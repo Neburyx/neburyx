@@ -19,8 +19,9 @@ import { canRetry } from '../failure-notice.js';
 import type { ApiFailure } from '../api/client.js';
 import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
+import { Dialog } from '../views/dialog.js';
 import { RUN_COPY } from './run/run-copy.js';
-import { EDITOR_SUBTITLE, failureView, listSubtitle, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
+import { EDITOR_SUBTITLE, failureView, type FailureView, listSubtitle, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
 import { RunFailure } from './run-failure.js';
@@ -137,7 +138,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const presetView = useStoreSelector(presetStore, (current) => current);
   const timeoutMs = sourceId === null ? undefined : answeredData(shell.sources)?.items.find((item) => item.id === sourceId)?.timeoutMs;
   const [builder, setBuilder] = useState<BuilderState>(INITIAL);
-  const [editing, setEditing] = useState<{ readonly item: ListedPattern; readonly whole: boolean } | undefined>(undefined);
+  const [editing, setEditing] = useState<{ readonly item: ListedPattern; readonly whole: boolean; readonly baseline: string } | undefined>(undefined);
   const drafted = builder.draft.anchorType !== undefined;
   const mounted = useRef(false);
   useEffect(() => {
@@ -163,6 +164,12 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     setPreviewing(undefined);
     setView('list');
   };
+  const changed = editing !== undefined && JSON.stringify(builder.draft) !== editing.baseline;
+  // the X of the preview of a draft or of a change that was edited: closing throws the draft away, so it asks first
+  const [askingClose, setAskingClose] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<string | undefined>(undefined);
+  const lostOnClose = editing !== undefined ? changed : JSON.stringify(builder.draft) !== savedDraft;
+  const closePreview = (): void => (previewing === undefined || !lostOnClose ? close() : setAskingClose(true));
   const backToList = (): void => {
     setSavedItem(undefined);
     setPreviewing(undefined);
@@ -172,7 +179,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const change = (item: ListedPattern): void => {
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
     setBuilder({ draft: opened.draft });
-    setEditing({ item, whole: opened.whole });
+    setEditing({ item, whole: opened.whole, baseline: JSON.stringify(opened.draft) });
     setSavedItem(undefined);
     setNotice(undefined);
     setView('builder');
@@ -221,6 +228,8 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   };
   const afterSave = (notice: Notice, mode: SaveMode, _saved?: SavedPattern): void => {
     setNotice(notice);
+    // a draft saved from its preview is no longer lost by closing, until it is edited again
+    if (mode.kind === 'new' && notice.tone === 'done') setSavedDraft(JSON.stringify(builder.draft));
     saved.reload();
     if (mode.kind === 'change' && notice.tone === 'done') {
       setBuilder(INITIAL);
@@ -261,12 +270,12 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
         <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : view === 'saved-preset' ? (savedItem?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
-        <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={close}>
+        <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={view === 'run' && savedItem === undefined ? closePreview : close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
       {sourceId === null ? null : (
-        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : view === 'builder' ? EDITOR_SUBTITLE : listSubtitle(sourceName)}</p>
+        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : view === 'builder' ? (editing === undefined ? EDITOR_SUBTITLE : changed ? `${editing.item.name} · ${RUN_COPY.changesNotSaved}` : editing.item.name) : listSubtitle(sourceName)}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (
@@ -382,6 +391,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               profile={profile}
               definition={previewing}
               editing={savedItem === undefined ? editing?.item : undefined}
+              changed={changed}
               onEdit={savedItem === undefined ? () => setView('builder') : () => editSaved(savedItem)}
               onSaved={afterSave}
               onStale={saved.reload}
@@ -398,15 +408,49 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
                     },
                   })}
               onHeader={setRunHeader}
-              close={close}
+              close={savedItem === undefined ? closePreview : close}
               escape={cancelOrClose}
             />
           ) : null}
         </>
       )}
+      {askingClose ? (
+        <Dialog title={editing === undefined ? RUN_COPY.closeDraftTitle : RUN_COPY.closeChangesTitle} onClose={() => setAskingClose(false)}>
+          {() => (
+            <div className="rename-form">
+              <p>{editing === undefined ? RUN_COPY.closeDraftText : RUN_COPY.closeChangesText}</p>
+              <div className="rename-actions">
+                <button type="button" className="secondary" onClick={() => setAskingClose(false)}>
+                  {RUN_COPY.keepEditing}
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    setAskingClose(false);
+                    close();
+                  }}
+                >
+                  {editing === undefined ? RUN_COPY.closeDraftConfirm : RUN_COPY.closeChangesConfirm}
+                </button>
+              </div>
+            </div>
+          )}
+        </Dialog>
+      ) : null}
       <RowDialogs actions={rows} />
     </div>
   );
+}
+
+/** A limit the source refuses is named by the form's own field: "Max hops can be at most 2 on this source.", not by the builder's word for it. */
+function refusalInFormWords(view: FailureView, failure: ApiFailure, preset: Preset): FailureView {
+  if (failure.code !== 'QUERY_BUDGET_EXCEEDED') return view;
+  const hops = maxHopsOf(failure);
+  const page = maxPageOf(failure);
+  if (hops !== undefined) return { ...view, text: `${labelOf(preset, 'maxHops')} can be at most ${hops} on this source.` };
+  if (page !== undefined) return { ...view, text: `${labelOf(preset, 'limit')} can be at most ${page} on this source.` };
+  return view;
 }
 
 function TemplatesFailure({ failure, sourceName, retry }: { readonly failure: ApiFailure; readonly sourceName: string; readonly retry: () => void }) {
@@ -520,7 +564,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
 
   const heavy = run.heavy === undefined ? undefined : heavyDecisionOfRun(run.heavy);
   const timeout = source?.timeoutMs;
-  const failure = run.failure === undefined ? undefined : failureView(run.failure, sourceName);
+  const failure = run.failure === undefined ? undefined : refusalInFormWords(failureView(run.failure, sourceName), run.failure, preset);
   // a result is shown only under the pattern that produced it
   const result = run.result !== undefined && run.result.presetId === preset.id ? run.result : undefined;
   const firstMatch = result?.matchIds[0];

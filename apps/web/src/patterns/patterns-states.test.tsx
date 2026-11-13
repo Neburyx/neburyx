@@ -100,7 +100,7 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
 
   it('names the page cap of QUERY_BUDGET_EXCEEDED and sets the limit field to it', async () => {
     await ran({ run: async () => ({ ok: false, failure: failure('QUERY_BUDGET_EXCEEDED', { maxPage: 50 }) }) });
-    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('at most 50');
+    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('Max matching accounts can be at most 50 on this source.');
     expect((screen.getByLabelText('Max matching accounts') as HTMLInputElement).value).toBe('50');
   });
 
@@ -111,7 +111,8 @@ describe('the Patterns panel: empty, failure and source-state answers', () => {
     await choosePreset('Connected accounts');
     await userEvent.click(run());
     await settle();
-    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('at most 1');
+    expect(screen.getAllByRole('alert')[0]?.textContent).toContain('Hops can be at most 1 on this source. The field is set to it.');
+    expect(screen.getAllByRole('alert')[0]?.textContent).not.toContain('steps');
     expect((screen.getByLabelText('Hops') as HTMLInputElement).value).toBe('1');
   });
 

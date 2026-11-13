@@ -13,9 +13,9 @@ const labels = (): string[] => [...document.querySelectorAll('.patterns-panel .s
 
 describe('the form of a pattern', () => {
   it.each([
-    ['Shared devices', ['Starting account', 'Window', 'Min shared', 'Max matching accounts']],
-    ['Shared addresses', ['Starting account', 'Window', 'Min shared', 'Limit']],
-    ['Connected accounts', ['Starting account', 'Direction', 'Hops', 'Window', 'Limit']],
+    ['Shared devices', ['Starting account', 'Window (UTC)', 'Min shared', 'Max matching accounts']],
+    ['Shared addresses', ['Starting account', 'Window (UTC)', 'Min shared', 'Limit']],
+    ['Connected accounts', ['Starting account', 'Direction', 'Hops', 'Window (UTC)', 'Limit']],
   ])('has the fields the schema declares for %s, with the preset’s labels or plain names, and no other', async (name, expected) => {
     await patternsWorkspace();
     await openBuiltIn();
@@ -35,22 +35,22 @@ describe('the form of a pattern', () => {
   it('shows a preset with no labels with the parameters’ plain names', async () => {
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([{ ...SHARED_ADDRESSES, labels: [] }]) }) });
     await openBuiltIn('Shared addresses');
-    expect(labels()).toEqual(['Anchor', 'Window', 'Min shared', 'Limit']);
+    expect(labels()).toEqual(['Anchor', 'Window (UTC)', 'Min shared', 'Limit']);
   });
 
   it('sends a window of two dates, a limit and a minimum, and sends nothing for a cleared window', async () => {
     const kit = await patternsWorkspace();
     await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
-    fireEvent.change(screen.getByLabelText('Window: from'), { target: { value: '2026-10-21' } });
-    fireEvent.change(screen.getByLabelText('Window: to'), { target: { value: '2026-10-28' } });
+    fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: '2026-10-21' } });
+    fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: '2026-10-28' } });
     await userEvent.type(screen.getByLabelText('Max matching accounts'), '25');
     await userEvent.type(screen.getByLabelText('Min shared'), '2');
     await userEvent.click(run());
     await settle();
     expect(kit.sent[0]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' }, window: { from: '2026-10-21', to: '2026-10-28' }, limit: 25, minShared: 2 });
-    fireEvent.change(screen.getByLabelText('Window: from'), { target: { value: '' } });
-    fireEvent.change(screen.getByLabelText('Window: to'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: '' } });
     await userEvent.click(run());
     await settle();
     expect(kit.sent[1]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' }, limit: 25, minShared: 2 });
@@ -60,8 +60,8 @@ describe('the form of a pattern', () => {
     const kit = await patternsWorkspace();
     await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
-    fireEvent.change(screen.getByLabelText('Window: from'), { target: { value: '2026-10-28' } });
-    fireEvent.change(screen.getByLabelText('Window: to'), { target: { value: '2026-10-21' } });
+    fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: '2026-10-28' } });
+    fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: '2026-10-21' } });
     await userEvent.type(screen.getByLabelText('Max matching accounts'), '0');
     await userEvent.click(run());
     expect(screen.getByText('The end date is before the start date.')).toBeTruthy();

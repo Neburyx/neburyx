@@ -18,11 +18,32 @@ async function previewByKeyboard(page: Page): Promise<void> {
   await expect(panelOf(page).getByRole('heading', { name: 'Preview pattern' })).toBeVisible();
 }
 
+const insideWindow = async (page: Page, menu: ReturnType<Page['getByRole']>): Promise<void> => {
+  const box = await menu.boundingBox();
+  const height = page.viewportSize()?.height ?? 0;
+  expect(box).not.toBeNull();
+  expect(box?.y ?? -1).toBeGreaterThanOrEqual(0);
+  expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(height);
+};
+
 test.describe('saved patterns in the Patterns panel', () => {
   test.beforeEach(async ({ page }) => {
     await page.request.post('/__support/reset');
     await openOneEntity(page, SOURCE, 'AC-1');
     await openPatternList(page);
+  });
+
+  test('keeps the menu of a row inside a short window, whichever row opens it', async ({ page }) => {
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 1440, height: 560 });
+    await expect(panelOf(page).getByRole('button', { name: /^More: / }).first()).toBeVisible();
+    const names = await panelOf(page).getByRole('button', { name: /^More: / }).evaluateAll((buttons) => buttons.map((button) => (button.getAttribute('aria-label') ?? '').slice('More: '.length)));
+    expect(names.length).toBeGreaterThan(1);
+    for (const name of names) {
+      await panelOf(page).getByRole('button', { name: `More: ${name}`, exact: true }).scrollIntoViewIfNeeded();
+      await openRowMenu(page, name);
+      await insideWindow(page, page.getByRole('menu', { name }));
+      await page.keyboard.press('Escape');
+    }
   });
 
   test('lists the seeded patterns in their sections, with Run and Copy and the owner-only lines on another person’s shared one', async ({ page }) => {

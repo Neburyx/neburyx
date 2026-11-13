@@ -204,4 +204,15 @@ describe('the refusals of a save, and the dialog around them', () => {
     expect(document.querySelector('.patterns-subhead')?.textContent).toBe('Mine');
     expect(screen.queryByRole('button', { name: 'Save pattern…' })).toBeNull();
   });
+
+  it('closes at once with the X after the draft is saved from its preview, since nothing is lost', async () => {
+    await runWorkspace({ patterns: { savePattern: async () => ({ ok: true, value: stored({ name: 'Mine' }) }) } });
+    await previewed();
+    await userEvent.click(saveButton());
+    await submit();
+    await userEvent.click(screen.getByRole('button', { name: 'Close Patterns' }));
+    await settle();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Preview pattern' })).toBeNull();
+  });
 });

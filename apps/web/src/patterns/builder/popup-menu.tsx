@@ -1,3 +1,4 @@
+import { useMenuPlacement } from '../menu-placement.js';
 import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 
 interface Props {
@@ -23,6 +24,7 @@ export function PopupMenu({ button, label, disabled, describedBy, children, clas
   const opener = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const id = useId();
+  useMenuPlacement(open, menu, opener);
   const close = (): void => {
     setOpen(false);
     opener.current?.focus();

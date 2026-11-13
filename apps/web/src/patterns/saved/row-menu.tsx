@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useMenuPlacement } from '../menu-placement.js';
 import { SAVED_COPY } from './saved-copy.js';
 
 export interface MenuItem {
@@ -31,6 +32,7 @@ export function RowMenu({ name, items }: Props) {
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const id = useId();
+  useMenuPlacement(open, list, trigger);
 
   useEffect(() => {
     if (!open) return undefined;

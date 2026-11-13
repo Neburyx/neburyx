@@ -176,6 +176,21 @@ test.describe('conditions and a window in the builder', () => {
     await expect(builderOf(page).getByRole('button', { name: 'Preview' })).toBeEnabled();
   });
 
+  test('keeps the Add condition menu inside a short window', async ({ page }) => {
+    await page.setViewportSize({ width: page.viewportSize()?.width ?? 1440, height: 560 });
+    await openBuilder(page);
+    await builderOf(page).getByLabel('Starting entity type').selectOption({ label: PACK.start });
+    await buildStep(page, 1, 'out', PACK.arrives, PACK.types);
+    const step = stepOf(page, 1);
+    await step.getByRole('tab', { name: /^Conditions/ }).click();
+    await step.getByRole('button', { name: '+ Add condition' }).click();
+    const menu = page.getByRole('menu').first();
+    await expect(menu).toBeVisible();
+    const box = await menu.boundingBox();
+    expect(box?.y ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.height ?? 0);
+  });
+
   test('Tab walks the form of a condition in order, Done closes it, and Enter on Remove condition takes the row away', async ({ page }) => {
     await openBuilder(page);
     await builderOf(page).getByLabel('Starting entity type').selectOption({ label: PACK.start });

@@ -249,6 +249,12 @@
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-panel);
   background: var(--color-surface);
+  overflow-y: auto;
+}
+
+.pattern-menu[data-placement='above'] {
+  top: auto;
+  bottom: 100%;
 }
 
 .pattern-menu-item {

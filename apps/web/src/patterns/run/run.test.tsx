@@ -166,6 +166,7 @@ describe('a run in progress', () => {
     await runWorkspace({ runDefinition: handler });
     await ran();
     await userEvent.click(screen.getByRole('button', { name: 'Close Patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
     await settle();
     expect(runs[0]?.signal?.aborted).toBe(true);
   });

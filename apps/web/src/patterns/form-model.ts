@@ -65,7 +65,7 @@ export function fieldsOf(preset: Preset, paramsSchema: Record<string, unknown>, 
     const schema = asRecord(raw) ?? {};
     const label = labelOf(preset, name);
     if (name === 'window') {
-      fields.push({ name, label, kind: 'window' });
+      fields.push({ name, label: /\bUTC\b/.test(label) ? label : `${label} (UTC)`, kind: 'window' });
       continue;
     }
     const choice = CHOICE_OF[name];

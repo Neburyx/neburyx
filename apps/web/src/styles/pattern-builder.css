@@ -299,6 +299,14 @@
   border-radius: var(--radius-flyout);
   background: var(--color-surface);
   box-shadow: var(--shadow-floating);
+  overflow-y: auto;
+}
+
+.popup-menu-list[data-placement='above'] {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: var(--space-4);
 }
 
 .popup-menu-heading,

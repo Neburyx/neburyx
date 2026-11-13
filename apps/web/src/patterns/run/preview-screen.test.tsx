@@ -162,7 +162,7 @@ describe('the preview screen', () => {
 });
 
 describe('Escape in the start field', () => {
-  it('closes the list of entities first, with the panel still open, and the panel only when no list is open', async () => {
+  it('closes the list of entities first, with the panel still open, and the panel, after asking, only when no list is open', async () => {
     await runWorkspace();
     await previewed();
     await userEvent.click(startCombo());
@@ -171,6 +171,9 @@ describe('Escape in the start field', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();
     fireEvent.keyDown(startCombo(), { key: 'Escape' });
+    // the draft would be lost, so the panel asks before it closes
+    expect(screen.getByRole('dialog').textContent).toContain('The pattern you have built is not saved.');
+    await userEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
     expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
   });
 });

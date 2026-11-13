@@ -152,7 +152,7 @@ test.describe('the Patterns panel on the canvas', () => {
     await openForm(page);
     await expect(startOf(page)).toBeFocused();
     const limit = panelOf(page).getByLabel('Max matching accounts');
-    const order = [startOf(page), panelOf(page).getByRole('searchbox', { name: 'Search the source' }), panelOf(page).getByLabel('Window: from'), panelOf(page).getByLabel('Window: to'), panelOf(page).getByLabel('Min shared'), limit];
+    const order = [startOf(page), panelOf(page).getByRole('searchbox', { name: 'Search the source' }), panelOf(page).getByLabel('Window (UTC): from'), panelOf(page).getByLabel('Window (UTC): to'), panelOf(page).getByLabel('Min shared'), limit];
     for (const field of order) {
       // a date field has a stop for each of its parts, so Tab is pressed until the field is reached
       for (let presses = 0; presses < 4 && !(await field.evaluate((element) => element === document.activeElement)); presses += 1) await page.keyboard.press('Tab');

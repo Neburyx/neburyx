@@ -42,6 +42,8 @@ export interface RunFlowProps {
   readonly definition: PatternDefinition;
   /** The saved pattern opened for a change, whole, so that a save can name its id and version. */
   readonly editing: ListedPattern | undefined;
+  /** Whether the draft of a change differs from the pattern as saved, which the heading says. */
+  readonly changed?: boolean;
   /** Back to the editor, to the same draft. */
   readonly onEdit: () => void;
   readonly onSaved: (notice: Notice, mode: SaveMode, saved?: SavedPattern) => void;
@@ -77,7 +79,7 @@ const entityKeysOf = (answer: { readonly matches: readonly { readonly match: Gra
   answer.matches.flatMap((match) => [match.match, ...match.through, ...match.relationships.flatMap((hop) => [hop.from, hop.to])].flatMap((ref) => (ref === null ? [] : [elementKey(ref)])));
 
 /** The preview, the choice of where to start, the run and what it gives: running, cancelled, refused, the heavy stop, and the result with its pages and Add to graph. It never edits the draft. */
-export function RunFlow({ client, sourceId, sourceName, mask, profile, definition, editing, onEdit, onSaved, onStale, saved, onHeader, close, escape }: RunFlowProps) {
+export function RunFlow({ client, sourceId, sourceName, mask, profile, definition, editing, changed, onEdit, onSaved, onStale, saved, onHeader, close, escape }: RunFlowProps) {
   const state = useClientState();
   const loaded = useLoadedGraph();
   const visible = useVisibleGraph();
@@ -168,7 +170,8 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
     target?.focus();
   }, [run.cancelled, run.failure]);
 
-  const named = saved?.item.name ?? savedName ?? editing?.name;
+  const base = saved?.item.name ?? savedName ?? editing?.name;
+  const named = base !== undefined && changed === true && saved === undefined ? `${base} · ${RUN_COPY.changesNotSaved}` : base;
   useEffect(() => {
     const subtitle = screen === 'preview' || screen === 'running' || screen === 'outOfDate' ? (named ?? RUN_COPY.draft) : `${named ?? RUN_COPY.draftName} · from ${startName}`;
     onHeader({ title: screen === 'running' ? RUN_COPY.runningTitle : screen === 'heavy' ? RUN_COPY.pausedTitle : screen === 'result' ? RUN_COPY.resultTitle : screen === 'outOfDate' ? SAVED_COPY.unavailable : RUN_COPY.previewTitle, subtitle });
