@@ -1,7 +1,9 @@
 import { expandRequestSchema } from '@neburyx/contracts';
 import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
-import { FUZZ_SOURCE, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
+import { makeToken } from '../reference/token.js';
+import { FUZZ_SOURCE, FUZZ_TIGHT_SOURCE, allowedNames, startFuzzRig } from '../testing/fuzz-rig.js';
+import { TEST_REFERENCE_KEYS } from '../testing/gate.js';
 import { benignValuesOf, closedSetOf, leaksOf, quotedNamesOf, statementProblems } from '../testing/fuzz-closed-set.js';
 import { FIELD_NAMES, TEMPLATE_NATIVE, fuzzParams, hostileText, textLeaves, wrongType } from '../testing/fuzz-corpus.js';
 
@@ -177,5 +179,84 @@ describe('POST /v1/graph/expand with hostile input', () => {
       }),
       fuzzParams(300),
     );
+  });
+});
+
+describe('the window of Expand', () => {
+  const codeOf = (body: string): string | undefined => (JSON.parse(body) as { error?: { code?: string } }).error?.code;
+  const unmapped = hostileText(names).filter((text) => text !== '');
+  /** What every refused expansion owes: the code, no call to the source, and no statement outside the closed set or holding request text. */
+  const refusedExpand = async (response: { readonly body: string }, code: string, request: unknown): Promise<void> => {
+    expect(codeOf(response.body)).toBe(code);
+    expect(rig.executor.calls).toEqual([]);
+    expect(statementProblems(rig, closed, textLeaves(request, known))).toEqual([]);
+  };
+  const expand = (extra: Record<string, unknown>, cursors?: Record<string, string>, sourceId = FUZZ_SOURCE) =>
+    rig.post('/v1/graph/expand', { sourceId, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes: ['gadget'], limit: 2, ...(cursors === undefined ? {} : { cursors }), ...extra });
+
+  it('is served as days or as a range of dates, resolves to two instants, and the instants reach the executor as parameters only', async () => {
+    for (const window of [{ days: 7 }, { days: 3650 }, { from: '2026-01-01', to: '2026-01-31' }]) {
+      rig.reset();
+      const response = await expand({ window });
+      expect(response.statusCode).toBe(200);
+      const answered = JSON.parse(response.body) as { window?: { from: string; to: string } };
+      expect(answered.window?.from).toMatch(/T00:00:00\.000Z$/);
+      expect(rig.executor.calls.some((call) => call.parameters['windowFrom'] !== undefined && call.parameters['windowTo'] !== undefined)).toBe(true);
+      expect(statementProblems(rig, closed, [answered.window?.from ?? '', answered.window?.to ?? '', ...textLeaves(window, known)])).toEqual([]);
+    }
+  });
+
+  it('that is not days from 1 to 3650 or a range of calendar dates in order is INVALID_REQUEST and nothing is read', async () => {
+    const bad = fc.oneof(
+      fc.integer({ max: 0 }).map((days) => ({ days })),
+      fc.integer({ min: 3651 }).map((days) => ({ days })),
+      fc.double({ noInteger: true, noNaN: true }).map((days) => ({ days })),
+      fc.constantFrom({ from: '2026-02-30', to: '2026-03-01' }, { from: '2026-03-02', to: '2026-03-01' }, { from: '2026-3-1', to: '2026-03-02' }, { from: '2026-03-01' }, { to: '2026-03-01' }, { from: '2010-01-01', to: '2026-03-01' }, { days: 3, from: '2026-03-01', to: '2026-03-02' }, { days: 3, other: 1 }, {}, { days: '3' }, null, '7 days'),
+      wrongType,
+    );
+    await fc.assert(
+      fc.asyncProperty(bad, async (window) => {
+        rig.reset();
+        await refusedExpand(await expand({ window }), 'INVALID_REQUEST', { window });
+      }),
+      fuzzParams(120),
+    );
+  });
+
+  it('hostile text in either date of a window is INVALID_REQUEST, reads nothing and is in no statement', async () => {
+    await fc.assert(
+      fc.asyncProperty(unmapped, fc.constantFrom('from', 'to'), async (text, end) => {
+        rig.reset();
+        await refusedExpand(await expand({ window: end === 'from' ? { from: text, to: '2026-03-01' } : { from: '2026-03-01', to: text } }), 'INVALID_REQUEST', { text });
+      }),
+      fuzzParams(80),
+    );
+  });
+
+  it('is part of what a cursor is bound to: a cursor continues with the same window, and with another window, none or a first window it is CURSOR_INVALIDATED and nothing is read', async () => {
+    for (const minted of [{ window: { days: 7 } }, {}] as const) {
+      const first = JSON.parse((await expand(minted)).body) as { pages: { nextCursor?: string }[] };
+      const cursor = first.pages[0]?.nextCursor;
+      expect(cursor).toBeDefined();
+      rig.reset();
+      expect((await expand(minted, { gadget: cursor ?? '' })).statusCode).toBe(200);
+      for (const other of [{}, { window: { days: 30 } }, { window: { from: '2026-01-01', to: '2026-01-31' } }]) {
+        if (JSON.stringify(other) === JSON.stringify(minted)) continue;
+        rig.reset();
+        await refusedExpand(await expand(other, { gadget: cursor ?? '' }), 'CURSOR_INVALIDATED', {});
+      }
+    }
+  });
+
+  it('over a relationship type with no mapped time property is served and applies to nothing: the answer names the type, and every statement is in the closed set', async () => {
+    const holder = { entityType: 'holder', stableId: makeToken(TEST_REFERENCE_KEYS, { sourceId: FUZZ_TIGHT_SOURCE, entityType: 'holder' }, 'H-1') };
+    for (const direction of ['out', 'both']) {
+      rig.reset();
+      const response = await rig.post('/v1/graph/expand', { sourceId: FUZZ_TIGHT_SOURCE, ref: holder, neighborTypes: ['widget'], direction, limit: 2, window: { days: 7 } });
+      expect(response.statusCode).toBe(200);
+      const [page] = (JSON.parse(response.body) as { pages: { window?: { applied: string; notAppliedTo: string[] } }[] }).pages;
+      expect(page?.window).toMatchObject({ applied: 'none', notAppliedTo: ['HOLDS'] });
+      expect(statementProblems(rig, closed, [])).toEqual([]);
+    }
   });
 });

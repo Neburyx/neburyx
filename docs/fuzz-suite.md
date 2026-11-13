@@ -6,7 +6,7 @@ Files are in `services/api/src/fuzz/`, with the rig in `services/api/src/testing
 
 ## What it checks
 
-**The closed set.** The rig runs the real app and gate over a recording executor. Before the fuzz starts it sends every legal choice of each read route once (entity types, relationship types, directions, match modes, groups, masked and unmasked, first pages and next pages, and for the pattern routes: every preset and each template by its own ID, one and two hops, each direction, no window, a window of days and a window of dates, with and without a minimum of shared nodes, masked and not, always a first run; each run reads its estimate first, so the count statement of each pattern template is in the set, and a run with the continue flag, which reads none, is sent for each template) and keeps the statement text the executor saw. That set is the *closed set*: the fixed templates with allowlisted names. For every fuzz request the suite then checks that
+**The closed set.** The rig runs the real app and gate over a recording executor. Before the fuzz starts it sends every legal choice of each read route once (entity types, relationship types, directions, match modes, groups, masked and unmasked, an expansion with no window, a window of days and a window of dates, an expansion of the third source over a relationship with no time property, first pages and next pages, and for the pattern routes: every preset and each template by its own ID, one and two hops, each direction, no window, a window of days and a window of dates, with and without a minimum of shared nodes, masked and not, always a first run; each run reads its estimate first, so the count statement of each pattern template is in the set, and a run with the continue flag, which reads none, is sent for each template) and keeps the statement text the executor saw. That set is the *closed set*: the fixed templates with allowlisted names. For every fuzz request the suite then checks that
 
 - the closed set holds none of the values used to build it (`W-1`, the search text, the phone values, the cursors and tokens it minted), so a template that wrote a request value into its text would be found;
 - every statement the executor saw is in the closed set;
@@ -35,7 +35,8 @@ A test feeds the check a statement built from text and shows it fails.
 | Coverage: no entries, more than 500, a duplicate | `INVALID_REQUEST`; a ref of another source: `SOURCE_MISMATCH`; coverage never reads the source |
 | Expand `limit` below 1, a fraction, beyond the safe integers | `INVALID_REQUEST` |
 | Expand `filters` or `rank` that name an operator, a target, an order or a kind outside the closed sets, a property the mapping does not declare (for every asked neighbor type and every row read), more than 6 conditions, an `in` of more than 20 values, a range with no end, values of mixed kinds, a number beyond 2^53, or temporal text that is not ISO; a condition or rank on a personal-data property while masking is asked | `INVALID_REQUEST`, no read |
-| Expand `filters` or `rank` changed, or taken off, when continuing with a cursor | `CURSOR_INVALIDATED` |
+| Expand `filters`, `rank` or `window` changed, taken off, or put on, when continuing with a cursor | `CURSOR_INVALIDATED` |
+| Expand `window` that is not days from 1 to 3650 or a range of calendar dates in order and at most 3650 days: a bad or reversed bound, text that is not an ISO date, both forms, an extra key, a wrong type | `INVALID_REQUEST`, no read |
 | Expand `limit` above the source's `max_page` (default 50) | `QUERY_BUDGET_EXCEEDED`, with `maxPage` |
 | `GET /v1/templates`: an unknown source | `NOT_FOUND` |
 | `GET /v1/templates`: no `sourceId`, an empty or repeated one, or another query member | `INVALID_REQUEST` |
@@ -54,11 +55,11 @@ A cursor is stateless and valid for 30 minutes. Replaying it unchanged in the sa
 
 ## A recorded run
 
-Run on the commit that added the cases of the estimate to the pattern routes' suite, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs, so every file's counts are higher than they were before them.
+Run on the commit that added the window of Expand to the suite, with `NBX_FUZZ_RECORD` set to a file; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, which now has the pattern runs, so every file's counts are higher than they were before them.
 
 | Route | Answers |
 |---|---|
-| `POST /v1/graph/expand` | `INVALID_REQUEST` 2033, `CURSOR_INVALIDATED` 949, `served` 696, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 61 |
+| `POST /v1/graph/expand` | `INVALID_REQUEST` 3202, `CURSOR_INVALIDATED` 2106, `served` 1506, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 51 |
 | `POST /v1/search/entities` | `served` 976, `INVALID_REQUEST` 222 |
 | `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 2604, `served` 493, `INVALID_REQUEST` 330 |
 | `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 370, `NOT_FOUND` 16 |
@@ -67,7 +68,7 @@ Run on the commit that added the cases of the estimate to the pattern routes' su
 | `POST /v1/graph/coverage` | `INVALID_REQUEST` 180, `NOT_FOUND` 65, `SOURCE_MISMATCH` 48, `served` 2 |
 | `POST /v1/templates/{id}/run` | `served` 2560, `INVALID_REQUEST` 1715, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
 
-15,186 requests, 21,039 statements seen by the executor, at most 73 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+18,312 requests, 24,803 statements seen by the executor, at most 78 distinct statements in a file, all in the closed set. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
 
 The pattern routes' own files are `fuzz/templates.test.ts` (the body, the ID, hostile text in every input, and the refusals that depend on the mapping, the budgets and the token) and the entries of the shape table in `fuzz/routes.test.ts`.
 
@@ -90,6 +91,7 @@ A failing property prints its seed, the path and the shrunk counterexample. To r
 - A refused search-more cursor is refused after one index-snapshot read. Every other refusal above makes no call at all: the gate validates (the cursor included) before its index guard.
 - The run route answers `NOT_FOUND`, not `INVALID_REQUEST`, for a template ID of any length, since a text that is not a preset or a template is an unknown ID; and an unmapped attribute type, target type or relationship type is `INVALID_REQUEST`, since the parameters of a built-in template are checked against the mapping as a request, not looked up as a resource. Only the entity type of the anchor and the ID are `NOT_FOUND`.
 - A hop count of 5 or more is `INVALID_REQUEST` (the parameter schema stops at 4); 3 and 4 are `QUERY_BUDGET_EXCEEDED`, naming the cap, which is the lower of the template's 2 and the source's budget.
+- A window on Expand over a relationship type with no mapped time property is served, not refused as it is on a pattern run: the page is read as without the window and the answer names the type (`applied: none`, `notAppliedTo`).
 - The `ref` of the run route carries no source ID, so there is no `SOURCE_MISMATCH` to send; an unknown source is `NOT_FOUND`, and a source ID inside the `ref` is an extra key.
 - A two-hop run whose target is its own anchor type needs the direction `both` when the relationship has two different ends; with the stored direction it reaches no such entity and is refused as a request.
 

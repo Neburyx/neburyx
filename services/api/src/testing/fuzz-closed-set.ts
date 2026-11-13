@@ -1,7 +1,9 @@
 import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
+import { makeToken } from '../reference/token.js';
 import { expandWindowInstantsOf } from '../graph/expand-window.js';
 import { windowInstantsOf } from '../graph/template-window.js';
+import { TEST_REFERENCE_KEYS } from './gate.js';
 import { FUZZ_HEAVY_ANCHOR, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The names a statement quotes in backticks. */
@@ -168,6 +170,15 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
       keep();
     }
   }
+  /** The expansion of the third source, whose only relationship at a holder has no time property: a window over it is served and applies to nothing, and its statement is the same with or without the window. */
+  const holder = { entityType: 'holder', stableId: makeToken(TEST_REFERENCE_KEYS, { sourceId: FUZZ_TIGHT_SOURCE, entityType: 'holder' }, 'H-1') };
+  for (const window of [undefined, { days: 7 }]) {
+    for (const direction of ['out', 'both']) {
+      const response = await post('/v1/graph/expand', { sourceId: FUZZ_TIGHT_SOURCE, ref: holder, neighborTypes: ['widget'], direction, limit: 2, ...(window === undefined ? {} : { window }) });
+      if (response.statusCode !== 200) throw new Error(`the closed set expected the expansion of the third source to be served, and it answered ${response.statusCode}`);
+      keep();
+    }
+  }
   const heavyAnchor = { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR };
   for (const [url, params] of [
     ['/v1/templates/shared-gadgets/run', { ref: heavyAnchor }],
@@ -185,7 +196,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     for (const direction of ['out', 'in', 'both']) {
       for (const relTypes of [undefined, ['MADE_FROM'], ['USES'], ['MADE_FROM', 'USES']]) {
         // each read is also made with a window (its statements differ from the others only by the window conditions; the instants are parameters)
-        for (const window of [undefined, { days: 7 }]) {
+        for (const window of [undefined, { days: 7 }, { from: '2026-01-01', to: '2026-01-31' }]) {
           for (const mask of [undefined, true, false]) {
             const response = await post('/v1/graph/expand', { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' }, neighborTypes, direction, ...(relTypes === undefined ? {} : { relTypes }), ...(mask === undefined ? {} : { mask }), ...(window === undefined ? {} : { window }), limit: 2 });
             const body = jsonOf(response.body);
@@ -281,7 +292,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     }
   }
   const instants = windows.flatMap((window) => (window === undefined ? [] : [expandWindowInstantsOf(window, new Date(rig.clock.now())), windowInstantsOf(window, new Date(rig.clock.now()))])).flatMap((pair) => [pair.windowFrom, pair.windowTo]);
-  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
+  return { statements, routes, cases, values: ['W-1', 'GD-0', 'L-1', 'H-1', holder.stableId, FUZZ_HEAVY_ANCHOR, '2026-01-01', '2026-01-31', ...instants, FUZZ_TEXT, 'ne', '+1-212-555-01', ...cursors, ...expandCursors.map((entry) => entry.cursor), ...keys.map((entry) => entry.stableId)] };
 }
 
 const escaped = (value: string): string => value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
