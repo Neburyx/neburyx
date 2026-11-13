@@ -132,8 +132,8 @@ describe('the Patterns panel: open and run a preset', () => {
   });
 
   it('lists exactly the two presets of the insurance pack for a source that declares them', async () => {
-    const claimant = { ...SHARED_DEVICES, id: 'shared-addresses', name: 'Shared addresses', bind: { anchor: 'kind-a', attribute: 'kind-c', via: 'LIVES_AT' }, labels: [{ key: 'anchor', text: 'Starting claimant' }] };
-    const claims = { ...CONNECTED, id: 'claimant-claims', name: 'Claims by claimant', bind: { anchor: 'kind-a', target: 'kind-b', via: 'FILED_BY' }, labels: [{ key: 'anchor', text: 'Starting claimant' }] };
+    const claimant = { ...SHARED_DEVICES, id: 'shared-addresses', name: 'Shared addresses', bind: { anchor: 'kind-a', attribute: 'kind-c', via: 'LINKS_A' }, labels: [{ key: 'anchor', text: 'Starting claimant' }] };
+    const claims = { ...CONNECTED, id: 'claimant-claims', name: 'Claims by claimant', bind: { anchor: 'kind-a', target: 'kind-b', via: 'LINKS_B' }, labels: [{ key: 'anchor', text: 'Starting claimant' }] };
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([claimant, claims]) }) });
     await openPatterns();
     expect(screen.getAllByRole('radio').map((card) => card.textContent)).toEqual(['Shared addresses', 'Claims by claimant']);
