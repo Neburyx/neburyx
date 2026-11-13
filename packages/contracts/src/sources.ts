@@ -3,6 +3,7 @@ import { addressable, addressableTextOfAtMost } from './addressable-text.js';
 import { MAX_STABLE_ID_LENGTH, referenceTextSchema } from './entities.js';
 import { caseRefSchema } from './investigations.js';
 import { mappingSummarySchema, sourceStateSchema } from './source-basics.js';
+import { PATTERN_LIMITS } from './pattern.js';
 import { DEGREE_STATUSES, readOnlyCheckSchema, serverInfoSchema, testOutcomeSchema } from './source-test.js';
 
 export { SOURCE_STATES, mappingSummarySchema, sourceStateSchema } from './source-basics.js';
@@ -42,6 +43,8 @@ export const sourceSummaryFieldsSchema = z.strictObject({
   demoCase: demoCaseSchema.nullable(),
   /** The source's server-side transaction timeout in milliseconds (its `timeout_ms`), which a running request is shown against. Absent in an answer from before the field existed. */
   timeoutMs: z.number().int().positive().optional(),
+  /** The most steps a pattern may have on this source (its `max_hops`, at most the contract's step limit, which the API keeps equal to its ceiling). Absent in an answer from before the field existed. */
+  maxHops: z.number().int().min(1).max(PATTERN_LIMITS.steps).optional(),
 });
 
 export const sourceSummarySchema = sourceSummaryFieldsSchema.refine((source) => source.demoCase === null || source.synthetic, { message: 'only a synthetic source has a demo case', path: ['demoCase'] });

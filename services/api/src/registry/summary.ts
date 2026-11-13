@@ -50,6 +50,7 @@ export function summariesOf(rows: readonly SourceRow[], mapping: MappingModel, l
         mappingSummary: mappingSummaryOf(source),
         demoCase: demoCaseOf(source, references),
         timeoutMs: source.budgets.timeoutMs,
+        maxHops: source.budgets.maxHops,
       },
     ];
   });

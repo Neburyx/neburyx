@@ -137,6 +137,14 @@ describe('the API client, reading sources and a profile', () => {
     expect(asked).toEqual(['/v1/sources', '/v1/sources/a%20b%2Fc/profile']);
   });
 
+  it('parses a source with and without the step limit of its patterns, and refuses one above the pattern step limit', async () => {
+    const item = { id: 'a', alias: 'a', state: 'connected', stateReason: null, readOnly: true, synthetic: false, lastTestAt: null, lastTest: null, mappingSummary: { entityTypes: 1, relationshipTypes: 1, derivedRules: 0 }, demoCase: null };
+    const read = async (extra: Record<string, unknown>) => createApiClient(async () => new Response(JSON.stringify({ items: [{ ...item, ...extra }], nextCursor: null }))).getSources();
+    expect(await read({})).toMatchObject({ ok: true });
+    expect(await read({ maxHops: 3 })).toMatchObject({ ok: true, value: { items: [{ maxHops: 3 }] } });
+    expect(await read({ maxHops: 5 })).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });
+  });
+
   it('gives a schema mismatch, never a partial value, for a list or a profile that does not match its contract', async () => {
     const client = createApiClient(async () => new Response(JSON.stringify({ items: [{ id: 1 }], nextCursor: null })));
     expect(await client.getSources()).toEqual({ ok: false, failure: { code: 'SCHEMA_MISMATCH' } });

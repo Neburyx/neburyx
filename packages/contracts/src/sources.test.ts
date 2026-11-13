@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PATTERN_LIMITS } from './pattern.js';
 import { lastTestSchema, SOURCE_STATES, sourcesResponseSchema, sourceSummarySchema } from './sources.js';
 
 const item = {
@@ -19,6 +20,14 @@ describe('the timeout of a source in the list', () => {
     expect(sourceSummarySchema.safeParse({ ...item, timeoutMs: 5000 }).success).toBe(true);
     expect(sourceSummarySchema.safeParse(item).success).toBe(true);
     for (const timeoutMs of [0, -1, 1.5, '5000', null]) expect(sourceSummarySchema.safeParse({ ...item, timeoutMs }).success).toBe(false);
+  });
+});
+
+describe('the step limit of a source in the list', () => {
+  it('is accepted as a whole number from 1 to the pattern step limit, and an answer without it still parses', () => {
+    for (const maxHops of [1, 3, PATTERN_LIMITS.steps]) expect(sourceSummarySchema.safeParse({ ...item, maxHops }).success).toBe(true);
+    expect(sourceSummarySchema.safeParse(item).success).toBe(true);
+    for (const maxHops of [0, -1, 1.5, PATTERN_LIMITS.steps + 1, '3', null]) expect(sourceSummarySchema.safeParse({ ...item, maxHops }).success).toBe(false);
   });
 });
 
