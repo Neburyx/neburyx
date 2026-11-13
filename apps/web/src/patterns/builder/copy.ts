@@ -165,11 +165,10 @@ export const LINK_COPY = {
 } as const;
 
 export const relationshipTypesTitle = (count: number): string => `Relationship types · ${count} of ${PATTERN_LIMITS.relationshipTypesPerStep}`;
-export const directionMeaning = (direction: Direction, from: string, to: string | undefined): string => {
-  const next = to ?? 'the next entity';
-  if (direction === 'out') return `Outgoing: the relationship points from ${from} to ${next}.`;
-  if (direction === 'in') return `Incoming: the relationship points to ${from} from ${next}.`;
-  return `Either: the relationship may point either way between ${from} and ${next}.`;
+export const directionMeaning = (direction: Direction, from: string): string => {
+  if (direction === 'out') return `Outgoing: the relationship points from ${from} to the next entity.`;
+  if (direction === 'in') return `Incoming: the relationship points to ${from} from the next entity.`;
+  return `Either: the relationship may point either way between ${from} and the next entity.`;
 };
 export const leavingText = (type: string, direction: Direction): string => `Leaving a ${type}, ${direction === 'out' ? 'outgoing' : direction === 'in' ? 'incoming' : 'either direction'}`;
 export const removeTypeLabel = (type: string): string => `Remove ${type}`;

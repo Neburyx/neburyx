@@ -46,7 +46,7 @@ export function LinkTab({ profile, step, index, previous, nameOf, dispatch, prob
         </div>
         {step.direction === undefined || previous === undefined ? null : (
           <p className="pattern-help" id={`${id}-direction-meaning`}>
-            {directionMeaning(step.direction, nameOf(previous), step.arrivesAt === undefined ? undefined : nameOf(step.arrivesAt))}
+            {directionMeaning(step.direction, nameOf(previous))}
           </p>
         )}
       </div>
