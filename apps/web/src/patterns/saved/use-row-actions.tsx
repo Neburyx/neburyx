@@ -18,6 +18,8 @@ export interface RowActionState {
   readonly busy: boolean;
   /** What the last refusal said, shown in the dialog that is open. */
   readonly message: string | undefined;
+  /** The pattern the person deleted last, so that what shows it (a run) goes with it. */
+  readonly removed: string | undefined;
   readonly open: (kind: DialogKind, item: ListedPattern) => void;
   readonly close: () => void;
   readonly rename: (item: ListedPattern, name: string) => void;
@@ -37,6 +39,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
   const [dialog, setDialog] = useState<RowActionState['dialog']>(undefined);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | undefined>(undefined);
+  const [removed, setRemoved] = useState<string | undefined>(undefined);
   const abort = useRef<AbortController | undefined>(undefined);
   const working = useRef(false);
   useEffect(() => {
@@ -44,7 +47,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
     return () => abort.current?.abort();
   }, []);
 
-  const perform = async <T,>(call: (signal: AbortSignal | undefined) => Promise<ApiResult<T>>, done: string): Promise<void> => {
+  const perform = async <T,>(call: (signal: AbortSignal | undefined) => Promise<ApiResult<T>>, done: string, gone?: string): Promise<void> => {
     if (working.current) return;
     working.current = true;
     const signal = abort.current?.signal;
@@ -55,6 +58,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
     if (signal?.aborted === true) return;
     setBusy(false);
     if (result.ok) {
+      if (gone !== undefined) setRemoved(gone);
       setDialog(undefined);
       notify({ text: done, tone: 'done' });
       reload();
@@ -79,6 +83,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
     dialog,
     busy,
     message,
+    removed,
     open: (kind, item) => {
       setMessage(undefined);
       setDialog({ kind, item });
@@ -87,7 +92,7 @@ export function useRowActions(client: ApiClient, reload: () => void, notify: (no
       if (!busy) setDialog(undefined);
     },
     rename: (item, name) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, name: name.trim() }, signal), SAVED_COPY.renamed),
-    remove: (item) => void perform((signal) => client.deletePattern(item.id, item.version, signal), SAVED_COPY.deleted),
+    remove: (item) => void perform((signal) => client.deletePattern(item.id, item.version, signal), SAVED_COPY.deleted, item.id),
     share: (item) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, visibility: 'shared' }, signal), SAVED_COPY.sharedDone),
     unshare: (item) => void perform((signal) => client.changePattern(item.id, { expectedVersion: item.version, visibility: 'private' }, signal), SAVED_COPY.unsharedDone),
     copy: (item) => void perform((signal) => client.copyPattern(item.id, signal), SAVED_COPY.copied),

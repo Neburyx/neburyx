@@ -52,11 +52,22 @@ export function SavedPatternsTabs({ client, sourceId, sourceName, mask, close, e
   useEffect(() => () => store.dispose(), [store]);
   const run = useStoreSelector(store, (view) => view);
   const [target, setTarget] = useState<ListedPattern | undefined>(undefined);
-  const { reload } = saved;
   useEffect(() => {
-    // what a run showed is read from the list again: a result moves the last run of the person's own pattern, and an unavailable answer or a pattern that is gone means the list was out of date
-    if (run.result !== undefined || run.unavailable !== undefined || run.failure?.code === 'NOT_FOUND') reload();
-  }, [run.result, run.unavailable, run.failure, reload]);
+    // a pattern the person deleted takes its run with it; one that left the list another way keeps what the run showed
+    if (rows.removed !== undefined && rows.removed === target?.id) {
+      store.clear();
+      setTarget(undefined);
+    }
+  }, [rows.removed, target, store]);
+  const { reload, markRun } = saved;
+  useEffect(() => {
+    // an unavailable answer, or a pattern that is gone, means the list was out of date; the run's own view stays on screen while the list is read again
+    if (run.unavailable !== undefined || run.failure?.code === 'NOT_FOUND') reload();
+  }, [run.unavailable, run.failure, reload]);
+  useEffect(() => {
+    // a result moves the last run of the person's own pattern; the pages already read stay
+    if (run.result !== undefined) markRun(run.result.ask.id);
+  }, [run.result, markRun]);
   const rowCount = items?.length;
   const previousRows = useRef(rowCount);
   useEffect(() => {
@@ -64,13 +75,6 @@ export function SavedPatternsTabs({ client, sourceId, sourceName, mask, close, e
     if (previousRows.current !== undefined && rowCount !== undefined && rowCount < previousRows.current && document.activeElement === document.body) tabs.current[TABS.indexOf(tab)]?.focus();
     previousRows.current = rowCount;
   }, [rowCount, tab]);
-  const current = target === undefined ? undefined : items?.find((item) => item.id === target.id);
-  useEffect(() => {
-    if (target !== undefined && items !== undefined && current === undefined) {
-      store.clear();
-      setTarget(undefined);
-    }
-  }, [target, items, current, store]);
 
   const actions: RowActions = {
     run: (item) => {
@@ -136,7 +140,7 @@ export function SavedPatternsTabs({ client, sourceId, sourceName, mask, close, e
           {which === 'built-in' ? renderBuiltIn(templates, presetEscape) : <SavedTabPanel tab={which} list={saved} sourceName={sourceName} presets={presets} actions={actions} running={run.running} />}
         </div>
       ))}
-      {tab !== 'built-in' && current !== undefined && tabOf(current) === tab ? <SavedRunArea client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} store={store} target={current} presets={presets} profile={profile} timeoutMs={timeoutMs} /> : null}
+      {tab !== 'built-in' && target !== undefined && tabOf(target) === tab ? <SavedRunArea client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} store={store} target={items?.find((item) => item.id === target.id) ?? target} presets={presets} profile={profile} timeoutMs={timeoutMs} /> : null}
     </>
   );
 }

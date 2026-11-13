@@ -23,6 +23,8 @@ export interface SavedList {
   readonly loadMore: () => void;
   /** Reads the list again from its first page, keeping the rows on screen until the answer arrives. */
   readonly reload: () => void;
+  /** Records that the person ran one of their own patterns just now, without reading the list again, so that the pages read so far stay. */
+  readonly markRun: (id: string) => void;
 }
 
 /**
@@ -98,5 +100,8 @@ export function useSavedPatterns(client: ApiClient, sourceId: string | null): Sa
   }, [client, sourceId, readFirst]);
 
   const reload = useCallback(() => readFirst(false), [readFirst]);
-  return { state, loadMore, reload };
+  const markRun = useCallback((id: string) => {
+    setState((now) => (now.phase === 'ready' ? { ...now, items: now.items.map((item) => (item.id === id && item.ownedByYou ? { ...item, lastRunAt: new Date().toISOString() } : item)) } : now));
+  }, []);
+  return { state, loadMore, reload, markRun };
 }

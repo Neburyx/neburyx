@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PATTERN_UNAVAILABLE_CODES, type ListedPattern, type PatternListResponse, type SavedPatternRunResponse } from '@neburyx/contracts';
+import { PATTERN_UNAVAILABLE_CODES, savedPatternSchema, type ListedPattern, type PatternListResponse, type SavedPatternRunResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { definitionHeavy, definitionOk, failure, heavyRun, listed, okRun, selectAccount, settle } from '../patterns-kit.js';
 import { openTab, savedWorkspace } from './saved-list.test.js';
@@ -186,18 +186,29 @@ describe('a saved pattern that cannot run', () => {
 });
 
 describe('what a run leaves in the list', () => {
-  it('reads the list again after a result, so that the last run of the pattern is shown', async () => {
-    let reads = 0;
+  it('marks the last run of the person’s own pattern after a result, without reading the list again', async () => {
+    const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha' })]), runSavedPattern: async () => ({ ok: true, value: definitionOk(['acc-2']) }) } });
+    await openTab(/My patterns/);
+    expect(screen.getByText('Not run yet · Only me')).toBeTruthy();
+    await press('Run Alpha');
+    expect(screen.getByText(`Last run ${new Date().toISOString().slice(0, 10)} UTC · Only me`)).toBeTruthy();
+    expect(kit.patternCalls.filter((call) => call.method === 'listPatterns')).toHaveLength(1);
+  });
+
+  it('keeps the result of a pattern read on a later page, the pages already read staying', async () => {
+    const LATER = '0192f000-0000-7000-8000-000000000009';
     await savedWorkspace({
       patterns: {
-        listPatterns: async () => page([listed({ id: ID, name: 'Alpha', lastRunAt: ++reads === 1 ? null : '2026-11-13T08:00:00.000Z' })]),
+        listPatterns: async (query) => (query.cursor === undefined ? { ok: true, value: { items: [listed({ id: ID, name: 'Alpha' })], nextCursor: 'next-1' } } : page([listed({ id: LATER, name: 'Omega' })])),
         runSavedPattern: async () => ({ ok: true, value: definitionOk(['acc-2']) }),
       },
     });
     await openTab(/My patterns/);
-    expect(screen.getByText('Not run yet · Only me')).toBeTruthy();
-    await press('Run Alpha');
-    expect(screen.getByText('Last run 2026-11-13 UTC · Only me')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await settle();
+    await press('Run Omega');
+    expect(result()).toBeTruthy();
+    expect(within(screen.getByRole('tabpanel', { name: /My patterns/ })).getByText('Alpha')).toBeTruthy();
   });
 
   it('says a pattern that is gone, and reads the list again so that its row goes, when the run answers NOT_FOUND', async () => {
@@ -212,6 +223,7 @@ describe('what a run leaves in the list', () => {
     await press('Run Beta');
     expect(kit.patternCalls.filter((call) => call.method === 'listPatterns')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: 'Run Beta' })).toBeNull();
+    expect(within(screen.getByRole('region', { name: 'Run: Beta' })).getByText('The pattern is not there any more, so the list was read again.')).toBeTruthy();
   });
 
   it('shows the run of a pattern of the person’s own under My patterns only, not under Shared on this source', async () => {
@@ -221,5 +233,36 @@ describe('what a run leaves in the list', () => {
     expect(screen.getByRole('region', { name: 'Run: Alpha' })).toBeTruthy();
     await openTab(/Shared on this source/);
     expect(screen.queryByRole('region', { name: 'Run: Alpha' })).toBeNull();
+  });
+});
+
+describe('the run area and its row', () => {
+  it('follows the row: the new name after a rename, and nothing after the person deletes it', async () => {
+    let renamed = false;
+    await savedWorkspace({
+      patterns: {
+        listPatterns: async () => page([listed({ id: ID, name: renamed ? 'Omega' : 'Alpha' })]),
+        changePattern: async () => {
+          renamed = true;
+          return { ok: true, value: savedPatternSchema.parse({ id: ID, sourceId: 'a', name: 'Omega', askForStartingEntity: false, anchor: null, visibility: 'private', lastRunAt: null, createdAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z', version: 2, kind: 'definition', definition: {} }) };
+        },
+        deletePattern: async () => ({ ok: true, value: { id: ID, version: 3, deletedAt: '2026-11-12T10:00:00.000Z', purgeAfter: '2026-12-12T10:00:00.000Z' } }),
+        runSavedPattern: async () => ({ ok: true, value: definitionOk(['acc-2']) }),
+      },
+    });
+    await openTab(/My patterns/);
+    await press('Run Alpha');
+    await userEvent.click(screen.getByRole('button', { name: 'More: Alpha' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.clear(screen.getByLabelText('New name'));
+    await userEvent.type(screen.getByLabelText('New name'), 'Omega');
+    await userEvent.click(screen.getByRole('button', { name: 'Rename' }));
+    await settle();
+    expect(screen.getByRole('region', { name: 'Run: Omega' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'More: Omega' }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await settle();
+    expect(screen.queryByRole('region', { name: /^Run:/ })).toBeNull();
   });
 });
