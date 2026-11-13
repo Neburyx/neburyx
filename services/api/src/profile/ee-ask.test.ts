@@ -128,13 +128,11 @@ describe('the real enterprise extension in a start', () => {
     await app.close();
   });
 
-  it('answers POST /v1/ask/plan with 422 ASK_UNSUPPORTED, the reason not-in-this-edition and its sentence, when no planner is installed', async () => {
-    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, startIo());
-    expect(result.exitCode).toBe(0);
-    if (result.exitCode !== 0) return;
-    const answer = await result.app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?', sourceId: 'demo' } });
+  it('answers POST /v1/ask/plan with 422 ASK_UNSUPPORTED, the reason not-in-this-edition and its sentence, while the extension has no planner (it is not configured)', async () => {
+    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension(), previewOn: true });
+    const answer = await app.inject({ method: 'POST', url: '/v1/ask/plan', payload: { message: 'Who shares a device?', sourceId: 'demo' } });
     expect([answer.statusCode, answer.json().error.code, answer.json().error.message, answer.json().error.details]).toEqual([422, 'ASK_UNSUPPORTED', 'Ask is not available in this edition.', { reason: 'not-in-this-edition' }]);
-    await result.app.close();
+    await app.close();
   });
 
   it.each([['a missing body', undefined], ['no message', {}], ['an empty message', { message: '' }], ['another field', { message: 'x', send: true }]])('answers POST /v1/ask/plan with 400 INVALID_REQUEST for %s', async (_name, payload) => {

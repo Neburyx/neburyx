@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { askPlanResponseSchema, parseExtensionRefusal, type AskPlan, type AskPlanner, type AskResolution, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { COMMON_WORDS_VERSION } from '../allowlist/index.js';
+import { AuditUnavailableError } from '../audited.js';
 import { previewHashOf, type PreviewMac } from '../preview/preview-hash.js';
 import type { PlaceholderSpan, ResolutionOutcome, resolveMentions } from '../resolution/index.js';
 import { questionVocabulary } from '../vocabulary/vocabulary.js';
@@ -210,6 +211,20 @@ describe('the confirmation', () => {
     expect(result).toEqual({ plan: PLAN });
     expect(rg.calls.map((call) => call.text)).toEqual([shown.preview]);
     for (const call of rg.calls) for (const word of MESSAGE_OK.split(/\W+/).filter((part) => part !== '')) expect(call.rest).not.toContain(word);
+  });
+
+  it('hands the planner the actor, role, trace ID and source of the request as its context, and no text in it', async () => {
+    const rg = rig();
+    const shown = await hashOf(rg);
+    await route(plain).handler(rg.request({ message: MESSAGE_OK, sourceId: SOURCE, send: true, previewHash: shown.previewHash }));
+    expect(rg.calls.map((call) => JSON.parse(call.rest))).toEqual([{ context: { actorId: 'p', actorRole: 'investigator', traceId: 'tr-1', sourceId: SOURCE } }]);
+  });
+
+  it('answers AUDIT_UNAVAILABLE when the call of the planner could not be audited', async () => {
+    const audit = rig(async () => Promise.reject(new AuditUnavailableError()));
+    const shown = await hashOf(audit);
+    const refusal = await route(plain).handler(audit.request({ message: MESSAGE_OK, sourceId: SOURCE, send: true, previewHash: shown.previewHash })).catch((error: unknown) => error);
+    expect(parseExtensionRefusal(refusal)).toEqual({ code: 'AUDIT_UNAVAILABLE' });
   });
 
   it('answers the new preview with changed, and does not call the planner, after a resolution changed', async () => {

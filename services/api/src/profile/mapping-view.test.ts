@@ -62,4 +62,29 @@ describe('the mapping view of the AI settings', () => {
   it('is empty for a mapping with no source', () => {
     expect(viewOf()).toEqual({ types: [] });
   });
+
+  it('gives each relationship type every pair of end types its rows give, and says for each pair whether it carries a time', () => {
+    const view = viewOf(FIRST);
+    expect(typeOf(view, 'KNOWS', 'relationship')?.ends).toEqual([
+      { from: 'person', to: 'person', timed: true },
+      { from: 'person', to: 'company', timed: false },
+    ]);
+    expect(typeOf(view, 'person', 'entity')?.ends).toBeUndefined();
+  });
+
+  it('marks a pair as timed when any row of it has a time, across sources', () => {
+    const other = baseSource({ id: 'third', entities: [{ type: 'person', label: 'Person', stable_id: 'id' }, { type: 'company', label: 'Company', stable_id: 'id' }], relationships: [{ type: 'KNOWS', from: 'person', to: 'company', observed_at: 'at' }] });
+    expect(typeOf(viewOf(FIRST, other), 'KNOWS', 'relationship')?.ends).toContainEqual({ from: 'person', to: 'company', timed: true });
+  });
+
+  it('holds the derived rules by ID and end types, and none when the mapping has none', () => {
+    const withRule = baseSource({ id: 'ruled', entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id' }, { type: 'node_b', label: 'NodeB', stable_id: 'key' }], relationships: [{ type: 'LINKS', from: 'node_a', to: 'node_b' }], derived: [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1 }] });
+    expect(viewOf(withRule).derivedRules).toEqual([{ id: 'shared', from: 'node_a', to: 'node_a' }]);
+    expect(viewOf(FIRST).derivedRules).toBeUndefined();
+  });
+
+  it('holds names of types and rules only: no property name of a relationship appears among the ends or the rules', () => {
+    const text = JSON.stringify({ ends: typeOf(viewOf(FIRST), 'KNOWS', 'relationship')?.ends });
+    for (const property of ['since', 'note', 'weight', 'rel_id']) expect(text).not.toContain(property);
+  });
 });

@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { PROMPT_IDS, type PromptId, type PromptParameters, type PromptRecord } from './provider.js';
 
-/** `instructions` hold no parameter; `text` is the two parts joined by a blank line, which is the template as it was before it had parts, so its hash is unchanged. */
+/** `instructions` hold no parameter but the static ones, which are filled in from the mapping and the catalog and never from the investigation; `text` is the two parts joined by a blank line, which is the template as it was before it had parts, so its hash is unchanged. */
 export interface BuiltInPrompt {
   readonly id: PromptId;
   readonly version: number;
   readonly parameters: readonly string[];
+  /** The parameters that may appear in the instructions: fixed for a mapping and a catalog, so they are part of the cached prefix. */
+  readonly staticParameters: readonly string[];
   readonly instructions: string;
   readonly values: string;
   readonly text: string;
@@ -17,16 +19,18 @@ export const VALUES_BOUNDARY = '[[values]]';
 
 const PART_SEPARATOR = '\n\n';
 
-function builtIn(id: PromptId, parameters: readonly string[], instructions: string, values: string): BuiltInPrompt {
-  return { id, version: 1, parameters, instructions, values, text: `${instructions}${PART_SEPARATOR}${values}` };
+function builtIn(id: PromptId, parameters: readonly string[], instructions: string, values: string, version = 1, staticParameters: readonly string[] = []): BuiltInPrompt {
+  return { id, version, parameters, staticParameters, instructions, values, text: `${instructions}${PART_SEPARATOR}${values}` };
 }
 
 export const BUILT_IN_PROMPTS: Readonly<Record<PromptId, BuiltInPrompt>> = {
   'ask.plan': builtIn(
     'ask.plan',
-    ['catalog', 'question'],
-    'Choose the one template from the catalog that answers the question, and give its parameters. Answer only with the plan as structured data. Never write a query.',
-    'Catalog:\n{{catalog}}\n\nQuestion:\n{{question}}',
+    ['catalog', 'vocabulary', 'question'],
+    'Choose the one template from the catalog that answers the question, and give its parameters. Use only the template identifiers of the catalog and only the entity types, relationship types and derived rules of the vocabulary. The question holds placeholders in angle brackets in place of names and IDs: use them as the references and values they stand for, and never write a name or an ID of your own. Answer only with the plan as one JSON object that has the kind plan, the template identifier, its version, the parameters and a one-line rationale. Answer with the kind unsupported and a short reason, as one JSON object, for a question that asks for a judgement, a question about what is shown on screen, and any question that no template answers. Never write a query.\n\nCatalog:\n{{catalog}}\n\nVocabulary:\n{{vocabulary}}',
+    'Question:\n{{question}}',
+    3,
+    ['catalog', 'vocabulary'],
   ),
   'summary.view': builtIn(
     'summary.view',
@@ -39,6 +43,12 @@ export const BUILT_IN_PROMPTS: Readonly<Record<PromptId, BuiltInPrompt>> = {
     ['message', 'view'],
     'Route the message to exactly one of three routes: an answer from the view, a plan to be confirmed, or a refusal. Answer only with the route and its content as structured data. Never write a query.',
     'View:\n{{view}}\n\nMessage:\n{{message}}',
+  ),
+  'ask.plan.repair': builtIn(
+    'ask.plan.repair',
+    ['catalog', 'vocabulary', 'question', 'reply', 'problems'],
+    'Your earlier answer to the question could not be used as a plan. The problems are listed by path. Answer again with one JSON object in the same form, using only the template identifiers of the catalog and only the entity types, relationship types and derived rules of the vocabulary, and the placeholders of the question as the references and values they stand for. If no template answers the question, answer with the kind unsupported and a short reason. Never write a query.',
+    'Catalog:\n{{catalog}}\n\nVocabulary:\n{{vocabulary}}\n\nQuestion:\n{{question}}\n\nYour earlier answer:\n{{reply}}\n\nProblems:\n{{problems}}',
   ),
 };
 
@@ -129,7 +139,7 @@ async function loadOverride(prompt: BuiltInPrompt, path: string): Promise<Overri
   if (split === 'many') return { ok: false, problem: `${where}: the file has more than one ${VALUES_BOUNDARY} line` };
   if (split.instructions === '') return { ok: false, problem: `${where}: the text before the ${VALUES_BOUNDARY} line is empty` };
   if (split.values === '') return { ok: false, problem: `${where}: the text after the ${VALUES_BOUNDARY} line is empty` };
-  if (placeholdersOf(split.instructions).length > 0) return { ok: false, problem: `${where}: the text before the ${VALUES_BOUNDARY} line uses a parameter, and would put a value in the cached part` };
+  if (placeholdersOf(split.instructions).some((name) => !prompt.staticParameters.includes(name))) return { ok: false, problem: `${where}: the text before the ${VALUES_BOUNDARY} line uses a parameter that is not static, and would put a value in the cached part` };
   return { ok: true, override: { template: text, instructions: split.instructions, values: split.values } };
 }
 
@@ -159,7 +169,9 @@ export async function buildPromptRegistry(overrides: Readonly<Record<string, str
         const filledValues = fillIn(source.values, values);
         const record: PromptRecord = { id, version: prompt.version, source: override === undefined ? 'builtin' : 'override', sha256: sha256Of(source.template) };
         if (source.instructions === undefined) return { record, text: filledValues, values: filledValues };
-        return { record, text: `${source.instructions}${PART_SEPARATOR}${filledValues}`, instructions: source.instructions, values: filledValues };
+        const instructions = fillIn(source.instructions, values);
+        const filled: PromptRecord = placeholdersOf(source.instructions).length === 0 ? record : { ...record, instructionsSha256: sha256Of(instructions) };
+        return { record: filled, text: `${instructions}${PART_SEPARATOR}${filledValues}`, instructions, values: filledValues };
       },
     },
   };

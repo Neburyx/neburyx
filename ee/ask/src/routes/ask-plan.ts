@@ -1,4 +1,5 @@
-import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AskPlan, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { AuditUnavailableError } from '../audited.js';
 import { COMMON_WORDS_VERSION, allowedWords, rebuildPlannerText } from '../allowlist/index.js';
 import { previewHashOf, hashesMatch } from '../preview/preview-hash.js';
 import { resolveMentions, type PlaceholderSpan, type ResolutionOutcome } from '../resolution/index.js';
@@ -101,10 +102,19 @@ export function createAskPlanRoute(options: AskPlanRouteOptions = {}): Extension
       const prepared = await prepare(body, capabilities, settled);
       if (prepared.kind === 'answer') return prepared.answer;
       if (body.send !== true) return { preview: prepared.text, previewHash: prepared.hash };
-      if (body.previewHash !== undefined && hashesMatch(body.previewHash, prepared.hash)) return { plan: await request.askPlanner.plan({ text: prepared.text }) };
+      if (body.previewHash !== undefined && hashesMatch(body.previewHash, prepared.hash)) return { plan: await planOf(request, prepared.text, body.sourceId) };
       return { preview: prepared.text, previewHash: prepared.hash, changed: true };
     },
   };
+}
+
+async function planOf(request: ExtensionRequest, text: string, sourceId: string): Promise<AskPlan> {
+  try {
+    return await request.askPlanner.plan({ text, context: { actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, sourceId } });
+  } catch (error) {
+    if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+    throw error;
+  }
 }
 
 export const askPlanRoute = createAskPlanRoute();

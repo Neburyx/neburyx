@@ -28,8 +28,10 @@ export interface AiAuditDetail {
   readonly modelRef: string;
   readonly promptId: string;
   readonly promptVersion: string;
-  /** The SHA-256, as 64 lower-case hexadecimal digits, of the prompt template used (the built-in text or the override file's bytes), never of the text with the request filled in: a hash of the filled text could be confirmed by guessing a value. */
+  /** The SHA-256, as 64 lower-case hexadecimal digits, of the prompt template used (the built-in text or the override file's bytes), never of the text with the question filled in: a hash of text that holds a value could be confirmed by guessing the value. */
   readonly promptSha256: string;
+  /** The SHA-256 of the instructions with the static parameters filled in from the mapping and the catalog, so two mappings that send different instructions under one template are told apart; the filled instructions hold names only, never a value of the question or of the data, so no value can be confirmed by guessing; absent for a prompt whose instructions hold no static parameter. */
+  readonly instructionsSha256?: string;
   /** The `type.property` names of the `pii` properties the request held, never their values; absent when none was sent, never an empty list. */
   readonly piiPropertiesSent?: readonly string[];
   /** The input tokens after the last cache breakpoint, as the provider states them; with caching, the total input is this plus the two cache counts. */
@@ -56,6 +58,7 @@ export const aiAuditDetailSchema = z.strictObject({
   promptId: label,
   promptVersion: label,
   promptSha256: sha256Hex,
+  instructionsSha256: sha256Hex.optional(),
   piiPropertiesSent: z.array(propertyName).min(1).max(MAX_PII_PROPERTIES).optional(),
   tokensIn: tokensSchema,
   tokensOut: tokensSchema,

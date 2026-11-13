@@ -6,6 +6,7 @@ import { buildPromptRegistry } from '../prompts.js';
 import type { ModelAnswer, ModelProvider } from '../provider.js';
 import { CONFORMANCE_CASES, CONFORMANCE_SCENARIOS, type ConformanceRig, type ConformanceScenario } from './conformance.js';
 import { createFixtureProvider, replyKey, type FixtureReply } from './fixture.js';
+import { BUILT_IN_PROMPTS } from '../prompts.js';
 
 const REPLIES: Readonly<Record<ConformanceScenario, FixtureReply>> = {
   'ok-known-usage': { kind: 'ok', text: 'a plan', usage: { kind: 'known', inputTokens: 12, outputTokens: 34 } },
@@ -25,7 +26,7 @@ async function fixtureRig(overrides: Partial<Record<ConformanceScenario, Fixture
   const built = await buildPromptRegistry();
   if (!built.ok) throw new Error(built.problems.join('; '));
   let next: FixtureReply = REPLIES['ok-known-usage'];
-  const fixture = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', 1)]: () => next } });
+  const fixture = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: () => next } });
   return {
     provider: wrap(fixture),
     registry: built.registry,

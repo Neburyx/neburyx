@@ -1,4 +1,4 @@
-import { PRESET_TEMPLATES, linkedEntitiesParamsSchema, sharedAttributeParamsSchema, type AiMappingView } from '@neburyx/contracts';
+import { ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, type AiMappingView } from '@neburyx/contracts';
 
 export interface VocabularyInput {
   /** The mapping the extension was configured with; the names of its entity and relationship types count, never a property name. */
@@ -9,7 +9,7 @@ export interface VocabularyInput {
 
 /** The identifiers of the templates a plan names and the parameter names of their plan schemas: the words of the catalog that the contract itself holds. */
 function contractCatalogEntries(): readonly string[] {
-  return [...PRESET_TEMPLATES, ...Object.keys(sharedAttributeParamsSchema.shape), ...Object.keys(linkedEntitiesParamsSchema.shape)];
+  return [...ASK_PLAN_TEMPLATE_IDS, ...ASK_PLAN_PARAM_NAMES];
 }
 
 /**

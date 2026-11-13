@@ -9,12 +9,14 @@ import { buildPromptRegistry, PromptError, type PromptRegistry } from './prompts
 import type { ModelProvider, ModelRequest, PromptId, TokenUsage } from './provider.js';
 import { CONFORMANCE_CASES, type ConformanceRig } from './testing/conformance.js';
 import { createFixtureProvider, replyKey, type FixtureReply } from './testing/fixture.js';
+import { BUILT_IN_PROMPTS } from './prompts.js';
 
 const SIGNAL = new AbortController().signal;
 const CONFIGURED_MODEL = 'configured-model';
 const CONTEXT: AuditedCallContext = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' };
 const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
   'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
   'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
 };
@@ -37,7 +39,7 @@ function recordingSink(failure?: Error): { readonly sink: AuditSink; readonly ev
 
 async function rig(reply: FixtureReply | ((request: ModelRequest) => FixtureReply) = { kind: 'ok', text: 'ANSWER-MARKER a plan', usage: { kind: 'known', inputTokens: 12, outputTokens: 34 } }, options: { overrides?: Record<string, string>; failure?: Error; sinkRegistry?: PromptRegistry; provider?: ModelProvider; model?: string } = {}) {
   const registry = await registryWith(options.overrides);
-  const replies = Object.fromEntries((['ask.plan', 'summary.view', 'assistant.route'] as const).map((id) => [replyKey(id, 1), reply]));
+  const replies = Object.fromEntries((['ask.plan', 'summary.view', 'assistant.route'] as const).map((id) => [replyKey(id, BUILT_IN_PROMPTS[id].version), reply]));
   const fixture = createFixtureProvider({ registry: options.sinkRegistry ?? registry, replies });
   const recorded = recordingSink(options.failure);
   const audited = createAuditedModelCall({ provider: options.provider ?? fixture, configuration: { registry, model: options.model ?? CONFIGURED_MODEL }, sink: recorded.sink });
@@ -48,7 +50,7 @@ describe('an answered model call', () => {
   it('returns the answer unchanged and passes the request and the signal to the provider', async () => {
     const seen: { request?: ModelRequest; signal?: AbortSignal } = {};
     const registry = await registryWith();
-    const fixture = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', 1)]: { kind: 'ok', text: 'a plan' } } });
+    const fixture = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'ok', text: 'a plan' } } });
     const provider: ModelProvider = { complete: (request, signal) => ((seen.request = request), (seen.signal = signal), fixture.complete(request, signal)) };
     const { audited } = await rig(undefined, { provider });
     const answer = await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
@@ -69,7 +71,7 @@ describe('an answered model call', () => {
         sourceId: 'src-1',
         investigationId: 'inv-1',
         traceId: 'tr-1',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: resolved.record.sha256, tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: String(BUILT_IN_PROMPTS[id].version), promptSha256: resolved.record.sha256, ...(resolved.record.instructionsSha256 === undefined ? {} : { instructionsSha256: resolved.record.instructionsSha256 }), tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
       },
     ]);
   });
@@ -106,10 +108,10 @@ describe('an answered model call', () => {
   it('records the same template hash whatever the request holds, and no hash of the filled text anywhere in the event', async () => {
     const { audited, events, registry } = await rig();
     await audited.call(REQUESTS['ask.plan'], CONTEXT, SIGNAL);
-    await audited.call({ promptId: 'ask.plan', parameters: { catalog: 'T3', question: 'another question entirely' } }, CONTEXT, SIGNAL);
+    await audited.call({ promptId: 'ask.plan', parameters: { catalog: 'T3', vocabulary: 'V1', question: 'another question entirely' } }, CONTEXT, SIGNAL);
     const hashes = events.map((event) => (event.detail && 'ai' in event.detail ? event.detail.ai?.promptSha256 : undefined));
     expect(hashes[0]).toBe(hashes[1]);
-    for (const parameters of [REQUESTS['ask.plan'].parameters, { catalog: 'T3', question: 'another question entirely' }]) {
+    for (const parameters of [REQUESTS['ask.plan'].parameters, { catalog: 'T3', vocabulary: 'V1', question: 'another question entirely' }]) {
       expect(JSON.stringify(events)).not.toContain(sha256Of(registry.resolve('ask.plan', parameters).text));
     }
   });
@@ -166,7 +168,7 @@ describe('an answered model call', () => {
   it('is a provider for one context, and passes the conformance cases of a provider', async () => {
     const { audited, registry, fixture } = await rig();
     let next: FixtureReply = { kind: 'ok', text: 'a plan', usage: { kind: 'known', inputTokens: 1, outputTokens: 2 } };
-    const replying = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', 1)]: () => next } });
+    const replying = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: () => next } });
     const wrapped = createAuditedModelCall({ provider: replying, configuration: { registry, model: CONFIGURED_MODEL }, sink: recordingSink().sink });
     const conformanceRig: ConformanceRig = {
       provider: wrapped.asProvider(CONTEXT),
@@ -215,7 +217,7 @@ describe('a refused, failed or thrown call', () => {
   describe('a failed answer whose usage is not known', () => {
     async function eventFor(usage: unknown): Promise<AuditEvent> {
       const registry = await registryWith();
-      const inner = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', 1)]: { kind: 'failed', code: 'truncated' } } });
+      const inner = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'failed', code: 'truncated' } } });
       const provider: ModelProvider = {
         complete: async (request, signal) => {
           const { usage: _usage, ...rest } = await inner.complete(request, signal);
@@ -312,7 +314,7 @@ describe('a call whose audit cannot be written', () => {
 
   it('does not return an answer before a sink that has not settled does', async () => {
     const registry = await registryWith();
-    const fixture = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', 1)]: { kind: 'ok', text: 'ANSWER-MARKER' } } });
+    const fixture = createFixtureProvider({ registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'ok', text: 'ANSWER-MARKER' } } });
     let release: (() => void) | undefined;
     const sink: AuditSink = { record: () => new Promise<void>((resolve) => (release = resolve)) };
     const audited = createAuditedModelCall({ provider: fixture, configuration: { registry, model: CONFIGURED_MODEL }, sink });
@@ -322,5 +324,11 @@ describe('a call whose audit cannot be written', () => {
     expect(answered).toBe(false);
     release?.();
     expect(await pending).toMatchObject({ status: 'ok' });
+  });
+});
+
+describe('the action of an audited repair call', () => {
+  it('is the action of the plan call it repairs', () => {
+    expect(AUDIT_ACTIONS['ask.plan.repair']).toBe(AUDIT_ACTIONS['ask.plan']);
   });
 });

@@ -109,7 +109,7 @@ function codeOf(error: unknown): FailureCode {
   return 'provider-error';
 }
 
-/** The one place that decides what is cached: only the fixed instructions, as the one system block with the one breakpoint, and never a value. With caching off, or with no fixed part, the whole prompt is the user message. */
+/** The one place that decides what is cached: only the instructions, with their static parameters filled in from the mapping and the catalog, as the one system block with the one breakpoint, and never a value of the question or of the data. With caching off, or with no fixed part, the whole prompt is the user message. */
 function promptParts(resolved: ResolvedPrompt, cache: AskConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
   if (!cache.enabled || resolved.instructions === undefined) return { messages: [{ role: 'user', content: resolved.text }] };
   const breakpoint = cache.ttl === '1h' ? { type: 'ephemeral' as const, ttl: '1h' as const } : { type: 'ephemeral' as const };

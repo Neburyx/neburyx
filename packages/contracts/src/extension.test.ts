@@ -122,3 +122,11 @@ describe('the refusal of a call that names a thing that is not there', () => {
     expect(parseExtensionRefusal(thrown)).toEqual({ code: 'NOT_FOUND' });
   });
 });
+
+describe('the refusal of a call whose audit event could not be written', () => {
+  it('is recognised by its shape and carries neither a reason nor an audited mark', () => {
+    const thrown = new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+    expect([thrown.code, thrown.reason, thrown.audited]).toEqual(['AUDIT_UNAVAILABLE', undefined, undefined]);
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'AUDIT_UNAVAILABLE' });
+  });
+});

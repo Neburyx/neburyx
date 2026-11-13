@@ -16,7 +16,8 @@ export interface BuiltRequest {
 }
 
 export interface RequestBuilder {
-  readonly ask: (input: { readonly question: string; readonly catalog: string }) => BuiltRequest;
+  readonly ask: (input: { readonly question: string; readonly catalog: string; readonly vocabulary: string }) => BuiltRequest;
+  readonly askRepair: (input: { readonly question: string; readonly catalog: string; readonly vocabulary: string; readonly reply: string; readonly problems: string }) => BuiltRequest;
   readonly summary: (input: { readonly elements: readonly ContextElement[] }) => BuiltRequest;
   readonly assistant: (input: { readonly message: string; readonly elements: readonly ContextElement[] }) => BuiltRequest;
 }
@@ -60,7 +61,8 @@ const noProperties = (request: ModelRequest): BuiltRequest => ({ request, sentPr
 /** The one place that turns what the gate returned into a request: a property goes in only when the rules allow it, after the gate has masked what it masks. */
 export function createRequestBuilder(rules: PropertyRules): RequestBuilder {
   return {
-    ask: ({ question, catalog }) => noProperties({ promptId: 'ask.plan', parameters: { question, catalog } }),
+    ask: ({ question, catalog, vocabulary }) => noProperties({ promptId: 'ask.plan', parameters: { question, catalog, vocabulary } }),
+    askRepair: ({ question, catalog, vocabulary, reply, problems }) => noProperties({ promptId: 'ask.plan.repair', parameters: { question, catalog, vocabulary, reply, problems } }),
     summary: ({ elements }) => {
       const view = viewOf(elements, rules);
       return { request: { promptId: 'summary.view', parameters: { view: view.text } }, sentProperties: view.sent, sentPii: view.sentPii };

@@ -44,3 +44,11 @@ describe('the question vocabulary', () => {
     expect(vocabulary.length).toBe(questionVocabulary({ view: undefined }).length + 1);
   });
 });
+
+describe('the words of the widened plan contract', () => {
+  it('holds the identifiers and parameter names of every template a plan can name, and none of the fields a plan cannot hold', () => {
+    const entries = questionVocabulary({ view: undefined });
+    for (const entry of ['entity', 'degree-preview', 'expand', 'derived-rule-run', 'derived-edge-support', 'search', 'neighborTypes', 'ruleId', 'ends', 'entityTypes', 'relTypes']) expect(entries).toContain(entry);
+    for (const excluded of ['filters', 'rank', 'cursors', 'mask', 'sourceId', 'typeahead']) expect(entries).not.toContain(excluded);
+  });
+});

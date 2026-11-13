@@ -546,7 +546,7 @@ describe('the usage of a failed answer', () => {
 describe('prompt caching', () => {
   type Sent = { model: string; max_tokens: number; output_config: { effort: string }; system?: unknown; messages: { role: string; content: string }[] };
   const sentBody = (): Sent => JSON.parse(seen[0]?.body ?? '') as Sent;
-  const VALUE_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'SENTINEL-CATALOG', question: 'SENTINEL-QUESTION [[values]]' } };
+  const VALUE_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'SENTINEL-CATALOG', vocabulary: 'V1', question: 'SENTINEL-QUESTION [[values]]' } };
 
   async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST, prompts?: Record<string, string>): Promise<AskConfiguration> {
     handler = reply(200, message());
@@ -570,11 +570,12 @@ describe('prompt caching', () => {
     expect((sentBody().system as { cache_control: unknown }[])[0]?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
   });
 
-  it.each([['5m'], ['1h']] as const)('never has a value of the request inside the system block, with the lifetime %s', async (ttl) => {
+  it.each([['5m'], ['1h']] as const)('has only the static parameters, never the question, inside the system block, with the lifetime %s', async (ttl) => {
     await callWith({ cache: { ttl } });
     const body = sentBody();
-    expect(JSON.stringify(body.system)).not.toMatch(/SENTINEL|\[\[values\]\]/);
-    expect(body.messages[0]?.content).toContain('SENTINEL-CATALOG');
+    expect(JSON.stringify(body.system)).not.toMatch(/SENTINEL-QUESTION|\[\[values\]\]/);
+    expect(JSON.stringify(body.system)).toContain('SENTINEL-CATALOG');
+    expect(body.messages[0]?.content).not.toContain('SENTINEL-CATALOG');
     expect(body.messages[0]?.content).toContain('SENTINEL-QUESTION [[values]]');
   });
 

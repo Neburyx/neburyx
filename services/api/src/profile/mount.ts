@@ -2,6 +2,7 @@ import { parseExtensionRefusal, type AskPlanner, type AuditSink, type ExtensionR
 import type { FastifyInstance } from 'fastify';
 import type { AppStore } from '../app-store.js';
 import { AppError } from '../errors.js';
+import { communityAskPlanner } from '../seams/community-seams.js';
 import type { Principal } from '../seams/seams.js';
 
 export interface ExtensionMount {
@@ -42,7 +43,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               previewOn: mount.previewOn,
               traceId: request.id,
               audit: mount.audit,
-              askPlanner: mount.askPlanner,
+              askPlanner: mount.askPlanner !== communityAskPlanner ? mount.askPlanner : (extension.askPlanner?.() ?? mount.askPlanner),
               ...(mount.previewMac === undefined ? {} : { previewMac: mount.previewMac }),
               ...(mount.policyVersionOf === undefined ? {} : { policyVersionOf: mount.policyVersionOf }),
               ...(askEntityTools === undefined ? {} : { askEntityTools }),

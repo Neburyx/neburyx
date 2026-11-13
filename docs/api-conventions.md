@@ -143,7 +143,7 @@ With neither part of the preview switch set, the enterprise code is not loaded a
 
 ## An Ask call that no planner can answer
 
-With the AI preview on, `POST /v1/ask/plan` and `POST /v1/ask/run` are mounted, and where no planner is installed they answer `ASK_UNSUPPORTED` (422) with `details.reason`. Nothing is audited for this answer. With the switch off the paths do not exist: 404. `POST /v1/ask/run` answers `NOT_FOUND` (404) for a plan that is not there; until plans are stored, none is.
+With the AI preview on, `POST /v1/ask/plan` and `POST /v1/ask/run` are mounted. The enterprise extension installs its planner once the model is configured and the audit sink is mounted; the plan route then answers from the model, and answers `AUDIT_UNAVAILABLE` (503) when the audit event of the model call cannot be written. Where no planner is installed they answer `ASK_UNSUPPORTED` (422) with `details.reason`. Nothing is audited for this answer. With the switch off the paths do not exist: 404. `POST /v1/ask/run` answers `NOT_FOUND` (404) for a plan that is not there; until plans are stored, none is.
 
 | `details.reason` | `message` | `retryable` |
 |---|---|---|

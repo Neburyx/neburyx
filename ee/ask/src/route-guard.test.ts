@@ -7,14 +7,15 @@ import { askRunRoute } from './routes/ask-run.js';
 import { buildPromptRegistry } from './prompts.js';
 import { replyKey, createFixtureProvider } from './testing/fixture.js';
 import type { ModelRequest } from './provider.js';
+import { BUILT_IN_PROMPTS } from './prompts.js';
 
 const SIGNAL = new AbortController().signal;
-const MODEL_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1', question: 'who is ‹person#1›?' } };
+const MODEL_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1', vocabulary: 'V1', question: 'who is ‹person#1›?' } };
 
 async function fixture() {
   const built = await buildPromptRegistry({});
   if (!built.ok) throw new Error(built.problems.join('; '));
-  return createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', 1)]: { kind: 'ok', text: 'draft' } } });
+  return createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'ok', text: 'draft' } } });
 }
 
 function requestOf(options: { readonly previewOn: boolean; readonly record?: (event: AuditEvent) => Promise<void> }): { readonly request: ExtensionRequest; readonly events: AuditEvent[] } {

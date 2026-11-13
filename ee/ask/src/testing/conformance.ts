@@ -31,7 +31,7 @@ export interface ConformanceCase {
   readonly run: (rig: ConformanceRig) => Promise<void>;
 }
 
-const REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', question: 'who is ‹person#1›?' } };
+const REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'who is ‹person#1›?' } };
 
 const FAILURE_SCENARIOS: readonly (readonly [ConformanceScenario, FailureCode])[] = [
   ['timeout', 'timeout'],
@@ -123,7 +123,7 @@ export const CONFORMANCE_CASES: readonly ConformanceCase[] = [
       const signal = new AbortController().signal;
       const isPromptError = (error: unknown): boolean => error instanceof PromptError;
       await assert.rejects(rig.provider.complete({ promptId: 'ask.plan', parameters: { question: 'q' } }, signal), isPromptError);
-      await assert.rejects(rig.provider.complete({ promptId: 'ask.plan', parameters: { catalog: 'c', question: 'q', extra: 'x' } }, signal), isPromptError);
+      await assert.rejects(rig.provider.complete({ promptId: 'ask.plan', parameters: { catalog: 'c', vocabulary: 'V1', question: 'q', extra: 'x' } }, signal), isPromptError);
       assert.equal(rig.callsMade(), before, 'no call went out');
     },
   },

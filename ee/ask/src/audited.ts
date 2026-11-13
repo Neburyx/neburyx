@@ -5,6 +5,7 @@ import type { ModelAnswer, ModelProvider, ModelRequest, PromptId, PromptRecord, 
 /** The action an audit event of each prompt carries. */
 export const AUDIT_ACTIONS: Readonly<Record<PromptId, string>> = {
   'ask.plan': 'ask.plan',
+  'ask.plan.repair': 'ask.plan',
   'summary.view': 'ai.summary',
   'assistant.route': 'assistant.turn',
 };
@@ -59,7 +60,7 @@ function countOf(value: number): AiAuditDetail['tokensIn'] {
 }
 
 function sameRecord(left: PromptRecord, right: PromptRecord): boolean {
-  return left.id === right.id && left.version === right.version && left.source === right.source && left.sha256 === right.sha256;
+  return left.id === right.id && left.version === right.version && left.source === right.source && left.sha256 === right.sha256 && left.instructionsSha256 === right.instructionsSha256;
 }
 
 export function createAuditedModelCall(options: AuditedModelOptions): AuditedModelCall {
@@ -80,6 +81,7 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
       promptId: prompt.id,
       promptVersion: String(prompt.version),
       promptSha256: prompt.sha256,
+      ...(prompt.instructionsSha256 === undefined ? {} : { instructionsSha256: prompt.instructionsSha256 }),
       ...(context.piiPropertiesSent === undefined || context.piiPropertiesSent.length === 0 ? {} : { piiPropertiesSent: context.piiPropertiesSent }),
       ...counts,
     });

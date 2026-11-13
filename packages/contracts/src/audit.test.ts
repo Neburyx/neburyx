@@ -24,6 +24,7 @@ describe('the AI fields of an audit event', () => {
       readonly promptId: string;
       readonly promptVersion: string;
       readonly promptSha256: string;
+      readonly instructionsSha256?: string;
       readonly piiPropertiesSent?: readonly string[];
       readonly tokensIn: TokenCount | 'unknown';
       readonly tokensOut: TokenCount | 'unknown';
@@ -124,5 +125,15 @@ describe('the cache counts of an AI audit detail', () => {
   it.each([[-1], [1.5], ['many'], [null]])('refuses %s as a cache count', (value) => {
     expect(aiAuditDetailSchema.safeParse({ ...AI, cacheReadTokens: value }).success).toBe(false);
     expect(aiAuditDetailSchema.safeParse({ ...AI, cacheWriteTokens: value }).success).toBe(false);
+  });
+});
+
+describe('the hash of the filled instructions of an audit event', () => {
+  const base = { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: 'a'.repeat(64), tokensIn: 1, tokensOut: 2 };
+
+  it('is accepted as 64 hexadecimal digits, is optional, and is refused in any other form', () => {
+    expect(parseAiAuditDetail({ ...base, instructionsSha256: 'b'.repeat(64) })).toMatchObject({ instructionsSha256: 'b'.repeat(64) });
+    expect(parseAiAuditDetail(base)).not.toHaveProperty('instructionsSha256');
+    for (const bad of ['B'.repeat(64), 'b'.repeat(63), 'a text with a space', 5]) expect(() => parseAiAuditDetail({ ...base, instructionsSha256: bad })).toThrow();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+import { ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
 
 const REF = { entityType: 'node_a', stableId: 'A-1' };
 const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
@@ -114,5 +114,46 @@ describe('the resolutions of a question', () => {
     const many = (count: number) => Array.from({ length: count }, () => picked);
     expect(askResolutionsSchema.safeParse(many(ASK_MAX_RESOLUTIONS)).success).toBe(true);
     expect(askResolutionsSchema.safeParse(many(ASK_MAX_RESOLUTIONS + 1)).success).toBe(false);
+  });
+});
+
+const ANCHOR = { entityType: 'node_a', stableId: 'A-1' };
+const PLANS: Readonly<Record<string, Record<string, unknown>>> = {
+  entity: { ref: ANCHOR },
+  'degree-preview': { ref: ANCHOR },
+  expand: { ref: ANCHOR, relTypes: ['link_a'], neighborTypes: ['node_b'], direction: 'out', sort: 'observed', window: { days: 7 }, limit: 25 },
+  'derived-rule-run': { ref: ANCHOR, ruleId: 'rule_a' },
+  'derived-edge-support': { ruleId: 'rule_a', ends: [ANCHOR, { entityType: 'node_a', stableId: 'A-2' }] },
+  search: { entityTypes: ['node_b'], text: 'PAY-77' },
+};
+const planOf = (templateId: string, params: Record<string, unknown>) => ({ kind: 'plan', templateId, templateVersion: 1, params, rationale: 'A plan.' });
+
+describe('the plans for the other templates', () => {
+  it.each(Object.entries(PLANS))('accepts a %s plan', (templateId, params) => {
+    expect(askPlanSchema.safeParse(planOf(templateId, params)).success).toBe(true);
+  });
+
+  it('holds the eight templates, and in no plan a source, a mask, a cursor, a continue flag, a filter or a rank', () => {
+    expect([...ASK_PLAN_TEMPLATE_IDS].sort()).toEqual(['degree-preview', 'derived-edge-support', 'derived-rule-run', 'entity', 'expand', 'linked-entities', 'search', 'shared-attribute']);
+    for (const excluded of ['sourceId', 'mask', 'cursors', 'continue', 'filters', 'rank', 'typeahead']) expect(ASK_PLAN_PARAM_NAMES).not.toContain(excluded);
+  });
+
+  it.each([
+    ['a parameter of another template', 'expand', { ...PLANS['expand'], ruleId: 'rule_a' }],
+    ['an unknown parameter', 'entity', { ref: ANCHOR, extra: 1 }],
+    ['filters on an expand', 'expand', { ...PLANS['expand'], filters: [{ property: 'p', op: 'eq', value: 'x' }] }],
+    ['a rank on an expand', 'expand', { ...PLANS['expand'], rank: { by: 'p' } }],
+    ['a cursor on an expand', 'expand', { ...PLANS['expand'], cursors: { node_b: 'abc' } }],
+    ['a limit of 0 on an expand', 'expand', { ...PLANS['expand'], limit: 0 }],
+    ['a source on a search', 'search', { ...PLANS['search'], sourceId: 'demo' }],
+    ['a typeahead on a search', 'search', { ...PLANS['search'], typeahead: true }],
+    ['three ends on an edge support', 'derived-edge-support', { ruleId: 'r', ends: [ANCHOR, ANCHOR, ANCHOR] }],
+    ['no neighbor types on an expand', 'expand', { ref: ANCHOR }],
+  ])('rejects %s', (_name, templateId, params) => {
+    expect(askPlanSchema.safeParse(planOf(templateId, params)).success).toBe(false);
+  });
+
+  it('rejects a text field beside the parameters of a new template', () => {
+    expect(askPlanSchema.safeParse({ ...planOf('entity', { ref: ANCHOR }), query: 'x' }).success).toBe(false);
   });
 });

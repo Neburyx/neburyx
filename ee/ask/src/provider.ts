@@ -1,4 +1,4 @@
-export const PROMPT_IDS = ['ask.plan', 'summary.view', 'assistant.route'] as const;
+export const PROMPT_IDS = ['ask.plan', 'summary.view', 'assistant.route', 'ask.plan.repair'] as const;
 
 export type PromptId = (typeof PROMPT_IDS)[number];
 
@@ -16,6 +16,8 @@ export interface PromptRecord {
   readonly version: number;
   readonly source: PromptSource;
   readonly sha256: string;
+  /** The SHA-256 of the instructions with the static parameters filled in; present only for a prompt whose instructions hold static parameters. */
+  readonly instructionsSha256?: string;
 }
 
 /** `inputTokens` is what the provider counts after the last cache breakpoint; a cache count the provider did not state is absent, never zero. */

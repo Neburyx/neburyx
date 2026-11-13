@@ -5,6 +5,7 @@ import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { createFailureReporter } from './failure-line.js';
+import { catalogWords, createAskPlanner } from './planner/index.js';
 import { guardAiRouteGroup } from './route-guard.js';
 import { createAskPlanRoute } from './routes/ask-plan.js';
 import { askRunRoute } from './routes/ask-run.js';
@@ -26,6 +27,7 @@ export type { BuiltInPrompt, PromptRegistry, PromptRegistryResult, ResolvedPromp
 export { FAILURE_CODES, PROMPT_IDS } from './provider.js';
 export type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, PromptId, PromptParameters, PromptRecord, PromptSource, TokenUsage } from './provider.js';
 
+export { CATALOG, INVALID_PLAN_REASON, MODEL_REFUSED_REASON, PlannerCallFailed, catalogText, catalogWords, createAskPlanner, vocabularyText } from './planner/index.js';
 export { ASK_PLAN_URL, askPlanRoute, createAskPlanRoute } from './routes/ask-plan.js';
 export { ASK_RUN_URL, askRunRoute } from './routes/ask-run.js';
 
@@ -70,6 +72,11 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,
+    askPlanner() {
+      const model = this.model();
+      const requestBuilder = this.requestBuilder();
+      return model === undefined || requestBuilder === undefined ? undefined : createAskPlanner({ model, requestBuilder, view: mappingView });
+    },
     model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink })),
     createAuditSink(context) {
       mounted = createAuditSink(context);
@@ -85,7 +92,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
             responseSchema: aiStatusResponseSchema,
             handler: async () => ({ preview: true }),
           },
-          createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: mappingView }) }),
+          createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: mappingView, catalogWords: catalogWords() }) }),
           askRunRoute,
         ],
       }),

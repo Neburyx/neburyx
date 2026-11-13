@@ -116,7 +116,7 @@ The `ai` block is optional, and so is each key in it. It belongs to the deployme
 | `provider` | no | The model provider. Only `anthropic` is accepted for now; another value is refused |
 | `model` | no | The model to use, for example `claude-sonnet-5-5`. There is no default. Give the name without a date suffix |
 | `key` | no | Where the API key is: a map with exactly one of `env` and `file`, never the key itself |
-| `prompts` | no | A map from a built-in prompt id (`ask.plan`, `summary.view`, `assistant.route`) to the absolute path of a text file that replaces that prompt. A replacement cannot add tools |
+| `prompts` | no | A map from a built-in prompt id (`ask.plan`, `ask.plan.repair`, `summary.view`, `assistant.route`) to the absolute path of a text file that replaces that prompt. A replacement cannot add tools |
 | `timeout_ms` | no | How long one call to the model may take, from 1000 to 600000. The default is 60000 |
 | `max_retries` | no | How many times a failed call is tried again, from 0 to 5. The default is 0 |
 | `max_tokens` | no | The most tokens a reply may use, from 1 to 32768. The default is 8192 |

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AuditUnavailableError, buildPromptRegistry, createAuditedModelCall, createEnterpriseExtension, type AuditedCallContext, type ModelRequest, type PromptId } from '@neburyx/ee-ask';
+import { AuditUnavailableError, BUILT_IN_PROMPTS, buildPromptRegistry, createAuditedModelCall, createEnterpriseExtension, type AuditedCallContext, type ModelRequest, type PromptId } from '@neburyx/ee-ask';
 import type { MountedAuditSink } from '@neburyx/contracts';
 import pg from 'pg';
 import { stringify } from 'yaml';
@@ -39,9 +39,12 @@ afterAll(async () => {
 const sha256Of = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 const ACTOR = uuidv7();
 const CONTEXT: AuditedCallContext = { actorId: ACTOR, actorRole: 'investigator', traceId: 'tr-call' };
-const MARKERS = ['QUESTION-MARKER', 'VIEW-MARKER', 'MESSAGE-MARKER', 'ANSWER-MARKER'];
+const MARKERS = ['QUESTION-MARKER', 'VIEW-MARKER', 'MESSAGE-MARKER', 'ANSWER-MARKER', 'REPLY-MARKER'];
+const IDS = ['ask.plan', 'summary.view', 'assistant.route', 'ask.plan.repair'] as const;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params: invalid_type' } },
   'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
   'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
 };
@@ -64,7 +67,7 @@ async function audited(database: TestDatabase, reply: FixtureReply, overrides: R
   if (sink === undefined) throw new Error('the extension holds no audit sink');
   const built = await buildPromptRegistry(overrides);
   if (!built.ok) throw new Error(built.problems.join('; '));
-  const replies = Object.fromEntries((['ask.plan', 'summary.view', 'assistant.route'] as const).map((id) => [replyKey(id, 1), reply]));
+  const replies = Object.fromEntries(IDS.map((id) => [replyKey(id, BUILT_IN_PROMPTS[id].version), reply]));
   const provider = createFixtureProvider({ registry: built.registry, replies });
   return { call: createAuditedModelCall({ provider, configuration: { registry: built.registry, model: 'configured-model' }, sink }).call, registry: built.registry };
 }
@@ -73,7 +76,7 @@ const OK: FixtureReply = { kind: 'ok', text: 'ANSWER-MARKER a plan', usage: { ki
 const SIGNAL = new AbortController().signal;
 
 describe('a model call through the fixture, recorded in audit_events', () => {
-  it.each(['ask.plan', 'summary.view', 'assistant.route'] as const)('leaves one row for %s with the model, the prompt, its hash and the counts', async (id) => {
+  it.each(IDS)('leaves one row for %s with the model, the prompt, its hash and the counts', async (id) => {
     const database = await migrated();
     const { call, registry } = await audited(database, OK);
     await call(REQUESTS[id], CONTEXT, SIGNAL);
@@ -82,12 +85,16 @@ describe('a model call through the fixture, recorded in audit_events', () => {
       {
         actor_id: ACTOR,
         actor_role: 'investigator',
-        action: { 'ask.plan': 'ask.plan', 'summary.view': 'ai.summary', 'assistant.route': 'assistant.turn' }[id],
+        action: { 'ask.plan': 'ask.plan', 'ask.plan.repair': 'ask.plan', 'summary.view': 'ai.summary', 'assistant.route': 'assistant.turn' }[id],
         result: 'success',
         trace_id: 'tr-call',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: '1', promptSha256: registry.resolve(id, REQUESTS[id].parameters).record.sha256, tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: String(BUILT_IN_PROMPTS[id].version), promptSha256: registry.resolve(id, REQUESTS[id].parameters).record.sha256, ...(registry.resolve(id, REQUESTS[id].parameters).record.instructionsSha256 === undefined ? {} : { instructionsSha256: registry.resolve(id, REQUESTS[id].parameters).record.instructionsSha256 }), tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
       },
     ]);
+    const [row] = stored;
+    const { ai } = row?.['detail'] as { ai: { instructionsSha256?: string } };
+    if (id === 'ask.plan') expect(ai.instructionsSha256).toMatch(SHA256_HEX);
+    else expect(ai).not.toHaveProperty('instructionsSha256');
   });
 
   it('leaves no marker of the question, the view, the message or the answer in the row, and none on the process output', async () => {
@@ -97,7 +104,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
     const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => (written.push(String(chunk)), true));
     const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => (written.push(String(chunk)), true));
     try {
-      for (const id of ['ask.plan', 'summary.view', 'assistant.route'] as const) await call(REQUESTS[id], CONTEXT, SIGNAL);
+      for (const id of IDS) await call(REQUESTS[id], CONTEXT, SIGNAL);
     } finally {
       out.mockRestore();
       err.mockRestore();
@@ -107,7 +114,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
       expect(everything).not.toContain(marker);
       expect(written.join('')).not.toContain(marker);
     }
-    expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS rows FROM audit_events')).toEqual([{ rows: 3 }]);
+    expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS rows FROM audit_events')).toEqual([{ rows: 4 }]);
   });
 
   it('records the template hash of an operator\'s override, not that of the built-in prompt', async () => {

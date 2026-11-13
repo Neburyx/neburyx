@@ -36,7 +36,7 @@ The API checks that the file exists, is not empty, can be read by the process an
 
 ## Prompts
 
-Each AI feature has a built-in prompt with an id and a version: `ask.plan`, `summary.view` and `assistant.route`. To replace one, point its id at your own text file in `ai.prompts`:
+Each AI feature has a built-in prompt with an id and a version: `ask.plan`, `ask.plan.repair`, `summary.view` and `assistant.route`. To replace one, point its id at your own text file in `ai.prompts`:
 
 ```yaml
 ai:
@@ -44,11 +44,11 @@ ai:
     ask.plan: /etc/neburyx/prompts/ask-plan.txt
 ```
 
-The file is plain UTF-8 text of at most 64 KiB. It may use only the parameters of its prompt, written as `{{name}}`: `ask.plan` has `catalog` and `question`, `summary.view` has `view`, `assistant.route` has `message` and `view`. A replacement changes what the model is told; it cannot add tools. The hash of a prompt, which later work records in the audit with its id and version, is the SHA-256 of the prompt text before any parameter is filled in (of the file's bytes, for a replacement), so it names the prompt and holds none of the request. The features that use these prompts come later; today the preview has one route, `GET /v1/ai/status`, and the checks that keep model output from reaching your graph arrive with them.
+The file is plain UTF-8 text of at most 64 KiB. It may use only the parameters of its prompt, written as `{{name}}`: `ask.plan` (version 3) has `catalog`, `vocabulary` and `question`, `ask.plan.repair` has those and `reply` and `problems`, `summary.view` has `view`, `assistant.route` has `message` and `view`. A replacement changes what the model is told; it cannot add tools. The hash of a prompt, which the audit records with its id and version, is the SHA-256 of the prompt text before any parameter is filled in (of the file's bytes, for a replacement), so it names the prompt and holds none of the request. `POST /v1/ask/plan` uses `ask.plan` and `ask.plan.repair`, and their output is checked against the template catalog and the mapping's vocabulary before any plan is returned. `summary.view` and `assistant.route` are still unused.
 
 ## Prompt caching
 
-Each prompt has two parts: fixed instructions, and the values of the investigation that follow them. With caching on, the provider is asked to keep the fixed instructions in its prompt cache, so a later call that starts with the same instructions reads them back at a lower price and faster. Only the fixed instructions are marked for the cache. A value of an investigation is never in the cached part: it travels in the user message after it. With caching off, the call is one user message with the whole prompt, as before, and no cache marker is sent.
+Each prompt has two parts: fixed instructions, and the values of the investigation that follow them. With caching on, the provider is asked to keep the fixed instructions in its prompt cache, so a later call that starts with the same instructions reads them back at a lower price and faster. Only the instructions are marked for the cache. For the planner prompt (`ask.plan`) the instructions include the template catalog and the vocabulary of your mapping (names of types and rules only), which are the same for every question of a mapping, so they are in the cached part; the question, and any value of an investigation, is never in the cached part: it travels in the user message after it. With caching off, the call is one user message with the whole prompt, as before, and no cache marker is sent.
 
 ```yaml
 ai:
@@ -66,11 +66,11 @@ The environment variables `NEBURYX_AI_CACHE` (`on` or `off`) and `NEBURYX_AI_CAC
 
 A read costs a fraction of the normal price (0.1 times on most models, 0.05 times on the current Sonnet and Opus models). The prices are the provider's, and they change; check its price list.
 
-A prefix shorter than the model's minimum is not cached, and no error is raised. The minimum is about 512 tokens on the current models, and more on older ones (1,024 to 4,096). Today's built-in prompts are short, so they will not be cached until later work makes them longer. A replacement prompt reaches the minimum when its fixed instructions are long enough.
+A prefix shorter than the model's minimum is not cached, and no error is raised. The minimum is about 512 tokens on the current models, and more on older ones (1,024 to 4,096). The planner prompt, with its catalog and vocabulary, is several thousand characters, so it is likely to reach that minimum on the current models; the other built-in prompts are short and are not cached. Its size is an estimate until the first call reports its token counts. A replacement prompt reaches the minimum when its fixed instructions are long enough.
 
-A replacement prompt marks where the instructions end with a line that holds only `[[values]]`. The text before the line is the instructions and the text after it is the values; the line itself is not sent. The instructions cannot use a `{{name}}` parameter, and neither part may be empty, or the start is refused. A replacement with no such line is sent whole as the user message and is not cached. (A file that already held such a line is read differently from this version on: the line is removed and the two parts are joined by a blank line.) The hash recorded in the audit is the hash of the whole file, line included.
+A replacement prompt marks where the instructions end with a line that holds only `[[values]]`. The text before the line is the instructions and the text after it is the values; the line itself is not sent. The instructions can use only a static parameter of the prompt (for `ask.plan`, `catalog` and `vocabulary`, which are filled in from the mapping and the catalog), not a parameter that holds a value of a question, and neither part may be empty, or the start is refused. A replacement with no such line is sent whole as the user message and is not cached. (A file that already held such a line is read differently from this version on: the line is removed and the two parts are joined by a blank line.) The hash recorded in the audit is the hash of the whole file, line included.
 
-The audit event of a model call carries `tokensIn` and `tokensOut`, and also `cacheReadTokens` (tokens read from the cache) and `cacheWriteTokens` (tokens written to it), each a number or `unknown` when the provider does not state it. `tokensIn` counts only the input tokens after the cached part, so the total input of a call is `tokensIn` plus the two cache figures.
+The audit event of a model call carries `tokensIn` and `tokensOut`, and also `cacheReadTokens` (tokens read from the cache) and `cacheWriteTokens` (tokens written to it), each a number or `unknown` when the provider does not state it. For a prompt whose instructions hold static parameters it also carries `instructionsSha256`, the SHA-256 of the instructions with those parameters filled in, so two mappings that send different instructions under one prompt version are told apart; the filled instructions hold names only, never a value of a question. `tokensIn` counts only the input tokens after the cached part, so the total input of a call is `tokensIn` plus the two cache figures.
 
 ## What may be sent to the model
 

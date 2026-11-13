@@ -246,3 +246,43 @@ describe('what the mount gives an extension for previews of Ask', () => {
     await app.close();
   });
 });
+
+describe('which planner an extension route is given', () => {
+  const stubPlanner = { availability: () => ({ available: true as const }), plan: () => Promise.reject(new Error('not used')) };
+
+  function withPlanner(extensionPlanner: (() => typeof stubPlanner | undefined) | undefined): ProfileExtension {
+    return { ...extensionOf(async (request) => request.askPlanner.availability()), ...(extensionPlanner === undefined ? {} : { askPlanner: extensionPlanner }) };
+  }
+
+  async function availabilityWith(extension: ProfileExtension, seamsPlanner?: typeof stubPlanner): Promise<unknown> {
+    const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), seams: { ...communitySeams(), ...(seamsPlanner === undefined ? {} : { askPlanner: seamsPlanner }) }, extension, previewOn: true });
+    const answer = (await app.inject({ url: URL_OF_ROUTE })).json();
+    await app.close();
+    return answer;
+  }
+
+  it('is the planner of the extension when the seams hold the Community default', async () => {
+    expect(await availabilityWith(withPlanner(() => stubPlanner))).toEqual({ available: true });
+  });
+
+  it('is the planner of the seams when it is not the Community default, even if the extension has one', async () => {
+    const unavailable = { availability: () => ({ available: false as const, reason: 'seam' }), plan: stubPlanner.plan };
+    expect(await availabilityWith(withPlanner(() => stubPlanner), unavailable as never)).toEqual({ available: false, reason: 'seam' });
+  });
+
+  it('is the Community default when the extension has no planner yet, or none at all', async () => {
+    expect(await availabilityWith(withPlanner(() => undefined))).toEqual({ available: false, reason: 'not_in_this_edition' });
+    expect(await availabilityWith(withPlanner(undefined))).toEqual({ available: false, reason: 'not_in_this_edition' });
+  });
+});
+
+describe('a refusal because the audit event could not be written', () => {
+  it('answers 503 AUDIT_UNAVAILABLE with no audit event and no failed-audit warning', async () => {
+    const { app, lines, events } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' }))), { previewOn: true });
+    const answer = await app.inject({ url: URL_OF_ROUTE });
+    expect([answer.statusCode, answer.json().error.code]).toEqual([503, 'AUDIT_UNAVAILABLE']);
+    expect(events).toEqual([]);
+    expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
+    await app.close();
+  });
+});

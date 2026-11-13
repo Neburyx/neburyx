@@ -46,15 +46,33 @@ export interface AiViewProperty {
   readonly pii: boolean;
 }
 
+/** One pair of end types a relationship type joins, and whether the relationships of that pair carry a time. */
+export interface AiViewEnds {
+  readonly from: string;
+  readonly to: string;
+  readonly timed: boolean;
+}
+
 export interface AiViewType {
   readonly name: string;
   readonly kind: 'entity' | 'relationship';
   readonly properties: readonly AiViewProperty[];
+  /** For a relationship type, every pair of end types its mapping rows give; absent for an entity type. */
+  readonly ends?: readonly AiViewEnds[];
+}
+
+/** A derived rule by its ID, with the two end types it joins. */
+export interface AiViewRule {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
 }
 
 /** The entity and relationship types the mapping names, each with the properties it names for the type: what an operator's property list may refer to. */
 export interface AiMappingView {
   readonly types: readonly AiViewType[];
+  /** The derived rules of the mapping, by ID and end types: names only. */
+  readonly derivedRules?: readonly AiViewRule[];
 }
 
 export interface ConfigureWarning {
@@ -75,6 +93,8 @@ export interface ProfileExtension {
   readonly migrationsDirectory?: string;
   /** Hands the extension the API's own logger, before `configure` is called. */
   readonly attachLogger?: (logger: ExtensionLogger) => void;
+  /** The planner of the extension, once it can plan (the model is configured and the audit sink is mounted); a planner given to the application through its seams wins over it, and the Community default is used when there is none. */
+  readonly askPlanner?: () => AskPlanner | undefined;
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView) => Promise<ConfigureOutcome>;
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
@@ -87,12 +107,13 @@ const notInThisEditionRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUS
 
 const notFoundRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('NOT_FOUND') });
 const queryTimeoutRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('QUERY_TIMEOUT'), timeoutMs: z.number().int().positive() });
+const auditUnavailableRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('AUDIT_UNAVAILABLE') });
 const invalidRequestRefusalSchema = z.object({ name: z.literal(EXTENSION_REFUSAL_NAME), code: z.literal('INVALID_REQUEST'), reason: z.string().min(1) });
 
 /** What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, a thing the call names not being there, a request whose parts the route cannot accept (with the reason), or a call that ran out of time (with the limit). */
-export const extensionRefusalSchema = z.union([previewOffRefusalSchema, notInThisEditionRefusalSchema, notFoundRefusalSchema, invalidRequestRefusalSchema, queryTimeoutRefusalSchema]);
+export const extensionRefusalSchema = z.union([previewOffRefusalSchema, notInThisEditionRefusalSchema, notFoundRefusalSchema, invalidRequestRefusalSchema, queryTimeoutRefusalSchema, auditUnavailableRefusalSchema]);
 
-export type ExtensionRefusalFields = Omit<z.infer<typeof previewOffRefusalSchema>, 'name'> | Omit<z.infer<typeof notInThisEditionRefusalSchema>, 'name'> | Omit<z.infer<typeof notFoundRefusalSchema>, 'name'> | Omit<z.infer<typeof invalidRequestRefusalSchema>, 'name'> | Omit<z.infer<typeof queryTimeoutRefusalSchema>, 'name'>;
+export type ExtensionRefusalFields = Omit<z.infer<typeof previewOffRefusalSchema>, 'name'> | Omit<z.infer<typeof notInThisEditionRefusalSchema>, 'name'> | Omit<z.infer<typeof notFoundRefusalSchema>, 'name'> | Omit<z.infer<typeof invalidRequestRefusalSchema>, 'name'> | Omit<z.infer<typeof queryTimeoutRefusalSchema>, 'name'> | Omit<z.infer<typeof auditUnavailableRefusalSchema>, 'name'>;
 
 /** Thrown by a route handler of an extension to refuse a call; the API answers it with the code and reason it names. */
 export class ExtensionRefusal extends Error {

@@ -86,6 +86,14 @@ describe('recording an event', () => {
     expect(calls[0]?.values[10]).toBe('{"ai":{"modelRef":"model-a","promptId":"ask-plan","promptVersion":"1","promptSha256":"'+SHA+'","tokensIn":10,"tokensOut":"unknown"}}');
   });
 
+  it('writes the hash of the filled instructions when the call has one, and refuses one that is not 64 lower-case hexadecimal digits', async () => {
+    const { mounted, calls } = rig();
+    const ai = { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '3', promptSha256: SHA, instructionsSha256: SHA, tokensIn: tokenCount(1), tokensOut: 'unknown' } as const;
+    await mounted.sink.record({ ...EVENT, action: 'ask.plan', detail: { ai } });
+    expect(JSON.parse(String(calls[0]?.values[10]))).toEqual({ ai });
+    await expect(mounted.sink.record({ ...EVENT, detail: { ai: { ...ai, instructionsSha256: 'not a hash' } } })).rejects.toMatchObject({ code: 'AUDIT_DETAIL_REFUSED' });
+  });
+
   it('writes the prompt hash and the names of the pii properties, and refuses an event whose AI detail has no hash', async () => {
     const { mounted, calls } = rig();
     const ai = { modelRef: 'model-a', promptId: 'ask-plan', promptVersion: '1', promptSha256: SHA, piiPropertiesSent: ['person.phone'], tokensIn: tokenCount(1), tokensOut: 'unknown' } as const;

@@ -101,7 +101,7 @@ describe('the failure line of the extension', () => {
   });
 
   it('keeps the question and the key out of the warning for a failing plan call', async () => {
-    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'ask.plan', parameters: { catalog: 'a catalog', question: 'SENTINEL-QUESTION' } });
+    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'ask.plan', parameters: { catalog: 'a catalog', vocabulary: 'V1', question: 'SENTINEL-QUESTION' } });
     expect(logged).toHaveLength(1);
     expect(JSON.stringify(logged)).not.toMatch(/SENTINEL/);
     expect(written).toEqual([]);
@@ -182,5 +182,17 @@ describe('the failure line of the extension', () => {
     const record = { code: 'rejected' as const, status: 401, errorType: 'authentication_error', key: 'SENTINEL-KEY', prompt: 'SENTINEL-PROMPT', question: 'SENTINEL-QUESTION' };
     createFailureReporter(() => ({ warn: (fields) => void logged.push({ ...fields }) }))(record);
     expect(logged).toEqual([{ event: 'ai.provider_failure', code: 'rejected', status: 401, errorType: 'authentication_error' }]);
+  });
+});
+
+describe('the planner of the extension', () => {
+  it('is absent until the model is configured and the audit sink is mounted, then plans through the model', async () => {
+    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+    expect(extension.askPlanner?.()).toBeUndefined();
+    await extension.configure?.(SETTINGS, { ONLY_IN_THE_START_ENV: 'key-from-the-start-environment' });
+    expect(extension.askPlanner?.()).toBeUndefined();
+    extension.createAuditSink?.(SINK_CONTEXT);
+    const planner = extension.askPlanner?.();
+    expect(planner?.availability()).toEqual({ available: true });
   });
 });

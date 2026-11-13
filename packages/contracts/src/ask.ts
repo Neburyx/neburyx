@@ -1,7 +1,11 @@
 import { z } from 'zod';
+import type { AuditEvent } from './audit.js';
 import { countSchema, elementRefSchema, type Count, type ElementRef } from './graph.js';
 import { codePoints } from './investigations.js';
-import { linkedEntitiesParamsSchema, sharedAttributeParamsSchema } from './template-run.js';
+import { referenceTextSchema } from './entities.js';
+import { EXPAND_DIRECTIONS, EXPAND_SORTS } from './expand.js';
+import { searchTextSchema } from './search.js';
+import { linkedEntitiesParamsSchema, sharedAttributeParamsSchema, windowSchema } from './template-run.js';
 
 /** The longest question the plan endpoint takes, in characters. */
 export const ASK_MESSAGE_MAX_LENGTH = 1000;
@@ -20,10 +24,54 @@ const askText = (max: number) =>
 
 const planShape = { kind: z.literal('plan'), templateVersion: z.number().int().min(1), rationale: askText(ASK_TEXT_MAX_LENGTH) };
 
+const name = z.string().min(1);
+const anchor = z.strictObject({ entityType: name, stableId: referenceTextSchema });
+
+/**
+ * The typed parameters of each template Ask can plan. Each holds what the template's request holds that a plan may choose, and none holds a source, a mask, a cursor or a continue flag: the application sets those.
+ * `limit` is at least 1; its upper bound is the source's, checked when the plan runs.
+ */
+export const ASK_PLAN_PARAMS = {
+  'shared-attribute': sharedAttributeParamsSchema,
+  'linked-entities': linkedEntitiesParamsSchema,
+  entity: z.strictObject({ ref: anchor }),
+  'degree-preview': z.strictObject({ ref: anchor }),
+  expand: z.strictObject({
+    ref: anchor,
+    relTypes: z.array(name).min(1).optional(),
+    neighborTypes: z.array(name).min(1),
+    direction: z.enum(EXPAND_DIRECTIONS).optional(),
+    sort: z.enum(EXPAND_SORTS).optional(),
+    window: windowSchema.optional(),
+    limit: z.number().int().min(1).optional(),
+  }),
+  'derived-rule-run': z.strictObject({ ref: anchor, ruleId: name }),
+  'derived-edge-support': z.strictObject({ ruleId: name, ends: z.tuple([anchor, anchor]) }),
+  search: z.strictObject({ entityTypes: z.array(name).min(1), text: searchTextSchema }),
+} as const;
+
+export const ASK_PLAN_TEMPLATE_IDS = Object.keys(ASK_PLAN_PARAMS) as (keyof typeof ASK_PLAN_PARAMS)[];
+
+/** The JSON Schema of the parameters of one template's plan, as Zod writes it from the contract schema: the one source of the catalog the planner shows the model. */
+export function askPlanParamsJsonSchema(id: keyof typeof ASK_PLAN_PARAMS): Record<string, unknown> {
+  return z.toJSONSchema(ASK_PLAN_PARAMS[id], { io: 'input', unrepresentable: 'throw' });
+}
+
+/** The names of the parameters of every plan schema, for the vocabulary the allowlist reads. */
+export const ASK_PLAN_PARAM_NAMES: readonly string[] = [...new Set(Object.values(ASK_PLAN_PARAMS).flatMap((schema) => Object.keys(schema.shape)))];
+
+const planOf = <Id extends keyof typeof ASK_PLAN_PARAMS>(id: Id) => z.strictObject({ ...planShape, templateId: z.literal(id), params: ASK_PLAN_PARAMS[id] });
+
 /** What a planner answers: a template of the catalog with its typed parameters, or `unsupported`. Nothing in it is query text. */
 export const askPlanSchema = z.union([
-  z.strictObject({ ...planShape, templateId: z.literal('shared-attribute'), params: sharedAttributeParamsSchema }),
-  z.strictObject({ ...planShape, templateId: z.literal('linked-entities'), params: linkedEntitiesParamsSchema }),
+  planOf('shared-attribute'),
+  planOf('linked-entities'),
+  planOf('entity'),
+  planOf('degree-preview'),
+  planOf('expand'),
+  planOf('derived-rule-run'),
+  planOf('derived-edge-support'),
+  planOf('search'),
   z.strictObject({ kind: z.literal('unsupported'), reason: askText(ASK_TEXT_MAX_LENGTH) }),
 ]);
 
@@ -100,8 +148,23 @@ export type AskEntityLookup = (ref: ElementRef, signal: AbortSignal) => Promise<
 
 export type AskAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
+/** Who asked and where: ids only, never text, so the audit of the planning call can name the actor. */
+export interface AskPlanContext {
+  readonly actorId: string;
+  readonly actorRole: Exclude<AuditEvent['actorRole'], 'system'>;
+  readonly traceId: string;
+  readonly investigationId?: string;
+  readonly sourceId?: string;
+}
+
+export interface AskPlanInput {
+  /** The previewed text: the question rebuilt from allowed tokens, with placeholders where typed names and IDs were. */
+  readonly text: string;
+  readonly context: AskPlanContext;
+}
+
 /** The seam Ask plans through: the Community default says it is not available; an installed planner answers a plan for the text it is given. */
 export interface AskPlanner {
   availability(): AskAvailability;
-  plan(input: { readonly text: string }): Promise<AskPlan>;
+  plan(input: AskPlanInput): Promise<AskPlan>;
 }

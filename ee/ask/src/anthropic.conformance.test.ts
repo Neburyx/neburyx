@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedCallContext } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
+import { BUILT_IN_PROMPTS } from './prompts.js';
 import type { ModelRequest, PromptId } from './provider.js';
 import { CONFORMANCE_CASES, type ConformanceScenario } from './testing/conformance.js';
 
@@ -103,7 +104,8 @@ describe('the conformance suite on the Anthropic provider, over a stub server', 
 
 const CONTEXT: AuditedCallContext = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' };
 const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?' } },
+  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
   'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
   'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
 };
@@ -148,7 +150,9 @@ describe('the provider behind the audited call', () => {
       expect(sent.messages[0]?.content).toBe(resolved.values);
       expect([sent.system?.[0]?.text, sent.messages[0]?.content].filter((part) => part !== undefined).join('\n\n')).toBe(resolved.text);
       const recorded = JSON.stringify(events);
-      for (const hash of [sha256Of(resolved.text), sha256Of(bodies[0] ?? ''), sha256Of(sent.messages[0]?.content ?? ''), sha256Of(sent.system?.[0]?.text ?? '')]) {
+      const staticPart = override ? false : BUILT_IN_PROMPTS[id].staticParameters.length > 0;
+      if (staticPart) expect(events[0]?.detail).toMatchObject({ ai: { instructionsSha256: sha256Of(sent.system?.[0]?.text ?? '') } });
+      for (const hash of [sha256Of(resolved.text), sha256Of(bodies[0] ?? ''), sha256Of(sent.messages[0]?.content ?? ''), ...(staticPart ? [] : [sha256Of(sent.system?.[0]?.text ?? '')])]) {
         expect(recorded).not.toContain(hash);
         expect(recorded).not.toContain(hash.toUpperCase());
       }

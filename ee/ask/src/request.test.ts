@@ -136,8 +136,8 @@ describe('the data classes and values the builder sends', () => {
 describe('the other requests', () => {
   it('builds ask.plan from the question and the catalog text as given, with no property of any element', async () => {
     const builder = await builderFor({ properties: { person: ['name'] } });
-    const built = builder.ask({ question: 'who is ‹person#1›?', catalog: 'T1: lists neighbors' });
-    expect(built).toEqual({ request: { promptId: 'ask.plan', parameters: { question: 'who is ‹person#1›?', catalog: 'T1: lists neighbors' } }, sentProperties: [], sentPii: [] });
+    const built = builder.ask({ question: 'who is ‹person#1›?', catalog: 'T1: lists neighbors', vocabulary: 'V1: names only' });
+    expect(built).toEqual({ request: { promptId: 'ask.plan', parameters: { question: 'who is ‹person#1›?', catalog: 'T1: lists neighbors', vocabulary: 'V1: names only' } }, sentProperties: [], sentPii: [] });
   });
 
   it('builds assistant.route from the message and the same filtered view as the summary', async () => {

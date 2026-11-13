@@ -36,7 +36,7 @@ describe('the request of the provider interface', () => {
 
   it('has the closed list of prompt ids', () => {
     const ids: readonly PromptId[] = PROMPT_IDS;
-    expect(ids).toEqual(['ask.plan', 'summary.view', 'assistant.route']);
+    expect(ids).toEqual(['ask.plan', 'summary.view', 'assistant.route', 'ask.plan.repair']);
   });
 });
 

@@ -5,6 +5,7 @@ import { configureAsk } from './configure.js';
 import { buildPromptRegistry } from './prompts.js';
 import { createRequestBuilder, piiPropertiesSentOf, type BuiltRequest, type ContextElement } from './request.js';
 import { createFixtureProvider, replyKey } from './testing/fixture.js';
+import { BUILT_IN_PROMPTS } from './prompts.js';
 
 const ENV = { AI_TEST_KEY: 'present' };
 const BASE: AiSettings = { preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } };
@@ -36,7 +37,7 @@ async function received(settings: Partial<AiSettings>, build: (builder: ReturnTy
   if (configuration === undefined) throw new Error(JSON.stringify(outcome));
   const registry = await buildPromptRegistry();
   if (!registry.ok) throw new Error(registry.problems.join('; '));
-  const replies = { [replyKey('ask.plan', 1)]: { kind: 'refused' as const }, [replyKey('summary.view', 1)]: { kind: 'refused' as const }, [replyKey('assistant.route', 1)]: { kind: 'refused' as const } };
+  const replies = { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: { kind: 'refused' as const }, [replyKey('summary.view', 1)]: { kind: 'refused' as const }, [replyKey('assistant.route', 1)]: { kind: 'refused' as const } };
   const provider = createFixtureProvider({ registry: registry.registry, replies });
   const built = build(createRequestBuilder(configuration.rules));
   await provider.complete(built.request, SIGNAL);
@@ -90,7 +91,7 @@ describe('what a provider receives', () => {
     const settings = { properties: { person: ['name'] } };
     expect(seen((await received(settings, summary)).text, 'ordinary')).toBe(true);
     expect(seen((await received(settings, (builder) => builder.assistant({ message: 'hi ‹person#1›', elements: [PERSON] }))).text, 'ordinary')).toBe(true);
-    const ask = await received(settings, (builder) => builder.ask({ question: 'who is ‹person#1›?', catalog: 'T1' }));
+    const ask = await received(settings, (builder) => builder.ask({ question: 'who is ‹person#1›?', catalog: 'T1', vocabulary: 'V1' }));
     for (const key of Object.keys(SENTINELS) as (keyof typeof SENTINELS)[]) expect(seen(ask.text, key), key).toBe(false);
   });
 });
