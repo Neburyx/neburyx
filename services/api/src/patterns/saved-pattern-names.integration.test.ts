@@ -173,7 +173,7 @@ describe('the migration that makes the names unique', () => {
     expect((await runInProcess(env, directory)).code).toBe(0);
     const owner = randomUUID();
     const other = randomUUID();
-    for (const [id, subject] of [[owner, 'owner'], [other, 'other']] as const) await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', $2, $2)`, [id, subject]);
+    for (const [id, subject] of [[owner, 'first'], [other, 'second']] as const) await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'issuer', $2, $2)`, [id, subject]);
     await rows(database.ownerUrl, `INSERT INTO sources (id, alias, connector, uri, database, secret_ref, config_hash, identity_hash) VALUES ('alpha', 'alpha', 'neo4j', 'bolt://x', 'neo4j', 'a:b', 'h', 'i')`);
     const long = 'y'.repeat(PATTERN_LIMITS.nameLength);
     const insert = async (who: string, name: string, at: string, extra = ''): Promise<string> => {
