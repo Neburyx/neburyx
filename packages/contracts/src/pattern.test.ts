@@ -145,6 +145,9 @@ describe('the request and the answer of the route', () => {
     expect(patternValidateResponseSchema.safeParse({ status: 'ok' }).success).toBe(true);
     expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [{ path: ['steps', 0], code: 'too-many' }] }).success).toBe(true);
     expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [] }).success).toBe(false);
+    const listed = (count: number) => ({ status: 'invalid', problems: Array.from({ length: count }, (_unused, index) => ({ path: ['steps', index], code: 'too-many' })) });
+    expect(patternValidateResponseSchema.safeParse(listed(MAX_PATTERN_PROBLEMS)).success).toBe(true);
+    expect(patternValidateResponseSchema.safeParse(listed(MAX_PATTERN_PROBLEMS + 1)).success).toBe(false);
     expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [{ path: [], code: 'because' }] }).success).toBe(false);
     expect(patternValidateResponseSchema.safeParse({ status: 'ok', problems: [] }).success).toBe(false);
   });

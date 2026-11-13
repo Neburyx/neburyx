@@ -101,24 +101,28 @@ const windowFieldSchema = z.custom<Window>().superRefine((value, ctx) => {
   if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ code: 'custom', path: [...issue.path], params: { problem: codeOf(issue, value) } });
 });
 
-const stepSchema = z
-  .strictObject({
-    relationshipTypes: z.array(name).min(1).max(PATTERN_LIMITS.relationshipTypesPerStep),
-    direction: z.enum(EXPAND_DIRECTIONS),
-    arrivesAt: name,
-    conditions: z.array(conditionSchema).max(2 * PATTERN_LIMITS.conditionsPerElement).optional(),
-    window: windowFieldSchema.optional(),
-  })
-  .superRefine((step, ctx) => {
-    const seen = new Set<string>();
-    step.relationshipTypes.forEach((type, index) => {
-      if (seen.has(type)) ctx.addIssue({ code: 'custom', path: ['relationshipTypes', index], params: { problem: 'bad-value' } });
-      seen.add(type);
-    });
-    for (const on of ['neighbor', 'relationship'] as const) {
-      if ((step.conditions ?? []).filter((condition) => condition.on === on).length > PATTERN_LIMITS.conditionsPerElement) ctx.addIssue({ code: 'custom', path: ['conditions'], params: { problem: 'too-many' } });
-    }
+/** The fields of a step, before the rules that look across them; a run reads the same fields with its window already resolved to two instants. */
+export const patternStepBaseSchema = z.strictObject({
+  relationshipTypes: z.array(name).min(1).max(PATTERN_LIMITS.relationshipTypesPerStep),
+  direction: z.enum(EXPAND_DIRECTIONS),
+  arrivesAt: name,
+  conditions: z.array(conditionSchema).max(2 * PATTERN_LIMITS.conditionsPerElement).optional(),
+  window: windowFieldSchema.optional(),
+});
+
+/** The rules that look across the fields of a step: distinct relationship types, and the cap of conditions on each element. */
+export function refinePatternStep(step: { readonly relationshipTypes: readonly string[]; readonly conditions?: readonly ExpandFilter[] | undefined }, ctx: z.core.$RefinementCtx): void {
+  const seen = new Set<string>();
+  step.relationshipTypes.forEach((type, index) => {
+    if (seen.has(type)) ctx.addIssue({ code: 'custom', path: ['relationshipTypes', index], params: { problem: 'bad-value' } });
+    seen.add(type);
   });
+  for (const on of ['neighbor', 'relationship'] as const) {
+    if ((step.conditions ?? []).filter((condition) => condition.on === on).length > PATTERN_LIMITS.conditionsPerElement) ctx.addIssue({ code: 'custom', path: ['conditions'], params: { problem: 'too-many' } });
+  }
+}
+
+const stepSchema = patternStepBaseSchema.superRefine(refinePatternStep);
 
 /**
  * A pattern: where it starts (the type of the entity a run is given) and the steps that follow. Each step walks over one or several relationship types in a direction to a node type, with conditions on that node and on the
@@ -166,7 +170,7 @@ export const patternValidateRequestSchema = z.strictObject({
 
 export const patternValidateResponseSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ok') }),
-  z.strictObject({ status: z.literal('invalid'), problems: z.array(patternProblemSchema).min(1) }),
+  z.strictObject({ status: z.literal('invalid'), problems: z.array(patternProblemSchema).min(1).max(MAX_PATTERN_PROBLEMS) }),
 ]);
 
 export type PatternValidateRequest = z.infer<typeof patternValidateRequestSchema>;

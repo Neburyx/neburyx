@@ -143,7 +143,7 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
-export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewConditionSchema, patternPreviewRequestSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewWindowSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
+export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewConditionSchema, patternPreviewRequestSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewWindowSchema, patternProblemsOf, patternStepBaseSchema, patternValidateRequestSchema, patternValidateResponseSchema, refinePatternStep } from './pattern.js';
 export type { PatternDefinition, PatternPreview, PatternPreviewRequest, PatternPreviewResponse, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
 export { TEMPLATE_PARAMS_SCHEMAS, listedTemplateSchema, paramsJsonSchemaOf, templateListQuerySchema, templateListResponseSchema } from './template-list.js';
 export type { ListedTemplate, TemplateListResponse } from './template-list.js';

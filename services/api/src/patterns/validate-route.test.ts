@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { patternValidateResponseSchema } from '@neburyx/contracts';
+import { MAX_PATTERN_PROBLEMS, patternValidateResponseSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { createLogger } from '../logger.js';
@@ -63,6 +63,15 @@ describe('POST /v1/patterns/validate', () => {
     expect(patternValidateResponseSchema.parse((await send(app, { sourceId: 'demo', definition: { anchorType: 'nothing', steps: five } })).json())).toEqual({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-many' }] });
     expect(patternValidateResponseSchema.parse((await send(app, { sourceId: 'demo', definition: { anchorType: 'maker', steps: [{ ...ok.steps[0], extra: 1 }] } })).json())).toEqual({ status: 'invalid', problems: [{ path: ['steps', 0], code: 'unknown-key' }] });
     expect(patternValidateResponseSchema.parse((await send(app, { sourceId: 'demo', definition: {} })).json())).toMatchObject({ status: 'invalid' });
+    await app.close();
+  });
+
+  it('lists at most the cap of problems however many faults the definition has, and the list parses with the shared schema', async () => {
+    const { app } = await started();
+    const faulty = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker', conditions: Array.from({ length: 12 }, () => ({ op: 'eq' })) };
+    const response = await send(app, { sourceId: 'demo', definition: { anchorType: 'maker', steps: Array.from({ length: 4 }, () => faulty) } });
+    const answer = patternValidateResponseSchema.parse(response.json());
+    expect(answer.status === 'invalid' && answer.problems.length).toBe(MAX_PATTERN_PROBLEMS);
     await app.close();
   });
 
