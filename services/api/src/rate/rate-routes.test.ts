@@ -56,6 +56,7 @@ const COUNTED: Readonly<Record<string, Call>> = {
   'derived neighbors': { method: 'POST', url: () => '/v1/graph/derived-neighbors', payload: (s) => ({ sourceId: s, ref }) },
   'template run of the linked-entities template': { method: 'POST', url: () => '/v1/templates/linked-nodes/run', payload: (s) => ({ sourceId: s, params: { ref } }), headers: () => ({ 'idempotency-key': `linked-key-of-sixteen-${(keyCounter += 1)}-chars` }) },
   'template run': { method: 'POST', url: () => '/v1/templates/shared-nodes/run', payload: (s) => ({ sourceId: s, params: { ref } }), headers: () => ({ 'idempotency-key': `key-of-sixteen-${(keyCounter += 1)}-chars` }) },
+  'pattern run': { method: 'POST', url: () => '/v1/patterns/run', payload: (s) => ({ sourceId: s, definition: { anchorType: 'node_a', steps: [{ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'node_b' }] }, anchor: ref }), headers: () => ({ 'idempotency-key': `pattern-key-of-sixteen-${(keyCounter += 1)}-chars` }) },
   'pattern preview': { method: 'POST', url: () => '/v1/patterns/preview', payload: (s) => ({ sourceId: s, definition: { anchorType: 'node_a', steps: [{ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'node_b' }] } }) },
   'pattern validation': { method: 'POST', url: () => '/v1/patterns/validate', payload: (s) => ({ sourceId: s, definition: { anchorType: 'node_a', steps: [{ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'node_b' }] } }) },
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
@@ -250,6 +251,7 @@ const COUNTED_ROUTES = [
   'POST /v1/graph/derived-neighbors',
   'POST /v1/templates/:id/run',
   'POST /v1/graph/coverage',
+  'POST /v1/patterns/run',
   'POST /v1/patterns/validate',
   'POST /v1/patterns/preview',
   'POST /v1/graph/read-refs',
@@ -287,6 +289,21 @@ describe('the template run route and a key that is sent again after a refusal fo
     const retry = await send(same, 'demo');
     expect(retry.statusCode).not.toBe(429);
     expect(retry.headers['idempotent-replay']).toBeUndefined();
+    await app.close();
+  });
+});
+
+describe('the pattern run route and a request that is replayed', () => {
+  it('counts the first call of a key and not its replay, so a replay does not use up the limit', async () => {
+    const now = 5_000_000;
+    const { app, send } = await started(() => now);
+    const counted = COUNTED['pattern run'] as Call;
+    const same: Call = { ...counted, headers: () => ({ 'idempotency-key': 'replayed-key-of-sixteen-c' }) };
+    expect((await send(same, 'demo')).statusCode).not.toBe(429);
+    const replay = await send(same, 'demo');
+    expect(replay.headers['idempotent-replay']).toBe('true');
+    expect((await send(counted, 'demo')).statusCode).not.toBe(429);
+    expect((await send(counted, 'demo')).statusCode).toBe(429);
     await app.close();
   });
 });

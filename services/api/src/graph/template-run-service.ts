@@ -107,12 +107,12 @@ function noticesOf(item: { readonly skipped: boolean; readonly bounded: boolean;
 }
 
 /** The page size of a continue: the product's 25, lowered by the page the caller asked for and by the source's `max_page`. */
-function continueLimitOf(requested: number | undefined, source: SourceModel): number {
+export function continueLimitOf(requested: number | undefined, source: SourceModel): number {
   return Math.min(HEAVY_CONTINUE_LIMIT, requested ?? HEAVY_CONTINUE_LIMIT, source.budgets.maxPage);
 }
 
 /** One gate call; a source the viewer may not use answers as a missing one, as in every run. */
-async function gateRun(gate: Gate, request: GateRequest): Promise<GatePage> {
+export async function gateRun(gate: Gate, request: GateRequest): Promise<GatePage> {
   try {
     return await gate.run(request);
   } catch (error) {
@@ -122,17 +122,22 @@ async function gateRun(gate: Gate, request: GateRequest): Promise<GatePage> {
 }
 
 /**
- * The estimate before a run (TAS §8.1): the probe's own gate call, in the same request. When it read more matches than the source's threshold the run does not start and the answer is the stop, with the estimate labelled a
- * lower bound at the threshold and no rows. A probe that fails, is cancelled, finds no usable count or does not find the anchor ends the request (never an `unknown` estimate: that is only a template with no probe).
+ * The estimate before a run (TAS §8.1): the probe's own gate call, in the same request. A probe that fails, is cancelled, finds no usable count or does not find the anchor ends the request (never an `unknown` estimate: that is only a
+ * template with no probe). `heavy` is true when the probe read more matches than the source's threshold: the estimate is then a lower bound at the threshold, and the run does not start.
  */
-async function heavyStopOf(gate: Gate, run: GateRequest, params: Params, probe: TemplateProbe, resolved: Resolved, source: SourceModel, allowlist: SourceAllowlist, requested: number | undefined): Promise<TemplateRunResponse | undefined> {
+export async function probeEstimateOf(gate: Gate, run: GateRequest, params: Params, probe: TemplateProbe, source: SourceModel, allowlist: SourceAllowlist, scope: string): Promise<{ readonly estimate: Count; readonly heavy: boolean; readonly threshold: number; readonly notices: readonly TemplateRunNotice[] }> {
   const page = await gateRun(gate, { ...run, templateId: probe.templateId, limit: 1 });
   const read = probe.read(page.items[0], params, allowlist);
   if (read === undefined) throw new AppError('INTERNAL_ERROR');
   if (!read.anchorFound) throw new AppError('NOT_FOUND');
   if (!read.usable) throw new AppError('INTERNAL_ERROR');
   const threshold = source.budgets.heavyOpThreshold;
-  const { estimate, heavy } = estimateOf(read, threshold, `template:${resolved.templateId}:estimate`);
+  return { ...estimateOf(read, threshold, scope), threshold, notices: read.notices };
+}
+
+/** The stop of a heavy template run, when its probe read more matches than the source's threshold: the estimate labelled a lower bound at the threshold and no rows. */
+async function heavyStopOf(gate: Gate, run: GateRequest, params: Params, probe: TemplateProbe, resolved: Resolved, source: SourceModel, allowlist: SourceAllowlist, requested: number | undefined): Promise<TemplateRunResponse | undefined> {
+  const { estimate, heavy, threshold, notices } = await probeEstimateOf(gate, run, params, probe, source, allowlist, `template:${resolved.templateId}:estimate`);
   if (!heavy) return undefined;
   return {
     status: 'heavy',
@@ -142,7 +147,7 @@ async function heavyStopOf(gate: Gate, run: GateRequest, params: Params, probe: 
     estimate,
     threshold,
     continueLimit: continueLimitOf(requested, source),
-    notices: [...read.notices],
+    notices: [...notices],
     warnings: [],
   };
 }
