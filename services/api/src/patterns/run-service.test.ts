@@ -19,7 +19,7 @@ const BACK = step({ relationshipTypes: ['USES_TOOL'], direction: 'in' });
 const definition = (steps: readonly unknown[] = [step()]) => ({ anchorType: 'maker', steps });
 const NOW = new Date('2026-03-10T12:00:00.000Z');
 
-function rig(options: { readonly mapping?: ReturnType<typeof patternMappingOf>; readonly rows?: readonly Record<string, unknown>[]; readonly probes?: ReadonlyMap<string, TemplateProbe>; readonly deny?: boolean; readonly count?: ExecuteOutcome; readonly denyGate?: boolean } = {}) {
+function rig(options: { readonly now?: () => Date; readonly mapping?: ReturnType<typeof patternMappingOf>; readonly rows?: readonly Record<string, unknown>[]; readonly probes?: ReadonlyMap<string, TemplateProbe>; readonly deny?: boolean; readonly count?: ExecuteOutcome; readonly denyGate?: boolean } = {}) {
   const mapping = options.mapping ?? patternMappingOf();
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
@@ -32,7 +32,7 @@ function rig(options: { readonly mapping?: ReturnType<typeof patternMappingOf>; 
   const real = createSourceAccess({ mapping, seams, logger: { warn: () => undefined } });
   let requires = 0;
   const access: typeof real = { ...real, require: (...args: Parameters<typeof real.require>) => ((requires += 1), real.require(...args)) };
-  const service = createPatternRunService({ gate: parts.gate, mapping, access, now: () => NOW, probes: options.probes ?? new Map() });
+  const service = createPatternRunService({ gate: parts.gate, mapping, access, now: options.now ?? (() => NOW), probes: options.probes ?? new Map() });
   const run = (over: Partial<PatternRunCall> = {}) => service.run({ traceId: 'tr-run', principal: LOCAL_PRINCIPAL, sourceId: 'demo', definition: definition(), anchor: { entityType: 'maker', stableId: 'W-1' }, mask: false, ...over });
   return { run, executor, requires: () => requires, countReads: () => executor.calls.filter((call) => call.templateId === 'pattern-count'), reads: () => executor.calls.filter((call) => call.templateId === 'pattern' && call.parameters['limit'] !== 1) };
 }
@@ -117,7 +117,7 @@ describe('a pattern run: what is refused before anything is read', () => {
 });
 
 describe('a pattern run: the read', () => {
-  it('runs the template with the parameters of the definition, the windows as instants at the time of the call, the limit, the mask and the signal', async () => {
+  it('runs the template with the parameters of the definition, the windows as instants in whole UTC days at the time of the call, the limit, the mask and the signal', async () => {
     const { run, reads } = rig({ rows: [noMatchRow('W-1')] });
     const controller = new AbortController();
     await run({ definition: definition([step({ window: { days: 2 } }), step({ window: { from: '2026-01-01', to: '2026-01-31' } })]), limit: 7, mask: true, signal: controller.signal });
@@ -126,7 +126,7 @@ describe('a pattern run: the read', () => {
       stableId: 'W-1',
       limit: 7,
       steps: [
-        { windowFrom: '2026-03-08T12:00:00.000Z', windowTo: '2026-03-10T12:00:00.000Z' },
+        { windowFrom: '2026-03-08T00:00:00.000Z', windowTo: '2026-03-11T00:00:00.000Z' },
         { windowFrom: '2026-01-01T00:00:00.000Z', windowTo: '2026-02-01T00:00:00.000Z' },
       ],
     });
@@ -361,3 +361,104 @@ describe('a pattern run: the estimate of the pattern probe', () => {
     }
   });
 });
+
+describe('a pattern run: the pages after the first', () => {
+  const ends = ['W-2', 'W-3', 'W-4'];
+  const rows = ends.map((end) => oneStepRow('W-1', end));
+  const heavyProbe: TemplateProbe = { templateId: 'pattern', read: () => ({ anchorFound: true, usable: true, matches: 9, bounded: false, notices: [{ code: 'readBounded' as const }] }) };
+
+  it('carries a cursor when the read found more than the page, and none on the last page', async () => {
+    const more = rig({ rows });
+    const first = patternRunResponseSchema.parse(await more.run({ limit: 2 }));
+    expect(first).toMatchObject({ status: 'ok' });
+    expect('nextCursor' in first && typeof first.nextCursor === 'string').toBe(true);
+    const last = patternRunResponseSchema.parse(await rig({ rows }).run({ limit: 3 }));
+    expect('nextCursor' in last).toBe(false);
+  });
+
+  it('may hold fewer matches than the limit and still carry the cursor, from the last row read', async () => {
+    const hidden = rig({ rows: [oneStepRow('W-1', 'W-2'), { ...oneStepRow('W-1', 'W-3'), x: { not: 'a node' } }, oneStepRow('W-1', 'W-4')] });
+    const answer = patternRunResponseSchema.parse(await hidden.run({ limit: 2 }));
+    if (answer.status !== 'ok') throw new Error('not ok');
+    expect(answer.matches.length).toBeLessThan(2);
+    expect(typeof answer.nextCursor).toBe('string');
+  });
+
+  it('reads no estimate and is never a heavy stop for a request with a cursor, though the same run without one stops as heavy', async () => {
+    const heavy = rig({ rows, probes: new Map([['pattern', heavyProbe]]), mapping: patternMappingOf({ heavy_op_threshold: 5 }) });
+    expect((await heavy.run({ limit: 2 })).status).toBe('heavy');
+    const first = (await heavy.run({ continue: true, limit: 2 })) as { nextCursor?: string };
+    expect(first.nextCursor).toBeDefined();
+    const estimates = () => heavy.executor.calls.filter((call) => call.templateId === 'pattern' && call.parameters['limit'] === 1).length;
+    const before = estimates();
+    const second = await heavy.run({ cursor: first.nextCursor, limit: 2 });
+    expect(second.status).toBe('ok');
+    expect(estimates()).toBe(before);
+  });
+
+  it('labels the count of a page after the first a lower bound, even on a last page with no cut', async () => {
+    const one = rig({ rows });
+    const firstAnswer = patternRunResponseSchema.parse(await one.run({ limit: 2 }));
+    if (firstAnswer.status !== 'ok') throw new Error('not ok');
+    expect(firstAnswer.count).toMatchObject({ value: 2, quality: 'lowerBound' });
+    const cursor = firstAnswer.nextCursor ?? '';
+    const lastAnswer = patternRunResponseSchema.parse(await one.run({ limit: 3, cursor }));
+    if (lastAnswer.status !== 'ok') throw new Error('not ok');
+    expect(lastAnswer.nextCursor).toBeUndefined();
+    expect(lastAnswer.count).toMatchObject({ value: 3, quality: 'lowerBound' });
+    const exactRig = rig({ rows: [oneStepRow('W-1', 'W-4')] });
+    const exact = patternRunResponseSchema.parse(await exactRig.run({ limit: 2 }));
+    if (exact.status !== 'ok') throw new Error('not ok');
+    expect(exact.count.quality).toBe('exact');
+  });
+
+  it('is served with another page size, and with the continue size when it continues', async () => {
+    const one = rig({ rows, mapping: patternMappingOf({ heavy_op_threshold: 5 }) });
+    const first = patternRunResponseSchema.parse(await one.run({ limit: 2 }));
+    const cursor = first.status === 'ok' ? (first.nextCursor ?? '') : '';
+    await expect(one.run({ limit: 3, cursor })).resolves.toMatchObject({ status: 'ok' });
+    await one.run({ limit: 40, cursor, continue: true });
+    expect(one.reads().at(-1)?.parameters['limit']).toBe(25);
+  });
+
+  it('reads the same relative window for every request of one UTC day, and another after midnight, which invalidates the cursor', async () => {
+    const windowed = definition([step({ window: { days: 3 } })]);
+    const morning = new Date('2026-03-10T08:00:00.000Z');
+    let clock = morning;
+    const timed = rig({ rows, now: () => clock });
+    const first = patternRunResponseSchema.parse(await timed.run({ definition: windowed, limit: 2 }));
+    const cursor = first.status === 'ok' ? (first.nextCursor ?? '') : '';
+    clock = new Date('2026-03-10T23:59:00.000Z');
+    await expect(timed.run({ definition: windowed, limit: 2, cursor })).resolves.toMatchObject({ status: 'ok' });
+    const [early, late] = timed.reads().map((call) => (call.parameters['steps'] as { windowFrom: string; windowTo: string }[])[0]);
+    expect(late).toEqual(early);
+    clock = new Date('2026-03-11T00:00:01.000Z');
+    await expect(timed.run({ definition: windowed, limit: 2, cursor })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+  });
+
+  it('is refused as invalidated for another definition, another anchor or masking, before any read', async () => {
+    const one = rig({ rows });
+    const first = patternRunResponseSchema.parse(await one.run({ limit: 2 }));
+    const cursor = first.status === 'ok' ? (first.nextCursor ?? '') : '';
+    const reads = one.reads().length;
+    await expect(one.run({ limit: 2, cursor, definition: definition([step({ direction: 'both' })]) })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+    await expect(one.run({ limit: 2, cursor, anchor: { entityType: 'maker', stableId: 'W-9' } })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+    await expect(one.run({ limit: 2, cursor, mask: true })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+    expect(one.reads()).toHaveLength(reads);
+  });
+
+  it('reads the estimate over the same whole-day window as the run', async () => {
+    const windowed = definition([step({ window: { days: 3 } })]);
+    const mapping = patternMappingOf({ heavy_op_threshold: 5 });
+    const { run, executor } = rig({ mapping, rows, probes: defaultTemplateProbes(), count: { status: 'rows', rows: [{ matches: 1, bounded: false, stopListed: false, supernodes: 0 }] } });
+    expect((await run({ definition: windowed, limit: 2 })).status).toBe('ok');
+    const windowOf = (templateId: string) => {
+      const call = executor.calls.find((candidate) => candidate.templateId === templateId);
+      const first = (call?.parameters['steps'] as { windowFrom: string; windowTo: string }[] | undefined)?.[0];
+      return { windowFrom: first?.windowFrom, windowTo: first?.windowTo };
+    };
+    expect(windowOf('pattern')).toEqual({ windowFrom: '2026-03-07T00:00:00.000Z', windowTo: '2026-03-11T00:00:00.000Z' });
+    expect(windowOf('pattern-count')).toEqual(windowOf('pattern'));
+  });
+});
+

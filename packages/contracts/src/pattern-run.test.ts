@@ -17,6 +17,12 @@ describe('the request of a pattern run', () => {
     expect(patternRunRequestSchema.safeParse({ ...body, definition: { anything: 1, steps: 'not a list' } }).success).toBe(true);
   });
 
+  it('takes the cursor of the page before, as text that is not empty', () => {
+    expect(patternRunRequestSchema.safeParse({ ...body, cursor: 'v1.a.b' }).success).toBe(true);
+    expect(patternRunRequestSchema.safeParse({ ...body, cursor: '' }).success).toBe(false);
+    expect(patternRunRequestSchema.safeParse({ ...body, cursor: 7 }).success).toBe(false);
+  });
+
   it.each([
     ['no source', { ...body, sourceId: undefined }],
     ['no definition', { ...body, definition: undefined }],
@@ -32,6 +38,13 @@ describe('the request of a pattern run', () => {
 });
 
 describe('the answer of a pattern run', () => {
+  it('carries a next cursor of one or more characters, or none', () => {
+    expect(patternRunOkSchema.safeParse(ok({ nextCursor: 'v1.a.b' })).success).toBe(true);
+    expect(patternRunOkSchema.safeParse(ok()).success).toBe(true);
+    expect(patternRunOkSchema.safeParse(ok({ nextCursor: '' })).success).toBe(false);
+    expect(patternRunOkSchema.safeParse(ok({ nextCursor: null })).success).toBe(false);
+  });
+
   it('holds the matches with a path for each: one entity between and one relationship for each hop', () => {
     expect(patternRunOkSchema.safeParse(ok()).success).toBe(true);
     const two = match({ hops: 2, through: [ref('tool', 'T-1')], relationships: [hop(), hop({ from: ref('tool', 'T-1') })] });

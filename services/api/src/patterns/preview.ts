@@ -31,7 +31,7 @@ function windowPart(window: NonNullable<Step['window']>, step: Step, previous: s
   const rowsOf = (type: string) => source.relationships.filter((row) => row.type === type && carries(row, previous, step.arrivesAt, step.direction));
   const appliesTo = types.filter((type) => rowsOf(type).some((row) => row.observedAt !== undefined));
   const notAppliedTo = types.filter((type) => rowsOf(type).some((row) => row.observedAt === undefined));
-  const span = 'days' in window ? `the last ${plural(window.days, 'day', 'days')} (UTC)` : `from ${window.from} to ${window.to}, both included (UTC)`;
+  const span = 'days' in window ? `the last ${plural(window.days, 'day', 'days')} and today (UTC)` : `from ${window.from} to ${window.to}, both included (UTC)`;
   const parts = [appliesTo.length === 0 ? undefined : `Window on ${appliesTo.join(' or ')}: ${span}`, notAppliedTo.length === 0 ? undefined : `The window does not apply to ${notAppliedTo.join(' or ')}: no date is declared for ${notAppliedTo.length === 1 ? 'it' : 'them'}`].filter((part) => part !== undefined);
   return { appliesTo, notAppliedTo, ...('days' in window ? { days: window.days } : { from: window.from, to: window.to }), text: parts.join('. ') };
 }

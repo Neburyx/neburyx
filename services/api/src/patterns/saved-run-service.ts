@@ -23,6 +23,7 @@ export interface SavedPatternRunCall {
   readonly limit?: number | undefined;
   readonly mask: boolean;
   readonly continue?: boolean | undefined;
+  readonly cursor?: string | undefined;
   readonly signal?: AbortSignal | undefined;
 }
 
@@ -83,12 +84,13 @@ export function createSavedPatternRunService(deps: {
       const held = row.anchorEntityType === null || row.anchorStableId === null ? undefined : { entityType: row.anchorEntityType, stableId: deps.references.entityId(row.sourceId, row.anchorEntityType, row.anchorStableId) };
       const anchor = call.anchor ?? held;
       if (anchor === undefined || anchor.entityType !== startTypeOf(row, source)) throw new AppError('INVALID_REQUEST');
+      if (row.kind !== 'definition' && call.cursor !== undefined) throw new AppError('INVALID_REQUEST');
       const run = { traceId: call.traceId, principal, sourceId: row.sourceId, mask: call.mask, continue: call.continue, signal: call.signal };
       const answer: SavedPatternRunResponse =
         row.kind === 'definition'
-          ? await deps.patternRuns.run({ ...run, definition: row.definition, anchor, limit: call.limit })
+          ? await deps.patternRuns.run({ ...run, definition: row.definition, anchor, limit: call.limit, cursor: call.cursor })
           : await deps.templateRuns.run({ ...run, id: row.presetId ?? '', params: { ...row.params, ...(call.limit === undefined ? {} : { limit: call.limit }), ref: anchor } });
-      if (answer.status === 'ok' && row.ownerId === principal.id) {
+      if (answer.status === 'ok' && call.cursor === undefined && row.ownerId === principal.id) {
         try {
           await deps.store.recordPatternRun(row.id, principal.id);
         } catch (error) {

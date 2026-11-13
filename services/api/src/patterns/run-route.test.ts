@@ -248,4 +248,24 @@ describe('a pattern run whose estimate cannot be read', () => {
     expect(reads(executor)).toHaveLength(0);
     await app.close();
   });
+
+  it('pages by cursor: a next cursor in the answer, the next page from it with another key, no estimate, and a refusal of a cursor of another request', async () => {
+    const rows = ['W-2', 'W-3', 'W-4'].map((end) => oneStepRow('W-1', end));
+    const { app, executor } = await started({ rows, answer: withCount((call) => Promise.resolve({ status: 'rows', rows: rows.slice(0, call.rowLimit) })) });
+    const first = patternRunResponseSchema.parse((await post(app, request({ limit: 2 }), 'first-key-of-sixteen-chars')).json());
+    if (first.status !== 'ok') throw new Error('not ok');
+    expect(first.matches).toHaveLength(2);
+    expect(typeof first.nextCursor).toBe('string');
+    const probes = () => executor.calls.filter((call) => call.templateId === 'pattern-count').length;
+    const before = probes();
+    const second = await post(app, request({ limit: 2, cursor: first.nextCursor }), 'second-key-of-sixteen-chars');
+    expect(second.statusCode).toBe(200);
+    expect(probes()).toBe(before);
+    const other = await post(app, request({ limit: 2, cursor: first.nextCursor, definition: { anchorType: 'maker', steps: [step({ direction: 'both' })] } }), 'third-key-of-sixteen-chars');
+    expect(codeOf(other)).toBe('CURSOR_INVALIDATED');
+    const empty = await post(app, request({ cursor: '' }), 'fourth-key-of-sixteen-chars');
+    expect(codeOf(empty)).toBe('INVALID_REQUEST');
+    await app.close();
+  });
 });
+

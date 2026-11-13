@@ -14,6 +14,8 @@ const definitionPattern = { ...base, kind: 'definition', definition: { anchorTyp
 describe('the request of a saved run', () => {
   it('takes any of the starting entity, a limit, a mask and a continue, or none of them', () => {
     expect(savedPatternRunRequestSchema.safeParse({}).success).toBe(true);
+    expect(savedPatternRunRequestSchema.safeParse({ cursor: 'v1.a.b' }).success).toBe(true);
+    expect(savedPatternRunRequestSchema.safeParse({ cursor: '' }).success).toBe(false);
     expect(savedPatternRunRequestSchema.safeParse({ anchor: { entityType: 'maker', stableId: 'p1.token' }, limit: 5, mask: true, continue: false }).success).toBe(true);
   });
 

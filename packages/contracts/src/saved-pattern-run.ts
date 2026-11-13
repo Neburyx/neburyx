@@ -14,6 +14,8 @@ export const savedPatternRunRequestSchema = z.strictObject({
   limit: z.number().int().min(1).optional(),
   mask: z.boolean().optional(),
   continue: z.boolean().optional(),
+  /** As for the run route: the `nextCursor` of the page before. A saved run of a preset has no pages and refuses one. */
+  cursor: z.string().min(1).optional(),
 });
 
 /** The answer of a run of a pattern that can no longer run against the current mapping: no source was read. */

@@ -4568,6 +4568,10 @@
           },
           "continue": {
             "type": "boolean"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "additionalProperties": false
@@ -4783,6 +4787,10 @@
                       ],
                       "additionalProperties": false
                     }
+                  },
+                  "nextCursor": {
+                    "type": "string",
+                    "minLength": 1
                   },
                   "nodes": {
                     "type": "array",
@@ -7239,6 +7247,10 @@
           },
           "continue": {
             "type": "boolean"
+          },
+          "cursor": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
@@ -7457,6 +7469,10 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "nextCursor": {
+                "type": "string",
+                "minLength": 1
               },
               "nodes": {
                 "type": "array",

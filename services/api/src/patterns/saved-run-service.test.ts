@@ -31,6 +31,7 @@ interface Options {
   readonly probes?: ReadonlyMap<string, TemplateProbe>;
   readonly deny?: boolean;
   readonly failRecord?: boolean;
+  readonly patternRows?: readonly Record<string, unknown>[];
 }
 
 function rig(options: Options = {}) {
@@ -38,7 +39,7 @@ function rig(options: Options = {}) {
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('no source');
   const answer = (call: ExecuteCall): Promise<ExecuteOutcome> =>
-    Promise.resolve({ status: 'rows', rows: call.templateId === 'pattern' ? [oneStepRow('W-1', 'W-2')] : call.templateId === 'linked-entities' ? [linkedRow({ anchor: 'W-1', match: 'W-2' })] : [] });
+    Promise.resolve({ status: 'rows', rows: call.templateId === 'pattern' ? (options.patternRows ?? [oneStepRow('W-1', 'W-2')]) : call.templateId === 'linked-entities' ? [linkedRow({ anchor: 'W-1', match: 'W-2' })] : [] });
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), answer));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
@@ -240,3 +241,53 @@ describe('running a saved pattern: the time of the last run', () => {
     expect(warned).toMatchObject([{ event: 'pattern.last_run_failed' }]);
   });
 });
+
+describe('running a saved pattern: the pages after the first', () => {
+  const rows = ['W-2', 'W-3', 'W-4'].map((end) => oneStepRow('W-1', end));
+
+  it('is served a cursor of the run route for the same definition and entity, and one of its own for the next page, recording the time of the last run on the first page only', async () => {
+    const { saveRun, save, patterns, patternRuns } = rig({ patternRows: rows });
+    const row = await save();
+    const direct = (await patternRuns.run({ traceId: 'tr', principal: OWNER, sourceId: 'demo', definition: DEFINITION, anchor: ENTITY, limit: 2, mask: false })) as { nextCursor?: string };
+    expect(direct.nextCursor).toBeDefined();
+    expect((await patterns.readPattern(row.id, OWNER.id))?.lastRunAt).toBeNull();
+    const second = await saveRun(row, { limit: 2, cursor: direct.nextCursor });
+    expect(second).toMatchObject({ status: 'ok' });
+    expect((await patterns.readPattern(row.id, OWNER.id))?.lastRunAt).toBeNull();
+    const first = (await saveRun(row, { limit: 2 })) as { nextCursor?: string };
+    expect(first.nextCursor).toBeDefined();
+    const recorded = (await patterns.readPattern(row.id, OWNER.id))?.lastRunAt;
+    expect(recorded).not.toBeNull();
+    await saveRun(row, { limit: 2, cursor: first.nextCursor });
+    expect((await patterns.readPattern(row.id, OWNER.id))?.lastRunAt).toBe(recorded);
+  });
+
+  it('refuses a cursor for a saved run of a preset as INVALID_REQUEST before any read, with no gate or executor call', async () => {
+    const { saveRun, save, executor } = rig({ patternRows: rows });
+    const row = await save(preset());
+    const before = executor.calls.length;
+    expect((await failureOf(saveRun(row, { cursor: 'v1.x.y' })))?.code).toBe('INVALID_REQUEST');
+    expect(executor.calls).toHaveLength(before);
+  });
+
+  it('is refused as invalidated for a cursor made for another entity', async () => {
+    const { saveRun, save } = rig({ patternRows: rows });
+    const row = await save();
+    const first = (await saveRun(row, { limit: 2 })) as { nextCursor?: string };
+    expect((await failureOf(saveRun(row, { limit: 2, cursor: first.nextCursor, anchor: { entityType: 'maker', stableId: 'W-9' } })))?.code).toBe('CURSOR_INVALIDATED');
+  });
+
+  it('keeps a cursor valid across a rename and a share, which change only the version, and invalidates it for an edited definition, reading nothing', async () => {
+    const { saveRun, save, executor } = rig({ patternRows: rows });
+    const row = await save();
+    const first = (await saveRun(row, { limit: 2 })) as { nextCursor?: string };
+    expect(first.nextCursor).toBeDefined();
+    const renamed = { ...row, name: 'renamed', version: row.version + 1, visibility: 'shared' as const };
+    expect(await saveRun(renamed, { limit: 2, cursor: first.nextCursor })).toMatchObject({ status: 'ok' });
+    const edited = { ...row, version: row.version + 2, definition: { ...DEFINITION, steps: [{ ...LINKS_STEP, direction: 'both' }] } };
+    const before = executor.calls.length;
+    expect((await failureOf(saveRun(edited, { limit: 2, cursor: first.nextCursor })))?.code).toBe('CURSOR_INVALIDATED');
+    expect(executor.calls).toHaveLength(before);
+  });
+});
+

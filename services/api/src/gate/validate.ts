@@ -121,6 +121,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   if (!template.paged) return { template, params: parsed.data, rendered, binding, held: 0 };
   // the position is the one this gate signed for this request, or none; a template reads it as the parameter `cursor`
   const verified = splitHeld(template, request.cursor === undefined ? null : cursors.verify(request.cursor, binding));
+  if (verified.position !== null && template.positionFits?.(verified.position) === false) throw new AppError('CURSOR_INVALIDATED');
   const position = verified.position === null ? null : readPosition(template, verified.position, context, references);
   return { template, params: parsed.data, rendered: { ...rendered, parameters: { ...rendered.parameters, cursor: position } }, binding, held: verified.held };
 }

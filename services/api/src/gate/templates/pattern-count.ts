@@ -19,6 +19,7 @@ export const patternCountTemplate: TemplateDefinition = {
   sort: undefined,
   referencePositions: undefined,
   nextPosition: undefined,
+  positionFits: undefined,
   auditAction: 'pattern.count',
   name: undefined,
   description: undefined,

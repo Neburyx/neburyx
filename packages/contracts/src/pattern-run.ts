@@ -20,6 +20,8 @@ export const patternRunRequestSchema = z.strictObject({
   limit: z.number().int().min(1).optional(),
   mask: z.boolean().optional(),
   continue: z.boolean().optional(),
+  /** The `nextCursor` of the page before, for the next page of the same run: it is bound to the request that made it and refused otherwise. A page with a cursor reads no estimate and is never a heavy stop. */
+  cursor: z.string().min(1).optional(),
 });
 
 /**
@@ -46,6 +48,8 @@ export const patternRunOkSchema = z.strictObject({
   templateVersion: text,
   count: countSchema,
   matches: z.array(patternMatchSchema),
+  /** The cursor of the next page, absent on the last page; a page may hold fewer matches than its limit and still carry one. */
+  nextCursor: z.string().min(1).optional(),
   nodes: z.array(nodeSchema),
   edges: z.array(edgeSchema),
   notices: z.array(templateRunNoticeSchema),

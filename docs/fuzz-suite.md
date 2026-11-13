@@ -85,11 +85,11 @@ A cursor is stateless and valid for 30 minutes. Replaying it unchanged in the sa
 
 ## A recorded run
 
-Run on the commit that added the saved pattern run, with `NBX_FUZZ_RECORD` set to a file and the files of `services/api/src/fuzz` run together; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, whose pattern cases are checked by grammar and kept apart from it. The pattern run route adds requests and statements (the run's statement and the count it reads first); the validation and the preview read no source, so they add requests and no statements. The requests of `fuzz/pattern-run.test.ts` are not counted: it does not use the rig.
+Run on the commit that added the cursor of the pattern run, with `NBX_FUZZ_RECORD` set to a file and the files of `services/api/src/fuzz` run together; the fixed seed is **5017**, 120 runs for a property unless the file says otherwise. The counts include the requests that build the closed set, whose pattern cases are checked by grammar and kept apart from it. The pattern run route adds requests and statements (the run's statement and the count it reads first); the validation and the preview read no source, so they add requests and no statements. The requests of `fuzz/pattern-run.test.ts` are not counted: it does not use the rig.
 
 | Route | Answers |
 |---|---|
-| `POST /v1/graph/expand` | `INVALID_REQUEST` 3382, `CURSOR_INVALIDATED` 2316, `served` 1660, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 51 |
+| `POST /v1/graph/expand` | `INVALID_REQUEST` 3382, `CURSOR_INVALIDATED` 2316, `served` 1661, `QUERY_BUDGET_EXCEEDED` 100, `NOT_FOUND` 51 |
 | `POST /v1/search/entities` | `served` 1053, `INVALID_REQUEST` 222 |
 | `POST /v1/search/entities/more` | `CURSOR_INVALIDATED` 2826, `served` 553, `INVALID_REQUEST` 330 |
 | `POST /v1/entities/lookup` | `INVALID_REQUEST` 487, `served` 373, `NOT_FOUND` 18 |
@@ -98,12 +98,12 @@ Run on the commit that added the saved pattern run, with `NBX_FUZZ_RECORD` set t
 | `POST /v1/graph/coverage` | `INVALID_REQUEST` 180, `NOT_FOUND` 65, `SOURCE_MISMATCH` 48, `served` 2 |
 | `POST /v1/graph/read-refs` | `served` 54 |
 | `POST /v1/templates/{id}/run` | `served` 2860, `INVALID_REQUEST` 1715, `NOT_FOUND` 321, `QUERY_BUDGET_EXCEEDED` 43 |
-| `POST /v1/patterns/run` | `served` 426, `INVALID_REQUEST` 191, `NOT_FOUND` 60 |
+| `POST /v1/patterns/run` | `served` 437, `CURSOR_INVALIDATED` 417, `INVALID_REQUEST` 191, `NOT_FOUND` 60 |
 | `POST /v1/patterns/{id}/run` | `served` 170, `INVALID_REQUEST` 160, `NOT_FOUND` 63 |
 | `POST /v1/patterns/validate` | `INVALID_REQUEST` 212, `served` 126, `NOT_FOUND` 60 |
 | `POST /v1/patterns/preview` | `INVALID_REQUEST` 212, `served` 126, `NOT_FOUND` 60 |
 
-21,402 requests, 29,609 statements seen by the executor, at most 94 distinct statements in a file, each in the closed set, or a pattern statement or count that the grammar accepts. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
+21,831 requests, 29,645 statements seen by the executor, at most 94 distinct statements in a file, each in the closed set, or a pattern statement or count that the grammar accepts. The oversized-page case is `fuzz/routes.test.ts`, "answers QUERY_BUDGET_EXCEEDED, naming the maximum".
 
 The pattern routes' own files are `fuzz/templates.test.ts` (the body, the ID, hostile text in every input, and the refusals that depend on the mapping, the budgets and the token) and the entries of the shape table in `fuzz/routes.test.ts`.
 

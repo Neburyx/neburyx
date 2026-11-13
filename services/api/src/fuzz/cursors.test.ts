@@ -24,6 +24,15 @@ async function mintExpand(neighborType = 'gadget', extra: Record<string, unknown
   return cursor;
 }
 
+const patternBody = (extra: Record<string, unknown> = {}) => ({ sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] }, anchor: { entityType: 'widget', stableId: 'W-1' }, limit: 1, ...extra });
+
+async function mintPattern(): Promise<string> {
+  const response = await rig.post('/v1/patterns/run', patternBody());
+  const cursor = parse(response.body)['nextCursor'];
+  if (typeof cursor !== 'string') throw new Error('the pattern run has no next page');
+  return cursor;
+}
+
 async function mintMore(group: 'exact' | 'related', extra: Record<string, unknown> = {}): Promise<string> {
   const response = await rig.post('/v1/search/entities', { sourceId: FUZZ_SOURCE, text: FUZZ_TEXT, ...extra });
   const body = parse(response.body);
@@ -40,6 +49,7 @@ interface Kind {
 
 const KINDS: readonly Kind[] = [
   { name: 'expand', mint: () => mintExpand(), send: (cursor) => rig.post('/v1/graph/expand', expandBody({}, { gadget: cursor })) },
+  { name: 'pattern run', mint: () => mintPattern(), send: (cursor) => rig.post('/v1/patterns/run', patternBody({ cursor })) },
   { name: 'search more (exact)', mint: () => mintMore('exact'), send: (cursor) => rig.post('/v1/search/entities/more', moreBody('exact', cursor)) },
   { name: 'search more (related)', mint: () => mintMore('related'), send: (cursor) => rig.post('/v1/search/entities/more', moreBody('related', cursor)) },
 ];
@@ -251,3 +261,17 @@ describe('a validly signed position whose keyed token does not read back', () =>
     }
   });
 });
+
+describe('a signed cursor of a pattern run whose position is flat but not the one the run writes', () => {
+  it('is CURSOR_INVALIDATED and reads nothing, whether a field is missing, of another kind or added', async () => {
+    const payload = payloadOfCursor(await mintPattern());
+    const position = payload['d'] as Record<string, unknown>;
+    expect(Object.keys(position).sort()).toEqual(['endElement', 'endKey', 'endType']);
+    const { endElement: _missing, ...withoutElement } = position;
+    for (const candidate of [withoutElement, { ...position, endKey: 7 }, { ...position, endElement: null }, { ...position, endType: true }, { ...position, extra: 'x' }, { endKey: 'a' }, {}]) {
+      rig.reset();
+      expectRefused(await rig.post('/v1/patterns/run', patternBody({ cursor: signCursor({ ...payload, d: candidate }) })), JSON.stringify(candidate));
+    }
+  });
+});
+

@@ -157,7 +157,7 @@ describe('the conditions of a step in words', () => {
 describe('the window of a step in words', () => {
   it('says the days, or the two dates, in UTC, and the relationship types it applies to; a step with no window has none', () => {
     const days = previewOf(definition([step({ window: { days: 30 } }), step({ window: { days: 1 } })])).steps;
-    expect(days.map((part) => part.window?.text)).toEqual(['Window on LINKS: the last 30 days (UTC)', 'Window on LINKS: the last 1 day (UTC)']);
+    expect(days.map((part) => part.window?.text)).toEqual(['Window on LINKS: the last 30 days and today (UTC)', 'Window on LINKS: the last 1 day and today (UTC)']);
     expect(days[0]?.window).toMatchObject({ appliesTo: ['LINKS'], notAppliedTo: [], days: 30 });
     expect(previewOf(definition()).steps[0]).not.toHaveProperty('window');
   });

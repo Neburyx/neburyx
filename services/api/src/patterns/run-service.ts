@@ -8,7 +8,7 @@ import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import type { Gate, GateRequest } from '../gate/types.js';
 import { continueLimitOf, gateRun, probeEstimateOf } from '../graph/template-run-service.js';
 import { defaultTemplateProbes, type TemplateProbe } from '../graph/template-probes.js';
-import { windowInstantsOf } from '../graph/template-window.js';
+import { expandWindowInstantsOf } from '../graph/expand-window.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
@@ -26,6 +26,8 @@ export interface PatternRunCall {
   readonly mask: boolean;
   /** Continue a run that stopped as heavy: no estimate is read and the page is at most the continue size. */
   readonly continue?: boolean | undefined;
+  /** The cursor of the page before: this page reads no estimate, never stops as heavy, and its count is a lower bound. */
+  readonly cursor?: string | undefined;
   readonly signal?: AbortSignal | undefined;
 }
 
@@ -36,7 +38,8 @@ export interface PatternRunService {
 /**
  * Runs a definition for an anchor through the gate. The order is fixed and nothing is read before it is settled: the access to the source; the anchor's type against the definition's; the definition against the source's
  * mapping (a problem is `INVALID_REQUEST`, and the one problem of more steps than the source allows is `QUERY_BUDGET_EXCEEDED` with the cap); then the estimate, when the pattern template has a probe and the run is not a continue; then
- * the run, one gate call of the `pattern` template. The answer's count is labelled by what the read did, and its notices are the ones the preview and the compiler follow.
+ * the run, one gate call of the `pattern` template. A relative window is read as whole UTC days (as an expansion's is), so that the window, which the cursor of every page binds, is the same for every request of one UTC day. A
+ * request with a cursor reads no estimate and is never a heavy stop; the count of its page is a lower bound, never exact, because the total is not known. The answer's count is labelled by what the read did, and its notices are the ones the preview and the compiler follow.
  */
 export function createPatternRunService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly now?: () => Date; readonly probes?: ReadonlyMap<string, TemplateProbe> }): PatternRunService {
   const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
@@ -66,14 +69,14 @@ export function createPatternRunService(deps: { readonly gate: Gate; readonly ma
           direction: step.direction,
           arrivesAt: step.arrivesAt,
           ...(step.conditions === undefined ? {} : { conditions: step.conditions }),
-          ...(step.window === undefined ? {} : windowInstantsOf(step.window, at)),
+          ...(step.window === undefined ? {} : expandWindowInstantsOf(step.window, at)),
         })),
       };
       // a page above the source's `max_page` is refused by the run's own gate call before anything is read, so the estimate is not read first
       const aboveMaxPage = call.limit !== undefined && call.limit > source.budgets.maxPage;
       const limit = call.continue === true && !aboveMaxPage ? continueLimitOf(call.limit, source) : (call.limit ?? source.budgets.defaultPage);
-      const run: GateRequest = { traceId: call.traceId, principal: call.principal, sourceId: call.sourceId, templateId: patternTemplate.id, params, limit, mask: call.mask, ...(call.signal === undefined ? {} : { signal: call.signal }) };
-      const probe = call.continue === true || aboveMaxPage ? undefined : probes.get(patternTemplate.id);
+      const run: GateRequest = { traceId: call.traceId, principal: call.principal, sourceId: call.sourceId, templateId: patternTemplate.id, params, limit, mask: call.mask, ...(call.cursor === undefined ? {} : { cursor: call.cursor }), ...(call.signal === undefined ? {} : { signal: call.signal }) };
+      const probe = call.continue === true || call.cursor !== undefined || aboveMaxPage ? undefined : probes.get(patternTemplate.id);
       if (probe !== undefined) {
         const { estimate, heavy, threshold, notices } = await probeEstimateOf(deps.gate, run, params, probe, source, allowlist, `${PATTERN_SCOPE}:estimate`);
         if (heavy) return { status: 'heavy', templateVersion: patternTemplate.version, estimate, threshold, continueLimit: continueLimitOf(call.limit, source), notices: [...notices], warnings: [] };
@@ -85,12 +88,13 @@ export function createPatternRunService(deps: { readonly gate: Gate; readonly ma
       const matches = item.matches
         .filter((entry) => shown.has(`${entry.match.entityType}\u0000${entry.match.stableId}`))
         .map((entry) => ({ match: entry.match, hops: entry.hops, through: [...entry.through], relationships: entry.relationships.map((hop) => ({ ...hop, relationshipType: hop.relationshipType === '' ? null : hop.relationshipType })) }));
-      const count: Count = { value: matches.length, quality: patternCountQualityOf(item, page.hasMore), scope: PATTERN_SCOPE };
+      const count: Count = { value: matches.length, quality: call.cursor === undefined ? patternCountQualityOf(item, page.hasMore) : 'lowerBound', scope: PATTERN_SCOPE };
       return {
         status: 'ok',
         templateVersion: patternTemplate.version,
         count,
         matches,
+        ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
         nodes: [...item.nodes],
         edges: [...item.edges],
         notices: patternNoticesOf(item, patternRequestOf(allowlist, params)),

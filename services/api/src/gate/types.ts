@@ -198,6 +198,8 @@ export interface Template {
   readsNothing?(params: Params, allowlist: SourceAllowlist): boolean;
   /** Where the page after this one starts, from the rows of this page; the gate signs it into the page's `nextCursor`. Only a paged template has one. */
   nextPosition?(rows: readonly Row[], limit: number): CursorPosition | undefined;
+  /** Whether a position the gate verified has the fields and the kinds this template's next page reads; a position that does not is `CURSOR_INVALIDATED` and nothing is read. A template without it accepts every verified position. */
+  positionFits?(position: CursorPosition): boolean;
   /**
    * For a paged template whose answer counts every hit of its pages so far: the hits one page holds, from its redacted items. The gate adds them to the count the cursor carried and signs the sum into
    * the next cursor, so a later page answers the hits held so far without trusting a number from the caller.

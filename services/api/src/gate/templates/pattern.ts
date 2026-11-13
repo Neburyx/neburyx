@@ -37,6 +37,12 @@ function nextPosition(rows: readonly Row[]): CursorPosition | undefined {
   return { endType, endKey, endElement };
 }
 
+/** A position this template wrote has exactly the three text fields; one with a field missing, of another kind or added is not one of its own. */
+function positionFits(position: CursorPosition): boolean {
+  const keys = Object.keys(position);
+  return keys.length === 3 && typeof position['endType'] === 'string' && typeof position['endKey'] === 'string' && typeof position['endElement'] === 'string';
+}
+
 function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContext): readonly Item[] {
   if (context === undefined) throw new Error('the pattern run needs the normalize context');
   return [{ ...normalizePattern(context, rows) }];
@@ -68,5 +74,6 @@ export const patternTemplate: TemplateDefinition = {
   usedProperties,
   refsOf: (): readonly ElementRef[] => [],
   nextPosition,
+  positionFits,
   normalize,
 };

@@ -187,7 +187,10 @@ const patternRow = (index: number, call: ExecuteCall) => {
     return step.direction === 'in' ? plainRelationship(type, far, near, properties, `rel-pat-${index}-${at}`) : plainRelationship(type, near, far, properties, `rel-pat-${index}-${at}`);
   });
   const supernode = anchorId === FUZZ_PATTERN_SUPERNODE && asked.length > 1;
-  const row: Record<string, unknown> = { a: nodes[0], bounded: false, stopListed: anchorId === FUZZ_PATTERN_STOPPED && asked.length > 1, heavy: supernode ? [neighbor('GD-SUPER')] : [], x: nodes[nodes.length - 1], mid: nodes.slice(1, -1), hops: asked.length };
+  const end = nodes[nodes.length - 1];
+  const endType = asked[asked.length - 1]?.arrivesAt ?? 'widget';
+  const endKey = String(end?.properties[PATTERN_NODES[endType]?.key ?? 'widgetId'] ?? '');
+  const row: Record<string, unknown> = { a: nodes[0], bounded: false, stopListed: anchorId === FUZZ_PATTERN_STOPPED && asked.length > 1, heavy: supernode ? [neighbor('GD-SUPER')] : [], x: end, endKey, endElement: end?.elementId, endType, mid: nodes.slice(1, -1), hops: asked.length };
   relationships.forEach((relationship, at) => (row[`r${at + 1}`] = relationship));
   return row;
 };

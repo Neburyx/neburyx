@@ -41,13 +41,13 @@ export const plainRel = (type: string, from: { elementId: string }, to: { elemen
 /** The row of a one-step read: the anchor and one match joined by a LINKS relationship. */
 export function oneStepRow(anchor: string, match: string, flags: { readonly bounded?: boolean; readonly stopListed?: boolean } = {}) {
   const [a, x] = [plainMaker(anchor), plainMaker(match)];
-  return { a, bounded: flags.bounded === true, stopListed: flags.stopListed === true, heavy: [], x, mid: [], r1: plainRel('LINKS', a, x, `${anchor}>${match}`), hops: 1 };
+  return { a, bounded: flags.bounded === true, stopListed: flags.stopListed === true, heavy: [], x, endKey: match, endElement: String(x.elementId), endType: 'maker', mid: [], r1: plainRel('LINKS', a, x, `${anchor}>${match}`), hops: 1 };
 }
 
 /** The row of a two-step read: the anchor, a tool between and a match, over USES_TOOL out and back. */
 export function twoStepRow(anchor: string, between: string, match: string) {
   const [a, t, x] = [plainMaker(anchor), plainTool(between), plainMaker(match)];
-  return { a, bounded: false, stopListed: false, heavy: [], x, mid: [t], r1: plainRel('USES_TOOL', a, t, `${anchor}>${between}`), r2: plainRel('USES_TOOL', x, t, `${match}>${between}`), hops: 2 };
+  return { a, bounded: false, stopListed: false, heavy: [], x, endKey: match, endElement: String(x.elementId), endType: 'maker', mid: [t], r1: plainRel('USES_TOOL', a, t, `${anchor}>${between}`), r2: plainRel('USES_TOOL', x, t, `${match}>${between}`), hops: 2 };
 }
 
 /** The one row of a read whose anchor exists and that found no match. */

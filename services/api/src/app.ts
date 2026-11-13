@@ -520,7 +520,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         { store: options.store, policy: runSeams.policy, policyVersion: runPolicyVersion },
         { principal, sourceId, key, fingerprint: fingerprintOf({ method: 'POST', path: request.url.split('?')[0] ?? '', query: '', body: request.body }), stillReadable: () => Promise.resolve(mapping.sources.some((source) => source.id === sourceId)) },
         async () => {
-          const made = await patternRuns.run({ traceId: request.id, principal, sourceId, definition: body.data.definition, anchor: body.data.anchor, limit: body.data.limit, mask: body.data.mask === true, continue: body.data.continue === true, signal: signalOf(request) });
+          const made = await patternRuns.run({ traceId: request.id, principal, sourceId, definition: body.data.definition, anchor: body.data.anchor, limit: body.data.limit, mask: body.data.mask === true, continue: body.data.continue === true, cursor: body.data.cursor, signal: signalOf(request) });
           return { statusCode: 200, body: patternRunResponseSchema.parse(made), replayed: false };
         },
         (error) => (error instanceof AppError && error.code !== 'RATE_LIMITED' ? { statusCode: errorStatus(error.code), body: errorResponse(error.code, request.id, error.details) } : undefined),
@@ -754,7 +754,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         { store: options.store, policy: runSeams.policy, policyVersion: runPolicyVersion },
         { principal, sourceId, key, fingerprint: fingerprintOf({ method: 'POST', path: request.url.split('?')[0] ?? '', query: '', body: request.body }), stillReadable: () => savedRuns.stillRunnable({ principal, id: pattern.id, sourceId }) },
         async () => {
-          const made = await savedRuns.run({ traceId: request.id, principal, pattern, anchor: body.data.anchor, limit: body.data.limit, mask: body.data.mask === true, continue: body.data.continue === true, signal: signalOf(request) });
+          const made = await savedRuns.run({ traceId: request.id, principal, pattern, anchor: body.data.anchor, limit: body.data.limit, mask: body.data.mask === true, continue: body.data.continue === true, cursor: body.data.cursor, signal: signalOf(request) });
           return { statusCode: 200, body: savedPatternRunResponseSchema.parse(made), replayed: false };
         },
         (error) => (error instanceof AppError && error.code !== 'RATE_LIMITED' ? { statusCode: errorStatus(error.code), body: errorResponse(error.code, request.id, error.details) } : undefined),
