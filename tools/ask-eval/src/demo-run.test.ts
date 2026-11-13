@@ -45,18 +45,18 @@ describe('the whole demo set', () => {
     const replay = join(dir, 'replay.json');
     expect((await cli([...base(replay), '--write-replay'])).code).toBe(EXIT_OK);
     const result = await cli(base(replay));
-    expect(result.code).toBe(EXIT_MISS);
-    expect(result.out.slice(0, 5)).toEqual(['refusals: 7 of 8 refused', 'plans: 21 of 25 right (at most 2 may miss)', 'family: 0 of 0 as expected', 'blocked: 0 of 0 expected', 'repaired: 0']);
+    expect(result.code).toBe(EXIT_OK);
+    expect(result.out.slice(0, 5)).toEqual(['refusals: 8 of 8 refused', 'plans: 25 of 25 right (at most 2 may miss)', 'family: 0 of 0 as expected', 'blocked: 0 of 0 expected', 'repaired: 0']);
     for (const id of KNOWN_BLOCKED) expect(result.out).toContain(`blocked-unexpectedly: ${id}`);
-    expect(result.out).toContain('target missed: every refusal must be refused');
-    expect(result.out).toContain('answered unsupported: 7 of 33');
+    expect(result.out.some((line) => line.startsWith('target missed'))).toBe(false);
+    expect(result.out).toContain('answered unsupported: 8 of 33');
     expect(connect).not.toHaveBeenCalled();
     expect(readdirSync(dir)).toEqual(['replay.json']);
     const json = await cli([...base(replay), '--json']);
     expect(json.out).toHaveLength(1);
     const parsed = reportSchema.safeParse(JSON.parse(json.out[0] ?? ''));
     expect(parsed.success).toBe(true);
-    expect(parsed.data?.summary).toMatchObject({ refusals: { total: 8, refused: 7 }, plans: { total: 25, right: 21, maxMisses: 2 }, targets: { refusalsMet: false, plansMet: false, blockedMet: true } });
+    expect(parsed.data?.summary).toMatchObject({ refusals: { total: 8, refused: 8 }, plans: { total: 25, right: 25, maxMisses: 2 }, targets: { refusalsMet: true, plansMet: true, blockedMet: true } });
   });
 
   it('writes a replay that holds no identifier or personal-data-like token, and one reply for each question', async () => {
@@ -106,7 +106,7 @@ describe('the whole demo set', () => {
     expect(result.out).toContain('wrong: accounts-that-paid-an-account (direction)');
     expect(result.out).toContain('wrongly-planned: is-an-account-fraudulent');
     expect(result.out.some((line) => line.includes('accounts-paid-by-an-account'))).toBe(false);
-    expect(result.out).toContain('plans: 20 of 25 right (at most 2 may miss)');
-    expect(result.out).toContain('refusals: 6 of 8 refused');
+    expect(result.out).toContain('plans: 24 of 25 right (at most 2 may miss)');
+    expect(result.out).toContain('refusals: 7 of 8 refused');
   });
 });

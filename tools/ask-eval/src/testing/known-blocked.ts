@@ -1,2 +1,2 @@
-/** Questions of the demo file the allowlist blocks today: it matches no base form of a verb, and "shortest" is not a vocabulary word. A test compares this list with what is blocked, so it fails when the allowlist changes. */
-export const KNOWN_BLOCKED: readonly string[] = ['claimants-at-the-same-address', 'claims-on-the-same-vehicle', 'claims-by-the-same-repairer', 'merchants-paid-in-a-window', 'shortest-path-between-accounts'];
+/** Questions of the demo file the allowlist blocks today: none, since a base form of a vocabulary word counts as that word and "shortest" is on the list. A test compares this list with what is blocked, so it fails when the allowlist changes. */
+export const KNOWN_BLOCKED: readonly string[] = [];

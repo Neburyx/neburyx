@@ -7,14 +7,16 @@ import { describe, expect, it } from 'vitest';
 import { COMMON_WORDS } from './common-words.js';
 import * as entry from './index.js';
 import { FUNCTION_WORDS, ORDINARY_WORDS_ALSO_SURNAMES } from './function-words.js';
+import { vocabularyForms } from './forms.js';
 import { rebuildPlannerText } from './rebuild.js';
 
 const NAMES = fileURLToPath(new URL('../testing/names/census-2010-surnames.txt', import.meta.url));
 const INDEX = fileURLToPath(new URL('./index.ts', import.meta.url));
 const SOURCE = fileURLToPath(new URL('.', import.meta.url));
 
-const PINNED_VERSION = 'common-words-2';
-const PINNED_HASH = 'b15610934c6f6e7b8b2e35bf89a5037a704c64b0d49ef710e7c842d562e5fa16';
+const PINNED_VERSION = 'common-words-3';
+const PINNED_FORMS = '21c613f77a06f6b02ec02a4edf9d9732da1cfda9e0a162a62c63f89e40899bab';
+const PINNED_HASH = '944c1588a1bc0a5a48f5560bd7ba628d7807c989c0f278af67c4325072d8687b';
 
 const MIN_SURNAMES = 100_000;
 
@@ -74,8 +76,20 @@ describe('the common-word list', () => {
     expect({ version: entry.COMMON_WORDS_VERSION, hash }).toEqual({ version: PINNED_VERSION, hash: PINNED_HASH });
   });
 
+  it('keeps the version in step with the word-form rule: a change of the rule without a new version fails', () => {
+    const sample = ['paid', 'lives', 'involves', 'repaired', 'filed', 'initiated', 'HOLDS_WIDGET', 'SparePart', 'transferred', 'stopped', 'caused', 'agreed', 'going', 'floated', 'carried', 'parking'];
+    const fingerprint = createHash('sha256').update([...vocabularyForms(sample)].sort().join('\n')).digest('hex');
+    expect({ version: entry.COMMON_WORDS_VERSION, fingerprint }).toEqual({ version: PINNED_VERSION, fingerprint: PINNED_FORMS });
+  });
+
+  it('holds shortest, which is not a surname of the public list', () => {
+    expect(COMMON_WORDS).toContain('shortest');
+    const names = new Set(readFileSync(NAMES, 'utf8').split(/\r?\n/).map((line) => line.trim().toLowerCase()));
+    expect(names.has('shortest')).toBe(false);
+  });
+
   it('names the public list, its publisher, its edition, its terms and the residual risks in the version note', () => {
-    for (const part of ['Census Bureau', '2010 Census', 'downloaded', 'Licence terms', 'Given names: not yet removed', 'date of birth', 'adverbs not, here, very, now', 'ORDINARY_WORDS_ALSO_SURNAMES', '2026-11-13']) expect(entry.COMMON_WORDS_NOTE).toContain(part);
+    for (const part of ['Census Bureau', '2010 Census', 'downloaded', 'Licence terms', 'Given names: not yet removed', 'date of birth', 'adverbs not, here, very, now', 'ORDINARY_WORDS_ALSO_SURNAMES', '2026-11-13', 'base or other regular form', 'IRREGULAR_VERB_LIST', 'never on their own', 'or a base of one']) expect(entry.COMMON_WORDS_NOTE).toContain(part);
   });
 });
 
