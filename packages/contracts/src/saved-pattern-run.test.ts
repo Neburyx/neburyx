@@ -60,13 +60,16 @@ describe('the answer of a saved run', () => {
   });
 });
 
+const listedOwner = { owner: { name: 'Person' }, ownedByYou: true };
+
 describe('a pattern in the list', () => {
   it('carries its availability, and the answers of save, change and delete do not', () => {
-    expect(listedPatternSchema.safeParse({ ...definitionPattern, availability: { status: 'available' } }).success).toBe(true);
+    expect(listedPatternSchema.safeParse({ ...definitionPattern, ...listedOwner, availability: { status: 'available' } }).success).toBe(true);
+    expect(listedPatternSchema.safeParse({ ...definitionPattern, availability: { status: 'available' } }).success).toBe(false);
     expect(listedPatternSchema.safeParse(definitionPattern).success).toBe(false);
     expect(savedPatternSchema.safeParse(definitionPattern).success).toBe(true);
     expect(savedPatternSchema.safeParse({ ...definitionPattern, availability: { status: 'available' } }).success).toBe(false);
-    expect(patternListResponseSchema.safeParse({ items: [{ ...definitionPattern, availability: unavailable }], nextCursor: null }).success).toBe(true);
+    expect(patternListResponseSchema.safeParse({ items: [{ ...definitionPattern, ...listedOwner, availability: unavailable }], nextCursor: null }).success).toBe(true);
     expect(patternListResponseSchema.safeParse({ items: [definitionPattern], nextCursor: null }).success).toBe(false);
   });
 });

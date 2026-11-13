@@ -29,6 +29,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'DELETE /v1/patterns/:id': 'reads no source: it writes to the application database and takes no read slot',
   'GET /v1/patterns': 'reads no source: it reads the application database and takes no read slot',
   'POST /v1/patterns': 'reads no source: it writes to the application database and takes no read slot',
+  'POST /v1/patterns/:id/copy': 'reads no source: it writes to the application database and takes no read slot',
   'POST /v1/patterns/preview': 'reads no source: it answers from the mapping and the definition, and takes no read slot',
   'POST /v1/graph/read-refs': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/sources/:id/test': 'counted in rate-routes.test.ts; it runs the source tester, not a gate read',

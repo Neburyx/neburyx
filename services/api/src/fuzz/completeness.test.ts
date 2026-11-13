@@ -18,6 +18,7 @@ export const NOT_IN_THE_CLOSED_SET: Readonly<Record<string, string>> = {
   'DELETE /v1/patterns/:id': 'reads no source: it writes to the application database',
   'GET /v1/patterns': 'reads no source: the application database',
   'POST /v1/patterns': 'reads no source: it stores a validated structure in the application database',
+  'POST /v1/patterns/:id/copy': 'reads no source: it copies a stored structure in the application database',
   'POST /v1/patterns/preview': 'reads no source: it answers from the mapping and the definition, never from the source',
   'GET /v1/investigations': 'reads no source: the application database',
   'GET /v1/investigations/:id': 'reads no source: the application database',

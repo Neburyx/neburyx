@@ -725,6 +725,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const answer = await savedPatterns.delete({ traceId: request.id, principal: identity.principal, id: params.data.id, expectedVersion: expected.data });
       return reply.header('etag', `"${answer.version}"`).send(deletePatternResponseSchema.parse(answer));
     });
+    app.post('/v1/patterns/:id/copy', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !z.strictObject({}).nullish().safeParse(request.body).success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const copied = savedPatternSchema.parse(await savedPatterns.copy({ traceId: request.id, principal: identity.principal, id: params.data.id }));
+      return reply.code(201).header('etag', `"${copied.version}"`).send(copied);
+    });
     app.post('/v1/patterns', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = savePatternRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');

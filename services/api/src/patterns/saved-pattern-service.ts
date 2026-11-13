@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { retentionOf } from '../mapping/retention.js';
-import { DEFAULT_PATTERN_LIST_LIMIT, MAX_PATTERN_LIST_LIMIT, patternDefinitionSchema, type AuditSink, type ChangePatternRequest, type DeletePatternResponse, type PatternDefinition, type PatternListResponse, type SavedPattern, type SavePatternRequest } from '@neburyx/contracts';
-import type { NewPattern, PatternChange, PatternRow, PatternStore } from '../db/patterns-repository.js';
+import { DEFAULT_PATTERN_LIST_LIMIT, MAX_PATTERN_LIST_LIMIT, PATTERN_LIMITS, patternDefinitionSchema, type AuditSink, type ChangePatternRequest, type DeletePatternResponse, type ListedPattern, type PatternAvailability, type PatternDefinition, type PatternListResponse, type SavedPattern, type SavePatternRequest } from '@neburyx/contracts';
+import type { ListedPatternRow, NewPattern, PatternChange, PatternRow, PatternStore } from '../db/patterns-repository.js';
 import { AppError } from '../errors.js';
 import type { CursorBinding, CursorCodec } from '../gate/cursor/codec.js';
 import { COMMUNITY_POLICY_VERSION } from '../investigations/draft.js';
@@ -20,6 +20,8 @@ export const PATTERN_LIST_AUDIT_ACTION = 'pattern.list';
 /** The audit actions of a source the person may not read, for a change and a delete. */
 export const PATTERN_CHANGE_AUDIT_ACTION = 'pattern.change';
 export const PATTERN_DELETE_AUDIT_ACTION = 'pattern.delete';
+/** The audit action of a source the person may not read, for a copy. */
+export const PATTERN_COPY_AUDIT_ACTION = 'pattern.copy';
 
 export interface SavePatternCall {
   readonly traceId: string;
@@ -42,6 +44,12 @@ export interface ChangePatternCall {
   readonly request: ChangePatternRequest;
 }
 
+export interface CopyPatternCall {
+  readonly traceId: string;
+  readonly principal: Principal;
+  readonly id: string;
+}
+
 export interface DeletePatternCall {
   readonly traceId: string;
   readonly principal: Principal;
@@ -50,12 +58,14 @@ export interface DeletePatternCall {
 }
 
 export interface SavedPatternService {
-  /** Renames the caller's pattern or changes what it holds. Another person's pattern, a deleted one and an id that is not a pattern's are `NOT_FOUND`; a stale version is `CONFLICT`; what save would refuse is `INVALID_REQUEST`. */
+  /** Copies a pattern the person may see (their own, or another person's shared one) into a private pattern of theirs, named as the original with a suffix. What the person may not see, a deleted one and an id that is not a pattern's are `NOT_FOUND`. */
+  copy(call: CopyPatternCall): Promise<SavedPattern>;
+  /** Renames the caller's pattern, changes what it holds, or shares or unshares it. A private pattern of another person, a deleted one and an id that is not a pattern's are `NOT_FOUND`; a shared pattern of another person is `ACCESS_DENIED`; a stale version is `CONFLICT`; what save would refuse is `INVALID_REQUEST`. */
   change(call: ChangePatternCall): Promise<SavedPattern>;
-  /** Deletes the caller's pattern (soft: it is purged after the retention period). */
+  /** Deletes the caller's pattern (soft: it is purged after the retention period). Another person's shared pattern is `ACCESS_DENIED`. */
   delete(call: DeletePatternCall): Promise<DeletePatternResponse>;
   save(call: SavePatternCall): Promise<SavedPattern>;
-  /** A page of the caller's own patterns on a source. A limit of 0 is `INVALID_REQUEST`, above the maximum `QUERY_BUDGET_EXCEEDED`, and a cursor that was not made for this call `CURSOR_INVALIDATED`. */
+  /** A page of the caller's own patterns on a source and the shared patterns of other people on it. A limit of 0 is `INVALID_REQUEST`, above the maximum `QUERY_BUDGET_EXCEEDED`, and a cursor that was not made for this call `CURSOR_INVALIDATED`. */
   list(call: ListPatternsCall): Promise<PatternListResponse>;
 }
 
@@ -72,6 +82,22 @@ export function shownPattern(references: StoredReferences, row: PatternRow): Sav
   return { ...common, kind: 'preset-run', presetId: row.presetId ?? '', templateId: row.templateId ?? '', templateVersion: row.templateVersion ?? 1, params: { ...(row.params ?? {}) } };
 }
 
+/** A pattern as the list shows it: with its creator's name, and whether it is the caller's own. No id of another person is shown. */
+export function shownListedPattern(references: StoredReferences, row: ListedPatternRow, callerId: string, availability: PatternAvailability): ListedPattern {
+  const owner = { owner: { name: row.ownerName }, ownedByYou: row.ownerId === callerId };
+  const shown = shownPattern(references, row);
+  return shown.kind === 'definition' ? { ...shown, ...owner, availability } : { ...shown, ...owner, availability };
+}
+
+const COPY_SUFFIX = ' (copy)';
+
+/** The name of a copy: the original's name with the suffix, the original cut by code points (and trimmed) when the whole would be over the name limit. */
+export function copyNameOf(name: string): string {
+  const room = PATTERN_LIMITS.nameLength - [...COPY_SUFFIX].length;
+  const characters = [...name];
+  return characters.length <= room ? `${name}${COPY_SUFFIX}` : `${characters.slice(0, room).join('').trimEnd()}${COPY_SUFFIX}`;
+}
+
 /** A template's version is text in code and an integer of 1 or more in a saved pattern. */
 export function templateVersionNumber(version: string): number {
   if (!/^[1-9]\d*$/.test(version)) throw new Error('a template version is an integer of 1 or more');
@@ -82,6 +108,13 @@ export function templateVersionNumber(version: string): number {
 function holdsPersonalCondition(definition: PatternDefinition, source: SourceModel): boolean {
   const entities = new Map(source.entities.map((entity) => [entity.type, entity]));
   return definition.steps.some((step) => (step.conditions ?? []).some((condition) => condition.on === 'neighbor' && (entities.get(step.arrivesAt)?.pii ?? []).includes(condition.property)));
+}
+
+/** Whether a stored pattern holds a condition on what the current mapping marks personal: a mapping can mark a property personal after a pattern was saved, so sharing, copying and showing a shared pattern look again. A stored definition that no longer reads as a definition is treated as holding one. */
+function storedHoldsPersonalCondition(row: PatternRow, source: SourceModel): boolean {
+  if (row.kind !== 'definition') return false;
+  const parsed = patternDefinitionSchema.safeParse(row.definition);
+  return !parsed.success || holdsPersonalCondition(parsed.data, source);
 }
 
 export function createSavedPatternService(deps: { readonly store: PatternStore; readonly mapping: MappingModel; readonly access: SourceAccess; readonly references: StoredReferences; readonly audit: AuditSink; readonly cursors: CursorCodec }): SavedPatternService {
@@ -147,6 +180,12 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
 
   /** The pattern's change against what it is now: the fields of the other kind are refused, and a held entity must be of the type the pattern starts at, also when the definition changes under it. */
   function changeOf(row: PatternRow, source: SourceModel, request: ChangePatternRequest): Omit<PatternChange, 'id' | 'ownerId' | 'expectedVersion'> {
+    if (request.visibility !== undefined) {
+      // sharing is a request of its own: one request, one concern, one event
+      if (request.name !== undefined || request.definition !== undefined || request.params !== undefined || request.anchor !== undefined) throw new AppError('INVALID_REQUEST');
+      if (request.visibility === 'shared' && storedHoldsPersonalCondition(row, source)) throw new AppError('INVALID_REQUEST', { reason: 'pattern-personal-condition' });
+      return { visibility: request.visibility, action: request.visibility === 'shared' ? 'shared' : 'unshared' };
+    }
     if (request.name === undefined && request.definition === undefined && request.params === undefined && request.anchor === undefined) throw new AppError('INVALID_REQUEST');
     if ((row.kind === 'definition' && request.params !== undefined) || (row.kind === 'preset-run' && request.definition !== undefined)) throw new AppError('INVALID_REQUEST');
     let startType: string | undefined;
@@ -179,10 +218,12 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
   return {
     async change({ traceId, principal, id, request }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
-      const row = await deps.store.readPattern(id, principal.id);
+      const row = await deps.store.readRunnablePattern(id, principal.id);
       if (row === undefined) throw new AppError('NOT_FOUND');
       await deps.access.require({ traceId, principal, sourceId: row.sourceId, auditAction: PATTERN_CHANGE_AUDIT_ACTION });
       const source = sourceOf(row.sourceId);
+      // only the creator changes what it made; another person sees a pattern only while it is shared, so this is their only refusal
+      if (row.ownerId !== principal.id) throw new AppError('ACCESS_DENIED');
       // the version is looked at before what the request holds, as for an investigation
       if (row.version !== request.expectedVersion) throw new AppError('CONFLICT');
       const changes = changeOf(row, source, request);
@@ -193,9 +234,10 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
     },
     async delete({ traceId, principal, id, expectedVersion }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');
-      const row = await deps.store.readPattern(id, principal.id);
+      const row = await deps.store.readRunnablePattern(id, principal.id);
       if (row === undefined) throw new AppError('NOT_FOUND');
       await deps.access.require({ traceId, principal, sourceId: row.sourceId, auditAction: PATTERN_DELETE_AUDIT_ACTION });
+      if (row.ownerId !== principal.id) throw new AppError('ACCESS_DENIED');
       const result = await deps.store.deletePattern({ id, ownerId: principal.id, expectedVersion, retentionDays: retentionOf(deps.mapping).deletedInvestigationsDays }, { principal, traceId, audit: deps.audit });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
@@ -211,7 +253,21 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       if (position !== undefined && !position.success) throw new AppError('CURSOR_INVALIDATED');
       const page = limit ?? DEFAULT_PATTERN_LIST_LIMIT;
       const found = await deps.store.listPatterns({ ownerId: principal.id, sourceId, limit: page, after: position?.data });
-      return { items: found.rows.map((row) => ({ ...shownPattern(deps.references, row), availability: availabilityOf(row, source) })), nextCursor: found.next === undefined ? null : deps.cursors.mint(binding, { updatedKey: found.next.updatedKey, id: found.next.id }) };
+      // another person's shared pattern that now holds a condition on personal data is left out; the next position is still the last row read, so no row is read twice or skipped
+      const shown = found.rows.filter((row) => row.ownerId === principal.id || !storedHoldsPersonalCondition(row, source));
+      return { items: shown.map((row) => shownListedPattern(deps.references, row, principal.id, availabilityOf(row, source))), nextCursor: found.next === undefined ? null : deps.cursors.mint(binding, { updatedKey: found.next.updatedKey, id: found.next.id }) };
+    },
+    async copy({ traceId, principal, id }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const row = await deps.store.readRunnablePattern(id, principal.id);
+      if (row === undefined) throw new AppError('NOT_FOUND');
+      await deps.access.require({ traceId, principal, sourceId: row.sourceId, auditAction: PATTERN_COPY_AUDIT_ACTION });
+      const source = sourceOf(row.sourceId);
+      const result = await deps.store.copyPattern({ originalId: id, nameOf: copyNameOf, accept: (original) => !storedHoldsPersonalCondition(original, source) }, { principal, traceId, audit: deps.audit });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'refused') throw new AppError('INVALID_REQUEST', { reason: 'pattern-personal-condition' });
+      if (result.outcome === 'limit') throw new AppError('INVALID_REQUEST', { reason: 'pattern-limit' });
+      return shownPattern(deps.references, result.row);
     },
     async save({ traceId, principal, request }) {
       await deps.access.require({ traceId, principal, sourceId: request.sourceId, auditAction: PATTERN_SAVE_AUDIT_ACTION });

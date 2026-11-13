@@ -49,6 +49,7 @@ const PRODUCT_EXAMPLES: Readonly<Record<string, OperationExample>> = {
   'PUT /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001', payload: '{}', headers: { 'content-type': 'application/json' } },
   'DELETE /v1/investigations/{id}': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001', headers: { 'if-match': '"1"' } },
   'PUT /v1/patterns/{id}': { url: '/v1/patterns/0192f000-0000-7000-8000-000000000001', payload: '{}', headers: { 'content-type': 'application/json' } },
+  'POST /v1/patterns/{id}/copy': { url: '/v1/patterns/0192f000-0000-7000-8000-000000000001/copy', payload: '{}', headers: { 'content-type': 'application/json' } },
   'DELETE /v1/patterns/{id}': { url: '/v1/patterns/0192f000-0000-7000-8000-000000000001', headers: { 'if-match': '"1"' } },
   'POST /v1/investigations/{id}/restore': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/restore', payload: '{}', headers: { 'content-type': 'application/json' } },
   'POST /v1/investigations/{id}/views/{viewId}/delete': { url: '/v1/investigations/0192f000-0000-7000-8000-000000000001/views/0192f000-0000-7000-8000-0000000000b1/delete', payload: '{}', headers: { 'content-type': 'application/json', 'if-match': '"1"' } },

@@ -57,14 +57,20 @@ export interface PatternListPosition {
 }
 
 export interface PatternListQuery {
+  /** The caller: their own patterns, and the shared patterns of other people, are listed. */
   readonly ownerId: string;
   readonly sourceId: string;
   readonly limit: number;
   readonly after: PatternListPosition | undefined;
 }
 
+/** A listed pattern: the row and its creator's current display name. */
+export interface ListedPatternRow extends PatternRow {
+  readonly ownerName: string;
+}
+
 export interface PatternListResult {
-  readonly rows: readonly PatternRow[];
+  readonly rows: readonly ListedPatternRow[];
   readonly next: PatternListPosition | undefined;
 }
 
@@ -77,6 +83,10 @@ export interface PatternChange {
   readonly definition?: Readonly<Record<string, unknown>>;
   readonly params?: Readonly<Record<string, unknown>>;
   readonly anchor?: { readonly entityType: string; readonly stableId: string } | null;
+  /** Makes the pattern visible to everyone on its source (`shared`) or to its creator only (`private`). */
+  readonly visibility?: 'private' | 'shared';
+  /** What the event records: `changed` (the default), or `shared` and `unshared` for a change of visibility. */
+  readonly action?: 'changed' | 'shared' | 'unshared';
 }
 
 export type PatternChangeResult = { readonly outcome: 'changed'; readonly row: PatternRow } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' };
@@ -91,6 +101,19 @@ export interface PatternDeletion {
 
 export type PatternDeleteResult = { readonly outcome: 'deleted'; readonly row: PatternRow; readonly deletedAt: string; readonly purgeAfter: string } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' };
 
+/** What a copy needs: the original, the name of the copy from the original's name, and whether the original may be copied now. Both are decided on the row as it is read under the lock. */
+export interface PatternCopy {
+  readonly originalId: string;
+  readonly nameOf: (originalName: string) => string;
+  readonly accept: (original: PatternRow) => boolean;
+}
+
+export type PatternCopyResult =
+  | { readonly outcome: 'copied'; readonly row: PatternRow; readonly original: PatternRow }
+  | { readonly outcome: 'not-found' }
+  | { readonly outcome: 'refused' }
+  | { readonly outcome: 'limit' };
+
 /** What the purge reports for each pattern it removes. */
 export interface PurgedPattern {
   readonly id: string;
@@ -100,7 +123,7 @@ export interface PurgedPattern {
 export interface PatternStore {
   /** Saves a pattern for the caller and records the `saved` event in the same transaction. The caller's patterns on the source are counted under a lock, so two saves cannot pass the limit together; a save over it writes nothing. */
   savePattern(input: NewPattern, context: PatternWriteContext): Promise<PatternSaveResult>;
-  /** The owner's patterns on a source that are not deleted, the most recently changed first, then by id, one page and where the next starts. Another owner's patterns are never read. */
+  /** The caller's patterns on a source that are not deleted, and the shared patterns of other people on it, the most recently changed first, then by id, one page and where the next starts: the next position is the last row read. Another person's private pattern is never read. */
   listPatterns(query: PatternListQuery): Promise<PatternListResult>;
   /** The owner's pattern that is not deleted; another owner's, a deleted one and an unknown id are `undefined`. */
   readPattern(id: string, ownerId: string): Promise<PatternRow | undefined>;
@@ -108,6 +131,8 @@ export interface PatternStore {
   readRunnablePattern(id: string, principalId: string): Promise<PatternRow | undefined>;
   /** Records that the owner ran the pattern: `last_run_at` is now. It is a use and not an edit: the version, `updated_at` and the events are not touched. False, with nothing written, for anyone but the owner, a deleted pattern and an unknown id. */
   recordPatternRun(id: string, ownerId: string): Promise<boolean>;
+  /** Copies a pattern the caller may see into a private pattern of theirs on the same source, under the caller's lock for the source and a share lock on the original, and records a `copied` event for the copy and one for the original. */
+  copyPattern(copy: PatternCopy, context: PatternWriteContext): Promise<PatternCopyResult>;
   /** Changes the owner's pattern in one transaction under a lock on its row: the owner's live pattern, then the version, then the write and its `changed` event. A stale version writes nothing. */
   changePattern(change: PatternChange, context: PatternWriteContext): Promise<PatternChangeResult>;
   /** Marks the owner's pattern deleted (`deleted_at`, `purge_after`) under the same lock and guards, and records the `deleted` event. */
@@ -169,6 +194,7 @@ export function createPatternStore(pool: pg.Pool): PatternStore {
     readPattern: (id, ownerId) => readPattern(pool, id, ownerId),
     readRunnablePattern: (id, principalId) => readRunnablePattern(pool, id, principalId),
     recordPatternRun: (id, ownerId) => recordPatternRun(pool, id, ownerId),
+    copyPattern: (copy, context) => copyPattern(pool, copy, context),
     changePattern: (change, context) => changePattern(pool, change, context),
     deletePattern: (deletion, context) => deletePattern(pool, deletion, context),
     purgeExpiredPatterns: (beforeDelete) => purgeExpiredPatterns(pool, beforeDelete),
@@ -198,15 +224,17 @@ async function savePattern(pool: pg.Pool, input: NewPattern, context: PatternWri
 const UPDATED_KEY = `to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
 
 async function listPatterns(pool: pg.Pool, query: PatternListQuery): Promise<PatternListResult> {
-  const found = await pool.query<PatternRecord & { updated_key: string }>(
-    `SELECT ${PATTERN_COLUMNS}, ${UPDATED_KEY} AS updated_key FROM saved_patterns
-     WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL AND ($3::text IS NULL OR (updated_at, id) < ($3::timestamptz, $4::uuid))
-     ORDER BY updated_at DESC, id DESC LIMIT $5`,
+  const half = (own: boolean): string =>
+    `(SELECT ${PATTERN_COLUMNS}, ${UPDATED_KEY} AS updated_key FROM saved_patterns
+      WHERE ${own ? 'owner_id = $1' : "owner_id <> $1 AND visibility = 'shared'"} AND source_id = $2 AND deleted_at IS NULL AND ($3::text IS NULL OR (updated_at, id) < ($3::timestamptz, $4::uuid))
+      ORDER BY updated_at DESC, id DESC LIMIT $5)`;
+  const found = await pool.query<PatternRecord & { updated_key: string; display_name: string }>(
+    `SELECT merged.*, u.display_name FROM (${half(true)} UNION ALL ${half(false)}) merged JOIN users u ON u.id = merged.owner_id ORDER BY merged.updated_at DESC, merged.id DESC LIMIT $5`,
     [query.ownerId, query.sourceId, query.after?.updatedKey ?? null, query.after?.id ?? null, query.limit + 1],
   );
   const page = found.rows.slice(0, query.limit);
   const last = page.at(-1);
-  return { rows: page.map(patternRowOf), next: found.rows.length > query.limit && last !== undefined ? { updatedKey: last.updated_key, id: last.id } : undefined };
+  return { rows: page.map((record) => ({ ...patternRowOf(record), ownerName: record.display_name })), next: found.rows.length > query.limit && last !== undefined ? { updatedKey: last.updated_key, id: last.id } : undefined };
 }
 
 async function readPattern(pool: pg.Pool, id: string, ownerId: string): Promise<PatternRow | undefined> {
@@ -247,6 +275,7 @@ async function changePattern(pool: pg.Pool, change: PatternChange, context: Patt
       sets.push(`${column} = $${values.length}`);
     };
     if (change.name !== undefined) set('name', change.name);
+    if (change.visibility !== undefined) set('visibility', change.visibility);
     if (change.definition !== undefined) set('definition', change.definition);
     if (change.params !== undefined) set('params', change.params);
     if (change.anchor !== undefined) {
@@ -257,7 +286,7 @@ async function changePattern(pool: pg.Pool, change: PatternChange, context: Patt
     const updated = await transaction.client.query<PatternRecord>(`UPDATE saved_patterns SET ${[...sets, 'version = version + 1', 'updated_at = clock_timestamp()'].join(', ')} WHERE id = $1 RETURNING ${PATTERN_COLUMNS}`, values);
     const record = updated.rows[0];
     if (record === undefined) throw new Error('the changed pattern was not returned');
-    await transaction.record({ sourceId: record.source_id, patternId: record.id, action: 'changed', version: record.version });
+    await transaction.record({ sourceId: record.source_id, patternId: record.id, action: change.action ?? 'changed', version: record.version });
     return { outcome: 'changed', row: patternRowOf(record) } as const;
   });
 }
@@ -275,6 +304,32 @@ async function deletePattern(pool: pg.Pool, deletion: PatternDeletion, context: 
     if (record === undefined) throw new Error('the deleted pattern was not returned');
     await transaction.record({ sourceId: record.source_id, patternId: record.id, action: 'deleted', version: record.version });
     return { outcome: 'deleted', row: patternRowOf(record), deletedAt: record.deleted_at.toISOString(), purgeAfter: record.purge_after.toISOString() } as const;
+  });
+}
+
+async function copyPattern(pool: pg.Pool, copy: PatternCopy, context: PatternWriteContext): Promise<PatternCopyResult> {
+  const callerId = context.principal.id;
+  return inPatternTransaction({ pool, audit: context.audit, newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
+    // the original is held while it is copied, so a pattern unshared or deleted at the same moment is not copied
+    const found = await transaction.client.query<PatternRecord>(`SELECT ${PATTERN_COLUMNS} FROM saved_patterns WHERE id = $1 AND deleted_at IS NULL AND (owner_id = $2 OR visibility = 'shared') FOR SHARE`, [copy.originalId, callerId]);
+    const record = found.rows[0];
+    if (record === undefined) return { outcome: 'not-found' } as const;
+    const original = patternRowOf(record);
+    if (!copy.accept(original)) return { outcome: 'refused' } as const;
+    await transaction.client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`saved_patterns:${callerId}:${record.source_id}`]);
+    const counted = await transaction.client.query<{ held: number }>('SELECT count(*)::int AS held FROM saved_patterns WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL', [callerId, record.source_id]);
+    if ((counted.rows[0]?.held ?? 0) >= PATTERN_LIMITS.patternsPerSource) return { outcome: 'limit' } as const;
+    const id = uuidv7();
+    const inserted = await transaction.client.query<PatternRecord>(
+      `INSERT INTO saved_patterns (id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING ${PATTERN_COLUMNS}`,
+      [id, callerId, record.source_id, copy.nameOf(record.name), record.kind, record.preset_id, record.template_id, record.template_version, record.params, record.definition, record.ask_for_starting_entity, record.anchor_entity_type, record.anchor_stable_id],
+    );
+    const made = inserted.rows[0];
+    if (made === undefined) throw new Error('the copied pattern was not returned');
+    await transaction.record({ sourceId: made.source_id, patternId: made.id, action: 'copied', version: 1 });
+    await transaction.record({ sourceId: record.source_id, patternId: record.id, action: 'copied', version: record.version });
+    return { outcome: 'copied', row: patternRowOf(made), original } as const;
   });
 }
 

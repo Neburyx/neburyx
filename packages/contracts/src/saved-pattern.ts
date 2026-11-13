@@ -32,10 +32,14 @@ const savedPatternBase = {
 };
 
 /** A saved pattern. A `definition` is shown as it was validated and stored (`patternDefinitionSchema` is the one definition; it holds a custom type that an OpenAPI schema cannot describe, so the answer says an object). A saved pattern is a built-in run (a template, its version and its parameters without the starting entity) or a pattern built in the app (a definition). Both are structures, never query text. */
-export const savedPatternSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ ...savedPatternBase, kind: z.literal('definition'), definition: z.record(z.string(), z.unknown()) }),
-  z.strictObject({ ...savedPatternBase, kind: z.literal('preset-run'), presetId: text, templateId: text, templateVersion: z.number().int().min(1), params: z.record(z.string(), z.unknown()) }),
-]);
+const definitionPatternShape = { ...savedPatternBase, kind: z.literal('definition'), definition: z.record(z.string(), z.unknown()) };
+const presetRunPatternShape = { ...savedPatternBase, kind: z.literal('preset-run'), presetId: text, templateId: text, templateVersion: z.number().int().min(1), params: z.record(z.string(), z.unknown()) };
+
+export const savedPatternSchema = z.discriminatedUnion('kind', [z.strictObject(definitionPatternShape), z.strictObject(presetRunPatternShape)]);
+
+/** What a listed pattern shows of who made it: the creator's current display name, and whether it is the caller's own (no id of another person is shown). */
+const listedOwner = { owner: z.strictObject({ name: z.string() }), ownedByYou: z.boolean() };
+
 
 /**
  * `POST /v1/patterns`: the source, the name and one of the two kinds. A definition is any object here, so that a bad one is refused with one answer, `INVALID_REQUEST`, and the client asks
@@ -89,10 +93,10 @@ export const patternAvailabilitySchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('unavailable'), reasons: z.array(patternUnavailableReasonSchema).min(1).max(MAX_PATTERN_PROBLEMS) }),
 ]);
 
-/** A pattern as the list shows it: a saved pattern and whether it can run now. The save, change and delete answers do not carry it (a pattern just saved is available by construction). */
+/** A pattern as the list shows it: a saved pattern, its creator's name and whether it is the caller's own, and whether it can run now. The save, change, copy and delete answers carry none of these (a pattern just saved is the caller's own and available by construction). */
 export const listedPatternSchema = z.discriminatedUnion('kind', [
-  savedPatternSchema.options[0].extend({ availability: patternAvailabilitySchema }),
-  savedPatternSchema.options[1].extend({ availability: patternAvailabilitySchema }),
+  savedPatternSchema.options[0].extend({ ...listedOwner, availability: patternAvailabilitySchema }),
+  savedPatternSchema.options[1].extend({ ...listedOwner, availability: patternAvailabilitySchema }),
 ]);
 
 export const patternListResponseSchema = z.strictObject({ items: z.array(listedPatternSchema), nextCursor: z.string().nullable() });
@@ -103,7 +107,7 @@ export type ListedPattern = z.infer<typeof listedPatternSchema>;
 
 /**
  * `PUT /v1/patterns/{id}`: the pattern's version goes in the body as `expectedVersion`, and at least one of the changeable fields. The name changes either kind; `definition` only a pattern built in the app and `params` only a built-in run
- * (the service refuses the other). `anchor` sets the held starting entity and `null` clears it; whether the pattern asks for its starting entity is derived from it, so `askForStartingEntity` is not a field.
+ * (the service refuses the other). `anchor` sets the held starting entity and `null` clears it; `visibility` shares or unshares the pattern and is sent alone; whether the pattern asks for its starting entity is derived from it, so `askForStartingEntity` is not a field.
  */
 export const changePatternRequestSchema = z.strictObject({
   expectedVersion: z.number().int().min(1),
@@ -111,6 +115,8 @@ export const changePatternRequestSchema = z.strictObject({
   definition: z.record(z.string(), z.unknown()).optional(),
   params: z.record(z.string(), z.unknown()).optional(),
   anchor: savedPatternAnchorSchema.nullable().optional(),
+  /** Makes the pattern visible to everyone on its source or to its creator only; sent alone, it is the whole request (one request, one concern). */
+  visibility: z.enum(SAVED_PATTERN_VISIBILITIES).optional(),
 });
 
 /** `DELETE /v1/patterns/{id}`: the version after the delete, and when the pattern is removed for good. */

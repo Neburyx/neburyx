@@ -228,6 +228,7 @@ const OTHER_CASES: Readonly<Record<string, string>> = {
   'DELETE /v1/patterns/:id': 'reads no source: it writes to the application database, so there is no source read to cancel',
   'GET /v1/patterns': 'reads no source: it reads the application database, so there is no source read to cancel',
   'POST /v1/patterns': 'reads no source: it writes to the application database, so there is no source read to cancel',
+  'POST /v1/patterns/:id/copy': 'reads no source: it writes to the application database, so there is no source read to cancel',
   'POST /v1/patterns/preview': 'reads no source: it answers from the mapping and the definition, so there is nothing to cancel',
   'GET /v1/investigations': 'reads no source',
   'GET /v1/investigations/:id': 'reads no source',
