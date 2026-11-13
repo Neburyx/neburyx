@@ -1,0 +1,5 @@
+MATCH (a:`Maker`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1
+CALL { WITH a CALL { WITH a MATCH (a)-[r1:`USES_TOOL`]->(n1:`Tool`) WHERE n1 <> a RETURN n1, r1 } WITH n1, r1 LIMIT $countCap + 1 WITH collect({n1: n1, r1: r1}) AS found RETURN size(found) > $countCap AS cut1, found[..$countCap] AS f1 }
+CALL { WITH f1 UNWIND f1 AS e WITH DISTINCT e.n1 AS n CALL { WITH n CALL { WITH n MATCH (n)<-[:`USES_TOOL`]-() RETURN 1 AS hit } WITH hit LIMIT $countCap + 1 RETURN count(*) AS degree } WITH collect({n: n, degree: degree, stopped: coalesce(n.`isCommon`, false) = true}) AS checked RETURN [c IN checked WHERE c.degree > $countCap | c.n] AS heavy2, [c IN checked WHERE c.degree <= $countCap AND NOT c.stopped | c.n] AS mids2, any(c IN checked WHERE c.stopped) AS stopped2 }
+CALL { WITH a, f1, mids2 UNWIND f1 AS e WITH a, e, mids2 WHERE e.n1 IN mids2 WITH a, e, e.n1 AS n1 CALL { WITH a, n1 MATCH (n1)<-[r2:`USES_TOOL`]-(n2:`Maker`) WHERE n2 <> a AND n2 <> n1 RETURN n2, r2 } WITH DISTINCT n2 LIMIT $countCap + 1 RETURN count(n2) AS matches }
+RETURN matches, cut1 AS bounded, stopped2 AS stopListed, size(heavy2) AS supernodes

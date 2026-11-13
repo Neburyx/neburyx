@@ -216,6 +216,7 @@ describe('the templates of the shipped catalog', () => {
       'linked-entities': 'cut means a lower bound',
       pattern: 'cut means a lower bound',
       'linked-entities-count': 'cut means a lower bound',
+      'pattern-count': 'cut means a lower bound',
       'derived-edge-support': 'cut means a lower bound',
       'aggregate-sample': 'one row',
       'aggregate-summary': 'one row',

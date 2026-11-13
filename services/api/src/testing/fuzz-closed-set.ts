@@ -204,6 +204,7 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     cases.add('pattern:run');
     const response = await post('/v1/patterns/run', { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps }, anchor: { entityType: 'widget', stableId: anchorId }, ...(mask === undefined ? {} : { mask }) });
     if (response.statusCode !== 200) throw new Error(`the closed set expected a pattern run to be served, and it answered ${response.statusCode}: ${JSON.stringify(steps)}`);
+    if (executor.calls.some((call) => call.templateId === 'pattern-count')) cases.add('pattern:estimate');
     keep();
   };
   const made = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget', ...extra });
@@ -226,6 +227,15 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   }
   await patternRun([made(), back()], FUZZ_PATTERN_SUPERNODE);
   await patternRun([made(), back()], FUZZ_PATTERN_STOPPED);
+  /** A run for the anchor whose count is over the threshold stops as heavy (its count statement is in the set), and the same run with the continue flag reads no count and is served. */
+  const heavyRun = await post('/v1/patterns/run', { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [made(), back()] }, anchor: { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR } });
+  cases.add('pattern:heavy');
+  if (heavyRun.statusCode !== 200 || (JSON.parse(heavyRun.body) as { status?: string }).status !== 'heavy') throw new Error(`the closed set expected a pattern run to stop as heavy: ${heavyRun.body.slice(0, 120)}`);
+  keep();
+  const continued = await post('/v1/patterns/run', { sourceId: FUZZ_SOURCE, definition: { anchorType: 'widget', steps: [made(), back()] }, anchor: { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR }, continue: true });
+  cases.add('pattern:continue');
+  if (continued.statusCode !== 200) throw new Error(`the closed set expected a continued pattern run to be served, and it answered ${continued.statusCode}`);
+  keep();
   const types = [['gadget'], ['phone'], ['gadget', 'phone']];
   for (const neighborTypes of types) {
     for (const direction of ['out', 'in', 'both']) {

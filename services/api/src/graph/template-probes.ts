@@ -1,9 +1,14 @@
 import type { Count, TemplateRunNotice } from '@neburyx/contracts';
 import { isNormalizedSharedCount } from '../gate/normalize/shared-attribute-count.js';
 import { isNormalizedLinkedCount } from '../gate/normalize/linked-entities-count.js';
+import { isNormalizedPatternCount } from '../gate/normalize/pattern-count.js';
 import { LINKED_ENTITIES_ID } from '../gate/templates/linked-entities.js';
 import { LINKED_ENTITIES_COUNT_ID } from '../gate/templates/linked-entities-count.js';
 import { linkedEntitiesRequestOf } from '../gate/templates/linked-entities-statement.js';
+import { PATTERN_ID } from '../gate/templates/pattern.js';
+import { PATTERN_COUNT_ID } from '../gate/templates/pattern-count.js';
+import { patternNoticesOf } from '../gate/templates/pattern-notices.js';
+import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import { SHARED_ATTRIBUTE_ID } from '../gate/templates/shared-attribute.js';
 import { SHARED_ATTRIBUTE_COUNT_ID } from '../gate/templates/shared-attribute-count.js';
 import { sharedAttributeRequestOf } from '../gate/templates/shared-attribute-statement.js';
@@ -64,7 +69,21 @@ const linkedEntitiesProbe: TemplateProbe = {
   },
 };
 
+/**
+ * The probe of the pattern template. Its notices are the run's own rule fed with what a probe can know: no entity is returned, so a heavy answer never names the entities left out, and an entity left out (a supernode or one on a stop-list)
+ * makes the estimate bounded, as the linked-entities probe does; `readBounded` is raised only for a step that was cut.
+ */
+const patternProbe: TemplateProbe = {
+  templateId: PATTERN_COUNT_ID,
+  read(item, params, allowlist) {
+    if (!isNormalizedPatternCount(item)) return undefined;
+    const request = patternRequestOf(allowlist, params);
+    const notices = patternNoticesOf({ stopListed: false, supernodes: [], bounded: item.bounded }, request);
+    return { anchorFound: item.anchorFound, usable: item.usable, matches: item.matches, bounded: item.bounded || item.stopListed || item.supernodes > 0, notices };
+  },
+};
+
 /** The probes of the built-in pattern templates, by template ID. */
 export function defaultTemplateProbes(): ReadonlyMap<string, TemplateProbe> {
-  return new Map([[SHARED_ATTRIBUTE_ID, sharedAttributeProbe], [LINKED_ENTITIES_ID, linkedEntitiesProbe]]);
+  return new Map([[SHARED_ATTRIBUTE_ID, sharedAttributeProbe], [LINKED_ENTITIES_ID, linkedEntitiesProbe], [PATTERN_ID, patternProbe]]);
 }

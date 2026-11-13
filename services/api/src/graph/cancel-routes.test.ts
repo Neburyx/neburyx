@@ -165,6 +165,26 @@ describe('a pattern run, when the client closes the connection while its estimat
   });
 });
 
+describe('a pattern run through the pattern route, when the client closes the connection while its estimate is read', () => {
+  it('stops the estimate and does not start the run, and the call is audited as cancelled', async () => {
+    const { app, executor, events } = await listening();
+    const text = JSON.stringify({ sourceId: 'demo', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }] }, anchor: ref });
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path: '/v1/patterns/run', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text), 'idempotency-key': 'a-key-of-sixteen-characters-p' } });
+    request.on('error', () => undefined);
+    request.end(text);
+    const isData = (call: ExecuteCall): boolean => call.templateId !== 'schema-indexes';
+    await until(() => executor.calls.some(isData));
+    const reading = executor.calls.filter(isData);
+    request.destroy();
+    await until(() => reading.every((call) => call.signal?.aborted === true));
+    await until(() => events.some((event) => event.detail?.reason === 'cancelled' && event.action === 'pattern.count'));
+    expect(reading.map((call) => call.templateId)).toEqual(['pattern-count']);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(executor.calls.some((call) => call.templateId === 'pattern')).toBe(false);
+    await app.close();
+  });
+});
+
 /** Routes that read the source and are cancelled in a case of their own above (search more), and routes that read no source, each with its reason. */
 const OTHER_CASES: Readonly<Record<string, string>> = {
   'POST /v1/search/entities/more': 'its own case, which first needs a cursor',

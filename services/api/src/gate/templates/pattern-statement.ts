@@ -83,6 +83,11 @@ function stopCondition(request: PatternRequest, type: string): string {
   return properties.length === 0 ? 'false' : properties.map((property) => `coalesce(n.${quoteName(property)}, false) = true`).join(' OR ');
 }
 
+/** The anchor: the first node by element ID of the anchor's type with the stable ID. */
+function anchorLineOf(allowlist: SourceAllowlist, request: PatternRequest): string {
+  return `MATCH (a:${labelOf(allowlist, request.anchor)}) WHERE a.${stableIdOf(allowlist, request.anchor)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`;
+}
+
 const firstHop = (allowlist: SourceAllowlist, request: PatternRequest): string =>
   `CALL { WITH a CALL { ${stepRead(allowlist, request, 1)} } WITH n1, r1 LIMIT $countCap + 1 WITH collect({n1: n1, r1: r1}) AS found RETURN size(found) > $countCap AS cut1, found[..$countCap] AS f1 }`;
 
@@ -94,10 +99,15 @@ function checkBefore(request: PatternRequest, index: number): string {
   return `CALL { WITH ${frontier} UNWIND ${frontier} AS e WITH DISTINCT e.n${index - 1} AS n CALL { WITH n CALL { ${degreeRead(request, index)} } WITH hit LIMIT $countCap + 1 RETURN count(*) AS degree } WITH collect({n: n, degree: degree, stopped: ${stopCondition(request, previous.arrivesAt)}}) AS checked RETURN [c IN checked WHERE c.degree > $countCap | c.n] AS heavy${index}, [c IN checked WHERE c.degree <= $countCap AND NOT c.stopped | c.n] AS mids${index}, any(c IN checked WHERE c.stopped) AS stopped${index} }`;
 }
 
-function laterHop(allowlist: SourceAllowlist, request: PatternRequest, index: number): string {
+/** The part of a later step that is the same for the run and the count: the frontier of the previous step, kept to the nodes its check let through, and the step's own read from each. */
+function laterRead(allowlist: SourceAllowlist, request: PatternRequest, index: number): string {
   const earlier = range(index - 1).map((hop) => `n${hop}`);
   const bound = earlier.map((name) => `e.${name} AS ${name}`).join(', ');
-  return `CALL { WITH a, f${index - 1}, mids${index} UNWIND f${index - 1} AS e WITH a, e, mids${index} WHERE e.n${index - 1} IN mids${index} WITH a, e, ${bound} CALL { ${stepRead(allowlist, request, index)} } WITH e, n${index}, r${index} LIMIT $countCap + 1 WITH collect(e{.*, n${index}: n${index}, r${index}: r${index}}) AS found RETURN size(found) > $countCap AS cut${index}, found[..$countCap] AS f${index} }`;
+  return `CALL { WITH a, f${index - 1}, mids${index} UNWIND f${index - 1} AS e WITH a, e, mids${index} WHERE e.n${index - 1} IN mids${index} WITH a, e, ${bound} CALL { ${stepRead(allowlist, request, index)} }`;
+}
+
+function laterHop(allowlist: SourceAllowlist, request: PatternRequest, index: number): string {
+  return `${laterRead(allowlist, request, index)} WITH e, n${index}, r${index} LIMIT $countCap + 1 WITH collect(e{.*, n${index}: n${index}, r${index}: r${index}}) AS found RETURN size(found) > $countCap AS cut${index}, found[..$countCap] AS f${index} }`;
 }
 
 /** The members of the stored edges of the shown path for a hop whose relationship rows have no stable ID: every relationship of the type between the two ends, at most `$countCap + 1` of them for each edge. */
@@ -122,9 +132,7 @@ function membersOf(request: PatternRequest): { readonly reads: readonly string[]
  */
 export function patternStatementOf(allowlist: SourceAllowlist, request: PatternRequest): string {
   const count = request.steps.length;
-  const anchorLabel = labelOf(allowlist, request.anchor);
-  const anchorId = stableIdOf(allowlist, request.anchor);
-  const lines = [`MATCH (a:${anchorLabel}) WHERE a.${anchorId} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`, firstHop(allowlist, request)];
+  const lines = [anchorLineOf(allowlist, request), firstHop(allowlist, request)];
   for (const index of range(count).slice(1)) lines.push(checkBefore(request, index), laterHop(allowlist, request, index));
   const hops = range(count);
   const later = hops.slice(1);
@@ -144,5 +152,33 @@ export function patternStatementOf(allowlist: SourceAllowlist, request: PatternR
   const rels = hops.map((index) => `m.r${index} AS r${index}`).join(', ');
   const cut = members.names.length === 0 ? '' : `, ${members.names.join(', ')}, ${members.names.map((name) => `size(${name}) > $countCap`).join(' OR ')} AS membersCut`;
   lines.push(`RETURN a, bounded, heavy[..$limit] AS heavy, stopListed, m.n${count} AS x, ${mids} AS mid, ${rels}, ${count} AS hops${cut}`);
+  return lines.join('\n');
+}
+
+/**
+ * The statement of the count of a pattern run, from the mapping and the request: the entities the last step reaches, each once, streamed and stopped at `$countCap + 1`, counted. The anchor, the first step, the check before each
+ * later step and the steps before the last are the run's own fragments, with the run's own bounds (a step is cut at `$countCap + 1` rows, a node with more relationships over the next step's types than `$countCap` is a supernode and a
+ * node on a stop-list is not traversed); the last step reads from the frontier the same way a later step does, but streams its distinct arrivals instead of collecting paths, because the run keeps at most `$countCap` paths for a step
+ * and so could never read more than the cap. Each read returns at most `$countCap + 1` rows; the scan of the last step is bounded by the degree check, except from the anchor of a one-step pattern, which has none (as the run's first
+ * step). One row: `matches` (at most `$countCap + 1`), `bounded` (a step before the last was cut), `stopListed` and `supernodes` (an entity was left out because it is on a stop-list or has too many relationships, and how many
+ * supernodes); no row when the anchor is not found. It returns numbers and flags only.
+ */
+export function patternCountStatementOf(allowlist: SourceAllowlist, request: PatternRequest): string {
+  const count = request.steps.length;
+  const anchor = anchorLineOf(allowlist, request);
+  if (count === 1) {
+    return [anchor, `CALL { WITH a CALL { ${stepRead(allowlist, request, 1)} } WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(n1) AS matches }`, 'RETURN matches, false AS bounded, false AS stopListed, 0 AS supernodes'].join('\n');
+  }
+  const lines = [anchor, firstHop(allowlist, request)];
+  for (const index of range(count).slice(1)) {
+    lines.push(checkBefore(request, index));
+    lines.push(index < count ? laterHop(allowlist, request, index) : `${laterRead(allowlist, request, index)} WITH DISTINCT n${index} LIMIT $countCap + 1 RETURN count(n${index}) AS matches }`);
+  }
+  const before = range(count - 1);
+  const later = range(count).slice(1);
+  const bounded = before.map((index) => `cut${index}`).join(' OR ');
+  const stopped = later.map((index) => `stopped${index}`).join(' OR ');
+  const heavy = later.map((index) => `heavy${index}`).join(' + ');
+  lines.push(`RETURN matches, ${bounded} AS bounded, ${stopped} AS stopListed, size(${heavy}) AS supernodes`);
   return lines.join('\n');
 }

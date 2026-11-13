@@ -88,21 +88,25 @@ describe('the closed set of the fuzz suite', () => {
 
     const sharedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('RETURN matches, anchorBounded, skipped'));
     const linkedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('AS frontierBounded') && statement.includes('AS supernodeSkipped') && statement.includes('count(n) AS matches') || statement.includes('count(x) AS matches'));
+    const patternProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('AS supernodes') && statement.includes('RETURN matches, ') && statement.includes('LIMIT $countCap + 1 RETURN count(n'));
     const casesBuilt = casesOfClosedSet.get(closed) ?? new Set<string>();
-    const CASES = ['shared-attribute:estimate', 'shared-attribute:continue', 'shared-attribute:heavy', 'linked-entities:estimate', 'linked-entities:continue', 'linked-entities:heavy'];
+    const CASES = ['shared-attribute:estimate', 'shared-attribute:continue', 'shared-attribute:heavy', 'linked-entities:estimate', 'linked-entities:continue', 'linked-entities:heavy', 'pattern:estimate', 'pattern:continue', 'pattern:heavy'];
     /** What the heavy-operation estimate needs of a closed set: the count statement of each pattern template and a run of each case, so a set without any of them is found. */
     const missingEstimateCases = (statements: ReadonlySet<string>, cases: ReadonlySet<string>): string[] => [
       ...(sharedProbe(statements).length === 0 ? ['the shared-attribute count statement'] : []),
       ...(linkedProbe(statements).length === 0 ? ['the linked-entities count statement'] : []),
+      ...(patternProbe(statements).length === 0 ? ['the pattern count statement'] : []),
       ...CASES.filter((name) => !cases.has(name)),
     ];
 
     it('holds the count statement of each pattern template, bounded and with no request value, and builds each case of the estimate; a set without any of them fails', () => {
       expect(missingEstimateCases(closed, casesBuilt)).toEqual([]);
-      for (const statement of [...sharedProbe(closed), ...linkedProbe(closed)]) expect(statement).toContain('LIMIT $countCap + 1');
+      for (const statement of [...sharedProbe(closed), ...linkedProbe(closed), ...patternProbe(closed)]) expect(statement).toContain('LIMIT $countCap + 1');
+      for (const statement of patternProbe(closed)) expect(statement).not.toContain(FUZZ_PATTERN_TEXT);
       const without = (drop: readonly string[]): ReadonlySet<string> => new Set([...closed].filter((statement) => !drop.includes(statement)));
       expect(missingEstimateCases(without(sharedProbe(closed)), casesBuilt)).toEqual(['the shared-attribute count statement']);
       expect(missingEstimateCases(without(linkedProbe(closed)), casesBuilt)).toEqual(['the linked-entities count statement']);
+      expect(missingEstimateCases(without(patternProbe(closed)), casesBuilt)).toEqual(['the pattern count statement']);
       for (const name of CASES) expect(missingEstimateCases(closed, new Set([...casesBuilt].filter((entry) => entry !== name)))).toEqual([name]);
     });
 

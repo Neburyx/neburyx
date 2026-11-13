@@ -207,6 +207,12 @@ export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId === 'shared-attribute') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => sharedRow(index, call)) });
   if (call.templateId === 'linked-entities-count') return Promise.resolve({ status: 'rows', rows: [{ matches: call.parameters['stableId'] === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, frontierBounded: false, supernodeSkipped: false }] });
   if (call.templateId === 'linked-entities') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => linkedRow(index, call)) });
+  if (call.templateId === 'pattern-count') {
+    const anchorId = call.parameters['stableId'];
+    const steps = call.parameters['steps'];
+    const several = Array.isArray(steps) && steps.length > 1;
+    return Promise.resolve({ status: 'rows', rows: [{ matches: anchorId === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, bounded: false, stopListed: anchorId === FUZZ_PATTERN_STOPPED && several, supernodes: anchorId === FUZZ_PATTERN_SUPERNODE && several ? 1 : 0 }] });
+  }
   if (call.templateId === 'pattern') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 2) }, (_, index) => patternRow(index, call)) });
   if (call.templateId === 'derived-rule-run') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => derivedRow(index)) });
   if (call.templateId === 'aggregate-sample') {

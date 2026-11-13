@@ -7,7 +7,7 @@ import { expandBranchesOf, expandCountStatementOf, expandStatementOf, undeclared
 import { aggregateStatementOf } from './templates/aggregate-statement.js';
 import { linkedEntitiesCountStatementOf, linkedEntitiesRequestOf, linkedEntitiesStatementOf } from './templates/linked-entities-statement.js';
 import { patternRequestOf } from './templates/pattern-request.js';
-import { patternStatementOf } from './templates/pattern-statement.js';
+import { patternCountStatementOf, patternStatementOf } from './templates/pattern-statement.js';
 import { sharedAttributeCountStatementOf, sharedAttributeRequestOf, sharedAttributeStatementOf } from './templates/shared-attribute-statement.js';
 import { derivedRuleStatementOf, derivedSupportStatementOf, ruleOf } from './templates/derived-rule-statement.js';
 import { CONTEXT_BRANCHES, contextBranchesOf, relatedContextStatementOf, type ContextBranch } from './templates/related-context-statement.js';
@@ -289,7 +289,8 @@ function linkedEntitiesOf(template: Template, params: Params, allowlist: SourceA
 /** The statement of a pattern run: the entity types, relationship types and conditions the request names, checked against the mapping's rows, written as `patternStatementOf` says. */
 function patternOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
   if (template.pattern === undefined) return '';
-  return patternStatementOf(allowlist, patternRequestOf(allowlist, params));
+  const request = patternRequestOf(allowlist, params);
+  return template.pattern.count === true ? patternCountStatementOf(allowlist, request) : patternStatementOf(allowlist, request);
 }
 
 /** The statement of a shared-attribute run: the entity types and the relationship type the request names, checked against the mapping's rows, written as `sharedAttributeStatementOf` says. */

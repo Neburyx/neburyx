@@ -31,7 +31,7 @@ async function started(options: Options = {}) {
   const mapping = options.mapping ?? patternMappingOf();
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
-  const base = options.answer ?? ((): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: options.rows ?? [] }));
+  const base = options.answer ?? ((call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve({ status: 'rows', rows: call.templateId === 'pattern-count' ? [{ matches: 1, bounded: false, stopListed: false, supernodes: 0 }] : (options.rows ?? []) }));
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), base));
   const defaults = communitySeams();
   const policy: Seams['policy'] = options.deny === true ? { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } : options.authorize === undefined ? defaults.policy : { authorizeSource: () => Promise.resolve(options.authorize?.() === true ? { allowed: true } : { allowed: false, reason: 'withdrawn' }) };
@@ -40,6 +40,9 @@ async function started(options: Options = {}) {
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }), templateRunClock: () => new Date('2026-03-10T12:00:00.000Z') });
   return { app, executor };
 }
+
+/** An answer that serves the probe's count too, so the test only scripts the run. */
+const withCount = (answer: (call: ExecuteCall) => Promise<ExecuteOutcome>) => (call: ExecuteCall): Promise<ExecuteOutcome> => (call.templateId === 'pattern-count' ? Promise.resolve({ status: 'rows', rows: [{ matches: 1, bounded: false, stopListed: false, supernodes: 0 }] }) : answer(call));
 
 type Started = Awaited<ReturnType<typeof started>>;
 const KEY = 'a-key-of-sixteen-characters';
@@ -185,7 +188,7 @@ describe('an idempotent pattern run', () => {
     await app.close();
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
-    const slow = await started({ answer: async () => (await held, { status: 'rows' as const, rows: [oneStepRow('W-1', 'W-2')] }) });
+    const slow = await started({ answer: withCount(async () => (await held, { status: 'rows' as const, rows: [oneStepRow('W-1', 'W-2')] })) });
     const first = post(slow.app, request(), 'slow-key-of-sixteen-chars');
     await new Promise((resolve) => setTimeout(resolve, 100));
     const repeat = await post(slow.app, request(), 'slow-key-of-sixteen-chars');
@@ -209,7 +212,7 @@ describe('an idempotent pattern run', () => {
 
   it('does not keep a first call that ended in a server error, so a retry runs again', async () => {
     let calls = 0;
-    const { app, executor } = await started({ answer: () => Promise.resolve(++calls === 1 ? { status: 'unavailable' as const, reason: 'unreachable' as const } : { status: 'rows' as const, rows: [oneStepRow('W-1', 'W-2')] }) });
+    const { app, executor } = await started({ answer: withCount(() => Promise.resolve(++calls === 1 ? { status: 'unavailable' as const, reason: 'unreachable' as const } : { status: 'rows' as const, rows: [oneStepRow('W-1', 'W-2')] })) });
     expect((await post(app, request())).statusCode).toBeGreaterThanOrEqual(500);
     expect((await post(app, request())).statusCode).toBe(200);
     expect(reads(executor).length).toBe(2);
@@ -232,5 +235,17 @@ describe('an idempotent pattern run', () => {
     expect({ status: stale.statusCode, code: codeOf(stale) }).toEqual({ status: 409, code: 'CONFLICT' });
     expect(reads(changed.executor)).toHaveLength(1);
     await changed.app.close();
+  });
+});
+
+describe('a pattern run whose estimate cannot be read', () => {
+  it.each([
+    ['times out', { status: 'timeout' as const }, 504],
+    ['finds the source unavailable', { status: 'unavailable' as const, reason: 'unreachable' as const }, 503],
+  ])('answers the error of the failure when the estimate %s, and sends no run', async (_name, outcome, status) => {
+    const { app, executor } = await started({ answer: (call) => Promise.resolve(call.templateId === 'pattern-count' ? outcome : { status: 'rows' as const, rows: [oneStepRow('W-1', 'W-2')] }) });
+    expect((await post(app, request())).statusCode).toBe(status);
+    expect(reads(executor)).toHaveLength(0);
+    await app.close();
   });
 });
