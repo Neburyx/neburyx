@@ -267,7 +267,7 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
   let keys = 0;
   const post = async (url: string, payload: unknown) => {
     last.url = url;
-    const headers = url.startsWith('/v1/templates/') || url === '/v1/patterns/run' ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
+    const headers = url.startsWith('/v1/templates/') || url === '/v1/patterns/run' || /^\/v1\/patterns\/[^/]+\/run$/.test(url) ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
     const response = await app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers });
     let code = String(response.statusCode);
     try {

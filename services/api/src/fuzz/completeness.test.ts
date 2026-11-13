@@ -107,6 +107,13 @@ describe('the closed set of the fuzz suite', () => {
       }
     });
 
+    it('builds the saved pattern run route and its case, which writes no statement of its own, and fails when the route is taken out', () => {
+      const key = 'POST /v1/patterns/:id/run';
+      expect(built.has(key)).toBe(true);
+      expect(missingFrom(new Set([...built].filter((route) => route !== key)), routes)).toEqual([key]);
+      expect((casesOfClosedSet.get(closed) ?? new Set<string>()).has('saved-pattern:run')).toBe(true);
+    });
+
     const sharedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('RETURN matches, anchorBounded, skipped'));
     const linkedProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('AS frontierBounded') && statement.includes('AS supernodeSkipped') && statement.includes('count(n) AS matches') || statement.includes('count(x) AS matches'));
     const patternProbe = (statements: ReadonlySet<string>): string[] => [...statements].filter((statement) => statement.includes('AS supernodes') && statement.includes('RETURN matches, ') && statement.includes('LIMIT $countCap + 1 RETURN count(n'));

@@ -206,3 +206,76 @@ describe('a hostile definition sent to POST /v1/patterns/run', () => {
     expect(rig.executor.calls).toEqual([]);
   });
 });
+
+describe('a hostile request sent to POST /v1/patterns/{id}/run', () => {
+  const runSaved = (id: string, body: unknown) => rig.post(`/v1/patterns/${encodeURIComponent(id)}/run`, body);
+  const anchor = { entityType: 'widget', stableId: 'W-1' };
+  const savedId = async (): Promise<string> => {
+    const made = await rig.app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: 'A saved pattern', kind: 'definition', definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] } }), headers: { 'content-type': 'application/json' } });
+    return (JSON.parse(made.body) as { id: string }).id;
+  };
+
+  it('answers NOT_FOUND for an id of any text, a very long one and a mapping preset’s id, with none of the text in the answer, and reads nothing', async () => {
+    await fc.assert(
+      fc.asyncProperty(hostile, async (id) => {
+        rig.reset();
+        const response = await runSaved([...id].slice(0, 60).join('').replace(/[\ud800-\udfff]/g, '?'), { anchor });
+        expect(codeOf(response.body)).toBe('NOT_FOUND');
+        if (id.length >= 4) expect(response.body).not.toContain(id);
+        expect(rig.executor.calls).toEqual([]);
+      }),
+      fuzzParams(60),
+    );
+    rig.reset();
+    for (const id of ['a'.repeat(5000), 'linked-gadgets', 'shared-gadgets']) {
+      const response = await runSaved(id, { anchor });
+      expect(response.statusCode).toBe(404);
+      expect(response.body).not.toContain('a'.repeat(100));
+    }
+    expect(rig.executor.calls).toEqual([]);
+  });
+
+  it('refuses hostile text as the type of the entity, and serves it as the stable ID of a type that is not keyed, the text reaching the executor as a parameter only', async () => {
+    const id = await savedId();
+    await fc.assert(
+      fc.asyncProperty(hostile, async (raw) => {
+        const text = [...raw].slice(0, 200).join('');
+        rig.reset();
+        const typed = await runSaved(id, { anchor: { entityType: text, stableId: 'W-1' } });
+        expect(codeOf(typed.body)).toBe('INVALID_REQUEST');
+        expect(rig.executor.calls).toEqual([]);
+        const body = { anchor: { entityType: 'widget', stableId: text } };
+        const served = await runSaved(id, body);
+        expect(codeOf(served.body)).not.toBe('INVALID_REQUEST');
+        expect(statementProblems(rig, closed, textLeaves(body, new Set([...known, 'steps', 'conditions'])))).toEqual([]);
+      }),
+      fuzzParams(80),
+    );
+  });
+
+  it('answers INVALID_REQUEST for a missing, extra or mistyped member and for a missing key, and nothing is read', async () => {
+    const id = await savedId();
+    const mutated = fc.tuple(fc.constantFrom('retype', 'extra'), fc.constantFrom('anchor', 'limit', 'mask', 'continue'), wrongType.filter((value) => typeof value !== 'boolean'), hostile);
+    await fc.assert(
+      fc.asyncProperty(mutated, async ([how, member, wrong, key]) => {
+        if (how === 'retype' && ((member === 'limit' && typeof wrong === 'number' && Number.isInteger(wrong) && wrong >= 1) || (member === 'anchor' && typeof wrong === 'object' && wrong !== null && !Array.isArray(wrong) && 'entityType' in wrong))) return;
+        rig.reset();
+        const body: Record<string, unknown> = { anchor, limit: 5, mask: true, continue: false };
+        if (how === 'retype') body[member] = wrong;
+        else body[key] = 'x';
+        const response = await runSaved(id, body);
+        expect(response.statusCode).toBe(400);
+        expect(codeOf(response.body)).toBe('INVALID_REQUEST');
+        expect(rig.executor.calls).toEqual([]);
+      }),
+      fuzzParams(80),
+    );
+    rig.reset();
+    const tooLong = await runSaved(id, { anchor: { entityType: 'widget', stableId: 'x'.repeat(1_100_000) } });
+    expect(codeOf(tooLong.body)).toBe('INVALID_REQUEST');
+    expect(rig.executor.calls).toEqual([]);
+    const noKey = await rig.app.inject({ method: 'POST', url: `/v1/patterns/${id}/run`, payload: JSON.stringify({ anchor }), headers: { 'content-type': 'application/json' } });
+    expect(codeOf(noKey.body)).toBe('INVALID_REQUEST');
+    expect(rig.executor.calls).toEqual([]);
+  });
+});

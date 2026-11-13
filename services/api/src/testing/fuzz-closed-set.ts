@@ -258,6 +258,35 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   cases.add('pattern:continue');
   if (continued.statusCode !== 200) throw new Error(`the closed set expected a continued pattern run to be served, and it answered ${continued.statusCode}`);
   keep();
+  /**
+   * The runs of saved patterns, which write no statement of their own: a saved pattern is run by the pattern run service or the template run service, so every statement of these runs is one the sample above already holds. The patterns are
+   * saved through the real save route first, with a held starting entity and without one, and run with the entity given and with the one held.
+   */
+  const savedPattern = async (body: Record<string, unknown>): Promise<string> => {
+    const made = await app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: 'A saved pattern', ...body }), headers: { 'content-type': 'application/json' } });
+    if (made.statusCode !== 201) throw new Error(`the closed set expected a pattern to be saved, and it answered ${made.statusCode}: ${made.body.slice(0, 120)}`);
+    return (JSON.parse(made.body) as { id: string }).id;
+  };
+  const savedRun = async (id: string, payload: unknown): Promise<void> => {
+    cases.add('saved-pattern:run');
+    const response = await post(`/v1/patterns/${id}/run`, payload);
+    if (response.statusCode !== 200) throw new Error(`the closed set expected a saved pattern to be run, and it answered ${response.statusCode}`);
+    const own = executor.calls.map((call) => call.cypher).filter((cypher) => !statements.has(cypher));
+    if (own.length > 0) throw new Error('a saved run wrote a statement of its own');
+    keep();
+  };
+  const held = { entityType: 'widget', stableId: 'W-1' };
+  for (const steps of [[made()], [made(), back()]]) {
+    for (const anchorHeld of [false, true]) {
+      const id = await savedPattern({ kind: 'definition', definition: { anchorType: 'widget', steps }, ...(anchorHeld ? { anchor: held } : {}) });
+      await savedRun(id, anchorHeld ? {} : { anchor: held });
+      await savedRun(id, { anchor: { entityType: 'widget', stableId: 'W-2' }, limit: 5 });
+    }
+  }
+  for (const anchorHeld of [false, true]) {
+    const id = await savedPattern({ kind: 'preset-run', presetId: 'linked-gadgets', params: {}, ...(anchorHeld ? { anchor: held } : {}) });
+    await savedRun(id, anchorHeld ? {} : { anchor: held });
+  }
   const types = [['gadget'], ['phone'], ['gadget', 'phone']];
   for (const neighborTypes of types) {
     for (const direction of ['out', 'in', 'both']) {

@@ -185,6 +185,34 @@ describe('a pattern run through the pattern route, when the client closes the co
   });
 });
 
+describe('a saved pattern run, when the client closes the connection while its estimate is read', () => {
+  it.each([
+    ['a pattern built in the app', { kind: 'definition', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }] } }, 'pattern-count', 'pattern'],
+    ['a saved run of a preset', { kind: 'preset-run', presetId: 'linked-leaves', params: {} }, 'linked-entities-count', 'linked-entities'],
+  ])('stops the estimate of %s, does not start the run, audits the call as cancelled and records no run', async (_name, saving, count, run) => {
+    const { app, executor, events } = await listening();
+    const base = `http://127.0.0.1:${portOf(app)}`;
+    const made = await fetch(`${base}/v1/patterns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceId: 'demo', name: 'A pattern', ...saving }) });
+    const { id } = (await made.json()) as { id: string };
+    const text = JSON.stringify({ anchor: ref });
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path: `/v1/patterns/${id}/run`, method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text), 'idempotency-key': 'a-saved-key-of-sixteen-chars' } });
+    request.on('error', () => undefined);
+    request.end(text);
+    const isData = (call: ExecuteCall): boolean => call.templateId !== 'schema-indexes';
+    await until(() => executor.calls.some(isData));
+    const reading = executor.calls.filter(isData);
+    request.destroy();
+    await until(() => reading.every((call) => call.signal?.aborted === true));
+    await until(() => events.some((event) => event.detail?.reason === 'cancelled'));
+    expect(reading.map((call) => call.templateId)).toEqual([count]);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(executor.calls.some((call) => call.templateId === run)).toBe(false);
+    const listed = (await (await fetch(`${base}/v1/patterns?sourceId=demo`)).json()) as { items: { lastRunAt: string | null }[] };
+    expect(listed.items.map((item) => item.lastRunAt)).toEqual([null]);
+    await app.close();
+  });
+});
+
 /** Routes that read the source and are cancelled in a case of their own above (search more), and routes that read no source, each with its reason. */
 const OTHER_CASES: Readonly<Record<string, string>> = {
   'POST /v1/search/entities/more': 'its own case, which first needs a cursor',
@@ -194,6 +222,7 @@ const OTHER_CASES: Readonly<Record<string, string>> = {
   'GET /v1/templates': 'reads no source',
   'POST /v1/sources/:id/test': 'the tester is called with no signal (below)',
   'POST /v1/graph/coverage': 'reads no source (below)',
+  'POST /v1/patterns/:id/run': 'its own case above, which first needs a saved pattern',
   'POST /v1/patterns/validate': 'reads no source: it answers from the mapping and the definition, so there is nothing to cancel',
   'PUT /v1/patterns/:id': 'reads no source: it writes to the application database, so there is no source read to cancel',
   'DELETE /v1/patterns/:id': 'reads no source: it writes to the application database, so there is no source read to cancel',

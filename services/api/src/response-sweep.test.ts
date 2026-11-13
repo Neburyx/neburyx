@@ -1,6 +1,6 @@
 import {
   coverageResponseSchema,
-  patternPreviewResponseSchema, patternRunResponseSchema, patternValidateResponseSchema,
+  patternPreviewResponseSchema, patternRunResponseSchema, savedPatternRunResponseSchema, patternValidateResponseSchema,
   readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
@@ -107,6 +107,7 @@ const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
   'PUT /v1/patterns/:id': 'answers the person\'s changed pattern: a structure of mapped names and typed values, never an element ID of the source',
   'DELETE /v1/patterns/:id': 'answers the id, the version and two times of the deleted pattern',
   'GET /v1/patterns': 'answers the person\'s saved patterns: structures of mapped names and typed values, never an element ID of the source',
+  'POST /v1/patterns/:id/run': 'a saved pattern is run in its own describe below: the pattern has to be saved first',
   'POST /v1/patterns': 'answers the person\'s saved pattern: a structure of mapped names and typed values, never an element ID of the source',
   'GET /v1/investigations': 'answers the person\'s saved investigations (references, never element IDs of the source)',
   'GET /v1/investigations/:id': 'answers a saved investigation (references, never element IDs of the source)',
@@ -165,6 +166,36 @@ describe('no response of a route of the inspector holds an element ID of the sou
     expect(cursors.length).toBeGreaterThan(0);
     for (const cursor of cursors) expect(cursor).toMatch(/^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(sweepFindings('expand cursors', { body: response.body, headers: {} }, issued)).toEqual([]);
+  });
+});
+
+describe('the run of a saved pattern holds no element ID of the source', () => {
+  const save = async (body: Record<string, unknown>): Promise<string> => {
+    const made = await rig.app.inject({ method: 'POST', url: '/v1/patterns', payload: JSON.stringify({ sourceId: FUZZ_SOURCE, name: 'A pattern', ...body }), headers: { 'content-type': 'application/json' } });
+    expect(made.statusCode).toBe(201);
+    return (made.json() as { id: string }).id;
+  };
+  const run = (id: string, payload: unknown, key: string) => rig.app.inject({ method: 'POST', url: `/v1/patterns/${id}/run`, payload: JSON.stringify(payload), headers: { 'content-type': 'application/json', 'idempotency-key': key } });
+
+  it.each([
+    ['a pattern built in the app', { kind: 'definition', definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }, { relationshipTypes: ['MADE_FROM'], direction: 'in', arrivesAt: 'widget' }] } }, 'W-SUPER'],
+    ['a saved run of a preset', { kind: 'preset-run', presetId: 'linked-gadgets', params: {} }, 'W-1'],
+  ])('is as its strict contract and is swept, for %s', async (name, saving, stableId) => {
+    const id = await save(saving);
+    const response = await run(id, { anchor: { entityType: 'widget', stableId } }, `sweep-saved-key-${name.length}-chars`);
+    expect(response.statusCode).toBe(200);
+    expect(savedPatternRunResponseSchema.safeParse(response.json()).success).toBe(true);
+    expect(sweepFindings(`saved run of ${name}`, { body: response.body, headers: response.headers }, issued)).toEqual([]);
+    expect(issued.size).toBeGreaterThan(20);
+  });
+
+  it('is swept when the pattern is unavailable, and when it is refused', async () => {
+    const id = await save({ kind: 'definition', definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['MADE_FROM'], direction: 'out', arrivesAt: 'gadget' }] } });
+    const refused = await run(id, {}, 'sweep-saved-refused-key');
+    expect(refused.statusCode).toBe(400);
+    expect(sweepFindings('saved run refused', { body: refused.body, headers: refused.headers }, issued)).toEqual([]);
+    const missing = await run('0192f000-0000-7000-8000-0000000000ff', { anchor: { entityType: 'widget', stableId: 'W-1' } }, 'sweep-saved-missing-key');
+    expect(sweepFindings('saved run not found', { body: missing.body, headers: missing.headers }, issued)).toEqual([]);
   });
 });
 

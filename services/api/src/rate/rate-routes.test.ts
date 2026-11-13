@@ -252,6 +252,7 @@ const COUNTED_ROUTES = [
   'POST /v1/templates/:id/run',
   'POST /v1/graph/coverage',
   'POST /v1/patterns/run',
+  'POST /v1/patterns/:id/run',
   'POST /v1/patterns/validate',
   'POST /v1/patterns/preview',
   'POST /v1/graph/read-refs',
@@ -304,6 +305,48 @@ describe('the pattern run route and a request that is replayed', () => {
     expect(replay.headers['idempotent-replay']).toBe('true');
     expect((await send(counted, 'demo')).statusCode).not.toBe(429);
     expect((await send(counted, 'demo')).statusCode).toBe(429);
+    await app.close();
+  });
+});
+
+describe('the saved pattern run route', () => {
+  const definition = { anchorType: 'node_a', steps: [{ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'node_b' }] };
+
+  async function ready(now: () => number) {
+    const context = await started(now);
+    const made = await context.app.inject({ method: 'POST', url: '/v1/patterns', payload: { sourceId: 'demo', name: 'A pattern', kind: 'definition', definition }, headers: { 'content-type': 'application/json' } });
+    const { id } = made.json() as { id: string };
+    const call: Call = { method: 'POST', url: () => `/v1/patterns/${id}/run`, payload: () => ({ anchor: ref }), headers: () => ({ 'idempotency-key': `saved-key-of-sixteen-${(keyCounter += 1)}-chars` }) };
+    return { ...context, call };
+  }
+
+  it('counts each request once, answers RATE_LIMITED with a Retry-After to the one over the limit, and reads nothing for it', async () => {
+    let now = 5_000_000;
+    const { app, executor, send, call } = await ready(() => now);
+    for (let i = 0; i < LIMIT; i += 1) {
+      expect((await send(call, 'demo')).statusCode).not.toBe(429);
+      now += 1_000;
+    }
+    const readsBefore = executor.calls.length;
+    const refused = await send(call, 'demo');
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json()).toMatchObject({ error: { code: 'RATE_LIMITED', retryable: true } });
+    expect(refused.headers['retry-after']).toBeDefined();
+    expect(executor.calls.length).toBe(readsBefore);
+    await app.close();
+  });
+
+  it('does not count a replay, and does not count the lookup of a pattern that is not found', async () => {
+    const now = 5_000_000;
+    const { app, send, call, limiter } = await ready(() => now);
+    const same: Call = { ...call, headers: () => ({ 'idempotency-key': 'saved-replayed-key-of-sixteen' }) };
+    expect((await send(same, 'demo')).statusCode).not.toBe(429);
+    expect((await send(same, 'demo')).headers['idempotent-replay']).toBe('true');
+    expect((await send(call, 'demo')).statusCode).not.toBe(429);
+    expect((await send(call, 'demo')).statusCode).toBe(429);
+    const missing: Call = { ...call, url: () => '/v1/patterns/0192f000-0000-7000-8000-0000000000ff/run' };
+    expect((await send(missing, 'demo')).statusCode).toBe(404);
+    expect(limiter.inspect().size).toBe(1);
     await app.close();
   });
 });
