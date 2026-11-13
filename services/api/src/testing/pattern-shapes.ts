@@ -1,7 +1,7 @@
 import { FILTER_KINDS, PATTERN_LIMITS, type FilterKind } from '@neburyx/contracts';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { patternParamsSchema, patternRequestOf } from '../gate/templates/pattern-request.js';
-import { patternStatementOf } from '../gate/templates/pattern-statement.js';
+import { patternCountStatementOf, patternStatementOf } from '../gate/templates/pattern-statement.js';
 import type { SourceAllowlist } from '../gate/types.js';
 import { linkedMappingOf } from './linked-entities-fixtures.js';
 
@@ -169,6 +169,11 @@ export function paramsOf(shape: Shape, alternate = false): unknown {
 /** The statement the compiler writes for a shape. */
 export function statementOfShape(shape: Shape, alternate = false, allowlist: SourceAllowlist = shapeAllowlist(shape.stopRules)): string {
   return patternStatementOf(allowlist, patternRequestOf(allowlist, paramsOf(shape, alternate) as never));
+}
+
+/** The statement of the count a run reads first, for a shape: the run's own fragments, a different tail. */
+export function countStatementOfShape(shape: Shape, alternate = false, allowlist: SourceAllowlist = shapeAllowlist(shape.stopRules)): string {
+  return patternCountStatementOf(allowlist, patternRequestOf(allowlist, paramsOf(shape, alternate) as never));
 }
 
 /** The same shape as a definition, as a person writes it (a window of days), for the validation. */
@@ -375,15 +380,16 @@ export const PATHS: readonly (readonly string[])[] = [
 const ARRIVES: Readonly<Record<string, string>> = { LINKS: 'maker', USES_TOOL: 'tool', MADE_BY: 'maker', FIXES: 'tool' };
 
 /** The statements of the paths over two types, with every number of stop-list rules on each type, so that the checks between steps differ from one step to the next. */
-export function pathEntries(): { readonly name: string; readonly statement: string }[] {
-  const out: { name: string; statement: string }[] = [];
+export function pathEntries(): { readonly name: string; readonly statement: string; readonly count: string }[] {
+  const out: { name: string; statement: string; count: string }[] = [];
   for (const makerRules of [0, 1, 2] as const) {
     for (const toolRules of [0, 1, 2] as const) {
       const allowlist = shapeAllowlist(makerRules, toolRules);
       for (const [pathIndex, path] of PATHS.entries()) {
         for (const withCondition of [false, true]) {
           const steps = path.map((type, index) => ({ relationshipTypes: [type], direction: 'out', arrivesAt: ARRIVES[type], ...(withCondition && index === path.length - 1 ? { conditions: [{ on: 'neighbor', property: 'region', op: 'eq', value: { kind: 'text', value: 'a' } }] } : {}) }));
-          out.push({ name: `stop-list/paths/${makerRules}-${toolRules}/path${pathIndex}${withCondition ? '/condition' : ''}`, statement: patternStatementOf(allowlist, patternRequestOf(allowlist, patternParamsSchema.parse({ anchorType: 'maker', stableId: 'item-a', steps }) as never)) });
+          const request = patternRequestOf(allowlist, patternParamsSchema.parse({ anchorType: 'maker', stableId: 'item-a', steps }) as never);
+          out.push({ name: `stop-list/paths/${makerRules}-${toolRules}/path${pathIndex}${withCondition ? '/condition' : ''}`, statement: patternStatementOf(allowlist, request), count: patternCountStatementOf(allowlist, request) });
         }
       }
     }
@@ -392,3 +398,4 @@ export function pathEntries(): { readonly name: string; readonly statement: stri
 }
 
 export const pathStatements = (): string[] => pathEntries().map((entry) => entry.statement);
+export const pathCountStatements = (): string[] => pathEntries().map((entry) => entry.count);

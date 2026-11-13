@@ -1,4 +1,4 @@
-import { TARGETS, TYPE_CLASSES, formsOf, pathEntries, statementOfShape, type Direction, type Shape, type StepShape } from './pattern-shapes.js';
+import { TARGETS, countStatementOfShape, TYPE_CLASSES, formsOf, pathEntries, statementOfShape, type Direction, type Shape, type StepShape } from './pattern-shapes.js';
 
 /**
  * The inputs of the fragments of a pattern statement: a base shape (one step, one type, no condition, no window) and, for each value of each input, the same shape with that one input changed. A fragment of the
@@ -19,9 +19,14 @@ export interface FragmentInput {
   readonly statement: () => string;
 }
 
+/** The count statement a run reads first has the same inputs: it is pinned for each of them beside the run's own statement. */
+
 export function fragmentInputs(): readonly FragmentInput[] {
   const inputs: FragmentInput[] = [];
-  const add = (name: string, shape: Shape): void => void inputs.push({ name, statement: () => statementOfShape(shape) });
+  const add = (name: string, shape: Shape): void => {
+    inputs.push({ name, statement: () => statementOfShape(shape) });
+    inputs.push({ name: `count/${name}`, statement: () => countStatementOfShape(shape) });
+  };
   add('base', one());
   for (const direction of ['in', 'both'] as const satisfies readonly Direction[]) add(`direction/${direction}`, one({ direction }));
   for (const key of ['2|T1+U1|0', '2|U2|0', '4|T2+U2|1', '4|T1+U3|1', '6|T2+U3+T1|2']) add(`types/${key}`, one({ typeClass: classOf(key) }));
@@ -32,7 +37,10 @@ export function fragmentInputs(): readonly FragmentInput[] {
   for (const target of TARGETS) for (const form of formsOf(target)) add(`condition/${target}/${form.operator}/${form.kind}`, one({ conditions: [form] }));
   for (const count of [2, 3, 4]) add(`steps/${count}`, many(count));
   for (const rules of [1, 2] as const) add(`stop-list/${rules}`, many(2, rules));
-  for (const entry of pathEntries()) inputs.push({ name: entry.name, statement: () => entry.statement });
+  for (const entry of pathEntries()) {
+    inputs.push({ name: entry.name, statement: () => entry.statement });
+    inputs.push({ name: `count/${entry.name}`, statement: () => entry.count });
+  }
   return inputs;
 }
 

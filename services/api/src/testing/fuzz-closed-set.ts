@@ -2,7 +2,7 @@ import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import type { SourceAllowlist } from '../gate/types.js';
-import { learnedGrammar } from './pattern-grammar-fixture.js';
+import { learnedCountGrammar, learnedGrammar } from './pattern-grammar-fixture.js';
 import { grammarProblems, type PatternGrammar } from './pattern-grammar.js';
 import { makeToken } from '../reference/token.js';
 import { expandWindowInstantsOf } from '../graph/expand-window.js';
@@ -111,7 +111,13 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
         const found = grammarProblems(call.cypher, learnedGrammar(), patternAllowlistOf());
         if (found.length > 0) throw new Error(`the closed set expected a pattern statement the grammar accepts: ${found.join('; ')}\n${call.cypher}`);
         patternStatements.add(call.cypher);
-      } else statements.add(call.cypher);
+      } else {
+        if (call.templateId === 'pattern-count') {
+          const found = grammarProblems(call.cypher, learnedCountGrammar(), patternAllowlistOf());
+          if (found.length > 0) throw new Error(`the closed set expected a count statement the grammar accepts: ${found.join('; ')}\n${call.cypher}`);
+        }
+        statements.add(call.cypher);
+      }
     }
     rig.reset();
   };
@@ -380,6 +386,8 @@ export interface StatementProblem {
  */
 export interface PatternGrammarCheck {
   readonly grammar: PatternGrammar;
+  /** The grammar of the count statements of a run; the learned one when not given. */
+  readonly countGrammar?: PatternGrammar;
   readonly allowlist: SourceAllowlist;
   /** The names a statement of the pattern template may quote, when they are not the rig's own. */
   readonly names?: ReadonlySet<string>;
@@ -400,8 +408,10 @@ export function statementProblems(rig: FuzzRig, closed: ReadonlySet<string>, req
   for (const call of rig.executor.calls) {
     if (call.templateId === 'pattern') {
       for (const reason of grammarProblems(call.cypher, pattern?.grammar ?? learnedGrammar(), pattern?.allowlist ?? patternAllowlistOf())) problems.push({ cypher: call.cypher, reason });
+    } else if (call.templateId === 'pattern-count') {
+      for (const reason of grammarProblems(call.cypher, pattern?.countGrammar ?? learnedCountGrammar(), pattern?.allowlist ?? patternAllowlistOf())) problems.push({ cypher: call.cypher, reason });
     } else if (!closed.has(call.cypher)) problems.push({ cypher: call.cypher, reason: 'not in the closed set' });
-    const mine = call.templateId === 'pattern' && pattern?.names !== undefined ? pattern.names : names;
+    const mine = (call.templateId === 'pattern' || call.templateId === 'pattern-count') && pattern?.names !== undefined ? pattern.names : names;
     for (const name of quotedNamesOf(call.cypher)) if (!mine.has(name)) problems.push({ cypher: call.cypher, reason: `quotes ${JSON.stringify(name)}` });
     for (const text of requestTexts) if (call.cypher.includes(text)) problems.push({ cypher: call.cypher, reason: `holds request text ${JSON.stringify(text)}` });
   }

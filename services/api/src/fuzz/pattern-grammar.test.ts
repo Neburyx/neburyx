@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import { patternStatementOf } from '../gate/templates/pattern-statement.js';
-import { GRAMMAR_ALLOWLIST, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
+import { GRAMMAR_ALLOWLIST, learnedCountGrammar, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
 import { grammarProblems, learnGrammar, K } from '../testing/pattern-grammar.js';
-import { PATHS, SHAPE_RELATIONSHIPS, enumerateShapes, formsOf, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape } from '../testing/pattern-shapes.js';
+import { PATHS, SHAPE_RELATIONSHIPS, enumerateShapes, formsOf, pathCountStatements, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape, countStatementOfShape } from '../testing/pattern-shapes.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { statementProblems, quotedNamesOf } from '../testing/fuzz-closed-set.js';
@@ -23,6 +23,26 @@ const NAMES = new Set(['Maker', 'Tool', 'makerId', 'region', 'rank', 'lane', 'se
 const FOUR_STEPS = statementOfShape({ steps: [0, 1, 2, 3].map((index) => ({ direction: 'out' as const, typeClass: index, conditions: [], windowed: false })), stopRules: 1 });
 const TWO_STEPS = statementOfShape({ steps: [0, 1].map((index) => ({ direction: 'out' as const, typeClass: index, conditions: [], windowed: false })), stopRules: 0 });
 const ONE_STEP = statementOfShape({ steps: [{ direction: 'out', typeClass: 0, conditions: [], windowed: false }], stopRules: 0 });
+
+describe('the grammar of the count statement of a run', () => {
+  const countProblems = (statement: string): string[] => grammarProblems(statement, learnedCountGrammar(), allowlist);
+  const COUNT = countStatementOfShape({ steps: [0, 1].map((index) => ({ direction: 'out' as const, typeClass: index, conditions: [], windowed: false })), stopRules: 1 });
+
+  it('accepts the count statement of every enumerated shape, of shapes drawn from seeds the corpus does not use, and of the paths', () => {
+    for (const shape of enumerateShapes()) expect(countProblems(countStatementOfShape(shape)), JSON.stringify(shape)).toEqual([]);
+    for (const seed of [7777, 31337, 424242]) for (const shape of randomShapes(seed, 200)) expect(countProblems(countStatementOfShape(shape)), `${seed} ${JSON.stringify(shape)}`).toEqual([]);
+    for (const statement of pathCountStatements()) expect(countProblems(statement), statement).toEqual([]);
+  });
+
+  it('refuses a count statement altered by a clause, a name that is not mapped, a value written into the text and a dropped bound, and a run statement is not a count statement', () => {
+    expect(countProblems(COUNT)).toEqual([]);
+    expect(countProblems(`${COUNT}\nDETACH DELETE a`)).not.toEqual([]);
+    expect(countProblems(COUNT.replace('`Maker`', '`Elsewhere`'))).not.toEqual([]);
+    expect(countProblems(COUNT.replace('$stableId', "'item-a'"))).not.toEqual([]);
+    expect(countProblems(COUNT.replaceAll('LIMIT $countCap + 1', ''))).not.toEqual([]);
+    expect(countProblems(TWO_STEPS)).not.toEqual([]);
+  });
+});
 
 describe('the grammar of a pattern statement', () => {
   it('is built from the compiler\'s own output: its module holds no Cypher clause or keyword written by hand', () => {
