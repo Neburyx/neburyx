@@ -11,6 +11,7 @@ const API_URL_PREFIX = '/v1/';
 
 export const NO_EXTENSION_MESSAGE = 'invalid configuration: the enterprise profile is on and this build has no enterprise code';
 export const EXTENSION_LOAD_FAILED_MESSAGE = 'the enterprise code could not be loaded';
+export const EXTENSION_LOGGER_FAILED_MESSAGE = 'the enterprise code could not take the logger';
 export const EXTENSION_CONFIGURE_FAILED_MESSAGE = 'the enterprise code could not be configured';
 
 /** Only the code or the name of an error, never its message, which may hold a path or a value. */

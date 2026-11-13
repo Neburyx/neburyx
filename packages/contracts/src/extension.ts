@@ -49,10 +49,17 @@ export interface ConfigureWarning {
 
 export type ConfigureOutcome = { readonly ok: true; readonly warnings?: readonly ConfigureWarning[] } | { readonly ok: false; readonly problems: readonly string[] };
 
+/** The one method of the API's logger an extension may use. */
+export interface ExtensionLogger {
+  readonly warn: (fields: Readonly<Record<string, unknown>>, message: string) => void;
+}
+
 export interface ProfileExtension {
   readonly name: string;
   readonly routeGroups: readonly ExtensionRouteGroup[];
   readonly migrationsDirectory?: string;
+  /** Hands the extension the API's own logger, before `configure` is called. */
+  readonly attachLogger?: (logger: ExtensionLogger) => void;
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView) => Promise<ConfigureOutcome>;
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;

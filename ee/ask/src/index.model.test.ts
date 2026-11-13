@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AuditEvent, AuditSink } from '@neburyx/contracts';
+import type { AuditEvent, AuditSink, ExtensionLogger } from '@neburyx/contracts';
+import type { ModelRequest } from './provider.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 const events: AuditEvent[] = [];
@@ -9,6 +10,7 @@ const sink: AuditSink = { record: (event) => (events.push(event), Promise.resolv
 vi.mock('@neburyx/ee-audit', () => ({ createAuditSink: () => ({ sink, close: async () => undefined }) }));
 
 const { createEnterpriseExtension } = await import('./index.js');
+const { createFailureReporter } = await import('./failure-line.js');
 
 const SINK_CONTEXT = { databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined };
 const SETTINGS = { preview: true, provider: 'anthropic' as const, model: 'claude-sonnet-5-5', key: { env: 'ONLY_IN_THE_START_ENV' }, timeout_ms: 5_000 };
@@ -59,17 +61,26 @@ describe('the model of the extension', () => {
 describe('the failure line of the extension', () => {
   const context = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator' as const, traceId: 'tr-1' };
 
-  async function callWith(httpStatus: number, body?: unknown): Promise<{ lines: string[]; answer: unknown }> {
+  interface Logged {
+    readonly fields: Readonly<Record<string, unknown>>;
+    readonly message: string;
+  }
+
+  async function callWith(httpStatus: number, body?: unknown, logger: ExtensionLogger | undefined = undefined, request: ModelRequest = { promptId: 'summary.view', parameters: { view: 'SENTINEL-PROMPT' } }): Promise<{ logged: Logged[]; written: string[]; answer: unknown }> {
     status = httpStatus;
     failureBody = body;
-    const lines: string[] = [];
-    vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => (lines.push(String(chunk)), true)) as typeof process.stdout.write);
+    const logged: Logged[] = [];
+    const written: string[] = [];
+    const capture = (chunk: string | Uint8Array): boolean => (written.push(String(chunk)), true);
+    vi.spyOn(process.stdout, 'write').mockImplementation(capture as typeof process.stdout.write);
+    vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      extension.attachLogger?.(logger ?? { warn: (fields, message) => void logged.push({ fields, message }) });
       await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
       extension.createAuditSink?.(SINK_CONTEXT);
-      const answer = await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'SENTINEL-PROMPT' } }, context, new AbortController().signal);
-      return { lines, answer };
+      const answer = await extension.model()?.call(request, context, new AbortController().signal);
+      return { logged, written, answer };
     } finally {
       vi.restoreAllMocks();
       status = 200;
@@ -82,28 +93,29 @@ describe('the failure line of the extension', () => {
     [429, 'rate_limit_error', 'rate-limited'],
     [500, 'api_error', 'provider-error'],
     [400, 'unrecognized', 'provider-error'],
-  ])('writes one line in the API log shape for status %i, with no sentinel in it', async (httpStatus, type, code) => {
-    const { lines } = await callWith(httpStatus, httpStatus === 400 ? 'SENTINEL-BODY not json' : { type: 'error', error: { type, message: 'SENTINEL-BODY' } });
-    const failures = lines.filter((line) => line.includes('ai.provider_failure'));
-    expect(failures).toHaveLength(1);
-    const parsed = JSON.parse(failures[0] ?? '{}') as Record<string, unknown>;
-    expect(parsed).toMatchObject({ level: 40, event: 'ai.provider_failure', code, status: httpStatus, errorType: type, msg: expect.any(String) });
-    expect(typeof parsed.time).toBe('number');
-    expect(lines.join('')).not.toMatch(/SENTINEL/);
+  ])('hands the logger one warning for status %i, with no sentinel in it and nothing on the process output', async (httpStatus, type, code) => {
+    const { logged, written } = await callWith(httpStatus, httpStatus === 400 ? 'SENTINEL-BODY not json' : { type: 'error', error: { type, message: 'SENTINEL-BODY' } });
+    expect(logged).toEqual([{ fields: { event: 'ai.provider_failure', code, status: httpStatus, errorType: type }, message: 'a model call failed' }]);
+    expect(JSON.stringify(logged)).not.toMatch(/SENTINEL/);
+    expect(written).toEqual([]);
   });
 
-  it('writes the line with status 200 and no error type for a reply cut off at the token limit', async () => {
-    const { lines } = await callWith(200, { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'SENTINEL-TEXT' }], stop_reason: 'max_tokens', usage: { input_tokens: 3, output_tokens: 4 } });
-    const parsed = JSON.parse(lines.find((line) => line.includes('ai.provider_failure')) ?? '{}') as Record<string, unknown>;
-    expect(parsed).toMatchObject({ code: 'truncated', status: 200 });
-    expect(parsed).not.toHaveProperty('errorType');
-    expect(lines.join('')).not.toMatch(/SENTINEL/);
+  it('keeps the question and the key out of the warning for a failing plan call', async () => {
+    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'ask.plan', parameters: { catalog: 'a catalog', question: 'SENTINEL-QUESTION' } });
+    expect(logged).toHaveLength(1);
+    expect(JSON.stringify(logged)).not.toMatch(/SENTINEL/);
+    expect(written).toEqual([]);
+  });
+
+  it('hands the logger status 200 and no error type for a reply cut off at the token limit', async () => {
+    const { logged } = await callWith(200, { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'SENTINEL-TEXT' }], stop_reason: 'max_tokens', usage: { input_tokens: 3, output_tokens: 4 } });
+    expect(logged).toEqual([{ fields: { event: 'ai.provider_failure', code: 'truncated', status: 200 }, message: 'a model call failed' }]);
+    expect(JSON.stringify(logged)).not.toMatch(/SENTINEL/);
   });
 
   it('records one failed audit event with the tokens of a reply cut off at the token limit', async () => {
     events.length = 0;
     status = 200;
-    vi.spyOn(process.stdout, 'write').mockImplementation((() => true) as typeof process.stdout.write);
     failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'cut' }], stop_reason: 'max_tokens', usage: { input_tokens: 12, output_tokens: 256 } };
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
@@ -115,7 +127,6 @@ describe('the failure line of the extension', () => {
       expect(events[0]).toMatchObject({ result: 'failed', detail: { ai: { tokensIn: 12, tokensOut: 256 } } });
     } finally {
       failureBody = undefined;
-      vi.restoreAllMocks();
     }
   });
 
@@ -135,24 +146,41 @@ describe('the failure line of the extension', () => {
     }
   });
 
-  it('writes nothing for a call that succeeds', async () => {
-    const { lines, answer } = await callWith(200);
+  it('logs nothing for a call that succeeds', async () => {
+    const { logged, written, answer } = await callWith(200);
     expect(answer).toMatchObject({ status: 'ok' });
-    expect(lines).toEqual([]);
+    expect([logged, written]).toEqual([[], []]);
   });
 
-  it('leaves the answer as it was when the output cannot be written', async () => {
+  it('leaves the answer as it was, and writes nothing to the process output, when no logger was handed over', async () => {
     status = 500;
-    vi.spyOn(process.stdout, 'write').mockImplementation((() => { throw new Error('SENTINEL-WRITE'); }) as typeof process.stdout.write);
+    const written: string[] = [];
+    const capture = (chunk: string | Uint8Array): boolean => (written.push(String(chunk)), true);
+    vi.spyOn(process.stdout, 'write').mockImplementation(capture as typeof process.stdout.write);
+    vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
       await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
       extension.createAuditSink?.(SINK_CONTEXT);
       const answer = await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'x' } }, context, new AbortController().signal);
       expect(answer).toMatchObject({ status: 'failed', code: 'provider-error' });
+      expect(written).toEqual([]);
     } finally {
       vi.restoreAllMocks();
       status = 200;
     }
+  });
+
+  it('leaves the answer as it was when the logger throws', async () => {
+    const { answer, written } = await callWith(500, undefined, { warn: () => { throw new Error('SENTINEL-WRITE'); } });
+    expect(answer).toMatchObject({ status: 'failed', code: 'provider-error' });
+    expect(written).toEqual([]);
+  });
+
+  it('logs only the fixed fields of a failure record that carries more', () => {
+    const logged: Record<string, unknown>[] = [];
+    const record = { code: 'rejected' as const, status: 401, errorType: 'authentication_error', key: 'SENTINEL-KEY', prompt: 'SENTINEL-PROMPT', question: 'SENTINEL-QUESTION' };
+    createFailureReporter(() => ({ warn: (fields) => void logged.push({ ...fields }) }))(record);
+    expect(logged).toEqual([{ event: 'ai.provider_failure', code: 'rejected', status: 401, errorType: 'authentication_error' }]);
   });
 });

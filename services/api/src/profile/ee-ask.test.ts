@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -5,7 +7,7 @@ import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import pino from 'pino';
 import { stringify } from 'yaml';
 import { z } from 'zod';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import { routesWithoutPermission } from '../permissions.js';
 import { start, type StartIo } from '../start.js';
@@ -15,6 +17,8 @@ import { checkOperations } from '../testing/contract-check.js';
 import { loadCommittedDocument } from '../testing/document.js';
 import { makeExportDirectory } from '../testing/export-directory.js';
 import { makeWebRoot } from '../testing/web-root.js';
+
+vi.mock('@neburyx/ee-audit', () => ({ createAuditSink: () => ({ sink: { record: () => Promise.resolve() }, close: async () => undefined }) }));
 
 const webRoot = makeWebRoot();
 const exportDirectory = makeExportDirectory();
@@ -140,5 +144,48 @@ describe('what a start tells the routes of an extension', () => {
     expect((await result.app.inject({ url: '/v1/probe' })).statusCode).toBe(200);
     expect(seen).toEqual([true]);
     await result.app.close();
+  });
+});
+
+describe('a model failure in the real enterprise extension in a start', () => {
+  it('reaches the API log as one warning in the API log shape, and nothing reaches the process output', async () => {
+    const provider = createServer((request, response) => {
+      request.resume();
+      request.on('end', () => {
+        response.writeHead(500, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, '127.0.0.1', resolve));
+    const address = provider.address();
+    if (address === null || typeof address === 'string') throw new Error('the stub provider has no port');
+    const lines: string[] = [];
+    const written: string[] = [];
+    const capture = (chunk: string | Uint8Array): boolean => (written.push(String(chunk)), true);
+    const out = vi.spyOn(process.stdout, 'write').mockImplementation(capture as typeof process.stdout.write);
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
+    const extension = createEnterpriseExtension({ modelBaseUrl: `http://127.0.0.1:${(address as AddressInfo).port}` });
+    const aiFile = join(folder, 'failing.yaml');
+    writeFileSync(aiFile, stringify({ sources: [], ai: { ...COMPLETE_AI, max_retries: 0 } }));
+    try {
+      const io = { ...startIo(), logger: pino({ level: 'info' }, { write: (line: string) => void lines.push(line) }), extensionLoader: { load: async () => extension } };
+      const result = await start({ DATABASE_URL, NEBURYX_CONFIG: aiFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'SENTINEL-KEY' }, io);
+      expect(result.exitCode).toBe(0);
+      if (result.exitCode !== 0) return;
+      const answer = await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'SENTINEL-PROMPT' } }, { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' }, new AbortController().signal);
+      expect(answer).toMatchObject({ status: 'failed', code: 'provider-error' });
+      const failures = lines.filter((line) => line.includes('ai.provider_failure'));
+      expect(failures).toHaveLength(1);
+      const parsed = JSON.parse(failures[0] ?? '{}') as Record<string, unknown>;
+      expect(parsed).toMatchObject({ level: 40, event: 'ai.provider_failure', code: 'provider-error', msg: 'a model call failed' });
+      expect(typeof parsed.time).toBe('number');
+      expect(lines.join('')).not.toMatch(/SENTINEL/);
+      expect(written).toEqual([]);
+      await result.app.close();
+    } finally {
+      out.mockRestore();
+      err.mockRestore();
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
   });
 });

@@ -29,7 +29,7 @@ import { createSourceTester } from './source-test/tester.js';
 import { start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
-import { clearRegisteredExtension, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOAD_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
+import { clearRegisteredExtension, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOAD_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
 import type { ExtensionRoute, ProfileExtension } from '@neburyx/contracts';
 import { LOCAL_IDENTITY, memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
@@ -252,6 +252,52 @@ describe('the enterprise extension at start', () => {
     expect(answer.body).not.toContain('SENTINEL-VALUE');
     expect(rig.lines.join('')).not.toContain('SENTINEL-VALUE');
     await result.app.close();
+  });
+
+  describe('handing the logger to the extension', () => {
+    it('hands the API logger over before configure is called, so a line it writes has the API log shape', async () => {
+      const order: string[] = [];
+      const rig = run(async () => ({
+        ...extensionWith(route()),
+        attachLogger: (logger) => {
+          order.push('attachLogger');
+          logger.warn({ event: 'ai.provider_failure', code: 'rejected' }, 'a model call failed');
+        },
+        configure: async () => (order.push('configure'), { ok: true as const }),
+      }));
+      const result = await start(ON, rig.io);
+      expect(result.exitCode).toBe(0);
+      if (result.exitCode !== 0) return;
+      expect(order).toEqual(['attachLogger', 'configure']);
+      const line = JSON.parse(rig.lines.find((entry) => entry.includes('ai.provider_failure')) ?? '{}') as Record<string, unknown>;
+      expect(line).toMatchObject({ level: 40, event: 'ai.provider_failure', code: 'rejected', msg: 'a model call failed' });
+      expect(typeof line.time).toBe('number');
+      await result.app.close();
+    });
+
+    it('loads and serves an extension that has no logger hook exactly as before', async () => {
+      const rig = run(async () => extensionWith(route()));
+      const result = await start(ON, rig.io);
+      expect(result.exitCode).toBe(0);
+      if (result.exitCode !== 0) return;
+      expect((await result.app.inject({ url: '/v1/fake/status' })).statusCode).toBe(200);
+      await result.app.close();
+    });
+
+    it('exits 1, logging only the code of the failure, when the logger hook throws', async () => {
+      const rig = run(async () => ({
+        ...extensionWith(route()),
+        attachLogger: () => {
+          throw Object.assign(new Error('cannot use /secret/place'), { code: 'ERR_HOOK' });
+        },
+      }));
+      expect(await start(ON, rig.io)).toEqual({ exitCode: 1 });
+      expect(rig.errors.join('')).toBe(`${EXTENSION_LOGGER_FAILED_MESSAGE}\n`);
+      const failed = rig.lines.filter((line) => line.includes('profile.extension_logger_failed'));
+      expect(failed).toHaveLength(1);
+      expect(failed[0]).toContain('ERR_HOOK');
+      expect(rig.lines.join('')).not.toContain('/secret/place');
+    });
   });
 
   describe('configuring the extension', () => {

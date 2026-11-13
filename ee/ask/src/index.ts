@@ -1,10 +1,10 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AuditSink, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
-import { writeFailureLine } from './failure-line.js';
+import { createFailureReporter } from './failure-line.js';
 import { guardAiRouteGroup } from './route-guard.js';
 import { createRequestBuilder, type RequestBuilder } from './request.js';
 
@@ -45,9 +45,14 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let configuration: AskConfiguration | undefined;
   let environment: Readonly<Record<string, string | undefined>> = {};
   let mounted: MountedAuditSink | undefined;
+  let logger: ExtensionLogger | undefined;
+  const reportFailure = createFailureReporter(() => logger);
   return {
     name: 'ask',
     migrationsDirectory: MIGRATIONS_DIRECTORY,
+    attachLogger(attached) {
+      logger = attached;
+    },
     configuration: () => configuration,
     requestBuilder: () => (configuration === undefined ? undefined : createRequestBuilder(configuration.rules)),
     async configure(settings, env, view) {
@@ -57,7 +62,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,
-    model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: writeFailureLine }), configuration, sink: mounted.sink })),
+    model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink })),
     createAuditSink(context) {
       mounted = createAuditSink(context);
       return mounted;

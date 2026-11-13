@@ -12,7 +12,7 @@ import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
 import { aiMappingViewOf } from './profile/mapping-view.js';
-import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
+import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
 import { createAppStore, STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS, type AppStore } from './app-store.js';
@@ -150,6 +150,13 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     }
     extension = loaded.extension;
     io.logger.info({ event: 'profile.extension_loaded', extension: extension.name }, 'enterprise extension loaded');
+    try {
+      extension.attachLogger?.(io.logger);
+    } catch (error) {
+      io.logger.error({ event: 'profile.extension_logger_failed', cause: causeOf(error) }, 'enterprise extension could not take the logger');
+      io.stderr.write(`${EXTENSION_LOGGER_FAILED_MESSAGE}\n`);
+      return { exitCode: 1 };
+    }
     if (extension.configure !== undefined) {
       let outcome;
       try {
