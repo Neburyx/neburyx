@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { GraphEdge } from '@neburyx/contracts';
 import { aggregateEdge } from '../inspector/relationship-kit.js';
+import { loadedOf } from '../workspace/node-counts.js';
+import { addResultToGraph } from './add-to-graph.js';
 import { elementKey } from '../state/keys.js';
 import { ref } from '../state/test-data.js';
 import { heavyRun, okRun, openPatterns, patternsWorkspace, selectAccount, settle, type KitOptions, type Sent } from './patterns-kit.js';
@@ -116,15 +118,22 @@ describe('what the outcome and the canvas show', () => {
     expect(drawn).not.toContain('acc-2');
   });
 
-  it('loads an aggregate relationship of a result once however often it is added', async () => {
+  it('loads an aggregate relationship of a result once however often it is added, with its member count', async () => {
     const summed: GraphEdge = aggregateEdge('acc-2', 'acc-3', { value: 3, quality: 'lowerBound', scope: 'x' }, 'PAYS');
     const base = okRun(['acc-2', 'acc-3']);
     if (base.status !== 'ok') throw new Error('not ok');
-    const kit = await start(async () => ({ ok: true, value: { ...base, edges: [...base.edges, summed] } }));
+    const result = { ...base, edges: [...base.edges, summed] };
+    const kit = await start(async () => ({ ok: true, value: result }));
     await userEvent.click(runButton());
     await settle();
     await add();
+    const first = JSON.stringify(kit.state.loadedGraph());
     expect(kit.state.investigation.getState().edgeRefs).toHaveLength(3);
+    addResultToGraph(kit.state, result, { sourceId: 'a', principalId: 'p' });
+    expect(JSON.stringify(kit.state.loadedGraph())).toBe(first);
+    const held = kit.state.loadedGraph().edges.find((edge) => 'memberCount' in edge);
+    expect(held !== undefined && 'memberCount' in held ? held.memberCount : undefined).toEqual({ value: 3, quality: 'lowerBound', scope: 'x' });
+    expect(loadedOf(kit.state.loadedGraph(), summed.from).total.quality).toBe('lowerBound');
   });
 
   it('says how many supernodes were not traversed and loads the rest', async () => {

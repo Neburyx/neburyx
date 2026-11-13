@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openOneEntity } from './support/workspace.ts';
+import { canvasOf, openOneEntity } from './support/workspace.ts';
 
 const SOURCE = 'banking-demo';
 const LIMITS = { slow: '3', cut: '5', stopList: '6' } as const;
@@ -84,6 +84,29 @@ test.describe('adding a pattern result to the canvas', () => {
     await expect(scopeOf(page)).toContainText('1 entity');
     await addOf(page).click();
     await expect(scopeOf(page)).toContainText('7 entities · 6 relationships · loaded');
+  });
+
+  test('the header, the inspector and the Export dialog agree about what is loaded after an add', async ({ page }) => {
+    await run(page, 'Shared devices', 'Starting account');
+    await addOf(page).click();
+    await expect(scopeOf(page)).toContainText('7 entities · 6 relationships · loaded · exact');
+    const inspector = page.getByRole('complementary', { name: 'Inspector' });
+    await canvasOf(page).focus();
+    await page.keyboard.press('Enter');
+    for (let step = 0; step < 12; step += 1) {
+      await page.keyboard.press('Space');
+      if (((await inspector.getByRole('heading', { level: 2 }).textContent().catch(() => '')) ?? '').includes('AC-1')) break;
+      await page.keyboard.press('Tab');
+    }
+    await expect(inspector.getByRole('heading', { level: 2 })).toContainText('AC-1');
+    await inspector.getByRole('tab', { name: 'Relationships' }).click();
+    await expect(inspector.getByRole('tabpanel')).toContainText('1 loaded');
+    const remainder = await page.locator('.graph-scope p').nth(1).textContent();
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current view' });
+    await expect(dialog.getByText(/^coverage: /)).toHaveText(`coverage: ${remainder}`);
+    await expect(dialog).toContainText('7');
+    await page.keyboard.press('Escape');
   });
 });
 
