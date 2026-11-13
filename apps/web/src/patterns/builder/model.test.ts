@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PATTERN_LIMITS } from '@neburyx/contracts';
 import { builderProfile } from './builder-kit.js';
-import { addStepBlock, arrivalTypes, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, type Action, type BuilderState } from './model.js';
+import { addStepBlock, arrivalTypes, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
 
 const profile = builderProfile();
 const run = (state: BuilderState, ...actions: Action[]): BuilderState => actions.reduce((held, action) => reduce(profile, held, action), state);
@@ -91,5 +91,38 @@ describe('why a step cannot be added', () => {
     expect(stepLimitOf(2)).toBe(2);
     expect(stepLimitOf(undefined)).toBe(PATTERN_LIMITS.steps);
     expect(stepLimitOf(99)).toBe(PATTERN_LIMITS.steps);
+  });
+});
+
+describe('removing a step by its place', () => {
+  it('removes the last step with no index, and the step at an index, keeping what still joins after it', () => {
+    const removed = run(twoSteps(), { type: 'remove' });
+    expect(removed.draft.steps).toHaveLength(1);
+    const first = run(twoSteps(), { type: 'remove', index: 0 });
+    // the second step now follows from the start: n-a does not lead to n-c, so its choices no longer join and it keeps only its direction
+    expect(first.draft.steps).toHaveLength(1);
+    expect(first.draft.steps[0]).toMatchObject({ direction: 'out', relationshipTypes: [] });
+    expect(first.draft.steps[0]?.arrivesAt).toBeUndefined();
+  });
+
+  it('does nothing for a step that is not there', () => {
+    const held = twoSteps();
+    expect(run(held, { type: 'remove', index: 5 })).toBe(held);
+    expect(run(INITIAL, { type: 'remove' })).toBe(INITIAL);
+  });
+});
+
+describe('the relationship types a step may take', () => {
+  it('lists each type with the type it leads to, once however many rows, and only to the arrival once it is chosen', () => {
+    expect(typeOptions(profile, 'n-a', 'out', undefined).map((option) => `${option.type}>${option.arrival}`)).toEqual(['r-1>n-b', 'r-2>n-b', 'r-self>n-a']);
+    expect(typeOptions(profile, 'n-a', 'out', 'n-b').map((option) => option.type)).toEqual(['r-1', 'r-2']);
+    expect(typeOptions(profile, 'n-b', 'both', undefined).map((option) => `${option.type}>${option.arrival}`)).toEqual(['r-1>n-a', 'r-2>n-a', 'r-3>n-c']);
+    expect(typeOptions(profile, 'n-e', 'both', undefined)).toEqual([]);
+  });
+
+  it('says whether the mapping gives a type an observed time', () => {
+    expect(typeOptions(profile, 'n-a', 'out', 'n-b').every((option) => !option.dated)).toBe(true);
+    const dated = { ...profile, relationshipTypes: profile.relationshipTypes.map((row) => (row.type === 'r-1' ? { ...row, observedAt: 'when' } : row)) };
+    expect(typeOptions(dated, 'n-a', 'out', 'n-b').map((option) => option.dated)).toEqual([true, false]);
   });
 });

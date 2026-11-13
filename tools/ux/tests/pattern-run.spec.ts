@@ -1,27 +1,23 @@
 import { expect, test, type Page } from '@playwright/test';
 import { drawing, openOneEntity } from './support/workspace.ts';
+import { buildStepThroughUi } from './support/pattern-editor.ts';
 
 const SOURCE = 'banking-demo';
 
 const panelOf = (page: Page) => page.getByRole('complementary', { name: 'Patterns' });
 const builderOf = (page: Page) => panelOf(page).getByRole('region', { name: 'New pattern' });
-const stepOf = (page: Page, n: number) => builderOf(page).getByRole('group', { name: `Step ${n}` });
+const stepOf = (page: Page, n: number) => builderOf(page).getByRole('tabpanel', { name: `Step ${n}` });
 const runOf = (page: Page) => builderOf(page).getByRole('button', { name: 'Run pattern' });
 const resultOf = (page: Page) => builderOf(page).getByRole('region', { name: 'Result' });
 
-async function buildStep(page: Page, n: number, direction: string, arrivesAt: string, types: readonly string[]): Promise<void> {
-  await builderOf(page).getByRole('button', { name: 'Add step' }).click();
-  await stepOf(page, n).getByLabel('Direction').selectOption(direction);
-  await stepOf(page, n).getByLabel('Arrives at').selectOption({ label: arrivesAt });
-  for (const type of types) await stepOf(page, n).getByRole('checkbox', { name: type }).check();
-}
+const buildStep = (page: Page, n: number, direction: string, arrivesAt: string, types: readonly string[]): Promise<void> => buildStepThroughUi(page, builderOf(page), n, direction, arrivesAt, types);
 
 /** Opens the builder on the entity `id` and builds Account → Device ← Account with choices only; the preview and the check have answered when it returns. */
 async function built(page: Page, id: string): Promise<void> {
   await openOneEntity(page, SOURCE, id);
   await page.getByRole('button', { name: 'Patterns', exact: true }).click();
   await panelOf(page).getByRole('button', { name: 'New pattern' }).click();
-  await builderOf(page).getByLabel('Starts at').selectOption({ label: 'Account' });
+  await builderOf(page).getByLabel('Starting entity type').selectOption({ label: 'Account' });
   await buildStep(page, 1, 'out', 'Device', ['USES_DEVICE']);
   await buildStep(page, 2, 'in', 'Account', ['USES_DEVICE']);
   await expect(builderOf(page).getByRole('region', { name: 'Preview' })).toBeVisible();
@@ -75,7 +71,7 @@ test.describe('running a pattern built in the panel', () => {
     await expect(builderOf(page).getByText('Refine filters or continue with a bounded limit of 25.')).toBeVisible();
     await expect(resultOf(page)).toHaveCount(0);
     await builderOf(page).getByRole('button', { name: 'Refine filters' }).click();
-    await expect(builderOf(page).getByLabel('Starts at')).toBeFocused();
+    await expect(builderOf(page).getByLabel('Starting entity type')).toBeFocused();
     await runOf(page).click();
     await builderOf(page).getByRole('button', { name: 'Continue with 25' }).click();
     await expect(resultOf(page)).toBeVisible();

@@ -31,19 +31,19 @@ describe('opening the builder from the Patterns panel', () => {
     const panel = builderPanel();
     // the title is the panel's heading, above the editor
     expect(screen.getByRole('heading', { name: 'New pattern' })).toBeTruthy();
-    expect(within(panel).getByText('Compose a pattern from your mapping. There is no query text field.')).toBeTruthy();
-    expect(within(panel).getByText('Types come from the mapping. A type that is not mapped cannot be chosen.')).toBeTruthy();
+    expect(within(panel).getByText('Every pattern starts from one entity you choose when you run it.')).toBeTruthy();
+    expect(within(panel).getByRole('group', { name: 'Entity types in the mapping' })).toBeTruthy();
     expect(startSelect().value).toBe('');
     expect([...startSelect().options].map((option) => option.textContent)).toEqual(['Choose a type', 'N-A', 'N-B', 'N-C', 'N-D', 'N-E']);
     expect(panel.querySelectorAll('input[type="text"], input[type="search"], textarea')).toHaveLength(0);
   });
 
-  it('hides the panel’s own intro while the builder is open, and shows it again on Back', async () => {
+  it('hides the panel’s own intro while the builder is open, and shows it again on Cancel', async () => {
     await builderWorkspace();
     expect(screen.getByText('Approved ways to explore. No query language needed.')).toBeTruthy();
     await openBuilder();
     expect(screen.queryByText('Approved ways to explore. No query language needed.')).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByText('Approved ways to explore. No query language needed.')).toBeTruthy();
   });
 
@@ -58,11 +58,11 @@ describe('opening the builder from the Patterns panel', () => {
     expect(screen.queryByRole('heading', { name: 'Patterns' })).toBeNull();
   });
 
-  it('moves the focus to Starts at, and back to New pattern on Back to patterns', async () => {
+  it('moves the focus to Starts at, and back to New pattern on Cancel', async () => {
     await builderWorkspace();
     await openBuilder();
     expect(document.activeElement).toBe(startSelect());
-    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New pattern' }));
   });
 
@@ -94,15 +94,20 @@ describe('opening the builder from the Patterns panel', () => {
 });
 
 describe('leaving and coming back', () => {
-  it('keeps the draft and the list’s form while the panel is open', async () => {
+  it('keeps the list’s form while the editor is open, and throws the draft away on Cancel after asking', async () => {
     const kit = await builderWorkspace();
     selectAccount(kit.state, 'acc-1');
     await openBuilder();
     await chooseStart('n-b');
-    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    const dialog = screen.getByRole('dialog', { name: 'Discard this draft?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }));
+    expect(startSelect().value).toBe('n-b');
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(within(screen.getByRole('dialog', { name: 'Discard this draft?' })).getByRole('button', { name: 'Discard draft' }));
     expect(screen.getByRole('radio', { name: 'Shared devices' }).getAttribute('aria-checked')).toBe('true');
     await openBuilder();
-    expect(startSelect().value).toBe('n-b');
+    expect(startSelect().value).toBe('');
   });
 
   it('closes the panel on Escape and on the close button, dropping the draft, with the focus on the Patterns tool', async () => {

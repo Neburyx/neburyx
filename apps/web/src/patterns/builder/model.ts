@@ -47,8 +47,34 @@ export function relationshipChoices(profile: SourceProfile, from: string, to: st
   return found;
 }
 
+export interface TypeOption {
+  readonly type: string;
+  /** The node type the relationship type leads to from the step's start. */
+  readonly arrival: string;
+  /** Whether the mapping gives this relationship type an observed time, which a date window can filter. */
+  readonly dated: boolean;
+}
+
+/** The relationship types a step may take, each with the node type it leads to and whether it has a date: from the step's start in its direction, and only to the arrival type once one is chosen. */
+export function typeOptions(profile: SourceProfile, from: string, direction: Direction, arrival: string | undefined): readonly TypeOption[] {
+  const found = new Map<string, TypeOption>();
+  const add = (row: Row, to: string): void => {
+    if (arrival !== undefined && to !== arrival) return;
+    const key = `${row.type}\u0000${to}`;
+    const held = found.get(key);
+    found.set(key, { type: row.type, arrival: to, dated: (held?.dated ?? false) || row.observedAt !== null });
+  };
+  for (const row of profile.relationshipTypes) {
+    if (direction !== 'in' && row.from === from) add(row, row.to);
+    if (direction !== 'out' && row.to === from) add(row, row.from);
+  }
+  return [...found.values()];
+}
+
 /** Whether any relationship type of the mapping touches a node type, in any direction. */
 export const hasAnyRelationship = (profile: SourceProfile, type: string): boolean => profile.relationshipTypes.some((row) => row.from === type || row.to === type);
+
+export const hasConditions = (step: StepDraft): boolean => rowsOf(step).length > 0;
 
 export const isComplete = (step: StepDraft): boolean => step.direction !== undefined && step.arrivesAt !== undefined && step.relationshipTypes.length > 0;
 
@@ -113,7 +139,7 @@ export type Action =
   | { readonly type: 'direction'; readonly index: number; readonly direction: Direction | undefined }
   | { readonly type: 'arrives'; readonly index: number; readonly arrivesAt: string | undefined }
   | { readonly type: 'toggle'; readonly index: number; readonly relationshipType: string }
-  | { readonly type: 'remove' }
+  | { readonly type: 'remove'; readonly index?: number }
   | { readonly type: 'add-condition'; readonly index: number; readonly mask: boolean }
   | { readonly type: 'change-condition'; readonly index: number; readonly id: number; readonly change: Partial<ConditionRow> }
   | { readonly type: 'remove-condition'; readonly index: number; readonly id: number }
@@ -139,8 +165,13 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
     }
     case 'add':
       return { draft: { ...draft, steps: [...draft.steps, { relationshipTypes: [] }] }, removed: 0 };
-    case 'remove':
-      return { draft: { ...draft, steps: draft.steps.slice(0, -1) }, removed: 0 };
+    case 'remove': {
+      const index = action.index ?? draft.steps.length - 1;
+      if (index < 0 || index >= draft.steps.length) return state;
+      const steps = draft.steps.filter((_, at) => at !== index);
+      // a step after the one removed now follows from the step before it: what still joins is kept, as for any change to a step
+      return index >= steps.length ? { draft: { ...draft, steps }, removed: 0 } : settled(profile, repair(profile, { ...draft, steps }, index));
+    }
     case 'direction':
     case 'arrives':
     case 'toggle': {

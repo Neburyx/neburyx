@@ -5,7 +5,7 @@ const SOURCE = 'banking-demo';
 
 const panelOf = (page: Page) => page.getByRole('complementary', { name: 'Patterns' });
 const builderOf = (page: Page) => panelOf(page).getByRole('region', { name: 'New pattern' });
-const stepOf = (page: Page, n: number) => builderOf(page).getByRole('group', { name: `Step ${n}` });
+const stepOf = (page: Page, n: number) => builderOf(page).getByRole('tabpanel', { name: `Step ${n}` });
 const tabOf = (page: Page, name: RegExp) => panelOf(page).getByRole('tab', { name });
 
 /** Keyboard-only moves: a control is focused, then the keys do the rest. */
@@ -53,20 +53,22 @@ test.describe('saved patterns in the Patterns panel', () => {
 
   test('saves a built pattern, finds it in My patterns, runs it and shares it, by keyboard alone', async ({ page }) => {
     await press(page, panelOf(page).getByRole('button', { name: 'New pattern' }));
-    await pick(page, builderOf(page).getByLabel('Starts at'), 'Account');
-    await press(page, builderOf(page).getByRole('button', { name: 'Add step' }));
-    await pick(page, stepOf(page, 1).getByLabel('Direction'), 'Outgoing');
+    await pick(page, builderOf(page).getByLabel('Starting entity type'), 'Account');
+    await press(page, builderOf(page).getByRole('button', { name: '+ Step' }));
+    await press(page, stepOf(page, 1).getByRole('radio', { name: 'Outgoing' }));
     await pick(page, stepOf(page, 1).getByLabel('Arrives at'), 'Device');
-    await stepOf(page, 1).getByRole('checkbox', { name: 'USES_DEVICE' }).focus();
+    await press(page, stepOf(page, 1).getByRole('button', { name: '+ Add type' }));
     await page.keyboard.press('Space');
-    await expect(builderOf(page).getByText('Valid: the mapping can follow this pattern.')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(builderOf(page).getByText('The mapping can follow this pattern')).toBeVisible();
     await press(page, builderOf(page).getByRole('button', { name: 'Save pattern' }));
     await page.keyboard.type('Keyboard saved');
     await expect(page.getByRole('dialog').getByLabel('Name')).toHaveValue(/Keyboard saved/);
     await page.getByRole('dialog').getByLabel('Name').fill('Keyboard saved');
     await press(page, page.getByRole('dialog').getByRole('button', { name: 'Save pattern' }));
     await expect(panelOf(page).getByText('Pattern saved.')).toBeVisible();
-    await press(page, builderOf(page).getByRole('button', { name: 'Back to patterns' }));
+    await press(page, builderOf(page).getByRole('button', { name: 'Cancel' }));
+    await press(page, page.getByRole('dialog').getByRole('button', { name: 'Discard draft' }));
     await tabOf(page, /Built-in/).focus();
     await page.keyboard.press('ArrowRight');
     await expect(panelOf(page).getByText('Keyboard saved')).toBeVisible();

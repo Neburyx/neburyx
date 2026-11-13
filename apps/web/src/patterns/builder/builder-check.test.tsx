@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiResult } from '../../api/client.js';
 import type { PatternValidateResponse } from '@neburyx/contracts';
 import { failure, settle } from '../patterns-kit.js';
-import { afterDebounce, buildStep, builderWorkspace, chooseStart, cleanup, field, openBuilder, screen, stepCard, userEvent, within } from './builder-kit.js';
+import { addStepButton, afterDebounce, buildStep, builderWorkspace, chooseArrival, chooseDirection, chooseStart, cleanup, field, openBuilder, screen, startSelect, stepCard, toggleType, userEvent, within } from './builder-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -28,16 +28,16 @@ describe('asking the server about the definition', () => {
     const kit = await builderWorkspace();
     await openBuilder();
     await chooseStart('n-a');
-    await userEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    await userEvent.selectOptions(field(1, 'Direction'), 'out');
+    await userEvent.click(addStepButton());
+    await chooseDirection(1, 'out');
     await afterDebounce();
     expect(kit.validations).toHaveLength(0);
-    await userEvent.selectOptions(field(1, 'Arrives at'), 'n-b');
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'r-1' }));
+    await chooseArrival(1, 'n-b');
+    await toggleType(1, 'r-1');
     expect(screen.getByText('Checking…')).toBeTruthy();
     await afterDebounce();
     expect(kit.validations).toEqual([{ sourceId: 'a', definition: { anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }] } }]);
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
   });
 
   it('sends one request for a burst of changes, and the mask with it when masking is on', async () => {
@@ -47,7 +47,7 @@ describe('asking the server about the definition', () => {
     await openBuilder();
     await chooseStart('n-a');
     await buildStep(1, 'out', 'n-b', ['r-1']);
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'r-2' }));
+    await toggleType(1, 'r-2');
     await afterDebounce();
     expect(kit.validations).toHaveLength(1);
     expect(kit.validations[0]?.definition).toMatchObject({ steps: [{ relationshipTypes: ['r-1', 'r-2'] }] });
@@ -64,10 +64,11 @@ describe('what the server finds wrong', () => {
     await afterDebounce();
     expect(screen.getByText(/^Not valid\./)).toBeTruthy();
     expect(within(stepCard(1)).getByText('This relationship type does not join the types of this step in this direction.')).toBeTruthy();
-    const start = screen.getByLabelText('Starts at').parentElement as HTMLElement;
-    expect(within(start).getByText('This type is not in the mapping.')).toBeTruthy();
     const top = screen.getByText('There are more here than a pattern may have.');
     expect(stepCard(1).contains(top)).toBe(false);
+    await userEvent.click(screen.getByRole('tab', { name: 'Start' }));
+    const start = startSelect().parentElement as HTMLElement;
+    expect(within(start).getByText('This type is not in the mapping.')).toBeTruthy();
     expect(start.contains(top)).toBe(false);
   });
 
@@ -78,22 +79,22 @@ describe('what the server finds wrong', () => {
       validate: () => (++call === 1 ? new Promise<Answer>((resolve) => (release = resolve)) : Promise.resolve<Answer>({ ok: true, value: { status: 'ok' } })),
     });
     await afterDebounce();
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'r-2' }));
+    await toggleType(1, 'r-2');
     await afterDebounce();
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
     act(() => release(invalid({ path: ['steps', 0], code: 'bad-value' })));
     await settle();
     expect(screen.queryByText(/^Not valid/)).toBeNull();
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
   });
 
   it('clears the result when the definition becomes incomplete', async () => {
     await oneStep();
     await afterDebounce();
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'r-1' }));
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
+    await toggleType(1, 'r-1');
     await afterDebounce();
-    expect(screen.queryByText(/Valid:|Not valid|Checking/)).toBeNull();
+    expect(screen.queryByText(/The mapping can follow this pattern|Not valid|Checking/)).toBeNull();
   });
 });
 
@@ -109,8 +110,8 @@ describe('a check that could not be made', () => {
     await afterDebounce();
     expect(within(screen.getByRole('alert')).getByText('The check could not be made.')).toBeTruthy();
     expect(screen.getByText(reason)).toBeTruthy();
-    expect(screen.queryByText(/Valid:/)).toBeNull();
-    expect(field(1, 'Direction').value).toBe('out');
+    expect(screen.queryByText(/The mapping can follow this pattern/)).toBeNull();
+    expect(screen.getByRole('radio', { name: 'Outgoing' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
   });
 
@@ -121,7 +122,7 @@ describe('a check that could not be made', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await settle();
     expect(kit.validations).toHaveLength(2);
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
   });
 
   it('drops a check that is on its way when the source changes, and shows nothing of its answer', async () => {
@@ -139,6 +140,6 @@ describe('a check that could not be made', () => {
     expect(signal?.aborted).toBe(true);
     act(() => release({ ok: true, value: { status: 'ok' } }));
     await settle();
-    expect(screen.queryByText(/Valid:/)).toBeNull();
+    expect(screen.queryByText(/The mapping can follow this pattern/)).toBeNull();
   });
 });

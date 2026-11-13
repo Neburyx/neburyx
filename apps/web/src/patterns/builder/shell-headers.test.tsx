@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { settle } from '../patterns-kit.js';
-import { builderWorkspace, cleanup, openBuilder, screen, userEvent } from './builder-kit.js';
+import { builderWorkspace, cleanup, openBuilder, screen, startSelect, userEvent } from './builder-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -18,15 +18,12 @@ describe('the headers of the panel shell', () => {
     expect(screen.queryByText(/read-only$/)).toBeNull();
   });
 
-  it('keeps the draft when the person goes back to the list and returns', async () => {
+  it('closes the editor at once on Cancel while nothing is built', async () => {
     await builderWorkspace();
     await openBuilder();
-    await userEvent.selectOptions(screen.getByLabelText('Starts at'), 'n-a');
-    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await settle();
+    expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByText(/^Source: .+ · read-only$/)).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'New pattern' }));
-    await settle();
-    expect((screen.getByLabelText('Starts at') as HTMLSelectElement).value).toBe('n-a');
   });
 });

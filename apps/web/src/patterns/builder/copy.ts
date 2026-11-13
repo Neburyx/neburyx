@@ -118,3 +118,58 @@ export function conditionBlockText(block: AddConditionBlock): string {
     }
   }
 }
+
+/** The words of the editor's chain, tabs, start and step panels (frames PB2, PB3 and PB8). */
+export const EDITOR_COPY = {
+  chainNone: 'Chain · no steps yet',
+  addStepToContinue: 'Add a step to continue',
+  canFollow: 'The mapping can follow this pattern',
+  start: 'Start',
+  startExplain: 'Every pattern starts from one entity you choose when you run it.',
+  startType: 'Starting entity type',
+  typesInMapping: 'Entity types in the mapping',
+  addStep: '+ Step',
+  stepsLabel: 'Pattern steps',
+  partsLabel: 'Parts of the step',
+  remove: 'Remove step',
+  cancel: 'Cancel',
+  preview: 'Preview',
+  keepEditing: 'Keep editing',
+  discardTitle: 'Discard this draft?',
+  discardText: 'The pattern you have built is not saved.',
+  discard: 'Discard draft',
+  removeTitle: (step: number): string => `Remove step ${step}?`,
+  removeText: (conditions: number): string => `${conditions} ${conditions === 1 ? 'condition goes' : 'conditions go'} with it.`,
+  previewNeedsValid: 'Preview is on once the source has checked the pattern.',
+} as const;
+
+export const chainTitle = (steps: number, conditions: number): string => (steps === 0 ? EDITOR_COPY.chainNone : `Chain · ${steps} ${steps === 1 ? 'step' : 'steps'} · ${conditions} ${conditions === 1 ? 'condition' : 'conditions'}`);
+export const stepSummary = (types: readonly string[], arrival: string | undefined): string => `${types.length === 0 ? '…' : types.join(' or ')} → ${arrival ?? '…'}`;
+export const conditionsTab = (count: number): string => `Conditions · ${count}`;
+export const windowTab = (days: number | undefined): string => (days === undefined ? 'Window · none' : `Window · ${days} d`);
+
+/** The Link tab (frame PB3). */
+export const LINK_COPY = {
+  link: 'Link',
+  direction: 'Direction',
+  out: 'Outgoing',
+  in: 'Incoming',
+  both: 'Either',
+  arrivesAt: 'Arrives at',
+  chooseType: 'Choose a type',
+  addType: '+ Add type',
+  onlyMapped: 'Only types in the mapping are listed.',
+  hasDate: 'has date',
+  noDate: 'no date',
+  typesAtMost: `At most ${PATTERN_LIMITS.relationshipTypesPerStep} relationship types in a step.`,
+} as const;
+
+export const relationshipTypesTitle = (count: number): string => `Relationship types · ${count} of ${PATTERN_LIMITS.relationshipTypesPerStep}`;
+export const directionMeaning = (direction: Direction, from: string, to: string | undefined): string => {
+  const next = to ?? 'the next entity';
+  if (direction === 'out') return `Outgoing: the relationship points from ${from} to ${next}.`;
+  if (direction === 'in') return `Incoming: the relationship points to ${from} from ${next}.`;
+  return `Either: the relationship may point either way between ${from} and ${next}.`;
+};
+export const leavingText = (type: string, direction: Direction): string => `Leaving a ${type}, ${direction === 'out' ? 'outgoing' : direction === 'in' ? 'incoming' : 'either direction'}`;
+export const removeTypeLabel = (type: string): string => `Remove ${type}`;

@@ -5,7 +5,7 @@ import type { ApiResult } from '../../api/client.js';
 import { ref } from '../../state/test-data.js';
 import { typedNode } from '../../workspace/filters-kit.js';
 import { definitionHeavy, definitionOk, settle } from '../patterns-kit.js';
-import { builderPanel, cleanup, runButton, runWorkspace, screen, userEvent, validPattern, within } from './run-kit.js';
+import { builderPanel, cleanup, runButton, runWorkspace, screen, startSelect, userEvent, validPattern, within, toggleType, runCancel } from './run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -39,8 +39,8 @@ describe('the heavy-operation stop of a pattern run', () => {
     await press();
     await userEvent.click(screen.getByRole('button', { name: 'Refine filters' }));
     expect(screen.queryByText(/Estimated/)).toBeNull();
-    expect(document.activeElement).toBe(screen.getByLabelText('Starts at'));
-    expect((screen.getByLabelText('Starts at') as HTMLSelectElement).value).toBe('n-a');
+    expect(document.activeElement).toBe(startSelect());
+    expect((startSelect() as HTMLSelectElement).value).toBe('n-a');
   });
 
   it('sends one continue run with the same definition and entity, continue and the limit, and shows the page', async () => {
@@ -66,7 +66,7 @@ describe('the heavy-operation stop of a pattern run', () => {
     await runWorkspace({ runDefinition: async () => ({ ok: true, value: definitionHeavy() }) });
     await validPattern();
     await press();
-    await userEvent.click(within(screen.getByRole('group', { name: 'Step 1' })).getByRole('checkbox', { name: 'r-2' }));
+    await toggleType(1, 'r-2');
     expect(screen.queryByText(/Estimated/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue with 25' })).toBeNull();
   });
@@ -166,7 +166,7 @@ describe('adding a result to the graph', () => {
     await press();
     expect(add().disabled).toBe(true);
     const before = kit.state.loadedGraph().nodes.length;
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(runCancel());
     await settle();
     act(() => runs[0]?.({ ok: true, value: definitionOk(['acc-9']) }));
     await settle();

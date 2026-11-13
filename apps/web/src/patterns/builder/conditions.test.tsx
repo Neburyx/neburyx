@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternValidateResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { settle } from '../patterns-kit.js';
-import { addCondition, afterDebounce, buildStep, chooseStart, cleanup, conditionRow, conditionsWorkspace, fireEvent, openBuilder, optionTexts, rowField, screen, stepCard, userEvent, within } from './builder-kit.js';
+import { addStepButton, addCondition, openStep, afterDebounce, buildStep, chooseArrival, chooseDirection, chooseStart, cleanup, conditionRow, conditionsWorkspace, fireEvent, openBuilder, optionTexts, rowField, screen, stepCard, toggleType, userEvent, within } from './builder-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -35,7 +35,8 @@ describe('one condition on the node', () => {
     const kit = await conditionsWorkspace();
     await openBuilder();
     await chooseStart('c-a');
-    await userEvent.click(screen.getByRole('button', { name: 'Add step' }));
+    await userEvent.click(addStepButton());
+    await openStep(1, 'Conditions');
     expect(addDisabledReason(1)).toBe('Choose where the step arrives first.');
     expect(kit.validations).toHaveLength(0);
   });
@@ -55,11 +56,11 @@ describe('one condition on the node', () => {
     await afterDebounce();
     expect(kit.validations).toHaveLength(before);
     expect(screen.queryByText('Enter a value.')).toBeNull();
-    expect(screen.queryByText(/Valid:|Not valid|Checking/)).toBeNull();
+    expect(screen.queryByText(/The mapping can follow this pattern|Not valid|Checking/)).toBeNull();
     await type(1, 1, 'Value', '12');
     await afterDebounce();
     expect(lastDefinition(kit)).toMatchObject({ steps: [{ conditions: [{ on: 'neighbor', property: 'b-name', op: 'eq', value: { kind: 'number', value: 12 } }] }] });
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
   });
 
   it('says what is wrong with a value once the person has edited it, and refuses a text over 256 characters', async () => {
@@ -158,8 +159,8 @@ describe('conditions on the relationship', () => {
     await type(1, 1, 'Value', '5');
     await afterDebounce();
     const sent = kit.validations.length;
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'k-1' }));
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'k-5' }));
+    await toggleType(1, 'k-1');
+    await toggleType(1, 'k-5');
     await afterDebounce();
     expect(within(conditionRow(1, 1)).getByText('This property is not available for the types now chosen.')).toBeTruthy();
     expect(kit.validations).toHaveLength(sent);
@@ -170,11 +171,11 @@ describe('conditions on the relationship', () => {
 
   it('takes a step’s conditions with it when a change removes the step, under the line that says steps were removed', async () => {
     await started(['k-1']);
-    await userEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    await userEvent.selectOptions(within(stepCard(2)).getByLabelText('Direction'), 'out');
-    await userEvent.selectOptions(within(stepCard(2)).getByLabelText('Arrives at'), 'c-c');
-    await userEvent.click(within(stepCard(2)).getByRole('checkbox', { name: 'k-3' }));
-    await userEvent.selectOptions(within(stepCard(1)).getByLabelText('Direction'), 'in');
+    await userEvent.click(addStepButton());
+    await chooseDirection(2, 'out');
+    await chooseArrival(2, 'c-c');
+    await toggleType(2, 'k-3');
+    await chooseDirection(1, 'in');
     expect(screen.queryByRole('group', { name: 'Step 2' })).toBeNull();
     expect(screen.getByText('Steps after this one were removed because they no longer follow from it.')).toBeTruthy();
   });
@@ -200,6 +201,7 @@ describe('caps and personal data', () => {
 
   it('says nothing can be used when the node and the relationship declare no property', async () => {
     await started(['k-3'], {}, 'c-b', 'c-c');
+    await openStep(1, 'Conditions');
     expect(addDisabledReason(1)).toBe('No property of these types can be filtered. The mapping declares which can.');
   });
 
@@ -233,6 +235,7 @@ describe('caps and personal data', () => {
 describe('the window', () => {
   it('offers no window, days and two dates, says nothing of the types while there is no window, names them once one is chosen, and sends nothing for no window', async () => {
     const kit = await started(['k-1']);
+    await openStep(1, 'Window');
     expect(optionTexts(windowSelect(1))).toEqual(['No window', 'Last N days', 'Between two dates']);
     expect(screen.queryByText(/by the window/)).toBeNull();
     await userEvent.selectOptions(windowSelect(1), 'days');
@@ -245,6 +248,7 @@ describe('the window', () => {
 
   it('sends days from 1 to 3650 and refuses anything else with Expand’s sentence', async () => {
     const kit = await started(['k-1']);
+    await openStep(1, 'Window');
     await userEvent.selectOptions(windowSelect(1), 'days');
     expect(screen.getByText('Enter a whole number of days from 1 to 3650.')).toBeTruthy();
     for (const bad of ['0', '3651', '2.5', 'x']) {
@@ -258,6 +262,7 @@ describe('the window', () => {
 
   it('sends two calendar dates in order and refuses a date that is not one, an end before the start and a range over 3,650 days', async () => {
     const kit = await started(['k-1']);
+    await openStep(1, 'Window');
     await userEvent.selectOptions(windowSelect(1), 'dates');
     const set = (from: string, to: string): void => {
       fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: From (UTC date)'), { target: { value: from } });
@@ -275,6 +280,7 @@ describe('the window', () => {
 
   it('names the types the window does not filter, and a type with both a dated and an undated row in both lines', async () => {
     await started(['k-1', 'k-2']);
+    await openStep(1, 'Window');
     expect(screen.queryByText(/by the window/)).toBeNull();
     await userEvent.selectOptions(windowSelect(1), 'dates');
     expect(screen.getByText('Filtered by the window: k-1.')).toBeTruthy();
@@ -285,10 +291,11 @@ describe('the window', () => {
     void kit;
     await openBuilder();
     await chooseStart('c-c');
-    await userEvent.click(screen.getByRole('button', { name: 'Add step' }));
-    await userEvent.selectOptions(within(stepCard(1)).getByLabelText('Direction'), 'both');
-    await userEvent.selectOptions(within(stepCard(1)).getByLabelText('Arrives at'), 'c-d');
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'k-two' }));
+    await userEvent.click(addStepButton());
+    await chooseDirection(1, 'both');
+    await chooseArrival(1, 'c-d');
+    await toggleType(1, 'k-two');
+    await openStep(1, 'Window');
     await userEvent.selectOptions(windowSelect(1), 'days');
     expect(screen.getByText('Filtered by the window: k-two.')).toBeTruthy();
     expect(screen.getByText('Not filtered by the window: k-two. They are read whole.')).toBeTruthy();
@@ -296,10 +303,11 @@ describe('the window', () => {
 
   it('disables the window when no chosen type has an observed time, and takes a window off when a change leaves none', async () => {
     const kit = await started(['k-1']);
+    await openStep(1, 'Window');
     await userEvent.selectOptions(windowSelect(1), 'days');
     fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: Days'), { target: { value: '30' } });
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'k-1' }));
-    await userEvent.click(within(stepCard(1)).getByRole('checkbox', { name: 'k-2' }));
+    await toggleType(1, 'k-1');
+    await toggleType(1, 'k-2');
     expect((windowSelect(1) as HTMLSelectElement).disabled).toBe(true);
     expect(screen.getByText('The window does not apply: no chosen relationship type has an observed time in the mapping.')).toBeTruthy();
     expect(screen.getByText('The window was taken off because no chosen relationship type has an observed time.')).toBeTruthy();
@@ -328,10 +336,11 @@ describe('what the server finds wrong with a condition or a window', () => {
     await afterDebounce();
     expect(within(conditionRow(1, 1)).getByText('This property cannot be used in a condition.')).toBeTruthy();
     expect(within(conditionRow(1, 2)).getByText('This choice does not fit with the others.')).toBeTruthy();
-    expect(within(stepCard(1).querySelector('.patterns-window') as HTMLElement).getByText('This choice is not allowed.')).toBeTruthy();
     const stepLevel = screen.getByText('There are more here than a pattern may have.');
     expect(stepCard(1).contains(stepLevel)).toBe(true);
     expect(conditionRow(1, 1).contains(stepLevel)).toBe(false);
+    await openStep(1, 'Window');
+    expect(within(stepCard(1).querySelector('.patterns-window') as HTMLElement).getByText('This choice is not allowed.')).toBeTruthy();
   });
 
   it('says in words each code a condition can come back with, by its own sentence', async () => {
@@ -356,10 +365,11 @@ describe('what the server finds wrong with a condition or a window', () => {
     await started(['k-1']);
     await addCondition(1);
     await type(1, 1, 'Value', 'a');
+    await openStep(1, 'Window');
     await userEvent.selectOptions(windowSelect(1), 'days');
     fireEvent.change(within(stepCard(1)).getByLabelText('Step 1 window: Days'), { target: { value: '30' } });
     await afterDebounce();
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
     expect(stepCard(1).querySelector('.patterns-error')).toBeNull();
   });
 
@@ -377,7 +387,7 @@ describe('what the server finds wrong with a condition or a window', () => {
     act(() => release(invalid({ path: ['steps', 0, 'conditions', 0, 'property'], code: 'not-filterable' })));
     await settle();
     expect(screen.queryByText('This property cannot be used in a condition.')).toBeNull();
-    expect(screen.getByText('Valid: the mapping can follow this pattern.')).toBeTruthy();
+    expect(screen.getByText('The mapping can follow this pattern')).toBeTruthy();
   });
 });
 

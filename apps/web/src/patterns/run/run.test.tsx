@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternPreviewResponse, PatternRunResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { definitionHeavy, definitionOk, failure, settle } from '../patterns-kit.js';
-import { afterDebounce, builderPanel, chooseStart, cleanup, runButton, runReason, runWorkspace, screen, userEvent, validPattern, within } from './run-kit.js';
+import { afterDebounce, builderPanel, chooseStart, cleanup, runButton, runReason, runWorkspace, screen, userEvent, validPattern, within, toggleType, runCancel } from './run-kit.js';
 
 beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
 afterEach(() => {
@@ -42,7 +42,7 @@ describe('running a built pattern', () => {
     await afterDebounce();
     expect(runReason()).toBe('The pattern is not valid.');
     answer = { ok: false, failure: failure('SOURCE_BUSY') };
-    await userEvent.click(within(screen.getByRole('group', { name: 'Step 1' })).getByRole('checkbox', { name: 'r-2' }));
+    await toggleType(1, 'r-2');
     await afterDebounce();
     expect(runReason()).toBe('The check could not be made.');
     answer = { ok: true, value: { status: 'ok' } };
@@ -103,7 +103,7 @@ describe('running a built pattern', () => {
     await validPattern();
     await press();
     expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
-    await userEvent.click(within(screen.getByRole('group', { name: 'Step 1' })).getByRole('checkbox', { name: 'r-2' }));
+    await toggleType(1, 'r-2');
     expect(screen.queryByRole('region', { name: 'Result' })).toBeNull();
     await afterDebounce();
     await press();
@@ -140,7 +140,7 @@ describe('the pattern in words', () => {
     const releases: Array<(answer: ApiResult<PatternPreviewResponse>) => void> = [];
     await runWorkspace({ preview: () => new Promise((resolve) => releases.push(resolve)) });
     await validPattern();
-    await userEvent.click(within(screen.getByRole('group', { name: 'Step 1' })).getByRole('checkbox', { name: 'r-2' }));
+    await toggleType(1, 'r-2');
     expect(screen.queryByRole('region', { name: 'Preview' })).toBeNull();
     await afterDebounce();
     expect(releases).toHaveLength(2);
@@ -198,7 +198,7 @@ describe('a run in progress', () => {
     await press();
     expect(runs).toHaveLength(1);
     expect(screen.getByText('Running · 5 s timeout')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+    expect(runCancel()).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Run pattern' })).toBeNull();
     expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
   });
@@ -209,7 +209,7 @@ describe('a run in progress', () => {
     await validPattern();
     const nodes = kit.state.visibleGraph().nodes.length;
     await press();
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(runCancel());
     await settle();
     expect(runs[0]?.signal?.aborted).toBe(true);
     expect(screen.getByText('Cancelled. No new matches shown.')).toBeTruthy();
@@ -299,6 +299,6 @@ describe('a run that fails', () => {
     await press();
     await press();
     expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
-    expect(builderPanel().querySelector('#pattern-step-0-direction')).toBeTruthy();
+    expect(within(builderPanel()).getByRole('radio', { name: 'Outgoing' })).toBeTruthy();
   });
 });

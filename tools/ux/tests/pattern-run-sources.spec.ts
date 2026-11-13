@@ -1,3 +1,4 @@
+import { buildStepThroughUi } from './support/pattern-editor.ts';
 import { expect, test } from '@playwright/test';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
@@ -15,15 +16,9 @@ test.describe('running a built pattern on each source of the second server', () 
       const panel = page.getByRole('complementary', { name: 'Patterns' });
       await panel.getByRole('button', { name: 'New pattern' }).click();
       const builder = panel.getByRole('region', { name: 'New pattern' });
-      await builder.getByLabel('Starts at').selectOption({ label: 'Account' });
-      await builder.getByRole('button', { name: 'Add step' }).click();
-      await builder.getByRole('group', { name: 'Step 1' }).getByLabel('Direction').selectOption('out');
-      await builder.getByRole('group', { name: 'Step 1' }).getByLabel('Arrives at').selectOption({ label: 'Device' });
-      await builder.getByRole('group', { name: 'Step 1' }).getByRole('checkbox', { name: 'USES_DEVICE' }).check();
-      await builder.getByRole('button', { name: 'Add step' }).click();
-      await builder.getByRole('group', { name: 'Step 2' }).getByLabel('Direction').selectOption('in');
-      await builder.getByRole('group', { name: 'Step 2' }).getByLabel('Arrives at').selectOption({ label: 'Account' });
-      await builder.getByRole('group', { name: 'Step 2' }).getByRole('checkbox', { name: 'USES_DEVICE' }).check();
+      await builder.getByLabel('Starting entity type').selectOption({ label: 'Account' });
+      await buildStepThroughUi(page, builder, 1, 'out', 'Device', ['USES_DEVICE']);
+      await buildStepThroughUi(page, builder, 2, 'in', 'Account', ['USES_DEVICE']);
       await expect(builder.getByRole('region', { name: 'Preview' })).toBeVisible();
       await builder.getByRole('button', { name: 'Run pattern' }).click();
       const result = builder.getByRole('region', { name: 'Result' });

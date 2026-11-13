@@ -48,13 +48,16 @@ const calls = (kit: Awaited<ReturnType<typeof opened>>, method: string) => kit.p
 describe('changing a saved pattern in the builder', () => {
   it('opens the builder with the start type, the step, the conditions and the window as stored', async () => {
     await opened(listed({ id: ID, name: 'Alpha', definition: DEFINITION, version: 4 }));
-    expect((builder().getByLabelText('Starts at') as HTMLSelectElement).value).toBe('c-a');
-    const step = within(builder().getByRole('group', { name: 'Step 1' }));
-    expect((step.getByLabelText('Direction') as HTMLSelectElement).value).toBe('out');
+    expect((builder().getByLabelText('Starting entity type') as HTMLSelectElement).value).toBe('c-a');
+    await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
+    const step = within(builder().getByRole('tabpanel', { name: 'Step 1' }));
+    expect(step.getByRole('radio', { name: 'Outgoing' }).getAttribute('aria-checked')).toBe('true');
     expect((step.getByLabelText('Arrives at') as HTMLSelectElement).value).toBe('c-b');
-    expect((step.getByRole('checkbox', { name: 'k-1' }) as HTMLInputElement).checked).toBe(true);
+    expect(step.getByRole('button', { name: 'Remove k-1' })).toBeTruthy();
+    await userEvent.click(step.getByRole('tab', { name: /^Conditions/ }));
     expect((step.getByLabelText('Step 1 condition 1: Value') as HTMLInputElement).value).toBe('abc');
     expect((step.getByLabelText('Step 1 condition 2: From') as HTMLInputElement).value).toBe('2026-01-01');
+    await userEvent.click(step.getByRole('tab', { name: /^Window/ }));
     expect((step.getByLabelText('Step 1 window: Days') as HTMLInputElement).value).toBe('30');
     expect(screen.getByText('Changing a saved pattern. Save changes keeps it where it is; Save as new makes another.')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Change pattern: Alpha' })).toBeTruthy();
@@ -113,6 +116,8 @@ describe('changing a saved pattern in the builder', () => {
     await settle();
     expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toContain('The pattern changed since you read the list');
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
+    await userEvent.click(builder().getByRole('tab', { name: /^Conditions/ }));
     expect((builder().getByLabelText('Step 1 condition 1: Value') as HTMLInputElement).value).toBe('abc');
     await userEvent.click(builder().getByRole('button', { name: 'Save as new' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save pattern' }));
@@ -125,14 +130,15 @@ describe('changing a saved pattern in the builder', () => {
     await opened(listed({ id: ID, name: 'Alpha', definition: gone, availability: { status: 'unavailable', reasons: [{ code: 'unknown-entity-type', path: ['steps', 0, 'arrivesAt'] }] } }), { validate: async () => ({ ok: true, value: { status: 'invalid', problems: [{ path: ['steps', 0, 'arrivesAt'], code: 'unknown-entity-type' }] } }) });
     await vi.advanceTimersByTimeAsync(400);
     await settle();
-    expect(within(builder().getByRole('group', { name: 'Step 1' })).getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
+    await userEvent.click(builder().getByRole('tab', { name: 'Step 1' }));
+    expect(within(builder().getByRole('tabpanel', { name: 'Step 1' })).getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
     expect((builder().getByRole('button', { name: 'Save changes' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('opens empty, saying so, for a stored definition that no longer passes the schema', async () => {
     await opened(listed({ id: ID, name: 'Alpha', definition: { anchorType: 'c-a', steps: [] }, availability: { status: 'unavailable', reasons: [{ code: 'bad-definition' }] } }));
     expect(builder().getByText('This part of the pattern cannot be shown because the mapping no longer has it.')).toBeTruthy();
-    expect((builder().getByLabelText('Starts at') as HTMLSelectElement).value).toBe('');
+    expect((builder().getByLabelText('Starting entity type') as HTMLSelectElement).value).toBe('');
   });
 
   it('offers Change only on the person’s own built patterns, not on a saved built-in run or another person’s shared one', async () => {

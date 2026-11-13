@@ -126,7 +126,12 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const newButton = useRef<HTMLButtonElement>(null);
   const startRef = useRef<HTMLSelectElement>(null);
   const opened = useRef(false);
-  const back = (): void => setView('list');
+  // Cancel in the editor throws the draft away (the editor has asked first when there was one)
+  const cancel = (): void => {
+    setBuilder(INITIAL);
+    setEditing(undefined);
+    setView('list');
+  };
   const editingView = useMemo(() => (editing === undefined ? undefined : editingViewOf(editing.item, editing.whole)), [editing]);
   const change = (item: ListedPattern): void => {
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
@@ -219,8 +224,8 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               maxHops={maxHops}
               state={builder}
               dispatch={dispatch}
-              onCancel={back}
-              onPreview={() => undefined}
+              onCancel={cancel}
+              onPreview={() => document.getElementById('pattern-run-start')?.focus()}
               startRef={startRef}
               editing={editingView}
               footer={(footer) => (
