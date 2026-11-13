@@ -60,7 +60,7 @@ export function LinkTab({ profile, step, index, previous, nameOf, dispatch, prob
           </p>
         )}
       </div>
-      <div className="patterns-field" role="group" aria-label="Relationship types">
+      <div className="patterns-field" role="group" aria-label="Relationship types" aria-describedby={wrongTypes.size === 0 ? undefined : [...wrongTypes.values()].map((_, place) => `${id}-types-problem-${place}`).join(' ')}>
         <span className="supernode-label">{relationshipTypesTitle(step.relationshipTypes.length)}</span>
         <div className="pattern-chips">
           {step.relationshipTypes.map((type) => (
@@ -86,8 +86,8 @@ export function LinkTab({ profile, step, index, previous, nameOf, dispatch, prob
             />
           )}
         </div>
-        {[...wrongTypes.values()].map((text) => (
-          <p key={text} className="patterns-error">
+        {[...wrongTypes.values()].map((text, place) => (
+          <p key={text} className="patterns-error" id={`${id}-types-problem-${place}`}>
             {text}
           </p>
         ))}
@@ -99,7 +99,7 @@ export function LinkTab({ profile, step, index, previous, nameOf, dispatch, prob
         <label className="supernode-label" htmlFor={`${id}-arrives`}>
           {LINK_COPY.arrivesAt}
         </label>
-        <select id={`${id}-arrives`} className="patterns-input" data-broken={arrivalWrong ? 'true' : undefined} aria-invalid={arrivalWrong ? true : undefined} disabled={step.direction === undefined || (reached.length === 0 && step.arrivesAt === undefined)} value={step.arrivesAt ?? ''} onChange={(event) => dispatch({ type: 'arrives', index, arrivesAt: event.target.value === '' ? undefined : event.target.value })}>
+        <select id={`${id}-arrives`} className="patterns-input" data-broken={arrivalWrong ? 'true' : undefined} aria-invalid={arrivalWrong ? true : undefined} aria-describedby={arrivalWrong ? `${id}-arrival-problem` : undefined} disabled={step.direction === undefined || (reached.length === 0 && step.arrivesAt === undefined)} value={step.arrivesAt ?? ''} onChange={(event) => dispatch({ type: 'arrives', index, arrivesAt: event.target.value === '' ? undefined : event.target.value })}>
           <option value="">{LINK_COPY.chooseType}</option>
           {(step.arrivesAt === undefined || reached.includes(step.arrivesAt) ? reached : [...reached, step.arrivesAt]).map((type) => (
             <option key={type} value={type}>
@@ -107,7 +107,7 @@ export function LinkTab({ profile, step, index, previous, nameOf, dispatch, prob
             </option>
           ))}
         </select>
-        {arrivalWrong && step.arrivesAt !== undefined ? <p className="patterns-error">{arrivalChanged(was === undefined || was === step.arrivesAt ? undefined : nameOf(was), nameOf(step.arrivesAt))}</p> : null}
+        {arrivalWrong && step.arrivesAt !== undefined ? <p className="patterns-error" id={`${id}-arrival-problem`}>{arrivalChanged(was === undefined || was === step.arrivesAt ? undefined : nameOf(was), nameOf(step.arrivesAt))}</p> : null}
         {step.direction !== undefined && previous !== undefined && reached.length === 0 ? <p className="pattern-help">{noArrival(nameOf(previous))}</p> : null}
       </div>
       {problems.map((found, place) => (

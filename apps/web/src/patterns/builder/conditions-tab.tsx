@@ -85,6 +85,12 @@ export function ConditionsTab({ profile, step, steps, index, previous, mask, nod
     setEditing({ id, original: undefined });
   };
 
+  const prefix = `pattern-step-${index}-conditions`;
+  /** The ids of the sentences about a row, so that the row is read with them. */
+  const describedBy = (row: ConditionRow, at: number, available: boolean): string | undefined => {
+    const ids = [...(available ? [] : [`${prefix}-row-${row.id}-unavailable`]), ...(rowProblems.get(at) ?? []).map((_, place) => `${prefix}-row-${row.id}-problem-${place}`)];
+    return ids.length === 0 ? undefined : ids.join(' ');
+  };
   const rowView = (row: ConditionRow, at: number): React.ReactNode => {
     const label = `Step ${number} condition ${at + 1}`;
     const available = isOffered(row, offered);
@@ -187,24 +193,24 @@ export function ConditionsTab({ profile, step, steps, index, previous, mask, nod
       );
     }
     return (
-      <div key={row.id} className="condition-row" role="group" aria-label={label} data-unavailable={available ? undefined : 'true'}>
+      <div key={row.id} className="condition-row" role="group" aria-label={label} aria-describedby={describedBy(row, at, available)} data-unavailable={available ? undefined : 'true'}>
         <div className="condition-row-text">
           <span className="condition-row-on">{row.on === 'neighbor' ? nodeName : CONDITIONS_TAB.relationship}</span>
           <span>{conditionSummary(row)}</span>
         </div>
-        <button type="button" className="condition-icon" aria-label={editLabel(at + 1, number)} onClick={() => ((focusAfter.current = 'form'), setEditing({ id: row.id, original: row }))}>
+        <button type="button" className="condition-icon" aria-label={editLabel(conditionSummary(row))} onClick={() => ((focusAfter.current = 'form'), setEditing({ id: row.id, original: row }))}>
           <span aria-hidden="true">✎</span>
         </button>
-        <button type="button" className="condition-icon" aria-label={removeLabel(at + 1, number)} onClick={() => dispatch({ type: 'remove-condition', index, id: row.id })}>
+        <button type="button" className="condition-icon" aria-label={removeLabel(conditionSummary(row))} onClick={() => dispatch({ type: 'remove-condition', index, id: row.id })}>
           <span aria-hidden="true">×</span>
         </button>
         {available ? null : (
-          <p className="patterns-error condition-row-note" role="alert">
+          <p className="patterns-error condition-row-note" role="alert" id={`${prefix}-row-${row.id}-unavailable`}>
             {FILTER_ROW_UNAVAILABLE}
           </p>
         )}
         {(rowProblems.get(at) ?? []).map((found, place) => (
-          <p className="patterns-error condition-row-note" key={`${found.code}-${place}`}>
+          <p className="patterns-error condition-row-note" key={`${found.code}-${place}`} id={`${prefix}-row-${row.id}-problem-${place}`}>
             {problemText(found)}
           </p>
         ))}

@@ -5,7 +5,7 @@ import { Dialog } from '../../views/dialog.js';
 import { failureView, problemText } from '../copy.js';
 import { BreakBanner } from './break-banner.js';
 import { ChainSummary } from './chain-summary.js';
-import { BUILDER_COPY, CHECK_COPY, EDITOR_COPY, blockText, checkedAtText, placeOf, type ProblemPlace } from './copy.js';
+import { BUILDER_COPY, CHECK_COPY, EDITOR_COPY, blockText, checkedAtText, placeOf, previewWhy, type ProblemPlace } from './copy.js';
 import { ProblemsPanel } from './problems-panel.js';
 import { TRY_AGAIN, rateLimitedSentence, retryAfterMsOf, tryAgainIn } from '../failure-words.js';
 import { addStepBlock, breaksOf, hasConditions, previousTypeOf, stepLimitOf, toDefinition, type Action, type BuilderState } from './model.js';
@@ -146,7 +146,19 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
             : panel.current?.querySelector<HTMLElement>('[role="radio"], select');
     target?.focus();
   }, [selected, part]);
-  const tabs = [{ id: 'start', label: EDITOR_COPY.start }, ...draft.steps.map((_, index) => (breaks.some((found) => found.step === index) ? { id: `step-${index}`, label: `Step ${index + 1} !`, marked: true } : { id: `step-${index}`, label: `Step ${index + 1}` }))];
+  const serverAt = (index: number): number => problems.filter((problem) => {
+    const place = placeOf(problem);
+    return (place.kind === 'step' || place.kind === 'condition' || place.kind === 'window') && place.index === index;
+  }).length;
+  const wrongAt = (index: number): boolean => breaks.some((found) => found.step === index) || serverAt(index) > 0;
+  const tabs = [
+    { id: 'start', label: EDITOR_COPY.start },
+    ...draft.steps.map((candidate, index) => {
+      const bad = wrongAt(index);
+      const description = `Step ${index + 1} of ${draft.steps.length}, ${candidate.relationshipTypes.join(' or ')} to ${nameOf(candidate.arrivesAt)}, ${bad ? 'has a problem' : checked ? 'valid' : 'not checked yet'}`;
+      return { id: `step-${index}`, label: bad ? `Step ${index + 1} !` : `Step ${index + 1}`, ...(bad ? { marked: true } : {}), description };
+    }),
+  ];
   const selectedId = current === 'start' ? 'start' : `step-${current}`;
   const step = current === 'start' ? undefined : draft.steps[current];
 
@@ -176,7 +188,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
             </div>
           </div>
         ) : null}
-        <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(breaks.map((found) => found.step))} sourceProblems={breaks.length === 0 ? problems.length : 0} stepLimit={limit} />
+        <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(draft.steps.flatMap((_, index) => (wrongAt(index) ? [index] : [])))} sourceProblems={breaks.length === 0 ? problems.length : 0} stepLimit={limit} />
         <BreakBanner breaks={breaks} undo={state.undo} nameOf={nameOf} onUndo={() => dispatch({ type: 'undo' })} />
         {breaks.length === 0 ? <ProblemsPanel problems={problems} onShow={show} /> : null}
         <>
@@ -186,6 +198,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
               tabs={tabs}
               selected={selectedId}
               onSelect={selectStep}
+              activation="manual"
               trailing={
                 <button type="button" className="pattern-add-step" disabled={ready === undefined || block !== undefined} aria-describedby={block === undefined ? undefined : reasonId} onClick={addStep}>
                   {EDITOR_COPY.addStep}
@@ -232,6 +245,10 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                   part={part}
                   onPart={setPart}
                   breaks={breaks.filter((found) => found.step === current)}
+                  serverProblems={problems.filter((problem) => {
+                    const place = placeOf(problem);
+                    return (place.kind === 'step' || place.kind === 'condition' || place.kind === 'window') && place.index === current;
+                  })}
                   was={state.undo?.draft.steps[current]?.arrivesAt}
                   onRemove={() => (hasConditions(step) ? setAsking({ remove: current }) : dispatch({ type: 'remove', index: current }))}
                   problems={problems.filter((problem) => {
@@ -255,9 +272,14 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
         <button type="button" className="secondary" onClick={cancel}>
           {EDITOR_COPY.cancel}
         </button>
-        <button type="button" className="primary" disabled={!checked || definition === undefined} onClick={() => definition !== undefined && onPreview(definition)}>
+        <button type="button" className="primary" disabled={!checked || definition === undefined} aria-describedby={checked && definition !== undefined ? undefined : 'pattern-preview-why'} onClick={() => definition !== undefined && onPreview(definition)}>
           {EDITOR_COPY.preview}
         </button>
+        {checked && definition !== undefined ? null : (
+          <span hidden id="pattern-preview-why">
+            {previewWhy(breaks.length, problems.length, definition !== undefined, check.state.kind)}
+          </span>
+        )}
       </div>
       {asking === undefined ? null : (
         <Dialog title={asking === 'discard' ? EDITOR_COPY.discardTitle : EDITOR_COPY.removeTitle(asking.remove + 1)} onClose={() => setAsking(undefined)}>

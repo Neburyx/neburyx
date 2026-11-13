@@ -117,8 +117,8 @@ export const onRelationship = (types: readonly string[]): string => `On ${types.
 export const groupFull = (label: string): string => `${label} has ${PATTERN_LIMITS.conditionsPerElement} of ${PATTERN_LIMITS.conditionsPerElement}. Remove one to add another.`;
 export const hiddenInMenu = (count: number): string => `${count} personal-data ${count === 1 ? 'property' : 'properties'} hidden (masking on)`;
 export const hiddenOnTab = (count: number): string => `${count} ${count === 1 ? 'property is' : 'properties are'} not offered in conditions, and their values are not shown in matches. Turn masking off in the toolbar if your role allows it.`;
-export const editLabel = (row: number, step: number): string => `Edit condition ${row} of step ${step}`;
-export const removeLabel = (row: number, step: number): string => `Remove condition ${row} of step ${step}`;
+export const editLabel = (summary: string): string => `Edit condition: ${summary}`;
+export const removeLabel = (summary: string): string => `Remove condition: ${summary}`;
 
 /** What each kind is called in the menu, and what a value of it looks like. */
 export const KIND_NAME: Readonly<Record<string, string>> = { text: 'text', number: 'number', boolean: 'true / false', date: 'date', dateTime: 'date-time', localDateTime: 'date-time (no zone)', time: 'time', localTime: 'time (no zone)' };
@@ -298,3 +298,11 @@ export const CHECK_COPY = {
 export const sourceProblems = (count: number): string => `${problemCount(count)} from the source. Preview is off.`;
 export const PART_NAME = { link: 'Link', conditions: 'Conditions', window: 'Window' } as const;
 export const checkedAtText = (at: Date): string => `Checked by the source at ${String(at.getUTCHours()).padStart(2, '0')}:${String(at.getUTCMinutes()).padStart(2, '0')} UTC.`;
+
+/** Why Preview is off, as it is read after its name (PB20). */
+export function previewWhy(broken: number, fromSource: number, complete: boolean, check: string): string {
+  if (broken > 0) return `unavailable, ${problemCount(broken)}`;
+  if (fromSource > 0) return `unavailable, ${problemCount(fromSource)} from the source`;
+  if (!complete) return 'unavailable until the pattern is complete';
+  return check === 'checking' ? 'unavailable while the source checks the pattern' : 'unavailable until the source has checked the pattern';
+}

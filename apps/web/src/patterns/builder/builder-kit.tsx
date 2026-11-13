@@ -146,7 +146,7 @@ export const addCondition = async (n: number, property?: string): Promise<void> 
 /** Opens the form of condition m of step n, when it is not open. */
 export const editRow = async (n: number, m: number): Promise<void> => {
   await openStep(n, 'Conditions');
-  if (within(stepCard(n)).queryByLabelText(`Step ${n} condition ${m}: Property`) === null) await userEvent.click(within(stepCard(n)).getByRole('button', { name: `Edit condition ${m} of step ${n}` }));
+  if (within(stepCard(n)).queryByLabelText(`Step ${n} condition ${m}: Property`) === null) await userEvent.click(within(conditionRow(n, m)).getByRole('button', { name: /^Edit condition: / }));
 };
 export const conditionRow = (n: number, m: number): HTMLElement => within(stepCard(n)).getByRole('group', { name: `Step ${n} condition ${m}` });
 export const rowField = (n: number, m: number, label: string): HTMLElement => within(conditionRow(n, m)).getByLabelText(`Step ${n} condition ${m}: ${label}`);

@@ -5,6 +5,8 @@ export interface TabSpec {
   readonly label: ReactNode;
   /** A tab that a part of its panel is wrong in, marked by a word as well as by colour. */
   readonly marked?: boolean;
+  /** What a screen reader adds to the tab's name (PB20): where the step is and whether it is valid, or how many conditions or problems a part has. */
+  readonly description?: string;
 }
 
 interface Props {
@@ -16,13 +18,15 @@ interface Props {
   /** What follows the tabs in the same row and is not one of them (the + Step button). */
   readonly trailing?: ReactNode;
   readonly className?: string;
+  /** `manual`: the arrow keys move the focus and Enter or Space selects (the step tabs of PB20); `automatic`: moving selects. */
+  readonly activation?: 'manual' | 'automatic';
 }
 
 export const tabId = (prefix: string, id: string): string => `${prefix}-tab-${id}`;
 export const panelId = (prefix: string, id: string): string => `${prefix}-panel-${id}`;
 
 /** A row of tabs: one tab is in the tab order, the arrow keys, Home and End move between them and select, and each tab names the panel it controls. */
-export function TabList({ label, idPrefix, tabs, selected, onSelect, trailing, className }: Props) {
+export function TabList({ label, idPrefix, tabs, selected, onSelect, trailing, className, activation = 'automatic' }: Props) {
   const list = useRef<HTMLDivElement>(null);
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const at = tabs.findIndex((tab) => tab.id === selected);
@@ -31,8 +35,10 @@ export function TabList({ label, idPrefix, tabs, selected, onSelect, trailing, c
     event.preventDefault();
     const next = tabs[(move + tabs.length) % tabs.length];
     if (next === undefined) return;
-    onSelect(next.id);
-    requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`#${CSS.escape(tabId(idPrefix, next.id))}`)?.focus());
+    if (activation === 'automatic') onSelect(next.id);
+    const target = list.current?.querySelector<HTMLElement>(`#${CSS.escape(tabId(idPrefix, next.id))}`);
+    if (activation === 'manual') target?.focus();
+    else requestAnimationFrame(() => target?.focus());
   };
   return (
     <div className={className === undefined ? 'editor-tabs' : `editor-tabs ${className}`}>
@@ -45,6 +51,7 @@ export function TabList({ label, idPrefix, tabs, selected, onSelect, trailing, c
             id={tabId(idPrefix, tab.id)}
             aria-selected={tab.id === selected}
             aria-controls={panelId(idPrefix, tab.id)}
+            aria-describedby={tab.description === undefined ? undefined : `${tabId(idPrefix, tab.id)}-description`}
             tabIndex={tab.id === selected ? 0 : -1}
             className="editor-tab"
             data-marked={tab.marked === true ? 'true' : undefined}
@@ -54,6 +61,13 @@ export function TabList({ label, idPrefix, tabs, selected, onSelect, trailing, c
           </button>
         ))}
       </div>
+      {tabs.map((tab) =>
+        tab.description === undefined ? null : (
+          <span key={tab.id} hidden id={`${tabId(idPrefix, tab.id)}-description`}>
+            {tab.description}
+          </span>
+        ),
+      )}
       {trailing}
     </div>
   );

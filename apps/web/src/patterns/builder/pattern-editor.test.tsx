@@ -72,20 +72,25 @@ describe('the chain and the tabs of a new pattern', () => {
     expect(screen.queryByRole('tabpanel', { name: 'Step 2' })).toBeNull();
   });
 
-  it('moves between the tabs with the arrow keys, Home and End, selecting as it goes, with one tab in the tab order', async () => {
+  it('moves the focus between the step tabs with the arrow keys, Home and End, and selects only on Enter or Space, with one tab in the tab order', async () => {
     await started();
     await buildStep(1, 'out', 'n-b', ['r-1']);
     await userEvent.click(screen.getByRole('tab', { name: 'Start' }));
     screen.getByRole('tab', { name: 'Start' }).focus();
     await userEvent.keyboard('{ArrowRight}');
+    expect(document.activeElement).toBe(stepTab(1));
+    expect(stepTab(1).getAttribute('aria-selected')).toBe('false');
+    expect(screen.getByRole('tab', { name: 'Start' }).tabIndex).toBe(0);
+    expect(stepTab(1).tabIndex).toBe(-1);
+    await userEvent.keyboard('{Enter}');
     expect(stepTab(1).getAttribute('aria-selected')).toBe('true');
-    expect(stepTab(1).tabIndex).toBe(0);
-    expect(screen.getByRole('tab', { name: 'Start' }).tabIndex).toBe(-1);
     await userEvent.keyboard('{ArrowLeft}');
-    expect(screen.getByRole('tab', { name: 'Start' }).getAttribute('aria-selected')).toBe('true');
-    await userEvent.keyboard('{End}');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Start' }));
     expect(stepTab(1).getAttribute('aria-selected')).toBe('true');
+    await userEvent.keyboard('{End}');
+    expect(document.activeElement).toBe(stepTab(1));
     await userEvent.keyboard('{Home}');
+    await userEvent.keyboard(' ');
     expect(screen.getByRole('tab', { name: 'Start' }).getAttribute('aria-selected')).toBe('true');
   });
 });

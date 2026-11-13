@@ -67,11 +67,11 @@ describe('the Conditions tab', () => {
     const row = within(conditionRow(1, 1));
     expect(row.getByText('b-count is 12')).toBeTruthy();
     expect(row.getByText('C-B')).toBeTruthy();
-    expect(row.getByRole('button', { name: 'Edit condition 1 of step 1' })).toBeTruthy();
-    await userEvent.click(row.getByRole('button', { name: 'Edit condition 1 of step 1' }));
+    expect(row.getByRole('button', { name: 'Edit condition: b-count is 12' })).toBeTruthy();
+    await userEvent.click(row.getByRole('button', { name: 'Edit condition: b-count is 12' }));
     expect((rowField(1, 1, 'Value') as HTMLInputElement).value).toBe('12');
     await userEvent.click(within(conditionRow(1, 1)).getByRole('button', { name: 'Done' }));
-    await userEvent.click(within(conditionRow(1, 1)).getByRole('button', { name: 'Remove condition 1 of step 1' }));
+    await userEvent.click(within(conditionRow(1, 1)).getByRole('button', { name: 'Remove condition: b-count is 12' }));
     expect(within(stepCard(1)).queryByRole('group', { name: 'Step 1 condition 1' })).toBeNull();
   });
 

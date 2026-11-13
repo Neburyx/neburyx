@@ -54,10 +54,10 @@ export function WindowTab({ profile, step, index, previous, dispatch, problems, 
       {draft.kind === 'days' && dated ? (
         <label className="condition-field">
           <span className="supernode-label">{WINDOW_COPY.daysField}</span>
-          <input className="patterns-input" aria-label={`Step ${number} window: ${WINDOW_COPY.daysField}`} aria-invalid={wrong?.at === 'days' ? true : undefined} inputMode="numeric" value={draft.text} onChange={(event) => dispatch({ type: 'window', index, window: { kind: 'days', text: event.target.value } })} />
+          <input className="patterns-input" aria-label={`Step ${number} window: ${WINDOW_COPY.daysField}`} aria-invalid={wrong?.at === 'days' ? true : undefined} aria-describedby={wrong?.at === 'days' ? `${id}-days-problem` : undefined} inputMode="numeric" value={draft.text} onChange={(event) => dispatch({ type: 'window', index, window: { kind: 'days', text: event.target.value } })} />
           <span className="pattern-help">{WINDOW_COPY.daysHelp}</span>
           {wrong?.at === 'days' ? (
-            <span className="patterns-error" role="alert">
+            <span className="patterns-error" role="alert" id={`${id}-days-problem`}>
               {wrong.reason}
             </span>
           ) : null}
@@ -68,18 +68,18 @@ export function WindowTab({ profile, step, index, previous, dispatch, problems, 
           <div className="condition-form-pair">
             <label className="condition-field">
               <span className="supernode-label">{WINDOW_COPY.from}</span>
-              <input className="patterns-input" aria-label={`Step ${number} window: ${WINDOW_COPY.from}`} aria-invalid={wrong?.at === 'from' ? true : undefined} placeholder="2026-03-01" value={draft.from} onChange={(event) => dispatch({ type: 'window', index, window: { ...draft, from: event.target.value } })} />
+              <input className="patterns-input" aria-label={`Step ${number} window: ${WINDOW_COPY.from}`} aria-invalid={wrong?.at === 'from' ? true : undefined} aria-describedby={wrong?.at === 'from' ? `${id}-from-problem` : undefined} placeholder="2026-03-01" value={draft.from} onChange={(event) => dispatch({ type: 'window', index, window: { ...draft, from: event.target.value } })} />
               {wrong?.at === 'from' ? (
-                <span className="patterns-error" role="alert">
+                <span className="patterns-error" role="alert" id={`${id}-from-problem`}>
                   {wrong.reason}
                 </span>
               ) : null}
             </label>
             <label className="condition-field">
               <span className="supernode-label">{WINDOW_COPY.to}</span>
-              <input className="patterns-input" aria-label={`Step ${number} window: ${WINDOW_COPY.to}`} aria-invalid={wrong?.at === 'to' ? true : undefined} placeholder="2026-03-31" value={draft.to} onChange={(event) => dispatch({ type: 'window', index, window: { ...draft, to: event.target.value } })} />
+              <input className="patterns-input" aria-label={`Step ${number} window: ${WINDOW_COPY.to}`} aria-invalid={wrong?.at === 'to' ? true : undefined} aria-describedby={wrong?.at === 'to' ? `${id}-to-problem` : undefined} placeholder="2026-03-31" value={draft.to} onChange={(event) => dispatch({ type: 'window', index, window: { ...draft, to: event.target.value } })} />
               {wrong?.at === 'to' ? (
-                <span className="patterns-error" role="alert">
+                <span className="patterns-error" role="alert" id={`${id}-to-problem`}>
                   {wrong.reason}
                 </span>
               ) : null}
