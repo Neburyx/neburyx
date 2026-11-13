@@ -56,3 +56,43 @@ export async function afterDebounce(): Promise<void> {
 }
 
 export { cleanup, fireEvent, screen, within, userEvent };
+
+const mapped = (type: string, from: string, to: string, observedAt: string | null, filterable: readonly string[]) => ({ ...row(type, from, to), observedAt, filterable: [...filterable] });
+
+/**
+ * A neutral mapping for conditions. c-a to c-b by k-1 (dated, `q-size`), k-2 (undated, `q-size` and `q-tag`) and k-5 (dated, nothing) and k-6 (undated, nothing); c-b to c-c by k-3 (undated, no property); c-c and c-d by one type, k-two, whose
+ * row c-c to c-d is dated and declares `fwd` and whose row c-d to c-c is undated and declares `back`. c-b has a personal-data property, c-c has no filterable property.
+ */
+export function conditionsProfile(): SourceProfile {
+  const base = testProfile('a', ['c-a', 'c-b', 'c-c', 'c-d']);
+  const declared: Readonly<Record<string, { readonly filterable: readonly string[]; readonly pii: readonly string[] }>> = {
+    'c-a': { filterable: ['a-name'], pii: [] },
+    'c-b': { filterable: ['b-name', 'b-count', 'b-secret'], pii: ['b-secret'] },
+    'c-c': { filterable: [], pii: [] },
+    'c-d': { filterable: ['d-x'], pii: [] },
+  };
+  return {
+    ...base,
+    entityTypes: base.entityTypes.map((entity) => ({ ...entity, filterable: [...(declared[entity.type]?.filterable ?? [])], pii: [...(declared[entity.type]?.pii ?? [])] })),
+    relationshipTypes: [
+      mapped('k-1', 'c-a', 'c-b', 'q-when', ['q-size']),
+      mapped('k-2', 'c-a', 'c-b', null, ['q-size', 'q-tag']),
+      mapped('k-5', 'c-a', 'c-b', 'q-when', []),
+      mapped('k-6', 'c-a', 'c-b', null, []),
+      mapped('k-3', 'c-b', 'c-c', null, []),
+      mapped('k-two', 'c-c', 'c-d', 'q-when', ['fwd']),
+      mapped('k-two', 'c-d', 'c-c', null, ['back']),
+    ],
+  };
+}
+
+export async function conditionsWorkspace(options: KitOptions = {}): Promise<PatternsKit> {
+  const kit = await patternsWorkspace({ profile: async () => ({ ok: true, value: conditionsProfile() }), ...options });
+  await openPatterns();
+  return kit;
+}
+
+export const addCondition = async (n: number): Promise<void> => userEvent.click(within(stepCard(n)).getByRole('button', { name: 'Add condition' }));
+export const conditionRow = (n: number, m: number): HTMLElement => within(stepCard(n)).getByRole('group', { name: `Step ${n} condition ${m}` });
+export const rowField = (n: number, m: number, label: string): HTMLElement => within(conditionRow(n, m)).getByLabelText(`Step ${n} condition ${m}: ${label}`);
+export const optionTexts = (select: HTMLElement): string[] => [...(select as HTMLSelectElement).options].map((option) => option.textContent ?? '');

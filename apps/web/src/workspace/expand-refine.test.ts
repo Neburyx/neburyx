@@ -35,6 +35,11 @@ describe('a value', () => {
     expect(readValue('', 'auto')).toMatchObject({ ok: false, reason: 'Enter a value.' });
     expect(readValue('', 'text')).toEqual({ ok: true, value: { kind: 'text', value: '' } });
   });
+
+  it('refuses a text longer than the contract allows, and accepts one of exactly that length', () => {
+    expect(readValue('x'.repeat(256), 'text')).toMatchObject({ ok: true });
+    expect(readValue('x'.repeat(257), 'text')).toEqual({ ok: false, reason: 'Enter at most 256 characters.' });
+  });
 });
 
 describe('a filter row', () => {

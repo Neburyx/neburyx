@@ -40,9 +40,9 @@ describe('what a step may choose', () => {
 
 describe('keeping the chain valid', () => {
   it('builds a definition only from a complete pattern', () => {
-    expect(toDefinition(EMPTY_DRAFT)).toBeUndefined();
-    expect(toDefinition(run(INITIAL, { type: 'start', anchorType: 'n-a' }, { type: 'add' }).draft)).toBeUndefined();
-    expect(toDefinition(twoSteps().draft)).toEqual({ anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }, { relationshipTypes: ['r-3'], direction: 'out', arrivesAt: 'n-c' }] });
+    expect(toDefinition(EMPTY_DRAFT, profile, false)).toBeUndefined();
+    expect(toDefinition(run(INITIAL, { type: 'start', anchorType: 'n-a' }, { type: 'add' }).draft, profile, false)).toBeUndefined();
+    expect(toDefinition(twoSteps().draft, profile, false)).toEqual({ anchorType: 'n-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'n-b' }, { relationshipTypes: ['r-3'], direction: 'out', arrivesAt: 'n-c' }] });
   });
 
   it('keeps the arrival type and the types that still join when the direction changes, and clears the rest', () => {

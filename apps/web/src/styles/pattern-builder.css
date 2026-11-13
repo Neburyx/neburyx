@@ -66,3 +66,26 @@
   gap: var(--space-8);
   font-size: var(--font-size-small);
 }
+
+.patterns-conditions,
+.patterns-window {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: 0;
+  border: 0;
+}
+
+.patterns-conditions .supernode-filter-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.patterns-conditions .supernode-filter-row > select,
+.patterns-conditions .supernode-filter-row > input {
+  width: 100%;
+  min-width: 0;
+}
+
+.patterns-conditions .supernode-filter-row > button {
+  justify-self: start;
+}

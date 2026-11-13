@@ -2,8 +2,11 @@ import { useEffect, useRef } from 'react';
 import { PATTERN_LIMITS, type PatternProblem, type SourceProfile } from '@neburyx/contracts';
 import { failureView } from '../copy.js';
 import type { ApiClient } from '../../api/client.js';
-import { ARROW, BUILDER_COPY, DIRECTION_TEXT, blockText, checkFailureText, noArrival, placeOf, problemText, stepTitle, stepsLine, tooManyTypes } from './copy.js';
+import { ARROW, BUILDER_COPY, CONDITIONS_COPY, DIRECTION_TEXT, blockText, checkFailureText, noArrival, placeOf, problemText, stepTitle, stepsLine, tooManyTypes } from './copy.js';
 import { DIRECTIONS, addStepBlock, arrivalTypes, isComplete, lastTypeOf, previousTypeOf, relationshipChoices, stepLimitOf, toDefinition, type Action, type BuilderState, type Direction, type StepDraft } from './model.js';
+import { rowsOf } from './conditions.js';
+import { ConditionsField } from './conditions-field.js';
+import { WindowField } from './window-field.js';
 import { usePatternCheck, type CheckState } from './use-check.js';
 
 export type ProfileView = { readonly kind: 'loading' } | { readonly kind: 'failed' } | { readonly kind: 'ready'; readonly profile: SourceProfile };
@@ -28,7 +31,7 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
   const ready = profile.kind === 'ready' ? profile.profile : undefined;
   const nameOf = (type: string | undefined): string => (type === undefined ? '' : (ready?.entityTypes.find((candidate) => candidate.type === type)?.displayName ?? type));
   const limit = stepLimitOf(maxHops);
-  const check = usePatternCheck(client, sourceId, mask, toDefinition(draft));
+  const check = usePatternCheck(client, sourceId, mask, ready === undefined ? undefined : toDefinition(draft, ready, mask));
   const block = ready === undefined ? undefined : addStepBlock(ready, draft, limit);
   const reasonId = 'pattern-builder-add-reason';
   const problems = check.state.kind === 'invalid' ? check.state.problems : [];
@@ -92,12 +95,24 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
               last={index === draft.steps.length - 1}
               nameOf={nameOf}
               dispatch={dispatch}
+              steps={draft.steps}
+              mask={mask}
               problems={problems.filter((problem) => {
                 const place = placeOf(problem);
-                return place.kind === 'step' && place.index === index;
+                return (place.kind === 'step' && place.index === index) || (place.kind === 'condition' && place.index === index && place.row >= rowsOf(step).length);
+              })}
+              rowProblems={rowProblemsOf(problems, index)}
+              windowProblems={problems.filter((problem) => {
+                const place = placeOf(problem);
+                return place.kind === 'window' && place.index === index;
               })}
             />
           ))}
+          {state.windowDropped === true ? (
+            <p className="search-panel-note" role="status">
+              {CONDITIONS_COPY.windowDropped}
+            </p>
+          ) : null}
           {state.removed > 0 ? (
             <p className="search-panel-note" role="status">
               {BUILDER_COPY.removed}
@@ -119,6 +134,16 @@ export function PatternBuilder({ profile, retryProfile, client, sourceId, source
       )}
     </section>
   );
+}
+
+function rowProblemsOf(problems: readonly PatternProblem[], index: number): ReadonlyMap<number, readonly PatternProblem[]> {
+  const found = new Map<number, PatternProblem[]>();
+  for (const problem of problems) {
+    const place = placeOf(problem);
+    if (place.kind !== 'condition' || place.index !== index) continue;
+    found.set(place.row, [...(found.get(place.row) ?? []), problem]);
+  }
+  return found;
 }
 
 function Problems({ list }: { readonly list: readonly PatternProblem[] }) {
@@ -166,11 +191,15 @@ interface StepProps {
   readonly last: boolean;
   readonly nameOf: (type: string | undefined) => string;
   readonly dispatch: (action: Action) => void;
+  readonly steps: readonly StepDraft[];
+  readonly mask: boolean;
   readonly problems: readonly PatternProblem[];
+  readonly rowProblems: ReadonlyMap<number, readonly PatternProblem[]>;
+  readonly windowProblems: readonly PatternProblem[];
   readonly ref?: React.Ref<HTMLFieldSetElement> | undefined;
 }
 
-function StepCard({ profile, step, index, previous, last, nameOf, dispatch, problems, ref }: StepProps) {
+function StepCard({ profile, step, steps, index, previous, last, mask, nameOf, dispatch, problems, rowProblems, windowProblems, ref }: StepProps) {
   const reached = previous === undefined || step.direction === undefined ? [] : arrivalTypes(profile, previous, step.direction);
   const choices = previous === undefined || step.direction === undefined || step.arrivesAt === undefined ? [] : relationshipChoices(profile, previous, step.arrivesAt, step.direction);
   const id = `pattern-step-${index}`;
@@ -220,6 +249,8 @@ function StepCard({ profile, step, index, previous, last, nameOf, dispatch, prob
           ) : null}
         </div>
       )}
+      <ConditionsField profile={profile} step={step} steps={steps} index={index} previous={previous} mask={mask} nodeName={nameOf(step.arrivesAt)} dispatch={dispatch} rowProblems={rowProblems} />
+      <WindowField profile={profile} step={step} index={index} previous={previous} dispatch={dispatch} problems={windowProblems} />
       <Problems list={problems} />
       {last ? (
         <button type="button" className="secondary" onClick={() => dispatch({ type: 'remove' })}>

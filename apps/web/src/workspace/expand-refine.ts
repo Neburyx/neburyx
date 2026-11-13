@@ -1,4 +1,4 @@
-import { FILTER_KINDS, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, type ExpandFilter, type ExpandRank, type FilterKind, type FilterValue, type SourceProfile } from '@neburyx/contracts';
+import { FILTER_KINDS, MAX_FILTER_TEXT, MAX_FILTERS, MAX_FILTER_VALUES, expandFilterSchema, type ExpandFilter, type ExpandRank, type FilterKind, type FilterValue, type SourceProfile } from '@neburyx/contracts';
 
 /** What a person has put into one filter row: the property is named with the side it is on, and the values are text until they are read. */
 export interface FilterDraft {
@@ -53,7 +53,7 @@ export function readValue(text: string, kind: 'auto' | FilterKind): ValueRead {
     return { ok: true, value: { kind: 'number', value: number } };
   }
   if (as === 'boolean') return trimmed === 'true' || trimmed === 'false' ? { ok: true, value: { kind: 'boolean', value: trimmed === 'true' } } : { ok: false, reason: 'Enter true or false.' };
-  if (as === 'text') return { ok: true, value: { kind: 'text', value: trimmed } };
+  if (as === 'text') return trimmed.length > MAX_FILTER_TEXT ? { ok: false, reason: `Enter at most ${MAX_FILTER_TEXT} characters.` } : { ok: true, value: { kind: 'text', value: trimmed } };
   return ISO(as, trimmed) ? { ok: true, value: { kind: as, value: trimmed } as FilterValue } : { ok: false, reason: `Enter ${as === 'date' ? 'a date like 2026-03-01' : as === 'time' || as === 'localTime' ? 'a time like 10:30:00' : 'a date and time like 2026-03-01T10:30:00'}${as === 'dateTime' || as === 'time' ? ' with a zone, such as Z or +01:00' : ''}.` };
 }
 

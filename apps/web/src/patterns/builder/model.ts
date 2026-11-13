@@ -1,4 +1,5 @@
 import { PATTERN_LIMITS, type PatternDefinition, type SourceProfile } from '@neburyx/contracts';
+import { NO_WINDOW, addConditionBlock, carryingRows, firstChoice, isOffered, nextRowId, offeredProperties, readRows, readWindow, rowsOf, windowOf, windowReach, type ConditionRow, type WindowDraft } from './conditions.js';
 
 export type Direction = 'out' | 'in' | 'both';
 
@@ -9,6 +10,9 @@ export interface StepDraft {
   readonly direction?: Direction;
   readonly arrivesAt?: string;
   readonly relationshipTypes: readonly string[];
+  /** The conditions on the step's node and relationship, in the order typed; they go with the step. */
+  readonly conditions?: readonly ConditionRow[];
+  readonly window?: WindowDraft;
 }
 
 export interface Draft {
@@ -20,7 +24,7 @@ export const EMPTY_DRAFT: Draft = { steps: [] };
 
 type Row = SourceProfile['relationshipTypes'][number];
 
-const joins = (row: Row, from: string, to: string, direction: Direction): boolean => {
+export const joins = (row: Row, from: string, to: string, direction: Direction): boolean => {
   const forward = row.from === from && row.to === to;
   const backward = row.to === from && row.from === to;
   return direction === 'out' ? forward : direction === 'in' ? backward : forward || backward;
@@ -88,11 +92,12 @@ export function repair(profile: SourceProfile, draft: Draft, changed: number): R
         continue;
       }
       const arrival = step.arrivesAt;
-      if (arrival === undefined) steps.push({ direction, relationshipTypes: [] });
-      else if (!arrivalTypes(profile, from, direction).includes(arrival)) steps.push({ direction, relationshipTypes: [] });
+      const carried = { ...(step.conditions === undefined ? {} : { conditions: step.conditions }), ...(step.window === undefined ? {} : { window: step.window }) };
+      if (arrival === undefined) steps.push({ direction, relationshipTypes: [], ...carried });
+      else if (!arrivalTypes(profile, from, direction).includes(arrival)) steps.push({ direction, relationshipTypes: [], ...carried });
       else {
         const allowed = relationshipChoices(profile, from, arrival, direction);
-        steps.push({ direction, arrivesAt: arrival, relationshipTypes: step.relationshipTypes.filter((type) => allowed.includes(type)) });
+        steps.push({ direction, arrivesAt: arrival, relationshipTypes: step.relationshipTypes.filter((type) => allowed.includes(type)), ...carried });
       }
       continue;
     }
@@ -108,12 +113,18 @@ export type Action =
   | { readonly type: 'direction'; readonly index: number; readonly direction: Direction | undefined }
   | { readonly type: 'arrives'; readonly index: number; readonly arrivesAt: string | undefined }
   | { readonly type: 'toggle'; readonly index: number; readonly relationshipType: string }
-  | { readonly type: 'remove' };
+  | { readonly type: 'remove' }
+  | { readonly type: 'add-condition'; readonly index: number; readonly mask: boolean }
+  | { readonly type: 'change-condition'; readonly index: number; readonly id: number; readonly change: Partial<ConditionRow> }
+  | { readonly type: 'remove-condition'; readonly index: number; readonly id: number }
+  | { readonly type: 'window'; readonly index: number; readonly window: WindowDraft };
 
 export interface BuilderState {
   readonly draft: Draft;
   /** The steps the last change removed; shown once, and cleared by the next change. */
   readonly removed: number;
+  /** Set when the last change took windows off steps that no longer have a dated relationship type; shown once, cleared by the next change. */
+  readonly windowDropped?: boolean;
 }
 
 export const INITIAL: BuilderState = { draft: EMPTY_DRAFT, removed: 0 };
@@ -124,7 +135,7 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
   switch (action.type) {
     case 'start': {
       const repaired = repair(profile, { ...draft, anchorType: action.anchorType }, 0);
-      return { draft: repaired.draft, removed: repaired.removed };
+      return settled(profile, repaired);
     }
     case 'add':
       return { draft: { ...draft, steps: [...draft.steps, { relationshipTypes: [] }] }, removed: 0 };
@@ -145,7 +156,32 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
       }
       const steps = draft.steps.map((candidate, index) => (index === action.index ? next : candidate));
       const repaired = repair(profile, { ...draft, steps }, action.index);
-      return { draft: repaired.draft, removed: repaired.removed };
+      return settled(profile, repaired);
+    }
+    case 'add-condition': {
+      const step = draft.steps[action.index];
+      if (step === undefined) return state;
+      const offered = offeredProperties(profile, previousTypeOf(draft, action.index), step, action.mask);
+      const choice = addConditionBlock(offered, step, draft.steps) === undefined ? firstChoice(offered, step) : undefined;
+      if (choice === undefined) return state;
+      const row: ConditionRow = { id: nextRowId(draft.steps), on: choice.on, property: choice.property, op: 'eq', text: '', from: '', to: '', kind: 'auto' };
+      return { draft: withStep(draft, action.index, { ...step, conditions: [...rowsOf(step), row] }), removed: 0 };
+    }
+    case 'change-condition': {
+      const step = draft.steps[action.index];
+      if (step === undefined) return state;
+      const rows = rowsOf(step).map((row) => (row.id === action.id ? { ...row, ...action.change, touched: true } : row));
+      return { draft: withStep(draft, action.index, { ...step, conditions: rows }), removed: 0 };
+    }
+    case 'remove-condition': {
+      const step = draft.steps[action.index];
+      if (step === undefined) return state;
+      return { draft: withStep(draft, action.index, { ...step, conditions: rowsOf(step).filter((row) => row.id !== action.id) }), removed: 0 };
+    }
+    case 'window': {
+      const step = draft.steps[action.index];
+      if (step === undefined) return state;
+      return { draft: withStep(draft, action.index, { ...step, window: action.window }), removed: 0 };
     }
     default: {
       const unreachable: never = action;
@@ -154,13 +190,41 @@ export function reduce(profile: SourceProfile, state: BuilderState, action: Acti
   }
 }
 
-/** The definition the server is asked about: only when the start type and every step are complete. */
-export function toDefinition(draft: Draft): PatternDefinition | undefined {
+const withStep = (draft: Draft, index: number, step: StepDraft): Draft => ({ ...draft, steps: draft.steps.map((candidate, at) => (at === index ? step : candidate)) });
+
+/** After a repair: a window on a step none of whose carrying rows is dated is taken off, and the person is told once. */
+function settled(profile: SourceProfile, repaired: Repaired): BuilderState {
+  let dropped = false;
+  const steps = repaired.draft.steps.map((step, index) => {
+    if (windowOf(step).kind === 'none' || windowReach(profile, previousTypeOf(repaired.draft, index), step).appliesTo.length > 0) return step;
+    if (carryingRows(profile, previousTypeOf(repaired.draft, index), step).length === 0 && !isComplete(step)) return step;
+    dropped = true;
+    return { ...step, window: NO_WINDOW };
+  });
+  return { draft: { ...repaired.draft, steps }, removed: repaired.removed, ...(dropped ? { windowDropped: true } : {}) };
+}
+
+/**
+ * The definition the server is asked about: only when the start type and every step are complete, every condition row is read and still offered for its step, and the window is read. A definition held back is never shown as valid or invalid.
+ */
+export function toDefinition(draft: Draft, profile: SourceProfile, mask: boolean): PatternDefinition | undefined {
   if (draft.anchorType === undefined || draft.steps.length === 0) return undefined;
   const steps: PatternDefinition['steps'] = [];
-  for (const step of draft.steps) {
+  for (const [index, step] of draft.steps.entries()) {
     if (step.direction === undefined || step.arrivesAt === undefined || step.relationshipTypes.length === 0) return undefined;
-    steps.push({ relationshipTypes: [...step.relationshipTypes], direction: step.direction, arrivesAt: step.arrivesAt });
+    const offered = offeredProperties(profile, previousTypeOf(draft, index), step, mask);
+    if (rowsOf(step).some((row) => !isOffered(row, offered))) return undefined;
+    const read = readRows(rowsOf(step));
+    if (read.problems.size > 0) return undefined;
+    const window = readWindow(windowOf(step));
+    if (!window.ok) return undefined;
+    steps.push({
+      relationshipTypes: [...step.relationshipTypes],
+      direction: step.direction,
+      arrivesAt: step.arrivesAt,
+      ...(read.filters.length === 0 ? {} : { conditions: [...read.filters] }),
+      ...(window.window === undefined ? {} : { window: window.window }),
+    });
   }
   return { anchorType: draft.anchorType, steps };
 }

@@ -65,6 +65,32 @@ describe('the two-step patterns the builder builds', () => {
   });
 });
 
+/** What the builder's conditions and window produce: the first definition is the one the browser spec of the builder builds on the banking pack (an equality on a node, a range on a relationship, a window, and a step back); the second is the same kind of step over the insurance pack. */
+describe('the conditions and the window the builder builds', () => {
+  it('validate against the real mapping of each pack', async () => {
+    const day = { kind: 'date', value: '2026-01-01' };
+    const bank = {
+      anchorType: 'account',
+      steps: [
+        {
+          relationshipTypes: ['USES_DEVICE'],
+          direction: 'out',
+          arrivesAt: 'device',
+          conditions: [
+            { op: 'eq', on: 'neighbor', property: 'platform', value: { kind: 'text', value: 'ios' } },
+            { op: 'between', on: 'relationship', property: 'lastSeen', from: day },
+          ],
+          window: { days: 30 },
+        },
+        { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account' },
+      ],
+    };
+    const claims = { anchorType: 'claim', steps: [{ relationshipTypes: ['FILED_BY'], direction: 'out', arrivesAt: 'claimant', conditions: [{ op: 'between', on: 'relationship', property: 'filedAt', from: day }], window: { from: '2026-01-01', to: '2026-03-31' } }] };
+    expect(await validate('banking-fraud', bank)).toEqual({ status: 'ok' });
+    expect(await validate('insurance-claims', claims)).toEqual({ status: 'ok' });
+  });
+});
+
 describe('a pattern over the insurance pack', () => {
   it('over LIVES_AT, out to an address and back in to a claimant, validates', async () => {
     expect(await validate('insurance-claims', outAndBack())).toEqual({ status: 'ok' });

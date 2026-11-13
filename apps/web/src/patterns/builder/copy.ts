@@ -1,5 +1,7 @@
 import type { PatternProblem, PatternProblemCode } from '@neburyx/contracts';
 import { PATTERN_LIMITS } from '@neburyx/contracts';
+import { FILTERS_NONE_OFFERED } from '../../workspace/expand-copy.js';
+import type { AddConditionBlock } from './conditions.js';
 import type { Direction, AddStepBlock } from './model.js';
 
 /** The words of the builder. "Path" and the two notes are frame 28's; the rest is proposed copy (listed with the frame differences). */
@@ -86,12 +88,62 @@ const PROBLEM_TEXT: Readonly<Record<PatternProblemCode, string>> = {
 
 export const problemText = (problem: PatternProblem): string => PROBLEM_TEXT[problem.code];
 
-/** Where a problem is shown: on a step, on the start type, or at the top of the builder when its path names neither. */
-export type ProblemPlace = { readonly kind: 'step'; readonly index: number } | { readonly kind: 'start' } | { readonly kind: 'top' };
+/** Where a problem is shown: at a condition row or a window of a step, on a step, on the start type, or at the top of the builder when its path names none of them. */
+export type ProblemPlace =
+  | { readonly kind: 'step'; readonly index: number }
+  | { readonly kind: 'condition'; readonly index: number; readonly row: number }
+  | { readonly kind: 'window'; readonly index: number }
+  | { readonly kind: 'start' }
+  | { readonly kind: 'top' };
 
 export function placeOf(problem: PatternProblem): ProblemPlace {
   const [first, second] = problem.path;
   if (first === 'anchorType') return { kind: 'start' };
-  if (first === 'steps' && typeof second === 'number') return { kind: 'step', index: second };
+  if (first === 'steps' && typeof second === 'number') {
+    const [, , part, row] = problem.path;
+    if (part === 'conditions' && typeof row === 'number') return { kind: 'condition', index: second, row };
+    if (part === 'window') return { kind: 'window', index: second };
+    return { kind: 'step', index: second };
+  }
   return { kind: 'top' };
+}
+
+export const CONDITIONS_COPY = {
+  legend: 'Conditions',
+  add: 'Add condition',
+  remove: 'Remove condition',
+  arrivalFirst: 'Choose where the step arrives first.',
+  patternCap: `At most ${PATTERN_LIMITS.conditionsPerPattern} conditions in a pattern.`,
+  windowLegend: 'Window',
+  windowKind: 'Window',
+  windowNone: 'No window',
+  windowDays: 'Last N days',
+  windowDates: 'Between two dates',
+  windowDaysField: 'Days',
+  windowFrom: 'From (UTC date)',
+  windowTo: 'To (UTC date)',
+  windowNoDated: 'The window does not apply: no chosen relationship type has an observed time in the mapping.',
+  windowDropped: 'The window was taken off because no chosen relationship type has an observed time.',
+  windowChooseTypes: 'Choose the relationship types first.',
+} as const;
+
+export const sideCapText = (on: 'neighbor' | 'relationship'): string => `At most ${PATTERN_LIMITS.conditionsPerElement} conditions on the ${on === 'neighbor' ? 'node' : 'relationship'} of a step.`;
+export const windowAppliesText = (types: readonly string[]): string => `Filtered by the window: ${types.join(', ')}.`;
+export const windowNotAppliedText = (types: readonly string[]): string => `Not filtered by the window: ${types.join(', ')}. They are read whole.`;
+
+export function conditionBlockText(block: AddConditionBlock): string {
+  switch (block.kind) {
+    case 'arrival':
+      return CONDITIONS_COPY.arrivalFirst;
+    case 'none-offered':
+      return FILTERS_NONE_OFFERED;
+    case 'pattern-cap':
+      return CONDITIONS_COPY.patternCap;
+    case 'side-cap':
+      return sideCapText(block.on);
+    default: {
+      const unreachable: never = block;
+      return unreachable;
+    }
+  }
 }
