@@ -22,7 +22,7 @@ const firstKey = (rig: ExportRig) => {
   if (key === undefined) throw new Error('the rig holds a key');
   return key;
 };
-const maintenance = (rig: ExportRig) => ({ store: { purgeExpiredInvestigations: rig.store.purgeExpiredInvestigations }, exports: rig.store, files: rig.files, audit: { record: () => Promise.resolve() }, logger: silent });
+const maintenance = (rig: ExportRig) => ({ store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: rig.store.purgeExpiredInvestigations }, exports: rig.store, files: rig.files, audit: { record: () => Promise.resolve() }, logger: silent });
 
 async function ready(rig: ExportRig, format: 'json' | 'csv' = 'json') {
   const investigation = await rig.open();
@@ -416,7 +416,7 @@ describe('the purge of an investigation', () => {
     let order = '';
     const purged = await purgeDeletedInvestigations({
       ...maintenance(rig),
-      store: { purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); order = `${(await rig.files.list()).length}`; return 1; } },
+      store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); order = `${(await rig.files.list()).length}`; return 1; } },
     });
     expect(purged).toBe(1);
     expect(order).toBe('1');
@@ -428,7 +428,7 @@ describe('the purge of an investigation', () => {
     const { investigation } = await ready(rig);
     const failing = { ...rig.files, remove: () => Promise.reject(new Error('locked')) };
     await expect(
-      purgeDeletedInvestigations({ ...maintenance(rig), files: failing, store: { purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } }),
+      purgeDeletedInvestigations({ ...maintenance(rig), files: failing, store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } }),
     ).rejects.toThrow('locked');
     await rig.stop();
   });
@@ -503,7 +503,7 @@ describe('calls that were killed, and the codes a retry meets', () => {
     const second = '44444444-4444-4444-8444-444444444444';
     await rig.store.insertExport({ id: second, investigationId: investigation.id, requestedBy: principal, policyVersion: 'none', sourceIdentityHash: 'x', format: 'json', retentionDays: 7 });
     await rig.files.write(second, Buffer.from('x'));
-    await purgeDeletedInvestigations({ ...maintenance(rig), store: { purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } });
+    await purgeDeletedInvestigations({ ...maintenance(rig), store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } });
     expect(await rig.files.list()).toEqual([]);
     await rig.stop();
   });

@@ -10,6 +10,7 @@ import { validatedDraft, type DeleteResult, type RestoreResult, type CreatedInve
 import type { ViewDeleteResult, ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { memoryExports, type MemoryExports } from './memory-exports.js';
+import { memoryPatterns, type MemoryPatternOptions, type MemoryPatterns } from './memory-patterns.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
 export const LOCAL_IDENTITY: Identity = {
@@ -18,7 +19,7 @@ export const LOCAL_IDENTITY: Identity = {
   identityMode: 'none',
 };
 
-export interface MemoryAppStoreOptions {
+export interface MemoryAppStoreOptions extends MemoryPatternOptions {
   readonly sources?: readonly SourceRow[];
   readonly failSources?: boolean;
   readonly inactiveSources?: readonly string[];
@@ -48,7 +49,7 @@ export interface MemoryNamedView {
   readonly deletionNote?: string | null;
 }
 
-export interface MemoryAppStore extends AppStore {
+export interface MemoryAppStore extends AppStore, Pick<MemoryPatterns, 'patternRows' | 'patternEvents' | 'deletedPatterns'> {
   readonly exports: MemoryExports;
   readonly namedViews: MemoryNamedView[];
   readonly checks: SourceCheck[];
@@ -92,8 +93,13 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   let deletions = 0;
   const exports = memoryExports({ investigations, isDeleted: (id) => deletedAt.has(id), now: () => Date.UTC(2026, 10, 7, 12, 0, deletions) });
   const { rows: _rows, keys: _keys, clock: _clock, ...exportStore } = exports;
+  const { patternRows, patternEvents, deletedPatterns, ...patternStore } = memoryPatterns(options.failPatternEvent === undefined ? {} : { failPatternEvent: options.failPatternEvent });
   return {
     ...exportStore,
+    ...patternStore,
+    patternRows,
+    patternEvents,
+    deletedPatterns,
     exports,
     checks,
     namedViews,

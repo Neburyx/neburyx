@@ -79,13 +79,13 @@ describe('the maintenance tasks at start', () => {
     return { seen, startJobRunner };
   };
 
-  it('hands the runner the purge and the export expiry with their daily schedules when no task list is injected', async () => {
+  it('hands the runner the two purges and the export expiry with their daily schedules when no task list is injected', async () => {
     const { seen, startJobRunner } = runnerSeen();
     const run = io({ startJobRunner });
     delete (run.io as { tasks?: unknown }).tasks;
     const result = await start(DATABASE_ENV, run.io);
     expect(result.exitCode).toBe(0);
-    expect(seen).toEqual([{ tasks: [{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }, { name: 'expire-exports', schedule: '41 3 * * *' }] }]);
+    expect(seen).toEqual([{ tasks: [{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }, { name: 'purge-deleted-patterns', schedule: '29 3 * * *' }, { name: 'expire-exports', schedule: '41 3 * * *' }] }]);
     if ('app' in result) await result.app.close();
   });
 

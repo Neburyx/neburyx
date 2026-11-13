@@ -64,6 +64,7 @@ describe('two migrate processes started together', () => {
           { name: '0015-export-source-identity' },
           { name: '0016-applied-preview-migrations-function' },
           { name: '0017-pattern-events' },
+          { name: '0018-saved-patterns' },
         ]);
         const queue = await check.query('SELECT id FROM graphile_worker.migrations');
         expect(new Set(queue.rows.map((row: { id: number }) => row.id)).size).toBe(queue.rows.length);

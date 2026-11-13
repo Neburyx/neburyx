@@ -1,4 +1,4 @@
-import { ACCESS_DENIED_ENTRIES, ACCESS_DENIED_REASONS, allowedDetails, CONFLICT_ENTRIES, INVALID_REQUEST_ENTRIES, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode, type ErrorResponse, type SourceUnavailableReason } from '@neburyx/contracts';
+import { ACCESS_DENIED_ENTRIES, ACCESS_DENIED_REASONS, allowedDetails, CONFLICT_ENTRIES, INVALID_REQUEST_ENTRIES, INVALID_REQUEST_REASONS, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode, type ErrorResponse, type SourceUnavailableReason } from '@neburyx/contracts';
 
 /** Why a read could not reach a source, as the adapter tells it; a fixed tag, sent in a response only as the public reason it maps to (`unavailableReasonOf`). */
 export const UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'credentials', 'database', 'refused', 'pool-full', 'closed'] as const;
@@ -70,8 +70,9 @@ export function errorResponse(code: ErrorCode, traceId: string, details?: unknow
   if (code === 'ACCESS_DENIED' && accessDeniedReason !== undefined) {
     return { error: { code, ...ACCESS_DENIED_ENTRIES[accessDeniedReason], traceId, details: allowed } };
   }
-  if (code === 'INVALID_REQUEST' && allowed?.reason === 'export-too-large') {
-    return { error: { code, ...INVALID_REQUEST_ENTRIES[allowed.reason], traceId, details: allowed } };
+  const invalidReason = INVALID_REQUEST_REASONS.find((candidate) => candidate === allowed?.reason);
+  if (code === 'INVALID_REQUEST' && invalidReason !== undefined) {
+    return { error: { code, ...INVALID_REQUEST_ENTRIES[invalidReason], traceId, details: allowed } };
   }
   const { message, retryable } = ERROR_TABLE[code];
   return { error: { code, message, retryable, traceId, ...(allowed ? { details: allowed } : {}) } };

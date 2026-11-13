@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternPreviewRequestSchema, patternRunRequestSchema, patternRunResponseSchema, patternPreviewResponseSchema, patternValidateRequestSchema, patternValidateResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternPreviewRequestSchema, patternRunRequestSchema, patternRunResponseSchema, patternPreviewResponseSchema, patternValidateRequestSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -27,6 +27,7 @@ import { createTemplateListService } from './graph/template-list-service.js';
 import { createPatternPreviewService } from './patterns/preview-service.js';
 import { createPatternRunService } from './patterns/run-service.js';
 import { createPatternValidateService } from './patterns/validate-service.js';
+import { createSavedPatternService } from './patterns/saved-pattern-service.js';
 import { createTemplateRunService } from './graph/template-run-service.js';
 import type { TemplateProbe } from './graph/template-probes.js';
 import { createExpandService } from './graph/expand-service.js';
@@ -698,6 +699,37 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const identity = await options.store.current();
       const answer = await investigations.restore({ traceId: request.id, id: params.data.id, principal: identity.principal, expectedVersion: body.data.expectedVersion });
       return reply.header('etag', `"${answer.investigation.version}"`).send(investigationResponseSchema.parse(answer));
+    });
+
+    const savedPatterns = createSavedPatternService({ store: options.store, mapping, access, references: storedReferences, audit: auditSink, cursors: listCursors });
+    app.get('/v1/patterns', { config: { permission: 'principal' } }, async (request) => {
+      const query = patternListQuerySchema.safeParse(request.query);
+      if (!query.success || (request.body !== undefined && request.body !== null)) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      return patternListResponseSchema.parse(await savedPatterns.list({ traceId: request.id, principal: identity.principal, sourceId: query.data.sourceId, limit: query.data.limit, cursor: query.data.cursor }));
+    });
+    app.put('/v1/patterns/:id', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const body = changePatternRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const changed = savedPatternSchema.parse(await savedPatterns.change({ traceId: request.id, principal: identity.principal, id: params.data.id, request: body.data }));
+      return reply.header('etag', `"${changed.version}"`).send(changed);
+    });
+    app.delete('/v1/patterns/:id', { config: { permission: 'principal' } }, async (request, reply) => {
+      const params = profileParamsSchema.safeParse(request.params);
+      const expected = ifMatchSchema.safeParse(request.headers['if-match']);
+      if (!noQuerySchema.safeParse(request.query).success || !params.success || !expected.success || (request.body !== undefined && request.body !== null)) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const answer = await savedPatterns.delete({ traceId: request.id, principal: identity.principal, id: params.data.id, expectedVersion: expected.data });
+      return reply.header('etag', `"${answer.version}"`).send(deletePatternResponseSchema.parse(answer));
+    });
+    app.post('/v1/patterns', { config: { permission: 'principal' } }, async (request, reply) => {
+      const body = savePatternRequestSchema.safeParse(request.body);
+      if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+      const identity = await options.store.current();
+      const saved = savedPatternSchema.parse(await savedPatterns.save({ traceId: request.id, principal: identity.principal, request: body.data }));
+      return reply.code(201).header('etag', `"${saved.version}"`).send(saved);
     });
 
     const views = createViewService({ store: options.store, references: storedReferences, mapping, cursors: listCursors });

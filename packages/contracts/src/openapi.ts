@@ -14,6 +14,7 @@ import { coverageRequestSchema, coverageResponseSchema } from './coverage.js';
 import { degreePreviewRequestSchema, degreePreviewSchema } from './degree-preview.js';
 import { derivedNeighborsRequestSchema, derivedNeighborsResponseSchema } from './derived-neighbors.js';
 import { patternRunRequestSchema, patternRunResponseSchema } from './pattern-run.js';
+import { changePatternRequestSchema, deletePatternResponseSchema, patternListResponseSchema, savedPatternSchema, savePatternRequestSchema } from './saved-pattern.js';
 import { patternPreviewRequestSchema, patternPreviewResponseSchema, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
 import { templateListResponseSchema } from './template-list.js';
 import { templateRunRequestSchema, templateRunResponseSchema } from './template-run.js';
@@ -31,7 +32,7 @@ export interface OpenApiDocument {
   readonly openapi: string;
   readonly info: { readonly title: string; readonly version: string };
   readonly paths: Readonly<Record<string, unknown>>;
-  readonly components: { readonly schemas: { readonly AiStatusResponse: Record<string, unknown>; readonly PatternRunRequest: Record<string, unknown>; readonly PatternRunResponse: Record<string, unknown>; readonly PatternValidateRequest: Record<string, unknown>; readonly PatternValidateResponse: Record<string, unknown>; readonly PatternPreviewRequest: Record<string, unknown>; readonly PatternPreviewResponse: Record<string, unknown>; readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly TemplateListResponse: Record<string, unknown>; readonly TemplateRunRequest: Record<string, unknown>; readonly TemplateRunResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly Export: Record<string, unknown>; readonly ExportFile: Record<string, unknown>; readonly ExportRequest: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly NamedView: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly RenameViewRequest: Record<string, unknown>; readonly RestoreViewResponse: Record<string, unknown>; readonly SaveViewRequest: Record<string, unknown>; readonly SaveViewResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly DeleteInvestigationResponse: Record<string, unknown>; readonly DeleteViewRequest: Record<string, unknown>; readonly DeleteViewResponse: Record<string, unknown>; readonly RestoreInvestigationRequest: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown>; readonly ViewListResponse: Record<string, unknown>; readonly OwnedViewListResponse: Record<string, unknown>; } };
+  readonly components: { readonly schemas: { readonly AiStatusResponse: Record<string, unknown>; readonly PatternRunRequest: Record<string, unknown>; readonly PatternRunResponse: Record<string, unknown>; readonly PatternValidateRequest: Record<string, unknown>; readonly PatternValidateResponse: Record<string, unknown>; readonly PatternPreviewRequest: Record<string, unknown>; readonly PatternPreviewResponse: Record<string, unknown>; readonly SavedPattern: Record<string, unknown>; readonly PatternListResponse: Record<string, unknown>; readonly ChangePatternRequest: Record<string, unknown>; readonly DeletePatternResponse: Record<string, unknown>; readonly SavePatternRequest: Record<string, unknown>; readonly CoverageRequest: Record<string, unknown>; readonly CoverageResponse: Record<string, unknown>; readonly DegreePreview: Record<string, unknown>; readonly DegreePreviewRequest: Record<string, unknown>; readonly DerivedNeighborsRequest: Record<string, unknown>; readonly DerivedNeighborsResponse: Record<string, unknown>; readonly TemplateListResponse: Record<string, unknown>; readonly TemplateRunRequest: Record<string, unknown>; readonly TemplateRunResponse: Record<string, unknown>; readonly DraftWriteRequest: Record<string, unknown>; readonly DraftWriteResponse: Record<string, unknown>; readonly EdgeDetail: Record<string, unknown>; readonly EntityLookupRequest: Record<string, unknown>; readonly ErrorResponse: Record<string, unknown>; readonly Export: Record<string, unknown>; readonly ExportFile: Record<string, unknown>; readonly ExportRequest: Record<string, unknown>; readonly ExpandRequest: Record<string, unknown>; readonly ExpandResponse: Record<string, unknown>; readonly GraphNode: Record<string, unknown>; readonly HealthResponse: Record<string, unknown>; readonly InvestigationListResponse: Record<string, unknown>; readonly InvestigationResponse: Record<string, unknown>; readonly MeResponse: Record<string, unknown>; readonly NamedView: Record<string, unknown>; readonly OpenInvestigationRequest: Record<string, unknown>; readonly OpenInvestigationResponse: Record<string, unknown>; readonly ReadRefsRequest: Record<string, unknown>; readonly ReadRefsResponse: Record<string, unknown>; readonly ReadyResponse: Record<string, unknown>; readonly RenameRequest: Record<string, unknown>; readonly RenameResponse: Record<string, unknown>; readonly RenameViewRequest: Record<string, unknown>; readonly RestoreViewResponse: Record<string, unknown>; readonly SaveViewRequest: Record<string, unknown>; readonly SaveViewResponse: Record<string, unknown>; readonly SearchMoreRequest: Record<string, unknown>; readonly SearchMoreResult: Record<string, unknown>; readonly SearchRequest: Record<string, unknown>; readonly SearchResult: Record<string, unknown>; readonly SourceProfile: Record<string, unknown>; readonly SourceTestReport: Record<string, unknown>; readonly SourcesResponse: Record<string, unknown>; readonly DeleteInvestigationResponse: Record<string, unknown>; readonly DeleteViewRequest: Record<string, unknown>; readonly DeleteViewResponse: Record<string, unknown>; readonly RestoreInvestigationRequest: Record<string, unknown>; readonly StatusChangeRequest: Record<string, unknown>; readonly StatusChangeResponse: Record<string, unknown>; readonly ViewListResponse: Record<string, unknown>; readonly OwnedViewListResponse: Record<string, unknown>; } };
 }
 
 const RETRY_AFTER_HEADER = { 'Retry-After': { description: 'Whole seconds to wait', schema: { type: 'integer', minimum: 1 } } };
@@ -634,6 +635,45 @@ export function buildOpenApiDocument(
           },
         },
       },
+      '/v1/patterns/{id}': {
+        put: {
+          operationId: 'changePattern',
+          summary: 'Rename a pattern or change what it holds',
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: jsonBody('ChangePatternRequest') },
+          description:
+            'Changes the caller\'s own pattern: its `name`, its `definition` (a pattern built in the app), its `params` (a built-in run) or its held starting entity (`anchor`, or `null` to clear it); `expectedVersion` is required. A stale version is `CONFLICT`, and a body that changes nothing, names a field of the other kind, or holds a definition, parameters or entity that save would refuse is `INVALID_REQUEST`. A name equal to the stored one with the current version is a change like any other. Another person\'s pattern, a deleted one and an identifier that is not a pattern\'s answer `NOT_FOUND`. The event of the change is recorded in the same transaction. Reads no source.',
+          responses: {
+            '200': { description: 'The pattern at its new version, with `ETag: "<version>"`', content: jsonBody('SavedPattern') },
+            '400': { description: 'The body is not a valid change, or what it holds is refused (see `details.reason`)', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such pattern of the caller\'s, or its source is not configured or may not be read', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICT: the pattern was changed elsewhere; reload it', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The answer could not be built', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The change could not be recorded, so nothing was changed (`AUDIT_UNAVAILABLE`)', content: jsonBody('ErrorResponse') },
+          },
+        },
+        delete: {
+          operationId: 'deletePattern',
+          summary: 'Delete a pattern',
+          parameters: [
+            { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'If-Match', in: 'header', required: true, schema: { type: 'string' }, description: 'The pattern\'s version, as `"<version>"`' },
+          ],
+          description:
+            'Deletes the caller\'s own pattern: it is no longer listed or readable, and it is removed for good after `retention.deleted_investigations_days` (30 by default). The pattern\'s version is the `If-Match` header; a stale one is `CONFLICT`. A deleted pattern, another person\'s and an identifier that is not a pattern\'s answer `NOT_FOUND`. The event of the delete is recorded in the same transaction. Reads no source.',
+          responses: {
+            '200': { description: 'The pattern\'s id, its version after the delete, and when it is removed for good; with `ETag`', content: jsonBody('DeletePatternResponse') },
+            '400': { description: 'A missing or malformed `If-Match`, a body or a query string', content: jsonBody('ErrorResponse') },
+            '404': { description: 'No such pattern of the caller\'s', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CONFLICT: the pattern was changed elsewhere; reload it', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person in the last minute: details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The answer could not be built', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The delete could not be recorded, so nothing was deleted (`AUDIT_UNAVAILABLE`)', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
       '/v1/patterns/validate': {
         post: {
           operationId: 'validatePattern',
@@ -648,6 +688,44 @@ export function buildOpenApiDocument(
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
             '429': { description: 'Too many requests from this person to this source in the last minute: details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
             '500': { description: 'The answer could not be built', content: jsonBody('ErrorResponse') },
+          },
+        },
+      },
+      '/v1/patterns': {
+        get: {
+          operationId: 'listPatterns',
+          summary: 'The caller\'s saved patterns on a source',
+          description:
+            'Lists the caller\'s own saved patterns on a source (`sourceId`, required), newest changed first, then by id, with the keyset paging of the list conventions (`limit` default 25, at most 100; `cursor`). A deleted pattern is not listed, and another person\'s pattern never is. Reads no source.',
+          parameters: [
+            { name: 'sourceId', in: 'query', required: true, schema: { type: 'string' } },
+            { name: 'limit', in: 'query', required: false, schema: { type: 'integer', minimum: 1, maximum: 100 } },
+            { name: 'cursor', in: 'query', required: false, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': { description: 'A page of the caller\'s patterns', content: jsonBody('PatternListResponse') },
+            '400': { description: 'A missing `sourceId`, an unknown query key or a `limit` that is not a positive integer', content: jsonBody('ErrorResponse') },
+            '404': { description: 'The source is not configured or may not be read (one answer for both)', content: jsonBody('ErrorResponse') },
+            '409': { description: 'CURSOR_INVALIDATED: start the list again', content: jsonBody('ErrorResponse') },
+            '422': { description: 'The limit is above the maximum (`details.maxPage`)', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The answer could not be built', content: jsonBody('ErrorResponse') },
+          },
+        },
+        post: {
+          operationId: 'savePattern',
+          summary: 'Save a pattern on a source',
+          requestBody: { required: true, content: jsonBody('SavePatternRequest') },
+          description:
+            'Saves a pattern for the caller on a source, privately: either a pattern built in the app (`kind` `definition`, a declarative structure that the source\'s mapping and the limits of a pattern allow, never query text) or a built-in run (`kind` `preset-run`, a preset of the source and its parameters without the starting entity). The starting entity is held only when `anchor` is sent, and then of the type the pattern starts at; otherwise `askForStartingEntity` is true. The name is stored trimmed. A refused definition or parameters, a condition on personal data, or a held entity of the wrong type is `INVALID_REQUEST`; `details.reason` `pattern-limit` says the caller already holds the most patterns allowed on the source, and `pattern-personal-condition` that a condition on personal data cannot be saved. The event of the save is recorded in the same transaction: if it cannot be, nothing is saved and the answer is `AUDIT_UNAVAILABLE`. Reads no source.',
+          responses: {
+            '201': { description: 'The saved pattern, with `ETag: "<version>"`', content: jsonBody('SavedPattern') },
+            '400': { description: 'The body is not a valid save request, the definition or parameters are refused, or a limit is reached (see `details.reason`)', content: jsonBody('ErrorResponse') },
+            '404': { description: 'The source is not configured or may not be read (one answer for both)', content: jsonBody('ErrorResponse') },
+            '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', content: jsonBody('ErrorResponse') },
+            '500': { description: 'The answer could not be built', content: jsonBody('ErrorResponse') },
+            '503': { description: 'The save could not be recorded, so nothing was saved (`AUDIT_UNAVAILABLE`)', content: jsonBody('ErrorResponse') },
           },
         },
       },
@@ -803,7 +881,7 @@ export function buildOpenApiDocument(
       },
     },
     components: {
-      schemas: { AiStatusResponse: schemaJson(aiStatusResponseSchema), PatternRunRequest: schemaJson(patternRunRequestSchema), PatternRunResponse: schemaJson(patternRunResponseSchema), PatternValidateRequest: schemaJson(patternValidateRequestSchema), PatternValidateResponse: schemaJson(patternValidateResponseSchema), PatternPreviewRequest: schemaJson(patternPreviewRequestSchema), PatternPreviewResponse: schemaJson(patternPreviewResponseSchema), CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), TemplateListResponse: schemaJson(templateListResponse), TemplateRunRequest: schemaJson(templateRunRequest), TemplateRunResponse: schemaJson(templateRunResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), Export: schemaJson(exportSchema), ExportFile: schemaJson(exportFileSchema), ExportRequest: schemaJson(exportRequestSchema), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), NamedView: schemaJson(namedViewSchema), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), RenameViewRequest: schemaJson(renameViewRequestSchema), RestoreViewResponse: schemaJson(restoreViewResponseSchema), SaveViewRequest: schemaJson(saveViewRequestSchema), SaveViewResponse: schemaJson(saveViewResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), DeleteInvestigationResponse: schemaJson(deleteInvestigationResponseSchema), DeleteViewRequest: schemaJson(deleteViewRequestSchema), DeleteViewResponse: schemaJson(deleteViewResponseSchema), RestoreInvestigationRequest: schemaJson(restoreInvestigationRequestSchema), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema), OwnedViewListResponse: schemaJson(ownedViewListResponseSchema), ViewListResponse: schemaJson(viewListResponseSchema) },
+      schemas: { AiStatusResponse: schemaJson(aiStatusResponseSchema), PatternRunRequest: schemaJson(patternRunRequestSchema), PatternRunResponse: schemaJson(patternRunResponseSchema), PatternValidateRequest: schemaJson(patternValidateRequestSchema), PatternValidateResponse: schemaJson(patternValidateResponseSchema), PatternPreviewRequest: schemaJson(patternPreviewRequestSchema), PatternPreviewResponse: schemaJson(patternPreviewResponseSchema), SavedPattern: schemaJson(savedPatternSchema), PatternListResponse: schemaJson(patternListResponseSchema), ChangePatternRequest: schemaJson(changePatternRequestSchema), DeletePatternResponse: schemaJson(deletePatternResponseSchema), SavePatternRequest: schemaJson(savePatternRequestSchema), CoverageRequest: schemaJson(coverageRequest), CoverageResponse: schemaJson(coverageResponse), DegreePreview: schemaJson(degreePreview), DegreePreviewRequest: schemaJson(degreePreviewRequest), DerivedNeighborsRequest: schemaJson(derivedNeighborsRequest), DerivedNeighborsResponse: schemaJson(derivedNeighborsResponse), TemplateListResponse: schemaJson(templateListResponse), TemplateRunRequest: schemaJson(templateRunRequest), TemplateRunResponse: schemaJson(templateRunResponse), DraftWriteRequest: schemaJson(draftWriteRequestSchema), DraftWriteResponse: schemaJson(draftWriteResponseSchema), EdgeDetail: schemaJson(edgeDetail), EntityLookupRequest: schemaJson(entityLookupRequest), ErrorResponse: schemaJson(errorResponse), Export: schemaJson(exportSchema), ExportFile: schemaJson(exportFileSchema), ExportRequest: schemaJson(exportRequestSchema), ExpandRequest: schemaJson(expandRequest), ExpandResponse: schemaJson(expandResponse), GraphNode: schemaJson(graphNode), HealthResponse: schemaJson(healthResponse), InvestigationListResponse: schemaJson(investigationList), InvestigationResponse: schemaJson(investigationResponse), MeResponse: schemaJson(meResponse), NamedView: schemaJson(namedViewSchema), OpenInvestigationRequest: schemaJson(openInvestigationRequest), OpenInvestigationResponse: schemaJson(openInvestigationResponse), ReadRefsRequest: schemaJson(readRefsRequestSchema), ReadRefsResponse: schemaJson(readRefsResponseSchema), ReadyResponse: schemaJson(readyResponse), RenameRequest: schemaJson(renameRequestSchema), RenameResponse: schemaJson(renameResponseSchema), RenameViewRequest: schemaJson(renameViewRequestSchema), RestoreViewResponse: schemaJson(restoreViewResponseSchema), SaveViewRequest: schemaJson(saveViewRequestSchema), SaveViewResponse: schemaJson(saveViewResponseSchema), SearchMoreRequest: schemaJson(searchMoreRequest), SearchMoreResult: schemaJson(searchMoreResult), SearchRequest: schemaJson(searchRequest), SearchResult: schemaJson(searchResult), SourceProfile: schemaJson(sourceProfile), SourceTestReport: schemaJson(sourceTestReport), SourcesResponse: schemaJson(sourcesResponse), DeleteInvestigationResponse: schemaJson(deleteInvestigationResponseSchema), DeleteViewRequest: schemaJson(deleteViewRequestSchema), DeleteViewResponse: schemaJson(deleteViewResponseSchema), RestoreInvestigationRequest: schemaJson(restoreInvestigationRequestSchema), StatusChangeRequest: schemaJson(statusChangeRequestSchema), StatusChangeResponse: schemaJson(statusChangeResponseSchema), OwnedViewListResponse: schemaJson(ownedViewListResponseSchema), ViewListResponse: schemaJson(viewListResponseSchema) },
     },
   };
 }

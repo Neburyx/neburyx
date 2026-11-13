@@ -1,3 +1,4 @@
+import { createPatternStore, type PatternStore } from './db/patterns-repository.js';
 import type { ReadyChecks } from '@neburyx/contracts';
 import { createPool } from './db/pool.js';
 import { createAddressCache, type AddressCache } from './db/lookup.js';
@@ -18,7 +19,7 @@ import type { SourceModel } from './mapping/model.js';
 import { toStartError } from './identity/errors.js';
 import type { Identity } from './identity/identity.js';
 
-export interface AppStore extends InvestigationStore, ViewStore, OwnedViewStore, ExportStore {
+export interface AppStore extends InvestigationStore, ViewStore, OwnedViewStore, ExportStore, PatternStore {
   initialize(): Promise<void>;
   current(): Promise<Identity>;
   syncSources(sources: readonly SourceModel[]): Promise<readonly string[]>;
@@ -93,6 +94,7 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     createInvestigation: (input) => createInvestigation(pool, input),
     findReusableInvestigation: (query) => findReusableInvestigation(pool, query),
     ...createExportStore(pool),
+    ...createPatternStore(pool),
     readInvestigation: (id, ownerId) => readInvestigation(pool, id, ownerId),
     saveDraft: (write) => saveDraft(pool, write),
     renameInvestigation: (change) => renameInvestigation(pool, change),

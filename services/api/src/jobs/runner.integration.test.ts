@@ -109,7 +109,7 @@ describe('the job runner of the API', () => {
     const logger = createLogger({ write: (chunk: string) => lines.push(chunk) });
     const tasks = maintenanceTasks({
       ...idleExportDeps(),
-      store: { purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }), ++purged) },
+      store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }), ++purged) },
       audit: { record: () => (++sinkCalls === 1 ? Promise.reject(new Error('the sink is down')) : Promise.resolve()) },
       logger,
     });

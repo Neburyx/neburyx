@@ -36,6 +36,8 @@ export const ACCESS_DENIED_ENTRIES: Readonly<Record<AccessDeniedReason, Omit<Err
 /** The sentence of each reason of `INVALID_REQUEST`; the limit itself is in the details. */
 export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit<ErrorEntry, 'status'>>> = {
   'export-too-large': { message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false },
+  'pattern-limit': { message: 'You have saved as many patterns on this source as are allowed. Delete one, then save again.', retryable: false },
+  'pattern-personal-condition': { message: 'A saved pattern cannot hold a condition on personal data. Remove it, then save again.', retryable: false },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {
