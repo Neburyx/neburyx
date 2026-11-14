@@ -43,6 +43,10 @@ pnpm ask-eval record --questions <file> --mapping <mapping> --budget <n> --out <
 - `--out` names a folder outside the checkout; the recording is `recording.json` there, with mode 0600, and an existing one is replaced only with `--force`. A question asked but blocked by the allowlist is named (`blocked: <id>`); an unexpected error ends the run after the recording and the run record are written. A question file outside the checkout takes one `--mapping`; its report holds ids and counts only. A refusal by the model is recorded and scores as a refusal of the kind the planner gives it (`model-refused`).
 - The run ends with the model, the prompt ids and versions, the word-list version and the token counts, for the record of the run.
 
+## The chain of the demo set
+
+`demo-chain.test.ts` runs every demo question from the question to the summary, in `pnpm test`, with no network, no model key and no Neo4j: the question goes through the plan route of the extension over the committed replay (the planner answers from `replies.json`), a plan is stored and run once through the run route over a scripted source (a fixed, contract-valid result for each template, `testing/scripted-results.ts`), and the summary of the run is checked: every statement cites at least one key, and every key is of an element the result lists. A refusal ends with its family and the fixed sentence of that family, no plan stored and no run. A question whose text has no entry in the replay, or a statement that is not cited, fails the test and names the question.
+
 ## Where the code lives
 
 The scoring, loading and reporting are here. The planner is `ee/` code (`ee/ask/src/eval`), so the entry script `entry/ask-eval-entry.mjs` imports it and hands it to the command (see [architecture checks](../../docs/architecture-checks.md)).

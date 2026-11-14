@@ -3,7 +3,7 @@ import { rebuildPlannerText } from '../allowlist/rebuild.js';
 import { createAuditedModelCall } from '../audited.js';
 import { PlannerCallFailed, catalogWords, createAskPlanner } from '../planner/index.js';
 import { buildPromptRegistry } from '../prompts.js';
-import type { ModelAnswer, ModelProvider, ModelRequest } from '../provider.js';
+import type { ModelAnswer, ModelProvider, ModelRequest, PromptRecord } from '../provider.js';
 import { createRequestBuilder } from '../request.js';
 import { buildPropertyRules } from '../rules.js';
 import { questionVocabulary } from '../vocabulary/vocabulary.js';
@@ -68,28 +68,34 @@ export async function plannerOver(view: AiMappingView, makeProvider: (registry: 
 
 export { EVAL_ACTOR };
 
+export interface ReplayState {
+  missing: 'plan' | 'repair' | undefined;
+  repaired: boolean;
+}
+
+/** The provider that answers from recorded replies, by the text of the question; a missing reply is noted in `state`, and a recorded refusal of the model answers as one. */
+export function replayProvider(replay: Replay, registry: { resolve: (id: ModelRequest['promptId'], parameters: ModelRequest['parameters']) => { readonly record: PromptRecord } }, state: ReplayState = { missing: undefined, repaired: false }): ModelProvider {
+  return {
+    async complete(request: ModelRequest): Promise<ModelAnswer> {
+      const { record } = registry.resolve(request.promptId, request.parameters);
+      const entry = replay[String(request.parameters['question'])];
+      const isRepair = request.promptId === 'ask.plan.repair';
+      const text = isRepair ? entry?.repair : entry?.plan;
+      if (isRepair) state.repaired = true;
+      if (text === undefined) {
+        state.missing = isRepair ? 'repair' : 'plan';
+        return { status: 'failed', code: EVAL_FAILURE, prompt: record };
+      }
+      if (!isRepair && entry?.refused === true) return { status: 'refused', usage: { kind: 'unknown' }, prompt: record };
+      return { status: 'ok', text, usage: { kind: 'unknown' }, model: 'replay', prompt: record };
+    },
+  };
+}
+
 /** The planner the real extension uses, answering from recorded replies; a question without its reply is reported, never skipped. */
 export async function createEvalPlanner(options: EvalPlannerOptions): Promise<EvalPlanner> {
   const state: { missing: 'plan' | 'repair' | undefined; repaired: boolean } = { missing: undefined, repaired: false };
-  const { planner, rebuild } = await plannerOver(
-    options.view,
-    (built) => ({
-      async complete(request: ModelRequest): Promise<ModelAnswer> {
-        const { record } = built.registry.resolve(request.promptId, request.parameters);
-        const entry = options.replay[String(request.parameters['question'])];
-        const isRepair = request.promptId === 'ask.plan.repair';
-        const text = isRepair ? entry?.repair : entry?.plan;
-        if (isRepair) state.repaired = true;
-        if (text === undefined) {
-          state.missing = isRepair ? 'repair' : 'plan';
-          return { status: 'failed', code: EVAL_FAILURE, prompt: record };
-        }
-        if (!isRepair && entry?.refused === true) return { status: 'refused', usage: { kind: 'unknown' }, prompt: record };
-        return { status: 'ok', text, usage: { kind: 'unknown' }, model: 'replay', prompt: record };
-      },
-    }),
-    'replay',
-  );
+  const { planner, rebuild } = await plannerOver(options.view, (built) => replayProvider(options.replay, built.registry, state), 'replay');
 
   return {
     rebuild,
