@@ -34,6 +34,10 @@
       // Declared so the Neo4j scripts build the package first: kept pending a decision.
       "ignoreDependencies": ["@neburyx/test-neo4j"]
     },
+    "tools/ask-safety-suite": {
+      // Mocked by name with vi.mock in each test file, which knip does not count as a use; the package is declared so that the mock resolves.
+      "ignoreDependencies": ["@neburyx/ee-audit"]
+    },
     "tools/concurrency-suite": {
       // Declared so the Neo4j scripts build the package first: kept pending a decision.
       "ignoreDependencies": ["@neburyx/test-neo4j"]

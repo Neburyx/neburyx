@@ -80,6 +80,8 @@ export interface PatternAppOptions extends MemoryAppStoreOptions {
   /** The enterprise extension and whether its preview is on: the application then mounts its routes. */
   readonly extension?: ProfileExtension;
   readonly previewOn?: boolean;
+  /** The lines the application's logger writes go here, when a test scans them. */
+  readonly logLines?: string[];
 }
 
 export async function patternApp(options: PatternAppOptions = {}) {
@@ -98,7 +100,7 @@ export async function patternApp(options: PatternAppOptions = {}) {
   );
   const seams: Seams = { ...communitySeams(), audit: audit.sink, ...(options.deny === true ? { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } } : {}) };
   const parts = testSourceGate(mapping, { executor });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }), ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void options.logLines?.push(line) }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }), ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
   return { app, store, audit, executor };
 }
 

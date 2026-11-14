@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest';
+import { expectedBody, expectNoValue, expectOnlyParameters, expectProviderInput, SafetyCheckFailed } from './checks.js';
+
+const TEXT = 'MATCH (n) WHERE n.id = $id AND n.x = $x RETURN n';
+const read = (cypher: string, parameters: Record<string, unknown>) => ({ cypher, parameters });
+
+describe('the check that values reach the source only as parameters', () => {
+  it('passes a statement that is exactly the expected text, with each value as a parameter, even when a value is text that appears in the statement', () => {
+    expect(() => expectOnlyParameters([read(TEXT, { id: '$id', x: 'RETURN n;' })], { text: TEXT, values: ['$id', 'RETURN n;'] })).not.toThrow();
+  });
+
+  it('canary: fails a statement with a value built into its text', () => {
+    expect(() => expectOnlyParameters([read(`${TEXT} // SENTINEL-1`, { id: 'a', x: 'b' })], { text: TEXT, values: ['a'] })).toThrow(SafetyCheckFailed);
+  });
+
+  it('canary: fails a value that did not arrive as a parameter, and a case that read nothing', () => {
+    expect(() => expectOnlyParameters([read(TEXT, { id: 'a' })], { text: TEXT, values: ['a', 'missing'] })).toThrow(SafetyCheckFailed);
+    expect(() => expectOnlyParameters([], { text: TEXT, values: [] })).toThrow(SafetyCheckFailed);
+  });
+});
+
+describe('the check of what the provider receives', () => {
+  const parts = { model: 'm', instructions: 'I', values: 'Q', cache: true };
+
+  it('passes the exact body in either layout, whatever the order of keys', () => {
+    const body = expectedBody(parts);
+    expect(() => expectProviderInput([JSON.stringify(Object.fromEntries(Object.entries(body).reverse()))], 0, body)).not.toThrow();
+    const joined = expectedBody({ ...parts, cache: false });
+    expect(() => expectProviderInput([JSON.stringify(joined)], 0, joined)).not.toThrow();
+  });
+
+  it('canary: fails a body with a property value in the user content, an extra key, and a call that did not happen', () => {
+    const body = expectedBody(parts);
+    const leaky = { ...body, messages: [{ role: 'user', content: 'Q SENTINEL-PROPERTY' }] };
+    expect(() => expectProviderInput([JSON.stringify(leaky)], 0, body)).toThrow(SafetyCheckFailed);
+    expect(() => expectProviderInput([JSON.stringify({ ...body, tools: [] })], 0, body)).toThrow(SafetyCheckFailed);
+    expect(() => expectProviderInput([], 0, body)).toThrow(SafetyCheckFailed);
+  });
+});
+
+describe('the check that no record holds a value', () => {
+  it('passes records without the sentinel, even when they hold the punctuation of the value', () => {
+    expect(() => expectNoValue([{ detail: "') DETACH DELETE n //" }, ['a line']], ['SENTINEL-1'])).not.toThrow();
+  });
+
+  it('canary: fails an event, a row and a log line that hold a sentinel', () => {
+    expect(() => expectNoValue([{ detail: { x: 'SENTINEL-1' } }], ['SENTINEL-1'])).toThrow(SafetyCheckFailed);
+    expect(() => expectNoValue([[{ intent: 'SENTINEL-2' }]], ['SENTINEL-2'])).toThrow(SafetyCheckFailed);
+    expect(() => expectNoValue([['a log line SENTINEL-3']], ['SENTINEL-3'])).toThrow(SafetyCheckFailed);
+  });
+});
