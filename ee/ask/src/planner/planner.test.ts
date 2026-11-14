@@ -41,15 +41,39 @@ describe('the planner', () => {
     expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
     expect(provider.calls).toEqual([{ promptId: 'ask.plan', parameters: { catalog: catalogText(), vocabulary: vocabularyText(DEFAULT_VIEW), patterns: '', question: TEXT } }]);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '6', tokensIn: 12, tokensOut: 34 } } });
+    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '7', tokensIn: 12, tokensOut: 34 } } });
     expect(JSON.stringify(events)).not.toContain('widget#1');
   });
 
-  it('reads a plan from a fenced block, and from nothing else around it', async () => {
+  it('reads a plan from a fenced block, and from the one object among prose', async () => {
     const fenced = await rig(ok('```json\n' + JSON.stringify(PLAN) + '\n```'));
     expect(await fenced.planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
     const chatty = await rig(ok('Here is the plan: ' + JSON.stringify(PLAN)));
-    expect(await chatty.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
+    expect(await chatty.planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
+    expect(chatty.provider.calls).toHaveLength(1);
+    const two = await rig(ok('Not this: {"kind":"unsupported"} but this: ' + JSON.stringify(PLAN)));
+    expect(await two.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
+    expect(two.provider.calls).toHaveLength(2);
+  });
+
+  it('accepts a repair that explains itself before its object, and puts no word of the prose in the answer or the audit', async () => {
+    const asText = JSON.stringify({ ...PLAN, templateVersion: '1' });
+    const { planner, events } = await rig(ok(asText), { repair: ok('The problem is probably PROSE-SENTINEL, the version should be a number. ' + JSON.stringify(PLAN)) });
+    const answer = await planner.plan({ text: TEXT, context: CONTEXT });
+    expect(answer).toEqual(PLAN);
+    expect(JSON.stringify([answer, events])).not.toContain('PROSE-SENTINEL');
+  });
+
+  it.each([['an extra key that turns the confirmation off', { ...PLAN, confirm: false }], ['a template outside the catalog', { ...PLAN, templateId: 'free-query' }]])('ends plan-not-usable after two requests for prose and then one object with %s', async (_name, object) => {
+    const { planner, provider } = await rig(ok('Sure, here you go: ' + JSON.stringify(object)), { repair: ok('Again: ' + JSON.stringify(object)) });
+    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
+    expect(provider.calls).toHaveLength(2);
+  });
+
+  it('keeps a version written as text invalid when the repair repeats it, after prose', async () => {
+    const asText = JSON.stringify({ ...PLAN, templateVersion: '1' });
+    const { planner } = await rig(ok(asText), { repair: ok('Again. ' + asText) });
+    expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
   });
 
   it.each([['text that is not JSON', 'no plan'], ['JSON that is not a plan', '{"kind":"plan","templateId":"free-query","query":"x"}'], ['a plan with a field of text beside its parameters', JSON.stringify({ ...PLAN, query: 'x' })]])('treats %s as an invalid reply', async (_name, text) => {

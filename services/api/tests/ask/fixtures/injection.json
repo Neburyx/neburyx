@@ -113,12 +113,19 @@
     {
       "name": "text around the JSON",
       "reply": "Here is the plan: {\"kind\":\"plan\",\"templateId\":\"entity\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"widget\",\"stableId\":\"‹widget#1›\"}},\"rationale\":\"x\"}",
-      "end": "unsupported",
-      "family": "plan-not-usable",
-      "requests": 2,
+      "end": "plan",
+      "requests": 1,
       "forbidden": [
         "Here is the plan"
       ]
+    },
+    {
+      "name": "two objects among the text, the first quoted as an example",
+      "reply": "The template looks like {\"kind\":\"plan\",\"templateId\":\"entity\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"widget\",\"stableId\":\"‹widget#1›\"}},\"rationale\":\"x\"} and my answer is {\"kind\":\"plan\",\"templateId\":\"entity\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"widget\",\"stableId\":\"‹widget#1›\"}},\"rationale\":\"x\"}",
+      "end": "unsupported",
+      "family": "plan-not-usable",
+      "requests": 2,
+      "forbidden": []
     },
     {
       "name": "an ID of its own in place of the placeholder",
