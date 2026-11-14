@@ -54,10 +54,12 @@ describe('what the mount gives an extension handler', () => {
 
   it('gives no runner of plans when the application has no gate to read through, and no search tools either', async () => {
     let seen: ExtensionRequest | undefined;
-    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true });
+    let abortedWhileHandling: boolean | undefined;
+    const { app } = await started(extensionOf(async (request) => ((seen = request), (abortedWhileHandling = request.signal.aborted), 'ok')), { previewOn: true });
     await app.inject({ url: URL_OF_ROUTE });
     expect(seen).toBeDefined();
     expect(seen).not.toHaveProperty('askPlanRunner');
+    expect(abortedWhileHandling).toBe(false);
     expect(seen).not.toHaveProperty('askEntityTools');
     expect(seen).not.toHaveProperty('askPatterns');
     await app.close();
@@ -160,13 +162,13 @@ describe('a POST route of an extension', () => {
     routeGroups: [{ routes: [{ method: 'POST', url: URL_OF_ROUTE, permission: 'principal', requestSchema: BODY_SCHEMA, responseSchema: z.unknown(), handler }] }],
   });
 
-  it('gives the handler the parsed body and the application planner', async () => {
+  it('gives the handler the parsed body and the application classifier', async () => {
     let seen: ExtensionRequest | undefined;
     const { app } = await started(postExtension(async (request) => ((seen = request), 'ok')), { previewOn: true });
     const answer = await app.inject({ method: 'POST', url: URL_OF_ROUTE, payload: { message: 'hello' } });
     expect(answer.statusCode).toBe(200);
     expect(seen).toMatchObject({ body: { message: 'hello' } });
-    expect(seen?.askPlanner.availability()).toEqual({ available: false, reason: 'not_in_this_edition' });
+    expect(seen?.askClassifier.availability()).toEqual({ available: false, reason: 'not_in_this_edition' });
     await app.close();
   });
 
@@ -245,32 +247,32 @@ describe('what the mount gives an extension to sign with', () => {
   });
 });
 
-describe('which planner an extension route is given', () => {
-  const stubPlanner = { availability: () => ({ available: true as const }), plan: () => Promise.reject(new Error('not used')) };
+describe('which classifier an extension route is given', () => {
+  const stubClassifier = { availability: () => ({ available: true as const }), classify: () => Promise.reject(new Error('not used')) };
 
-  function withPlanner(extensionPlanner: (() => typeof stubPlanner | undefined) | undefined): ProfileExtension {
-    return { ...extensionOf(async (request) => request.askPlanner.availability()), ...(extensionPlanner === undefined ? {} : { askPlanner: extensionPlanner }) };
+  function withClassifier(extensionClassifier: (() => typeof stubClassifier | undefined) | undefined): ProfileExtension {
+    return { ...extensionOf(async (request) => request.askClassifier.availability()), ...(extensionClassifier === undefined ? {} : { askClassifier: extensionClassifier }) };
   }
 
-  async function availabilityWith(extension: ProfileExtension, seamsPlanner?: typeof stubPlanner): Promise<unknown> {
-    const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), seams: { ...communitySeams(), ...(seamsPlanner === undefined ? {} : { askPlanner: seamsPlanner }) }, extension, previewOn: true });
+  async function availabilityWith(extension: ProfileExtension, seamsClassifier?: typeof stubClassifier): Promise<unknown> {
+    const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), seams: { ...communitySeams(), ...(seamsClassifier === undefined ? {} : { askClassifier: seamsClassifier }) }, extension, previewOn: true });
     const answer = (await app.inject({ url: URL_OF_ROUTE })).json();
     await app.close();
     return answer;
   }
 
-  it('is the planner of the extension when the seams hold the Community default', async () => {
-    expect(await availabilityWith(withPlanner(() => stubPlanner))).toEqual({ available: true });
+  it('is the classifier of the extension when the seams hold the Community default', async () => {
+    expect(await availabilityWith(withClassifier(() => stubClassifier))).toEqual({ available: true });
   });
 
-  it('is the planner of the seams when it is not the Community default, even if the extension has one', async () => {
-    const unavailable = { availability: () => ({ available: false as const, reason: 'seam' }), plan: stubPlanner.plan };
-    expect(await availabilityWith(withPlanner(() => stubPlanner), unavailable as never)).toEqual({ available: false, reason: 'seam' });
+  it('is the classifier of the seams when it is not the Community default, even if the extension has one', async () => {
+    const unavailable = { availability: () => ({ available: false as const, reason: 'seam' }), classify: stubClassifier.classify };
+    expect(await availabilityWith(withClassifier(() => stubClassifier), unavailable as never)).toEqual({ available: false, reason: 'seam' });
   });
 
-  it('is the Community default when the extension has no planner yet, or none at all', async () => {
-    expect(await availabilityWith(withPlanner(() => undefined))).toEqual({ available: false, reason: 'not_in_this_edition' });
-    expect(await availabilityWith(withPlanner(undefined))).toEqual({ available: false, reason: 'not_in_this_edition' });
+  it('is the Community default when the extension has no classifier yet, or none at all', async () => {
+    expect(await availabilityWith(withClassifier(() => undefined))).toEqual({ available: false, reason: 'not_in_this_edition' });
+    expect(await availabilityWith(withClassifier(undefined))).toEqual({ available: false, reason: 'not_in_this_edition' });
   });
 });
 

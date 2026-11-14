@@ -14,7 +14,7 @@ async function fixture() {
 function requestOf(options: { readonly previewOn: boolean; readonly record?: (event: AuditEvent) => Promise<void> }): { readonly request: ExtensionRequest; readonly events: AuditEvent[] } {
   const events: AuditEvent[] = [];
   const record = options.record ?? (async (event: AuditEvent) => void events.push(event));
-  return { events, request: { principalId: 'principal-1', principalRole: 'investigator', previewOn: options.previewOn, traceId: 'tr-1', audit: { record }, askPlanner: { availability: () => ({ available: false, reason: 'x' }) } } };
+  return { events, request: { principalId: 'principal-1', principalRole: 'investigator', previewOn: options.previewOn, traceId: 'tr-1', audit: { record }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false, cause: 'unavailable' }) }, signal: new AbortController().signal } };
 }
 
 async function groupOf() {

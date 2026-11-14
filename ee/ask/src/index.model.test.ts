@@ -23,6 +23,7 @@ const askEnv = (key: string, extra: Record<string, string> = {}): Record<string,
 let server: Server;
 let status = 200;
 let failureBody: unknown;
+let replyText = 'A synthetic answer.';
 let baseUrl: string;
 const authorizations: (string | undefined)[] = [];
 
@@ -37,7 +38,7 @@ beforeAll(async () => {
         return;
       }
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'A synthetic answer.' }], stop_reason: 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
+      response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: replyText }], stop_reason: 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -60,6 +61,32 @@ describe('the model of the extension', () => {
     expect(authorizations).toEqual(['Bearer key-from-the-start-environment']);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ action: 'test.call', result: 'success', detail: { ai: { modelRef: 'claude-sonnet-5-5', promptId: 'test.prompt' } } });
+  });
+});
+
+describe('the classifier of the extension', () => {
+  const asked = { sourceId: 'source-a', question: 'Which accounts share a thing with SENTINEL-QUESTION?', actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator' as const, traceId: 'tr-9' };
+
+  it('is none before the folder is loaded and the audit is mounted, and the stub answers it afterwards with the hash of classification.md in the one event', async () => {
+    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+    expect(extension.askClassifier()).toBeUndefined();
+    expect((await extension.configure?.(SETTINGS, askEnv('key-for-the-classifier'), CONTEXT))?.ok).toBe(true);
+    expect(extension.askClassifier()).toBeUndefined();
+    extension.createAuditSink?.(SINK_CONTEXT);
+    const classifier = extension.askClassifier();
+    expect(classifier?.availability()).toEqual({ available: true });
+    events.length = 0;
+    replyText = '{"intent":"byId","entities":{"id":"A-1"}}';
+    expect(await classifier?.classify(asked, new AbortController().signal)).toEqual({ ok: true, intent: 'byId', entities: { id: 'A-1' } });
+    replyText = 'not the form';
+    expect(await classifier?.classify(asked, new AbortController().signal)).toEqual({ ok: false, cause: 'bad-reply' });
+    replyText = 'A synthetic answer.';
+    expect(events).toHaveLength(2);
+    const expected = extension.askFolder()?.source('source-a')?.classification.sha256;
+    for (const event of events) {
+      expect(event).toMatchObject({ action: 'ask.classify', detail: { ai: { promptId: 'ask.classify', promptSha256: expected } } });
+      expect(JSON.stringify(event)).not.toMatch(/SENTINEL|not the form|A-1/);
+    }
   });
 });
 

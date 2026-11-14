@@ -55,7 +55,7 @@ import { matchesEntityTag } from './registry/etag.js';
 import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
-import { communityAskPlanner, communitySeams } from './seams/community-seams.js';
+import { communityAskClassifier, communitySeams } from './seams/community-seams.js';
 import { searchExactTemplate } from './gate/templates/search-exact.js';
 import { createAskPatternFinder, createAskPatternLister } from './ask/patterns-lister.js';
 import { createAskPlanRunnerFactory } from './ask/plan-runner.js';
@@ -371,7 +371,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     mountExtensionRoutes(app, options.extension, options.store, {
       previewOn: options.previewOn === true,
       audit: (options.seams ?? communitySeams()).audit,
-      askPlanner: (options.seams ?? communitySeams()).askPlanner ?? communityAskPlanner,
+      askClassifier: (options.seams ?? communitySeams()).askClassifier ?? communityAskClassifier,
       signText: createSigner(options.signingKey ?? deriveSigningKey(fallbackKeyMaterial)),
       askPlanRunnerFor: (context) => askRunners.current?.(context),
       askPatternsFor: (context) => askPatternLists.current?.(context),

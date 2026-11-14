@@ -45,30 +45,39 @@ export type ParsedIntents = { readonly ok: true; readonly intents: readonly Pars
 
 const PLAIN_KEY = /^[A-Za-z0-9_.-]{1,64}$/;
 
-/** The keys of the top-level object in file order, duplicates included: `JSON.parse` keeps the last of two equal keys, so the file is walked once more. */
-function topLevelKeys(text: string): readonly string[] {
-  const keys: string[] = [];
-  let depth = 0;
+/** The rule for the name of a parameter, and of an entity the classifier names. */
+export const isParameterName = (name: string): boolean => PARAMETER_NAME.test(name) && name !== '__proto__';
+
+/**
+ * Whether any object of a JSON text holds the same key twice: `JSON.parse` keeps the last of two equal keys and says nothing, so the text is walked once more. The walk is iterative, so a deep text costs no stack.
+ */
+export function hasDuplicateKeys(text: string): boolean {
+  const frames: ({ readonly keys: Set<string>; expectKey: boolean } | 'array')[] = [];
   for (let at = 0; at < text.length; at += 1) {
     const char = text[at];
+    const top = frames[frames.length - 1];
     if (char === '"') {
       let end = at + 1;
       while (end < text.length && text[end] !== '"') end += text[end] === '\\' ? 2 : 1;
-      let after = end + 1;
-      while (after < text.length && /\s/.test(text[after] ?? '')) after += 1;
-      if (depth === 1 && text[after] === ':') {
+      if (top !== undefined && top !== 'array' && top.expectKey) {
         try {
           const key: unknown = JSON.parse(text.slice(at, end + 1));
-          if (typeof key === 'string') keys.push(key);
+          if (typeof key === 'string') {
+            if (top.keys.has(key)) return true;
+            top.keys.add(key);
+          }
         } catch {
           // a string that does not parse was refused by JSON.parse already
         }
+        top.expectKey = false;
       }
       at = end;
-    } else if (char === '{' || char === '[') depth += 1;
-    else if (char === '}' || char === ']') depth -= 1;
+    } else if (char === '{') frames.push({ keys: new Set(), expectKey: true });
+    else if (char === '[') frames.push('array');
+    else if (char === '}' || char === ']') frames.pop();
+    else if (char === ',' && top !== undefined && top !== 'array') top.expectKey = true;
   }
-  return keys;
+  return false;
 }
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -81,7 +90,7 @@ function parametersOf(name: string, value: unknown, problems: string[]): readonl
   }
   const names: string[] = [];
   for (const entry of value as readonly unknown[]) {
-    if (typeof entry !== 'string' || !PARAMETER_NAME.test(entry)) problems.push(`intent "${name}": a parameter name is not [A-Za-z_][A-Za-z0-9_]{0,63}`);
+    if (typeof entry !== 'string' || !isParameterName(entry)) problems.push(`intent "${name}": a parameter name is not [A-Za-z_][A-Za-z0-9_]{0,63}`);
     else if (names.includes(entry)) problems.push(`intent "${name}": a parameter is listed twice`);
     else names.push(entry);
   }
@@ -107,7 +116,7 @@ export function parseIntentsFile(text: string): ParsedIntents {
   }
   if (!isRecord(data)) return { ok: false, problems: ['the file must be one object with an intent for each key'] };
   const names = Object.keys(data);
-  if (new Set(topLevelKeys(text)).size !== topLevelKeys(text).length) return { ok: false, problems: ['an intent name is used twice'] };
+  if (hasDuplicateKeys(text)) return { ok: false, problems: ['a key is used twice in an object of the file'] };
   if (names.length === 0) return { ok: false, problems: ['the file names no intent'] };
   if (names.length > ASK_FOLDER_LIMITS.intents) return { ok: false, problems: [`the file names more than ${ASK_FOLDER_LIMITS.intents} intents`] };
   const problems: string[] = [];

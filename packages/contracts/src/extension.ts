@@ -1,7 +1,7 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
 import type { AskFolder } from './ask-folder.js';
-import type { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskPlanner, AskRunResult } from './ask.js';
+import type { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskClassifier, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
 
@@ -17,8 +17,10 @@ export interface ExtensionRequest {
   readonly audit: AuditSink;
   /** The body of a `POST` route, already parsed by the route's request schema. */
   readonly body?: unknown;
-  /** The application's `AskPlanner`: the Community default unless the application was given another. */
-  readonly askPlanner: AskPlanner;
+  /** The application's `AskClassifier`: the Community default unless the application was given another. */
+  readonly askClassifier: AskClassifier;
+  /** Aborted when the client gives up the request. */
+  readonly signal: AbortSignal;
   /** Signs a text: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
   readonly signText?: (canonical: string) => string;
   /**
@@ -87,8 +89,8 @@ export interface ProfileExtension {
   readonly migrationsDirectory?: string;
   /** Hands the extension the API's own logger, before `configure` is called. */
   readonly attachLogger?: (logger: ExtensionLogger) => void;
-  /** The planner of the extension, once it can plan (the model is configured and the audit sink is mounted); a planner given to the application through its seams wins over it, and the Community default is used when there is none. */
-  readonly askPlanner?: () => AskPlanner | undefined;
+  /** The classifier of the extension, once it can classify (the model is configured, the audit sink is mounted and the folder is loaded); a classifier given to the application through its seams wins over it, and the Community default is used when there is none. */
+  readonly askClassifier?: () => AskClassifier | undefined;
   /** The Ask folder as it was read at start-up: undefined before `configure` has run or when it refused. */
   readonly askFolder?: () => AskFolder | undefined;
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, context: ConfigureContext) => Promise<ConfigureOutcome>;

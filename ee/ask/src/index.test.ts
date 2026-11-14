@@ -15,7 +15,7 @@ describe('the enterprise extension', () => {
     const [route, ...more] = group?.routes ?? [];
     expect(more).toEqual([]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', AI_STATUS_URL, 'principal']);
-    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }) } });
+    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, signal: new AbortController().signal });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
     expect(route?.responseSchema).toBe(aiStatusResponseSchema);
   });
@@ -23,7 +23,7 @@ describe('the enterprise extension', () => {
   it('refuses the status route when the request reports the preview off, and records the refusal', async () => {
     const [group] = createEnterpriseExtension().routeGroups;
     const events: unknown[] = [];
-    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) }, askPlanner: { availability: () => ({ available: false, reason: 'x' }) } };
+    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, signal: new AbortController().signal };
     await expect(group?.routes[0]?.handler(request) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
     expect(events).toHaveLength(1);
   });
@@ -52,11 +52,12 @@ describe('the enterprise extension', () => {
     await mounted?.close();
   });
 
-  it('has no plan store, no maintenance task and no Ask planner', () => {
+  it('has no plan store, no maintenance task and no Ask planner, and no classifier before it is configured and the audit is mounted', () => {
     const extension = createEnterpriseExtension() as unknown as Record<string, unknown>;
     expect(extension['planStore']).toBeUndefined();
     expect(extension['maintenanceTasks']).toBeUndefined();
     expect(extension['askPlanner']).toBeUndefined();
+    expect((extension as unknown as { askClassifier: () => unknown })['askClassifier']()).toBeUndefined();
   });
 
   describe('the model behind the audit', () => {

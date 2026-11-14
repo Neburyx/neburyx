@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AuditEvent } from './audit.js';
 import { edgeRefSchema, elementRefSchema, nodeSchema } from './graph.js';
 import { codePoints } from './investigations.js';
 import { referenceTextSchema } from './entities.js';
@@ -45,25 +46,6 @@ export const SAVED_PATTERN_TEMPLATE_VERSION = 1;
 
 /** The parameters of a saved-pattern plan as it is stored. */
 export const storedSavedPatternParamsSchema = z.strictObject({ patternId: z.uuid(), patternVersion: z.number().int().min(1), ref: anchor.optional() });
-/** The kinds of question Ask refuses, neutral names; the closed list the refusal answer draws its `family` from. The last two are set by the server only. */
-export const ASK_REFUSAL_FAMILIES = [
-  'path',
-  'property-selection',
-  'similar-records',
-  'ranking-or-aggregate',
-  'attribute-combination',
-  'indirect-attribute',
-  'unnamed-relation',
-  'judgement',
-  'personal-data',
-  'loaded-view',
-  'other',
-  'plan-not-usable',
-  'model-refused',
-] as const;
-
-export const askRefusalFamilySchema = z.enum(ASK_REFUSAL_FAMILIES);
-
 export const ASK_RUN_OUTCOMES = ['complete', 'partial', 'failed'] as const;
 
 /** What a run of a plan answers: the template it ran and the answer of the service its manual route uses, whole, so a run reads exactly as the person's own click would. */
@@ -121,7 +103,6 @@ export const askSummarySchema = z
     if (new Set(summary.citations.map((citation) => citation.element.sourceId)).size > 1) context.addIssue({ code: 'custom', message: 'the citations are of one source', path: ['citations'] });
   });
 
-export type AskRefusalFamily = z.infer<typeof askRefusalFamilySchema>;
 export type AskRunResult = z.infer<typeof askRunResultSchema>;
 export type AskSummary = z.infer<typeof askSummarySchema>;
 export type AskSummaryCitation = z.infer<typeof askSummaryCitationSchema>;
@@ -187,7 +168,43 @@ export interface AskPatternOffer {
   readonly projection: AskPatternProjection;
 }
 
-/** The seam Ask runs through: the Community default says it is not available; an installed one is available when the model and the audit are. */
-export interface AskPlanner {
+/** Why Ask did not answer a question. Each cause has one fixed sentence (`ASK_REFUSAL_SENTENCES`); no sentence holds a word of the model, the question or the folder. */
+export const ASK_REFUSAL_CAUSES = [
+  'no-intent',
+  'unknown-intent',
+  'bad-reply',
+  'model-declined',
+  'model-failed',
+  'no-ask-for-source',
+  'unavailable',
+  'missing-inputs',
+  'extra-inputs',
+  'nothing-found',
+] as const;
+
+export type AskRefusalCause = (typeof ASK_REFUSAL_CAUSES)[number];
+
+/** The values the classifier extracted from a question, named as the parameters of the intent it chose. */
+export type AskEntities = Readonly<Record<string, string | number | boolean>>;
+
+/** Who asked and about which source: ids only, so the audit of the call can name the actor. */
+export interface AskClassifyInput {
+  readonly sourceId: string;
+  /** The question as typed, at most `ASK_QUESTION_MAX_CODE_POINTS` code points and not blank. */
+  readonly question: string;
+  readonly actorId: string;
+  readonly actorRole: Exclude<AuditEvent['actorRole'], 'system'>;
+  readonly traceId: string;
+  readonly investigationId?: string;
+}
+
+export type AskClassification = { readonly ok: true; readonly intent: string; readonly entities: AskEntities } | { readonly ok: false; readonly cause: AskRefusalCause };
+
+/** The longest question Ask takes, in code points. */
+export const ASK_QUESTION_MAX_CODE_POINTS = 1000;
+
+/** The seam Ask runs through: the Community default says it is not available; an installed one classifies a question into an intent and its entities, or says why it did not. */
+export interface AskClassifier {
   availability(): AskAvailability;
+  classify(input: AskClassifyInput, signal: AbortSignal): Promise<AskClassification>;
 }

@@ -1,4 +1,4 @@
-import type { AskRefusalFamily } from '@neburyx/contracts';
+import type { AskRefusalCause } from '@neburyx/contracts';
 import type { ToolEntry } from '../workspace/tool-registry.js';
 
 /** The id the Paths tool registers under, as an action tool; Ask offers it only then. */
@@ -20,23 +20,7 @@ export const EXPAND_HINT = 'To expand an entity, select it and press E, or right
 /** True for the one tool a chip may run: an action tool with the Paths id. A tool that opens a flyout is not offered. */
 export const isPathsTool = (tool: ToolEntry | undefined): boolean => tool !== undefined && tool.id === PATHS_TOOL_ID && tool.kind.type === 'action';
 
-/** What the card offers for a family, in order. */
-export function chipsOf(family: AskRefusalFamily, pathsAvailable: boolean): readonly RefusalChip[] {
-  switch (family) {
-    case 'path':
-      return [pathsAvailable ? 'paths' : 'expand'];
-    case 'property-selection':
-      return ['filters', 'search'];
-    case 'ranking-or-aggregate':
-    case 'loaded-view':
-      return [];
-    case 'personal-data':
-      return ['search-id'];
-    case 'other':
-    case 'plan-not-usable':
-    case 'model-refused':
-      return ['search-id', 'filters', 'expand'];
-    default:
-      return ['expand'];
-  }
+/** What the card offers for a cause, in order. Every cause gets the same chips until the Ask panel is rebuilt and chooses them by cause. */
+export function chipsOf(_cause: AskRefusalCause): readonly RefusalChip[] {
+  return ['search-id', 'filters', 'expand'];
 }

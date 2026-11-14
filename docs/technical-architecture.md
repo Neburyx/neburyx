@@ -40,7 +40,7 @@ tagged **[W2]** (the second wave) or **[Later]**.
 | ADR-08 | LLM provider is pluggable and customer-chosen; no data goes to a model unless the policy allows it | Regulated buyers must control where data goes |
 | ADR-09 | Open core in one repo and one image: Community and the `ee/` directory are both under Apache-2.0. The public image compiles `ee/` in; its code path is off unless both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set. These switches are safety rails, not a lock. | One repo, one CI, solo-maintainable |
 | ADR-10 | Schema mapping is **declarative YAML**, a strict YAML 1.2 subset (see §5), validated at startup and by `test-source` | Onboarding without code |
-| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a built-in versioned prompt with no tools, never auto-saved or exported. The summarizer reuses the `AskPlanner` seam and Ask's model settings. | Gen-AI value without a black box or a data leak |
+| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a built-in versioned prompt with no tools, never auto-saved or exported. The summarizer reuses Ask's model settings and audited call. | Gen-AI value without a black box or a data leak |
 | ADR-12 | **Valkey in the Enterprise profile, for coordination only** (2026-10-30). It holds concurrency leases, rate-limit counters, circuit-breaker state, login challenges and sign-in throttles, all with expiries. It **never holds customer data**, query results or PII, and nothing in it needs a backup. Community keeps the same state in process memory. The result cache stays per process in both editions (§3). | Several API copies must share per-user and per-source read limits (§14). Holding a Postgres connection for up to 10 s per Neo4j read does not scale to hundreds of reads in flight. Valkey is the BSD-licensed Linux Foundation fork of Redis, offered as a managed service by AWS and Google Cloud; elsewhere the customer runs it with a replica and failover |
 | ADR-13 | **Single-tenant**: one organization per deployment (2026-10-30). No `tenant_id`. Covers self-hosted deployments now and a dedicated instance run on a customer's behalf later. A multi-tenant SaaS is not built. | Regulated buyers keep the product next to their Neo4j; no tenancy isolation to build or test |
 | ADR-14 | **Domain-neutral engine, configured in three layers** (2026-10-30). *Product* (code): screens, tools, count rules, masking, errors, the gate. *Source* (YAML, per source): types, display, key properties, presets, vocabulary, style rules (§5). *User* (UI): columns, density, layout, saved views. No entity, relationship or property name appears in code. Domain content ships as **domain packs** (§5.1). The mapping is not editable in the UI (validate-only editor Later). | Security-relevant config (pii, search, derived edges) stays under the customer's change control in git. A minimal mapping works with defaults; `neburyx init` drafts one. Domain-specific screens would be customer-specific code |
@@ -53,7 +53,7 @@ tagged **[W2]** (the second wave) or **[Later]**.
  Browser ──►│  Fastify app  ── serves built web assets + /v1 API + SSE      │
             │     │  gate: policy → template → budget → execute → normalize │──► Neo4j (customer, read-only, TLS)
             │     ├─ job runner: graphile-worker (in-process C | `worker` E) │
-            │     └─ Ask planner ──► LLM provider (E, customer-chosen)       │
+            │     └─ Ask classifier ──► LLM provider (E, customer-chosen)    │
             └─────┬──────────────────────┬────────────────┬───────────────┘
                   │ PostgreSQL (C and E) │ C: /data/exports│ E: Valkey (leases, counters,
                   │                      │ E: S3-compatible│    login challenges; no customer data)
@@ -117,11 +117,11 @@ ee/              (Enterprise scope; Apache-2.0 like Community; off unless the pr
   policy/        authorization + PII redaction applied inside gate/
   audit/         append-only audit events + minimal viewer API
   evidence/      evidence packs: manifest, checksums, object store, verify CLI
-  ask/           planner, assistant router, case summarizer, LLM providers, citation checker
+  ask/           classifier, assistant router, case summarizer, LLM providers, citation checker
 ```
 
 Community code never imports from `ee/`. Enterprise plugs in through interfaces defined in
-Community (`PolicyProvider`, `AuditSink`, `EvidenceStore`, `AskPlanner`, which also serves the case summarizer,
+Community (`PolicyProvider`, `AuditSink`, `EvidenceStore`, `AskClassifier`,
 and `Coordinator`, whose Community default is in-memory and whose Enterprise implementation uses Valkey),
 each with a no-op or single-user default. This keeps the line between editions obvious, and keeps Community fully usable
 by itself.
@@ -649,7 +649,7 @@ machinery as Ask. It describes a view. Ask answers a question.
 visible element keys ─► re-read through the gate (policy applies server-side, capped at 300 elements)
         ─► de-identify: names, IDs and property values → placeholders ‹person#1›, ‹device#2›
            (kept: entity types, relationship types, derived-rule names, timestamps, counts + quality)
-        ─► summarizer (LLM, through the AskPlanner seam) ─► JSON sentences, each with citation keys [n3][e7]
+        ─► summarizer (LLM, through Ask's audited model call) ─► JSON sentences, each with citation keys [n3][e7]
         ─► structural citation check + numeric check ─► re-hydrate placeholders locally
         ─► draft + server-written omissions line ─► analyst reviews, edits, regenerates or discards
 ```

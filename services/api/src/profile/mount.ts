@@ -1,14 +1,17 @@
-import { parseExtensionRefusal, type AskPlanner, type ExtensionRefusalFields, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
+import { parseExtensionRefusal, type AskClassifier, type ExtensionRefusalFields, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppStore } from '../app-store.js';
 import { AppError } from '../errors.js';
-import { communityAskPlanner } from '../seams/community-seams.js';
+import { communityAskClassifier } from '../seams/community-seams.js';
 import type { Principal } from '../seams/seams.js';
+
+/** What an extension route gets as its abort signal when the application gave no way to tell that the client gave up. */
+const NEVER_ABORTED = new AbortController();
 
 export interface ExtensionMount {
   readonly previewOn: boolean;
   readonly audit: AuditSink;
-  readonly askPlanner: AskPlanner;
+  readonly askClassifier: AskClassifier;
   /** Signs a text (the Continue token); absent, a route that needs it refuses. */
   readonly signText?: ExtensionRequest['signText'];
   /** The runner of plans for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs a plan refuses. */
@@ -49,7 +52,8 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               previewOn: mount.previewOn,
               traceId: request.id,
               audit: mount.audit,
-              askPlanner: mount.askPlanner !== communityAskPlanner ? mount.askPlanner : (extension.askPlanner?.() ?? mount.askPlanner),
+              askClassifier: mount.askClassifier !== communityAskClassifier ? mount.askClassifier : (extension.askClassifier?.() ?? mount.askClassifier),
+              signal: mount.signalOf?.(request) ?? NEVER_ABORTED.signal,
               ...(mount.signText === undefined ? {} : { signText: mount.signText }),
               ...(askPatterns === undefined ? {} : { askPatterns }),
               ...(askPatternFind === undefined ? {} : { askPatternFind }),

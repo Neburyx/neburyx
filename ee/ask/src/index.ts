@@ -1,9 +1,10 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AskFolder, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AskClassifier, type AskFolder, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
+import { createAskClassifier } from './classify/classifier.js';
 import { createFailureReporter } from './failure-line.js';
 import { loadAskFolder } from './folder/load.js';
 import { guardAiRouteGroup } from './route-guard.js';
@@ -23,6 +24,8 @@ export interface EnterpriseExtension extends ProfileExtension {
   /** The Ask folder read at start-up; undefined before `configure` accepted it. */
   readonly askFolder: () => AskFolder | undefined;
   readonly configuration: () => AskConfiguration | undefined;
+  /** The classifier of Ask, once the model is configured, the audit sink is mounted and the folder is loaded; undefined before. */
+  readonly askClassifier: () => AskClassifier | undefined;
   /** The audit sink the application mounted, or undefined before it was built; the audited model call records through it. */
   readonly auditSink: () => AuditSink | undefined;
   /** The model behind the audit: undefined until both the configuration and the mounted audit sink exist, so no route reaches the provider without the audit. */
@@ -41,6 +44,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let logger: ExtensionLogger | undefined;
   let folder: AskFolder | undefined;
   const reportFailure = createFailureReporter(() => logger);
+  const modelOf = (): AuditedModelCall | undefined => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink }));
   return {
     name: 'ask',
     migrationsDirectory: MIGRATIONS_DIRECTORY,
@@ -49,6 +53,10 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     },
     configuration: () => configuration,
     askFolder: () => folder,
+    askClassifier: () => {
+      const model = modelOf();
+      return model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
+    },
     async configure(_settings, env, context) {
       const configured = await configureAsk(env);
       configuration = configured.configuration;
@@ -63,7 +71,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,
-    model: () => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink })),
+    model: modelOf,
     createAuditSink(context) {
       mounted = createAuditSink(context);
       return mounted;

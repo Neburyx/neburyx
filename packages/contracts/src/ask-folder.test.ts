@@ -64,12 +64,17 @@ describe('the intents file', () => {
     expect(problemsOf(intents).join(' ')).toContain('more than 200 intents');
   });
 
+  it('refuses a parameter named __proto__', () => {
+    expect(problemsOf({ named: { parameters: ['__proto__'], template: 'entity' } }).join(' ')).toContain('a parameter name is not');
+  });
+
   it('refuses an intent name used twice, which JSON.parse would merge', () => {
     const text = '{"same": {"parameters": [], "template": "entity"}, "other": {"parameters": [], "template": "entity"}, "same": {"parameters": [], "template": "entity"}}';
-    expect(problemsOf(text)).toEqual(['an intent name is used twice']);
-    expect(problemsOf('{"a": {"parameters": [], "template": "entity", "settings": {"same": 1, "same": 2}}}')).toEqual([]);
+    expect(problemsOf(text)).toEqual(['a key is used twice in an object of the file']);
+    expect(problemsOf('{"a": {"parameters": [], "template": "entity", "settings": {"same": 1, "same": 2}}}')).toEqual(['a key is used twice in an object of the file']);
+    expect(problemsOf('{"a": {"parameters": [], "template": "entity", "settings": {"list": [{"x": 1}, {"x": 2}]}}}')).toEqual([]);
     const spaced = `{"a": {"parameters": [], "template": "entity"}, "a"${' '.repeat(80)}: {"parameters": [], "template": "entity"}}`;
-    expect(problemsOf(spaced)).toEqual(['an intent name is used twice']);
+    expect(problemsOf(spaced)).toEqual(['a key is used twice in an object of the file']);
   });
 
   it('prints a key only when it is plain, and freezes what it returns', () => {

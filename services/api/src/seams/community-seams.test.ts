@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { LOCAL_IDENTITY } from '../testing/app-store.js';
-import { communityAskPlanner, communityAudit, communityPolicy, communitySeams } from './community-seams.js';
+import { communityAskClassifier, communityAudit, communityPolicy, communitySeams } from './community-seams.js';
 import type { AuditEvent } from './seams.js';
 
 describe('the Community policy provider', () => {
@@ -63,9 +63,10 @@ describe('the Community coordinator', () => {
   });
 });
 
-describe('the Community Ask planner', () => {
-  it('says it is not available in this edition, and is the planner of the Community seams', () => {
-    expect(communityAskPlanner.availability()).toEqual({ available: false, reason: 'not_in_this_edition' });
-    expect(communitySeams().askPlanner).toBe(communityAskPlanner);
+describe('the Community Ask classifier', () => {
+  it('says it is not available in this edition, answers the cause unavailable, and is the classifier of the Community seams', async () => {
+    expect(communityAskClassifier.availability()).toEqual({ available: false, reason: 'not_in_this_edition' });
+    expect(communitySeams().askClassifier).toBe(communityAskClassifier);
+    expect(await communityAskClassifier.classify({ sourceId: 'demo', question: 'anything', actorId: 'a', actorRole: 'investigator', traceId: 't' }, new AbortController().signal)).toEqual({ ok: false, cause: 'unavailable' });
   });
 });

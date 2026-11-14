@@ -73,7 +73,7 @@ describe('recognising a refusal by its shape', () => {
 });
 
 describe('the request an extension handler is given', () => {
-  const complete: ExtensionRequest = { principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }) } };
+  const complete: ExtensionRequest = { principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false, cause: 'unavailable' }) }, signal: new AbortController().signal };
 
   it('is only added to: a handler that reads the principal alone still takes it', async () => {
     const handler = async (request: ExtensionRequest): Promise<string> => request.principalId;

@@ -108,7 +108,7 @@ function codeOf(error: unknown): FailureCode {
   return 'provider-error';
 }
 
-/** The one place that decides what is cached: only the instructions, with their static parameters filled in from the mapping and the catalog, as the one system block with the one breakpoint, and never a value of the question or of the data. With caching off, or with no fixed part, the whole prompt is the user message. */
+/** The one place that decides what is cached: only the instructions, as the caller wrote them, as the one system block with the one breakpoint, and never the values (the question). The prefix is cached only above the model's minimum cacheable length; a shorter one is simply sent uncached. With caching off, or with no fixed part, the whole prompt is the user message. */
 function promptParts(request: ModelRequest, cache: AskConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
   if (!cache.enabled || request.instructions === undefined) return { messages: [{ role: 'user', content: request.instructions === undefined ? request.values : `${request.instructions}\n\n${request.values}` }] };
   const breakpoint = cache.ttl === '1h' ? { type: 'ephemeral' as const, ttl: '1h' as const } : { type: 'ephemeral' as const };
