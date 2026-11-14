@@ -11,6 +11,7 @@ import neo4j from 'neo4j-driver';
 import { parse } from 'yaml';
 import { buildApp } from '../app.js';
 import { createSourceGate, type SourceGate } from '../gate/source-gate.js';
+import type { Gate } from '../gate/types.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
 import type { SourceModel } from '../mapping/model.js';
@@ -139,20 +140,45 @@ async function hydrated(pack: string, value: unknown): Promise<unknown> {
   return value;
 }
 
+const TYPES = (value: unknown, path = ''): string[] =>
+  Array.isArray(value) ? [`${path}: array`, ...value.flatMap((item, at) => TYPES(item, `${path}[${at}]`))] : typeof value === 'object' && value !== null ? Object.entries(value).flatMap(([key, item]) => TYPES(item, path === '' ? key : `${path}.${key}`)) : [`${path}: ${typeof value}`];
+
+/** What a failed run needs to be read: the template, the parameter names with their types (not their values), the source's bounds, the gate's own warnings, and the same template called through the manual route with the same parameters. */
+async function diagnosis(pack: string, rig: Awaited<ReturnType<typeof started>>, plan: { templateId: string; templateVersion: number }, params: unknown): Promise<string> {
+  const source = sourceOf(pack);
+  const manual = await rig.app.inject({ method: 'POST', url: `/v1/templates/${plan.templateId}/run`, headers: { 'idempotency-key': 'diagnosis-0001' }, payload: { sourceId: rig.sourceId, params } });
+  return [
+    `template ${plan.templateId} v${plan.templateVersion}`,
+    `parameters ${TYPES(params).join(', ')}`,
+    `source maxHops ${source.budgets.maxHops}, heavyOpThreshold ${source.budgets.heavyOpThreshold}`,
+    `manual route: ${manual.statusCode} ${manual.body.slice(0, 300)}`,
+    `log: ${logged.filter((line) => line.includes('gate-')).slice(-6).join(' | ')}`,
+  ].join('\n');
+}
+
 const available: AskPlanner = { availability: () => ({ available: true }), plan: () => Promise.reject(new Error('not used')) };
 
 /** The lines the application logged, so that a summary the product dropped is seen and not mistaken for a run that listed nothing. */
 const logged: string[] = [];
 
+/** The gate as the application sees it, with the text of any failure kept in `logged`, since the application's own log leaves the text of an unexpected failure out. */
+function watched(inner: Gate): Gate {
+  const keep = (error: unknown): never => {
+    logged.push(`gate-failure: ${error instanceof Error ? `${error.name}: ${error.message} ${String((error as { reason?: unknown }).reason)}` : String(error)}`.slice(0, 600));
+    throw error;
+  };
+  return { run: (request) => inner.run(request).catch(keep), runMany: (requests) => inner.runMany(requests).catch(keep) };
+}
+
 async function started(pack: string) {
   const mapping = { sources: [sourceOf(pack)] };
   const server = servers.get(pack);
   if (server === undefined) throw new Error('no server');
-  const gate = createSourceGate({ mapping, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password }, seams: communitySeams(), logger: { warn: () => undefined } });
+  const gate = createSourceGate({ mapping, env: { DEMO_NEO4J_USER: server.reader.user, DEMO_NEO4J_PASSWORD: server.reader.password }, seams: communitySeams(), logger: { warn: (...parts: unknown[]) => void logged.push(`gate-warn: ${JSON.stringify(parts).slice(0, 300)}`) } });
   gates.push(gate);
   const plans = createListPlanStore();
   const seams = communitySeams();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void logged.push(line) }), store: memoryAppStore(), mapping, gate: gate.gate, seams: { ...seams, askPlanner: available } as Seams, extension: createEnterpriseExtension({ planStore: plans }), previewOn: true });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void logged.push(line) }), store: memoryAppStore(), mapping, gate: watched(gate.gate), seams: { ...seams, askPlanner: available } as Seams, extension: createEnterpriseExtension({ planStore: plans }), previewOn: true });
   return { app, plans, sourceId: mapping.sources[0]?.id ?? '' };
 }
 
@@ -187,7 +213,7 @@ describe.each(PACKS)(`every demo question of the %s pack, from the committed rep
         if (plan.kind !== 'plan') continue;
         const stored = rig.plans.put({ id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`, userId: principalFixture.id, sourceId: rig.sourceId, templateId: plan.templateId, templateVersion: plan.templateVersion, params: (await hydrated(pack, plan.params)) as never });
         const response = await rig.app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: stored.id } });
-        if (response.statusCode !== 200) throw new Error(`the question ${question.id} ran with the status ${response.statusCode}`);
+        if (response.statusCode !== 200) throw new Error(`${await diagnosis(pack, rig, plan, stored.params)}\n` + `the question ${question.id} ran with the status ${response.statusCode}: ${response.body.slice(0, 400)} (template ${plan.templateId}; ${logged.slice(-6).join(' | ').slice(0, 1500)})`);
         const body = askRunResponseSchema.parse(response.json());
         ran += 1;
         const listed = listedElements(body.result);
