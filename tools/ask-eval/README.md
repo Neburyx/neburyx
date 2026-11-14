@@ -12,14 +12,14 @@ pnpm ask-eval --packs domain-packs \
 - A question expects `refuse` or an intent with its entities (`questions.yaml` of a pack: `expect: { intent: …, entities: { … } }`). Each pack's own `ask/` folder is read the way the product reads it.
 - A plan is **right** only when the intent and every entity (name and value) are equal to the expected ones, compared exactly as given (nothing is trimmed). A refusal is **refused** only when the classifier answers that no intent fits (`no-intent`). Every other answer is a miss with its cause: `wrong-intent`, `wrong-entities`, `answered` (a question to refuse was given an intent), `no-reply` (the replay has no answer), or the classifier's own cause (`unknown-intent`, `bad-reply`, `model-declined`, `model-failed`).
 - **Targets:** every refusal is refused, and at least 92% of the plans are right, that is at most `floor(plans × 8 / 100)` misses. The report also counts the plan questions the classifier answered `no-intent`.
-- **Baseline:** `baseline.json` holds the counts of the best run of the replay mode (refusals refused, plans right) and a hash of the question files; a run below either count fails, and a baseline made for other questions is refused. `--update-baseline` writes it only from a run that meets the targets, never lower, and never from a scripted replay.
+- **Baseline:** `baseline.json` holds the counts of the best run of the replay mode (refusals refused, plans right), the model they were measured on and a hash of the question files; a baseline made for another model is refused (a new model is a new baseline); a run below either count fails, and a baseline made for other questions is refused. `--update-baseline` writes it only from a run that meets the targets, never lower, and never from a scripted replay.
 - Exit codes: 0 for a run that meets the targets and the baseline, 1 for a miss, 2 for a usage error.
 
 The report holds counts, ids and causes. It never holds a question, an entity value or a reply.
 
 ## The replay
 
-A replay is one file: `{ folders, answers }`. `folders` holds the SHA-256 of the `classification.md` of each source the answers were recorded for; `answers` maps a question's text to `{ reply }` (the model's text), `{ declined: true }` (the model refused) or `{ failure: <code> }` (a failed call). A replay recorded for another `classification.md` is refused: a change to a classification text needs a new recording.
+A replay is one file: `{ model, folders, answers }`. `model` is the model that gave the answers (a recording has one; a scripted replay has none); a replay that is not scripted and names no model is refused, and the report prints the model. `folders` holds the SHA-256 of the `classification.md` of each source the answers were recorded for; `answers` maps a question's text to `{ reply }` (the model's text), `{ declined: true }` (the model refused) or `{ failure: <code> }` (a failed call). A replay recorded for another `classification.md` is refused: a change to a classification text needs a new recording.
 
 The committed replay, `tools/ask-eval/data/replay.json`, is the recording of one measured run of `claude-haiku-5-5` (35 calls, one for each demo question), and `baseline.json` holds its counts (8 refusals refused, 27 plans right).
 

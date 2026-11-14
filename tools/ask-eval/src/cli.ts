@@ -6,7 +6,7 @@ import { requireOutsideGitTree, writePrivateFile } from './paths.js';
 import { readQuestions, UsageError } from './questions.js';
 import { recordRun } from './record.js';
 import { reportLines, resultOf } from './report.js';
-import { checkReplay, parseReplay, replayText, SCRIPTED, scriptedReplay } from './replay-file.js';
+import { checkReplay, parseReplay, replayText, requireModel, SCRIPTED, scriptedReplay } from './replay-file.js';
 import { scanTree } from './scan.js';
 import { scoreReplay } from './score.js';
 import { cleanUpTemporary, loadSets, type SetInputs } from './sets.js';
@@ -88,23 +88,24 @@ async function score(parsed: Parsed, io: CliIo, hooks: EvalHooks): Promise<numbe
   const baselinePath = one(parsed, 'baseline');
   if (privateRun) for (const path of [replayPath, baselinePath]) if (path !== undefined) requireOutsideGitTree(path, 'a file of a private run');
   const replay = parseReplay(readFileSync(replayPath, 'utf8'));
+  requireModel(replay);
   checkReplay(sets, replay);
   const result = resultOf(await scoreReplay(sets, replay, hooks), replay.note === SCRIPTED);
   const label = `${sets.map((set) => set.label).join(', ')} (${sets.reduce((total, set) => total + set.questions.length, 0)} questions)`;
   let problem: string | undefined;
   if (baselinePath !== undefined) {
     const baseline = parseBaseline(readFileSync(baselinePath, 'utf8'));
-    problem = belowBaseline(baseline, sets, result);
+    problem = belowBaseline(baseline, sets, result, replay.model);
     if (parsed.switches.has('update-baseline')) {
-      const text = `${JSON.stringify(updatedBaseline(baseline, sets, result), null, 2)}\n`;
+      const text = `${JSON.stringify(updatedBaseline(baseline, sets, result, replay.model), null, 2)}\n`;
       if (privateRun) writePrivateFile(baselinePath, text, true);
       else writeFileSync(baselinePath, text);
       io.out('baseline written');
     }
   } else if (parsed.switches.has('update-baseline')) throw new UsageError(USAGE);
-  if (parsed.switches.has('json')) io.out(JSON.stringify({ label, ...result, questions: questionsHash(sets), ...(problem === undefined ? {} : { baseline: problem }) }));
+  if (parsed.switches.has('json')) io.out(JSON.stringify({ label, ...(replay.model === undefined ? {} : { model: replay.model }), ...result, questions: questionsHash(sets), ...(problem === undefined ? {} : { baseline: problem }) }));
   else {
-    for (const line of reportLines(result, label)) io.out(line);
+    for (const line of reportLines(result, label, replay.model)) io.out(line);
     if (problem !== undefined) io.out(`baseline: ${problem}`);
     io.out(result.targetsMet && problem === undefined ? 'result: pass' : 'result: fail');
   }

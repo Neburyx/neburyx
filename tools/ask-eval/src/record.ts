@@ -62,7 +62,7 @@ export async function recordRun(sets: readonly SourceSet[], options: RecordOptio
     failedWith = error;
   }
   const usage = recording.usage();
-  const replay: Replay = { folders: Object.fromEntries(sets.map((set) => [set.source.sourceId, set.source.classificationSha256])), answers: Object.fromEntries(recording.answers()) };
+  const replay: Replay = { model: live.model, folders: Object.fromEntries(sets.map((set) => [set.source.sourceId, set.source.classificationSha256])), answers: Object.fromEntries(recording.answers()) };
   const record = { model: live.model, effort: live.effort, prompts: Object.fromEntries(sets.map((set) => [set.label, set.source.classificationSha256])), questions, questionsHash: questionsHash(sets), stoppedAtBudget: stopped, stoppedByError: failedWith !== undefined, ...usage };
   writePrivateFile(join(options.out, 'recording.json'), replayText(replay), options.force);
   writePrivateFile(join(options.out, 'run-record.json'), `${JSON.stringify(record, null, 2)}\n`, options.force);

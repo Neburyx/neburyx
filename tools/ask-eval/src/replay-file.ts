@@ -6,9 +6,11 @@ import type { SourceSet } from './sets.js';
 const MAX_REPLAY_BYTES = 5 * 1024 * 1024;
 
 const answerSchema = z.union([z.strictObject({ reply: z.string() }), z.strictObject({ declined: z.literal(true) }), z.strictObject({ failure: z.enum(FAILURE_CODES as [string, ...string[]]) })]);
-const replaySchema = z.strictObject({ note: z.string().optional(), folders: z.record(z.string(), z.string().regex(/^[0-9a-f]{64}$/)), answers: z.record(z.string(), answerSchema) });
+const replaySchema = z.strictObject({ model: z.string().min(1).optional(), note: z.string().optional(), folders: z.record(z.string(), z.string().regex(/^[0-9a-f]{64}$/)), answers: z.record(z.string(), answerSchema) });
 
 export interface Replay {
+  /** The model that gave the answers. A recording has one; a scripted replay has none. */
+  readonly model?: string;
   /** `scripted` marks a replay generated from the expectations; a recording by a model has no note. */
   readonly note?: string;
   /** The SHA-256 of the `classification.md` of each source the replay was recorded for. */
@@ -32,6 +34,12 @@ export function parseReplay(text: string): Replay {
 }
 
 export const replayOf = (replay: Replay): ReadonlyMap<string, RecordedAnswer> => new Map(Object.entries(replay.answers));
+
+/** Refuses a replay that is not scripted and does not say which model recorded it: its answers could be any model's. */
+export function requireModel(replay: Replay): void {
+  if (replay.note !== SCRIPTED && replay.model === undefined) throw new UsageError('the replay does not say which model recorded it');
+  if (replay.note === SCRIPTED && replay.model !== undefined) throw new UsageError('a scripted replay names no model');
+}
 
 /** Refuses a replay recorded for another classification text, and a replay that holds an answer to a question not in the set (the number is named, never the text). */
 export function checkReplay(sets: readonly SourceSet[], replay: Replay): void {

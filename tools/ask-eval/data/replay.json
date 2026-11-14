@@ -1,4 +1,5 @@
 {
+  "model": "claude-haiku-5-5",
   "folders": {
     "banking-demo": "821858a6bae051b601a862d03ad7bcd4fe2a7db0206c99ef688e4d3f0e3c9dc3",
     "insurance-demo": "d89e9f5765d91b58869c0c075521ec6ac3e96e6d25be17a66df3f2b375a61598"

@@ -4,7 +4,7 @@ import type { Result } from './report.js';
 import { UsageError } from './questions.js';
 import type { SourceSet } from './sets.js';
 
-const valueSchema = z.strictObject({ questions: z.string().regex(/^[0-9a-f]{64}$/), refusals: z.number().int().min(0), plans: z.number().int().min(0) });
+const valueSchema = z.strictObject({ model: z.string().min(1), questions: z.string().regex(/^[0-9a-f]{64}$/), refusals: z.number().int().min(0), plans: z.number().int().min(0) });
 const baselineSchema = z.strictObject({ replay: valueSchema.optional() });
 
 export type Baseline = z.infer<typeof baselineSchema>;
@@ -28,9 +28,10 @@ export function parseBaseline(text: string): Baseline {
 }
 
 /** The problem with a run against its baseline, or undefined when there is none: no value yet, or both counts held. */
-export function belowBaseline(baseline: Baseline, sets: readonly SourceSet[], result: Result): string | undefined {
+export function belowBaseline(baseline: Baseline, sets: readonly SourceSet[], result: Result, model: string | undefined): string | undefined {
   const value = baseline.replay;
   if (value === undefined) return undefined;
+  if (model !== value.model) throw new UsageError('the baseline was made for another model');
   if (value.questions !== questionsHash(sets)) throw new UsageError('the baseline was made for other questions');
   if (result.refusals.refused < value.refusals) return `refusals refused ${result.refusals.refused} is below the baseline ${value.refusals}`;
   if (result.plans.right < value.plans) return `plans right ${result.plans.right} is below the baseline ${value.plans}`;
@@ -38,10 +39,12 @@ export function belowBaseline(baseline: Baseline, sets: readonly SourceSet[], re
 }
 
 /** The baseline a run may write: only from a run that meets its targets and is not scripted, and never lower than the one it replaces. */
-export function updatedBaseline(previous: Baseline, sets: readonly SourceSet[], result: Result): Baseline {
+export function updatedBaseline(previous: Baseline, sets: readonly SourceSet[], result: Result, model: string | undefined): Baseline {
+  if (previous.replay !== undefined && previous.replay.model !== model) throw new UsageError('the baseline holds another model\'s counts; a new model is a new baseline, so remove the value first');
   if (result.scripted) throw new UsageError('a baseline is not written from a scripted replay');
+  if (model === undefined) throw new UsageError('a baseline is written only from a replay that names its model');
   if (!result.targetsMet) throw new UsageError('a baseline is written only from a run that meets its targets');
   const old = previous.replay;
   if (old !== undefined && old.questions === questionsHash(sets) && (result.refusals.refused < old.refusals || result.plans.right < old.plans)) throw new UsageError('a baseline is never written lower');
-  return { replay: { questions: questionsHash(sets), refusals: result.refusals.refused, plans: result.plans.right } };
+  return { replay: { model, questions: questionsHash(sets), refusals: result.refusals.refused, plans: result.plans.right } };
 }

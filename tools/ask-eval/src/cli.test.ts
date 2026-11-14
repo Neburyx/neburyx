@@ -24,7 +24,7 @@ async function privateRun(extra: readonly string[], answers: Record<string, Reco
   const replay = join(outside, 'replay.json');
   expect(await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--write-replay', replay], scripted.io, given)).toBe(0);
   const text = JSON.parse(readFileSync(replay, 'utf8')) as { note?: string; folders: unknown; answers: unknown };
-  writeFileSync(replay, JSON.stringify({ folders: text.folders, answers: replayAnswers }));
+  writeFileSync(replay, JSON.stringify({ model: 'fixture-model', folders: text.folders, answers: replayAnswers }));
   const run = io();
   const code = await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--replay', replay, ...extra], run.io, given);
   return { code, ...run, fixture, outside, replay };
@@ -76,14 +76,14 @@ describe('scoring a private-shaped set on a replay', () => {
     const fixture = fixtureSet(QUESTIONS);
     const outside = scratch();
     const replay = join(outside, 'replay.json');
-    writeFileSync(replay, JSON.stringify({ folders: { [fixture.source]: 'f'.repeat(64) }, answers: {} }));
+    writeFileSync(replay, JSON.stringify({ model: 'fixture-model', folders: { [fixture.source]: 'f'.repeat(64) }, answers: {} }));
     const stale = io();
     expect(await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--replay', replay], stale.io, hooks())).toBe(2);
     expect(stale.err.join('\n')).toContain('recorded for another classification text');
     const scripted = io();
     await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--write-replay', replay], scripted.io, hooks());
     const written = JSON.parse(readFileSync(replay, 'utf8')) as { folders: unknown; answers: Record<string, unknown> };
-    writeFileSync(replay, JSON.stringify({ folders: written.folders, answers: { ...written.answers, 'Not in the set.': { reply: 'x' } } }));
+    writeFileSync(replay, JSON.stringify({ model: 'fixture-model', folders: written.folders, answers: { ...written.answers, 'Not in the set.': { reply: 'x' } } }));
     const stray = io();
     expect(await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--replay', replay], stray.io, hooks())).toBe(2);
     expect(stray.err.join('\n')).toContain('1 answer to questions that are not in the set');
@@ -93,7 +93,7 @@ describe('scoring a private-shaped set on a replay', () => {
   it('refuses a malformed replay and one over 5 MiB', async () => {
     const fixture = fixtureSet(QUESTIONS);
     const outside = scratch();
-    for (const text of ['not json', '{"folders":{},"answers":{"q":{"reply":1}}}', JSON.stringify({ folders: {}, answers: {}, pad: 'x'.repeat(5 * 1024 * 1024 + 1) })]) {
+    for (const text of ['not json', '{"folders":{},"answers":{"q":{"reply":1}}}', JSON.stringify({ model: 'm', folders: {}, answers: {}, pad: 'x'.repeat(5 * 1024 * 1024 + 1) })]) {
       const replay = join(outside, 'r.json');
       writeFileSync(replay, text);
       const run = io();
@@ -125,7 +125,7 @@ describe('the baseline', () => {
     const first = await privateRun(['--baseline', baseline, '--update-baseline']);
     expect(first.code).toBe(0);
     const stored = JSON.parse(readFileSync(baseline, 'utf8')) as { replay: { refusals: number; plans: number } };
-    expect(stored.replay).toMatchObject({ refusals: 1, plans: 2 });
+    expect(stored.replay).toMatchObject({ model: 'fixture-model', refusals: 1, plans: 2 });
     const worse = await privateRun(['--baseline', baseline], RIGHT, { ...RIGHT, 'Show thing one.': { reply: '{"intent":"byId","entities":{"id":"T-9"}}' } });
     expect(worse.code).toBe(1);
   });
@@ -137,7 +137,7 @@ describe('the baseline', () => {
   });
 
   it('is refused when it was made for other questions, and when it is malformed', async () => {
-    const other = await baselineWith(JSON.stringify({ replay: { questions: 'a'.repeat(64), refusals: 1, plans: 2 } }), false);
+    const other = await baselineWith(JSON.stringify({ replay: { model: 'fixture-model', questions: 'a'.repeat(64), refusals: 1, plans: 2 } }), false);
     expect(other.code).toBe(2);
     expect(other.err.join('\n')).toContain('other questions');
     expect((await baselineWith('{"surprise":1}', false)).code).toBe(2);
@@ -269,7 +269,7 @@ describe('the files a private run writes', () => {
     writeFileSync(baseline, '{}');
     chmodSync(baseline, 0o644);
     const answers = JSON.parse(readFileSync(replay, 'utf8')) as { answers: Record<string, RecordedAnswer> };
-    writeFileSync(replay, JSON.stringify({ folders: (JSON.parse(readFileSync(replay, 'utf8')) as { folders: unknown }).folders, answers: answers.answers }));
+    writeFileSync(replay, JSON.stringify({ model: 'fixture-model', folders: (JSON.parse(readFileSync(replay, 'utf8')) as { folders: unknown }).folders, answers: answers.answers }));
     expect(await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--replay', replay, '--baseline', baseline, '--update-baseline'], io().io, hooks())).toBe(0);
     expect(statSync(baseline).mode & 0o777).toBe(0o600);
   });
@@ -332,5 +332,55 @@ describe('the temporary folders of a run', () => {
     const packs = fileURLToPath(new URL('../../../domain-packs', import.meta.url));
     await runCli(['--packs', packs, '--write-replay', join(scratch(), 'r.json')], io().io, hooks());
     expect(mine()).toBe(before);
+  });
+});
+
+describe('the model of a replay and of a baseline', () => {
+  it('prints the model of a recorded replay in the report', async () => {
+    const run = await privateRun([]);
+    expect(run.out).toContain('model: fixture-model');
+  });
+
+  it('refuses a replay that is not scripted and does not say which model recorded it, and a scripted one that names a model', async () => {
+    const fixture = fixtureSet(QUESTIONS);
+    const outside = scratch();
+    const replay = join(outside, 'replay.json');
+    await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--write-replay', replay], io().io, hooks());
+    const scripted = JSON.parse(readFileSync(replay, 'utf8')) as { folders: unknown; answers: unknown };
+    writeFileSync(replay, JSON.stringify({ folders: scripted.folders, answers: scripted.answers }));
+    const missing = io();
+    expect(await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--replay', replay], missing.io, hooks())).toBe(2);
+    expect(missing.err.join('\n')).toContain('does not say which model');
+    writeFileSync(replay, JSON.stringify({ note: 'scripted', model: 'fixture-model', folders: scripted.folders, answers: scripted.answers }));
+    const named = io();
+    expect(await runCli(['--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--replay', replay], named.io, hooks())).toBe(2);
+    expect(named.err.join('\n')).toContain('names no model');
+  });
+
+  it('writes the model into the baseline, and then refuses a baseline made for another model, an update over another model\'s value, and a value with no model', async () => {
+    const outside = scratch();
+    const baseline = join(outside, 'baseline.json');
+    writeFileSync(baseline, '{}');
+    expect((await privateRun(['--baseline', baseline, '--update-baseline'])).code).toBe(0);
+    const stored = JSON.parse(readFileSync(baseline, 'utf8')) as { replay: { model: string; questions: string; refusals: number; plans: number } };
+    expect(stored.replay.model).toBe('fixture-model');
+    writeFileSync(baseline, JSON.stringify({ replay: { ...stored.replay, model: 'other-model' } }));
+    const other = await privateRun(['--baseline', baseline]);
+    expect(other.code).toBe(2);
+    expect(other.err.join('\n')).toContain('another model');
+    const update = await privateRun(['--baseline', baseline, '--update-baseline']);
+    expect(update.code).toBe(2);
+    expect(update.err.join('\n')).toContain('another model');
+    expect(JSON.parse(readFileSync(baseline, 'utf8')).replay.model).toBe('other-model');
+    const { model: _model, ...withoutModel } = stored.replay;
+    writeFileSync(baseline, JSON.stringify({ replay: withoutModel }));
+    expect((await privateRun(['--baseline', baseline])).code).toBe(2);
+  });
+
+  it('writes the model into a recording, so the recording can be committed as the replay', async () => {
+    const fixture = fixtureSet(QUESTIONS);
+    const out = join(scratch(), 'run');
+    expect(await runCli(['record', '--questions', fixture.questions, '--folder', fixture.folder, '--source', fixture.source, '--budget', '3', '--out', out], io().io, hooks())).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, 'recording.json'), 'utf8')).model).toBe('fixture-model');
   });
 });
