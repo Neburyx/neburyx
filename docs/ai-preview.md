@@ -99,6 +99,8 @@ A word that Cypher reserves for a command (for example `start`, `next`, `offset`
 {"intent": null, "entities": {}}
 ```
 
+This is the whole reply when no intent answers the question. The bare word `null` is not a reply: it is not an object with the two keys, so it is refused as a reply that does not fit.
+
 A name that is not an intent of the folder is refused as an unknown intent, and any other departure from the form as a reply that does not fit. Both get a fixed sentence and nothing runs. Whether the names in `entities` are the intent's parameters is checked afterwards, when the entities are bound to the intent: a missing, extra or invalid input is refused with its own fixed sentence.
 
 `classification.md` must also name the reserved intent `saved-pattern` as an allowed answer, with its two entity keys, or the classifier never picks a saved pattern: `pattern`, the key of one of the saved patterns in the list the product sends after the question, and `anchor`, the stable ID of the starting entity, only for a pattern that starts from an entity the question gives. The product's own sentence before that list says how to name a pattern, but it travels in the content after the question, not in the instructions of the call, so a `classification.md` that says the intent must be one of its own list contradicts it. `saved-pattern` is accepted only when the person's saved patterns were sent with the question; for a person with none, a reply that names it is refused as an unknown intent. The shipped files of the two domain packs name it with its two keys. See [Asking for a saved pattern](#asking-for-a-saved-pattern).

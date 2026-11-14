@@ -153,7 +153,6 @@ Every request is checked against a strict schema: unknown fields are rejected, a
 | Notes | 10,000 characters |
 | Search text | 2 to 200 characters |
 | Ask question | 1 to 1,000 characters |
-| Ask plan rationale, and the reason of an unsupported plan | 1 to 500 characters |
 | A template string parameter | 200 characters (a template's schema may be stricter) |
 | A template list parameter | 100 items (a template's schema may be stricter) |
 | Request body | 1 MiB; `PUT /v1/investigations/{id}/draft` 2 MiB and 4 KiB (two documents of at most 1 MiB each, and their envelope) |
