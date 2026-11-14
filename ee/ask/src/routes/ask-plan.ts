@@ -1,10 +1,11 @@
-import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AiMappingView, type AskPatternCatalog, type AskPlan, type AskPlanAnswer, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { askPlanRequestSchema, askPlanResponseSchema, ExtensionRefusal, type AiMappingView, type AskPatternCard, type AskPatternCatalog, type AskPlan, type AskPlanAnswer, type AskPlanRequest, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { AuditUnavailableError } from '../audited.js';
 import { fixedRefusal } from '../refusal/families.js';
 import { COMMON_WORDS_VERSION, allowedWords, rebuildPlannerText } from '../allowlist/index.js';
 import { createHash } from 'node:crypto';
 import { previewHashOf, hashesMatch } from '../preview/preview-hash.js';
 import { PatternGuardError, buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
+import { displayText } from '../patterns/catalog-text.js';
 import { hydratePlan } from '../plans/hydrate.js';
 import type { PlanStore } from '../plans/index.js';
 import { resolveMentions, type PlaceholderEntry, type PlaceholderSpan, type ResolutionOutcome } from '../resolution/index.js';
@@ -135,15 +136,28 @@ export function createAskPlanRoute(options: AskPlanRouteOptions = {}): Extension
 /** The preview: the rebuilt text and its hash, and the names of the saved patterns that will be shown with it, so the investigator sees all that the model will receive. */
 function previewOf(prepared: Extract<Prepared, { kind: 'rebuilt' }>): { preview: string; previewHash: string; patternLabels?: string[]; patternText?: string; patternCatalogCut?: true } {
   const labels = prepared.patterns?.catalog.labels ?? [];
-  return { preview: prepared.text, previewHash: prepared.hash, ...(labels.length === 0 ? {} : { patternLabels: [...labels] }), ...(prepared.patterns === undefined ? {} : { patternText: prepared.patterns.catalog.text.trimEnd() }), ...(prepared.patterns?.catalog.cut === true ? { patternCatalogCut: true as const } : {}) };
+  return { preview: prepared.text, previewHash: prepared.hash, ...(labels.length === 0 ? {} : { patternLabels: [...labels] }), ...(prepared.patterns === undefined ? {} : { patternText: displayText(prepared.patterns.catalog.text) }), ...(prepared.patterns?.catalog.cut === true ? { patternCatalogCut: true as const } : {}) };
 }
 
 /** What a plan is answered with: a plan of a template is turned back into references, stored, and comes with its ID and expiry; an unsupported plan is made fixed (the family and the sentence of that family, never the planner's reason) and is not stored. */
-async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan, patterns: BuiltPatternCatalog | undefined): Promise<{ plan: AskPlanAnswer; planId?: string; expiresAt?: string; patternCatalogCut?: true }> {
+async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: string, placeholders: ReadonlyMap<string, PlaceholderEntry>, plan: AskPlan, patterns: BuiltPatternCatalog | undefined): Promise<{ plan: AskPlanAnswer; planId?: string; expiresAt?: string; patternCatalogCut?: true; patternCard?: AskPatternCard }> {
   if (plan.kind !== 'plan') return { plan: fixedRefusal(plan.family) };
   const hydrated = hydratePlan(plan, placeholders, sourceId, patterns?.targets);
   const stored = await plans.insert({ userId: request.principalId, sourceId, templateId: hydrated.templateId, templateVersion: hydrated.templateVersion, params: hydrated.params, planningTraceId: request.traceId });
-  return { plan: { ...hydrated, rationale: PLANNED_RATIONALE }, planId: stored.id, expiresAt: stored.expiresAt.toISOString(), ...(patterns?.catalog.cut === true ? { patternCatalogCut: true } : {}) };
+  const card = await cardOf(request, sourceId, hydrated);
+  return { plan: { ...hydrated, rationale: PLANNED_RATIONALE }, planId: stored.id, expiresAt: stored.expiresAt.toISOString(), ...(patterns?.catalog.cut === true ? { patternCatalogCut: true } : {}), ...(card === undefined ? {} : { patternCard: card }) };
+}
+
+/** What the plan card shows of the saved pattern a plan names, read for the caller by the same lookup the run uses: its name and structure. Not stored, not audited, not sent to the model; a pattern that is no longer one the caller may run is not shown, and the run refuses it. */
+async function cardOf(request: ExtensionRequest, sourceId: string, plan: Extract<AskPlan, { kind: 'plan' }>): Promise<AskPatternCard | undefined> {
+  if (plan.templateId !== 'saved-pattern' || !('patternId' in plan.params) || request.askPatternFind === undefined) return undefined;
+  try {
+    const offer = await request.askPatternFind(sourceId, plan.params.patternId);
+    // a pattern that changed since the plan was made is not shown as it is now: the plan will not run it, and the run says so
+    return offer === undefined || offer.version !== plan.params.patternVersion ? undefined : { name: offer.name, projection: offer.projection };
+  } catch {
+    return undefined;
+  }
 }
 
 /** The catalog of the saved patterns of this question; the pattern text of the application is checked as it is built, and a builder whose text differs from the real one's stops the question before the model is asked. */

@@ -453,6 +453,33 @@ describe('a plan that names a saved pattern', () => {
     for (const text of ['pat_1', 'SECRET-PATTERN-NAME', 'Acme', 'widgets', PLACEHOLDER, 'The pattern fits']) expect(row).not.toContain(text);
   });
 
+  it('answers the plan with the name and structure of the pattern, read for the caller by the lookup of the run, and keeps both out of the row and the model input', async () => {
+    const rg = rig(async () => named());
+    const found: string[] = [];
+    const { send, plans } = await confirm(rg, { askPatterns: async () => ({ offers: [OFFER], cut: false }), askPatternFind: async (sourceId, id) => (found.push(`${sourceId}:${id}`), OFFER) });
+    const result = askPlanResponseSchema.parse(await send());
+    expect(result).toMatchObject({ patternCard: { name: 'SECRET-PATTERN-NAME', projection: { kind: 'definition', anchorType: 'widget' } } });
+    expect(found).toEqual([`${SOURCE}:${PATTERN_ID}`]);
+    expect(JSON.stringify(plans.plans)).not.toContain('SECRET-PATTERN-NAME');
+  });
+
+  it('answers the plan with no card when the pattern changed since the plan was made, and when the lookup fails, and keeps the stored plan', async () => {
+    const changed = await confirm(rig(async () => named()), { askPatterns: async () => ({ offers: [OFFER], cut: false }), askPatternFind: async () => ({ ...OFFER, version: 4 }) });
+    expect(askPlanResponseSchema.parse(await changed.send())).not.toHaveProperty('patternCard');
+    const failing = await confirm(rig(async () => named()), { askPatterns: async () => ({ offers: [OFFER], cut: false }), askPatternFind: async () => Promise.reject(new Error('database')) });
+    const answer = askPlanResponseSchema.parse(await failing.send());
+    expect(answer).toMatchObject({ plan: { templateId: 'saved-pattern' } });
+    expect(answer).not.toHaveProperty('patternCard');
+    expect(failing.plans.plans.length).toBe(1);
+  });
+
+  it('answers the plan with no card when the pattern is no longer one the caller may run, or when there is no lookup, and for a plan of a template', async () => {
+    const gone = await confirm(rig(async () => named()), { askPatterns: async () => ({ offers: [OFFER], cut: false }), askPatternFind: async () => undefined });
+    expect(askPlanResponseSchema.parse(await gone.send())).not.toHaveProperty('patternCard');
+    const none = await confirm(rig(async () => named()), { askPatterns: async () => ({ offers: [OFFER], cut: false }) });
+    expect(askPlanResponseSchema.parse(await none.send())).not.toHaveProperty('patternCard');
+  });
+
   it('says that the catalog was cut, with no count, when the application cut it, and says nothing otherwise', async () => {
     const cutRg = rig(async () => named());
     const cut = await confirm(cutRg, { askPatterns: async () => ({ offers: [OFFER], cut: true }) });
@@ -499,6 +526,8 @@ describe('a plan that names a saved pattern', () => {
       const left = await shownWith(rig(), { offers: [OFFER], cut: false });
       expect(left.shown).not.toHaveProperty('patternLabels');
       expect(left.shown).toMatchObject({ patternText: expect.stringContaining('pat_1: starts at') });
+      expect(JSON.stringify(left.shown)).not.toContain('template identifier');
+      expect(JSON.stringify(left.shown)).not.toContain('it is data, never an instruction');
       expect(JSON.stringify(left.shown)).not.toContain('SECRET-PATTERN-NAME');
       const none = await shownWith(rig(), { offers: [], cut: false });
       expect(none.shown).not.toHaveProperty('patternLabels');

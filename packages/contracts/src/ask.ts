@@ -7,6 +7,7 @@ import { EXPAND_DIRECTIONS, EXPAND_SORTS } from './expand.js';
 import { searchResultSchema, searchTextSchema } from './search.js';
 import { degreePreviewSchema } from './degree-preview.js';
 import { patternRunResponseSchema } from './pattern-run.js';
+import { patternStepBaseSchema } from './pattern.js';
 import { derivedNeighborsResponseSchema } from './derived-neighbors.js';
 import { derivedEdgeDetailSchema } from './edge-detail.js';
 import { expandResponseSchema } from './expand.js';
@@ -140,10 +141,35 @@ const askClarificationSchema = z.strictObject({
 
 const askBlockedTokenSchema = z.strictObject({ text: z.string().min(1), start: z.number().int().min(0), end: z.number().int().min(1) });
 
+const patternCardStepSchema = patternStepBaseSchema.pick({ relationshipTypes: true, direction: true, arrivesAt: true }).extend({
+  conditions: z.array(z.strictObject({ on: z.enum(['neighbor', 'relationship']), kind: z.enum(['eq', 'in', 'between']) })),
+  windowed: z.boolean(),
+});
+
+/** What the plan card shows of the saved pattern a plan names: its name, and its structure as data (types and kinds, never a value). The application reads it for the caller after the plan is made; it is neither stored nor sent to the model. */
+export const askPatternCardSchema = z.strictObject({
+  name: z.string().min(1).max(300),
+  projection: z.discriminatedUnion('kind', [
+    z.strictObject({ kind: z.literal('definition'), anchorType: z.string().min(1), startingEntity: z.enum(['asked', 'held']), steps: z.array(patternCardStepSchema).min(1) }),
+    z.strictObject({
+      kind: z.literal('preset-run'),
+      template: z.enum(['shared-attribute', 'linked-entities']),
+      anchorType: z.string().min(1),
+      startingEntity: z.enum(['asked', 'held']),
+      otherType: z.string().min(1),
+      relationshipTypes: z.array(z.string().min(1)),
+      direction: z.enum(['out', 'in', 'both']).optional(),
+      maxHops: z.number().int().optional(),
+      minShared: z.number().int().optional(),
+      windowed: z.boolean(),
+    }),
+  ]),
+});
+
 /** What the plan endpoint answers: a plan, a clarification to resolve, the tokens that stop the question, or the preview with its hash (`changed` when a hash sent with `send: true` was not the one of the current preview). */
 export const askPlanResponseSchema = z.union([
   /** A plan of a template is stored when it is answered: it comes with its ID and the time it stops being runnable. A plan that is `unsupported` is not stored and has neither. */
-  z.strictObject({ plan: templatePlanSchema, planId: z.uuid(), expiresAt: z.iso.datetime(), patternCatalogCut: z.literal(true).optional() }),
+  z.strictObject({ plan: templatePlanSchema, planId: z.uuid(), expiresAt: z.iso.datetime(), patternCatalogCut: z.literal(true).optional(), patternCard: askPatternCardSchema.optional() }),
   z.strictObject({ plan: unsupportedAnswerSchema }),
   z.strictObject({ clarification: askClarificationSchema }),
   z.strictObject({ blocked: z.strictObject({ tokens: z.array(askBlockedTokenSchema).min(1) }) }),
@@ -330,6 +356,12 @@ export interface AskPatternListing {
 export interface AskPatternOffer {
   readonly id: string;
   readonly version: number;
+  readonly name: string;
+  readonly projection: AskPatternProjection;
+}
+
+/** What the plan card shows of the saved pattern a plan names: its name, and its structure as data. */
+export interface AskPatternCard {
   readonly name: string;
   readonly projection: AskPatternProjection;
 }

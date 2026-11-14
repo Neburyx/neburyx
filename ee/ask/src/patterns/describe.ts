@@ -1,7 +1,7 @@
 import type { AskPatternProjection, AskPatternStep } from '@neburyx/contracts';
 
 function stepText(step: AskPatternStep, index: number): string {
-  const conditions = step.conditions.length === 0 ? 'no conditions' : `${step.conditions.length} conditions (${step.conditions.map((condition) => `${condition.on} ${condition.kind}`).join(', ')})`;
+  const conditions = step.conditions.length === 0 ? 'no conditions' : `${step.conditions.length} ${step.conditions.length === 1 ? 'condition' : 'conditions'} (${step.conditions.map((condition) => `${condition.on} ${condition.kind}`).join(', ')})`;
   return `step ${index + 1}: ${step.direction} over ${step.relationshipTypes.join(' or ')} to ${step.arrivesAt}, ${conditions}${step.windowed ? ', with a time window' : ''}`;
 }
 
@@ -20,7 +20,7 @@ const SAMPLE_STEP = { relationshipTypes: ['a', 'b'], direction: 'out', arrivesAt
 /** Every fixed word the descriptions are written with, read from the renderer itself, so a word of the renderer that a pattern's name also has is not taken for a leak. */
 export function descriptionWords(): string {
   const projections: AskPatternProjection[] = [
-    { kind: 'definition', anchorType: 'a', startingEntity: 'asked', steps: [SAMPLE_STEP, { ...SAMPLE_STEP, direction: 'in', conditions: [], windowed: false }, { ...SAMPLE_STEP, direction: 'both' }] },
+    { kind: 'definition', anchorType: 'a', startingEntity: 'asked', steps: [SAMPLE_STEP, { ...SAMPLE_STEP, direction: 'in', conditions: [], windowed: false }, { ...SAMPLE_STEP, direction: 'both' }, { ...SAMPLE_STEP, conditions: [{ on: 'relationship', kind: 'between' }] }] },
     { kind: 'definition', anchorType: 'a', startingEntity: 'held', steps: [] },
     { kind: 'preset-run', template: 'shared-attribute', anchorType: 'a', startingEntity: 'asked', otherType: 'b', relationshipTypes: ['c'], minShared: 2, windowed: true },
     { kind: 'preset-run', template: 'linked-entities', anchorType: 'a', startingEntity: 'held', otherType: 'b', relationshipTypes: ['c'], direction: 'both', maxHops: 2, windowed: false },

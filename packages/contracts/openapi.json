@@ -5826,6 +5826,192 @@
               "patternCatalogCut": {
                 "type": "boolean",
                 "const": true
+              },
+              "patternCard": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  },
+                  "projection": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "definition"
+                          },
+                          "anchorType": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "startingEntity": {
+                            "type": "string",
+                            "enum": [
+                              "asked",
+                              "held"
+                            ]
+                          },
+                          "steps": {
+                            "minItems": 1,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "relationshipTypes": {
+                                  "minItems": 1,
+                                  "maxItems": 6,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 256
+                                  }
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": [
+                                    "out",
+                                    "in",
+                                    "both"
+                                  ]
+                                },
+                                "arrivesAt": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 256
+                                },
+                                "conditions": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "on": {
+                                        "type": "string",
+                                        "enum": [
+                                          "neighbor",
+                                          "relationship"
+                                        ]
+                                      },
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "eq",
+                                          "in",
+                                          "between"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "on",
+                                      "kind"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "windowed": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": [
+                                "relationshipTypes",
+                                "direction",
+                                "arrivesAt",
+                                "conditions",
+                                "windowed"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "anchorType",
+                          "startingEntity",
+                          "steps"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "preset-run"
+                          },
+                          "template": {
+                            "type": "string",
+                            "enum": [
+                              "shared-attribute",
+                              "linked-entities"
+                            ]
+                          },
+                          "anchorType": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "startingEntity": {
+                            "type": "string",
+                            "enum": [
+                              "asked",
+                              "held"
+                            ]
+                          },
+                          "otherType": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "relationshipTypes": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "direction": {
+                            "type": "string",
+                            "enum": [
+                              "out",
+                              "in",
+                              "both"
+                            ]
+                          },
+                          "maxHops": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "minShared": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "windowed": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "template",
+                          "anchorType",
+                          "startingEntity",
+                          "otherType",
+                          "relationshipTypes",
+                          "windowed"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "projection"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
