@@ -21,8 +21,8 @@ describe('the open-core line', () => {
     expect(fixture('ee-uses-community-types')).toEqual([]);
   });
 
-  it('exempts the two entry scripts by name and reports another script of deploy/ and another script of tools/dev', () => {
-    expect(fixture('ee-entry-script').map((violation) => violation.file).sort()).toEqual(['deploy/release/publish.mjs', 'tools/dev/other.mjs']);
+  it('exempts the three entry scripts by name and reports another script of deploy/, of tools/dev and of tools/ask-eval', () => {
+    expect(fixture('ee-entry-script').map((violation) => violation.file).sort()).toEqual(['deploy/release/publish.mjs', 'tools/ask-eval/other.mjs', 'tools/dev/other.mjs']);
   });
 
   it('exempts a test file and still reports the production file next to it', () => {
@@ -56,5 +56,10 @@ describe('the open-core line', () => {
 
   it('exempts the testing folder of the API', () => {
     expect(snippet('services/api/src/testing/a.ts', "import { x } from '../../../../ee/ask/dist/index.js';")).toEqual([]);
+  });
+
+  it('exempts the testing folder of the evaluation tool, and still reports a production file of the tool', () => {
+    expect(snippet('tools/ask-eval/src/testing/a.ts', "import { x } from '@neburyx/ee-ask/eval';")).toEqual([]);
+    expect(snippet('tools/ask-eval/src/a.ts', "import { x } from '@neburyx/ee-ask/eval';").map((violation) => violation.file)).toEqual(['tools/ask-eval/src/a.ts']);
   });
 });

@@ -31,7 +31,7 @@ const ASK_VARIABLES = {
 } as const;
 
 /** The model Ask classifies with when none is named: the smallest model of the current family. */
-const DEFAULT_MODEL = 'claude-haiku-5-5';
+export const DEFAULT_ASK_MODEL = 'claude-haiku-5-5';
 
 /** An empty value counts as not set, as for the cache variables. */
 const given = (env: Env, name: string): string | undefined => {
@@ -114,7 +114,7 @@ export async function configureAsk(env: Env): Promise<Configuration> {
   const problems: string[] = [];
   const provider = given(env, ASK_VARIABLES.provider) ?? AI_PROVIDERS[0];
   if (!AI_PROVIDERS.some((known) => known === provider)) problems.push(`${ASK_VARIABLES.provider} must be ${AI_PROVIDERS.join(' or ')}`);
-  const model = given(env, ASK_VARIABLES.model) ?? DEFAULT_MODEL;
+  const model = given(env, ASK_VARIABLES.model) ?? DEFAULT_ASK_MODEL;
   const folder = given(env, ASK_VARIABLES.folder);
   if (folder === undefined) problems.push(`${ASK_VARIABLES.folder} is required when the AI preview is on`);
   else if (!folder.startsWith('/')) problems.push(`${ASK_VARIABLES.folder} must be an absolute path`);

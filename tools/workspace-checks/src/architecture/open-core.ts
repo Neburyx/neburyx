@@ -7,16 +7,16 @@ export const OPEN_CORE_SCAN_ROOTS: readonly string[] = ['services', 'packages', 
 
 const EE_FOLDER = 'ee';
 const EE_PACKAGE = /^@neburyx\/ee-/;
-/** The files that compose a run: the image's entry script and the one of `pnpm dev` register the enterprise code for Community code to load when the preview is on. */
-const ENTRY_SCRIPTS: readonly string[] = ['deploy/docker/entrypoint.mjs', 'tools/dev/entry/enterprise-entry.mjs'];
+/** The files that compose a run: the image's entry script and the one of `pnpm dev` register the enterprise code for Community code to load when the preview is on; the entry script of the evaluation tool hands the classifier of the enterprise code to the tool. */
+const ENTRY_SCRIPTS: readonly string[] = ['deploy/docker/entrypoint.mjs', 'tools/dev/entry/enterprise-entry.mjs', 'tools/ask-eval/entry/ask-eval-entry.mjs'];
 const TEST_FILE = /\.test\.[cm]?[jt]sx?$/;
-const TESTING_ZONE = 'services/api/src/testing';
+const TESTING_ZONES: readonly string[] = ['services/api/src/testing', 'tools/ask-eval/src/testing'];
 
 /** A specifier that reaches `ee/` holds the folder name or the package prefix unless an escape spells it; a file with neither is not parsed. */
 const NAMES_EE = /\bee\b|@neburyx\/ee-/;
 
 function isExempt(path: string): boolean {
-  return ENTRY_SCRIPTS.includes(path) || TEST_FILE.test(path) || isInside(path, TESTING_ZONE);
+  return ENTRY_SCRIPTS.includes(path) || TEST_FILE.test(path) || TESTING_ZONES.some((zone) => isInside(path, zone));
 }
 
 function reachesEe(file: string, specifier: string): boolean {

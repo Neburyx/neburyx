@@ -18,8 +18,8 @@
       "entry": ["src/dev/controls/*.ts"]
     },
     "ee/ask": {
-      // Loaded by the image entry script and the dev entry script through dist, which knip cannot follow.
-      "entry": ["src/index.ts"],
+      // Loaded by the image entry script and the dev entry script through dist, which knip cannot follow; src/eval/index.ts is the package's eval export, which the entry script of the evaluation tool loads by package name.
+      "entry": ["src/index.ts", "src/eval/index.ts"],
       "includeEntryExports": true
     },
     "packages/contracts": {
@@ -46,6 +46,10 @@
       // Declared so the Neo4j and integration scripts build the packages first: kept pending a decision.
       "ignoreDependencies": ["@neburyx/test-containers", "@neburyx/test-neo4j"]
     },
+    "tools/ask-eval": {
+      // The entry script loads the enterprise classifier by package name and hands it to the command in src/cli.ts.
+      "entry": ["entry/*.mjs", "src/cli.ts"]
+    },
     "tools/dev": {
       // main.ts is run as node tools/dev/dist/main.js; the .mjs fixtures are spawned by path in tests.
       "entry": ["entry/*.mjs", "src/main.ts", "src/testing/*.mjs"],
@@ -71,6 +75,8 @@
     "apps/web/src/workspace/tool-registry.tsx": ["exports"],
     // Used by the tests of services/api through dist, which knip cannot follow; the final sweep of the Ask rework keeps only createEnterpriseExtension here.
     "ee/ask/src/index.ts": ["exports", "types"],
+    // Imported by the entry script of the evaluation tool through the package subpath ./eval, which knip does not follow.
+    "ee/ask/src/eval/index.ts": ["exports"],
     // Named aliases of one value, one name for each role in the canvas look: kept pending a decision.
     "apps/web/src/canvas/look.ts": ["duplicates"],
     // Public schema names that point at one schema: kept pending a decision.
