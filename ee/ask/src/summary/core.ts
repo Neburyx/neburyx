@@ -16,6 +16,9 @@ export function listOf(items: readonly Listed[]): ListedElements {
 
 const length = (text: string): number => [...text].length;
 
+/** A title that ends with a full stop leaves two at the end of the sentence that closes with its own: one is kept. */
+const tidy = (text: string): string => text.replace(/([^.])\.\.$/, '$1.');
+
 /**
  * Builds a summary. A sentence is added with the elements it cites, and every one of them must be one the result lists: a sentence with no element, or with one the result does not list, cannot be built.
  * Keys are given in the order of first citation. When a limit would be passed, the sentence is not added (never cut in the middle) and is counted, and the omissions line says how many were left out;
@@ -30,8 +33,7 @@ export class SummaryBuilder {
   constructor(private readonly listed: ListedElements) {}
 
   add(written: string, elements: readonly (ElementRef | EdgeRef)[]): boolean {
-    // a title that ends with a full stop leaves two at the end of the sentence that closes with its own
-    const text = written.replace(/([^.])\.\.$/, '$1.');
+    const text = tidy(written);
     if (elements.length === 0) throw new Error('a sentence cites at least one element');
     const items = elements.map((element) => {
       const item = this.listed.get(refId(element));
@@ -56,6 +58,11 @@ export class SummaryBuilder {
     }
     this.sentences.push({ text, cites });
     return true;
+  }
+
+  /** Whether a sentence of this text passes the length limit: asked before a sentence is added, so a shorter one can be tried without counting a left-out statement. */
+  fits(text: string): boolean {
+    return length(tidy(text)) <= ASK_SUMMARY_MAX_SENTENCE_LENGTH;
   }
 
   /** The summary, or nothing when no sentence could be built. `omissions` is the line the builder wrote; the number of statements left out is added to it. */

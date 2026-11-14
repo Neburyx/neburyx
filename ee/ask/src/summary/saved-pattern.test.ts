@@ -46,10 +46,10 @@ describe('no summary where there is nothing to cite', () => {
     expect(words(result, start.ref)).toBe('No match was found for the saved pattern from Alice.');
   });
 
-  it('keeps the notices that explain an exact zero, after its sentence and with no omissions line', () => {
+  it('repeats no notice in the zero path either: the sentence stands alone and there is no omissions line', () => {
     const result = saved(run({ nodes: [start], notices: [{ code: 'undatedExcluded' }] }));
     const summary = checked(result, start.ref);
-    expect(summary.sentences.map((sentence) => sentence.text)).toEqual(['No match was found for the saved pattern from Alice.', 'Relationships without a usable date are outside the window.']);
+    expect(summary.sentences.map((sentence) => sentence.text)).toEqual(['No match was found for the saved pattern from Alice.']);
     expect(summary.omissions).toBeUndefined();
   });
 
@@ -59,47 +59,39 @@ describe('no summary where there is nothing to cite', () => {
 });
 
 describe('the summary of a pattern run', () => {
-  it('gives the count with its label, the names, the steps to each match and the number shown, citing listed elements only', () => {
+  it('names the matches in one sentence and the ones reached through listed entities in one more, citing listed elements only, with no count and no line for each match', () => {
     const result = saved(run({ count: count('exact', 2), matches: [match('b-1'), match('c-1', 2, ['m-1'])], nodes: [start, bob, cy, mid1] }));
-    const text = words(result, start.ref);
-    expect(text).toContain('Matches of the saved pattern from Alice: 2 · exact.');
-    expect(text).toContain('They are Bob and Cy.');
-    expect(text).toContain('Bob is reached in one step.');
-    expect(text).toContain('Cy is reached in 2 steps, through Mid One.');
-    expect(checked(result, start.ref).omissions).toBe('2 shown.');
-  });
-
-  it('leaves out the sentences of the steps when every shown match is one step away, and the names sentence still cites each of them', () => {
-    const result = saved(run({ count: count('exact', 2), matches: [match('b-1'), match('c-1')], nodes: [start, bob, cy] }));
     const summary = checked(result, start.ref);
-    const text = summary.sentences.map((sentence) => sentence.text).join(' ');
-    expect(text).not.toContain('is reached in');
-    expect(text).toContain('They are Bob and Cy.');
-    const names = summary.sentences.find((sentence) => sentence.text.startsWith('They are'));
-    expect(names?.cites).toHaveLength(2);
-    expect(summary.citations.map((citation) => citation.title)).toEqual(['Alice', 'Bob', 'Cy']);
+    expect(summary.sentences.map((sentence) => sentence.text)).toEqual(['Bob and Cy match the saved pattern from Alice.', 'Cy is reached through Mid One.']);
+    expect(summary.citations.map((citation) => citation.title)).toEqual(['Alice', 'Bob', 'Cy', 'Mid One']);
+    expect(summary.omissions).toBe('2 shown.');
   });
 
-  it('keeps the sentence of every shown match, the one-step ones too, when any match takes more than one step', () => {
-    const result = saved(run({ count: count('exact', 2), matches: [match('b-1'), match('c-1', 2, ['m-1'])], nodes: [start, bob, cy, mid1] }));
-    const text = words(result, start.ref);
-    expect(text).toContain('Bob is reached in one step.');
-    expect(text).toContain('Cy is reached in 2 steps, through Mid One.');
+  it('says one match in the singular and adds no sentence of steps when every shown match is one step away', () => {
+    const one = saved(run({ count: count('exact', 1), matches: [match('b-1')], nodes: [start, bob] }));
+    expect(checked(one, start.ref).sentences.map((sentence) => sentence.text)).toEqual(['Bob matches the saved pattern from Alice.']);
+    const two = saved(run({ count: count('exact', 2), matches: [match('b-1'), match('c-1')], nodes: [start, bob, cy] }));
+    const summary = checked(two, start.ref);
+    expect(summary.sentences).toHaveLength(1);
+    expect(summary.sentences[0]?.cites).toHaveLength(3);
+  });
+
+  it('reads as including when the count is not exact, even for few listed matches', () => {
+    const cut = saved(run({ count: count('lowerBound', 2), matches: [match('b-1'), match('c-1')], nodes: [start, bob, cy] }));
+    expect(words(cut, start.ref)).toBe('The matches of the saved pattern from Alice include Bob and Cy.');
   });
 
   it('names the start from the first hop of the first match when the plan has none, and never guesses one that is not listed', () => {
     const held = saved(run({ count: count('exact', 1), matches: [match('b-1')], nodes: [start, bob] }));
     expect(words(held)).toContain('from Alice');
     const unlisted = saved(run({ count: count('exact', 1), matches: [match('b-1')], nodes: [bob] }));
-    const text = words(unlisted);
-    expect(text).toContain('Matches of the saved pattern: 1 · exact.');
-    expect(text).not.toContain('from');
+    expect(words(unlisted)).toBe('Bob matches the saved pattern.');
   });
 
-  it('writes a three-hop path with its listed middle entities in order, skipping a null and an unlisted one, and no sentence for a match the result does not list', () => {
+  it('names the listed middle entities in order, skipping a null and an unlisted one, and no sentence for a match the result does not list', () => {
     const result = saved(run({ count: count('exact', 2), matches: [match('b-1', 4, ['m-1', null, 'm-9', 'm-2']), match('x-9')], nodes: [start, bob, mid1, mid2] }));
     const text = words(result, start.ref);
-    expect(text).toContain('Bob is reached in 4 steps, through Mid One and Mid Two.');
+    expect(text).toContain('Bob is reached through Mid One and Mid Two.');
     expect(text).not.toContain('x-9');
   });
 
@@ -111,6 +103,18 @@ describe('the summary of a pattern run', () => {
     expect(checked(saved(run({ count: count('unknown'), matches: [match('b-1')], nodes: [start, bob] })), start.ref).omissions).toBe('1 shown; how many are not yet retrieved is not known.');
   });
 
+  it('reads as including when an exact count is larger than the matches listed', () => {
+    const result = saved(run({ count: count('exact', 38), matches: [match('b-1')], nodes: [start, bob] }));
+    expect(words(result, start.ref)).toBe('The matches of the saved pattern from Alice include Bob.');
+  });
+
+  it('names the first match with its first middle entity when it alone names more than the limit allows', () => {
+    const many = ['m-1', 'm-2', 'm-3', 'm-4', 'm-5', 'm-6'].map((id) => node(id, `${'z'.repeat(80)}${id}`));
+    const result = saved(run({ count: count('exact', 1), matches: [match('b-1', 7, many.map((entry) => entry.ref.stableId))], nodes: [start, bob, ...many] }));
+    const sentence = checked(result, start.ref).sentences.find((entry) => entry.text.includes('is reached through'));
+    expect(sentence?.text).toBe(`Bob is reached through ${many[0]?.display.title}.`);
+  });
+
   it('names at most five matches and says no more than the count', () => {
     const many = Array.from({ length: 7 }, (_, index) => node(`n-${index}`, `Name ${index}`));
     const result = saved(run({ count: count('exact', 7), matches: many.map((entry) => match(entry.ref.stableId)), nodes: [start, ...many] }));
@@ -119,15 +123,14 @@ describe('the summary of a pattern run', () => {
     expect(text).not.toContain('Name 5');
   });
 
-  it('says one sentence for each notice, citing the supernodes it names when the result lists them, and otherwise the start', () => {
+  it('repeats no notice, so the supernodes a notice names are not cited', () => {
     const result = saved(run({ count: count('lowerBound', 1), matches: [match('b-1')], nodes: [start, bob, mid1], notices: [{ code: 'noStopList' }, { code: 'supernodesSkipped', entities: [mid1.ref] }] }));
     const summary = checked(result, start.ref);
-    const text = summary.sentences.map((sentence) => sentence.text).join(' ');
-    expect(text).toContain('The source has no stop list for this pattern.');
-    expect(text).toContain('1 supernode was not traversed.');
+    expect(JSON.stringify(summary)).not.toMatch(/stop list|supernode/);
+    expect(summary.citations.map((citation) => citation.title)).toEqual(['Alice', 'Bob']);
   });
 
-  it('holds no property value, no warning text and nothing of the result but node titles, counts and fixed notice sentences', () => {
+  it('holds no property value, no warning text and nothing of the result but node titles', () => {
     const result = saved(run({ count: count('exact', 1), matches: [match('b-1')], nodes: [start, bob], notices: [{ code: 'noStopList' }] }));
     const everything = JSON.stringify(checked(result, start.ref));
     for (const marker of ['PROPERTY-MARKER', 'WARNING-MARKER']) expect(everything).not.toContain(marker);

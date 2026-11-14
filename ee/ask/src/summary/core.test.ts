@@ -1,8 +1,8 @@
-import type { ElementRef, TemplateRunNotice } from '@neburyx/contracts';
+import type { ElementRef } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { SummaryBuilder, citedKeysExist, listOf, type Listed } from './core.js';
 import { countWords, groupedNumber, remainderSentence } from './counts.js';
-import { noticeSentence } from './notices.js';
+import { addNamed } from './shared.js';
 import { nodeTitle, refId } from './title.js';
 
 const ref = (stableId: string): ElementRef => ({ sourceId: 'demo', entityType: 'node_a', stableId });
@@ -129,13 +129,29 @@ describe('the words of counts', () => {
   });
 });
 
-describe('the sentences of notices', () => {
-  it('has one fixed sentence for each notice, and leaves out one it does not know', () => {
-    const notices: TemplateRunNotice[] = [{ code: 'stopListSkipped' }, { code: 'noStopList' }, { code: 'undatedExcluded' }, { code: 'readBounded' }, { code: 'evidenceCut' }, { code: 'windowNotApplied', relationshipTypes: ['a', 'b'] }, { code: 'supernodesSkipped', entities: [ref('e0')] }];
-    for (const notice of notices) {
-      expect(noticeSentence(notice)).toEqual(expect.any(String));
-    }
-    expect(noticeSentence({ code: 'made-up' } as never)).toBeUndefined();
+describe('a sentence that lists names', () => {
+  const names = (count: number): { title: string; ref: ElementRef }[] => Array.from({ length: count }, (_, index) => ({ title: `${'n'.repeat(70)}${index}`, ref: ref(`e${index}`) }));
+
+  it('is tried with fewer names, always as a part of the list, before the length limit leaves it out, and the retry is not counted as left out', () => {
+    const builder = new SummaryBuilder(many(5));
+    addNamed(builder, (list, _count, whole) => (whole ? `${list} are all.` : `Some are ${list}.`), names(5), true);
+    const summary = builder.finish();
+    expect(summary?.sentences).toHaveLength(1);
+    expect(summary?.sentences[0]?.text.startsWith('Some are ')).toBe(true);
+    expect(summary?.sentences[0]?.cites).toHaveLength(3);
+    expect(summary?.omissions).toBeUndefined();
+  });
+
+  it('is left out only when the shortest sentence is still too long', () => {
+    const builder = new SummaryBuilder(many(1));
+    addNamed(builder, (list) => `Some are ${list}.`, [{ title: 'x'.repeat(400), ref: ref('e0') }], true);
+    expect(builder.finish()).toBeUndefined();
+  });
+
+  it('adds nothing for no names', () => {
+    const builder = new SummaryBuilder(many(1));
+    addNamed(builder, (list) => list, [], true);
+    expect(builder.finish()).toBeUndefined();
   });
 });
 

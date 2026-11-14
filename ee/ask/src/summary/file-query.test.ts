@@ -19,32 +19,47 @@ const result = (over: Partial<FileQueryResult> = {}): FileQueryResult => ({ stat
 const words = (value: FileQueryResult): string => (summarizeFileQuery(value)?.sentences ?? []).map((sentence) => sentence.text).join(' ');
 
 describe('the summary of a file-query result', () => {
-  it('gives the count of rows with its label, the names, the relationships and types, and the number shown, each sentence citing listed elements', () => {
+  it('names the rows the query returned and the type of the relationships, with no count, each sentence citing listed elements', () => {
     const value = result();
     const summary = summarizeFileQuery(value);
     expect(summary).toBeDefined();
     if (summary === undefined) return;
     expect(askSummarySchema.safeParse(summary).success).toBe(true);
     expect(citedKeysExist(summary, fileQueryListed(value))).toBe(true);
-    expect(summary.sentences.map((sentence) => sentence.text)).toEqual(['Rows returned by the query: 2 · exact.', 'They are Alice and Bob.', '1 relationship is shown, of 1 type.']);
+    expect(summary.sentences.map((sentence) => sentence.text)).toEqual(['The query returned Alice and Bob.', 'The relationship shown is of type KNOWS.']);
     expect(summary.omissions).toBe('2 shown.');
   });
 
-  it('names at most five nodes and counts the types of the relationships', () => {
+  it('names at most five nodes, says the list is not the whole of it, and names the types of the relationships', () => {
     const many = Array.from({ length: 7 }, (_unused, index) => node(`n${index}`, `Name ${index}`));
     const text = words(result({ nodes: many, edges: [edge('n0', 'n1'), edge('n1', 'n2', 'PAID')], count: count('exact', 7) }));
     expect(text).toContain('Name 4');
     expect(text).not.toContain('Name 5');
-    expect(text).toContain('2 relationships are shown, of 2 types.');
+    expect(text).toContain('The rows include Name 0, Name 1, Name 2, Name 3 and Name 4.');
+    expect(text).toContain('The relationships shown are of type KNOWS and PAID.');
   });
 
-  it('says that more may exist for a cut result, and a count is never exact then', () => {
+  it('says the rows include the names for a cut result, keeps the omissions line, and repeats neither the count nor the notice', () => {
     const summary = summarizeFileQuery(result({ count: count('lowerBound', 50), notices: [{ code: 'readBounded' }] }));
     expect(summary?.omissions).toBe('50 shown; more may exist (lower bound).');
     const text = (summary?.sentences ?? []).map((sentence) => sentence.text).join(' ');
-    expect(text).toContain('≥ 50 · lower bound');
-    expect(text).toContain('The read was cut, so the count is a lower bound.');
-    expect(text).not.toContain('50 · exact');
+    expect(text).toContain('The rows include Alice and Bob.');
+    expect(text).not.toMatch(/lower bound|50|exact|read was cut/);
+  });
+
+  it('names more than five types as included, and one relationship in the singular', () => {
+    const types = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6'];
+    const many = words(result({ edges: types.map((type, index) => edge('a', `x${index}`, type)) }));
+    expect(many).toContain('The relationships shown include the types T1, T2, T3, T4 and T5.');
+    expect(words(result({ nodes: [node('a', 'Alice')], edges: [], count: count('exact', 1) }))).toBe('The query returned Alice.');
+  });
+
+  it('tries a shorter list in the form that is not complete when the sentence would pass 300 characters, and leaves it out only when even one name is too long', () => {
+    const long = (index: number) => node(`n${index}`, `${'x'.repeat(70)}${index}`);
+    const five = summarizeFileQuery(result({ nodes: [0, 1, 2, 3, 4].map(long), edges: [], count: count('exact', 5) }));
+    expect(five?.sentences.map((sentence) => sentence.text)).toEqual([`The rows include ${long(0).display.title}, ${long(1).display.title} and ${long(2).display.title}.`]);
+    const huge = summarizeFileQuery(result({ nodes: [node('h', 'y'.repeat(400))], edges: [], count: count('exact', 1) }));
+    expect(huge).toBeUndefined();
   });
 
   it('has no summary for a result that lists no node, because a sentence must cite an element', () => {
@@ -52,7 +67,7 @@ describe('the summary of a file-query result', () => {
     expect(summarizeFileQueryResult(result({ nodes: [], edges: [], count: count('exact', 0) }))).toEqual({ kind: 'none' });
   });
 
-  it('holds no property value, no warning text and nothing of the result but node titles, counts and fixed notice sentences', () => {
+  it('holds no property value, no warning text and nothing of the result but node titles and relationship types', () => {
     const text = JSON.stringify(summarizeFileQuery(result({ notices: [{ code: 'readBounded' }] })));
     for (const marker of ['PROPERTY-MARKER', 'WARNING-MARKER']) expect(text).not.toContain(marker);
   });

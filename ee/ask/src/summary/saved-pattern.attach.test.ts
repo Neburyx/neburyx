@@ -11,7 +11,7 @@ const logger = { warn: (fields: Record<string, unknown>) => void warnings.push(f
 describe('the summary of a saved-pattern run answer, with the real builders', () => {
   it('is attached, naming the start of the plan', () => {
     const summary = summaryOfRun(result, { sourceId: 'demo', params }, logger);
-    expect(summary?.sentences[0]?.text).toBe('Matches of the saved pattern from Alice: 1 · exact.');
+    expect(summary?.sentences[0]?.text).toBe('Bob matches the saved pattern from Alice.');
     expect(warnings).toEqual([]);
   });
 

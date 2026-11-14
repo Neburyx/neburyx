@@ -1,7 +1,6 @@
 import type { DerivedEdgeDetail, DerivedNeighborsResponse, GraphNode } from '@neburyx/contracts';
 import { SummaryBuilder, listOf, type Listed, type ListedElements } from './core.js';
-import { countWords } from './counts.js';
-import { SHOWN_NAMES, anchorItem, edgeItem, nameList, nodeItem, nodeMap } from './shared.js';
+import { SHOWN_NAMES, addNamed, anchorItem, edgeItem, nodeItem, nodeMap } from './shared.js';
 import { nodeTitle, refId } from './title.js';
 
 export function derivedRuleListed(result: DerivedNeighborsResponse): ListedElements {
@@ -21,6 +20,8 @@ export function summarizeDerivedRule(result: DerivedNeighborsResponse): ReturnTy
       builder.add(`${label} found nothing linked to ${anchor.title}.`, [result.ref]);
       continue;
     }
+    // a rule with no count of at least one claims nothing: what the result does not show is not said
+    if (entry.count.value === undefined || entry.count.value < 1) continue;
     const ends: GraphNode[] = [];
     for (const edge of entry.edges) {
       if (edge.semantics !== 'derived') continue;
@@ -28,9 +29,17 @@ export function summarizeDerivedRule(result: DerivedNeighborsResponse): ReturnTy
       const node = nodes.get(refId(other));
       if (node !== undefined && !ends.includes(node)) ends.push(node);
     }
-    const named = ends.slice(0, SHOWN_NAMES);
-    const including = named.length === 0 ? '' : `, including ${nameList(named.map(nodeTitle))}`;
-    builder.add(`${label}, other ends linked to ${anchor.title}: ${countWords(entry.count)}${including}.`, [result.ref, ...named.map((node) => node.ref)]);
+    if (ends.length === 0) {
+      builder.add(`${label} links ${anchor.title} to other entities.`, [result.ref]);
+      continue;
+    }
+    addNamed(
+      builder,
+      (list, _count, whole) => (whole ? `${label} links ${anchor.title} to ${list}.` : `${label} links ${anchor.title} to, among others, ${list}.`),
+      ends.slice(0, SHOWN_NAMES).map((node) => ({ title: nodeTitle(node), ref: node.ref })),
+      entry.count.quality === 'exact' && entry.count.value === ends.length && ends.length <= SHOWN_NAMES,
+      [result.ref],
+    );
   }
   return builder.finish();
 }
@@ -56,6 +65,5 @@ export function summarizeDerivedEdge(detail: DerivedEdgeDetail): ReturnType<Summ
   const from = listed.get(refId(detail.from.ref))?.title ?? detail.from.ref.stableId;
   const to = listed.get(refId(detail.to.ref))?.title ?? detail.to.ref.stableId;
   builder.add(`${from} and ${to} are linked by rule ${detail.rule.id} (version ${detail.rule.version}).`, [detail.from.ref, detail.to.ref, detail.ref]);
-  builder.add(`Supporting chains: ${countWords(detail.supports.count)}.`, [detail.ref]);
   return builder.finish();
 }

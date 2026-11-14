@@ -1,7 +1,6 @@
-import type { EdgeRef, ElementRef, GraphNode, SearchResult } from '@neburyx/contracts';
+import type { EdgeRef, GraphNode, SearchResult } from '@neburyx/contracts';
 import { SummaryBuilder, listOf, type Listed, type ListedElements } from './core.js';
-import { countWords } from './counts.js';
-import { SHOWN_NAMES, nameList, nodeItem, nodeMap } from './shared.js';
+import { SHOWN_NAMES, addNamed, nodeItem, nodeMap } from './shared.js';
 import { endTitle, nodeTitle } from './title.js';
 
 type EvidenceHit = SearchResult['evidence']['hits'][number];
@@ -28,13 +27,9 @@ export function summarizeSearch(result: SearchResult): ReturnType<SummaryBuilder
   const first = [...listed.values()][0];
   if (first === undefined) return undefined;
   const builder = new SummaryBuilder(listed);
-  const named: (ElementRef | EdgeRef)[] = result.exact.slice(0, SHOWN_NAMES).map((node) => node.ref);
-  const exactNames = result.exact.slice(0, SHOWN_NAMES).map(nodeTitle);
-  if (named.length > 0) builder.add(`Exact matches: ${countWords(result.counts.exact)}, including ${nameList(exactNames)}.`, named);
-  const relatedNames = result.related.hits.slice(0, SHOWN_NAMES);
-  if (relatedNames.length > 0) builder.add(`Related records: ${countWords(result.related.count)}, including ${nameList(relatedNames.map((hit) => nodeTitle(hit.node)))}.`, relatedNames.map((hit) => hit.node.ref));
-  const evidence = result.evidence.hits.slice(0, SHOWN_NAMES).map((hit) => evidenceItem(result, hit, nodesOf(result)));
-  if (evidence.length > 0) builder.add(`Supporting relationships: ${countWords(result.evidence.count)}, such as ${nameList(evidence.map((item) => item.title))}.`, evidence.map((item) => item.element));
+  addNamed(builder, (list) => `Exact matches include ${list}.`, result.exact.slice(0, SHOWN_NAMES).map((node) => ({ title: nodeTitle(node), ref: node.ref })), false);
+  addNamed(builder, (list) => `Related records include ${list}.`, result.related.hits.slice(0, SHOWN_NAMES).map((hit) => ({ title: nodeTitle(hit.node), ref: hit.node.ref })), false);
+  addNamed(builder, (list) => `Supporting relationships include ${list}.`, result.evidence.hits.slice(0, SHOWN_NAMES).map((hit) => evidenceItem(result, hit, nodesOf(result))).map((item) => ({ title: item.title, ref: item.element })), false);
   for (const failure of result.failures) builder.add(`The ${failure.group} group could not be read.`, [first.element]);
   if (!result.searchable) builder.add('No property could be searched.', [first.element]);
   else {

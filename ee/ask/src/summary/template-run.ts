@@ -1,8 +1,6 @@
 import type { ElementRef, GraphNode, TemplateRunOk } from '@neburyx/contracts';
 import { SummaryBuilder, listOf, type ListedElements } from './core.js';
-import { countWords } from './counts.js';
-import { noticeSentence } from './notices.js';
-import { SHOWN_NAMES, edgeItem, nameList, nodeItem, nodeMap, plural } from './shared.js';
+import { SHOWN_NAMES, addNamed, edgeItem, nameList, nodeItem, nodeMap } from './shared.js';
 import { nodeTitle, refId } from './title.js';
 
 export function templateRunListed(run: TemplateRunOk): ListedElements {
@@ -15,39 +13,68 @@ function anchorOf(run: TemplateRunOk, anchor: ElementRef | undefined): GraphNode
   return (anchor === undefined ? undefined : run.nodes.find((node) => refId(node.ref) === refId(anchor))) ?? run.nodes[0];
 }
 
-/** The summary of a shared-attribute or a linked-entities run. `anchor` is the plan's own anchor, when the caller has it. */
+/**
+ * The sentence that names the matches reached through an entity the result lists: the named matches whose link goes through one, taken in order while the middle entities they name together stay within a limit (five, then three, then one),
+ * so a match is never paired with a middle entity that is not its own; the middles are those of the kept matches only. The limit shrinks when the sentence would pass the length limit.
+ */
+export function addReachedThrough(builder: SummaryBuilder, reached: readonly { readonly match: GraphNode; readonly through: readonly GraphNode[] }[]): void {
+  const candidates = reached.filter((entry) => entry.through.length > 0);
+  const first = candidates[0];
+  if (first === undefined) return;
+  const attempts = [SHOWN_NAMES, 3, 1].map((limit) => {
+    const middles = new Map<string, GraphNode>();
+    const kept: GraphNode[] = [];
+    for (const entry of candidates) {
+      const fresh = entry.through.filter((node) => !middles.has(refId(node.ref)));
+      if (middles.size + fresh.length > limit) break;
+      for (const node of fresh) middles.set(refId(node.ref), node);
+      kept.push(entry.match);
+    }
+    // the first match alone may name more middles than the limit: it is then kept with the first of them, which is true of it
+    const via = kept.length === 0 ? [first.through[0] as GraphNode] : [...middles.values()];
+    const named = kept.length === 0 ? [first.match] : kept;
+    return { named, via, text: `${nameList(named.map(nodeTitle))} ${named.length === 1 ? 'is' : 'are'} reached through ${nameList(via.map(nodeTitle))}.` };
+  });
+  const chosen = attempts.find((attempt) => builder.fits(attempt.text)) ?? attempts[attempts.length - 1];
+  if (chosen === undefined) return;
+  builder.add(chosen.text, [...chosen.named.map((node) => node.ref), ...chosen.via.map((node) => node.ref)]);
+}
+
+/** The summary of a shared-attribute or a linked-entities run: one sentence that names the matches (the count and the notices are drawn by the application), and one more for the matches reached through an entity. `anchor` is the plan's own anchor, when the caller has it. */
 export function summarizeTemplateRun(run: TemplateRunOk, anchor?: ElementRef): ReturnType<SummaryBuilder['finish']> {
-  const listed = templateRunListed(run);
-  const builder = new SummaryBuilder(listed);
+  const builder = new SummaryBuilder(templateRunListed(run));
   const nodes = nodeMap(run.nodes);
   const head = anchorOf(run, anchor);
   if (head === undefined) return undefined;
   const linked = run.templateId === 'linked-entities';
+  const title = nodeTitle(head);
   const matches = run.matchIds.map((ref) => nodes.get(refId(ref))).filter((node): node is GraphNode => node !== undefined);
   const shown = matches.slice(0, SHOWN_NAMES);
   if (run.count.quality === 'exact' && run.count.value === 0) {
-    builder.add(linked ? `${nodeTitle(head)} reaches no other entity.` : `No other record shares an attribute with ${nodeTitle(head)}.`, [head.ref]);
-  } else {
-    builder.add(linked ? `Entities reached from ${nodeTitle(head)}: ${countWords(run.count)}.` : `Other records that share an attribute with ${nodeTitle(head)}: ${countWords(run.count)}.`, [head.ref]);
-    if (shown.length > 0) builder.add(`${plural(shown.length, 'It is', 'They are')} ${nameList(shown.map(nodeTitle))}.`, shown.map((node) => node.ref));
-    if (linked) {
-      for (const link of (run.links ?? []).slice(0, SHOWN_NAMES)) {
-        const match = nodes.get(refId(link.match));
-        if (match === undefined) continue;
-        const through = link.through === undefined ? undefined : nodes.get(refId(link.through));
-        const how = link.hops === 1 ? 'one hop' : through === undefined ? 'two hops' : `two hops, through ${nodeTitle(through)}`;
-        builder.add(`${nodeTitle(match)} is reached in ${how}.`, through === undefined ? [match.ref] : [match.ref, through.ref]);
-      }
-    }
+    builder.add(linked ? `${title} reaches no other entity.` : `No other record shares an attribute with ${title}.`, [head.ref]);
+    return builder.finish();
   }
-  for (const notice of run.notices) {
-    const text = noticeSentence(notice);
-    if (text === undefined) continue;
-    const named = notice.code === 'supernodesSkipped' ? notice.entities.filter((entity) => nodes.has(refId(entity))) : [];
-    builder.add(text, named.length > 0 ? named : [head.ref]);
+  const complete = run.count.quality === 'exact' && run.count.value === matches.length && matches.length <= SHOWN_NAMES;
+  addNamed(
+    builder,
+    linked
+      ? (list, _count, whole) => (whole ? `${title} reaches ${list}.` : `${title} reaches, among others, ${list}.`)
+      : (list, count, whole) => (whole ? `${list} ${count === 1 ? 'shares' : 'share'} an attribute with ${title}.` : `The records that share an attribute with ${title} include ${list}.`),
+    shown.map((node) => ({ title: nodeTitle(node), ref: node.ref })),
+    complete,
+    [head.ref],
+  );
+  if (linked) {
+    addReachedThrough(
+      builder,
+      shown.map((match) => ({
+        match,
+        through: (run.links ?? []).flatMap((link) => (refId(link.match) === refId(match.ref) && link.through !== undefined ? [nodes.get(refId(link.through))] : [])).filter((node): node is GraphNode => node !== undefined),
+      })),
+    );
   }
   // the count of a run is of the matches it holds: exact when the read ended, a lower bound when it was cut, so the line says what is shown and, for a cut, that more may exist
   const shownCount = run.matchIds.length;
-  const omissions = run.count.quality === 'lowerBound' ? `${shownCount} shown; more may exist (lower bound).` : run.count.quality === 'exact' && run.count.value === 0 ? undefined : `${shownCount} shown.`;
+  const omissions = run.count.quality === 'lowerBound' ? `${shownCount} shown; more may exist (lower bound).` : `${shownCount} shown.`;
   return builder.finish(omissions);
 }

@@ -1,8 +1,7 @@
 import type { AskSummary, FileQueryResult } from '@neburyx/contracts';
 import { SummaryBuilder, citedKeysExist, listOf, type ListedElements } from './core.js';
-import { countWords, groupedNumber, remainderSentence } from './counts.js';
-import { noticeSentence } from './notices.js';
-import { SHOWN_NAMES, edgeItem, nameList, nodeItem, nodeMap, plural } from './shared.js';
+import { groupedNumber, remainderSentence } from './counts.js';
+import { SHOWN_NAMES, addNamed, edgeItem, nodeItem, nodeMap } from './shared.js';
 import { nodeTitle } from './title.js';
 import type { SummaryOutcome } from './index.js';
 
@@ -13,23 +12,28 @@ export function fileQueryListed(result: FileQueryResult): ListedElements {
 }
 
 /**
- * The summary of a file-query result, by fixed rules from the result alone (no model, no read, no clock): the count of rows with its label, the names of up to five nodes, how many relationships of how many types, the
- * sentences of its notices and the omissions line; every sentence cites elements the result lists. A result that lists no node has no summary, because a sentence must cite an element.
+ * The summary of a file-query result, by fixed rules from the result alone (no model, no read, no clock): one sentence that names up to five nodes the query returned and, when relationships are listed, one that names their types (the counts and the notices are drawn
+ * by the application); every sentence cites elements the result lists. A result that lists no node has no summary, because a sentence must cite an element.
  */
 export function summarizeFileQuery(result: FileQueryResult): AskSummary | undefined {
-  const [first] = result.nodes;
-  if (first === undefined) return undefined;
+  if (result.nodes.length === 0) return undefined;
   const builder = new SummaryBuilder(fileQueryListed(result));
   const shown = result.nodes.slice(0, SHOWN_NAMES);
-  builder.add(`Rows returned by the query: ${countWords(result.count)}.`, [first.ref]);
-  builder.add(`${plural(shown.length, 'It is', 'They are')} ${nameList(shown.map(nodeTitle))}.`, shown.map((node) => node.ref));
+  addNamed(
+    builder,
+    (list, _count, whole) => (whole ? `The query returned ${list}.` : `The rows include ${list}.`),
+    shown.map((node) => ({ title: nodeTitle(node), ref: node.ref })),
+    result.count.quality === 'exact' && result.count.value === result.nodes.length && result.nodes.length <= SHOWN_NAMES,
+  );
   if (result.edges.length > 0) {
-    const types = [...new Set(result.edges.map((edge) => edge.type))];
-    builder.add(`${groupedNumber(result.edges.length)} ${plural(result.edges.length, 'relationship is', 'relationships are')} shown, of ${groupedNumber(types.length)} ${plural(types.length, 'type', 'types')}.`, result.edges.slice(0, SHOWN_NAMES).map((edge) => edge.ref));
-  }
-  for (const notice of result.notices) {
-    const text = noticeSentence(notice);
-    if (text !== undefined) builder.add(text, [first.ref]);
+    const types = result.edges.filter((edge, index) => result.edges.findIndex((other) => other.type === edge.type) === index);
+    const single = result.edges.length === 1;
+    addNamed(
+      builder,
+      (list, count, whole) => (single ? `The relationship shown is of type ${list}.` : whole ? `The relationships shown are of type ${list}.` : `The relationships shown include the ${count === 1 ? 'type' : 'types'} ${list}.`),
+      types.slice(0, SHOWN_NAMES).map((edge) => ({ title: edge.type, ref: edge.ref })),
+      types.length <= SHOWN_NAMES,
+    );
   }
   const rows = result.count.value ?? 0;
   const complete = result.count.quality === 'exact';

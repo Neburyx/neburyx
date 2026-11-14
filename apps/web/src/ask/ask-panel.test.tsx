@@ -327,12 +327,12 @@ describe('the Ask panel: guards', () => {
 
 describe('the Ask panel: the lines of a refusal', () => {
   it('says nothing for a list that is empty instead of leaving the line blank, and draws what is missing as a problem', async () => {
-    const h = harness(async () => ({ ok: true, value: { refused: { cause: 'missing-inputs', sentence: ASK_REFUSAL_SENTENCES['missing-inputs'], intent: 'find', parameters: ['accountId'], found: [], missing: ['accountId'] } } }));
+    const h = harness(async () => ({ ok: true, value: { refused: { cause: 'missing-inputs', sentence: ASK_REFUSAL_SENTENCES['missing-inputs'], intent: 'find', parameters: ['targetId'], found: [], missing: ['targetId'] } } }));
     render(h.tree(true));
     await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
     await screen.findByRole('heading', { name: 'Ask did not answer' });
     const lines = [...document.querySelectorAll('.ask-line')].map((line) => line.textContent);
-    expect(lines).toEqual(['NeedsAccount ID', 'Foundnothing', 'MissingAccount ID']);
+    expect(lines).toEqual(['NeedsTarget ID', 'Foundnothing', 'MissingTarget ID']);
     expect(document.querySelectorAll('.ask-problem')).toHaveLength(2);
   });
 });
@@ -406,14 +406,14 @@ describe('the Ask panel: the figure of a count', () => {
 
 describe('the Ask panel: the answer card', () => {
   const ENTITY = { ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' }, display: { title: 'acc-1', type: 'kind-a' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
-  const summarized = (extra: Record<string, unknown> = {}): AskAnswer => askAnswerSchema.parse({ answered: { intent: 'accounts-paid-by', entities: { accountId: 'acc-1' }, outcome: 'complete', result: { templateId: 'entity', result: ENTITY }, summary: { sentences: [{ text: 'acc-1 is here.', cites: ['n1'] }], citations: [{ key: 'n1', element: ENTITY.ref, type: 'kind-a', title: 'acc-1' }], omissions: 'Not named in the answer: none.' }, ...extra } });
+  const summarized = (extra: Record<string, unknown> = {}): AskAnswer => askAnswerSchema.parse({ answered: { intent: 'accounts-paid-by', entities: { targetId: 'acc-1' }, outcome: 'complete', result: { templateId: 'entity', result: ENTITY }, summary: { sentences: [{ text: 'acc-1 is here.', cites: ['n1'] }], citations: [{ key: 'n1', element: ENTITY.ref, type: 'kind-a', title: 'acc-1' }], omissions: 'Not named in the answer: none.' }, ...extra } });
 
   it('says what the question was taken as and the values taken from it, in words', async () => {
     const h = harness(async () => ({ ok: true, value: summarized() }));
     render(h.tree(true));
     await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
     expect(await screen.findByText('Accounts paid by')).toBeTruthy();
-    expect(screen.getByText('Account ID')).toBeTruthy();
+    expect(screen.getByText('Target ID')).toBeTruthy();
     expect(document.querySelector('.ask-values-row dd')?.textContent).toBe('acc-1');
   });
 

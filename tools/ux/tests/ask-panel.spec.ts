@@ -103,7 +103,7 @@ test.describe('the Ask panel', () => {
     await open(page);
     await page.getByLabel('Your question').fill('shared devices?');
     await page.keyboard.press('Enter');
-    await expect(panel(page).getByText('This read would be very large, so Ask stopped before reading it. The number is an estimate.')).toBeVisible();
+    await expect(panel(page).getByText('This read would be very large, so Ask stopped before reading it. At least this many match.')).toBeVisible();
     await expect(panel(page).getByText('≥ 500 matches')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Continue' }).click();
     await expect(page.getByRole('heading', { name: 'Answer ready' })).toBeVisible();
