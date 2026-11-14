@@ -27,7 +27,7 @@ describe('the catalog of the planner', () => {
     expect(text('expand')).toContain('Always state the direction');
     expect(text('derived-edge-support')).toContain('names two entities and one derived rule of the vocabulary');
     expect(text('derived-edge-support')).toContain('not a run of the rule from one anchor');
-    expect(text('derived-rule-run')).toContain('names two entities and a derived rule and asks what supports the link between them is not this template: use derived-edge-support');
+    expect(text('derived-rule-run')).toContain('names two entities and a derived rule and asks what supports the link between them is not this template: use the template that shows the support of a link');
   });
 
   it('writes each template as a block with its identifier, version, description and parameters', () => {
@@ -102,4 +102,4 @@ describe('the vocabulary of the prompt', () => {
 });
 
 /** The parts of catalog words that are also surnames of the public list: they are ordinary words of the descriptions, and a question may use them. A new word of a description that is one fails the test until it is named here. */
-const SURNAME_PARTS = ["anchor","counts","edge","goes","hold","joins","link","list","names","neighbor","neighbors","path","plain","reading","record","records","rule","run","set","share","state","use","way","window"];
+const SURNAME_PARTS = ["anchor","counts","goes","hold","joins","link","list","names","neighbor","neighbors","path","plain","reading","record","records","rule","run","set","share","state","use","way","window"];
