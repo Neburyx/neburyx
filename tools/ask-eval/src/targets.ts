@@ -25,7 +25,7 @@ export function tally(questions: readonly Question[], results: readonly Question
   const plans = results.filter((result) => byId.get(result.id)?.expect.kind === 'plan');
   const asked = refusals.filter((result) => {
     const expect = byId.get(result.id)?.expect;
-    return expect?.kind === 'unsupported' && expect.family !== undefined;
+    return expect?.kind === 'unsupported' && expect.family !== undefined && result.answered !== 'blocked';
   });
   const measured = refusals.some((result) => result.family !== undefined);
   return {

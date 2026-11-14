@@ -40,3 +40,11 @@ describe('the families of the question file', () => {
     expect([...REFUSAL_FAMILIES].sort()).toEqual(ASK_REFUSAL_FAMILIES.filter((family) => family !== 'plan-not-usable' && family !== 'model-refused').sort());
   });
 });
+
+describe('the family count and a refusal that the allowlist blocked', () => {
+  it('leaves a blocked refusal out of the count, because nothing was planned and no family exists', () => {
+    const blocked: QuestionResult = { id: 'one', verdict: 'refused', fields: [], repaired: false, answered: 'blocked' };
+    const found = tally(questions, [blocked, refused('two', 'loaded-view'), refused('three')]);
+    expect(found.family).toEqual({ asked: 1, right: 1, measured: true });
+  });
+});
