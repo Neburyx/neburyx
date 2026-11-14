@@ -18,7 +18,7 @@ export interface ReadSlots extends Coordinator {
   inspect(): { readonly sources: ReadonlyMap<string, PoolCounts>; readonly users: ReadonlyMap<string, PoolCounts> };
 }
 
-export interface PoolCounts {
+interface PoolCounts {
   readonly held: number;
   readonly waiting: number;
 }

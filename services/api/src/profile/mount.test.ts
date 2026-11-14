@@ -206,45 +206,28 @@ describe('a refusal that names a thing that is not there', () => {
 });
 
 
-describe('what the mount gives an extension for previews of Ask', () => {
-  it('gives a signing function, a policy version of none and no key bytes', async () => {
+describe('what the mount gives an extension to sign with', () => {
+  it('gives a signing function and no key bytes', async () => {
     let seen: ExtensionRequest | undefined;
     const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true });
     await app.inject({ url: URL_OF_ROUTE });
-    expect(seen?.previewMac?.('a text')).toMatch(/^[0-9a-f]{64}$/);
-    expect(seen?.policyVersionOf?.('any-source')).toBe('none');
+    expect(seen?.signText?.('a text')).toMatch(/^[0-9a-f]{64}$/);
     const values = Object.values(seen ?? {});
     expect(values.some((value) => value instanceof Uint8Array)).toBe(false);
     await app.close();
   });
 
   it('signs the same text the same way with the same key and differently with another key', async () => {
-    const macOf = async (previewKey: Buffer) => {
+    const macOf = async (signingKey: Buffer) => {
       let seen: ExtensionRequest | undefined;
-      const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true, app: { previewKey } });
+      const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true, app: { signingKey } });
       await app.inject({ url: URL_OF_ROUTE });
       await app.close();
-      return seen?.previewMac?.('a text');
+      return seen?.signText?.('a text');
     };
     const first = await macOf(Buffer.alloc(32, 1));
     expect(await macOf(Buffer.alloc(32, 1))).toBe(first);
     expect(await macOf(Buffer.alloc(32, 2))).not.toBe(first);
-  });
-
-  it('answers the policy version the application and its gate use for the source', async () => {
-    let seen: ExtensionRequest | undefined;
-    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true, app: { policyVersion: (sourceId) => `v-${sourceId}` } });
-    await app.inject({ url: URL_OF_ROUTE });
-    expect(seen?.policyVersionOf?.('demo')).toBe('v-demo');
-    await app.close();
-  });
-
-  it('gives no search tools when the application has no gate', async () => {
-    let seen: ExtensionRequest | undefined;
-    const { app } = await started(extensionOf(async (request) => ((seen = request), 'ok')), { previewOn: true });
-    await app.inject({ url: URL_OF_ROUTE });
-    expect(seen?.askEntityTools).toBeUndefined();
-    await app.close();
   });
 
   it('keeps the code of an error of the application that an extension lets through', async () => {
@@ -302,7 +285,7 @@ describe('a refusal because the audit event could not be written', () => {
   });
 });
 
-describe('the refusals of a read of the gate and of a plan', () => {
+describe('the refusals of a read of the gate', () => {
   const answers: ReadonlyArray<[string, Record<string, unknown>, number, Record<string, unknown> | undefined]> = [
     ['QUERY_BUDGET_EXCEEDED', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 50, maxHops: 2 }, 422, { maxPage: 50, maxHops: 2 }],
     ['QUERY_TIMEOUT', { code: 'QUERY_TIMEOUT', timeoutMs: 1000 }, 504, { timeoutMs: 1000 }],
@@ -313,8 +296,6 @@ describe('the refusals of a read of the gate and of a plan', () => {
     ['ACCESS_DENIED with no reason', { code: 'ACCESS_DENIED' }, 403, undefined],
     ['NOT_FOUND', { code: 'NOT_FOUND' }, 404, undefined],
     ['SOURCE_MISMATCH', { code: 'SOURCE_MISMATCH' }, 400, undefined],
-    ['CONFLICT plan-expired', { code: 'CONFLICT', reason: 'plan-expired' }, 409, { reason: 'plan-expired' }],
-    ['CONFLICT plan-not-runnable', { code: 'CONFLICT', reason: 'plan-not-runnable' }, 409, { reason: 'plan-not-runnable' }],
     ['INVALID_REQUEST with a reason', { code: 'INVALID_REQUEST', reason: 'overlap' }, 400, undefined],
     ['ASK_PLAN_INVALID', { code: 'ASK_PLAN_INVALID' }, 422, undefined],
     ['AUDIT_UNAVAILABLE', { code: 'AUDIT_UNAVAILABLE' }, 503, undefined],
@@ -327,17 +308,6 @@ describe('the refusals of a read of the gate and of a plan', () => {
     expect(events).toEqual([]);
     expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
     expect(name).not.toBe('');
-    await app.close();
-  });
-
-  it('logs which check stopped a request and which pattern, and nothing of the text it found, and answers an unexpected failure', async () => {
-    const stopped = Object.assign(new Error('SECRET-TEXT would reach the model'), { name: 'PatternGuardError', kind: 'text', position: 2 });
-    const { app, lines } = await started(extensionOf(async () => Promise.reject(stopped)), { previewOn: true });
-    const answer = await app.inject({ url: URL_OF_ROUTE });
-    expect([answer.statusCode, answer.json().error.code]).toEqual([500, 'INTERNAL_ERROR']);
-    const logged = lines.map((line) => JSON.parse(line)).find((line) => line.event === 'extension.handler_failed');
-    expect(logged).toMatchObject({ extension: 'probe', guard: 'text', guardPosition: 2 });
-    expect(lines.join('\n')).not.toContain('SECRET-TEXT');
     await app.close();
   });
 });

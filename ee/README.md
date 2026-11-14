@@ -4,7 +4,7 @@ Code for the Enterprise and AI features of Neburyx. It is open source, under the
 
 What may live here:
 
-- Modules for the Enterprise scope (sign-in, policy, audit, evidence packs, and the AI features: model providers, planner, summary and assistant), one folder per module.
+- Modules for the Enterprise scope (sign-in, policy, audit, evidence packs, and the AI features: model providers, Ask, summary and assistant), one folder per module.
 - Nothing that the Community build needs to run.
 
 Modules now:

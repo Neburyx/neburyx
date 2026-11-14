@@ -1,12 +1,11 @@
-import type { PromptRegistry } from '../prompts.js';
-import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, TokenUsage } from '../provider.js';
+import { promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type TokenUsage } from '../provider.js';
 
 export type FixtureReply =
   | { readonly kind: 'ok'; readonly text: string; readonly usage?: TokenUsage; readonly model?: string }
   | { readonly kind: 'refused'; readonly usage?: TokenUsage }
   | { readonly kind: 'failed'; readonly code: FailureCode; readonly usage?: TokenUsage };
 
-export type FixtureReplySource = FixtureReply | ((request: ModelRequest) => FixtureReply);
+type FixtureReplySource = FixtureReply | ((request: ModelRequest) => FixtureReply);
 
 export type FixtureReplies = Readonly<Record<string, FixtureReplySource>>;
 
@@ -21,7 +20,6 @@ export interface FixtureProvider extends ModelProvider {
 }
 
 export interface FixtureOptions {
-  readonly registry: PromptRegistry;
   readonly replies: FixtureReplies;
   readonly model?: string;
 }
@@ -36,7 +34,7 @@ export function createFixtureProvider(options: FixtureOptions): FixtureProvider 
   return {
     calls,
     async complete(request): Promise<ModelAnswer> {
-      const { record } = options.registry.resolve(request.promptId, request.parameters);
+      const record = promptRecordOf(request);
       calls.push(request);
       const key = replyKey(record.id, record.version);
       const source = options.replies[key];

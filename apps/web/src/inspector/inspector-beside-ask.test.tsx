@@ -1,6 +1,6 @@
 import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/ask-binder.js';
+import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/panel-layout.js';
 import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-limits.js';
 import { inspectorRig, select } from './inspector-kit.js';
 

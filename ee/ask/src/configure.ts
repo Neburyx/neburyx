@@ -1,10 +1,8 @@
 import { access, constants, readFile, stat } from 'node:fs/promises';
-import { AI_DEFAULTS, AI_CACHE_TTLS, type AiCacheTtl, type AiEffort, type AiMappingView, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
+import { AI_DEFAULTS, AI_CACHE_TTLS, type AiCacheTtl, type AiEffort, type AiSettings, type ConfigureOutcome } from '@neburyx/contracts';
 import { parseKeyText } from './key-file.js';
-import { buildPromptRegistry, type PromptRegistry } from './prompts.js';
-import { buildPropertyRules, type PropertyRules } from './rules.js';
 
-export type KeyReference = { readonly kind: 'env'; readonly name: string } | { readonly kind: 'file'; readonly path: string };
+type KeyReference = { readonly kind: 'env'; readonly name: string } | { readonly kind: 'file'; readonly path: string };
 
 export interface AskConfiguration {
   readonly provider: 'anthropic';
@@ -12,8 +10,6 @@ export interface AskConfiguration {
   readonly key: KeyReference;
   readonly cache: { readonly enabled: boolean; readonly ttl: AiCacheTtl };
   readonly limits: { readonly timeoutMs: number; readonly maxRetries: number; readonly maxTokens: number; readonly effort: AiEffort };
-  readonly registry: PromptRegistry;
-  readonly rules: PropertyRules;
 }
 
 const GROUP_AND_OTHER_BITS = 0o077;
@@ -78,7 +74,7 @@ function cacheChoice(settings: AiSettings, env: Readonly<Record<string, string |
 export type Configuration = { readonly outcome: ConfigureOutcome; readonly configuration?: AskConfiguration };
 
 /** Checks the settings of the AI preview without reading the key, and builds what the routes of the extension use. */
-export async function configureAsk(settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView): Promise<Configuration> {
+export async function configureAsk(settings: AiSettings, env: Readonly<Record<string, string | undefined>>): Promise<Configuration> {
   const problems: string[] = [];
   if (settings.provider === undefined) problems.push(requiredProblem('ai.provider'));
   if (settings.model === undefined) problems.push(requiredProblem('ai.model'));
@@ -88,16 +84,12 @@ export async function configureAsk(settings: AiSettings, env: Readonly<Record<st
   if (env.ANTHROPIC_CUSTOM_HEADERS !== undefined) problems.push('ANTHROPIC_CUSTOM_HEADERS is set in the environment; the AI preview refuses it because it would add headers to every call');
   const cache = cacheChoice(settings, env);
   problems.push(...cache.problems);
-  const registry = await buildPromptRegistry(settings.prompts);
-  if (!registry.ok) problems.push(...registry.problems);
-  const properties = buildPropertyRules(settings, view);
-  problems.push(...properties.problems);
 
-  if (problems.length > 0 || settings.provider === undefined || settings.model === undefined || settings.key === undefined || !registry.ok || properties.rules === undefined) {
+  if (problems.length > 0 || settings.provider === undefined || settings.model === undefined || settings.key === undefined) {
     return { outcome: { ok: false, problems } };
   }
   return {
-    outcome: properties.warnings.length > 0 ? { ok: true, warnings: properties.warnings } : { ok: true },
+    outcome: { ok: true },
     configuration: {
       provider: settings.provider,
       model: settings.model,
@@ -109,8 +101,6 @@ export async function configureAsk(settings: AiSettings, env: Readonly<Record<st
         maxTokens: settings.max_tokens ?? AI_DEFAULTS.maxTokens,
         effort: settings.effort ?? AI_DEFAULTS.effort,
       },
-      registry: registry.registry,
-      rules: properties.rules,
     },
   };
 }

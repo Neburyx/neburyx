@@ -1,16 +1,12 @@
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { AuditEvent, AuditSink } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedCallContext } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
-import { BUILT_IN_PROMPTS } from './prompts.js';
-import type { ModelRequest, PromptId } from './provider.js';
+import type { ModelRequest } from './provider.js';
 import { CONFORMANCE_CASES, type ConformanceScenario } from './testing/conformance.js';
 
 const KEY = 'conformance-key-1234567890';
@@ -54,7 +50,6 @@ let baseUrl: string;
 let next: Reply = SCENARIOS['ok-known-usage'];
 let bodies: string[] = [];
 const sockets = new Set<Socket>();
-const folder = mkdtempSync(join(tmpdir(), 'ee-ask-conformance-'));
 
 beforeAll(async () => {
   server = createServer((request, response) => {
@@ -76,11 +71,10 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const socket of sockets) socket.destroy();
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  rmSync(folder, { recursive: true, force: true });
 });
 
-async function configurationWith(prompts: Record<string, string> = {}): Promise<AskConfiguration> {
-  const { configuration, outcome } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, timeout_ms: 1_000, max_retries: 0, prompts }, { STUB_KEY: KEY });
+async function configurationWith(): Promise<AskConfiguration> {
+  const { configuration, outcome } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, timeout_ms: 1_000, max_retries: 0 }, { STUB_KEY: KEY });
   if (configuration === undefined) throw new Error(JSON.stringify(outcome));
   return configuration;
 }
@@ -92,23 +86,16 @@ describe('the conformance suite on the Anthropic provider, over a stub server', 
       bodies = [];
       await conformanceCase.run({
         provider: createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl }),
-        registry: configuration.registry,
         arrange: (scenario) => {
           next = SCENARIOS[scenario];
         },
-        callsMade: () => bodies.length,
       });
     });
   });
 });
 
-const CONTEXT: AuditedCallContext = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' };
-const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'QUESTION-MARKER who is here?' } },
-  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params.ref: invalid_type' } },
-  'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
-  'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
-};
+const CONTEXT: AuditedCallContext = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1', action: 'test.call' };
+const REQUEST: ModelRequest = { promptId: 'test.prompt', version: 3, instructions: 'INSTRUCTIONS-MARKER Summarise the view.', values: 'VIEW-MARKER a view' };
 
 function recordingSink(): { readonly sink: AuditSink; readonly events: AuditEvent[] } {
   const events: AuditEvent[] = [];
@@ -122,52 +109,34 @@ async function audited(configuration: AskConfiguration) {
 }
 
 describe('the provider behind the audited call', () => {
-  describe.each([['the built-in text', false], ['an operator override', true]] as const)('with %s', (_name, override) => {
-    it.each(['ask.plan', 'summary.view', 'assistant.route'] as const)('audits the template hash of %s and no hash of the filled text or of the request body', async (id) => {
-      const overrides: Record<string, string> = {};
-      let templateBytes: string | undefined;
-      if (override) {
-        const placeholders = { 'ask.plan': '{{catalog}} {{question}}', 'summary.view': '{{view}}', 'assistant.route': '{{message}} {{view}}' }[id];
-        templateBytes = `Override text for the test. ${placeholders}\n`;
-        const path = join(folder, `${id}.txt`);
-        writeFileSync(path, templateBytes);
-        overrides[id] = path;
-      }
-      const configuration = await configurationWith(overrides);
-      const { call, events } = await audited(configuration);
-      next = SCENARIOS['ok-known-usage'];
-      bodies = [];
-      const answer = await call.call(REQUESTS[id], CONTEXT, new AbortController().signal);
-      expect(answer.status).toBe('ok');
-      expect(bodies).toHaveLength(1);
-
-      const resolved = configuration.registry.resolve(id, REQUESTS[id].parameters);
-      expect(events).toHaveLength(1);
-      expect(events[0]?.detail).toMatchObject({ ai: { promptId: id, promptSha256: resolved.record.sha256 } });
-      if (templateBytes !== undefined) expect(resolved.record.sha256).toBe(sha256Of(templateBytes));
-
-      const sent = JSON.parse(bodies[0] ?? '') as { system?: { text: string }[]; messages: { content: string }[] };
-      expect(sent.messages[0]?.content).toBe(resolved.values);
-      expect([sent.system?.[0]?.text, sent.messages[0]?.content].filter((part) => part !== undefined).join('\n\n')).toBe(resolved.text);
-      const recorded = JSON.stringify(events);
-      const staticPart = override ? false : BUILT_IN_PROMPTS[id].staticParameters.length > 0;
-      if (staticPart) expect(events[0]?.detail).toMatchObject({ ai: { instructionsSha256: sha256Of(sent.system?.[0]?.text ?? '') } });
-      for (const hash of [sha256Of(resolved.text), sha256Of(bodies[0] ?? ''), sha256Of(sent.messages[0]?.content ?? ''), ...(staticPart ? [] : [sha256Of(sent.system?.[0]?.text ?? '')])]) {
-        expect(recorded).not.toContain(hash);
-        expect(recorded).not.toContain(hash.toUpperCase());
-      }
-      expect(recorded).not.toMatch(/MARKER|A synthetic answer/);
-    });
+  it('audits the hash of the fixed instructions and no hash of the values, the filled text or the request body', async () => {
+    const { call, events } = await audited(await configurationWith());
+    next = SCENARIOS['ok-known-usage'];
+    bodies = [];
+    const answer = await call.call(REQUEST, CONTEXT, new AbortController().signal);
+    expect(answer.status).toBe('ok');
+    expect(bodies).toHaveLength(1);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ action: 'test.call', detail: { ai: { promptId: 'test.prompt', promptVersion: '3', promptSha256: sha256Of(REQUEST.instructions ?? '') } } });
+    const sent = JSON.parse(bodies[0] ?? '') as { system?: { text: string }[]; messages: { content: string }[] };
+    expect(sent.system?.[0]?.text).toBe(REQUEST.instructions);
+    expect(sent.messages[0]?.content).toBe(REQUEST.values);
+    const recorded = JSON.stringify(events);
+    for (const hash of [sha256Of(REQUEST.values), sha256Of(`${REQUEST.instructions}\n\n${REQUEST.values}`), sha256Of(bodies[0] ?? '')]) {
+      expect(recorded).not.toContain(hash);
+      expect(recorded).not.toContain(hash.toUpperCase());
+    }
+    expect(recorded).not.toMatch(/MARKER|A synthetic answer/);
   });
 
   it('records one failed event for a stub that never replies, and one refused event for a refusal, and the answers carry no text', async () => {
     const configuration = await configurationWith();
     const { call, events } = await audited(configuration);
     next = SCENARIOS.timeout;
-    const timedOut = await call.call(REQUESTS['summary.view'], CONTEXT, new AbortController().signal);
+    const timedOut = await call.call(REQUEST, CONTEXT, new AbortController().signal);
     expect(timedOut).toMatchObject({ status: 'failed', code: 'timeout' });
     next = SCENARIOS.refused;
-    const refused = await call.call(REQUESTS['summary.view'], CONTEXT, new AbortController().signal);
+    const refused = await call.call(REQUEST, CONTEXT, new AbortController().signal);
     expect(refused.status).toBe('refused');
     expect(events.map((event) => event.result)).toEqual(['failed', 'refused']);
     for (const answer of [timedOut, refused]) expect(answer).not.toHaveProperty('text');
@@ -176,7 +145,7 @@ describe('the provider behind the audited call', () => {
   it('records the model the reply names when a fallback answered', async () => {
     const { call, events } = await audited(await configurationWith());
     next = json(200, message({ model: 'claude-haiku-5-5' }));
-    await call.call(REQUESTS['summary.view'], CONTEXT, new AbortController().signal);
+    await call.call(REQUEST, CONTEXT, new AbortController().signal);
     expect(events[0]?.detail).toMatchObject({ ai: { modelRef: 'claude-haiku-5-5' } });
   });
 });

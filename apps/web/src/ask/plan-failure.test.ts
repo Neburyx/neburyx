@@ -8,11 +8,8 @@ const client = (code: string): ApiFailure => ({ code }) as ApiFailure;
 const CALLS: readonly PlanCall[] = ['run', 'continue', 'edit', 'cancel'];
 
 describe('a plan that is gone or past its time', () => {
-  it.each(CALLS)('says to ask again for a plan that is not found, expired or no longer runnable, on a %s', (call) => {
+  it.each(CALLS)('says to ask again for a plan that is not found, on a %s', (call) => {
     expect(planFailureWords(server('NOT_FOUND'), 'demo', call)).toEqual({ text: PLAN_FAILURE_COPY.gone, action: 'ask-again' });
-    expect(planFailureWords(server('CONFLICT', { reason: 'plan-expired' }), 'demo', call)).toEqual({ text: PLAN_FAILURE_COPY.expired, action: 'ask-again' });
-    expect(planFailureWords(server('CONFLICT', { reason: 'plan-not-runnable' }), 'demo', call)).toEqual({ text: PLAN_FAILURE_COPY.notRunnable, action: 'ask-again' });
-    expect(planFailureWords(server('CONFLICT'), 'demo', call).action).toBe('ask-again');
   });
 });
 
@@ -63,9 +60,9 @@ describe('a refusal of Ask or of the read', () => {
 describe('the words of every code, for every call', () => {
   it.each(FAILURE_CODES_WITH_WORDS)('give one sentence for %s with no ID, code or trace in it', (code) => {
     for (const call of CALLS) {
-      const words = planFailureWords(server(code, { reason: 'plan-expired', retryAfterMs: 2000, timeoutMs: 1000, maxPage: 5 }), 'demo', call);
+      const words = planFailureWords(server(code, { reason: 'source-changed', retryAfterMs: 2000, timeoutMs: 1000, maxPage: 5 }), 'demo', call);
       expect(words.text.length).toBeGreaterThan(5);
-      expect(words.text).not.toMatch(/tr-SECRET|plan-expired|[A-Z]{2,}_[A-Z_]+|[0-9a-f]{8}-[0-9a-f]{4}/);
+      expect(words.text).not.toMatch(/tr-SECRET|source-changed|[A-Z]{2,}_[A-Z_]+|[0-9a-f]{8}-[0-9a-f]{4}/);
     }
   });
 });

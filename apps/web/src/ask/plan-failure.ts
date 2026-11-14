@@ -3,7 +3,7 @@ import { failureWords } from '../patterns/failure-words.js';
 import { askFailureWords } from './ask-failure.js';
 
 /** What the person can do after a plan call failed: ask the question again (the plan cannot be used any more), press Run again (the plan is still proposed), try the same save or cancel again, or nothing. */
-export type PlanAction = 'ask-again' | 'run-again' | 'try-again' | 'none';
+type PlanAction = 'ask-again' | 'run-again' | 'try-again' | 'none';
 
 export interface PlanFailureWords {
   readonly text: string;
@@ -18,8 +18,6 @@ const detailOf = (failure: ApiFailure, key: string): unknown => ('details' in fa
 
 export const PLAN_FAILURE_COPY = {
   gone: 'This plan is no longer there. Ask the question again.',
-  expired: 'This plan expired. Ask the question again.',
-  notRunnable: 'This plan can no longer be run. Ask the question again.',
   invalidValues: "These values don't fit this plan. Check them and save again.",
   badContinue: 'That continue is no longer valid. Run the plan again to get a new one.',
   notRecorded: "The plan ran but could not be recorded, so its result is not shown and it cannot run again. Ask the question again.",
@@ -41,7 +39,6 @@ export function planFailureWords(failure: ApiFailure, source: string, call: Plan
   if (code === 'CONFLICT' && reason === 'pattern-changed') return { text: PLAN_FAILURE_COPY.patternChanged, action: 'ask-again' };
   if (code === 'CONFLICT' && reason === 'pattern-unavailable') return { text: PLAN_FAILURE_COPY.patternGone, action: 'ask-again' };
   if (code === 'NOT_FOUND') return { text: savedPattern ? PLAN_FAILURE_COPY.planOrPatternGone : PLAN_FAILURE_COPY.gone, action: 'ask-again' };
-  if (code === 'CONFLICT') return { text: reason === 'plan-expired' ? PLAN_FAILURE_COPY.expired : PLAN_FAILURE_COPY.notRunnable, action: 'ask-again' };
   if (code === 'ASK_PLAN_INVALID' || code === 'SOURCE_MISMATCH') return { text: PLAN_FAILURE_COPY.invalidValues, action: 'none' };
   if (code === 'INVALID_REQUEST') return call === 'continue' ? { text: PLAN_FAILURE_COPY.badContinue, action: 'run-again' } : call === 'edit' ? { text: PLAN_FAILURE_COPY.invalidValues, action: 'none' } : { text: failureWords(failure, source).text, action: 'none' };
   if (code === 'AUDIT_UNAVAILABLE' && (call === 'run' || call === 'continue')) return { text: PLAN_FAILURE_COPY.notRecorded, action: 'ask-again' };

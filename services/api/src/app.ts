@@ -57,11 +57,9 @@ import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
 import { communityAskPlanner, communitySeams } from './seams/community-seams.js';
 import { searchExactTemplate } from './gate/templates/search-exact.js';
-import { createAskEntityLookup } from './ask/entity-lookup.js';
-import { createAskEntitySearch } from './ask/entity-search.js';
 import { createAskPatternFinder, createAskPatternLister } from './ask/patterns-lister.js';
 import { createAskPlanRunnerFactory } from './ask/plan-runner.js';
-import { createPreviewMac, derivePreviewKey } from './ask/preview-key.js';
+import { createSigner, deriveSigningKey } from './ask/signing-key.js';
 import { COMMUNITY_POLICY_VERSION } from './investigations/draft.js';
 import { mountExtensionRoutes, type ExtensionMount } from './profile/mount.js';
 import type { Seams } from './seams/seams.js';
@@ -85,8 +83,8 @@ export interface AppOptions {
   readonly referenceKeys?: ReferenceKeys | undefined;
   /** Signs and checks the cursors of the lists of the application database; absent, a key made for this copy alone. */
   readonly cursors?: CursorCodec | undefined;
-  /** The key that signs the previews of Ask, derived from the cursor key material; absent, a key made for this copy alone. */
-  readonly previewKey?: Buffer | undefined;
+  /** The key that signs the Continue token of a heavy Ask run, derived from the cursor key material; absent, a key made for this copy alone. */
+  readonly signingKey?: Buffer | undefined;
   /** What the checks showed about how the source answers a count of neighbors; absent, every degree preview is bounded. */
   readonly degreeVerdicts?: DegreeVerdicts | undefined;
   /** Overrides the lifetime and size of the degree preview cache, which is only kept when the verdicts are given. */
@@ -366,7 +364,6 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   const fallbackKeyMaterial = randomBytes(32);
-  const askTools: { current?: NonNullable<ExtensionMount['askEntityToolsFor']> } = {};
   const askRunners: { current?: NonNullable<ExtensionMount['askPlanRunnerFor']> } = {};
   const askPatternLists: { current?: NonNullable<ExtensionMount['askPatternsFor']> } = {};
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
@@ -375,9 +372,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       previewOn: options.previewOn === true,
       audit: (options.seams ?? communitySeams()).audit,
       askPlanner: (options.seams ?? communitySeams()).askPlanner ?? communityAskPlanner,
-      previewMac: createPreviewMac(options.previewKey ?? derivePreviewKey(fallbackKeyMaterial)),
-      policyVersionOf: options.policyVersion ?? (() => COMMUNITY_POLICY_VERSION),
-      askEntityToolsFor: (context) => askTools.current?.(context),
+      signText: createSigner(options.signingKey ?? deriveSigningKey(fallbackKeyMaterial)),
       askPlanRunnerFor: (context) => askRunners.current?.(context),
       askPatternsFor: (context) => askPatternLists.current?.(context),
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
@@ -466,11 +461,6 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     });
 
     const searching = createSearchService({ gate: options.gate, mapping, access, references: referenceKeys, ...(options.indexes === undefined ? {} : { indexes: options.indexes }) });
-    askTools.current = ({ principal, traceId }) => (sourceId) => ({
-      search: createAskEntitySearch(searching, { principal, sourceId, traceId, mask: true }),
-      lookup: createAskEntityLookup(entities, { principal, sourceId, traceId, mask: true }),
-      ensureSource: () => access.require({ traceId, principal, sourceId, auditAction: searchExactTemplate.auditAction }),
-    });
     app.post('/v1/search/entities', { config: { permission: 'principal' } }, async (request) => {
       const body = searchRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');

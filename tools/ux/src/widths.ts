@@ -6,9 +6,6 @@ export const BENCHMARK = 'benchmark';
 /** Specs whose result depends on the width of the window (a region inside the window, boxes that must not overlap): they run at both widths. */
 export const WIDTH_DEPENDENT: readonly string[] = [
   'ai-header.spec.ts',
-  'ask-inspector.spec.ts',
-  'ask-panel.spec.ts',
-  'ask-plan.spec.ts',
   'compare.spec.ts',
   'evidence.spec.ts',
   'first-run.spec.ts',

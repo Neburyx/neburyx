@@ -1,15 +1,36 @@
-import { act, screen, within } from '@testing-library/react';
+import { useState } from 'react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { AskRunAnswer } from '../api/client.js';
 import { afterEach, describe, expect, it } from 'vitest';
+import type { AskSummary } from '@neburyx/contracts';
+import { addResultToGraph, type AddedOutcome } from '../patterns/add-to-graph.js';
+import { createClientState } from '../state/client-state.js';
+import { ClientStateProvider } from '../state/context.js';
 import { elementKey } from '../state/keys.js';
-import { answer, button, cleanup, drawPlan, NODE, ok, PLAN_ID, sharedPlan, sharedResult } from './plan-kit.js';
+import { ResultView } from './plan-result.js';
+import { addableOf } from './plan-result-model.js';
+import type { ResultPanel, RunView } from './result-panel.js';
 
 afterEach(cleanup);
 
-const withSummary = (run: AskRunAnswer, summary: NonNullable<AskRunAnswer['summary']>): AskRunAnswer => ({ ...run, summary });
+const SOURCE = 'demo';
+const NODE = (stableId: string, entityType = 'widget') => ({
+  ref: { sourceId: SOURCE, entityType, stableId },
+  display: { title: `Widget ${stableId}`, type: entityType },
+  properties: [],
+  qualityFlags: [],
+  provenanceRefs: [],
+  authorization: { canInspect: true, canExport: true },
+});
+const sharedResult = (): RunView =>
+  ({
+    outcome: 'complete',
+    result: { templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: 2, scope: 'test' }, matchIds: [NODE('w-2').ref], nodes: [NODE('w-1'), NODE('w-2')], edges: [], notices: [], warnings: [] } },
+  }) as RunView;
+
+const withSummary = (run: RunView, summary: AskSummary): RunView => ({ ...run, summary });
 const cite = (key: string, stableId: string, title = `Widget ${stableId}`) => ({ key, element: NODE(stableId).ref, type: 'widget', title });
-const SUMMARY: NonNullable<AskRunAnswer['summary']> = {
+const SUMMARY: AskSummary = {
   sentences: [
     { text: 'Other records that share an attribute with Widget w-1: ~ 1,500 (estimated).', cites: ['n1'] },
     { text: 'There may be more: ≥ 40 · lower bound, and the rest has no count.', cites: ['n1', 'n2'] },
@@ -18,11 +39,34 @@ const SUMMARY: NonNullable<AskRunAnswer['summary']> = {
   omissions: '2 shown; ≥ 38 · lower bound not yet retrieved.',
 };
 
-async function ran(summary: AskRunAnswer['summary'] | 'none' = SUMMARY, options: { readonly shell?: boolean } = {}) {
-  const harness = await drawPlan(sharedPlan(), { shell: options.shell ?? true });
-  await userEvent.click(button('Run'));
-  await answer(harness.runs[0], ok(summary === 'none' ? sharedResult('exact') : withSummary(sharedResult('exact'), summary)));
-  return harness;
+/** Holds a finished result the way the panel does: Add to graph goes through the same add the application uses. */
+function Held({ run, state }: { readonly run: RunView; readonly state: ReturnType<typeof createClientState> }) {
+  const [added, setAdded] = useState<AddedOutcome | undefined>(undefined);
+  const addable = addableOf(run.result);
+  const panel: ResultPanel = {
+    stage: { kind: 'result', seconds: 0, outcome: run.outcome, run, added },
+    canAdd: addable !== undefined,
+    addToGraph: () => {
+      if (addable === undefined || added !== undefined) return;
+      setAdded(addResultToGraph(state, addable, { sourceId: SOURCE, principalId: 'p' }));
+    },
+    continueRun: () => undefined,
+    cancel: () => undefined,
+  };
+  return <ResultView panel={panel} />;
+}
+
+const button = (name: string): HTMLElement => screen.getByRole('button', { name });
+
+async function ran(summary: AskSummary | 'none' = SUMMARY) {
+  const state = createClientState();
+  state.bindSource(SOURCE);
+  render(
+    <ClientStateProvider state={state}>
+      <Held run={summary === 'none' ? sharedResult() : withSummary(sharedResult(), summary)} state={state} />
+    </ClientStateProvider>,
+  );
+  return { state };
 }
 
 describe('the answer under a result', () => {
@@ -49,12 +93,6 @@ describe('the answer under a result', () => {
     expect(screen.getByText('Matches', { selector: 'dt' })).toBeTruthy();
   });
 
-  it('is cleared with the result when masking changes', async () => {
-    const { state } = await ran();
-    expect(screen.getByRole('region', { name: 'Answer' })).toBeTruthy();
-    act(() => state.setMask(true));
-    expect(screen.queryByRole('region', { name: 'Answer' })).toBeNull();
-  });
 });
 
 describe('the list of sources', () => {
@@ -83,11 +121,10 @@ describe('a marker', () => {
   const marker = (number: string): HTMLButtonElement => screen.getAllByRole('button', { name: new RegExp(`^Source ${number}:`) })[0] as HTMLButtonElement;
 
   it('says to use Add to graph first when the result was not added, and selects nothing', async () => {
-    const { state, runs } = await ran();
+    const { state } = await ran();
     await userEvent.click(marker('1'));
     expect(await screen.findByText('It is not on the graph yet. Use Add to graph first.')).toBeTruthy();
     expect(state.presentation.view.getState().selection.size).toBe(0);
-    expect(runs).toHaveLength(1);
   });
 
   it('keeps one status region mounted and announces the same words again after a second press, and clears it when an element is selected', async () => {
@@ -107,12 +144,11 @@ describe('a marker', () => {
   });
 
   it('selects the element through the app’s own selection once it is on the graph, with no request, and the keyboard does the same', async () => {
-    const { state, runs } = await ran();
+    const { state } = await ran();
     await userEvent.click(button('Add to graph'));
     act(() => state.presentation.select([]));
     await userEvent.click(marker('2'));
     expect([...state.presentation.view.getState().selection]).toEqual([elementKey(NODE('w-2').ref)]);
-    expect(runs).toHaveLength(1);
     act(() => state.presentation.select([]));
     marker('1').focus();
     await userEvent.keyboard('{Enter}');

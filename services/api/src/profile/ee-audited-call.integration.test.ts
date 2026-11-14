@@ -1,9 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AuditUnavailableError, BUILT_IN_PROMPTS, buildPromptRegistry, createAuditedModelCall, createEnterpriseExtension, type AuditedCallContext, type ModelRequest, type PromptId } from '@neburyx/ee-ask';
+import { AuditUnavailableError, createAuditedModelCall, createEnterpriseExtension, type AuditedCallContext, type ModelRequest } from '@neburyx/ee-ask';
 import type { MountedAuditSink } from '@neburyx/contracts';
 import pg from 'pg';
 import { stringify } from 'yaml';
@@ -19,7 +17,6 @@ const PREVIEW_MIGRATIONS = fileURLToPath(new URL('../../../../ee/migrations', im
 const PREVIEW_FILE = join(fixtureFolder({ 'neburyx.yaml': stringify({ sources: [], ai: { preview: true } }) }), 'neburyx.yaml');
 const loader: ExtensionLoader = { load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: PREVIEW_MIGRATIONS }) };
 const QUERY_TIMEOUT_MS = 800;
-const folder = mkdtempSync(join(tmpdir(), 'audited-call-'));
 const mountedSinks: MountedAuditSink[] = [];
 
 let postgres: TestPostgres;
@@ -33,21 +30,14 @@ afterAll(async () => {
   await postgres.stop();
   removeFixtureFolders();
   clearRegisteredExtension();
-  rmSync(folder, { recursive: true, force: true });
 });
 
 const sha256Of = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 const ACTOR = uuidv7();
-const CONTEXT: AuditedCallContext = { actorId: ACTOR, actorRole: 'investigator', traceId: 'tr-call' };
-const MARKERS = ['QUESTION-MARKER', 'VIEW-MARKER', 'MESSAGE-MARKER', 'ANSWER-MARKER', 'REPLY-MARKER'];
-const IDS = ['ask.plan', 'summary.view', 'assistant.route', 'ask.plan.repair'] as const;
-const SHA256_HEX = /^[0-9a-f]{64}$/;
-const REQUESTS: Readonly<Record<PromptId, ModelRequest>> = {
-  'ask.plan': { promptId: 'ask.plan', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?' } },
-  'ask.plan.repair': { promptId: 'ask.plan.repair', parameters: { catalog: 'T1, T2', vocabulary: 'V1', question: 'QUESTION-MARKER who is here?', reply: 'REPLY-MARKER', problems: 'params: invalid_type' } },
-  'summary.view': { promptId: 'summary.view', parameters: { view: 'VIEW-MARKER a view' } },
-  'assistant.route': { promptId: 'assistant.route', parameters: { message: 'MESSAGE-MARKER hello', view: 'VIEW-MARKER a view' } },
-};
+const CONTEXT: AuditedCallContext = { action: 'ai.summary', actorId: ACTOR, actorRole: 'investigator', traceId: 'tr-call' };
+const MARKERS = ['INSTRUCTIONS-MARKER', 'VALUES-MARKER', 'ANSWER-MARKER'];
+const INSTRUCTIONS = 'INSTRUCTIONS-MARKER the fixed part of a test prompt.';
+const REQUEST: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: INSTRUCTIONS, values: 'VALUES-MARKER what changes with each call' };
 
 async function migrated(): Promise<TestDatabase> {
   const database = await postgres.newDatabase();
@@ -57,7 +47,7 @@ async function migrated(): Promise<TestDatabase> {
 }
 
 /** The extension's own mounted sink over the application's login, and a fixture provider behind the audited call, as a start of the preview puts them together. */
-async function audited(database: TestDatabase, reply: FixtureReply, overrides: Record<string, string> = {}) {
+async function audited(database: TestDatabase, reply: FixtureReply) {
   const extension = createEnterpriseExtension();
   expect(extension.auditSink()).toBeUndefined();
   const mounted = extension.createAuditSink?.({ databaseUrl: database.appUrl, poolSize: 2, connectionTimeoutMs: 500, statementTimeoutMs: QUERY_TIMEOUT_MS, queryTimeoutMs: QUERY_TIMEOUT_MS, newId: uuidv7, onConnectionError: () => undefined });
@@ -65,46 +55,42 @@ async function audited(database: TestDatabase, reply: FixtureReply, overrides: R
   mountedSinks.push(mounted);
   const sink = extension.auditSink();
   if (sink === undefined) throw new Error('the extension holds no audit sink');
-  const built = await buildPromptRegistry(overrides);
-  if (!built.ok) throw new Error(built.problems.join('; '));
-  const replies = Object.fromEntries(IDS.map((id) => [replyKey(id, BUILT_IN_PROMPTS[id].version), reply]));
-  const provider = createFixtureProvider({ registry: built.registry, replies });
-  return { call: createAuditedModelCall({ provider, configuration: { registry: built.registry, model: 'configured-model' }, sink }).call, registry: built.registry };
+  const provider = createFixtureProvider({ replies: { [replyKey('test.prompt', 1)]: reply } });
+  return { call: createAuditedModelCall({ provider, configuration: { model: 'configured-model' }, sink }).call };
 }
 
-const OK: FixtureReply = { kind: 'ok', text: 'ANSWER-MARKER a plan', usage: { kind: 'known', inputTokens: 12, outputTokens: 34 } };
+const OK: FixtureReply = { kind: 'ok', text: 'ANSWER-MARKER an answer', usage: { kind: 'known', inputTokens: 12, outputTokens: 34 } };
 const SIGNAL = new AbortController().signal;
 
 describe('a model call through the fixture, recorded in audit_events', () => {
-  it.each(IDS)('leaves one row for %s with the model, the prompt, its hash and the counts', async (id) => {
+  it('leaves one row with the action, the model, the prompt, its hash and the counts', async () => {
     const database = await migrated();
-    const { call, registry } = await audited(database, OK);
-    await call(REQUESTS[id], CONTEXT, SIGNAL);
+    const { call } = await audited(database, OK);
+    await call(REQUEST, CONTEXT, SIGNAL);
     const stored = await rows(database.appUrl, 'SELECT actor_id, actor_role, action, result, trace_id, detail FROM audit_events');
     expect(stored).toEqual([
       {
         actor_id: ACTOR,
         actor_role: 'investigator',
-        action: { 'ask.plan': 'ask.plan', 'ask.plan.repair': 'ask.plan', 'summary.view': 'ai.summary', 'assistant.route': 'assistant.turn' }[id],
+        action: 'ai.summary',
         result: 'success',
         trace_id: 'tr-call',
-        detail: { ai: { modelRef: 'fixture-model', promptId: id, promptVersion: String(BUILT_IN_PROMPTS[id].version), promptSha256: registry.resolve(id, REQUESTS[id].parameters).record.sha256, ...(registry.resolve(id, REQUESTS[id].parameters).record.instructionsSha256 === undefined ? {} : { instructionsSha256: registry.resolve(id, REQUESTS[id].parameters).record.instructionsSha256 }), tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
+        detail: { ai: { modelRef: 'fixture-model', promptId: 'test.prompt', promptVersion: '1', promptSha256: sha256Of(INSTRUCTIONS), tokensIn: 12, tokensOut: 34, cacheReadTokens: 'unknown', cacheWriteTokens: 'unknown' } },
       },
     ]);
     const [row] = stored;
-    const { ai } = row?.['detail'] as { ai: { instructionsSha256?: string } };
-    if (id === 'ask.plan') expect(ai.instructionsSha256).toMatch(SHA256_HEX);
-    else expect(ai).not.toHaveProperty('instructionsSha256');
+    expect(row?.['detail']).not.toHaveProperty('ai.instructionsSha256');
+    expect(row?.['detail']).not.toHaveProperty('ai.piiPropertiesSent');
   });
 
-  it('leaves no marker of the question, the view, the message or the answer in the row, and none on the process output', async () => {
+  it('leaves no marker of the instructions, the values or the answer in the row, and none on the process output', async () => {
     const database = await migrated();
     const { call } = await audited(database, OK);
     const written: string[] = [];
     const out = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => (written.push(String(chunk)), true));
     const err = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => (written.push(String(chunk)), true));
     try {
-      for (const id of IDS) await call(REQUESTS[id], CONTEXT, SIGNAL);
+      await call(REQUEST, CONTEXT, SIGNAL);
     } finally {
       out.mockRestore();
       err.mockRestore();
@@ -114,28 +100,14 @@ describe('a model call through the fixture, recorded in audit_events', () => {
       expect(everything).not.toContain(marker);
       expect(written.join('')).not.toContain(marker);
     }
-    expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS rows FROM audit_events')).toEqual([{ rows: 4 }]);
+    expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS rows FROM audit_events')).toEqual([{ rows: 1 }]);
   });
 
-  it('records the template hash of an operator\'s override, not that of the built-in prompt', async () => {
+  it('records the model of a fallback answer and unknown counts as unknown', async () => {
     const database = await migrated();
-    const file = join(folder, 'summary.txt');
-    writeFileSync(file, "An operator's own instruction about {{view}}.");
-    const { call } = await audited(database, OK, { 'summary.view': file });
-    await call(REQUESTS['summary.view'], CONTEXT, SIGNAL);
-    const [row] = await rows(database.appUrl, 'SELECT detail FROM audit_events');
-    const expected = sha256Of("An operator's own instruction about {{view}}.");
-    expect(row?.['detail']).toMatchObject({ ai: { promptSha256: expected } });
-    const builtIn = await buildPromptRegistry();
-    if (!builtIn.ok) throw new Error('the built-in prompts did not load');
-    expect(builtIn.registry.resolve('summary.view', REQUESTS['summary.view'].parameters).record.sha256).not.toBe(expected);
-  });
-
-  it('records the model of a fallback answer, unknown counts as unknown, and the names of the pii properties sent', async () => {
-    const database = await migrated();
-    const { call } = await audited(database, { kind: 'ok', text: 'a plan', model: 'fallback-model' });
-    await call(REQUESTS['ask.plan'], { ...CONTEXT, piiPropertiesSent: ['person.phone'] }, SIGNAL);
-    expect(await rows(database.appUrl, 'SELECT detail FROM audit_events')).toMatchObject([{ detail: { ai: { modelRef: 'fallback-model', tokensIn: 'unknown', tokensOut: 'unknown', piiPropertiesSent: ['person.phone'] } } }]);
+    const { call } = await audited(database, { kind: 'ok', text: 'an answer', model: 'fallback-model' });
+    await call(REQUEST, CONTEXT, SIGNAL);
+    expect(await rows(database.appUrl, 'SELECT detail FROM audit_events')).toMatchObject([{ detail: { ai: { modelRef: 'fallback-model', tokensIn: 'unknown', tokensOut: 'unknown' } } }]);
   });
 
   it('rejects with the audit error and returns no text when the table is locked and the insert stalls', async () => {
@@ -147,7 +119,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
       await owner.query('BEGIN');
       await owner.query('LOCK TABLE audit_events IN ACCESS EXCLUSIVE MODE');
       const started = Date.now();
-      const outcome = await call(REQUESTS['ask.plan'], CONTEXT, SIGNAL).catch((error: unknown) => error);
+      const outcome = await call(REQUEST, CONTEXT, SIGNAL).catch((error: unknown) => error);
       expect(outcome).toBeInstanceOf(AuditUnavailableError);
       expect(outcome).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
       expect(JSON.stringify(outcome)).not.toContain('ANSWER-MARKER');

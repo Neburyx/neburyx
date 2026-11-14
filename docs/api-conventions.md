@@ -130,8 +130,6 @@ A read that needs several indexes that are not online names the least recoverabl
 | `status-change-not-allowed` | none | An archived investigation must be reopened before it can be closed. | `false` |
 | `investigation-read-only` | `closed` or `archived` | This investigation is closed or archived. Reopen it to make changes. | `false` |
 | `source-changed` | `details.sourceState`: `repointed` or `removed` | This source now points to a different database or is no longer configured. This investigation is read-only. | `false` |
-| `plan-expired` | none | This plan has expired. Ask the question again to get a new plan. | `false` |
-| `plan-not-runnable` | none | This plan can no longer be run. Ask the question again to get a new plan. | `false` |
 
 A reason of `SOURCE_UNAVAILABLE` is not valid on `CONFLICT`, and a reason of `CONFLICT` is not valid on `SOURCE_UNAVAILABLE`.
 
@@ -142,30 +140,6 @@ With neither part of the preview switch set, the enterprise code is not loaded a
 | `details.reason` | `message` | `retryable` |
 |---|---|---|
 | `ai-preview-off` | The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock. | `false` |
-
-## An Ask call that no planner can answer
-
-With the AI preview on, `POST /v1/ask/plan` and `POST /v1/ask/run` are mounted. The enterprise extension installs its planner once the model is configured and the audit sink is mounted; the plan route then answers from the model, and answers `AUDIT_UNAVAILABLE` (503) when the audit event of the model call cannot be written. Where no planner is installed they answer `ASK_UNSUPPORTED` (422) with `details.reason`. Nothing is audited for this answer. Where the enterprise code is not loaded the paths do not exist: 404; where it is loaded but the preview is not switched on, a call is refused with `ACCESS_DENIED` and the reason `ai-preview-off`, audited. `POST /v1/ask/run` is described in *Plans and runs of Ask* below. A plan the model proposes is answered with a fixed `rationale` sentence in place of the model's own: nothing the model wrote in free text is shown, stored or returned, and what can run is only the validated template and its parameters.
-
-| `details.reason` | `message` | `retryable` |
-|---|---|---|
-| `not-in-this-edition` | Ask is not available in this edition. | `false` |
-
-## Plans and runs of Ask
-
-With the AI preview on and the enterprise code installed with a plan store, `POST /v1/ask/plan` with `send: true` answers a plan of a template together with `planId` and `expiresAt` (an ISO time, 15 minutes after the plan was stored, by the database clock). The placeholders of the question are already turned back into the entity references the investigator resolved and, for a search, the value they typed, so the plan shown is the plan that will run. A plan that is `unsupported` is not stored and has neither field. A plan names its source once; every reference of a plan is in that source.
-
-- `POST /v1/ask/edit` takes `{ planId, templateId, params }`: the template must be the plan's own, and every reference in `params` carries its `sourceId`, which must be the plan's. It stores a new plan with a fresh expiry and cancels the old one together, and answers `{ plan, planId, expiresAt }` for the new plan. `params` that fail the schema of the template or name a type, relationship type or rule the mapping does not hold answer `ASK_PLAN_INVALID` (422); a reference of another source answers `SOURCE_MISMATCH` (400).
-- `POST /v1/ask/cancel` takes `{ planId }` and answers `{ planId, state: "cancelled" }` for a proposed plan.
-- `POST /v1/ask/run` takes `{ planId, mask?, continue?, continueToken? }`. The call claims the plan before anything is read, so a plan runs for one call only, reads the plan's own source through the gate with the services and budgets of the manual routes, and answers `{ planId, outcome, result }`: `outcome` is `complete`, or `partial` when the result reports a cut (a count that is a lower bound, a next page, a bounded read, or a run that stopped as heavy), and `result` holds `templateId` and the answer of the manual route of that template, whole. A read the gate refuses answers the refusal the manual route gives, and the run is recorded as failed.
-
-A template run that would read more than the source's `heavy_op_threshold` stops as in a manual run, with the estimate and no rows: the answer is `{ planId, outcome: "partial", result, continueToken }` with the stop as `result`, the plan goes back to `proposed` with its expiry unchanged, and no run and no `ask.run` event are recorded (the gate's own event covers the estimate). `continueToken` is a signature over the plan and its parameters; sending the same plan with `continue: true` and that token skips the estimate and reads one page of at most the continue limit. `continue` and `continueToken` come together or not at all (`INVALID_REQUEST`); a continue is checked in this order: the plan is found (`NOT_FOUND`), is still proposed and not expired (`CONFLICT` with its reason), and only then the token is checked (`INVALID_REQUEST`), before anything is claimed or read. An edit of the plan, or any change of its parameters, voids the token. The token is signed with the key that signs cursors, so without a configured `NEBURYX_CURSOR_KEY` a restart between the stop and the continue makes it invalid: the plan is run again and gives a new token.
-
-A run answer may also carry a `summary`: a few sentences written from the result alone, by fixed rules, with no model call. `summary` is `{ sentences, citations, omissions? }`. A sentence is `{ text, cites }` and cites one or more keys; a citation is `{ key, element, type, title }`, where `element` is a node reference or a relationship reference the result lists, and `type` and `title` are as they arrived in the result (the title of a relationship is its type with the titles of its two ends; a node with no title is named by its stable ID). A key is a handle of that answer (`n1`, `n2`, in the order of first citation), not an ID in the source. Every sentence cites at least one key, every key has one citation, every citation is cited, and the citations are of the plan's own source. At most 12 sentences of at most 300 characters and 40 citations; when a limit would be passed, the sentences that fit are kept in order and `omissions` says how many were left out. Counts in a sentence are written with their quality (`n · exact`, `~ n (estimated)`, `≥ n · lower bound`, or `no count`). A summary that fails its checks is left out of the answer whole, and a run that stopped as heavy has none.
-
-A call on a plan that is not there or is another user's answers `NOT_FOUND` (404), the same for both. A plan that expired answers `CONFLICT` (409) with the reason `plan-expired`, and one that was cancelled, edited, claimed or already run answers `CONFLICT` with the reason `plan-not-runnable`. The three calls answer `ASK_UNSUPPORTED` (422) where Ask has no planner or no plan store, and, where the extension is loaded but the preview is not switched on, `ACCESS_DENIED` with the reason `ai-preview-off`, audited; where it is not loaded they do not exist (404).
-
-Every run leaves one audit event, `ask.run`, after the run is recorded: the template and its version, a keyed hash of the plan's parameters and the number of elements the result lists, and no parameter and no question. A run that cannot be audited answers `AUDIT_UNAVAILABLE` with no result; the plan is already `run` and cannot run again.
 
 ## Field limits
 

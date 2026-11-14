@@ -19,7 +19,7 @@
     },
     "ee/ask": {
       // Loaded by the image entry script and the dev entry script through dist, which knip cannot follow.
-      "entry": ["src/index.ts", "tools/*.mjs"],
+      "entry": ["src/index.ts"],
       "includeEntryExports": true
     },
     "packages/contracts": {
@@ -29,11 +29,6 @@
     "packages/test-neo4j": {
       // Exported as the ./check subpath, run by hand.
       "entry": ["src/index.ts", "src/check.ts"]
-    },
-    "tools/ask-eval": {
-      "entry": ["entry/*.mjs"],
-      // Ask tool: its dependencies are left until the Ask rework in progress lands.
-      "ignoreDependencies": ["@neburyx/api", "@neburyx/ee-ask"]
     },
     "tools/cancellation-suite": {
       // Declared so the Neo4j scripts build the package first: kept pending a decision.
@@ -62,56 +57,21 @@
       "entry": ["scripts/make-profile.mjs"]
     }
   },
-  // Ask files: removed or reworked by the Ask rework in progress, so their findings are left until it lands.
-  // One line per file and kind of finding; each line is dropped, or narrowed, as the rework removes its findings.
+  // Findings left on purpose: each group below says why and which step of the Ask rework removes it.
   "ignoreIssues": {
-    "apps/web/src/ask/ask-panel.tsx": ["exports"],
-    "apps/web/src/ask/plan-edit-model.ts": ["types"],
-    "apps/web/src/ask/plan-failure.ts": ["types"],
-    "apps/web/src/ask/plan-kit.tsx": ["exports"],
-    "apps/web/src/ask/plan-model.ts": ["exports", "types"],
-    "apps/web/src/ask/plan-result-model.ts": ["types"],
-    "apps/web/src/ask/use-ask.ts": ["types"],
-    "apps/web/src/ask/use-plan.ts": ["types"],
-    "ee/ask/src/anthropic.ts": ["exports"],
-    "ee/ask/src/configure.ts": ["types"],
-    "ee/ask/src/eval/record.ts": ["types"],
-    "ee/ask/src/eval/replay-planner.ts": ["exports", "types"],
-    "ee/ask/src/failure-line.ts": ["exports"],
-    "ee/ask/src/index.ts": ["exports", "types"],
-    "ee/ask/src/patterns/catalog.ts": ["types"],
-    "ee/ask/src/patterns/index.ts": ["exports", "types"],
-    "ee/ask/src/planner/index.ts": ["exports", "types"],
-    "ee/ask/src/plans/index.ts": ["exports", "types"],
-    "ee/ask/src/plans/store.ts": ["exports", "types"],
-    "ee/ask/src/provider.ts": ["types"],
-    "ee/ask/src/resolution/index.ts": ["exports", "types"],
-    "ee/ask/src/resolution/resolve.ts": ["exports", "types"],
-    "ee/ask/src/resolution/spans.ts": ["exports"],
-    "ee/ask/src/routes/ask-cancel.ts": ["exports"],
-    "ee/ask/src/routes/ask-edit.ts": ["exports"],
-    "ee/ask/src/routes/ask-plan.ts": ["exports"],
-    "ee/ask/src/rules.ts": ["exports"],
+    // Kept for the Ask panel rebuilt by the Ask rework (the panel step): nothing calls them until it lands, and each line is removed there.
+    "apps/web/src/ai/ai-actions.ts": ["exports"],
+    "apps/web/src/ask/plan-result.tsx": ["exports"],
+    "apps/web/src/ask/refusal-chips.ts": ["files"],
+    "apps/web/src/shell/shell-data.tsx": ["exports"],
+    "apps/web/src/workspace/tool-registry.tsx": ["exports"],
+    // Kept for the saved-pattern step of the Ask rework, which builds the catalog text for the classifier.
+    "ee/ask/src/patterns/index.ts": ["files"],
+    // Kept for the run step of the Ask rework, which attaches the cited summary to its answer.
     "ee/ask/src/summary/attach.ts": ["exports", "types"],
-    "ee/ask/src/summary/counts.ts": ["exports"],
     "ee/ask/src/summary/index.ts": ["exports", "types"],
-    "ee/ask/src/summary/shared.ts": ["exports"],
-    "ee/ask/src/testing/leakage-rig.ts": ["exports", "types"],
-    "ee/ask/src/testing/memory-plans.ts": ["types"],
-    "ee/ask/src/testing/question-generator.ts": ["exports"],
-    "ee/ask/src/testing/recording.ts": ["exports"],
-    "packages/contracts/src/extension.ts": ["exports"],
-    "services/api/src/seams/read-slots.ts": ["types"],
-    "services/api/src/seams/seams.ts": ["types"],
-    "tools/ask-eval/src/baseline.ts": ["exports"],
-    "tools/ask-eval/src/external.ts": ["exports"],
-    "tools/ask-eval/src/groups.ts": ["exports"],
-    "tools/ask-eval/src/mapping-view.ts": ["exports"],
-    "tools/ask-eval/src/questions.ts": ["exports"],
-    "tools/ask-eval/src/record.ts": ["exports"],
-    "tools/ask-eval/src/score.ts": ["exports"],
-    "tools/ask-eval/src/types.ts": ["types"],
-    "tools/ux/tests/support/ask-panel.ts": ["exports"],
+    // Used by the tests of services/api through dist, which knip cannot follow; the final sweep of the Ask rework keeps only createEnterpriseExtension here.
+    "ee/ask/src/index.ts": ["exports", "types"],
     // Named aliases of one value, one name for each role in the canvas look: kept pending a decision.
     "apps/web/src/canvas/look.ts": ["duplicates"],
     // Public schema names that point at one schema: kept pending a decision.

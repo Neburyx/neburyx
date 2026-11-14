@@ -40,7 +40,7 @@ tagged **[W2]** (the second wave) or **[Later]**.
 | ADR-08 | LLM provider is pluggable and customer-chosen; no data goes to a model unless the policy allows it | Regulated buyers must control where data goes |
 | ADR-09 | Open core in one repo and one image: Community and the `ee/` directory are both under Apache-2.0. The public image compiles `ee/` in; its code path is off unless both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set. These switches are safety rails, not a lock. | One repo, one CI, solo-maintainable |
 | ADR-10 | Schema mapping is **declarative YAML**, a strict YAML 1.2 subset (see §5), validated at startup and by `test-source` | Onboarding without code |
-| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a built-in versioned prompt (the operator may override it, §9.4) with no tools, never auto-saved or exported. The summarizer reuses the `AskPlanner` seam and Ask's model settings. | Gen-AI value without a black box or a data leak |
+| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a built-in versioned prompt with no tools, never auto-saved or exported. The summarizer reuses the `AskPlanner` seam and Ask's model settings. | Gen-AI value without a black box or a data leak |
 | ADR-12 | **Valkey in the Enterprise profile, for coordination only** (2026-10-30). It holds concurrency leases, rate-limit counters, circuit-breaker state, login challenges and sign-in throttles, all with expiries. It **never holds customer data**, query results or PII, and nothing in it needs a backup. Community keeps the same state in process memory. The result cache stays per process in both editions (§3). | Several API copies must share per-user and per-source read limits (§14). Holding a Postgres connection for up to 10 s per Neo4j read does not scale to hundreds of reads in flight. Valkey is the BSD-licensed Linux Foundation fork of Redis, offered as a managed service by AWS and Google Cloud; elsewhere the customer runs it with a replica and failover |
 | ADR-13 | **Single-tenant**: one organization per deployment (2026-10-30). No `tenant_id`. Covers self-hosted deployments now and a dedicated instance run on a customer's behalf later. A multi-tenant SaaS is not built. | Regulated buyers keep the product next to their Neo4j; no tenancy isolation to build or test |
 | ADR-14 | **Domain-neutral engine, configured in three layers** (2026-10-30). *Product* (code): screens, tools, count rules, masking, errors, the gate. *Source* (YAML, per source): types, display, key properties, presets, vocabulary, style rules (§5). *User* (UI): columns, density, layout, saved views. No entity, relationship or property name appears in code. Domain content ships as **domain packs** (§5.1). The mapping is not editable in the UI (validate-only editor Later). | Security-relevant config (pii, search, derived edges) stays under the customer's change control in git. A minimal mapping works with defaults; `neburyx init` drafts one. Domain-specific screens would be customer-specific code |
@@ -93,7 +93,7 @@ the previous tag works. Every release is tested by upgrading from the previous t
 | API → Neo4j | TLS; a read-only principal; driver-level transaction timeouts |
 | API → Postgres / object store | Dedicated least-privilege identity; encryption per customer policy |
 | API → Valkey (E) | TLS and an access-controlled user; holds no customer data, so a compromise exposes only counters and lease tokens |
-| API → LLM (E) | Customer-configured endpoint; only policy-filtered, redacted context is sent (§9.4) |
+| API → LLM (E) | Customer-configured endpoint; what a call carries is described in §9.4 |
 | Referral system → browser | Deep links carry IDs only. Enterprise links are signed (HMAC with expiry). An ID in a URL is never treated as authorization. |
 
 ## 3. Modules
@@ -157,7 +157,7 @@ This section is the summary.
 | Work product | `investigations` (bound to one source; `open`, `closed`, `archived`; soft delete), `saved_views` (one autosaved `draft` per user plus `named` snapshots, per investigation), `exports` · `investigation_shares` | C · E |
 | Patterns | `saved_patterns` [W2] · `pattern_shares` [Later] | C · E |
 | Jobs | graphile-worker's own schema (maintenance tasks from v0.1) and `jobs` (user-visible operations, §13) [Later] | C |
-| Assistant and Ask | `assistant_threads`, `assistant_turns`, `ask_plans`, `ask_runs` [W2] | E |
+| Assistant and Ask | `assistant_threads`, `assistant_turns`, `ask_runs` [W2] | E |
 | Governance | `settings` (versioned rows) [Later], `audit_events` (append-only, no raw PII) [W2, a plain table; monthly partitions Later], `audit_seals` (chained, anchored tamper evidence) [Later] | E |
 | Later | `evidence_packs`, `template_defs`, `alert_rules`, `alert_runs`, `channel_checks` | E |
 
@@ -625,114 +625,20 @@ something new since the last run") and a channel (email or webhook).
 **Goal:** natural-language questions with chatbot convenience, while keeping template safety,
 policy, citations and an audit trail.
 
-### 9.1 Flow
+### 9.1 State of Ask in this build
 
-```
-question ─► local entity resolution (search; mentions → placeholders)
-        ─► planner (LLM) ─► AskPlan (JSON, schema-validated) ─► preview & edit (user) ─► confirm
-        ─► gate (§7.1, same as manual) ─► GraphPage
-        ─► summary: deterministic per-template text [W2]  |  LLM answerer + citation check [Later]
-```
+Ask is not available in this build. The earlier design (a typed question rebuilt from an allowlist, a stored plan, a preview and a confirmation) was removed, and its routes (`/v1/ask/*`), its plan table and its settings are gone. The rebuilt Ask is described here when it is available.
 
-```json
-{
-  "kind": "plan",
-  "templateId": "shared-attribute",
-  "templateVersion": 1,
-  "params": { "ref": {"entityType": "account", "stableId": "A-1029"},
-              "attributeType": "device", "via": "USES_DEVICE",
-              "window": {"days": 90}, "limit": 25 },
-  "rationale": "Accounts linked to the same device as A-1029 in the last 90 days"
-}
-```
+What holds for Ask whatever its design:
 
-If no template fits, the planner returns `{"kind": "unsupported", "family": "...", "reason": "..."}`. The plan endpoint never passes the planner's `reason` on: it answers the `family` (from a closed list; `other` when the planner names none) and the fixed sentence of that family, so the `reason` of an `unsupported` plan is fixed server text, not the planner's.
-
-### 9.2 Rules
-
-1. **Planner input:** the question **after local entity resolution**, the template catalog (IDs,
-   descriptions, parameter schemas) and the mapping vocabulary (entity and relationship types).
-   - Names, IDs and other values the investigator types are matched locally through `search`, then
-     replaced with placeholders such as `‹account#1›`. The model never sees them.
-   - Ambiguous matches are resolved by the user before planning.
-   - **Fail closed: the planner text is built from an allowlist.** The server never forwards the
-     typed question. It rebuilds it token by token, and every token must be one of:
-     - a resolved placeholder;
-     - a word from the mapping vocabulary or the template catalog;
-     - a number of at most 3 digits, or a date or time-window phrase;
-     - a word from a fixed, versioned common-word list, with every given name and surname from
-       public name lists removed.
-
-     Any other token (an unknown word, a longer digit run, an email address, a lowercase name not
-     in the list) stops the turn with a clarification that marks it, and nothing is sent. The
-     analyst resolves it to an entity or rewords the question. There is **no override** that sends
-     an unlisted token. The analyst always sees the exact text the model will receive.
-   - **Two calls; what is sent is exactly what was previewed.** `POST /v1/ask/plan` and
-     `POST /v1/assistant/turns` take `{message, resolutions[]{start, end, ref}, send}`.
-     `resolutions` carries the analyst's **Pick an entity** choices.
-     - With `send: false` nothing reaches the model. The server returns one of three things:
-       - a `clarification` for an ambiguous match;
-       - `{blocked: {tokens[]{text, start, end}}}`;
-       - `{preview, previewHash}`, where `previewHash` is an HMAC over the rebuilt text, the
-         resolutions, the caller's policy version and the word-list version.
-     - With `send: true` the request must carry that `previewHash`. The server rebuilds the text
-       again; if the new hash differs (a resolution, the analyst's access or the word list
-       changed), it sends nothing and returns the new preview with `changed: true`.
-     - So the model only ever receives text the analyst saw. The server never takes the text
-       itself from the client, only the hash to compare against.
-   - **Residual risk, stated:** a name that is also an ordinary word on the list (for example
-     "Rose" or "Hunter") and that local resolution did not match passes as that word. The guarantee
-     is that no token outside the list ever reaches the model; the "don't type customer names"
-     hint covers the rest. PII-classified **properties** are never sent by
-     default; only the operator's explicit override can allow one (§9.4).
-   - By default no graph data values reach the planner.
-2. **Planner output is validated** against the template's parameter schema and the budgets. Invalid
-   output means one repair attempt, then `unsupported`. The LLM never produces Cypher, and there is
-   no free-text query path at all.
-3. **The user sees and can edit the plan before it runs.** Nothing runs without explicit
-   confirmation. There is no auto-run mode; adding one would need a recorded decision.
-4. **Summary.**
-   - **[W2]** A deterministic, per-template summary built from the result, for example "12 accounts
-     share device ‹d› [n3][n5]…". No LLM is involved, so it can't hallucinate.
-   - **[Later]** An LLM answerer whose input is only the **policy-filtered, redacted** `GraphPage`
-     and the placeholder question, with a short citation key on each element (`[n3]`, `[e7]`).
-     The same mechanism already ships in W2 for the view-level AI case summary (§9.5).
-5. **Citation check [Later].** This check is **structural**: every sentence must cite at least one
-   key, and every cited key must exist in the page.
-   - Sentences that fail are removed, and the answer is marked "partially supported".
-   - If nothing survives, only the results are shown, with no narrative.
-   - It does **not** prove that a cited element supports the claim. Groundedness is measured
-     separately (§9.3).
-6. **No memory across questions** beyond the current investigation's focus. No training on
-   customer data. The provider is configured by the customer and can be self-hosted.
-7. **Audit every run:** actor, template, parameter hash, outcome, model reference, token counts. The
-   question text is stored only if the policy allows.
-
-### 9.3 Evaluation
-
-- Keep `services/api/tests/ask/questions.yaml`: about 30 questions to start, growing to about 50, over the demo
-  graph. Each has the expected template and parameters, or `unsupported`.
-- CI (nightly) reports plan accuracy and fails if accuracy drops below the last baseline.
-- **[Later]** Once the LLM answerer exists, keep a human-labelled set of answers marked supported or
-  unsupported per sentence. Report groundedness against it on each model or prompt change. CI can
-  only enforce the structural citation check.
-- Coverage gaps, meaning questions that come back `unsupported`, feed template priorities.
+- The model never writes query text. A question is mapped to a known intent and its inputs, and every read goes through the gate (§7.1), read-only and bounded.
+- An answer is built by the server from the result and cites the elements it lists; the model does not write it.
+- Every model call and every run is audited (actor, prompt id and version, model reference, token counts), and the question text is stored only if the policy allows.
+- The provider is configured by the customer and can be self-hosted. There is no training on customer data.
 
 ### 9.4 Data sent to the model
 
-| Data | Sent by default? |
-|---|---|
-| The question text | Yes, after local entity resolution: typed names and IDs are replaced with placeholders |
-| Template catalog + type vocabulary | Yes |
-| Focus entity ref | As a placeholder only |
-| Result properties | **Default none, for every model, self-hosted or not** (decided 2026-10-30). In the W2 preview the operator may list, in the YAML, which properties of which entity and relationship types may be sent (`ai.properties`); only listed properties go, and only after the gate has redacted them (the list narrows what is left, it never widens it). Later: the console setting `ai.send_property_values` joins the YAML, and the YAML can pin it off so a customer can forbid the console from turning it on |
-| PII-classified properties | **Never by default.** Only when the operator switches on `ai.pii_override` in the YAML **and** names the property in `ai.properties` (a wildcard never includes a `pii` property). A list that names a `pii` property without the override is refused at start-up with the setting named; with the override the server logs a warning at start-up that names each such property, and the audit of every call that sent one records that a `pii` property was sent (names only). A property that the gate masked is never sent, whatever the list and the override say |
-
-The preview runs on any source, not only a source flagged `synthetic: true` (decided 2026-11-12). The data rules in this table and the audit of every model call apply to every source alike.
-
-**One request builder.** A single builder in the enterprise code turns what the gate returned into a model request. It takes the properties of an element only from the gate's output (so what the gate masked is already masked), and sends a property only when the operator's list allows it, the mapping names it for that type, its value is a text, a number, a boolean, a date or a time (not a list, a point or an unknown value), and, if it is a `pii` property, the override is on and it is named. The list is checked at start-up against the types and properties the mapping names, and a type or property it does not have refuses the start. The request for Ask carries no property at all. What is sent is a function of the list and the mapping only; the model and provider settings do not change it.
-
-**Operator configuration of the model (decided 2026-11-12).** In the YAML `ai` section the operator sets: `ai.provider` (in the W2 preview the only value is `anthropic`, a native client of the Messages API through the official TypeScript SDK, not through a compatibility layer; an OpenAI-compatible client, which also covers most self-hosted servers, and other providers come when a customer needs one), `ai.model` (a model ID without a date suffix; the example config shows `claude-sonnet-5-5`, with `claude-opus-5-5` as the step up) and the key by reference (an environment variable or a file with owner-only access, never inline); there is no default model, the operator chooses. The provider sets the depth control (effort) explicitly, never switches thinking off, takes token usage from the reply, treats a refusal as a refusal and not as text, and sends no tools. The operator may also point a built-in prompt, by its id, at their own prompt file (`ai.prompts`). Each built-in prompt has an id and a version; the audit records the id, the version and a SHA-256 of the prompt template used (the built-in text, or the override file's bytes), and, when the prompt's instructions hold static parameters filled in from the mapping and the catalog (the cached part), also a SHA-256 of those filled instructions, which hold names only; never a hash of the user message, which holds the question and any values sent. An override cannot add tools, and the model's output is still checked against the template catalog, so no free query text reaches the source whatever a prompt says (ADR-07). Operator-defined pipelines of steps, like an agent workflow, are Later.
+The product withholds nothing from a model call by setting: there is no property list and no override. What a call carries is what the feature that makes it needs, and the audit records the call (§9.1). Masking of what a person sees stays in the gate. Ask is not available in this build, and Summarize is not available either: the data it sends is decided when it is built. A limit per role on what reaches a model is not built.
 
 ### 9.5 AI case summary (Enterprise) [W2]
 
@@ -755,10 +661,7 @@ visible element keys ─► re-read through the gate (policy applies server-side
    any read. Over the cap, the request is refused with a message to narrow the view.
 2. **De-identification.** Display names, IDs and property values become placeholders. The model sees
    structure: types, relationships, derived-rule names, timestamps and counts with their quality label.
-   Property values are sent only for properties the operator lists (same rule and default as §9.4: none).
-   PII-classified properties follow the override rule of §9.4 (never by default). A mapped timestamp property,
-   such as a relationship's observed time, is a property and follows the list; the structural time facts of an
-   element are not properties.
+   Which property values are sent is decided when the summarizer is built (§9.4).
 3. **Output contract.** The model returns `{"sentences":[{"text":"…","cites":["n3","e7"]}]}`, schema-validated,
    with one repair attempt. It has no tools, no browsing and no memory. The system prompt is fixed.
    Element values are data, never instructions.
@@ -829,8 +732,7 @@ visible element keys ─► re-read through the gate (policy applies server-side
 | Entity types, relationship types, derived-rule names | Yes |
 | Display names and IDs | No: placeholders, restored locally |
 | Timestamps, counts and their quality labels | Yes |
-| Property values | Only for properties the operator lists (default none for every model, §9.4) |
-| PII-classified properties | Never by default; only with the operator's explicit override and the property named (§9.4) |
+| Property values | Decided when the summarizer is built (§9.4) |
 
 ### 9.6 Investigation assistant (Enterprise) [W2]
 
@@ -841,7 +743,7 @@ front end on §9.1–9.5. It adds routing and follow-up resolution, and no new d
 message ─► local entity resolution (search + the investigation's own entities; mentions → placeholders)
         ─► router (LLM, built-in prompt, JSON out) ─► one of three routes:
              view    ─► §9.5 summarizer over the visible elements ─► cited reply
-             plan    ─► AskPlan (§9.1) ─► plan card ─► user clicks Run ─► gate ─► GraphPage
+             plan    ─► Ask (§9.1) ─► gate ─► GraphPage
                         ─► §9.5 summarizer over the returned page ─► cited reply
              refuse  ─► fixed refusal + manual alternatives (Paths, Filters, Patterns)
 ```
@@ -1132,10 +1034,9 @@ normalized errors. The OpenAPI document is generated from the code and published
 | `POST /v1/investigations/{id}/exports` | Plain export; Enterprise may include an AI case summary by passing its `summaryToken` (§9.5 rule 8). `Idempotency-Key` required; body `{kind: "view", format: "json"\|"csv", entities, edges, aggregates, derived}` (references; no `mask` field yet); the server reads each through the gate in calls of 100 under one rate unit and one 10 s deadline; more than the export cap (300 entities and 300 relationships, to be replaced by the measured figure) is `INVALID_REQUEST` with `details.reason` `export-too-large` and `details.maxElements`; 201 `{id, status, format, filename, sizeBytes, createdAt, expiresAt}`; JSON is one file, CSV is one zip of `entities.csv` and `relationships.csv`; every file begins with the header (source, time, `current view (partial)`, coverage with the count quality, masking); `EXPORT_FAILED` for a write failure; audit `export.create` (format, counts, masked fields). Maintenance task `expire-exports` (daily 03:41) deletes expired files; the purge deletes an investigation's files first | C |
 | `GET /v1/jobs/{id}` · `GET …/events` (SSE) · `POST …/cancel` | Jobs **[Later]** | C |
 | `GET /v1/diagnostics/bundle` | Redacted diagnostics zip **[Later]** | C |
-| `POST /v1/ask/plan` · `POST /v1/ask/run` | Ask: plan → confirm/run; `ask/plan` takes `resolutions[]` and `send: false` (preview and `previewHash`, blocked words or a clarification), then `send: true` with the `previewHash`, as the assistant does (§9.2) **[W2]** | E |
 | `POST /v1/summary` | AI case summary: re-read the view's elements through the gate, de-identify, draft, check, return the sentences (each with `storable`) and a sealed `summaryToken` **[W2]** | E |
 | `POST /v1/investigations/{id}/draft/ai-notes` | Copy to notes: `{summaryToken, version}` (the draft's ETag). Re-checks the caller's write right and policy version, refuses a property-values token, appends the storable sentences once per token, returns `{copied, notCopied, alreadyCopied}` (§9.5 rule 8) **[W2]** | E |
-| `POST /v1/assistant/turns` | Assistant: route a message to answer-from-view, a plan card, or a refusal; plans run only through `POST /v1/ask/run`. `send: false` returns the preview and `previewHash`, the blocked words or a clarification, and nothing is sent; `send: true` must carry the `previewHash` (§9.2) **[W2]** | E |
+| `POST /v1/assistant/turns` | Assistant: route a message to answer-from-view, a plan, or a refusal **[W2]** | E |
 | `POST /v1/investigations/{id}/evidence-packs` · `GET /v1/evidence-packs/{id}` | Evidence packs **[Later]** | E |
 | `GET /v1/admin/audit` · `POST /v1/admin/audit/exports` | Audit search, bounded · audit CSV export (event metadata only; itself audited) | E |
 | `GET/PUT /v1/admin/policies/limits` | Source limits per source: current values, product ceilings and version history (versioned rows in `source_limits`, audited) | E |
@@ -1222,7 +1123,7 @@ and the database never disagree about a value's length.
 - **Header.** `Idempotency-Key`: 16 to 64 characters from letters, digits, `_` and `-` (a UUID fits). It is **required** on the
   calls that create or run something and that a retry could repeat: `POST /v1/investigations/{id}/exports`,
   `POST /v1/admin/audit/exports`, `POST /v1/templates/{id}/run` and `POST /v1/patterns/{id}/run` (a pattern run is a template
-  run), `POST /v1/ask/run`, `POST /v1/summary`, and alert creation `POST /v1/alerts`. It is not asked of
+  run), `POST /v1/summary`, and alert creation `POST /v1/alerts`. It is not asked of
   reads, of writes guarded by a version, or of deletes, which repeat harmlessly. A missing or malformed key is `INVALID_REQUEST`.
 - **What is kept.** For 24 hours the server keeps, for the principal, the key, a **fingerprint** of the request and the first
   response. The fingerprint is a SHA-256 of the method, the concrete path (with its ids), the query string and the canonical
@@ -1260,7 +1161,7 @@ and the database never disagree about a value's length.
 
 | Convention | Applies to |
 |---|---|
-| `Idempotency-Key` required | exports (`POST …/{id}/exports`, `POST /v1/admin/audit/exports`), template and pattern runs, `POST /v1/ask/run`, `POST /v1/summary`, `POST /v1/alerts` |
+| `Idempotency-Key` required | exports (`POST …/{id}/exports`, `POST /v1/admin/audit/exports`), template and pattern runs, `POST /v1/summary`, `POST /v1/alerts` |
 | `If-Match` | `PUT …/{id}/draft`, `POST …/{id}/views`, `PUT …/views/{viewId}`, `POST …/views/{viewId}/delete`, `POST …/views/{viewId}/restore`, and every `DELETE` of a versioned resource |
 | `expectedVersion` in the body | `PUT /v1/investigations/{id}`, `POST …/{id}/status`, `POST …/{id}/restore`, `PUT /v1/admin/users/{id}/grants`, `PUT /v1/admin/settings/{key}`, `PUT /v1/admin/policies/limits`, `PUT /v1/patterns/{id}` |
 | Neither | reads (`GET`), and calls that create or change nothing that has a version |
@@ -1419,7 +1320,6 @@ neburyx/
   deploy/compose/           Community compose file: neburyx + postgres, loopback only
   deploy/demo/              docker-compose: two neo4j + demo loader + postgres + neburyx
   tools/demo-graph/         synthetic graph generator, driven by the packs' demo data
-  tools/ask-eval/           Ask evaluation harness (may be Python; calls the API only)
   docs/                     PUBLIC technical docs only: technical-architecture.md and
                             coding-guidelines.md
   LICENSE (Apache-2.0)                      ee/LICENSE (Apache-2.0)
@@ -1432,7 +1332,6 @@ Node 24 LTS, TypeScript in strict mode everywhere.
 |---|---|
 | Dev environment | `make dev`: Neo4j demo + Postgres containers, API (watch mode, YAML reload) + web (Vite) |
 | Tests | `make test`: unit + contract (Vitest); `make test-int`: integration against testcontainers Neo4j, Postgres and Valkey |
-| Ask eval | `make ask-eval` (needs a configured model; nightly in CI) |
 | Lint / types | `eslint` and `tsc --noEmit` (strict) across the workspace; the no-domain-words check (§5.1) |
 | Image | `make image`: build, SBOM, sign |
 | Demo | `cd deploy/demo && docker compose up` |
@@ -1506,7 +1405,7 @@ is configured as its own source. Together they produce:
 
 1. **Community v0.1.** Demo-graph install ≤ 15 min; supernode suite
    passes; domain-neutrality suite passes (both packs); the author completes the demo case and the mapping task.
-2. **Ask preview [W2].** Plan accuracy meets the eval baseline; every summary statement
+2. **Ask preview [W2].** Ask accuracy meets its measured baseline; every summary statement
    cites returned elements; the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit.
 3. **Enterprise build [Later].** Evidence-pack suite (`verify-pack`, tamper,
    partial); OIDC/RBAC/audit/PII suites; image signing and SBOM; security checklist; install

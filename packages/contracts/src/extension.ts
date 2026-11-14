@@ -1,6 +1,6 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
-import type { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskEntityLookup, AskEntitySearch, AskPatternListing, AskPatternOffer, AskPlanner, AskRunResult } from './ask.js';
+import type { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskPlanner, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
 
@@ -18,11 +18,8 @@ export interface ExtensionRequest {
   readonly body?: unknown;
   /** The application's `AskPlanner`: the Community default unless the application was given another. */
   readonly askPlanner: AskPlanner;
-  /** Signs a text for the preview of a question: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
-  readonly previewMac?: (canonical: string) => string;
-  /** The caller's policy version for a source; `none` in Community. */
-  readonly policyVersionOf?: (sourceId: string) => string;
-  /** The search and the lookup of the caller's source that resolve a question, read through the gate with the caller's rights; `ensureSource` refuses (as `NOT_FOUND`) a source that is not configured or that the caller may not read, and is asked before anything is signed or sent. */
+  /** Signs a text: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
+  readonly signText?: (canonical: string) => string;
   /**
    * The run of a plan of the caller on one source, through the gate: the factory is built for this request (its caller, trace ID and abort signal). The runner it returns reads only the source of the
    * scope, and its reads refuse, as `NOT_FOUND` and before anything is read, a source that is not configured or that the caller may not read; that refusal comes with the run, so a plan that meets it is a failed run.
@@ -32,7 +29,6 @@ export interface ExtensionRequest {
   readonly askPatterns?: (sourceId: string) => Promise<AskPatternListing>;
   /** One saved pattern the caller may run on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller may run now. */
   readonly askPatternFind?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
-  readonly askEntityTools?: (sourceId: string) => { readonly search: AskEntitySearch; readonly lookup: AskEntityLookup; readonly ensureSource: () => Promise<void> };
 }
 
 /** The source a plan is run on and whether the personal data of the nodes of its result is masked. */
@@ -65,42 +61,6 @@ export interface ExtensionRouteGroup {
   readonly routes: readonly ExtensionRoute[];
 }
 
-export interface AiViewProperty {
-  readonly name: string;
-  readonly pii: boolean;
-}
-
-/** One pair of end types a relationship type joins, and whether the relationships of that pair carry a time. */
-export interface AiViewEnds {
-  readonly from: string;
-  readonly to: string;
-  readonly timed: boolean;
-}
-
-export interface AiViewType {
-  readonly name: string;
-  readonly kind: 'entity' | 'relationship';
-  readonly properties: readonly AiViewProperty[];
-  /** For a relationship type, every pair of end types its mapping rows give; absent for an entity type. */
-  readonly ends?: readonly AiViewEnds[];
-}
-
-/** A derived rule by its ID, with the two end types it joins. */
-export interface AiViewRule {
-  readonly id: string;
-  readonly from: string;
-  readonly to: string;
-}
-
-/** The entity and relationship types the mapping names, each with the properties it names for the type: what an operator's property list may refer to. */
-export interface AiMappingView {
-  readonly types: readonly AiViewType[];
-  /** The derived rules of the mapping, by ID and end types: names only. */
-  readonly derivedRules?: readonly AiViewRule[];
-  /** The most hops a plan that follows relationships may ask for, by source ID: the smaller of what the template allows and the source's own limit. A plan above it is refused by a run, so the planner does not offer it. */
-  readonly maxHopsBySource?: Readonly<Record<string, number>>;
-}
-
 export interface ConfigureWarning {
   readonly event: string;
   readonly message: string;
@@ -115,13 +75,6 @@ export interface ExtensionLogger {
   readonly info?: (fields: Readonly<Record<string, unknown>>, message: string) => void;
 }
 
-/** One recurring task an extension asks the application's job runner to run: a name that no other task has, a cron schedule and the work. Compatible with the application's own task type. */
-export interface ExtensionTask {
-  readonly name: string;
-  readonly schedule: string;
-  readonly run: (payload: unknown) => Promise<void>;
-}
-
 export interface ProfileExtension {
   readonly name: string;
   readonly routeGroups: readonly ExtensionRouteGroup[];
@@ -130,9 +83,7 @@ export interface ProfileExtension {
   readonly attachLogger?: (logger: ExtensionLogger) => void;
   /** The planner of the extension, once it can plan (the model is configured and the audit sink is mounted); a planner given to the application through its seams wins over it, and the Community default is used when there is none. */
   readonly askPlanner?: () => AskPlanner | undefined;
-  readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, view?: AiMappingView) => Promise<ConfigureOutcome>;
-  /** The recurring tasks of the extension for the application's job runner, asked once at start-up after the audit sink is mounted, and only when the preview is on; none before the extension has what they need. */
-  readonly maintenanceTasks?: () => readonly ExtensionTask[];
+  readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>) => Promise<ConfigureOutcome>;
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
 }
@@ -160,8 +111,8 @@ const rateLimitedRefusalSchema = z.object({ name: named, code: z.literal('RATE_L
 const sourceUnavailableRefusalSchema = z
   .object({ name: named, code: z.literal('SOURCE_UNAVAILABLE'), reason: z.enum(SOURCE_UNAVAILABLE_REASONS), retryAfterMs: z.number().int().nonnegative().optional() })
   .refine((fields) => fields.retryAfterMs === undefined || fields.reason === 'repeated-timeouts', { message: 'only repeated-timeouts has a wait' });
-/** A plan refusal names one of the reasons of a plan or of the pattern it names, no other reason of `CONFLICT`. */
-export const PLAN_CONFLICT_REASONS = ['plan-expired', 'plan-not-runnable', 'pattern-changed', 'pattern-unavailable'] as const;
+/** A refusal of a run names a reason about the saved pattern it names, no other reason of `CONFLICT`. */
+const PLAN_CONFLICT_REASONS = ['pattern-changed', 'pattern-unavailable'] as const;
 const conflictRefusalSchema = z.object({ name: named, code: z.literal('CONFLICT'), reason: z.enum(PLAN_CONFLICT_REASONS) });
 
 const refusalSchemas = [

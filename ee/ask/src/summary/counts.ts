@@ -26,7 +26,7 @@ export function countWords(count: Count): string {
 }
 
 /** What is not yet retrieved: the total less what is shown, with the quality the total has; no number when the total has none. */
-export function notYetRetrieved(total: Count, shown: number): Count {
+function notYetRetrieved(total: Count, shown: number): Count {
   if (total.value === undefined) return { quality: 'unknown', scope: total.scope };
   const remaining = Math.max(0, total.value - shown);
   return { quality: total.quality, value: remaining, scope: total.scope };

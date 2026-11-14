@@ -40,26 +40,16 @@ function limitedInteger(limits: { readonly min: number; readonly max: number }) 
   return z.number().int().min(limits.min).max(limits.max);
 }
 
-const aiPropertyListSchema = z
-  .array(z.string().min(1, { message: 'a property name is empty' }))
-  .min(1, { message: 'the list is empty' })
-  .refine((names) => new Set(names).size === names.length, { message: 'a property is listed twice' });
-
-export const AI_ALL_PROPERTIES = '*';
-
 export const aiSettingsSchema = z.strictObject({
   preview: z.boolean().optional(),
   provider: z.enum(AI_PROVIDERS).optional(),
   model: z.string().min(1).optional(),
   key: aiKeySchema.optional(),
-  prompts: z.record(z.string().min(1), absolutePathSchema).optional(),
   timeout_ms: limitedInteger(AI_LIMITS.timeoutMs).optional(),
   max_retries: limitedInteger(AI_LIMITS.maxRetries).optional(),
   max_tokens: limitedInteger(AI_LIMITS.maxTokens).optional(),
   effort: z.enum(AI_EFFORTS).optional(),
   cache: z.strictObject({ enabled: z.boolean().optional(), ttl: z.enum(AI_CACHE_TTLS).optional() }).optional(),
-  properties: z.record(z.string().min(1, { message: 'the key is empty' }), aiPropertyListSchema).optional(),
-  pii_override: z.boolean().optional(),
 });
 
 export type AiSettings = z.infer<typeof aiSettingsSchema>;

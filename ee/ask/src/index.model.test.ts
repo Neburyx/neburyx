@@ -50,23 +50,23 @@ describe('the model of the extension', () => {
     extension.createAuditSink?.(SINK_CONTEXT);
     const model = extension.model();
     expect(model).toBeDefined();
-    const answer = await model?.call({ promptId: 'summary.view', parameters: { view: 'a synthetic view' } }, { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' }, new AbortController().signal);
+    const answer = await model?.call({ promptId: 'test.prompt', version: 1, instructions: 'Summarise the view.', values: 'a synthetic view' }, { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1', action: 'test.call' }, new AbortController().signal);
     expect(answer).toMatchObject({ status: 'ok', text: 'A synthetic answer.' });
     expect(authorizations).toEqual(['Bearer key-from-the-start-environment']);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ action: 'ai.summary', result: 'success', detail: { ai: { modelRef: 'claude-sonnet-5-5', promptId: 'summary.view' } } });
+    expect(events[0]).toMatchObject({ action: 'test.call', result: 'success', detail: { ai: { modelRef: 'claude-sonnet-5-5', promptId: 'test.prompt' } } });
   });
 });
 
 describe('the failure line of the extension', () => {
-  const context = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator' as const, traceId: 'tr-1' };
+  const context = { actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator' as const, traceId: 'tr-1', action: 'test.call' };
 
   interface Logged {
     readonly fields: Readonly<Record<string, unknown>>;
     readonly message: string;
   }
 
-  async function callWith(httpStatus: number, body?: unknown, logger: ExtensionLogger | undefined = undefined, request: ModelRequest = { promptId: 'summary.view', parameters: { view: 'SENTINEL-PROMPT' } }): Promise<{ logged: Logged[]; written: string[]; answer: unknown }> {
+  async function callWith(httpStatus: number, body?: unknown, logger: ExtensionLogger | undefined = undefined, request: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: 'Summarise the view.', values: 'SENTINEL-PROMPT' }): Promise<{ logged: Logged[]; written: string[]; answer: unknown }> {
     status = httpStatus;
     failureBody = body;
     const logged: Logged[] = [];
@@ -100,8 +100,8 @@ describe('the failure line of the extension', () => {
     expect(written).toEqual([]);
   });
 
-  it('keeps the question and the key out of the warning for a failing plan call', async () => {
-    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'ask.plan', parameters: { catalog: 'a catalog', vocabulary: 'V1', patterns: '', question: 'SENTINEL-QUESTION' } });
+  it('keeps the values and the key out of the warning for a failing call', async () => {
+    const { logged, written } = await callWith(500, { type: 'error', error: { type: 'api_error', message: 'SENTINEL-BODY' } }, undefined, { promptId: 'test.prompt', version: 1, instructions: 'a fixed text', values: 'SENTINEL-QUESTION' });
     expect(logged).toHaveLength(1);
     expect(JSON.stringify(logged)).not.toMatch(/SENTINEL/);
     expect(written).toEqual([]);
@@ -121,7 +121,7 @@ describe('the failure line of the extension', () => {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
       await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
       extension.createAuditSink?.(SINK_CONTEXT);
-      const answer = await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'a view' } }, context, new AbortController().signal);
+      const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'a view' }, context, new AbortController().signal);
       expect(answer).toMatchObject({ status: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 12, outputTokens: 256 } });
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({ result: 'failed', detail: { ai: { tokensIn: 12, tokensOut: 256 } } });
@@ -138,7 +138,7 @@ describe('the failure line of the extension', () => {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
       await extension.configure?.(SETTINGS, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
       extension.createAuditSink?.(SINK_CONTEXT);
-      await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'a view' } }, context, new AbortController().signal);
+      await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'a view' }, context, new AbortController().signal);
       expect(events).toHaveLength(1);
       expect(events[0]).toMatchObject({ result: 'success', detail: { ai: { tokensIn: 12, tokensOut: 5, cacheReadTokens: 300, cacheWriteTokens: 40 } } });
     } finally {
@@ -162,7 +162,7 @@ describe('the failure line of the extension', () => {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
       await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
       extension.createAuditSink?.(SINK_CONTEXT);
-      const answer = await extension.model()?.call({ promptId: 'summary.view', parameters: { view: 'x' } }, context, new AbortController().signal);
+      const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'x' }, context, new AbortController().signal);
       expect(answer).toMatchObject({ status: 'failed', code: 'provider-error' });
       expect(written).toEqual([]);
     } finally {
@@ -182,17 +182,5 @@ describe('the failure line of the extension', () => {
     const record = { code: 'rejected' as const, status: 401, errorType: 'authentication_error', key: 'SENTINEL-KEY', prompt: 'SENTINEL-PROMPT', question: 'SENTINEL-QUESTION' };
     createFailureReporter(() => ({ warn: (fields) => void logged.push({ ...fields }) }))(record);
     expect(logged).toEqual([{ event: 'ai.provider_failure', code: 'rejected', status: 401, errorType: 'authentication_error' }]);
-  });
-});
-
-describe('the planner of the extension', () => {
-  it('is absent until the model is configured and the audit sink is mounted, then plans through the model', async () => {
-    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
-    expect(extension.askPlanner?.()).toBeUndefined();
-    await extension.configure?.(SETTINGS, { ONLY_IN_THE_START_ENV: 'key-from-the-start-environment' });
-    expect(extension.askPlanner?.()).toBeUndefined();
-    extension.createAuditSink?.(SINK_CONTEXT);
-    const planner = extension.askPlanner?.();
-    expect(planner?.availability()).toEqual({ available: true });
   });
 });

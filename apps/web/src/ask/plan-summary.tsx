@@ -5,13 +5,13 @@ import { useClientState } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { addableOf } from './plan-result-model.js';
 import { SUMMARY_COPY, citationKey, markerNumber, pressOutcome, sourcesLabel, sourcesOf } from './plan-summary-model.js';
-import type { PlanPanel } from './use-plan.js';
+import type { ResultPanel } from './result-panel.js';
 
 /**
  * The answer under a result: the sentences as the server wrote them, a marker after each citation, the omissions line and a list of the sources. A marker selects the element on the canvas when it is drawn, and says why
  * when it is not. Nothing is read: the title and type of a source are those that arrived.
  */
-export function SummaryView({ panel, summary }: { readonly panel: PlanPanel; readonly summary: AskSummary }) {
+export function SummaryView({ panel, summary }: { readonly panel: ResultPanel; readonly summary: AskSummary }) {
   const state = useClientState();
   const listId = useId();
   const [open, setOpen] = useState(false);

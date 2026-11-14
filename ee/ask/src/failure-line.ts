@@ -1,7 +1,7 @@
 import type { ExtensionLogger } from '@neburyx/contracts';
 import type { ProviderFailure } from './anthropic.js';
 
-export const PROVIDER_FAILURE_EVENT = 'ai.provider_failure';
+const PROVIDER_FAILURE_EVENT = 'ai.provider_failure';
 
 /** Reports a failure to the logger the API handed over, as one warning built from the fixed fields of the record, so nothing else can enter it; with no logger, or a logger that throws, nothing happens and the answer is unchanged. */
 export function createFailureReporter(currentLogger: () => ExtensionLogger | undefined): (failure: ProviderFailure) => void {

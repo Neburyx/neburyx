@@ -9,28 +9,16 @@ export interface ExtensionMount {
   readonly previewOn: boolean;
   readonly audit: AuditSink;
   readonly askPlanner: AskPlanner;
-  /** Signs previews; absent, the plan route refuses. */
-  readonly previewMac?: ExtensionRequest['previewMac'];
-  /** The caller's policy version for a source. */
-  readonly policyVersionOf?: ExtensionRequest['policyVersionOf'];
-  /** The search and lookup of a source for the caller of one request, read through the gate; absent, the plan route refuses. */
-  readonly askEntityToolsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askEntityTools'];
+  /** Signs a text (the Continue token); absent, a route that needs it refuses. */
+  readonly signText?: ExtensionRequest['signText'];
   /** The runner of plans for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs a plan refuses. */
   readonly askPlanRunnerFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['askPlanRunner'];
-  /** The saved patterns the caller may run on a source, for one request; absent, no pattern is offered to the planner. */
+  /** The saved patterns the caller may run on a source, for one request; absent, no saved pattern is offered to Ask. */
   readonly askPatternsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatterns'];
   /** One saved pattern by its id, for one request; absent, an edit of a plan that names a pattern is refused. */
   readonly askPatternFindFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatternFind'];
   /** The signal that is aborted when the client gives up the request. */
   readonly signalOf?: (request: FastifyRequest) => AbortSignal;
-}
-
-/** What a check that stopped a request says of itself, and nothing else: which check, and which pattern of the listing; never the text it found. */
-function guardFieldsOf(error: unknown): { readonly guard?: string; readonly guardPosition?: number } {
-  if (!(error instanceof Error) || error.name !== 'PatternGuardError') return {};
-  const kind: unknown = Reflect.get(error, 'kind');
-  const position: unknown = Reflect.get(error, 'position');
-  return { ...(typeof kind === 'string' ? { guard: kind } : {}), ...(typeof position === 'number' ? { guardPosition: position } : {}) };
 }
 
 export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExtension, store: Pick<AppStore, 'current'>, mount: ExtensionMount): void {
@@ -52,7 +40,6 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           }
           let reply: unknown;
           try {
-            const askEntityTools = mount.askEntityToolsFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
             const askPatternFind = mount.askPatternFindFor?.({ principal, traceId: request.id });
             const askPlanRunner = mount.signalOf === undefined ? undefined : mount.askPlanRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
@@ -63,9 +50,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               traceId: request.id,
               audit: mount.audit,
               askPlanner: mount.askPlanner !== communityAskPlanner ? mount.askPlanner : (extension.askPlanner?.() ?? mount.askPlanner),
-              ...(mount.previewMac === undefined ? {} : { previewMac: mount.previewMac }),
-              ...(mount.policyVersionOf === undefined ? {} : { policyVersionOf: mount.policyVersionOf }),
-              ...(askEntityTools === undefined ? {} : { askEntityTools }),
+              ...(mount.signText === undefined ? {} : { signText: mount.signText }),
               ...(askPatterns === undefined ? {} : { askPatterns }),
               ...(askPatternFind === undefined ? {} : { askPatternFind }),
               ...(askPlanRunner === undefined ? {} : { askPlanRunner }),
@@ -76,7 +61,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             // the application's own tools throw its errors: they keep their code
             if (refusal === undefined && error instanceof AppError) throw error;
             if (refusal === undefined) {
-              request.log.error({ event: 'extension.handler_failed', extension: extension.name, ...guardFieldsOf(error) }, 'an extension handler failed');
+              request.log.error({ event: 'extension.handler_failed', extension: extension.name }, 'an extension handler failed');
               throw new AppError('INTERNAL_ERROR');
             }
             if ('audited' in refusal && !refusal.audited) request.log.warn({ event: 'extension.audit_failed', extension: extension.name }, 'the audit event of a refusal could not be written');

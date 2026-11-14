@@ -2,7 +2,7 @@ import type { AskPlanner, AuditSink, MeResponse } from '@neburyx/contracts';
 
 export type Principal = MeResponse['principal'];
 
-export interface AuthorizationRequest {
+interface AuthorizationRequest {
   readonly principal: Principal;
   readonly sourceId: string;
 }
@@ -16,7 +16,7 @@ export interface PolicyProvider {
 export type { AuditEvent, AuditResult, AuditSink } from '@neburyx/contracts';
 
 /** The slot limits of one source, as the gate resolved them for the read. */
-export interface ReadLimits {
+interface ReadLimits {
   /** Reads one person may have in flight on the source. */
   readonly userConcurrency: number;
   /** Reads everyone together may have in flight on the source. */
@@ -67,7 +67,7 @@ export interface Coordinator {
   acquireRead(request: ReadAccessRequest): Promise<ReadAdmission>;
 }
 
-export type { AskAvailability, AskPlan, AskPlanner } from '@neburyx/contracts';
+export type { AskPlanner } from '@neburyx/contracts';
 
 export interface Seams {
   readonly policy: PolicyProvider;

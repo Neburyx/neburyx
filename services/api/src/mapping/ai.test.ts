@@ -24,7 +24,6 @@ describe('the ai section of the mapping file', () => {
       provider: 'anthropic',
       model: 'claude-sonnet-5-5',
       key: { env: 'ANTHROPIC_API_KEY' },
-      prompts: { 'ask.plan': '/etc/neburyx/prompts/ask-plan.txt' },
       timeout_ms: 30_000,
       max_retries: 2,
       max_tokens: 4_096,
@@ -71,8 +70,6 @@ describe('the ai section of the mapping file', () => {
   });
 
   it.each([
-    ['a prompt file that is not absolute', { prompts: { 'ask.plan': 'prompts/ask.txt' } }, 'ai.prompts'],
-    ['prompts that are a list', { prompts: ['/a'] }, 'ai.prompts'],
     ['a timeout under its range', { timeout_ms: 999 }, 'ai.timeout_ms'],
     ['a timeout over its range', { timeout_ms: 600_001 }, 'ai.timeout_ms'],
     ['a fractional timeout', { timeout_ms: 1500.5 }, 'ai.timeout_ms'],
@@ -88,35 +85,8 @@ describe('the ai section of the mapping file', () => {
     expect(refusal(ai).issues.map((issue) => issue.path).some((issuePath) => issuePath.startsWith(path))).toBe(true);
   });
 
-  it.each(['properties', 'temperature', 'top_p', 'top_k', 'thinking', 'api_key'])('refuses %s as a key the section does not have', (key) => {
+  it.each(['prompts', 'properties', 'pii_override', 'temperature', 'top_p', 'top_k', 'thinking', 'api_key'])('refuses %s as a key the section does not have', (key) => {
     expect(() => parseWith({ [key]: 1 })).toThrow(MappingError);
-  });
-
-  it('holds the property list and the pii override as written, and an empty map as none', () => {
-    const ai = { properties: { person: ['full_name', '*'], KNOWS: ['since'] }, pii_override: true };
-    expect(parseWith(ai).ai).toEqual(ai);
-    expect(parseWith({ properties: {} }).ai).toEqual({ properties: {} });
-    expect(parseWith({ pii_override: false }).ai).toEqual({ pii_override: false });
-  });
-
-  it.each([
-    ['a list instead of a map', ['person'], 'ai.properties'],
-    ['an empty list for a type', { person: [] }, 'ai.properties.person'],
-    ['a list that holds a non-text', { person: [1] }, 'ai.properties.person'],
-    ['an empty property name', { person: [''] }, 'ai.properties.person'],
-    ['a property listed twice', { person: ['name', 'name'] }, 'ai.properties.person'],
-    ['an empty type name', { '': ['name'] }, 'ai.properties'],
-    ['a type with a text instead of a list', { person: 'name' }, 'ai.properties.person'],
-  ])('refuses %s, naming ai.properties and the type', (_name, properties, path) => {
-    expect(refusal({ properties }).issues.map((issue) => issue.path).some((issuePath) => issuePath.startsWith(path))).toBe(true);
-  });
-
-  it('names the place of an empty type name with an empty last part of the path', () => {
-    expect(refusal({ properties: { '': ['name'] } }).issues.map((issue) => issue.path)).toContain('ai.properties.');
-  });
-
-  it.each([['a text', 'yes'], ['a number', 1]])('refuses a pii override that is %s, naming ai.pii_override', (_name, value) => {
-    expect(refusal({ pii_override: value }).issues.map((issue) => issue.path)).toContain('ai.pii_override');
   });
 
   it('refuses send_property_values as a key the section does not have', () => {

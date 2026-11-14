@@ -1,11 +1,9 @@
-import { type AiMappingView, type AskPatternCatalog, type AskPatternEntry, type AskPatternListing } from '@neburyx/contracts';
-import { PATTERN_CATALOG_CUT_SENTENCE, PATTERN_CATALOG_INTRO, PATTERN_LABEL_NOTE } from './catalog-text.js';
+import { type AskPatternCatalog, type AskPatternEntry, type AskPatternListing } from '@neburyx/contracts';
+import { PATTERN_CATALOG_CUT_SENTENCE } from './catalog-text.js';
 import { describeProjection } from './describe.js';
-import { createPatternGuard } from './guard.js';
-import { labelOf } from './label.js';
 
 /** What a key stood for in one request: the pattern's own id and version, held by the route and never sent. */
-export interface PatternTarget {
+interface PatternTarget {
   readonly id: string;
   readonly version: number;
 }
@@ -20,10 +18,10 @@ export interface BuiltPatternCatalog {
  * the text holds the descriptions and keys only, because a description is built from the projection, which has no field for anything typed.
  */
 
-export function buildPatternCatalog(listing: AskPatternListing, view: AiMappingView | undefined, vocabulary: readonly string[] = []): BuiltPatternCatalog | undefined {
+export function buildPatternCatalog(listing: AskPatternListing): BuiltPatternCatalog | undefined {
   const { offers } = listing;
   if (offers.length === 0) return undefined;
-  const described = offers.map((offer, position) => ({ offer, position, text: describeProjection(offer.projection), ...labelOf(offer.name, vocabulary) }));
+  const described = offers.map((offer, position) => ({ offer, position, text: describeProjection(offer.projection), label: offer.name }));
   const order = (left: string, right: string): number => (left === right ? 0 : left < right ? -1 : 1);
   described.sort((left, right) => order(left.text, right.text) || order(left.label ?? '', right.label ?? '') || left.position - right.position);
   const entries = new Map<string, AskPatternEntry>();
@@ -35,8 +33,6 @@ export function buildPatternCatalog(listing: AskPatternListing, view: AiMappingV
     return label === undefined ? `${key}: ${text}` : `${key}, named ${JSON.stringify(label)}: ${text}`;
   });
   const tail = listing.cut ? `\n${PATTERN_CATALOG_CUT_SENTENCE}` : '';
-  const labels = described.flatMap(({ label }) => (label === undefined ? [] : [label]));
-  const text = `${PATTERN_CATALOG_INTRO}${labels.length === 0 ? '' : ` ${PATTERN_LABEL_NOTE}`}\n${lines.join('\n')}${tail}\n\n`;
-  const guarded = described.map(({ offer, label, blocked }) => ({ offer, blocked, offered: label !== undefined }));
-  return { catalog: { text, entries, cut: listing.cut, labels, check: createPatternGuard(guarded, view, text).check }, targets };
+  const text = `${lines.join('\n')}${tail}\n\n`;
+  return { catalog: { text, entries, cut: listing.cut }, targets };
 }

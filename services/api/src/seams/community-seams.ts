@@ -12,7 +12,6 @@ export const communityAudit: AuditSink = {
 
 export const communityAskPlanner: AskPlanner = {
   availability: () => ({ available: false, reason: 'not_in_this_edition' }),
-  plan: () => Promise.reject(new Error('Ask has no planner in this edition')),
 };
 
 /** The Community seams; each call has read slots of its own, so one process builds them once. */

@@ -1,23 +1,22 @@
-export const PROMPT_IDS = ['ask.plan', 'summary.view', 'assistant.route', 'ask.plan.repair'] as const;
+import { createHash } from 'node:crypto';
 
-export type PromptId = (typeof PROMPT_IDS)[number];
-
-export type PromptParameters = Readonly<Record<string, string | number>>;
-
+/** What a caller sends: the prompt as it wrote it. `instructions` are the fixed part (the one cached block); `values` follow it and hold what changes with each call. */
 export interface ModelRequest {
-  readonly promptId: PromptId;
-  readonly parameters: PromptParameters;
+  readonly promptId: string;
+  readonly version: number;
+  readonly instructions?: string;
+  readonly values: string;
 }
 
-export type PromptSource = 'builtin' | 'override';
-
+/** Which prompt a call used: its id and version, and the SHA-256 of its fixed instructions (of nothing when there are none), never of the values. */
 export interface PromptRecord {
-  readonly id: PromptId;
+  readonly id: string;
   readonly version: number;
-  readonly source: PromptSource;
   readonly sha256: string;
-  /** The SHA-256 of the instructions with the static parameters filled in; present only for a prompt whose instructions hold static parameters. */
-  readonly instructionsSha256?: string;
+}
+
+export function promptRecordOf(request: ModelRequest): PromptRecord {
+  return { id: request.promptId, version: request.version, sha256: createHash('sha256').update(request.instructions ?? '', 'utf8').digest('hex') };
 }
 
 /** `inputTokens` is what the provider counts after the last cache breakpoint; a cache count the provider did not state is absent, never zero. */

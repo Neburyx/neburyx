@@ -2,11 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { buildPromptRegistry } from '../prompts.js';
 import type { ModelAnswer, ModelProvider } from '../provider.js';
 import { CONFORMANCE_CASES, CONFORMANCE_SCENARIOS, type ConformanceRig, type ConformanceScenario } from './conformance.js';
 import { createFixtureProvider, replyKey, type FixtureReply } from './fixture.js';
-import { BUILT_IN_PROMPTS } from '../prompts.js';
 
 const REPLIES: Readonly<Record<ConformanceScenario, FixtureReply>> = {
   'ok-known-usage': { kind: 'ok', text: 'a plan', usage: { kind: 'known', inputTokens: 12, outputTokens: 34 } },
@@ -23,17 +21,13 @@ const REPLIES: Readonly<Record<ConformanceScenario, FixtureReply>> = {
 };
 
 async function fixtureRig(overrides: Partial<Record<ConformanceScenario, FixtureReply>> = {}, wrap: (provider: ModelProvider) => ModelProvider = (provider) => provider): Promise<ConformanceRig> {
-  const built = await buildPromptRegistry();
-  if (!built.ok) throw new Error(built.problems.join('; '));
   let next: FixtureReply = REPLIES['ok-known-usage'];
-  const fixture = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', BUILT_IN_PROMPTS['ask.plan'].version)]: () => next } });
+  const fixture = createFixtureProvider({ replies: { [replyKey('conformance', 1)]: () => next } });
   return {
     provider: wrap(fixture),
-    registry: built.registry,
     arrange(scenario) {
       next = overrides[scenario] ?? REPLIES[scenario];
     },
-    callsMade: () => fixture.calls.length,
   };
 }
 
@@ -50,10 +44,9 @@ async function failedCases(rig: ConformanceRig): Promise<string[]> {
 }
 
 describe('the conformance suite', () => {
-  it('covers every scenario, and the parameter case', () => {
+  it('covers every scenario', () => {
     const names = CONFORMANCE_CASES.map((conformanceCase) => conformanceCase.name);
     for (const scenario of CONFORMANCE_SCENARIOS) expect(names).toContain(`scenario ${scenario}`);
-    expect(names).toContain('a missing or undeclared parameter throws a PromptError before any outbound call');
     expect(new Set(names).size).toBe(names.length);
   });
 
@@ -120,18 +113,5 @@ describe('the conformance suite on a provider that is wrong', () => {
     });
     const failed = await failedCases(await fixtureRig({}, withoutRecord));
     expect(failed).toEqual(CONFORMANCE_SCENARIOS.map((scenario) => `scenario ${scenario}`));
-  });
-
-  it('fails a provider that wraps the registry error, or sends a call before it', async () => {
-    const wrapping = (provider: ModelProvider): ModelProvider => ({
-      complete: async (request, signal) => {
-        try {
-          return await provider.complete(request, signal);
-        } catch (error) {
-          throw new Error(`wrapped: ${String(error)}`);
-        }
-      },
-    });
-    expect(await failedCases(await fixtureRig({}, wrapping))).toEqual(['a missing or undeclared parameter throws a PromptError before any outbound call']);
   });
 });

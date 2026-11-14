@@ -1,24 +1,16 @@
 import { ERROR_TABLE, isTokenCount, parseAiAuditDetail, tokenCount, type AiAuditDetail, type AuditEvent, type AuditResult, type AuditSink, type ErrorCode } from '@neburyx/contracts';
 import type { AskConfiguration } from './configure.js';
-import type { ModelAnswer, ModelProvider, ModelRequest, PromptId, PromptRecord, TokenUsage } from './provider.js';
-
-/** The action an audit event of each prompt carries. */
-export const AUDIT_ACTIONS: Readonly<Record<PromptId, string>> = {
-  'ask.plan': 'ask.plan',
-  'ask.plan.repair': 'ask.plan',
-  'summary.view': 'ai.summary',
-  'assistant.route': 'assistant.turn',
-};
+import { promptRecordOf, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptRecord, type TokenUsage } from './provider.js';
 
 /** Who asked and where it belongs: a model request carries none of it. */
 export interface AuditedCallContext {
+  /** The action the audit event of the call carries. */
+  readonly action: string;
   readonly actorId: string;
   readonly actorRole: AuditEvent['actorRole'];
   readonly traceId: string;
   readonly investigationId?: string;
   readonly sourceId?: string;
-  /** The `type.property` names of the `pii` properties the request holds, never their values. */
-  readonly piiPropertiesSent?: readonly string[];
   /** The saved patterns the request offered: their number and the SHA-256 of the text sent, never a pattern. */
   readonly patternCatalog?: { readonly count: number; readonly sha256: string };
 }
@@ -34,17 +26,15 @@ export class AuditUnavailableError extends Error {
 
 export interface AuditedModelOptions {
   readonly provider: ModelProvider;
-  /** The configuration the provider was built from: its registry names the prompt whose template hash is audited, and its model is the one a refused or failed call is recorded under. */
-  readonly configuration: Pick<AskConfiguration, 'registry' | 'model'>;
+  /** The configuration the provider was built from: its model is the one a refused or failed call is recorded under. */
+  readonly configuration: Pick<AskConfiguration, 'model'>;
   readonly sink: AuditSink;
 }
 
 export interface AuditedModelCall {
-  /** Whether the prompt in use has a place for the parameter. */
-  readonly takes: (id: PromptId, parameter: string) => boolean;
   readonly call: (request: ModelRequest, context: AuditedCallContext, signal: AbortSignal) => Promise<ModelAnswer>;
   /**
-   * The same call as a provider, for one context. Unlike a bare provider it can reject with `AuditUnavailableError` (the event could not be written, or the answer's prompt differs from the one resolved),
+   * The same call as a provider, for one context. Unlike a bare provider it can reject with `AuditUnavailableError` (the event could not be written, or the answer's prompt differs from the one sent),
    * and it rethrows what the provider threw after recording the failure; a route that takes it as a provider maps both.
    */
   readonly asProvider: (context: AuditedCallContext) => ModelProvider;
@@ -56,6 +46,9 @@ interface Outcome {
   readonly usage: TokenUsage;
 }
 
+/** What the audit event accepts as a prompt id: the rule of the contract's `label`. */
+const AUDIT_LABEL = /^[A-Za-z0-9._:/-]{1,200}$/;
+
 const UNKNOWN_USAGE: TokenUsage = { kind: 'unknown' };
 
 /** A count that is not a non-negative whole number is `unknown`, never a number. */
@@ -64,13 +57,13 @@ function countOf(value: number): AiAuditDetail['tokensIn'] {
 }
 
 function sameRecord(left: PromptRecord, right: PromptRecord): boolean {
-  return left.id === right.id && left.version === right.version && left.source === right.source && left.sha256 === right.sha256 && left.instructionsSha256 === right.instructionsSha256;
+  return left.id === right.id && left.version === right.version && left.sha256 === right.sha256;
 }
 
 export function createAuditedModelCall(options: AuditedModelOptions): AuditedModelCall {
   const { provider, configuration, sink } = options;
 
-  function eventOf(request: ModelRequest, context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): AuditEvent {
+  function eventOf(context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): AuditEvent {
     const counts =
       outcome.usage.kind === 'known'
         ? {
@@ -85,15 +78,13 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
       promptId: prompt.id,
       promptVersion: String(prompt.version),
       promptSha256: prompt.sha256,
-      ...(prompt.instructionsSha256 === undefined ? {} : { instructionsSha256: prompt.instructionsSha256 }),
-      ...(context.piiPropertiesSent === undefined || context.piiPropertiesSent.length === 0 ? {} : { piiPropertiesSent: context.piiPropertiesSent }),
       ...(context.patternCatalog === undefined ? {} : { patternCatalog: context.patternCatalog }),
       ...counts,
     });
     return {
       actorId: context.actorId,
       actorRole: context.actorRole,
-      action: AUDIT_ACTIONS[request.promptId],
+      action: context.action,
       result: outcome.result,
       ...(context.sourceId === undefined ? {} : { sourceId: context.sourceId }),
       ...(context.investigationId === undefined ? {} : { investigationId: context.investigationId }),
@@ -103,37 +94,39 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
   }
 
   /** Records the event, or throws the one error that says it could not be: whatever the detail or the sink did, nothing of the call leaves with it. */
-  async function record(request: ModelRequest, context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): Promise<void> {
+  async function record(context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): Promise<void> {
     try {
-      await sink.record(eventOf(request, context, prompt, outcome));
+      await sink.record(eventOf(context, prompt, outcome));
     } catch {
       throw new AuditUnavailableError();
     }
   }
 
   async function call(request: ModelRequest, context: AuditedCallContext, signal: AbortSignal): Promise<ModelAnswer> {
-    const resolved = configuration.registry.resolve(request.promptId, request.parameters);
+    // an id the audit event cannot hold is refused before anything is sent, so no call goes out without its event
+    if (!AUDIT_LABEL.test(request.promptId) || !Number.isInteger(request.version) || request.version < 0) throw new RangeError('the prompt id or version cannot be recorded in the audit');
+    const sent = promptRecordOf(request);
     const failed: Outcome = { result: 'failed', modelRef: configuration.model, usage: UNKNOWN_USAGE };
     let answer: ModelAnswer;
     try {
       answer = await provider.complete(request, signal);
     } catch (error) {
-      await record(request, context, resolved.record, failed);
+      await record(context, sent, failed);
       throw error;
     }
-    if (!sameRecord(answer.prompt, resolved.record)) {
-      await record(request, context, resolved.record, failed);
+    if (!sameRecord(answer.prompt, sent)) {
+      await record(context, sent, failed);
       throw new AuditUnavailableError();
     }
     switch (answer.status) {
       case 'ok':
-        await record(request, context, resolved.record, { result: 'success', modelRef: answer.model, usage: answer.usage });
+        await record(context, sent, { result: 'success', modelRef: answer.model, usage: answer.usage });
         return answer;
       case 'refused':
-        await record(request, context, resolved.record, { result: 'refused', modelRef: configuration.model, usage: answer.usage });
+        await record(context, sent, { result: 'refused', modelRef: configuration.model, usage: answer.usage });
         return answer;
       case 'failed':
-        await record(request, context, resolved.record, { ...failed, usage: answer.usage ?? UNKNOWN_USAGE });
+        await record(context, sent, { ...failed, usage: answer.usage ?? UNKNOWN_USAGE });
         return answer;
       default: {
         const unreachable: never = answer;
@@ -142,5 +135,5 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     }
   }
 
-  return { takes: (id, parameter) => configuration.registry.takes(id, parameter), call, asProvider: (context) => ({ complete: (request, signal) => call(request, context, signal) }) };
+  return { call, asProvider: (context) => ({ complete: (request, signal) => call(request, context, signal) }) };
 }

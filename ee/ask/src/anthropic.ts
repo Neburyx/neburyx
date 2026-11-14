@@ -2,16 +2,15 @@ import { readFile, stat } from 'node:fs/promises';
 import Anthropic, { APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
 import type { AskConfiguration } from './configure.js';
 import { parseKeyText } from './key-file.js';
-import type { ResolvedPrompt } from './prompts.js';
-import type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, PromptRecord, TokenUsage } from './provider.js';
+import { promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptRecord, type TokenUsage } from './provider.js';
 
 /** The address of the service. A test points the provider at a stub instead; the environment's own base address is never used. */
-export const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
+const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 
 const GROUP_AND_OTHER_BITS = 0o077;
 
 export interface AnthropicProviderOptions {
-  readonly configuration: Pick<AskConfiguration, 'model' | 'key' | 'limits' | 'registry' | 'cache'>;
+  readonly configuration: Pick<AskConfiguration, 'model' | 'key' | 'limits' | 'cache'>;
   /** Where a key given as an environment variable is read, at each call. The default is the process environment. */
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Only a test sets this, to a stub on the loopback address. */
@@ -110,10 +109,10 @@ function codeOf(error: unknown): FailureCode {
 }
 
 /** The one place that decides what is cached: only the instructions, with their static parameters filled in from the mapping and the catalog, as the one system block with the one breakpoint, and never a value of the question or of the data. With caching off, or with no fixed part, the whole prompt is the user message. */
-function promptParts(resolved: ResolvedPrompt, cache: AskConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
-  if (!cache.enabled || resolved.instructions === undefined) return { messages: [{ role: 'user', content: resolved.text }] };
+function promptParts(request: ModelRequest, cache: AskConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
+  if (!cache.enabled || request.instructions === undefined) return { messages: [{ role: 'user', content: request.instructions === undefined ? request.values : `${request.instructions}\n\n${request.values}` }] };
   const breakpoint = cache.ttl === '1h' ? { type: 'ephemeral' as const, ttl: '1h' as const } : { type: 'ephemeral' as const };
-  return { system: [{ type: 'text', text: resolved.instructions, cache_control: breakpoint }], messages: [{ role: 'user', content: resolved.values }] };
+  return { system: [{ type: 'text', text: request.instructions, cache_control: breakpoint }], messages: [{ role: 'user', content: request.values }] };
 }
 
 function failureOf(error: unknown, code: FailureCode): ProviderFailure {
@@ -149,8 +148,8 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Mode
   };
 
   async function attempt(request: ModelRequest, signal: AbortSignal, note: (failure: ProviderFailure) => void): Promise<ModelAnswer> {
-    const resolved = configuration.registry.resolve(request.promptId, request.parameters);
-    const failed = (code: FailureCode): ModelAnswer => ({ status: 'failed', code, usage: UNKNOWN_USAGE, prompt: resolved.record });
+    const record = promptRecordOf(request);
+    const failed = (code: FailureCode): ModelAnswer => ({ status: 'failed', code, usage: UNKNOWN_USAGE, prompt: record });
     const key = await readKey(configuration, options.env ?? process.env);
     if (key === undefined) return failed('rejected');
 
@@ -176,8 +175,8 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Mode
         maxRetries,
       });
       const sent = client.messages
-        .create({ model: configuration.model, max_tokens: maxTokens, output_config: { effort }, ...promptParts(resolved, configuration.cache) }, { signal: deadline.signal })
-        .then((body): ModelAnswer => answerOf(body, resolved.record, configuration.model));
+        .create({ model: configuration.model, max_tokens: maxTokens, output_config: { effort }, ...promptParts(request, configuration.cache) }, { signal: deadline.signal })
+        .then((body): ModelAnswer => answerOf(body, record, configuration.model));
       // The race keeps a late rejection from the abandoned call from surfacing.
       sent.catch(noop);
       const first = await Promise.race([sent, expired]);

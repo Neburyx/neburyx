@@ -4,10 +4,10 @@ import { inspectorContent } from './inspector-panel.js';
 import type { Inspector } from './inspector.js';
 import { INSPECTOR_PANEL_ID, INSPECTOR_PANEL_TOP, INSPECTOR_PANEL_WIDTH } from './inspector-layout.js';
 import { inspectedKey } from './inspected.js';
-import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/ask-binder.js';
+import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/panel-layout.js';
 import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-limits.js';
 
-/** While the Ask panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is the Ask panel's width between two gaps. */
+/** While the Ask panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is the Ask panel's width between two gaps. Nothing opens the panel until the rebuilt Ask panel lands, so until then the inset is the gap alone. */
 function insetOf(state: ClientState): number {
   const view = state.presentation.view.getState();
   // held to the limits the panel is drawn with, so a stored width below the least is not trusted

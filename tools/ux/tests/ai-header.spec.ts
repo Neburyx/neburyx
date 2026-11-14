@@ -30,37 +30,37 @@ function countAiRequests(page: Page): string[] {
   return seen;
 }
 
-test.describe('Ask and Summarize in the workspace header', () => {
+test.describe('Summarize in the workspace header, and no Ask control while Ask is rebuilt', () => {
   test('are locked for a community build, with a padlock and no pill, and the same after a reload', async ({ page }) => {
     await openWorkspace(page);
-    for (const label of ['Ask', 'Summarize'] as const) {
-      await expect(control(page, label)).toHaveAttribute('aria-disabled', 'true');
-      await expect(control(page, label)).toHaveAccessibleName(`${label}, Enterprise capability, locked`);
-      await expect(control(page, label)).toHaveAttribute('title', 'Enterprise capability, locked');
-      await expect(control(page, label).locator('svg rect')).toHaveCount(1);
-    }
+    await expect(control(page, 'Summarize')).toHaveAttribute('aria-disabled', 'true');
+    await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize, Enterprise capability, locked');
+    await expect(control(page, 'Summarize')).toHaveAttribute('title', 'Enterprise capability, locked');
+    await expect(control(page, 'Summarize').locator('svg rect')).toHaveCount(1);
+    await expect(control(page, 'Ask')).toHaveCount(0);
     await expect(header(page).getByText('Enterprise', { exact: true })).toHaveCount(0);
     await page.reload();
-    await expect(control(page, 'Ask')).toHaveAttribute('aria-disabled', 'true');
+    await expect(control(page, 'Summarize')).toHaveAttribute('aria-disabled', 'true');
+    await expect(control(page, 'Ask')).toHaveCount(0);
   });
 
   test('are unlocked for an enterprise build, and the same after a reload', async ({ page }) => {
     await answerAsEnterprise(page);
     await openWorkspace(page);
-    for (const label of ['Ask', 'Summarize'] as const) {
-      await expect(control(page, label)).toHaveAccessibleName(label);
-      await expect(control(page, label)).not.toHaveAttribute('aria-disabled', 'true');
-      await expect(control(page, label).locator('svg rect')).toHaveCount(0);
-    }
+    await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize');
+    await expect(control(page, 'Summarize')).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(control(page, 'Summarize').locator('svg rect')).toHaveCount(0);
+    await expect(control(page, 'Ask')).toHaveCount(0);
     await page.reload();
     await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize');
+    await expect(control(page, 'Ask')).toHaveCount(0);
   });
 
-  test('sit beside the source status and Views without the header scrolling sideways, in both states', async ({ page }) => {
+  test('sits beside the source status and Views without the header scrolling sideways, in both states', async ({ page }) => {
     for (const enterprise of [false, true]) {
       if (enterprise) await answerAsEnterprise(page);
       await openWorkspace(page);
-      await expect(control(page, 'Ask')).toBeVisible();
+      await expect(control(page, 'Summarize')).toBeVisible();
       const fits = await header(page).evaluate((element) => element.scrollWidth <= element.clientWidth);
       expect(fits, `the header fits (enterprise: ${enterprise})`).toBe(true);
       const placed = await header(page).evaluate((element) => {
@@ -68,24 +68,22 @@ test.describe('Ask and Summarize in the workspace header', () => {
         const buttons = [...element.querySelectorAll('button')];
         const named = (start: string): Element | undefined => buttons.find((button) => button.textContent?.trim().startsWith(start));
         const source = element.querySelector('.header-source') ?? undefined;
-        return { sourceThenAsk: follows(source, named('Ask')), askThenSummarize: follows(named('Ask'), named('Summarize')), summarizeThenViews: follows(named('Summarize'), named('Views')) };
+        return { sourceThenSummarize: follows(source, named('Summarize')), summarizeThenViews: follows(named('Summarize'), named('Views')) };
       });
-      expect(placed, `the order of the header (enterprise: ${enterprise})`).toEqual({ sourceThenAsk: true, askThenSummarize: true, summarizeThenViews: true });
+      expect(placed, `the order of the header (enterprise: ${enterprise})`).toEqual({ sourceThenSummarize: true, summarizeThenViews: true });
     }
   });
 
-  test('send no request to an AI path when activated by click, Enter or Space, locked or unlocked with nothing registered', async ({ page }) => {
+  test('send no request to an AI path when Summarize is activated by click, Enter or Space, locked or unlocked with nothing registered', async ({ page }) => {
     const seen = countAiRequests(page);
     for (const enterprise of [false, true]) {
       if (enterprise) await answerAsEnterprise(page);
       await openWorkspace(page);
-      for (const label of ['Ask', 'Summarize'] as const) {
-        await control(page, label).click({ force: true });
-        await control(page, label).focus();
-        await page.keyboard.press('Enter');
-        await page.keyboard.press('Space');
-        await expect(control(page, label)).toBeFocused();
-      }
+      await control(page, 'Summarize').click({ force: true });
+      await control(page, 'Summarize').focus();
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Space');
+      await expect(control(page, 'Summarize')).toBeFocused();
       if (enterprise) await expect(header(page).getByText('Summarize is not available in this release yet.')).toBeVisible();
       else await expect(header(page).getByText('is not available in this release yet.')).toHaveCount(0);
     }

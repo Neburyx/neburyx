@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -124,18 +125,12 @@ describe('the ask_runs table of the preview', () => {
     await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'local', $2, 'Test user')`, [id, id]);
     return id;
   };
-  const INSERT_RUN = 'INSERT INTO ask_runs (id, plan_id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5, $6)';
-  const planOf = async (database: TestDatabase, owner: string): Promise<string> => {
-    const id = randomUUID();
-    await rows(database.ownerUrl, `INSERT INTO ask_plans (id, user_id, source_id, template_id, template_version, params, planning_trace_id, expires_at) VALUES ($1, $2, 'demo', 'entity', 1, '{}', 'tr-1', clock_timestamp() + interval '15 minutes')`, [id, owner]);
-    return id;
-  };
+  const INSERT_RUN = 'INSERT INTO ask_runs (id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5)';
 
   it('has the columns of the data model, all required, with the id as primary key and created_at defaulting to the database clock', async () => {
     const database = await migratedWithPreview();
     expect(await columnsOf(database, 'ask_runs')).toEqual([
       { column_name: 'id', data_type: 'uuid', is_nullable: 'NO' },
-      { column_name: 'plan_id', data_type: 'uuid', is_nullable: 'NO' },
       { column_name: 'actor_id', data_type: 'uuid', is_nullable: 'NO' },
       { column_name: 'outcome', data_type: 'text', is_nullable: 'NO' },
       { column_name: 'row_count', data_type: 'integer', is_nullable: 'NO' },
@@ -145,7 +140,6 @@ describe('the ask_runs table of the preview', () => {
     const constraints = await rows(database.ownerUrl, `SELECT contype, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'ask_runs'::regclass AND contype IN ('p', 'f') ORDER BY contype`);
     expect(constraints).toEqual([
       { contype: 'f', definition: 'FOREIGN KEY (actor_id) REFERENCES users(id)' },
-      { contype: 'f', definition: 'FOREIGN KEY (plan_id) REFERENCES ask_plans(id)' },
       { contype: 'p', definition: 'PRIMARY KEY (id)' },
     ]);
   });
@@ -154,72 +148,48 @@ describe('the ask_runs table of the preview', () => {
     const database = await migratedWithPreview();
     const actor = await user(database);
     const id = randomUUID();
-    expect(await attempt(database.appUrl, INSERT_RUN, [id, await planOf(database, actor), actor, outcome, 3, 120])).toBe('allowed');
+    expect(await attempt(database.appUrl, INSERT_RUN, [id, actor, outcome, 3, 120])).toBe('allowed');
     expect(await rows(database.appUrl, 'SELECT outcome, row_count, elapsed_ms FROM ask_runs WHERE id = $1', [id])).toEqual([{ outcome, row_count: 3, elapsed_ms: 120 }]);
   });
 
-  it('refuses an actor that is no user, a plan that does not exist, an unknown outcome and a negative count', async () => {
+  it('refuses an actor that is no user, an unknown outcome and a negative count', async () => {
     const database = await migratedWithPreview();
     const actor = await user(database);
-    const plan = await planOf(database, actor);
-    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), plan, randomUUID(), 'complete', 1, 1])).toMatch(/foreign key/);
-    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), randomUUID(), actor, 'complete', 1, 1])).toMatch(/ask_runs_plan_known/);
-    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), plan, actor, 'ok', 1, 1])).toMatch(/ask_runs_outcome_known/);
-    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), plan, actor, 'complete', -1, 1])).toMatch(/ask_runs_row_count_not_negative/);
-    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), plan, actor, 'complete', 1, -1])).toMatch(/ask_runs_elapsed_not_negative/);
-    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), plan, actor, 'complete', 1, 1])).toBe('allowed');
+    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), randomUUID(), 'complete', 1, 1])).toMatch(/foreign key/);
+    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), actor, 'ok', 1, 1])).toMatch(/ask_runs_outcome_known/);
+    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), actor, 'complete', -1, 1])).toMatch(/ask_runs_row_count_not_negative/);
+    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), actor, 'complete', 1, -1])).toMatch(/ask_runs_elapsed_not_negative/);
+    expect(await attempt(database.appUrl, INSERT_RUN, [randomUUID(), actor, 'complete', 1, 1])).toBe('allowed');
   });
 });
 
-describe('the ask_plans table of the preview', () => {
-  const user = async (database: TestDatabase): Promise<string> => {
-    const id = randomUUID();
-    await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'local', $2, 'Test user')`, [id, id]);
-    return id;
+describe('the preview migrations that retired the stored plans', () => {
+  const EARLIER_FILES = ['0001-audit-events.sql', '0002-ask-runs.sql', '0003-ask-plans.sql'];
+  const earlier: ExtensionLoader = {
+    load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: fixtureFolder(Object.fromEntries(EARLIER_FILES.map((name) => [name, readFileSync(join(PREVIEW_MIGRATIONS, name), 'utf8')]))) }),
   };
-  const INSERT_PLAN = `INSERT INTO ask_plans (id, user_id, source_id, template_id, template_version, params, state, parent_plan_id, planning_trace_id, expires_at) VALUES ($1, $2, 'demo', 'entity', 1, '{}', $3, $4, 'tr-1', clock_timestamp() + interval '15 minutes')`;
 
-  it('has the columns of the data model with the optional ones nullable, and the keys of the plan', async () => {
-    const database = await migratedWithPreview();
-    expect(await columnsOf(database, 'ask_plans')).toEqual([
-      { column_name: 'id', data_type: 'uuid', is_nullable: 'NO' },
-      { column_name: 'user_id', data_type: 'uuid', is_nullable: 'NO' },
-      { column_name: 'source_id', data_type: 'text', is_nullable: 'NO' },
-      { column_name: 'turn_id', data_type: 'uuid', is_nullable: 'YES' },
-      { column_name: 'template_id', data_type: 'text', is_nullable: 'NO' },
-      { column_name: 'template_version', data_type: 'integer', is_nullable: 'NO' },
-      { column_name: 'params', data_type: 'jsonb', is_nullable: 'NO' },
-      { column_name: 'state', data_type: 'text', is_nullable: 'NO' },
-      { column_name: 'parent_plan_id', data_type: 'uuid', is_nullable: 'YES' },
-      { column_name: 'planning_trace_id', data_type: 'text', is_nullable: 'NO' },
-      { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
-      { column_name: 'expires_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
-    ]);
-    const constraints = await rows(database.ownerUrl, `SELECT contype, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'ask_plans'::regclass AND contype IN ('p', 'f') ORDER BY contype, definition`);
-    expect(constraints).toEqual([
-      { contype: 'f', definition: 'FOREIGN KEY (parent_plan_id) REFERENCES ask_plans(id)' },
-      { contype: 'f', definition: 'FOREIGN KEY (user_id) REFERENCES users(id)' },
-      { contype: 'p', definition: 'PRIMARY KEY (id)' },
-    ]);
+  it('drops ask_plans and the plan_id of ask_runs on a database that holds plans and runs, keeps every run, and the audit index by trace ID', async () => {
+    const database = await postgres.newDatabase();
+    expect((await runInProcess(previewOn(database), SHIPPED, { extensionLoader: earlier })).code).toBe(0);
+    const owner = randomUUID();
+    await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'local', $2, 'Test user')`, [owner, owner]);
+    const plan = randomUUID();
+    await rows(database.ownerUrl, `INSERT INTO ask_plans (id, user_id, source_id, template_id, template_version, params, planning_trace_id, expires_at) VALUES ($1, $2, 'demo', 'entity', 1, '{}', 'tr-1', clock_timestamp() + interval '15 minutes')`, [plan, owner]);
+    const runs = [randomUUID(), randomUUID()];
+    for (const id of runs) await rows(database.ownerUrl, `INSERT INTO ask_runs (id, plan_id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, 'complete', 2, 10)`, [id, plan, owner]);
+
+    const migrated = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
+    expect([migrated.code, migrated.stderr]).toEqual([0, '']);
+    expect(await rows(database.ownerUrl, `SELECT to_regclass('public.ask_plans') IS NOT NULL AS plans`)).toEqual([{ plans: false }]);
+    expect((await columnsOf(database, 'ask_runs')).map((column) => column['column_name'])).not.toContain('plan_id');
+    expect((await rows(database.ownerUrl, 'SELECT id FROM ask_runs ORDER BY id')).map((row) => row['id'])).toEqual([...runs].sort());
+    expect(await rows(database.ownerUrl, `SELECT indexname FROM pg_indexes WHERE tablename = 'audit_events' AND indexdef LIKE '%(trace_id)%'`)).toEqual([{ indexname: 'audit_events_trace' }]);
+    const again = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
+    expect([again.code, again.stdout]).toEqual([0, 'nothing to apply\n']);
   });
 
-  it.each(['proposed', 'confirmed', 'run', 'cancelled', 'expired'])('lets the application role write a plan in the state %s and read it back', async (state) => {
-    const database = await migratedWithPreview();
-    const owner = await user(database);
-    const id = randomUUID();
-    expect(await attempt(database.appUrl, INSERT_PLAN, [id, owner, state, null])).toBe('allowed');
-    expect(await rows(database.appUrl, 'SELECT state, source_id FROM ask_plans WHERE id = $1', [id])).toEqual([{ state, source_id: 'demo' }]);
-  });
-
-  it('refuses a state outside the five, an owner that is no user and a parent that does not exist', async () => {
-    const database = await migratedWithPreview();
-    const owner = await user(database);
-    expect(await attempt(database.appUrl, INSERT_PLAN, [randomUUID(), owner, 'running', null])).toMatch(/ask_plans_state_known/);
-    expect(await attempt(database.appUrl, INSERT_PLAN, [randomUUID(), randomUUID(), 'proposed', null])).toMatch(/foreign key/);
-    expect(await attempt(database.appUrl, INSERT_PLAN, [randomUUID(), owner, 'proposed', randomUUID()])).toMatch(/foreign key/);
-  });
-
-  it('indexes the audit table by trace ID', async () => {
+  it('indexes the audit table by trace ID on a fresh database', async () => {
     const database = await migratedWithPreview();
     const found = await rows(database.ownerUrl, `SELECT indexname FROM pg_indexes WHERE tablename = 'audit_events' AND indexdef LIKE '%(trace_id)%'`);
     expect(found).toEqual([{ indexname: 'audit_events_trace' }]);
@@ -231,7 +201,7 @@ describe('a start of the Community product', () => {
     const database = await postgres.newDatabase();
     const result = await runInProcess(environment(database), SHIPPED);
     expect(result.code).toBe(0);
-    const found = await rows(database.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS audit, to_regclass('public.ask_runs') IS NOT NULL AS runs, to_regclass('public.ask_plans') IS NOT NULL AS plans`);
-    expect(found).toEqual([{ audit: false, runs: false, plans: false }]);
+    const found = await rows(database.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS audit, to_regclass('public.ask_runs') IS NOT NULL AS runs`);
+    expect(found).toEqual([{ audit: false, runs: false }]);
   });
 });

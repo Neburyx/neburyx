@@ -26,7 +26,7 @@ import { createSourceGate, type SourceGate, type SourceGateOptions } from './gat
 import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
-import { createPreviewMac, derivePreviewKey } from './ask/preview-key.js';
+import { createSigner, deriveSigningKey } from './ask/signing-key.js';
 import { start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
@@ -184,64 +184,8 @@ describe('the enterprise extension at start', () => {
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     await result.app.inject({ url: '/v1/fake/status' });
-    expect(seen?.previewMac?.('a text')).toBe(createPreviewMac(derivePreviewKey(material))('a text'));
+    expect(seen?.signText?.('a text')).toBe(createSigner(deriveSigningKey(material))('a text'));
     await result.app.close();
-  });
-
-  describe('the maintenance tasks of the extension', () => {
-    const sweepTask = (ran: string[]): NonNullable<ProfileExtension['maintenanceTasks']> => () => [{ name: 'fake-sweep', schedule: '*/5 * * * *', run: async () => void ran.push('swept') }];
-    const withTasks = (ran: string[]): ProfileExtension => ({ ...extensionWith(route()), maintenanceTasks: sweepTask(ran) });
-    const runner = () => {
-      const seen: { name: string; schedule?: string }[][] = [];
-      const startJobRunner: NonNullable<StartIo['startJobRunner']> = (_url, tasks) => {
-        seen.push(tasks.map((task) => ({ name: task.name, ...(task.schedule === undefined ? {} : { schedule: task.schedule }) })));
-        return Promise.resolve(undefined);
-      };
-      return { seen, startJobRunner };
-    };
-
-    it('adds no task with the switch off, and never asks the extension for one', async () => {
-      const ask = vi.fn(() => []);
-      const rig = run(async () => ({ ...extensionWith(route()), maintenanceTasks: ask }));
-      const jobs = runner();
-      const base = { ...rig.io, startJobRunner: jobs.startJobRunner };
-      delete (base as { tasks?: unknown }).tasks;
-      const result = await start(OFF, base);
-      expect(result.exitCode).toBe(0);
-      expect(ask).not.toHaveBeenCalled();
-      expect(jobs.seen[0]?.map((task) => task.name)).toEqual(['purge-deleted-investigations', 'purge-deleted-patterns', 'expire-exports']);
-      if (result.exitCode === 0) await result.app.close();
-    });
-
-    it('adds the tasks of the extension to the application\u2019s own on the one runner with the switch on', async () => {
-      const rig = run(async () => withTasks([]));
-      const jobs = runner();
-      const base = { ...rig.io, startJobRunner: jobs.startJobRunner };
-      delete (base as { tasks?: unknown }).tasks;
-      const result = await start(ON, base);
-      expect(result.exitCode).toBe(0);
-      expect(jobs.seen).toEqual([[{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }, { name: 'purge-deleted-patterns', schedule: '29 3 * * *' }, { name: 'expire-exports', schedule: '41 3 * * *' }, { name: 'fake-sweep', schedule: '*/5 * * * *' }]]);
-      if (result.exitCode === 0) await result.app.close();
-    });
-
-    it('stops with the configuration error of a task that has the name of another, and starts nothing', async () => {
-      const rig = run(async () => ({ ...extensionWith(route()), maintenanceTasks: () => [{ name: 'expire-exports', schedule: '*/5 * * * *', run: async () => undefined }] }));
-      const jobs = runner();
-      const base = { ...rig.io, startJobRunner: jobs.startJobRunner };
-      delete (base as { tasks?: unknown }).tasks;
-      const result = await start(ON, base);
-      expect(result.exitCode).not.toBe(0);
-      expect(jobs.seen).toEqual([]);
-    });
-
-    it('leaves an injected list as it is, whatever the extension has', async () => {
-      const rig = run(async () => withTasks([]));
-      const jobs = runner();
-      const result = await start(ON, { ...rig.io, startJobRunner: jobs.startJobRunner, tasks: [{ name: 'mine', run: () => Promise.resolve() }] });
-      expect(result.exitCode).toBe(0);
-      expect(jobs.seen).toEqual([[{ name: 'mine' }]]);
-      if (result.exitCode === 0) await result.app.close();
-    });
   });
 
   it('never calls the loader and mounts nothing when the switch is off', async () => {
@@ -392,8 +336,8 @@ describe('the enterprise extension at start', () => {
 
     function configuring(configure: NonNullable<ProfileExtension['configure']>) {
       const events: string[] = [];
-      const calls: { settings: unknown; env: unknown; view: unknown }[] = [];
-      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env, view) => (events.push('configure'), calls.push({ settings, env, view }), configure(settings, env, view)) };
+      const calls: { settings: unknown; env: unknown }[] = [];
+      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env) => (events.push('configure'), calls.push({ settings, env }), configure(settings, env)) };
       const lines: string[] = [];
       const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
       const base = io({ portOverride: 0, logger, extensionLoader: { load: async () => extension } });
@@ -406,25 +350,25 @@ describe('the enterprise extension at start', () => {
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['configure', 'open-store']);
-      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, view: { types: [] } }]);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED }]);
       if (result.exitCode === 0) await result.app.close();
     });
 
     it('logs each warning of a successful configure at warn level with its event name, and goes on', async () => {
-      const rig = configuring(async () => ({ ok: true, warnings: [{ event: 'ai.pii_override', message: 'ai.properties.person: ssn is a pii property that may be sent to the model' }] }));
+      const rig = configuring(async () => ({ ok: true, warnings: [{ event: 'ai.example_warning', message: 'a warning of the configure step' }] }));
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
-      const warned = rig.lines.filter((line) => line.includes('ai.pii_override'));
+      const warned = rig.lines.filter((line) => line.includes('ai.example_warning'));
       expect(warned).toHaveLength(1);
       expect(warned[0]).toContain('"level":40');
-      expect(warned[0]).toContain('ssn is a pii property');
+      expect(warned[0]).toContain('a warning of the configure step');
       if (result.exitCode === 0) await result.app.close();
     });
 
     it('logs nothing of the kind when there are no warnings', async () => {
       const rig = configuring(async () => ({ ok: true }));
       const result = await start(CONFIGURED, rig.io);
-      expect(rig.lines.filter((line) => line.includes('ai.pii_override'))).toEqual([]);
+      expect(rig.lines.filter((line) => line.includes('ai.example_warning'))).toEqual([]);
       if (result.exitCode === 0) await result.app.close();
     });
 
@@ -1178,7 +1122,7 @@ describe('the cursor key at start', () => {
     const warnings = lines.filter((line) => line.includes('cursor.key_not_set'));
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('NEBURYX_CURSOR_KEY');
-    expect(warnings[0]).toContain('Ask previews');
+    expect(warnings[0]).toContain('Ask Continue tokens');
     expect(cursors[0]).toBeDefined();
     if (result.exitCode === 0) await result.app.close();
   });

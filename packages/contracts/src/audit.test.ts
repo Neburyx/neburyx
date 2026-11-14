@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { ASK_RUN_PARAMS_LABEL, aiAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount, type AiAuditDetail, type AuditDetail, type AuditEvent, type TokenCount } from './audit.js';
+import { aiAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount, type AiAuditDetail, type AuditDetail, type AuditEvent, type TokenCount } from './audit.js';
 
 const SHA = 'a'.repeat(64);
 
@@ -24,8 +24,6 @@ describe('the AI fields of an audit event', () => {
       readonly promptId: string;
       readonly promptVersion: string;
       readonly promptSha256: string;
-      readonly instructionsSha256?: string;
-      readonly piiPropertiesSent?: readonly string[];
       readonly tokensIn: TokenCount | 'unknown';
       readonly tokensOut: TokenCount | 'unknown';
       readonly cacheReadTokens?: TokenCount | 'unknown';
@@ -63,14 +61,6 @@ describe('the AI fields of an audit event', () => {
 
   it.each([['a missing hash', { ...AI, promptSha256: undefined }], ['upper-case digits', { ...AI, promptSha256: 'A'.repeat(64) }], ['63 digits', { ...AI, promptSha256: 'a'.repeat(63) }], ['65 digits', { ...AI, promptSha256: 'a'.repeat(65) }], ['text that is not hexadecimal', { ...AI, promptSha256: 'g'.repeat(64) }]])('refuses %s as the prompt hash', (_name, value) => {
     expect(aiAuditDetailSchema.safeParse(value).success).toBe(false);
-  });
-
-  it('accepts the names of the pii properties sent, and refuses an empty list, a name with whitespace, a name of 201 characters and 101 names', () => {
-    expect(parseAiAuditDetail({ ...AI, piiPropertiesSent: ['person.phone', 'account.email'] }).piiPropertiesSent).toEqual(['person.phone', 'account.email']);
-    expect(parseAiAuditDetail(AI).piiPropertiesSent).toBeUndefined();
-    for (const bad of [[], ['a name'], ['x'.repeat(201)], Array.from({ length: 101 }, (_, index) => `t.p${index}`), [1], ['']]) {
-      expect(aiAuditDetailSchema.safeParse({ ...AI, piiPropertiesSent: bad }).success, JSON.stringify(bad)).toBe(false);
-    }
   });
 
   it('are parsed strictly: an unknown key, a text count, a decimal and a negative number are refused', () => {
@@ -128,52 +118,10 @@ describe('the cache counts of an AI audit detail', () => {
   });
 });
 
-describe('the hash of the filled instructions of an audit event', () => {
-  const base = { modelRef: 'm', promptId: 'p', promptVersion: '1', promptSha256: 'a'.repeat(64), tokensIn: 1, tokensOut: 2 };
-
-  it('is accepted as 64 hexadecimal digits, is optional, and is refused in any other form', () => {
-    expect(parseAiAuditDetail({ ...base, instructionsSha256: 'b'.repeat(64) })).toMatchObject({ instructionsSha256: 'b'.repeat(64) });
-    expect(parseAiAuditDetail(base)).not.toHaveProperty('instructionsSha256');
-    for (const bad of ['B'.repeat(64), 'b'.repeat(63), 'a text with a space', 5]) expect(() => parseAiAuditDetail({ ...base, instructionsSha256: bad })).toThrow();
-  });
-});
-
-describe('the detail of the audit event of a run of a plan', () => {
-  const RUN = { templateId: 'shared-attribute', templateVersion: 1, paramsHash: SHA, rowCount: 7 };
-
-  it('holds the template, its version, a keyed hash of the parameters and a row count, and is one of the known detail shapes', () => {
-    expect(askRunAuditDetailSchema.parse(RUN)).toEqual(RUN);
-    expect(parseAuditDetail({ askRun: RUN })).toEqual({ askRun: RUN });
-    expect(askRunAuditDetailSchema.safeParse({ ...RUN, rowCount: 0 }).success).toBe(true);
-  });
-
-  it.each([
-    ['a parameter', { ...RUN, params: { ref: 'a-1' } }],
-    ['a question', { ...RUN, question: 'who' }],
-    ['no hash', { ...RUN, paramsHash: undefined }],
-    ['a hash in upper case', { ...RUN, paramsHash: 'A'.repeat(64) }],
-    ['a short hash', { ...RUN, paramsHash: 'a'.repeat(63) }],
-    ['a template with a space', { ...RUN, templateId: 'shared attribute' }],
-    ['a version below one', { ...RUN, templateVersion: 0 }],
-    ['a version that is not whole', { ...RUN, templateVersion: 1.5 }],
-    ['a negative row count', { ...RUN, rowCount: -1 }],
-    ['a row count that is not whole', { ...RUN, rowCount: 1.5 }],
-    ['a row count that is text', { ...RUN, rowCount: '7' }],
-  ])('refuses %s', (_name, detail) => {
-    expect(askRunAuditDetailSchema.safeParse(detail).success).toBe(false);
-    expect(auditDetailSchema.safeParse({ askRun: detail }).success).toBe(false);
-  });
-
-  it('is kept apart from the other shapes', () => {
-    expect(auditDetailSchema.safeParse({ askRun: RUN, ai: AI }).success).toBe(false);
-    expect(auditDetailSchema.safeParse({ askRun: RUN, counts: { nodes: 1, edges: 0, missing: 0 } }).success).toBe(false);
-    // @ts-expect-error a detail is one shape, not two
-    const both: AuditDetail = { askRun: RUN, reason: 'timeout' };
-    expect(both).toBeDefined();
-  });
-
-  it('names the purpose label its hash is signed under', () => {
-    expect(ASK_RUN_PARAMS_LABEL).toBe('ask-run-params');
+describe('the fields the audit detail of a call no longer holds', () => {
+  it('refuses the hash of filled instructions and the names of pii properties sent', () => {
+    expect(aiAuditDetailSchema.safeParse({ ...AI, instructionsSha256: 'b'.repeat(64) }).success).toBe(false);
+    expect(aiAuditDetailSchema.safeParse({ ...AI, piiPropertiesSent: ['person.phone'] }).success).toBe(false);
   });
 });
 
@@ -185,13 +133,5 @@ describe('the audit detail of a saved pattern', () => {
     expect(parseAiAuditDetail(base)).not.toHaveProperty('patternCatalog');
     expect(() => parseAiAuditDetail({ ...base, patternCatalog: { count: 0, sha256: 'b'.repeat(64) } })).toThrow();
     expect(() => parseAiAuditDetail({ ...base, patternCatalog: { count: 1, sha256: 'b'.repeat(64), text: 'x' } })).toThrow();
-  });
-
-  it('may name the pattern a run ran by id and version, and no name', () => {
-    const run = { templateId: 'saved-pattern', templateVersion: 1, paramsHash: 'c'.repeat(64), rowCount: 3 };
-    expect(askRunAuditDetailSchema.safeParse({ ...run, patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 3 }).success).toBe(true);
-    expect(askRunAuditDetailSchema.safeParse(run).success).toBe(true);
-    expect(askRunAuditDetailSchema.safeParse({ ...run, patternId: 'a name' }).success).toBe(false);
-    expect(askRunAuditDetailSchema.safeParse({ ...run, patternName: 'a name' }).success).toBe(false);
   });
 });

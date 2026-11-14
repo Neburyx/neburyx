@@ -29,6 +29,8 @@ rolling back the image still works against the new schema. In practice:
 
 Never rename or drop something in the same release that stops using it.
 
+One exception is recorded: the preview migration `ee/migrations/0004-drop-ask-plans.sql` drops the table `ask_plans` and the column `ask_runs.plan_id` in the release that stops using them. The tables belong to the AI preview, which is not released, and Ask is offline in that build, so there is no running old image to keep compatible; the previous image cannot run against the migrated database.
+
 ## Running an older image against a newer database
 
 After a rollback the database has applied migrations that the older image does not ship. `neburyx migrate`

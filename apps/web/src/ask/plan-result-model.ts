@@ -9,7 +9,7 @@ export interface Addable {
   readonly templateId: string;
 }
 
-export interface ResultLine {
+interface ResultLine {
   readonly label: string;
   readonly text: string;
 }

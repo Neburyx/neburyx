@@ -11,7 +11,7 @@ import { configureAsk, type AskConfiguration } from './configure.js';
 import type { ModelAnswer, ModelRequest } from './provider.js';
 
 const KEY = 'test-key-1234567890';
-const REQUEST: ModelRequest = { promptId: 'summary.view', parameters: { view: 'a synthetic view of two people' } };
+const REQUEST: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: 'Summarise the view in two sentences.', values: 'a synthetic view of two people' };
 const SIGNAL = new AbortController().signal;
 
 interface Captured {
@@ -112,8 +112,7 @@ describe('the request', () => {
     const body = JSON.parse(request?.body ?? '') as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(['max_tokens', 'messages', 'model', 'output_config']);
     expect(body).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 321, output_config: { effort: 'high' } });
-    const resolved = configuration.registry.resolve('summary.view', REQUEST.parameters);
-    expect(body.messages).toEqual([{ role: 'user', content: resolved.text }]);
+    expect(body.messages).toEqual([{ role: 'user', content: `${REQUEST.instructions}\n\n${REQUEST.values}` }]);
     const headers = JSON.stringify(request?.headers);
     expect(request?.headers.authorization).toBe(`Bearer ${KEY}`);
     expect(request?.headers['x-api-key']).toBeUndefined();
@@ -249,7 +248,7 @@ describe('a key that cannot be read when the call is made', () => {
 describe('the answers', () => {
   it('is ok with the text, the usage, the model the reply names and the prompt record', async () => {
     const answer = await answerTo(reply(200, message({ model: 'claude-haiku-5-5' })));
-    expect(answer).toMatchObject({ status: 'ok', text: 'A synthetic answer.', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 }, model: 'claude-haiku-5-5', prompt: { id: 'summary.view', source: 'builtin' } });
+    expect(answer).toMatchObject({ status: 'ok', text: 'A synthetic answer.', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 }, model: 'claude-haiku-5-5', prompt: { id: 'test.prompt', version: 1 } });
   });
 
   it('joins the text blocks in order and holds no thinking text', async () => {
@@ -546,22 +545,21 @@ describe('the usage of a failed answer', () => {
 describe('prompt caching', () => {
   type Sent = { model: string; max_tokens: number; output_config: { effort: string }; system?: unknown; messages: { role: string; content: string }[] };
   const sentBody = (): Sent => JSON.parse(seen[0]?.body ?? '') as Sent;
-  const VALUE_REQUEST: ModelRequest = { promptId: 'ask.plan', parameters: { catalog: 'SENTINEL-CATALOG', vocabulary: 'V1', patterns: '', question: 'SENTINEL-QUESTION [[values]]' } };
+  const VALUE_REQUEST: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: 'SENTINEL-INSTRUCTIONS Plan the question.', values: 'SENTINEL-VALUES [[values]]' };
 
-  async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST, prompts?: Record<string, string>): Promise<AskConfiguration> {
+  async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST): Promise<AskConfiguration> {
     handler = reply(200, message());
-    const { configuration } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, ...(prompts === undefined ? {} : { prompts }), ...settings }, { STUB_KEY: KEY });
+    const { configuration } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, ...settings }, { STUB_KEY: KEY });
     if (configuration === undefined) throw new Error('the configuration of the test is not valid');
     await createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl }).complete(request, SIGNAL);
     return configuration;
   }
 
   it('sends the instructions as the one system block with the breakpoint, and the values as the user message, by default', async () => {
-    const configuration = await callWith({});
-    const resolved = configuration.registry.resolve('ask.plan', VALUE_REQUEST.parameters);
+    await callWith({});
     const body = sentBody();
-    expect(body.system).toEqual([{ type: 'text', text: resolved.instructions, cache_control: { type: 'ephemeral' } }]);
-    expect(body.messages).toEqual([{ role: 'user', content: resolved.values }]);
+    expect(body.system).toEqual([{ type: 'text', text: VALUE_REQUEST.instructions, cache_control: { type: 'ephemeral' } }]);
+    expect(body.messages).toEqual([{ role: 'user', content: VALUE_REQUEST.values }]);
     expect(JSON.stringify(body.system)).not.toContain('ttl');
   });
 
@@ -570,45 +568,34 @@ describe('prompt caching', () => {
     expect((sentBody().system as { cache_control: unknown }[])[0]?.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' });
   });
 
-  it.each([['5m'], ['1h']] as const)('has only the static parameters, never the question, inside the system block, with the lifetime %s', async (ttl) => {
+  it.each([['5m'], ['1h']] as const)('has only the instructions, never the values, inside the system block, with the lifetime %s', async (ttl) => {
     await callWith({ cache: { ttl } });
     const body = sentBody();
-    expect(JSON.stringify(body.system)).not.toMatch(/SENTINEL-QUESTION|\[\[values\]\]/);
-    expect(JSON.stringify(body.system)).toContain('SENTINEL-CATALOG');
-    expect(body.messages[0]?.content).not.toContain('SENTINEL-CATALOG');
-    expect(body.messages[0]?.content).toContain('SENTINEL-QUESTION [[values]]');
+    expect(JSON.stringify(body.system)).not.toMatch(/SENTINEL-VALUES|\[\[values\]\]/);
+    expect(JSON.stringify(body.system)).toContain('SENTINEL-INSTRUCTIONS');
+    expect(body.messages[0]?.content).not.toContain('SENTINEL-INSTRUCTIONS');
+    expect(body.messages[0]?.content).toContain('SENTINEL-VALUES [[values]]');
   });
 
-  it.each([['summary.view', { view: 'v' }], ['assistant.route', { message: 'm', view: 'v' }]] as const)('puts the instructions of %s in the system block too', async (promptId, parameters) => {
-    await callWith({}, { promptId, parameters });
-    expect((sentBody().system as unknown[]).length).toBe(1);
-  });
-
-  it('sends no system field and no cache_control anywhere with caching off, and the whole prompt as the user message', async () => {
-    const configuration = await callWith({ cache: { enabled: false, ttl: '1h' } });
+  it('sends no system field for a request with no instructions, even with caching on', async () => {
+    await callWith({}, { promptId: 'test.prompt', version: 1, values: 'only values' });
     const body = seen[0]?.body ?? '';
     expect(body).not.toContain('cache_control');
     expect(body).not.toContain('"system"');
-    expect(sentBody().messages).toEqual([{ role: 'user', content: configuration.registry.resolve('ask.plan', VALUE_REQUEST.parameters).text }]);
+    expect(sentBody().messages).toEqual([{ role: 'user', content: 'only values' }]);
   });
 
-  it('sends no system field for a replacement prompt that declares no values line, even with caching on', async () => {
-    const path = join(folder, 'no-boundary.txt');
-    writeFileSync(path, 'Plan {{question}} {{catalog}}');
-    const configuration = await callWith({}, VALUE_REQUEST, { 'ask.plan': path });
+  it('sends no system field and no cache_control anywhere with caching off, and the instructions, a blank line and the values as the user message', async () => {
+    await callWith({ cache: { enabled: false, ttl: '1h' } });
     const body = seen[0]?.body ?? '';
     expect(body).not.toContain('cache_control');
     expect(body).not.toContain('"system"');
-    expect(sentBody().messages[0]?.content).toBe(configuration.registry.resolve('ask.plan', VALUE_REQUEST.parameters).text);
+    expect(sentBody().messages).toEqual([{ role: 'user', content: `${VALUE_REQUEST.instructions}\n\n${VALUE_REQUEST.values}` }]);
   });
 
-  it('caches the instructions of a replacement prompt with a values line, and sends the marker nowhere', async () => {
-    const path = join(folder, 'boundary.txt');
-    writeFileSync(path, 'Plan the question.\n[[values]]\nQ: {{question}} {{catalog}}');
-    await callWith({}, VALUE_REQUEST, { 'ask.plan': path });
-    const body = sentBody();
-    expect(body.system).toEqual([{ type: 'text', text: 'Plan the question.', cache_control: { type: 'ephemeral' } }]);
-    expect(body.messages[0]?.content).toBe('Q: SENTINEL-QUESTION [[values]] SENTINEL-CATALOG');
+  it('sends only the values as the user message with caching off and no instructions', async () => {
+    await callWith({ cache: { enabled: false } }, { promptId: 'test.prompt', version: 1, values: 'only values' });
+    expect(sentBody().messages).toEqual([{ role: 'user', content: 'only values' }]);
   });
 
   it('changes nothing else in the request: the model, the limit, the effort, no tools and no sampling parameters', async () => {

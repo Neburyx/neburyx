@@ -18,7 +18,7 @@ export function describeProjection(projection: AskPatternProjection): string {
 const SAMPLE_STEP = { relationshipTypes: ['a', 'b'], direction: 'out', arrivesAt: 'c', conditions: [{ on: 'neighbor', kind: 'eq' }, { on: 'relationship', kind: 'in' }, { on: 'neighbor', kind: 'between' }], windowed: true } as const;
 
 /** Every fixed word the descriptions are written with, read from the renderer itself, so a word of the renderer that a pattern's name also has is not taken for a leak. */
-export function descriptionWords(): string {
+function descriptionWords(): string {
   const projections: AskPatternProjection[] = [
     { kind: 'definition', anchorType: 'a', startingEntity: 'asked', steps: [SAMPLE_STEP, { ...SAMPLE_STEP, direction: 'in', conditions: [], windowed: false }, { ...SAMPLE_STEP, direction: 'both' }, { ...SAMPLE_STEP, conditions: [{ on: 'relationship', kind: 'between' }] }] },
     { kind: 'definition', anchorType: 'a', startingEntity: 'held', steps: [] },

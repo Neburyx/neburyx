@@ -6,13 +6,12 @@ import type { MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
-import { derivePreviewKey } from './ask/preview-key.js';
+import { deriveSigningKey } from './ask/signing-key.js';
 import { createCursorCodec } from './gate/cursor/codec.js';
 import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
-import { aiMappingViewOf } from './profile/mapping-view.js';
 import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
@@ -161,7 +160,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     if (extension.configure !== undefined) {
       let outcome;
       try {
-        outcome = await extension.configure(mapping.ai ?? {}, env, aiMappingViewOf(mapping));
+        outcome = await extension.configure(mapping.ai ?? {}, env);
       } catch (error) {
         io.logger.error({ event: 'profile.extension_configure_failed', cause: causeOf(error) }, 'enterprise extension could not be configured');
         io.stderr.write(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);
@@ -210,7 +209,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       io.logger.warn({ event: 'source.identity_changed', sourceId }, 'source now points to a different database');
     }
     // a key that is not configured is made for this process only, so a page opened before a restart, or on another copy, says "Start again"
-    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors and Ask previews do not survive a restart, are not valid across API copies, and the hashes of Ask runs in the audit differ after each restart');
+    if (config.cursorKey === undefined) io.logger.warn({ event: 'cursor.key_not_set' }, 'NEBURYX_CURSOR_KEY is not set: page cursors and Ask Continue tokens do not survive a restart and are not valid across API copies');
     const cursorKeyMaterial = config.cursorKey ?? randomBytes(32);
     const cursors = createCursorCodec({ key: cursorKeyMaterial, clock: Date.now });
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
@@ -235,8 +234,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
     if (problem !== undefined) throw new StartupStop(problem);
-    // the extension's own recurring tasks run only with the preview on, on the same runner as the application's
-    const tasks = io.tasks ?? [...maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: seams.audit, logger: io.logger }), ...(decision.state === 'on' ? (extension?.maintenanceTasks?.() ?? []) : [])];
+    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: seams.audit, logger: io.logger });
     validateTasks(tasks);
     jobs = await (io.startJobRunner ?? startJobRunner)(
       config.databaseUrl,
@@ -260,7 +258,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       previewOn: decision.state === 'on',
       referenceKeys,
       cursors,
-      previewKey: derivePreviewKey(cursorKeyMaterial),
+      signingKey: deriveSigningKey(cursorKeyMaterial),
       exportFiles,
       degreeVerdicts: usability,
       indexes: gate.indexes,

@@ -25,8 +25,6 @@ export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 
   'investigation-read-only': { message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false },
   'source-changed': { message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false },
   'pattern-name-taken': { message: 'You already have a pattern with this name on this source. Choose another name.', retryable: false },
-  'plan-expired': { message: 'This plan has expired. Ask the question again to get a new plan.', retryable: false },
-  'plan-not-runnable': { message: 'This plan can no longer be run. Ask the question again to get a new plan.', retryable: false },
   'pattern-changed': { message: 'The saved pattern changed after this plan was made, so it was not run. Ask the question again to plan the pattern as it is now.', retryable: false },
   'pattern-unavailable': { message: 'The saved pattern can no longer run against the source. Ask the question again.', retryable: false },
 };

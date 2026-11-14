@@ -73,7 +73,7 @@ describe('recognising a refusal by its shape', () => {
 });
 
 describe('the request an extension handler is given', () => {
-  const complete: ExtensionRequest = { principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }), plan: () => Promise.reject(new Error('not used')) } };
+  const complete: ExtensionRequest = { principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askPlanner: { availability: () => ({ available: false, reason: 'x' }) } };
 
   it('is only added to: a handler that reads the principal alone still takes it', async () => {
     const handler = async (request: ExtensionRequest): Promise<string> => request.principalId;
@@ -141,8 +141,8 @@ describe('the refusals of a read of the gate and of a plan', () => {
     ['a rate limit with its wait', { code: 'RATE_LIMITED', retryAfterMs: 1000 }],
     ['an access refusal with no reason', { code: 'ACCESS_DENIED' }],
     ['a source mismatch', { code: 'SOURCE_MISMATCH' }],
-    ['an expired plan', { code: 'CONFLICT', reason: 'plan-expired' }],
-    ['a plan that cannot be run', { code: 'CONFLICT', reason: 'plan-not-runnable' }],
+    ['a pattern that was changed', { code: 'CONFLICT', reason: 'pattern-changed' }],
+    ['a pattern that is unavailable', { code: 'CONFLICT', reason: 'pattern-unavailable' }],
     ['an invalid plan', { code: 'ASK_PLAN_INVALID' }],
     ['an audit that is unavailable', { code: 'AUDIT_UNAVAILABLE' }],
   ];
@@ -153,12 +153,12 @@ describe('the refusals of a read of the gate and of a plan', () => {
   });
 
   it.each([
-    ['a reason of another code on an unavailable source', { code: 'SOURCE_UNAVAILABLE', reason: 'plan-expired' }],
+    ['a reason of another code on an unavailable source', { code: 'SOURCE_UNAVAILABLE', reason: 'pattern-changed' }],
     ['an unavailable source with no reason', { code: 'SOURCE_UNAVAILABLE' }],
     ['a wait on an unavailable source that is not the breaker', { code: 'SOURCE_UNAVAILABLE', reason: 'unreachable', retryAfterMs: 5 }],
     ['a conflict with no reason', { code: 'CONFLICT' }],
-    ['a conflict with a reason that is not a plan one', { code: 'CONFLICT', reason: 'source-changed' }],
-    ['a reason on an invalid plan', { code: 'ASK_PLAN_INVALID', reason: 'plan-expired' }],
+    ['a conflict with a reason that is not a pattern one', { code: 'CONFLICT', reason: 'source-changed' }],
+    ['a reason on an invalid plan', { code: 'ASK_PLAN_INVALID', reason: 'pattern-changed' }],
     ['a reason that is not the preview one on an access refusal', { code: 'ACCESS_DENIED', reason: 'access-changed' }],
     ['a negative wait on a rate limit', { code: 'RATE_LIMITED', retryAfterMs: -1 }],
     ['a figure that is not a whole number', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 1.5 }],

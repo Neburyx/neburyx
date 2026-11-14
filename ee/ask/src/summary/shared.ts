@@ -17,7 +17,7 @@ export function anchorItem(ref: ElementRef, nodes: ReadonlyMap<string, GraphNode
   return node === undefined ? { element: ref, type: ref.entityType, title: ref.stableId } : nodeItem(node);
 }
 
-export const refOf = (item: Listed): ElementRef | EdgeRef => item.element;
+const refOf = (item: Listed): ElementRef | EdgeRef => item.element;
 
 /** "A", "A and B", "A, B and C". */
 export function nameList(names: readonly string[]): string {

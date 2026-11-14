@@ -2,41 +2,43 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { FAILURE_CODES, PROMPT_IDS, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptId, type TokenUsage } from './index.js';
+import { FAILURE_CODES, promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type TokenUsage } from './index.js';
 
-const PROMPT: ModelAnswer['prompt'] = { id: 'ask.plan', version: 1, source: 'builtin', sha256: 'a'.repeat(64) };
+const PROMPT: ModelAnswer['prompt'] = { id: 'test.prompt', version: 1, sha256: 'a'.repeat(64) };
 
 describe('the request of the provider interface', () => {
-  it('holds a prompt id and its parameters, and nothing else', () => {
-    const request: ModelRequest = { promptId: 'summary.view', parameters: { view: '‹account#1›', count: 3 } };
-    expect(Object.keys(request).sort()).toEqual(['parameters', 'promptId']);
+  it('holds a prompt id, a version, optional fixed instructions and the values, and nothing else', () => {
+    const request: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: 'Answer in one word.', values: '‹account#1›' };
+    expect(Object.keys(request).sort()).toEqual(['instructions', 'promptId', 'values', 'version']);
   });
 
-  it('refuses at compile time an unknown prompt id and every field that could carry a tool or free prompt text', () => {
-    // @ts-expect-error an id that is not a built-in prompt
-    const unknownId: ModelRequest = { promptId: 'free.text', parameters: {} };
+  it('refuses at compile time every field that could carry a tool or a sampling setting', () => {
     // @ts-expect-error tools
-    const tools: ModelRequest = { promptId: 'ask.plan', parameters: {}, tools: [] };
-    // @ts-expect-error functions
-    const functions: ModelRequest = { promptId: 'ask.plan', parameters: {}, functions: [] };
+    const tools: ModelRequest = { promptId: 'test.prompt', version: 1, values: '', tools: [] };
     // @ts-expect-error messages
-    const messages: ModelRequest = { promptId: 'ask.plan', parameters: {}, messages: [] };
-    // @ts-expect-error a system text
-    const system: ModelRequest = { promptId: 'ask.plan', parameters: {}, system: 'x' };
-    // @ts-expect-error a free prompt
-    const prompt: ModelRequest = { promptId: 'ask.plan', parameters: {}, prompt: 'x' };
-    // @ts-expect-error a version: the registry gives it
-    const version: ModelRequest = { promptId: 'ask.plan', parameters: {}, version: 2 };
+    const messages: ModelRequest = { promptId: 'test.prompt', version: 1, values: '', messages: [] };
+    // @ts-expect-error a system text under another name
+    const system: ModelRequest = { promptId: 'test.prompt', version: 1, values: '', system: 'x' };
     // @ts-expect-error a sampling setting
-    const temperature: ModelRequest = { promptId: 'ask.plan', parameters: {}, temperature: 0 };
-    // @ts-expect-error a parameter is text or a number
-    const objectParameter: ModelRequest = { promptId: 'ask.plan', parameters: { x: { y: 1 } } };
-    expect([unknownId, tools, functions, messages, system, prompt, version, temperature, objectParameter]).toHaveLength(9);
+    const temperature: ModelRequest = { promptId: 'test.prompt', version: 1, values: '', temperature: 0 };
+    // @ts-expect-error the values are text
+    const objectValues: ModelRequest = { promptId: 'test.prompt', version: 1, values: { x: 1 } };
+    // @ts-expect-error the version is required
+    const noVersion: ModelRequest = { promptId: 'test.prompt', values: '' };
+    expect([tools, messages, system, temperature, objectValues, noVersion]).toHaveLength(6);
   });
 
-  it('has the closed list of prompt ids', () => {
-    const ids: readonly PromptId[] = PROMPT_IDS;
-    expect(ids).toEqual(['ask.plan', 'summary.view', 'assistant.route', 'ask.plan.repair']);
+  it('records the id, the version and the SHA-256 of the fixed instructions, never of the values', () => {
+    const request: ModelRequest = { promptId: 'test.prompt', version: 2, instructions: 'Answer in one word.', values: 'first' };
+    const record = promptRecordOf(request);
+    expect(record).toMatchObject({ id: 'test.prompt', version: 2 });
+    expect(record.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(promptRecordOf({ ...request, values: 'second' })).toEqual(record);
+    expect(promptRecordOf({ ...request, instructions: 'Answer in two words.' }).sha256).not.toBe(record.sha256);
+  });
+
+  it('hashes no instructions as the SHA-256 of nothing', () => {
+    expect(promptRecordOf({ promptId: 'test.prompt', version: 1, values: 'x' }).sha256).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
   });
 });
 
@@ -114,11 +116,11 @@ describe('the usage of a failed answer', () => {
 describe('the provider', () => {
   it('is called with a request and an abort signal, and nothing else', async () => {
     const provider: ModelProvider = { complete: async () => ({ status: 'refused', usage: { kind: 'unknown' }, prompt: PROMPT }) };
-    expect((await provider.complete({ promptId: 'ask.plan', parameters: {} }, new AbortController().signal)).status).toBe('refused');
+    expect((await provider.complete({ promptId: 'test.prompt', version: 1, values: '' }, new AbortController().signal)).status).toBe('refused');
     // @ts-expect-error a third required argument is not part of the interface
     const extra: ModelProvider = { complete: async (_request: ModelRequest, _signal: AbortSignal, _more: string) => ({ status: 'refused', usage: { kind: 'unknown' }, prompt: PROMPT }) };
     // @ts-expect-error the signal is not optional for a caller
-    void provider.complete({ promptId: 'ask.plan', parameters: {} });
+    void provider.complete({ promptId: 'test.prompt', version: 1, values: '' });
     expect(extra).toBeDefined();
   });
 });
