@@ -83,6 +83,24 @@ The folder is read once at start-up; a change needs a restart. The start-up chec
 
 A word that Cypher reserves for a command (for example `start`, `next`, `offset`, `set`, `create`, `use`) cannot be used as a name in a query: put it in backticks.
 
+### The reply form
+
+`classification.md` must tell the model to answer in this form (the shipped files of the two domain packs do). Ask reads the reply strictly:
+
+- The reply is exactly one JSON object, with nothing around it but whitespace and no key twice, and it has exactly the keys `intent` and `entities`.
+- `intent` is the name of an intent of the folder (or `saved-pattern` when the person's saved patterns were sent, see [Asking for a saved pattern](#asking-for-a-saved-pattern)), or `null` when no intent answers the question; with `null`, `entities` is empty.
+- `entities` is an object of text values: at most 20, each name a parameter name (`[A-Za-z_][A-Za-z0-9_]{0,63}`), each value non-empty, at most 256 code points, with no control character.
+
+```json
+{"intent": "name", "entities": {"id": "value"}}
+```
+
+```json
+{"intent": null, "entities": {}}
+```
+
+A name that is not an intent of the folder is refused as an unknown intent, and any other departure from the form as a reply that does not fit. Both get a fixed sentence and nothing runs. Whether the names in `entities` are the intent's parameters is checked afterwards, when the entities are bound to the intent: a missing, extra or invalid input is refused with its own fixed sentence.
+
 ### Template intents
 
 `settings` is the template's own parameters, with the fixed parts written out and each value the question supplies written as the string `"$name"`, where `name` is one of the intent's `parameters`:
@@ -110,15 +128,17 @@ A word that Cypher reserves for a command (for example `start`, `next`, `offset`
 
 ### What a question does
 
-With the preview on, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with `classification.md` and the intent names, binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops with its estimate, no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
+With the preview on, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with one call to the model (below), binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops with its estimate, no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
 
 A question that cannot be answered gets one fixed sentence for its cause, never text from the model. An intent with a `query` is checked at start-up as above and run by the same route through the gate: the entities are the query's parameters and reach it only as parameters, the read is bounded by the source's limits and its result must be nodes and relationships of the source's mapping (the rules the gate applies are in the architecture notes). The answer lists what the query returned, with a count labelled as a lower bound when the read was cut.
+
+The model receives the source's `classification.md` as the instructions of the call and, as its content, the question exactly as typed and, for a person with saved patterns on the source, one fixed sentence and the catalog of that person's own patterns (a key, the label and a description of the structure of each, and a fixed sentence when not all of them are listed; see below). Nothing else is sent: no property value, no entity value of a result, no other person's pattern. Nothing is withheld or redacted from the question before the call. The intent names of the folder are sent only if `classification.md` lists them, so it should. The reply must have [the reply form](#the-reply-form).
 
 What Ask sends to the model, and that nothing else reaches it, is pinned by the tests of `tools/ask-safety-suite` (see its README for the list of what each test proves).
 
 ### Asking for a saved pattern
 
-A question may name one of the person's own saved patterns on the source (the shared patterns of other people are never offered). When the person has any, the model is sent, after the question and `classification.md`, one fixed sentence that says how to name a pattern and a list with a key for each pattern, its label as the person typed it and a description of its structure (types, directions and kinds of condition, never a value or an ID); it answers with the reserved intent `saved-pattern` and the entity `pattern` (the key), and `anchor` (the stable ID the question gives) for a pattern that starts from an entity the question names. Ask then runs the saved pattern through the gate as the person's own saved run would, with the person's masking. The answer names the pattern by its ID in `entities` and by its label in `patternName`, and an unknown pattern is the refusal `nothing found`. A saved pattern is never built from a name in the question, only from an ID.
+A question may name one of the person's own saved patterns on the source (the shared patterns of other people are never offered). When the person has any, the model is sent, after the question, one fixed sentence that says how to name a pattern and a list with a key for each pattern, its label as the person typed it and a description of its structure (types, directions and kinds of condition, never a value or an ID); it answers with the reserved intent `saved-pattern` and the entity `pattern` (the key), and `anchor` (the stable ID the question gives) for a pattern that starts from an entity the question names. Ask then runs the saved pattern through the gate as the person's own saved run would, with the person's masking. The answer names the pattern by its ID in `entities` and by its label in `patternName`, and an unknown pattern is the refusal `nothing found`. A saved pattern is never built from a name in the question, only from an ID.
 
 Each question writes one audit event, `ask.question` (`ask.continue` for a continue), with the intent's name, the kind, the outcome, the cause, the template id, a keyed hash of the parameters and the number of elements listed (for a saved pattern, also its ID and version, never its label). It never holds an entity value, the question or a sentence. The model call that classifies is audited by its own event (`ask.classify`), as under [Prompt caching](#prompt-caching). If an event cannot be written, the answer is withheld.
 

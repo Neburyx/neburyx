@@ -36,11 +36,11 @@ tagged **[W2]** (the second wave) or **[Later]**.
 | ADR-04 | **One OCI image, Postgres in both editions** (revised 2026-10-30; SQLite dropped). Community = the image + a Postgres container (compose file) + local disk; Enterprise = the image + the customer's managed Postgres + S3-compatible object store **[Later]** + Valkey (ADR-12). | One artifact and one SQL dialect to build, test and support. The Postgres job queue and progress notifications (`LISTEN/NOTIFY`) work the same in both editions. Cost: Community installs with `docker compose up` instead of a single `docker run` |
 | ADR-05 | Read-only, **allowlisted, parameterized Cypher templates** only | Protects source availability, permissions and correctness |
 | ADR-06 | REST for commands. v0.1 runs interactive calls synchronously, with a server timeout and client abort. A durable job table with SSE progress comes later, for long paths and exports **[Later]**. | Simple first; jobs stay auditable once added |
-| ADR-07 | **Ask is template-bound**: the LLM picks a template and its parameters, and never writes Cypher. This includes the conversational assistant (§9.6), which only routes to answer-from-view, a confirmed plan, or a refusal | Safety, auditability and citations by construction |
+| ADR-07 | **Ask is intent-bound**: the LLM classifies a question into an intent of the operator's Ask folder (a built-in template or a parameterised read-only file query) and names its entities, and never writes Cypher. The intent runs through the gate with the entities as parameters only; a question Ask cannot answer gets a fixed sentence. The conversational assistant (§9.6) is not built; its design is decided again when it is | Safety, auditability and citations by construction |
 | ADR-08 | LLM provider is pluggable and customer-chosen; no data goes to a model unless the policy allows it | Regulated buyers must control where data goes |
 | ADR-09 | Open core in one repo and one image: Community and the `ee/` directory are both under Apache-2.0. The public image compiles `ee/` in; its code path is off unless both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set. These switches are safety rails, not a lock. | One repo, one CI, solo-maintainable |
 | ADR-10 | Schema mapping is **declarative YAML**, a strict YAML 1.2 subset (see §5), validated at startup and by `test-source` | Onboarding without code |
-| ADR-11 | **AI output is a reviewable draft**: placeholders in, structural citation check and numeric check on the way out, a built-in versioned prompt with no tools, never auto-saved or exported. The summarizer reuses Ask's model settings and audited call. | Gen-AI value without a black box or a data leak |
+| ADR-11 | **AI output is a reviewable draft**: Ask's model receives the question as typed, the source's `classification.md` and the person's own saved-pattern catalog, and nothing is withheld; Ask's answer is built by the server from the result and cited. For the case summary (not built), what it sends, its checks on the way out (structural citation check, numeric check), its prompt and that it is never auto-saved or exported are the design before the rebuild of Ask, decided again when it is built. | Gen-AI value without a black box or a data leak |
 | ADR-12 | **Valkey in the Enterprise profile, for coordination only** (2026-10-30). It holds concurrency leases, rate-limit counters, circuit-breaker state, login challenges and sign-in throttles, all with expiries. It **never holds customer data**, query results or PII, and nothing in it needs a backup. Community keeps the same state in process memory. The result cache stays per process in both editions (§3). | Several API copies must share per-user and per-source read limits (§14). Holding a Postgres connection for up to 10 s per Neo4j read does not scale to hundreds of reads in flight. Valkey is the BSD-licensed Linux Foundation fork of Redis, offered as a managed service by AWS and Google Cloud; elsewhere the customer runs it with a replica and failover |
 | ADR-13 | **Single-tenant**: one organization per deployment (2026-10-30). No `tenant_id`. Covers self-hosted deployments now and a dedicated instance run on a customer's behalf later. A multi-tenant SaaS is not built. | Regulated buyers keep the product next to their Neo4j; no tenancy isolation to build or test |
 | ADR-14 | **Domain-neutral engine, configured in three layers** (2026-10-30). *Product* (code): screens, tools, count rules, masking, errors, the gate. *Source* (YAML, per source): types, display, key properties, presets, vocabulary, style rules (§5). *User* (UI): columns, density, layout, saved views. No entity, relationship or property name appears in code. Domain content ships as **domain packs** (§5.1). The mapping is not editable in the UI (validate-only editor Later). | Security-relevant config (pii, search, derived edges) stays under the customer's change control in git. A minimal mapping works with defaults; `neburyx init` drafts one. Domain-specific screens would be customer-specific code |
@@ -162,7 +162,7 @@ This section is the summary.
 | Later | `evidence_packs`, `template_defs`, `alert_rules`, `alert_runs`, `channel_checks` | E |
 
 No table stores property values from the customer graph. What is stored: element refs, counts,
-filter and template-parameter values the user chose, timestamps inside placeholder-form AI text, and text the user typed. There is no `tenant_id` (ADR-13).
+filter and template-parameter values the user chose, timestamps inside placeholder-form AI text (the design of the case summary, which is not built), and text the user typed. There is no `tenant_id` (ADR-13).
 
 **Identifiers.** A canonical element ref is `{sourceId, entityType, stableId}`. `stableId` comes
 from the property configured in the mapping. Relationships should also have a configured
@@ -652,6 +652,8 @@ The product withholds nothing from a model call by setting: there is no property
 
 ### 9.5 AI case summary (Enterprise) [W2]
 
+*Design before the rebuild of Ask; decided again when this feature is built.*
+
 **Goal:** a reviewable, cited draft summary of the view on screen, built with the same safety
 machinery as Ask. It describes a view. Ask answers a question.
 
@@ -677,7 +679,7 @@ visible element keys ─► re-read through the gate (policy applies server-side
    Element values are data, never instructions.
 4. **Structural citation check.** Every sentence must cite at least one key, and every key must exist
    in the input. Failing sentences are removed. If none survive, the UI shows "No summary could be
-   supported by this view". As in §9.2, this does not prove a claim is true.
+   supported by this view". This does not prove a claim is true. [The Ask section this pointed to was removed by the rebuild of Ask.]
 5. **Count honesty.** The omissions line ("10 of ~48 neighbors shown; 38 not yet retrieved") is written
    by the server, never by the model. A sentence containing a number that is absent from the input
    is dropped, and a count is never worded as exact when its quality is estimated, lower bound or unknown.
@@ -732,8 +734,8 @@ visible element keys ─► re-read through the gate (policy applies server-side
   mention and claims it must not make.
 - CI enforces the structural suites: citation check, numeric consistency, no placeholder leakage,
   prompt-injection fixtures and the no-verdict check.
-- On each model or prompt change, report groundedness against a human-labelled sample (same
-  method as the [Later] Ask answerer in §9.3).
+- On each model or prompt change, report groundedness against a human-labelled sample. [The Ask
+  answerer method this pointed to was removed by the rebuild of Ask.]
 
 #### Data sent to the model
 
@@ -746,8 +748,12 @@ visible element keys ─► re-read through the gate (policy applies server-side
 
 ### 9.6 Investigation assistant (Enterprise) [W2]
 
+*Design before the rebuild of Ask; decided again when this feature is built.*
+
 **Goal:** the convenience of a chatbot with Ask's guarantees. The assistant is a conversational
 front end on §9.1–9.5. It adds routing and follow-up resolution, and no new data path.
+
+[The diagram and rules below name the plan route, local entity resolution, placeholders and a plan card, which the rebuild of Ask removed: Ask now classifies a question into an intent and runs it with no plan, preview or confirmation (§9.1).]
 
 ```
 message ─► local entity resolution (search + the investigation's own entities; mentions → placeholders)
@@ -762,16 +768,16 @@ message ─► local entity resolution (search + the investigation's own entitie
 
 1. **Three routes only.** The router returns `{"route":"view"|"plan"|"refuse", ...}`, schema-validated
    with one repair attempt. Anything else is `refuse`.
-2. **One plan per turn, never auto-run.** A plan is a normal AskPlan, shown as a card with its
+2. **One plan per turn, never auto-run.** [Removed by the rebuild of Ask: there is no AskPlan, plan card or Run click.] A plan is a normal AskPlan, shown as a card with its
    template, parameters and limits. It runs only on an explicit Run click, through the same gate and
    budgets as manual expansion. There is no chain of plans and no background agent.
-3. **Follow-ups resolve locally.** "The other device" or "that account" is resolved against entities
+3. **Follow-ups resolve locally.** [Local entity resolution and placeholders are the design before the rebuild of Ask.] "The other device" or "that account" is resolved against entities
    already in the investigation, then replaced with placeholders. Ambiguity is shown to the user to
    pick from; the model never guesses an entity.
 4. **Replies are cited or dropped.** Replies use the §9.5 checks: structural citation check, numeric
    check, no-verdict check, server-written omissions line, local re-hydration. A reply with no
    surviving sentence becomes "I can't support an answer from this investigation".
-5. **Context window.** The router sees the placeholder thread of the current investigation (last N
+5. **Context window.** [The placeholder thread is the design before the rebuild of Ask.] The router sees the placeholder thread of the current investigation (last N
    turns, capped) plus the template catalog and type vocabulary. It never sees other
    investigations, other sources or other users' threads.
 6. **Retention.** The thread is stored with the investigation only if policy allows;
@@ -785,7 +791,7 @@ message ─► local entity resolution (search + the investigation's own entitie
 
 - Add `services/api/tests/assistant/threads.yaml`: about 20 short multi-turn threads over the demo
   graph, each turn labelled with the expected route, template and parameters, or refusal.
-- CI (nightly) reports route accuracy and plan accuracy against the last baseline. The §9.5
+- CI (nightly) reports route accuracy and plan accuracy [plans were removed by the rebuild of Ask] against the last baseline. The §9.5
   structural suites run on every reply. Injection fixtures include messages that ask for raw
   Cypher, for other sources, or to "just run it".
 
@@ -948,7 +954,7 @@ message ─► local entity resolution (search + the investigation's own entitie
   state (canvas, table, tooltips, undo history and the copy buffer). Values fetched earlier are purged.
 - **Every output honors it.** The inspector and labels, the table, "Copy properties", CSV, JSON and the
   PNG (rendered from the masked view data), saved-view reopen and the AI case summary all use the
-  masked values. The summary's placeholders are restored from the masked values.
+  masked values. The summary's placeholders are restored from the masked values (design of the case summary, which is not built).
 - **Exports.** The export header (and an evidence pack's `manifest.json` under `policy`) records the
   outcome as `masking: off`, `masking: N critical fields masked` or the redaction profile. The cache key
   includes the mask flag, so a masked result is never served to an unmasked request.
@@ -1041,7 +1047,7 @@ normalized errors. The OpenAPI document is generated from the code and published
 | `GET /v1/views` | Named views across the investigations the user can open (the Saved views tab). `{items, nextCursor, count}`, every status, readable sources, not deleted, keyset on (created, id) | C |
 | `GET/PUT /v1/me/preferences` | Per-user display settings and tour state (`user_preferences`) | C |
 | `GET /v1/exports/{id}` · `GET …/{id}/download` | Export status and download; only the requester may download, and each download re-checks their current access and policy version. The status answer is the row without its key or hash for any status; the download is an attachment (`Cache-Control: no-store`); the re-check is the owner, `authorizeSource` and the policy version (Community `none`); a failed check is `ACCESS_DENIED` with `details.reason` `access-changed`, the file is deleted and the row `expired`; a soft-deleted investigation's, another person's, an unknown and an expired export are `NOT_FOUND`; a file whose hash no longer matches is `INTERNAL_ERROR`. Audit `export.download` (format only) | C |
-| `POST /v1/investigations/{id}/exports` | Plain export; Enterprise may include an AI case summary by passing its `summaryToken` (§9.5 rule 8). `Idempotency-Key` required; body `{kind: "view", format: "json"\|"csv", entities, edges, aggregates, derived}` (references; no `mask` field yet); the server reads each through the gate in calls of 100 under one rate unit and one 10 s deadline; more than the export cap (300 entities and 300 relationships, to be replaced by the measured figure) is `INVALID_REQUEST` with `details.reason` `export-too-large` and `details.maxElements`; 201 `{id, status, format, filename, sizeBytes, createdAt, expiresAt}`; JSON is one file, CSV is one zip of `entities.csv` and `relationships.csv`; every file begins with the header (source, time, `current view (partial)`, coverage with the count quality, masking); `EXPORT_FAILED` for a write failure; audit `export.create` (format, counts, masked fields). Maintenance task `expire-exports` (daily 03:41) deletes expired files; the purge deletes an investigation's files first | C |
+| `POST /v1/investigations/{id}/exports` | Plain export; Enterprise may include an AI case summary by passing its `summaryToken` (§9.5 rule 8). `Idempotency-Key` required; body `{kind: "view", format: "json"\|"csv", entities, edges, aggregates, derived}` (references; no `mask` field yet); the server reads each through the gate in calls of 100 under one rate unit and one 10 s deadline; more than the export cap (300 entities, 300 stored relationships and 100 aggregated or derived relationships) is `INVALID_REQUEST` with `details.reason` `export-too-large` and the `details` `maxEntities`, `maxRelationships`, `maxAggregates` and `exceeded` (the limit it went over), which only this reason carries; every other reason of `INVALID_REQUEST` carries `reason` only; 201 `{id, status, format, filename, sizeBytes, createdAt, expiresAt}`; JSON is one file, CSV is one zip of `entities.csv` and `relationships.csv`; every file begins with the header (source, time, `current view (partial)`, coverage with the count quality, masking); `EXPORT_FAILED` for a write failure; audit `export.create` (format, counts, masked fields). Maintenance task `expire-exports` (daily 03:41) deletes expired files; the purge deletes an investigation's files first | C |
 | `GET /v1/jobs/{id}` · `GET …/events` (SSE) · `POST …/cancel` | Jobs **[Later]** | C |
 | `GET /v1/diagnostics/bundle` | Redacted diagnostics zip **[Later]** | C |
 | `POST /v1/summary` | AI case summary: re-read the view's elements through the gate, de-identify, draft, check, return the sentences (each with `storable`) and a sealed `summaryToken` **[W2]** | E |
@@ -1372,9 +1378,9 @@ is configured as its own source. Together they produce:
 
 | Threat | Mitigation and test |
 |---|---|
-| Cypher injection | Templates only; parameters only; labels/types only from the validated allowlist; fuzz tests on all inputs |
-| Prompt injection through the question or graph data (Ask) | The LLM can only choose a template and parameters, which are schema-validated; graph text in the answerer is treated as data; citation check; no tool or code execution |
-| Restricted data leaked to the LLM | Redaction before model context; PII never sent by default; provider chosen by the customer; tests with PII-tagged fixtures |
+| Cypher injection | Built-in templates, or the parameterised read-only queries of the operator's Ask folder, whose text is checked at start-up (read clauses only) and again by the gate; values only as parameters; a file query runs in an explicit read transaction; labels/types only from the validated allowlist; fuzz tests on all inputs. The Ask safety suite (`tools/ask-safety-suite`) proves that a value reaches the source only as a parameter, that a file query that writes is refused at start-up and by the gate, and (against Neo4j) that the read transaction refuses a write that passed every text check |
+| Prompt injection through the question or graph data (Ask) | Ask classifies a question to an intent of the operator's folder (a built-in template or a file query); the model's reply is read strictly (one JSON object with an intent of the folder and text entities) and anything else is refused with a fixed sentence; the entities reach the source only as parameters; file queries pass the text check and run in a read transaction; the answer is built by the server from the result, so no graph text goes to the model; no tool or code execution. The Ask safety suite proves that an instruction typed into a question runs nothing, that a reply that does not fit is refused, and the parameter, text-check and read-transaction controls |
+| Restricted data leaked to the LLM | The model receives only the question as typed, the source's `classification.md` and, for a person with saved patterns, that person's own pattern catalog: no graph data and no property value. Nothing is withheld by design, since nothing else is sent. Provider chosen by the customer. The Ask safety suite pins the exact input the provider receives and proves that no property value of a result reaches it |
 | Unauthorized traversal through derived links | Both-endpoints-plus-support rule; negative authorization tests |
 | PII leaked via caches or exports | Policy-aware cache keys; redaction before export; short-lived URLs; audit |
 | Source DoS via supernodes | Degree probe, budgets, timeouts, concurrency quotas, circuit breaker; load tests |
@@ -1402,8 +1408,8 @@ is configured as its own source. Together they produce:
 | Gate | Every endpoint goes through the gate (an architecture test fails if a router calls the adapter directly) |
 | Cancellation | Queued, running and raced-complete jobs; source outage mid-job; the graph stays intact |
 | Ask (E) | Plan accuracy; invalid-plan repair; `unsupported`; local entity resolution (no typed names or IDs in the prompt); injection fixtures; citation check once the LLM answerer exists |
-| AI summary (E) | Placeholder round trip (no names or IDs in the prompt); citation check; numeric consistency; omissions line written by the server; injection fixtures; no-verdict check |
-| Assistant (E) | Route accuracy; follow-up resolution against the investigation's entities; one plan per turn, no auto-run; refusals for raw-query, cross-source and verdict requests; replies pass the AI-summary suites |
+| AI summary (E) | [Design of the case summary, which is not built.] Placeholder round trip (no names or IDs in the prompt); citation check; numeric consistency; omissions line written by the server; injection fixtures; no-verdict check |
+| Assistant (E) | [Design of the assistant, which is not built; plans were removed by the rebuild of Ask.] Route accuracy; follow-up resolution against the investigation's entities; one plan per turn, no auto-run; refusals for raw-query, cross-source and verdict requests; replies pass the AI-summary suites |
 | Evidence (E) | `verify-pack`; partial capture; unavailable evidence; tamper detection |
 | Audit (E) | `verify-audit` detects an altered, deleted or inserted event and a broken seal chain; late insert into a sealed window fails closed; app role cannot update, delete or truncate |
 | Authorization (E) | Cross-source deep link, hidden labels, derived-link leakage, facet-count leakage, stale permissions on reopen, viewer export denial, share filtering leaves no trace, oversight opens audited |
@@ -1416,7 +1422,7 @@ is configured as its own source. Together they produce:
 1. **Community v0.1.** Demo-graph install ≤ 15 min; supernode suite
    passes; domain-neutrality suite passes (both packs); the author completes the demo case and the mapping task.
 2. **Ask preview [W2].** Ask accuracy meets its measured baseline; every summary statement
-   cites returned elements; the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit.
+   cites returned elements; [design of the unbuilt case summary and assistant:] the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline [end of the unbuilt design]; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit.
 3. **Enterprise build [Later].** Evidence-pack suite (`verify-pack`, tamper,
    partial); OIDC/RBAC/audit/PII suites; image signing and SBOM; security checklist; install
    runbook; documented limitations.

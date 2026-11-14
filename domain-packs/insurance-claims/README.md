@@ -14,7 +14,7 @@ A deliberately small mapping for a synthetic graph of insurance claims. It shows
 
 Each preset gives its parameters a label ("Starting claimant").
 
-**Demo data.** `demo.yaml` describes the synthetic demo graph of this pack, built by `tools/demo-graph`: rings of claimants that share a phone or an address, a phone on the stop list, duplicated addresses (the same street and city under different IDs) and some missing timestamps. The graph has no supernode: no record has more than 100 neighbors. The dates of the data are relative to the day the graph is built (the definition states the `reference_date` its ranges were written for; `--build-date` sets the day, and the default is today in UTC); a restart builds the graph again for the new day.
+**Demo data.** `demo.yaml` describes the synthetic demo graph of this pack, built by `tools/demo-graph`: rings of claimants that share a phone or an address, a phone on the stop list, duplicated addresses (the same street and city under different IDs) and some missing timestamps. The graph has no supernode: no record has more than 100 neighbors. The dates of the data are relative to the day the graph is built (the definition states the `reference_date` its ranges were written for; `--build-date` sets the day, and the default is today in UTC). The answers about the last 7, 30 and 90 days hold for a few days after a start; a restart builds the graph again for the new day, which moves the window.
 
 To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
 
@@ -22,4 +22,4 @@ To adapt the pack to your own graph, follow [Start from a pack](../README.md#sta
 
 ## Ask
 
-The `ask/` folder holds what Ask knows about this pack's source: `classification.md` (the text the model reads, with the reply form) and `intents.json` (one intent for each demo question, as a built-in template with its values fixed, and one query that finds a person by full name). Copy it as it is to `config/ask/insurance-demo/` of an install (the folder is named by the source id; see [the AI preview](../../docs/ai-preview.md#the-ask-folder)). `questions.yaml` lists the demo questions as a person types them, each with the intent and the entities Ask should find, or `refuse`. The JSON is data, not code.
+The `ask/` folder holds what Ask knows about this pack's source: `classification.md` (the text the model reads, with [the reply form](../../docs/ai-preview.md#the-reply-form)) and `intents.json` (one intent for each demo question, as a built-in template with its values fixed, and one query that finds a person by full name). Copy it as it is to `config/ask/insurance-demo/` of an install (the folder is named by the source id; see [the AI preview](../../docs/ai-preview.md#the-ask-folder)). `questions.yaml` lists the demo questions as a person types them, each with the intent and the entities Ask should find, or `refuse`. The JSON is data, not code.
