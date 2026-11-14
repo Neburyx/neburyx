@@ -46,6 +46,8 @@ The model client reads only these variables. The other `ANTHROPIC_*` variables o
 
 If you name a model that the service has announced as retired, the client library writes one warning to the console with the model's name when a call is made. The warning holds neither the key nor any prompt. Choose a current model to avoid it.
 
+In the demo environment (`deploy/demo`), the packs' own folders are used: add `COMPOSE_FILE=compose.yaml:compose.ask.yaml` and `NEBURYX_DEMO_ASK_KEY_FILE=<absolute path of a key file>` to the demo's `.env`; see its README.
+
 ## The Ask folder
 
 The folder named by `NEBURYX_ASK_MAPPING_FOLDER` holds what Ask knows about each source, in one subfolder per source id:

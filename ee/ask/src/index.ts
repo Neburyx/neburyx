@@ -15,6 +15,7 @@ import { guardAiRouteGroup } from './route-guard.js';
 export { AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext } from './audited.js';
 export { configureAsk } from './configure.js';
+export { citedKeysExist, listedElements } from './summary/index.js';
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 export { FAILURE_CODES, promptRecordOf } from './provider.js';
 export type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, TokenUsage } from './provider.js';

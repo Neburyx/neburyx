@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { extname, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
@@ -21,6 +21,8 @@ export const PROOFS: Readonly<Record<string, Readonly<Record<string, string>>>> 
 };
 
 const ALLOWED = new Set(['.yaml', '.md']);
+/** The one place a pack may hold data in JSON: the intents of its Ask folder. */
+const ASK_FOLDER = 'ask';
 
 /** Every file under the folder whose extension is not one a pack may hold. */
 export function codeFilesIn(folder: string): string[] {
@@ -28,7 +30,7 @@ export function codeFilesIn(folder: string): string[] {
   for (const entry of readdirSync(folder, { withFileTypes: true })) {
     const path = join(folder, entry.name);
     if (entry.isDirectory()) found.push(...codeFilesIn(path));
-    else if (!ALLOWED.has(extname(entry.name))) found.push(path);
+    else if (!ALLOWED.has(extname(entry.name)) && !(extname(entry.name) === '.json' && basename(folder) === ASK_FOLDER)) found.push(path);
   }
   return found;
 }
@@ -58,6 +60,19 @@ const here = join(repoRoot, 'tools', 'demo-graph', 'src');
 describe('the presets of the shipped packs', () => {
   it('are held in files that are YAML or Markdown only, so a preset needs no code', () => {
     expect(codeFilesIn(PACKS_FOLDER)).toEqual([]);
+  });
+
+  it('allows JSON only in the ask folder of a pack', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'pack-files-'));
+    try {
+      mkdirSync(join(folder, 'pack', 'ask'), { recursive: true });
+      writeFileSync(join(folder, 'pack', 'neburyx.yaml'), 'sources: []\n');
+      writeFileSync(join(folder, 'pack', 'ask', 'intents.json'), '{}');
+      writeFileSync(join(folder, 'pack', 'data.json'), '{}');
+      expect(codeFilesIn(folder)).toEqual([join(folder, 'pack', 'data.json')]);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 
   it('names a file that is not YAML or Markdown, in a folder that holds one', () => {

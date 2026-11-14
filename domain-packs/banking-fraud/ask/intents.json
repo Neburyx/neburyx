@@ -1,0 +1,328 @@
+{
+  "accounts-on-the-same-device": {
+    "parameters": [
+      "account"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "attributeType": "device",
+      "via": "USES_DEVICE"
+    }
+  },
+  "accounts-on-the-same-address": {
+    "parameters": [
+      "account"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "attributeType": "ip_address",
+      "via": "CONNECTS_FROM"
+    }
+  },
+  "same-device-in-the-last-90-days": {
+    "parameters": [
+      "account"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "attributeType": "device",
+      "via": "USES_DEVICE",
+      "window": {
+        "days": 90
+      }
+    }
+  },
+  "two-shared-devices": {
+    "parameters": [
+      "account"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "attributeType": "device",
+      "via": "USES_DEVICE",
+      "minShared": 2
+    }
+  },
+  "ten-accounts-on-the-same-address": {
+    "parameters": [
+      "account"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "attributeType": "ip_address",
+      "via": "CONNECTS_FROM",
+      "limit": 10
+    }
+  },
+  "accounts-paid-by-an-account": {
+    "parameters": [
+      "account"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "targetType": "account",
+      "via": [
+        "TRANSFERRED_TO"
+      ],
+      "direction": "out"
+    }
+  },
+  "accounts-that-paid-an-account": {
+    "parameters": [
+      "account"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "targetType": "account",
+      "via": [
+        "TRANSFERRED_TO"
+      ],
+      "direction": "in"
+    }
+  },
+  "accounts-within-two-transfers": {
+    "parameters": [
+      "account"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "targetType": "account",
+      "via": [
+        "TRANSFERRED_TO"
+      ],
+      "direction": "both",
+      "maxHops": 2
+    }
+  },
+  "merchants-an-account-paid": {
+    "parameters": [
+      "account"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "targetType": "merchant",
+      "via": [
+        "INITIATED",
+        "PAID_TO"
+      ],
+      "direction": "out",
+      "maxHops": 2
+    }
+  },
+  "merchants-paid-in-the-last-30-days": {
+    "parameters": [
+      "account"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "targetType": "merchant",
+      "via": [
+        "INITIATED",
+        "PAID_TO"
+      ],
+      "direction": "out",
+      "maxHops": 2,
+      "window": {
+        "days": 30
+      }
+    }
+  },
+  "show-an-account": {
+    "parameters": [
+      "account"
+    ],
+    "template": "entity",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      }
+    }
+  },
+  "devices-and-addresses-of-an-account": {
+    "parameters": [
+      "account"
+    ],
+    "template": "degree-preview",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      }
+    }
+  },
+  "accounts-using-a-device": {
+    "parameters": [
+      "device"
+    ],
+    "template": "expand",
+    "settings": {
+      "ref": {
+        "entityType": "device",
+        "stableId": "$device"
+      },
+      "relTypes": [
+        "USES_DEVICE"
+      ],
+      "neighborTypes": [
+        "account"
+      ],
+      "direction": "in",
+      "limit": 25
+    }
+  },
+  "latest-transactions-of-an-account": {
+    "parameters": [
+      "account"
+    ],
+    "template": "expand",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "relTypes": [
+        "INITIATED"
+      ],
+      "neighborTypes": [
+        "transaction"
+      ],
+      "direction": "out",
+      "sort": "observed",
+      "limit": 25
+    }
+  },
+  "payments-made-to-a-merchant": {
+    "parameters": [
+      "merchant"
+    ],
+    "template": "expand",
+    "settings": {
+      "ref": {
+        "entityType": "merchant",
+        "stableId": "$merchant"
+      },
+      "relTypes": [
+        "PAID_TO"
+      ],
+      "neighborTypes": [
+        "transaction"
+      ],
+      "direction": "in",
+      "limit": 25
+    }
+  },
+  "devices-used-in-the-last-7-days": {
+    "parameters": [
+      "account"
+    ],
+    "template": "expand",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "relTypes": [
+        "USES_DEVICE"
+      ],
+      "neighborTypes": [
+        "device"
+      ],
+      "direction": "out",
+      "window": {
+        "days": 7
+      }
+    }
+  },
+  "shared-device-chain": {
+    "parameters": [
+      "account"
+    ],
+    "template": "derived-rule-run",
+    "settings": {
+      "ref": {
+        "entityType": "account",
+        "stableId": "$account"
+      },
+      "ruleId": "shared-device"
+    }
+  },
+  "why-two-accounts-are-linked": {
+    "parameters": [
+      "first",
+      "second"
+    ],
+    "template": "derived-edge-support",
+    "settings": {
+      "ruleId": "shared-device",
+      "ends": [
+        {
+          "entityType": "account",
+          "stableId": "$first"
+        },
+        {
+          "entityType": "account",
+          "stableId": "$second"
+        }
+      ]
+    }
+  },
+  "transactions-with-a-payment-reference": {
+    "parameters": [
+      "reference"
+    ],
+    "template": "search",
+    "settings": {
+      "entityTypes": [
+        "transaction"
+      ],
+      "text": "$reference"
+    }
+  },
+  "customers-by-name": {
+    "parameters": [
+      "name"
+    ],
+    "query": "MATCH (c:Customer) WHERE c.fullName = $name RETURN c ORDER BY c.customerId"
+  }
+}

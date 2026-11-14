@@ -19,3 +19,7 @@ Each preset gives its parameters a label ("Starting claimant").
 To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
 
 **Demo cases.** `cases.yaml` holds one scripted case with a known answer for the default seed: four claimants who share one phone, and the phone on the stop list that thirty claimants share. It also holds the preset investigation, which starts at one of those claimants.
+
+## Ask
+
+The `ask/` folder holds what Ask knows about this pack's source: `classification.md` (the text the model reads, with the reply form) and `intents.json` (one intent for each demo question, as a built-in template with its values fixed, and one query that finds a person by full name). Copy it as it is to `config/ask/insurance-demo/` of an install (the folder is named by the source id; see [the AI preview](../../docs/ai-preview.md#the-ask-folder)). `questions.yaml` lists the demo questions as a person types them, each with the intent and the entities Ask should find, or `refuse`. The JSON is data, not code.

@@ -1,8 +1,8 @@
 import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sourcesResponseSchema } from '@neburyx/contracts';
+import { aiStatusResponseSchema, sourcesResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { parse } from 'yaml';
 import { z } from 'zod';
@@ -178,6 +178,10 @@ describe('the demo stack', () => {
 
   it('shows both demo sources as connected and synthetic', sourcesAreConnected);
 
+  it('answers the AI status route as refused, since the preview is off unless the override is added', async () => {
+    expect((await fetch(`${stack.url}/v1/ai/status`)).status).toBe(403);
+  });
+
   it('finishes the config container and both loaders with exit code 0 before the api container starts', async () => {
     await recorder.sync();
     const events = recorder.since(startedAt);
@@ -218,7 +222,7 @@ describe('the demo stack', () => {
     expect(mounts.find((mount) => mount.Destination === '/config')?.RW).toBe(false);
     const written = (await stack.compose(['exec', '-T', 'api', 'cat', '/config/neburyx.yaml'])).stdout;
     expect(parse(written)).toEqual({ sources: DEMO_PACKS.map((name) => packSource(name)) });
-    expect(readdirSync(join(repository, 'deploy/demo')).filter((name) => name.endsWith('.yaml') && !['compose.yaml', 'compose.dev.yaml'].includes(name))).toEqual([]);
+    expect(readdirSync(join(repository, 'deploy/demo')).filter((name) => name.endsWith('.yaml') && !['compose.yaml', 'compose.dev.yaml', 'compose.ask.yaml'].includes(name))).toEqual([]);
   });
 
   function testSource(name: string) {
@@ -471,5 +475,110 @@ describe('a demo stack with a setting that is missing or wrong', () => {
     expect(logs).toContain('invalid configuration');
     expect(logs).toContain('NEBURYX_CURSOR_KEY');
     expect(logs).not.toContain(bad);
+  });
+});
+
+const ASK_OVERRIDE = join(repository, 'deploy/demo/compose.ask.yaml');
+
+/** A key file the way the docs say to make one: owner-only, owned by the user the api runs as. Its text is a made-up key; no model is ever called. */
+async function keyFile(): Promise<string> {
+  const folder = mkdtempSync(join(tmpdir(), 'demo-ask-key-'));
+  folders.push(folder);
+  const file = join(folder, 'key');
+  writeFileSync(file, 'not-a-real-key\n', { mode: 0o600 });
+  chmodSync(file, 0o600);
+  chmodSync(folder, 0o755);
+  await docker(['run', '--rm', '--user', '0', '--entrypoint', 'chown', '-v', `${folder}:/k`, `${IMAGE}:${TAG}`, '1000', '/k/key']);
+  return file;
+}
+
+const resolvedService = (stdout: string, name: string) =>
+  z
+    .object({
+      services: z.record(
+        z.string(),
+        z.object({
+          environment: z.record(z.string(), z.string().nullable()).optional(),
+          command: z.array(z.string()).optional(),
+          volumes: z.array(z.object({ type: z.string(), source: z.string().optional(), target: z.string(), read_only: z.boolean().optional(), bind: z.object({ create_host_path: z.boolean().optional() }).optional() })).optional(),
+          depends_on: z.record(z.string(), z.object({ condition: z.string() })).optional(),
+        }),
+      ),
+    })
+    .parse(JSON.parse(stdout)).services[name];
+
+describe('the demo stack with the Ask override', () => {
+  it('resolves, without the override, with no profile, no key file, no key mount and no mapping for migrate', async () => {
+    const stack = await demoStack();
+    onTestFinished(() => release(stack));
+    const resolved = await stack.compose(['config', '--format', 'json']);
+    expect(resolved.code, resolved.stderr).toBe(0);
+    const api = resolvedService(resolved.stdout, 'api');
+    const migrate = resolvedService(resolved.stdout, 'migrate');
+    expect(api?.environment?.['NEBURYX_PROFILE'] ?? '').toBe('');
+    expect(api?.environment).not.toHaveProperty('NEBURYX_ASK_API_KEY_FILE');
+    expect(api?.volumes?.map((volume) => volume.target).sort()).toEqual(['/config', '/data/exports']);
+    expect(migrate?.environment?.['NEBURYX_CONFIG'] ?? '').toBe('');
+    expect(resolvedService(resolved.stdout, 'config')?.command).not.toContain('--ask');
+  });
+
+  it('resolves, with the override, to the profile on both services, the mapping for migrate, the folder of the config service and the key as a read-only bind that creates nothing', async () => {
+    const stack = await demoStack({ overrides: [ASK_OVERRIDE], settings: { ...settings(), NEBURYX_DEMO_ASK_KEY_FILE: '/somewhere/key' } });
+    onTestFinished(() => release(stack));
+    const resolved = await stack.compose(['config', '--format', 'json']);
+    expect(resolved.code, resolved.stderr).toBe(0);
+    const api = resolvedService(resolved.stdout, 'api');
+    const migrate = resolvedService(resolved.stdout, 'migrate');
+    expect([api?.environment?.['NEBURYX_PROFILE'], migrate?.environment?.['NEBURYX_PROFILE']]).toEqual(['enterprise', 'enterprise']);
+    expect(migrate?.environment?.['NEBURYX_CONFIG']).toBe('/config/neburyx.yaml');
+    expect(migrate?.volumes?.map((volume) => volume.target)).toEqual(['/config']);
+    expect(migrate?.depends_on).toHaveProperty('config');
+    expect(api?.environment).toMatchObject({ NEBURYX_ASK_MAPPING_FOLDER: '/config/ask', NEBURYX_ASK_API_KEY_FILE: '/run/ask/key' });
+    expect(api?.volumes?.find((volume) => volume.target === '/run/ask/key')).toMatchObject({ type: 'bind', source: '/somewhere/key', read_only: true, bind: { create_host_path: false } });
+    expect(resolvedService(resolved.stdout, 'config')?.command).toContain('--ask');
+  });
+
+  it('stops before the api starts, naming the variable, when the override is on and no key file is named', async () => {
+    const stack = await demoStack({ overrides: [ASK_OVERRIDE] });
+    onTestFinished(() => release(stack));
+    const resolved = await stack.compose(['config']);
+    expect(resolved.code).not.toBe(0);
+    expect(resolved.stderr).toContain('NEBURYX_DEMO_ASK_KEY_FILE');
+  });
+
+  it('fails before the api starts, naming the path and creating nothing on the host, when the key file is not there', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'demo-ask-nokey-'));
+    folders.push(folder);
+    const missing = join(folder, 'no-key-here');
+    const stack = await demoStack({ overrides: [ASK_OVERRIDE, overrideFile(API_WITHOUT_GRAPHS)], settings: { ...settings(), NEBURYX_DEMO_ASK_KEY_FILE: missing } });
+    onTestFinished(() => release(stack));
+    const result = await stack.compose(['up', '-d', 'api']);
+    expect(result.code).not.toBe(0);
+    expect(`${result.stderr}${result.stdout}`).toContain(missing);
+    expect(readdirSync(folder)).toEqual([]);
+  }, STACK_TEST_TIMEOUT_MS);
+
+  it('starts with the override and a key file: both folders pass the start-up checks, the preview is on and both sources are connected; the model is never asked', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const stack = await demoStack({ overrides: [ASK_OVERRIDE], settings: { ...settings(), NEBURYX_DEMO_ASK_KEY_FILE: await keyFile() } });
+    onTestFinished(() => release(stack));
+    const result = await stack.up();
+    expect(result.code, result.stderr).toBe(0);
+    aiStatusResponseSchema.parse(await (await fetch(`${stack.url}/v1/ai/status`)).json());
+    const body = sourcesResponseSchema.parse(await (await fetch(`${stack.url}/v1/sources`)).json());
+    expect(body.items.map((item) => item.id).sort()).toEqual(['banking-demo', 'insurance-demo']);
+    const folderText = (await stack.compose(['exec', '-T', 'api', 'ls', '/config/ask'])).stdout.split('\n').filter(Boolean).sort();
+    expect(folderText).toEqual(['banking-demo', 'insurance-demo']);
+  });
+
+  it('never becomes ready, and its log names the intent, when a pack\'s ask folder is broken after the copy', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const broken = '{"brokenone":{"parameters":["a"],"template":"entity","settings":{"ref":{"entityType":"x","stableId":"$$b"}}}}';
+    const script = `node dist/main.js combine --packs banking-fraud,insurance-claims --ask --out /config/neburyx.yaml && printf '%s' '${broken}' > /config/ask/banking-demo/intents.json`;
+    const override = overrideFile(`${API_WITHOUT_GRAPHS}  config:\n    entrypoint: ${JSON.stringify(['sh', '-c', script])}\n`);
+    const stack = await demoStack({ overrides: [ASK_OVERRIDE, override], settings: { ...settings(), NEBURYX_DEMO_ASK_KEY_FILE: await keyFile() } });
+    onTestFinished(() => release(stack));
+    const result = await stack.compose(['up', '-d', '--wait', '--wait-timeout', '120', 'api']);
+    expect(result.code).not.toBe(0);
+    expect((await stack.compose(['logs', '--no-log-prefix', 'config'])).stdout, 'the config step finished').toContain('wrote /config/neburyx.yaml');
+    expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).toContain('brokenone');
   });
 });

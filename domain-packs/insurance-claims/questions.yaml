@@ -1,0 +1,29 @@
+# The demo questions of this pack as a person types them, with what Ask should find: the intent and its inputs, or refuse.
+questions:
+  - id: claimants-at-the-same-address
+    wording: "Which claimants live at the same address as CT-00100?"
+    expect: { intent: claimants-at-the-same-address, entities: {"claimant": "CT-00100"} }
+  - id: claimants-sharing-a-phone
+    wording: "Which claimants share a phone with CT-00100?"
+    expect: { intent: claimants-sharing-a-phone, entities: {"claimant": "CT-00100"} }
+  - id: claims-on-the-same-vehicle
+    wording: "Which claims involve the same vehicle as CL-001007?"
+    expect: { intent: claims-on-the-same-vehicle, entities: {"claim": "CL-001007"} }
+  - id: claims-by-the-same-repairer
+    wording: "Which other claims did the same repairer repair as CL-001007?"
+    expect: { intent: claims-by-the-same-repairer, entities: {"claim": "CL-001007"} }
+  - id: claims-filed-by-a-claimant
+    wording: "Which claims were filed by CT-00100?"
+    expect: { intent: claims-filed-by-a-claimant, entities: {"claimant": "CT-00100"} }
+  - id: policies-of-a-claimants-claims
+    wording: "Which policies are the claims of CT-00100 under?"
+    expect: { intent: policies-of-a-claimants-claims, entities: {"claimant": "CT-00100"} }
+  - id: duplicate-addresses
+    wording: "Which addresses are duplicates of AD-00001?"
+    expect: refuse
+  - id: claimant-with-the-most-claims
+    wording: "Which of these claimants has the most claims?"
+    expect: refuse
+  - id: claimants-with-a-name
+    wording: "Who is the claimant named Ada Alder?"
+    expect: { intent: claimants-by-name, entities: {"name": "Ada Alder"} }

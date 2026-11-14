@@ -1,0 +1,99 @@
+{
+  "claimants-at-the-same-address": {
+    "parameters": [
+      "claimant"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "claimant",
+        "stableId": "$claimant"
+      },
+      "attributeType": "address",
+      "via": "LIVES_AT"
+    }
+  },
+  "claimants-sharing-a-phone": {
+    "parameters": [
+      "claimant"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "claimant",
+        "stableId": "$claimant"
+      },
+      "attributeType": "phone",
+      "via": "REACHED_AT"
+    }
+  },
+  "claims-on-the-same-vehicle": {
+    "parameters": [
+      "claim"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "claim",
+        "stableId": "$claim"
+      },
+      "attributeType": "vehicle",
+      "via": "INVOLVES_VEHICLE"
+    }
+  },
+  "claims-by-the-same-repairer": {
+    "parameters": [
+      "claim"
+    ],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": {
+        "entityType": "claim",
+        "stableId": "$claim"
+      },
+      "attributeType": "repairer",
+      "via": "REPAIRED_BY"
+    }
+  },
+  "claims-filed-by-a-claimant": {
+    "parameters": [
+      "claimant"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "claimant",
+        "stableId": "$claimant"
+      },
+      "targetType": "claim",
+      "via": [
+        "FILED_BY"
+      ]
+    }
+  },
+  "policies-of-a-claimants-claims": {
+    "parameters": [
+      "claimant"
+    ],
+    "template": "linked-entities",
+    "settings": {
+      "ref": {
+        "entityType": "claimant",
+        "stableId": "$claimant"
+      },
+      "targetType": "policy",
+      "via": [
+        "FILED_BY",
+        "UNDER_POLICY"
+      ],
+      "direction": "both",
+      "maxHops": 2
+    }
+  },
+  "claimants-by-name": {
+    "parameters": [
+      "name"
+    ],
+    "query": "MATCH (c:Claimant) WHERE c.fullName = $name RETURN c ORDER BY c.claimantId"
+  }
+}

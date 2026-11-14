@@ -73,4 +73,48 @@ describe('the demo compose file', () => {
     expect(demo['migrate']?.environment?.['NEBURYX_CONFIG']).toBe('');
     expect(demo['migrate']?.volumes).toEqual([]);
   });
+
+  it('holds nothing of Ask that switches it on: no key file, no key mount and no folder of the demo\'s own', () => {
+    const text = readFileSync(join(repository, 'deploy/demo/compose.yaml'), 'utf8');
+    expect(text).not.toMatch(/NEBURYX_ASK_API_KEY|NEBURYX_DEMO_ASK_KEY_FILE|\/run\/ask|--ask|enterprise/);
+  });
+});
+
+interface OverrideService {
+  readonly command?: readonly string[];
+  readonly environment?: Record<string, string>;
+  readonly volumes?: readonly (string | { readonly type: string; readonly source: string; readonly target: string; readonly read_only?: boolean; readonly bind?: { readonly create_host_path?: boolean } })[];
+  readonly depends_on?: Record<string, { readonly condition: string }>;
+}
+const askOverride = services('deploy/demo/compose.ask.yaml') as Record<string, OverrideService>;
+
+describe('the demo override that switches Ask on', () => {
+  it('holds exactly the config, migrate and api services and nothing else', () => {
+    expect(Object.keys(askOverride).sort()).toEqual(['api', 'config', 'migrate']);
+  });
+
+  it('has the config service combine the packs with the Ask option, over the same packs the base file combines', () => {
+    const base = (demo['config'] as { command?: readonly string[] } | undefined)?.command ?? [];
+    expect(askOverride['config']?.command).toEqual([...base.slice(0, base.indexOf('--out')), '--ask', ...base.slice(base.indexOf('--out'))]);
+  });
+
+  it('has migrate and api run with the enterprise profile, and migrate read the mapping the config service wrote, after it finished', () => {
+    expect(askOverride['migrate']?.environment).toEqual({ NEBURYX_PROFILE: 'enterprise', NEBURYX_CONFIG: '/config/neburyx.yaml' });
+    expect(askOverride['migrate']?.volumes).toEqual(['demo-config:/config:ro']);
+    expect(askOverride['migrate']?.depends_on).toEqual({ config: { condition: 'service_completed_successfully' } });
+    expect(askOverride['api']?.environment?.['NEBURYX_PROFILE']).toBe('enterprise');
+  });
+
+  it('has the api read the folder the config service wrote, and the key from a file mounted read-only by the long bind syntax that creates nothing on the host, whose path must be given', () => {
+    expect(askOverride['api']?.environment).toMatchObject({ NEBURYX_ASK_MAPPING_FOLDER: '/config/ask', NEBURYX_ASK_API_KEY_FILE: '/run/ask/key' });
+    const [mount, ...more] = askOverride['api']?.volumes ?? [];
+    expect(more).toEqual([]);
+    expect(mount).toMatchObject({ type: 'bind', target: '/run/ask/key', read_only: true, bind: { create_host_path: false } });
+    expect(typeof mount === 'object' ? mount.source : '').toMatch(/^\$\{NEBURYX_DEMO_ASK_KEY_FILE:\?[^}]+\}$/);
+  });
+
+  it('passes no key by value and holds no secret', () => {
+    const text = readFileSync(join(repository, 'deploy/demo/compose.ask.yaml'), 'utf8');
+    expect(text).not.toMatch(/NEBURYX_ASK_API_KEY\b(?!_FILE)/);
+  });
 });

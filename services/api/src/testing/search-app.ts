@@ -56,6 +56,7 @@ export interface SearchAppOptions {
   readonly audit?: Seams['audit'];
   readonly redact?: AssembleOptions['redact'];
   readonly catalog?: AssembleOptions['catalog'];
+  readonly fileQueries?: AssembleOptions['fileQueries'];
   /** Further options of the application, which win over the ones this rig sets. */
   readonly appOptions?: Partial<Parameters<typeof buildApp>[0]>;
 }
@@ -76,6 +77,7 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
     seams,
     ...(options.redact === undefined ? {} : { redact: options.redact }),
     ...(options.catalog === undefined ? {} : { catalog: options.catalog }),
+    ...(options.fileQueries === undefined ? {} : { fileQueries: options.fileQueries }),
     referenceKeys: TEST_REFERENCE_KEYS,
   });
   const store = memoryAppStore();

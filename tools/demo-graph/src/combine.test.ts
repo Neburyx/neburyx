@@ -253,3 +253,102 @@ describe('the preset of a pack', () => {
     expect(parse(readFileSync(out, 'utf8')).sources[0].demo_case).toEqual({ entity: { type, id }, case_ref: '\u{1F600}'.repeat(100) });
   });
 });
+
+describe('the option that carries the Ask folders', () => {
+  const ASK = ['classification.md', 'intents.json'];
+  function withAsk(folder: string, name: string, id: string, files: readonly string[] = ASK): void {
+    pack(folder, name, source(id));
+    mkdirSync(join(folder, name, 'ask'), { recursive: true });
+    for (const file of files) writeFileSync(join(folder, name, 'ask', file), `${name} ${file}`);
+  }
+
+  it('refuses a pack without an ask folder, names the pack and writes nothing', async () => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    pack(folder, 'two', source('b'));
+    const out = join(folder, 'out', 'combined.yaml');
+    const result = await run(['combine', '--packs', 'one,two', '--ask', '--out', out], folder);
+    expect(result.code).toBe(1);
+    expect(result.err.join('')).toContain('pack two has no ask folder');
+    expect(existsSync(out)).toBe(false);
+    expect(existsSync(join(folder, 'out', 'ask'))).toBe(false);
+  });
+
+  it.each([
+    ['a third file', [...ASK, 'notes.md']],
+    ['a missing file', ['intents.json']],
+  ])('refuses an ask folder with %s, naming the pack', async (_name, files) => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a', files);
+    const result = await run(['combine', '--packs', 'one', '--ask', '--out', join(folder, 'out', 'combined.yaml')], folder);
+    expect(result.code).toBe(1);
+    expect(result.err.join('')).toContain('the ask folder of pack one must hold exactly');
+  });
+
+  it('refuses a folder inside the ask folder, a link and a file that is not plain', async () => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    mkdirSync(join(folder, 'one', 'ask', 'more'));
+    expect((await run(['combine', '--packs', 'one', '--ask', '--out', join(folder, 'out', 'combined.yaml')], folder)).code).toBe(1);
+  });
+
+  it('writes the preview switch and copies each ask folder as it is to ask/<source id>/ beside the file', async () => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    withAsk(folder, 'two', 'b');
+    const out = join(folder, 'out', 'combined.yaml');
+    expect((await run(['combine', '--packs', 'one,two', '--ask', '--out', out], folder)).code).toBe(0);
+    const written = parse(readFileSync(out, 'utf8')) as { ai: unknown; sources: { id: string }[] };
+    expect(written.ai).toEqual({ preview: true });
+    expect(written.sources.map((entry) => entry.id)).toEqual(['a', 'b']);
+    expect(readdirSync(join(folder, 'out', 'ask')).sort()).toEqual(['.written-by-combine', 'a', 'b']);
+    for (const [id, name] of [['a', 'one'], ['b', 'two']] as const) {
+      expect(readdirSync(join(folder, 'out', 'ask', id)).sort()).toEqual(ASK);
+      for (const file of ASK) expect(readFileSync(join(folder, 'out', 'ask', id, file), 'utf8')).toBe(`${name} ${file}`);
+    }
+  });
+
+  it('replaces an ask folder of an earlier run and does not merge with it', async () => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    const out = join(folder, 'out', 'combined.yaml');
+    mkdirSync(join(folder, 'out', 'ask', 'old'), { recursive: true });
+    writeFileSync(join(folder, 'out', 'ask', 'old', 'intents.json'), '{}');
+    writeFileSync(join(folder, 'out', 'ask', '.written-by-combine'), '');
+    expect((await run(['combine', '--packs', 'one', '--ask', '--out', out], folder)).code).toBe(0);
+    expect(readdirSync(join(folder, 'out', 'ask')).sort()).toEqual(['.written-by-combine', 'a']);
+  });
+
+  it('removes the ask folder of an earlier run when the option is not given, so a stack that switched Ask off does not keep it', async () => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    const out = join(folder, 'out', 'combined.yaml');
+    expect((await run(['combine', '--packs', 'one', '--ask', '--out', out], folder)).code).toBe(0);
+    expect(existsSync(join(folder, 'out', 'ask'))).toBe(true);
+    expect((await run(['combine', '--packs', 'one', '--out', out], folder)).code).toBe(0);
+    expect(existsSync(join(folder, 'out', 'ask'))).toBe(false);
+    expect(Object.keys(parse(readFileSync(out, 'utf8')) as object)).toEqual(['sources']);
+  });
+
+  it.each([['with', ['--ask']], ['without', []]])('stops and leaves an ask folder it did not write as it was, %s the option', async (_name, flag) => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    const out = join(folder, 'out', 'combined.yaml');
+    mkdirSync(join(folder, 'out', 'ask', 'mine'), { recursive: true });
+    writeFileSync(join(folder, 'out', 'ask', 'mine', 'intents.json'), 'mine');
+    const result = await run(['combine', '--packs', 'one', ...flag, '--out', out], folder);
+    expect(result.code).toBe(1);
+    expect(result.err.join('')).toContain('was not written by this command');
+    expect(readFileSync(join(folder, 'out', 'ask', 'mine', 'intents.json'), 'utf8')).toBe('mine');
+    expect(existsSync(out)).toBe(false);
+  });
+
+  it('writes the same file as before, with no preview switch and no folder, when the option is not given', async () => {
+    const folder = scratch();
+    withAsk(folder, 'one', 'a');
+    const out = join(folder, 'out', 'combined.yaml');
+    expect((await run(['combine', '--packs', 'one', '--out', out], folder)).code).toBe(0);
+    expect(Object.keys(parse(readFileSync(out, 'utf8')) as object)).toEqual(['sources']);
+    expect(existsSync(join(folder, 'out', 'ask'))).toBe(false);
+  });
+});

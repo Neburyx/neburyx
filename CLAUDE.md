@@ -18,7 +18,7 @@ safe on very high-degree nodes. The repo is **pre-release**: the build tooling, 
 | `packages/contracts` | API contract and generated client types |
 | `packages/test-containers` | How tests and tools start a container (retries the port-binding timeout) |
 | `packages/test-neo4j` | How the Neo4j tests reach a Neo4j Enterprise server of their own: the connection, a database per test file, the sweep of leftovers (see its README) |
-| `domain-packs` | Ready-made mapping files, one directory per domain; YAML and Markdown only, no code (see its README) |
+| `domain-packs` | Ready-made mapping files, one directory per domain; YAML and Markdown only, no code, and the data files of an `ask/` folder (see its README) |
 | `deploy/docker` | Container image build (`Dockerfile`; see its README) |
 | `deploy/compose` | Community install: image + Postgres, loopback only (see its README) |
 | `deploy/release` | Release image: the script that builds it for both platforms and pushes the checked archive, the image target, and the workflow that runs it on a version tag (see its README) |

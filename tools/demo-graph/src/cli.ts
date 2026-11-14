@@ -16,7 +16,7 @@ export const USAGE = `usage:
   demo-graph generate (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] --out <dir>
   demo-graph load     (--pack <name> | --mapping <file>) [--source <id>] --dir <dir> [--uri <address>] [--reset]
   demo-graph build    (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--out <dir>] [--uri <address>] [--reset]
-  demo-graph combine  --packs <name>,<name>... [--addresses <source-id>=<bolt-address>,...] --out <file>`;
+  demo-graph combine  --packs <name>,<name>... [--addresses <source-id>=<bolt-address>,...] [--ask] --out <file>`;
 
 export interface CliIo {
   readonly out: (text: string) => void;
@@ -30,6 +30,7 @@ interface Arguments {
   readonly command: 'generate' | 'load' | 'build' | 'combine';
   readonly values: ReadonlyMap<string, string>;
   readonly reset: boolean;
+  readonly ask: boolean;
 }
 
 type Command = Arguments['command'];
@@ -38,7 +39,7 @@ const ALLOWED: Readonly<Record<Command, ReadonlySet<string>>> = {
   generate: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out']),
   load: new Set(['pack', 'mapping', 'source', 'dir', 'uri', 'reset']),
   build: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out', 'uri', 'reset']),
-  combine: new Set(['packs', 'addresses', 'out']),
+  combine: new Set(['packs', 'addresses', 'out', 'ask']),
 };
 const REQUIRED: Readonly<Record<Command, readonly string[]>> = { generate: ['out'], load: ['dir'], build: [], combine: ['packs', 'out'] };
 
@@ -48,6 +49,7 @@ export function parseArguments(argv: readonly string[]): Arguments | undefined {
   const allowed = ALLOWED[command];
   const values = new Map<string, string>();
   let reset = false;
+  let ask = false;
   for (let index = 0; index < rest.length; index++) {
     const option = rest[index];
     const name = option?.startsWith('--') ? option.slice(2) : '';
@@ -55,13 +57,17 @@ export function parseArguments(argv: readonly string[]): Arguments | undefined {
       reset = true;
       continue;
     }
+    if (name === 'ask' && allowed.has('ask') && !ask) {
+      ask = true;
+      continue;
+    }
     const value = rest[index + 1];
-    if (name === 'reset' || !allowed.has(name) || value === undefined || value.startsWith('--') || values.has(name)) return undefined;
+    if (name === 'reset' || name === 'ask' || !allowed.has(name) || value === undefined || value.startsWith('--') || values.has(name)) return undefined;
     values.set(name, value);
     index += 1;
   }
   if (REQUIRED[command].some((required) => !values.has(required))) return undefined;
-  return { command, values, reset };
+  return { command, values, reset, ask };
 }
 
 function sourceFiles(values: ReadonlyMap<string, string>, needsDefinition: boolean): { mapping: string; definition: string } | undefined {
@@ -98,7 +104,7 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
         }
         addresses.set(id, pair.slice(at + 1));
       }
-      combinePacks(packs, out, io.packsFolder, addresses);
+      combinePacks(packs, out, io.packsFolder, addresses, { ask: parsed.ask });
       io.out(`wrote ${out} with the sources of ${packs.length} packs`);
       return 0;
     }

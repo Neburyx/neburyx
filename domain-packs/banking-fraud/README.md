@@ -19,3 +19,7 @@ Each preset gives its parameters a label ("Starting account"). To adapt the pack
 **Demo data.** `demo.yaml` describes the synthetic demo graph of this pack: customers, accounts, devices, addresses, transactions and merchants, with three supernodes (of 1,000, 10,000 and 100,000 neighbors), rings of accounts that share a device and an address, devices on the stop list, and some missing timestamps. `tools/demo-graph` builds it into a demo database; see its README.
 
 **Demo cases.** `cases.yaml` holds four scripted cases with known answers for the default seed: a ring of six accounts on one device and one address, a device on the stop list with 1,000 accounts, an address on the stop list with 10,000 accounts, and a merchant with 100,000 payments. It also holds the preset investigation, which starts at one of the ring's accounts.
+
+## Ask
+
+The `ask/` folder holds what Ask knows about this pack's source: `classification.md` (the text the model reads, with the reply form) and `intents.json` (one intent for each demo question, as a built-in template with its values fixed, and one query that finds a person by full name). Copy it as it is to `config/ask/banking-demo/` of an install (the folder is named by the source id; see [the AI preview](../../docs/ai-preview.md#the-ask-folder)). `questions.yaml` lists the demo questions as a person types them, each with the intent and the entities Ask should find, or `refuse`. The JSON is data, not code.

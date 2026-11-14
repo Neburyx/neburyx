@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { repository } from './stack.js';
 
 const example = readFileSync(join(repository, 'deploy/demo/.env.example'), 'utf8');
-const composeText = [join(repository, 'deploy/demo/compose.yaml'), join(repository, 'deploy/compose/compose.yaml')].map((file) => readFileSync(file, 'utf8')).join('\n');
+const composeText = [join(repository, 'deploy/demo/compose.yaml'), join(repository, 'deploy/demo/compose.ask.yaml'), join(repository, 'deploy/compose/compose.yaml')].map((file) => readFileSync(file, 'utf8')).join('\n');
 
 const SECRET = /PASSWORD|KEY/;
 
@@ -21,9 +21,11 @@ function listed(): { readonly name: string; readonly value: string; readonly des
 }
 
 const NOT_USED_BY_THE_DEMO = new Set(['NEBURYX_CONFIG_DIR']);
+/** The one variable that Compose itself reads: it names the compose files, so no compose file uses it. */
+const READ_BY_COMPOSE = ['COMPOSE_FILE'];
 
 function used(): Set<string> {
-  return new Set([...composeText.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g)].flatMap((match) => (match[1] === undefined || NOT_USED_BY_THE_DEMO.has(match[1]) ? [] : [match[1]])));
+  return new Set([...composeText.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g)].flatMap((match) => (match[1] === undefined || NOT_USED_BY_THE_DEMO.has(match[1]) ? [] : [match[1]])).concat(READ_BY_COMPOSE));
 }
 
 describe('the demo settings example', () => {

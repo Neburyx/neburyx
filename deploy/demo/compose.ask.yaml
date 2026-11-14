@@ -1,0 +1,28 @@
+# Switches Ask on in the demo. Add it with one line in .env:  COMPOSE_FILE=compose.yaml:compose.ask.yaml
+# It also needs NEBURYX_DEMO_ASK_KEY_FILE in .env: the host path of a file that holds the key of the model service (see README.md).
+services:
+  config:
+    command: ["combine", "--packs", "banking-fraud,insurance-claims", "--ask", "--out", "/config/neburyx.yaml"]
+
+  migrate:
+    environment:
+      NEBURYX_PROFILE: enterprise
+      NEBURYX_CONFIG: /config/neburyx.yaml
+    volumes:
+      - demo-config:/config:ro
+    depends_on:
+      config:
+        condition: service_completed_successfully
+
+  api:
+    environment:
+      NEBURYX_PROFILE: enterprise
+      NEBURYX_ASK_MAPPING_FOLDER: /config/ask
+      NEBURYX_ASK_API_KEY_FILE: /run/ask/key
+    volumes:
+      - type: bind
+        source: ${NEBURYX_DEMO_ASK_KEY_FILE:?set NEBURYX_DEMO_ASK_KEY_FILE in the .env file to the file that holds the key}
+        target: /run/ask/key
+        read_only: true
+        bind:
+          create_host_path: false

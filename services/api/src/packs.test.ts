@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,9 @@ const PACKS_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..
 const MAPPING_FILE = 'neburyx.yaml';
 const DEMO_FILE = 'demo.yaml';
 const CASES_FILE = 'cases.yaml';
+const QUESTIONS_FILE = 'questions.yaml';
+const ASK_FOLDER = 'ask';
+const ASK_FILES = ['classification.md', 'intents.json'];
 const THIS_FILE = fileURLToPath(import.meta.url);
 
 const SHIPPED_ENTITY_TYPES = new Map([
@@ -143,9 +146,67 @@ describe('finding the packs', () => {
   });
 });
 
+/**
+ * What is wrong with the shape of a pack directory: only plain text (`.yaml`, `.md`), no folder but `ask/`, in `ask/` exactly `classification.md` and `intents.json` (the only `.json` of a pack), no link anywhere.
+ */
+function shapeProblems(dir: string): readonly string[] {
+  const problems: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) problems.push(`${entry.name}: a link`);
+    else if (entry.isDirectory()) {
+      if (entry.name !== ASK_FOLDER) {
+        problems.push(`${entry.name}: a folder`);
+        continue;
+      }
+      const inside = readdirSync(join(dir, entry.name), { withFileTypes: true });
+      for (const file of inside) if (!file.isFile() || !ASK_FILES.includes(file.name)) problems.push(`${ASK_FOLDER}/${file.name}: not one of the two files of an Ask folder`);
+      for (const name of ASK_FILES) if (!inside.some((file) => file.name === name)) problems.push(`${ASK_FOLDER}/${name}: missing`);
+    } else if (!entry.isFile() || !['.yaml', '.md'].includes(extname(entry.name))) problems.push(`${entry.name}: not a plain text file of a pack`);
+  }
+  return problems;
+}
+
+describe('the shape of a pack directory', () => {
+  const made: string[] = [];
+  afterEach(() => {
+    for (const path of made.splice(0)) rmSync(path, { recursive: true, force: true });
+  });
+  const pack = (build: (dir: string) => void): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'pack-shape-'));
+    made.push(dir);
+    writeFileSync(join(dir, 'README.md'), 'text');
+    writeFileSync(join(dir, MAPPING_FILE), 'sources: []');
+    build(dir);
+    return dir;
+  };
+  const askWith = (dir: string, names: readonly string[]): void => {
+    mkdirSync(join(dir, ASK_FOLDER));
+    for (const name of names) writeFileSync(join(dir, ASK_FOLDER, name), '{}');
+  };
+
+  it('refuses an extra file, a script, a folder that is not ask, and a json file outside ask', () => {
+    expect(shapeProblems(pack((dir) => writeFileSync(join(dir, 'notes.txt'), 'x')))).toEqual(['notes.txt: not a plain text file of a pack']);
+    expect(shapeProblems(pack((dir) => writeFileSync(join(dir, 'run.mjs'), 'x')))).toEqual(['run.mjs: not a plain text file of a pack']);
+    expect(shapeProblems(pack((dir) => mkdirSync(join(dir, 'extra'))))).toEqual(['extra: a folder']);
+    expect(shapeProblems(pack((dir) => writeFileSync(join(dir, 'data.json'), '{}')))).toEqual(['data.json: not a plain text file of a pack']);
+  });
+
+  it('refuses an ask folder with a third file, a missing file, a folder inside, and a link', () => {
+    expect(shapeProblems(pack((dir) => askWith(dir, [...ASK_FILES, 'questions.yaml'])))).toEqual(['ask/questions.yaml: not one of the two files of an Ask folder']);
+    expect(shapeProblems(pack((dir) => askWith(dir, ['intents.json'])))).toEqual(['ask/classification.md: missing']);
+    expect(shapeProblems(pack((dir) => (askWith(dir, ASK_FILES), mkdirSync(join(dir, ASK_FOLDER, 'more')))))).toEqual(['ask/more: not one of the two files of an Ask folder']);
+    expect(shapeProblems(pack((dir) => (askWith(dir, ASK_FILES), symlinkSync(join(dir, 'README.md'), join(dir, 'link.md')))))).toEqual(['link.md: a link']);
+  });
+
+  it('accepts a questions file and an ask folder with exactly its two files', () => {
+    expect(shapeProblems(pack((dir) => (askWith(dir, ASK_FILES), writeFileSync(join(dir, QUESTIONS_FILE), 'questions: []'))))).toEqual([]);
+  });
+});
+
 describe.each(packs)('the %s pack: the mapping file', (pack) => {
-  it('holds the mapping file and a README, and a demo definition and demo cases when the pack has them, and nothing else', () => {
-    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => name !== DEMO_FILE && name !== CASES_FILE).sort()).toEqual(['README.md', MAPPING_FILE]);
+  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions and an Ask folder when the pack has them, and nothing else', () => {
+    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASK_FOLDER].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
+    expect(shapeProblems(join(PACKS_ROOT, pack))).toEqual([]);
   });
 
   it('loads with one synthetic source, the entity types the architecture gives and a case reference label', () => {
@@ -213,11 +274,8 @@ describe.each(packs)('the %s pack: the mapping file', (pack) => {
     expect(outcome.openStore).not.toHaveBeenCalled();
   });
 
-  it('holds only plain-text files: no code, no binary, no folder', () => {
-    for (const entry of readdirSync(join(PACKS_ROOT, pack), { withFileTypes: true })) {
-      expect(entry.isFile(), entry.name).toBe(true);
-      expect(['.yaml', '.md']).toContain(extname(entry.name));
-    }
+  it('holds only plain-text files: no code, no binary, and no folder but the Ask folder with its two files', () => {
+    expect(shapeProblems(join(PACKS_ROOT, pack))).toEqual([]);
   });
 });
 

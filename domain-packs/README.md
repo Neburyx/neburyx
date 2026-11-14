@@ -1,6 +1,6 @@
 # Domain packs
 
-A domain pack is a directory of plain YAML and Markdown that describes one kind of graph to Neburyx. It holds no code: the same image serves every pack, and adding a pack changes nothing in `services/api`, `apps/web` or `packages/contracts`. To write a mapping step by step, start with the [mapping guide](../docs/mapping-guide.md).
+A domain pack is a directory of plain YAML and Markdown (and, for Ask, the two data files of an `ask/` folder) that describes one kind of graph to Neburyx. It holds no code: the same image serves every pack, and adding a pack changes nothing in `services/api`, `apps/web` or `packages/contracts`. To write a mapping step by step, start with the [mapping guide](../docs/mapping-guide.md).
 
 | Pack | Domain |
 |---|---|
@@ -15,6 +15,8 @@ A domain pack is a directory of plain YAML and Markdown that describes one kind 
 | `README.md` | The pack in plain words: what it maps, its presets, and the address and variables it expects. |
 | `demo.yaml` | Only for a pack that has a demo: the definition of its synthetic demo data, built into a graph by `tools/demo-graph`. |
 | `cases.yaml` | Only for a pack that has a demo: its scripted demo cases, each with a known answer for the default seed, and the preset investigation that "Open demo case" opens (a starting entity and a case reference). Tests check the answers against the loaded demo graph. |
+| `questions.yaml` | Only for a pack that has a demo: the demo questions as a person types them, each with the intent and the entities Ask should find, or `refuse`. Used by the tests of the demo and by the accuracy run. |
+| `ask/` | Only for a pack that has a demo: what Ask knows about the pack's source, exactly two files: `classification.md` (the text the model reads, with the reply form) and `intents.json` (the intents: built-in templates with fixed settings, and parameterised read-only queries). Copy the folder to `config/ask/<source id>/` of an install (see [the AI preview](../docs/ai-preview.md#the-ask-folder)). The JSON is data, not code. |
 
 Every pack here describes a **synthetic** graph (`synthetic: true`). The address in each file is a host name on the demo network, and the credentials are the names of environment variables, never values.
 
