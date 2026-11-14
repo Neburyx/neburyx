@@ -1,5 +1,5 @@
 import type { AskPlan, AskPlanner } from '@neburyx/contracts';
-import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { PLANNED_RATIONALE, createEnterpriseExtension } from '@neburyx/ee-ask';
 import { describe, expect, it, vi } from 'vitest';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
@@ -70,7 +70,7 @@ describe('the plan endpoint of the mounted application', () => {
 
   it('answers the plan of the planner with its placeholder turned back into the entity, stored with an ID, and the planner received the previewed text', async () => {
     const planned: AskPlan = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: '‹widget#1›' }, limit: 25 }, rationale: 'Widgets that share a gadget.' };
-    const shape: AskPlan = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: 'W-001' }, limit: 25 }, rationale: 'Widgets that share a gadget.' };
+    const shape: AskPlan = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: 'W-001' }, limit: 25 }, rationale: PLANNED_RATIONALE };
     const { post, texts, app } = await startAsk(undefined, planned);
     const shown = (await post({ message: QUESTION, sourceId: 'demo' })).json();
     const confirmed = await post({ message: QUESTION, sourceId: 'demo', send: true, previewHash: shown.previewHash });

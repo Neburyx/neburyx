@@ -41,7 +41,7 @@ describe('the planner', () => {
     expect(await planner.plan({ text: TEXT, context: CONTEXT })).toEqual(PLAN);
     expect(provider.calls).toEqual([{ promptId: 'ask.plan', parameters: { catalog: catalogText(), vocabulary: vocabularyText(DEFAULT_VIEW), patterns: '', question: TEXT } }]);
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '5', tokensIn: 12, tokensOut: 34 } } });
+    expect(events[0]).toMatchObject({ action: 'ask.plan', result: 'success', actorId: CONTEXT.actorId, actorRole: 'investigator', traceId: 'tr-9', sourceId: 'demo', detail: { ai: { modelRef: 'fixture-model', promptId: 'ask.plan', promptVersion: '6', tokensIn: 12, tokensOut: 34 } } });
     expect(JSON.stringify(events)).not.toContain('widget#1');
   });
 

@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AiMappingView, AskPlan, AuditEvent } from '@neburyx/contracts';
-import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { PLANNED_RATIONALE, createEnterpriseExtension } from '@neburyx/ee-ask';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { communitySeams } from '../seams/community-seams.js';
 import { LISTED_PLAN_EXPIRY, LISTED_PLAN_ID, createListPlanStore } from '../testing/list-plan-store.js';
@@ -62,7 +62,7 @@ describe('the plan endpoint with the planner of the real extension', () => {
     replyText = JSON.stringify(PLAN);
     const { post, app } = await startPlanning();
     const answer = await confirmed(post);
-    const hydrated = JSON.parse(JSON.stringify(PLAN).replace('‹widget#1›', 'W-001')) as AskPlan;
+    const hydrated = { ...(JSON.parse(JSON.stringify(PLAN).replace('‹widget#1›', 'W-001')) as AskPlan), rationale: PLANNED_RATIONALE } as AskPlan;
     expect([answer.statusCode, answer.json()]).toEqual([200, { plan: hydrated, planId: LISTED_PLAN_ID, expiresAt: LISTED_PLAN_EXPIRY.toISOString() }]);
     expect(received).toHaveLength(1);
     expect(received[0]).toContain('‹widget#1›');

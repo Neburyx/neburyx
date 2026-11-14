@@ -23,7 +23,7 @@ async function registryWith(overrides: Record<string, string> = {}): Promise<Pro
   return built.registry;
 }
 
-const VERSIONS: Readonly<Record<string, number>> = { 'ask.plan': 5, 'summary.view': 1, 'assistant.route': 1, 'ask.plan.repair': 3 };
+const VERSIONS: Readonly<Record<string, number>> = { 'ask.plan': 6, 'summary.view': 1, 'assistant.route': 1, 'ask.plan.repair': 4 };
 
 const VALUES = { 'ask.plan': { catalog: 'T1, T2', vocabulary: 'V1', patterns: '', question: 'who is ‹person#1›?' }, 'ask.plan.repair': { catalog: 'T1', vocabulary: 'V1', patterns: '', question: 'who is ‹person#1›?', reply: 'REPLY-VALUE', problems: 'PROBLEM-VALUE' }, 'summary.view': { view: '‹account#1›' }, 'assistant.route': { message: 'hello', view: '‹account#1›' } } as const;
 
@@ -40,10 +40,10 @@ describe('the built-in prompts', () => {
 
 describe('the parts of the built-in prompts', () => {
   const PINNED: Readonly<Record<string, string>> = {
-    'ask.plan': '28777e4d98eed2e2493a3e76694f6b5542f9dc1a6db7cc59d83bd9578d933295',
+    'ask.plan': '6723a462bb954ed7cf5c7bf6c0621497da51f5188857faa07b64a121f1e528d4',
     'summary.view': '4933b5f1fa5581982f16d7a54bf55e02adb7380080cf37426ebeb8f97b3d8cb9',
     'assistant.route': 'd15cd59e3b7db95e5c77c1c0b999b045b42f94099d9f07a26080a2e100e5a320',
-    'ask.plan.repair': '73b5574c57cb87166db31956fa5ccf33f525bdd5574ebab016decc4e9e1e9123',
+    'ask.plan.repair': '0f9f96b177bd1ea03096d9d6a8aba4b591a14920d9d8021013cd43cf9fb56f34',
   };
 
   it.each(PROMPT_IDS)('join to their text: the hash and the version are pinned (%s)', async (id) => {
@@ -158,7 +158,7 @@ describe('resolving a prompt with an override', () => {
     const registry = await registryWith({ 'ask.plan': path });
     const resolved = registry.resolve('ask.plan', VALUES['ask.plan']);
     expect(resolved.text).toBe('Plan for who is ‹person#1›? using T1, T2.');
-    expect(resolved.record).toEqual({ id: 'ask.plan', version: 5, source: 'override', sha256: sha('Plan for {{question}} using {{catalog}}.') });
+    expect(resolved.record).toEqual({ id: 'ask.plan', version: 6, source: 'override', sha256: sha('Plan for {{question}} using {{catalog}}.') });
     expect(resolved.record.sha256).not.toBe((await registryWith()).resolve('ask.plan', VALUES['ask.plan']).record.sha256);
   });
 
@@ -249,8 +249,8 @@ describe('the families in the planner prompts', () => {
 describe('the built-in planner prompt', () => {
   const prompt = BUILT_IN_PROMPTS['ask.plan'];
 
-  it('is version 5 with the parameters catalog, vocabulary, patterns and question', () => {
-    expect(prompt.version).toBe(5);
+  it('is version 6 with the parameters catalog, vocabulary, patterns and question', () => {
+    expect(prompt.version).toBe(6);
     expect([...prompt.parameters].sort()).toEqual(['catalog', 'patterns', 'question', 'vocabulary']);
   });
 
@@ -308,7 +308,7 @@ describe('the static part of the planner prompt', () => {
   it('still accepts an override written for version 2, with no boundary line or with the catalog after it, and sends it whole as values with no instructions hash', async () => {
     for (const text of ['Plan {{question}} with {{catalog}} and {{vocabulary}}.', marked('Plan.', 'Q: {{question}} {{catalog}} {{vocabulary}}')]) {
       const resolved = (await registryWith({ 'ask.plan': file(`older-${text.length}.txt`, text) })).resolve('ask.plan', { ...STATIC, question: 'q' });
-      expect(resolved.record).toEqual({ id: 'ask.plan', version: 5, source: 'override', sha256: sha(text) });
+      expect(resolved.record).toEqual({ id: 'ask.plan', version: 6, source: 'override', sha256: sha(text) });
     }
   });
 

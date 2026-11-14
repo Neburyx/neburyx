@@ -12,6 +12,9 @@ import { questionVocabulary } from '../vocabulary/vocabulary.js';
 
 export const ASK_PLAN_URL = '/v1/ask/plan';
 
+/** The one sentence a plan is answered with in place of the model's own `rationale`: nothing the model wrote in free text is shown, kept or returned. */
+export const PLANNED_RATIONALE = 'Proposed for your question.';
+
 /** How long the resolution of one question may take in all: its searches go through the gate under their own budgets, and this bounds the whole. */
 export const RESOLUTION_TIMEOUT_MS = 20_000;
 
@@ -140,7 +143,7 @@ async function answered(request: ExtensionRequest, plans: PlanStore, sourceId: s
   if (plan.kind !== 'plan') return { plan: fixedRefusal(plan.family) };
   const hydrated = hydratePlan(plan, placeholders, sourceId, patterns?.targets);
   const stored = await plans.insert({ userId: request.principalId, sourceId, templateId: hydrated.templateId, templateVersion: hydrated.templateVersion, params: hydrated.params, planningTraceId: request.traceId });
-  return { plan: hydrated, planId: stored.id, expiresAt: stored.expiresAt.toISOString(), ...(patterns?.catalog.cut === true ? { patternCatalogCut: true } : {}) };
+  return { plan: { ...hydrated, rationale: PLANNED_RATIONALE }, planId: stored.id, expiresAt: stored.expiresAt.toISOString(), ...(patterns?.catalog.cut === true ? { patternCatalogCut: true } : {}) };
 }
 
 /** The catalog of the saved patterns of this question; the pattern text of the application is checked as it is built, and a builder whose text differs from the real one's stops the question before the model is asked. */

@@ -36,7 +36,7 @@ export * from './plans/index.js';
 export { PLAN_SWEEP_EVENT, PLAN_SWEEP_FAILED_EVENT, createPlanSweepTask } from './plans/sweep.js';
 export { HydrationError, hydratePlan } from './plans/hydrate.js';
 export type { HydrationFailure } from './plans/hydrate.js';
-export { ASK_PLAN_URL, askPlanRoute, createAskPlanRoute } from './routes/ask-plan.js';
+export { ASK_PLAN_URL, PLANNED_RATIONALE, askPlanRoute, createAskPlanRoute } from './routes/ask-plan.js';
 export { questionVocabulary };
 export { ASK_RUN_ACTION, ASK_RUN_URL, askRunRoute, createAskRunRoute } from './routes/ask-run.js';
 export { paramsHashOf } from './plans/params-hash.js';
