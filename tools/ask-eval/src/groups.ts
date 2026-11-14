@@ -22,11 +22,30 @@ export const reportSchema = z.strictObject({
   summary: runSummarySchema,
   overall: z.strictObject({ total: z.number().int(), answeredUnsupported: z.number().int(), blocked: z.number().int() }),
   byFamily: z.array(z.strictObject({ family: z.string(), refused: z.number().int(), wronglyPlanned: z.number().int(), other: z.number().int() })),
+  byReturned: z.strictObject({ measured: z.boolean(), counts: z.array(z.strictObject({ answer: z.string(), count: z.number().int() })) }),
   byTemplate: z.array(z.strictObject({ template: z.string(), right: z.number().int(), wrong: z.number().int(), refused: z.number().int() })),
   questions: z.array(z.strictObject({ id: z.string(), verdict: z.string(), fields: z.array(z.string()) })),
 });
 
 export type Report = z.infer<typeof reportSchema>;
+
+/** What the planner returned over all answered questions, by the family of a refusal: `plan`, a family, `unspecified` for a refusal that carries none, or `no-reply`. A blocked question was not asked. */
+function returnedOf(results: readonly QuestionResult[]): Report['byReturned'] {
+  const counts = new Map<string, number>();
+  let refusals = 0;
+  let withFamily = 0;
+  for (const result of results) {
+    if (result.answered === 'blocked') continue;
+    let answer: string = result.answered;
+    if (result.answered === 'unsupported') {
+      refusals += 1;
+      if (result.family !== undefined) withFamily += 1;
+      answer = result.family ?? UNSPECIFIED;
+    }
+    counts.set(answer, (counts.get(answer) ?? 0) + 1);
+  }
+  return { measured: refusals === 0 || withFamily > 0, counts: [...counts].sort(([left], [right]) => left.localeCompare(right)).map(([answer, count]) => ({ answer, count })) };
+}
 
 export function groupReport(questions: readonly Question[], results: readonly QuestionResult[], summary: RunSummary): Report {
   const expectOf = new Map(questions.map((question) => [question.id, question.expect] as const));
@@ -53,6 +72,7 @@ export function groupReport(questions: readonly Question[], results: readonly Qu
     summary,
     overall: { total: results.length, answeredUnsupported: results.filter((result) => result.answered === 'unsupported').length, blocked: results.filter((result) => result.answered === 'blocked').length },
     byFamily: [...families].sort(([left], [right]) => left.localeCompare(right)).map(([family, group]) => ({ family, ...group })),
+    byReturned: returnedOf(results),
     byTemplate: [...templates].sort(([left], [right]) => left.localeCompare(right)).map(([template, group]) => ({ template, ...group })),
     questions: results.map((result) => ({ id: result.id, verdict: result.verdict, fields: [...result.fields] })),
   };
@@ -61,6 +81,7 @@ export function groupReport(questions: readonly Question[], results: readonly Qu
 export function groupLines(report: Report): readonly string[] {
   return [
     `answered unsupported: ${report.overall.answeredUnsupported} of ${report.overall.total}`,
+    ...(report.byReturned.measured ? report.byReturned.counts.map((group) => `returned ${group.answer}: ${group.count}`) : ['returned family: not measured']),
     ...report.byFamily.map((group) => `family ${group.family}: refused ${group.refused}, wrongly planned ${group.wronglyPlanned}, other ${group.other}`),
     ...report.byTemplate.map((group) => `template ${group.template}: right ${group.right}, wrong ${group.wrong}, refused ${group.refused}`),
   ];
