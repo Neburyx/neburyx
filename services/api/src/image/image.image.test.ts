@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -66,6 +66,17 @@ async function migratedDatabase(): Promise<TestDatabase> {
   return database;
 }
 
+/** Waits for the API of a container to answer; when it does not, the failure carries the state of the container and its log, so a start that exited says why. */
+async function answersMe(name: string, url: string): Promise<void> {
+  try {
+    await vi.waitFor(async () => expect((await fetch(`${url}/v1/me`)).status).toBe(200), { timeout: 60_000, interval: 250 });
+  } catch (error) {
+    const state = await docker(['inspect', '--format', '{{.State.Status}}, exit code {{.State.ExitCode}}', name]);
+    const logs = await docker(['logs', name]);
+    throw new Error(`the container ${name} did not answer at ${url} (${state.stdout.trim()}):\n${logs.stdout}${logs.stderr}`, { cause: error });
+  }
+}
+
 async function startApi(database: TestDatabase, command: readonly string[] = ['api']): Promise<{ readonly name: string; readonly url: string }> {
   const name = `neburyx-image-${randomBytes(4).toString('hex')}`;
   containers.push(name);
@@ -76,7 +87,7 @@ async function startApi(database: TestDatabase, command: readonly string[] = ['a
   ]);
   const mapping = await dockerOk(['port', name, '8080/tcp']);
   const url = `http://127.0.0.1:${mapping.split('\n')[0]?.split(':').pop()}`;
-  await vi.waitFor(async () => expect((await fetch(`${url}/v1/me`)).status).toBe(200), { timeout: 60_000, interval: 250 });
+  await answersMe(name, url);
   return { name, url };
 }
 
@@ -167,6 +178,8 @@ describe('the enterprise code in the one image', () => {
 
   const askFolder = mkdtempSync(join(tmpdir(), 'image-ask-'));
   scratch.push(askFolder);
+  // mkdtemp makes the folder readable by its owner only; the image runs as the `node` user (uid 1000), another user on Linux, so the mounted folder must be readable by others
+  chmodSync(askFolder, 0o755);
   const ASK_ENV = ['-e', 'NEBURYX_ASK_API_KEY=not-a-real-key', '-e', 'NEBURYX_ASK_MAPPING_FOLDER=/ask-folder', '-v', `${askFolder}:/ask-folder:ro`];
 
   const withMapping = (file: string, profile: string | undefined): string[] => [
@@ -188,7 +201,7 @@ describe('the enterprise code in the one image', () => {
     await dockerOk(['run', '-d', '--name', name, '--add-host', `${HOST_ALIAS}:host-gateway`, '-p', '127.0.0.1::8080', '-e', `DATABASE_URL=${viaHost(database.appUrl)}`, ...extra, TAG]);
     const mapping = await dockerOk(['port', name, '8080/tcp']);
     const url = `http://127.0.0.1:${mapping.split('\n')[0]?.split(':').pop()}`;
-    await vi.waitFor(async () => expect((await fetch(`${url}/v1/me`)).status).toBe(200), { timeout: 60_000, interval: 250 });
+    await answersMe(name, url);
     return { name, url };
   }
 
