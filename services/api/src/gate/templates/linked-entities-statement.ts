@@ -210,6 +210,16 @@ export function linkedEntitiesStatementOf(allowlist: SourceAllowlist, request: L
 }
 
 /**
+ * The matches of a two-hop count: the neighbors of the anchor that are of the target's type (none when the target is not next to the anchor in any listed step, which leaves out that branch altogether, since a branch with
+ * no statement is not a statement), and those reached from a middle entity.
+ */
+function matchesOf(parts: Parts): string {
+  const direct = parts.neighbors(true);
+  const reached = `WITH a, mids UNWIND mids AS n CALL { ${parts.expansions('x')} } RETURN x`;
+  return direct === '' ? reached : `WITH a CALL { ${direct} } RETURN n AS x UNION ALL ${reached}`;
+}
+
+/**
  * The statement of the count of a linked-entities run, from the mapping and the request: the matches the run would return (the neighbors of the target's type, and for two hops those reached through a middle entity that is
  * not a supernode and not on a stop-list), each once, streamed and stopped at `$countCap + 1`, counted. The matches of one hop are streamed from the anchor itself, not from the frontier the run keeps (which is cut to the cap, so
  * it could never read more than the cap). For two hops the frontier of middle entities is read with the run's own bound (at most `$countCap + 1` neighbors) and the run's degree check of each middle entity, so it traverses no supernode; it reads no relationship of the matches and orders nothing. One row: the number of matches read, `frontierBounded` (the frontier reached the cap) and `supernodeSkipped` (a middle entity was
@@ -224,7 +234,7 @@ export function linkedEntitiesCountStatementOf(allowlist: SourceAllowlist, reque
     parts.anchorLine,
     `CALL { WITH a CALL { ${parts.neighbors(false)} } WITH n, isTarget LIMIT $countCap + 1 WITH collect({n: n, isTarget: isTarget}) AS found RETURN size(found) > $countCap AS frontierBounded, found[..$countCap] AS nbs }`,
     parts.intermediates,
-    `CALL { WITH a, mids CALL { WITH a CALL { ${parts.neighbors(true)} } RETURN n AS x UNION ALL WITH a, mids UNWIND mids AS n CALL { ${parts.expansions('x')} } RETURN x } WITH DISTINCT x LIMIT $countCap + 1 RETURN count(x) AS matches }`,
+    `CALL { WITH a, mids CALL { ${matchesOf(parts)} } WITH DISTINCT x LIMIT $countCap + 1 RETURN count(x) AS matches }`,
     'RETURN matches, frontierBounded, size(heavy) > 0 OR stopListed AS supernodeSkipped',
   ].join('\n');
 }
