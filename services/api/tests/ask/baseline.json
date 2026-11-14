@@ -1,0 +1,14 @@
+{
+  "format": 1,
+  "questionsHash": "59f6ad76401bb0fb342ea677103118ab76a8c0319e344edc3933aaefb767b216",
+  "modes": {
+    "replay": {
+      "plansRight": 25,
+      "refusalsRefused": 8
+    },
+    "live": {
+      "plansRight": 25,
+      "refusalsRefused": 8
+    }
+  }
+}

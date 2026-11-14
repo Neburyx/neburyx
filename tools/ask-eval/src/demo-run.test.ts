@@ -69,6 +69,18 @@ describe('the whole demo set', () => {
     expect(checkRecording({ format: 1, entries })).toEqual([]);
   });
 
+  it('runs on the committed replay and baseline: every refusal refused, every plan right, no run below the baseline of either mode, and no identifier or personal-data-like token in it', async () => {
+    const replay = join(ROOT, 'services', 'api', 'tests', 'ask', 'replies.json');
+    const baseline = join(ROOT, 'services', 'api', 'tests', 'ask', 'baseline.json');
+    for (const mode of ['replay', 'live']) {
+      const result = await cli([...base(replay), '--baseline', baseline, '--mode', mode]);
+      expect(result.code).toBe(EXIT_OK);
+      expect(result.out.slice(0, 2)).toEqual(['refusals: 8 of 8 refused', 'plans: 25 of 25 right (at most 2 may miss)']);
+    }
+    const entries = Object.values(parseReplay(readFileSync(replay, 'utf8'))).flatMap((entry) => [entry.plan, ...(entry.repair === undefined ? [] : [entry.repair])]).map((text) => ({ promptId: 'ask.plan' as const, version: 7, reply: { kind: 'ok' as const, text } }));
+    expect(checkRecording({ format: 1, entries })).toEqual([]);
+  });
+
   it('accepts the template version the planner expects, so a changed catalog version fails here', () => {
     expect(PLAN_TEMPLATE_VERSION).toBe(1);
   });

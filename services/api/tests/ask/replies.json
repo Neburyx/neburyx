@@ -1,0 +1,102 @@
+{
+  "How many accounts are on screen?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"loaded-view\",\"reason\":\"The question asks about what is shown on the screen, which no template or saved pattern answers.\"}"
+  },
+  "How many devices and addresses is ‹account#1› connected to?": {
+    "plan": "The question asks how many devices and addresses the account is connected to. This is a count of relationships by type, so the closest match is degree-preview. But it could also mean the number of distinct devices and addresses, which would call for a listing. \"How connected\" is what degree-preview covers, and it counts relationships by type and direction, which here would be USES_DEVICE and CONNECTS_FROM. I choose degree-preview.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"degree-preview\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"}},\"rationale\":\"The question asks for counts of the account's connections by type (devices and addresses), which degree-preview gives per relationship type.\"}\n```"
+  },
+  "Is ‹account#1› fraudulent?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"judgement\",\"reason\":\"The question asks for a judgement about whether the account is fraudulent, which no template of the catalog can answer.\"}"
+  },
+  "Show 10 accounts that use the same address as ‹account#1›.": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"attributeType\":\"ip_address\",\"via\":\"CONNECTS_FROM\",\"limit\":10},\"rationale\":\"Accounts sharing an ip_address with the anchor account through CONNECTS_FROM, limited to 10.\"}"
+  },
+  "Show me ‹account#1›.": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"entity\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"}},\"rationale\":\"The question asks to show the one named account, so the entity template reads its details.\"}"
+  },
+  "Show the latest transactions of ‹account#1›.": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"expand\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"relTypes\":[\"INITIATED\"],\"neighborTypes\":[\"transaction\"],\"direction\":\"out\",\"sort\":\"observed\"},\"rationale\":\"Transactions directly connected to the account through INITIATED, outgoing, sorted by observation time so the latest come first.\"}"
+  },
+  "Show the payments made to ‹merchant#1›.": {
+    "plan": "Payments to a merchant are transactions linked by PAID_TO (transaction -> merchant). From the merchant, the direction is \"in\", and the neighbor type is transaction. The merchant is the anchor, so expand fits, since the question asks which entities are directly connected.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"expand\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"merchant\",\"stableId\":\"‹merchant#1›\"},\"relTypes\":[\"PAID_TO\"],\"neighborTypes\":[\"transaction\"],\"direction\":\"in\"},\"rationale\":\"Payments to the merchant are transactions linked by PAID_TO, which points into the merchant, so expand inward to transactions.\"}\n```"
+  },
+  "What is the shortest path between ‹account#1› and ‹account#2›?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"path\",\"reason\":\"The question asks for the shortest path between two accounts, and no template in the catalog answers that. The derived-rule templates need a named rule, and linked-entities needs a single anchor and a target type.\"}"
+  },
+  "Which accounts are connected to ‹account#1› by transfers within 2 steps?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"linked-entities\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"targetType\":\"account\",\"via\":[\"TRANSFERRED_TO\"],\"direction\":\"both\",\"maxHops\":2},\"rationale\":\"Accounts reachable from the anchor account through TRANSFERRED_TO links in up to two hops; the question gives no direction, so both are used.\"}"
+  },
+  "Which accounts are linked to ‹account#1› by a shared device, and what chain shows it?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"derived-rule-run\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"ruleId\":\"shared-device\"},\"rationale\":\"The question asks for the chain that shows the shared-device link from the anchor account, so the derived-rule-run template applies.\"}"
+  },
+  "Which accounts are related to ‹account#1›?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"unnamed-relation\",\"reason\":\"The question asks only for accounts related to the anchor and names no relationship type, derived rule or attribute type, so no template answers it.\"}"
+  },
+  "Which accounts connect from the same address as ‹account#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"attributeType\":\"ip_address\",\"via\":\"CONNECTS_FROM\"},\"rationale\":\"The question asks which accounts share the same ip_address with the anchor account through CONNECTS_FROM, which is a plain shared-attribute question.\"}"
+  },
+  "Which accounts has ‹account#1› transferred money to?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"expand\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"relTypes\":[\"TRANSFERRED_TO\"],\"neighborTypes\":[\"account\"],\"direction\":\"out\"},\"rationale\":\"Accounts directly reached by outgoing TRANSFERRED_TO relationships from the anchor account.\"}"
+  },
+  "Which accounts sent money to ‹account#1›?": {
+    "plan": "Accounts that sent money to the anchor account follow the TRANSFERRED_TO relationship (account -> account) into the anchor, so the direction is \"in\". The expand template lists direct neighbors, and linked-entities would also work with one hop. Expand fits the question of which entities are directly connected.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"expand\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"relTypes\":[\"TRANSFERRED_TO\"],\"neighborTypes\":[\"account\"],\"direction\":\"in\"},\"rationale\":\"Accounts that sent money to the anchor are sources of incoming TRANSFERRED_TO relationships, so expand inward over that type.\"}\n```"
+  },
+  "Which accounts share at least 2 devices with ‹account#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"attributeType\":\"device\",\"via\":\"USES_DEVICE\",\"minShared\":2},\"rationale\":\"Accounts sharing at least two device records with the anchor account, joined by USES_DEVICE, so shared-attribute with minShared 2.\"}"
+  },
+  "Which accounts share both a device and an address with ‹account#1›?": {
+    "plan": "The question asks for accounts that share both a device and an address with the anchor. That is several attributes combined at once. shared-attribute handles one attribute type with one relationship type, and minShared only counts how many records of that single type are shared. The derived rules each cover a single link, so the intersection of the two cannot be expressed. No template answers it.\n\n{\"kind\":\"unsupported\",\"family\":\"attribute-combination\",\"reason\":\"The question needs accounts that share both a device and an IP address with the anchor, which combines two attributes at once; no single template covers that.\"}"
+  },
+  "Which accounts use ‹device#1›?": {
+    "plan": "Accounts use a device through USES_DEVICE (account -> device). The device is the anchor, so the accounts sit on the incoming side. The question asks for directly connected accounts, so expand fits.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"expand\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"device\",\"stableId\":\"‹device#1›\"},\"relTypes\":[\"USES_DEVICE\"],\"neighborTypes\":[\"account\"],\"direction\":\"in\"},\"rationale\":\"Accounts that use the device are its direct neighbors through USES_DEVICE, which points from account to device, so the direction is in.\"}\n```"
+  },
+  "Which accounts use the same device as ‹account#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"attributeType\":\"device\",\"via\":\"USES_DEVICE\"},\"rationale\":\"The question asks which other accounts share the same device attribute record with the anchor account, via USES_DEVICE.\"}"
+  },
+  "Which accounts used the same device as ‹account#1› in the last 90 days?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"attributeType\":\"device\",\"via\":\"USES_DEVICE\",\"window\":{\"days\":90}},\"rationale\":\"The question asks which accounts share a device with the anchor account, restricted to the last 90 days, so shared-attribute with USES_DEVICE and a 90-day window answers it.\"}"
+  },
+  "Which accounts were opened last month?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"property-selection\",\"reason\":\"The question picks accounts by the value of a property (when they were opened), and no template in the catalog selects records by a property value.\"}"
+  },
+  "Which addresses are duplicates of ‹address#1›?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"similar-records\",\"reason\":\"The question asks which addresses are duplicates, meaning records that look alike or nearly match. No template or derived rule in the catalog finds duplicates, and the vocabulary defines no relationship for it.\"}"
+  },
+  "Which claimants live at the same address as ‹claimant#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claimant\",\"stableId\":\"‹claimant#1›\"},\"attributeType\":\"address\",\"via\":\"LIVES_AT\"},\"rationale\":\"The question asks which other claimants share the same address attribute record with the anchor claimant, joined by LIVES_AT.\"}"
+  },
+  "Which claimants share a phone with ‹claimant#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claimant\",\"stableId\":\"‹claimant#1›\"},\"attributeType\":\"phone\",\"via\":\"REACHED_AT\"},\"rationale\":\"The question asks who shares the same phone attribute with the anchor claimant, so shared-attribute with REACHED_AT to phone fits.\"}"
+  },
+  "Which claims involve the same vehicle as ‹claim#1›?": {
+    "plan": "The question asks which other claims share a vehicle with the anchor claim. That is a shared attribute question: the vehicle is the attribute record, and INVOLVES_VEHICLE joins the claim to it.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claim\",\"stableId\":\"‹claim#1›\"},\"attributeType\":\"vehicle\",\"via\":\"INVOLVES_VEHICLE\"},\"rationale\":\"Claims that share the same vehicle record with the anchor claim through INVOLVES_VEHICLE.\"}\n```"
+  },
+  "Which claims were filed by ‹claimant#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"linked-entities\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claimant\",\"stableId\":\"‹claimant#1›\"},\"targetType\":\"claim\",\"via\":[\"FILED_BY\"],\"direction\":\"in\",\"maxHops\":1},\"rationale\":\"Claims point to the claimant through FILED_BY, so the claims are found by following that relationship inward from the claimant in one hop.\"}"
+  },
+  "Which devices did ‹account#1› use in the last 7 days?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"expand\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"relTypes\":[\"USES_DEVICE\"],\"neighborTypes\":[\"device\"],\"direction\":\"out\",\"window\":{\"days\":7}},\"rationale\":\"The question asks which devices are directly connected to the account through USES_DEVICE, limited to the last 7 days.\"}"
+  },
+  "Which merchants did ‹account#1› pay in the last 30 days?": {
+    "plan": "The account pays merchants through transactions: account -INITIATED-> transaction -PAID_TO-> merchant. That is a two-hop path, with the time window applying to INITIATED (PAID_TO has no time). The linked-entities template fits, with both relationship types in via and maxHops 2.\n\n{\"kind\":\"plan\",\"templateId\":\"linked-entities\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"targetType\":\"merchant\",\"via\":[\"INITIATED\",\"PAID_TO\"],\"direction\":\"out\",\"maxHops\":2,\"window\":{\"days\":30}},\"rationale\":\"Merchants paid by the account are reached in two outgoing hops through transactions (INITIATED then PAID_TO), limited to the last 30 days.\"}"
+  },
+  "Which merchants has ‹account#1› paid?": {
+    "plan": "The account reaches merchants through two relationships: INITIATED (account -> transaction) and PAID_TO (transaction -> merchant). Naming the transaction as the intermediate type means a two-hop path, so linked-entities fits, with both relationship types listed in via, outward direction, and maxHops 2.\n\n{\"kind\":\"plan\",\"templateId\":\"linked-entities\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},\"targetType\":\"merchant\",\"via\":[\"INITIATED\",\"PAID_TO\"],\"direction\":\"out\",\"maxHops\":2},\"rationale\":\"Merchants paid by the account are reached in two outgoing hops: account INITIATED transaction, then transaction PAID_TO merchant.\"}"
+  },
+  "Which of these claimants has the most claims?": {
+    "plan": "{\"kind\":\"unsupported\",\"family\":\"ranking-or-aggregate\",\"reason\":\"The question asks for a ranking by number of claims across many claimants, which no template in the catalog computes.\"}"
+  },
+  "Which other claims did the same repairer repair as ‹claim#1›?": {
+    "plan": "The question asks for other claims that share a repairer with the anchor claim, which is a shared attribute. The attribute record is the repairer, joined to the claim by REPAIRED_BY.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claim\",\"stableId\":\"claim#1\"},\"attributeType\":\"repairer\",\"via\":\"REPAIRED_BY\"},\"rationale\":\"Other claims sharing the same repairer with the anchor claim is a shared-attribute question via REPAIRED_BY.\"}\n```",
+    "repair": "{\"kind\":\"plan\",\"templateId\":\"shared-attribute\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claim\",\"stableId\":\"‹claim#1›\"},\"attributeType\":\"repairer\",\"via\":\"REPAIRED_BY\"},\"rationale\":\"Other claims sharing the same repairer with the anchor claim is a shared-attribute question via REPAIRED_BY.\"}"
+  },
+  "Which policies are the claims of ‹claimant#1› under?": {
+    "plan": "The path goes claimant <- FILED_BY (claim) -> UNDER_POLICY -> policy, which is two hops through the claim type. The first hop runs in toward the claimant and the second runs out from the claim, so the direction is mixed and \"both\" is the fitting value.\n\n{\"kind\":\"plan\",\"templateId\":\"linked-entities\",\"templateVersion\":1,\"params\":{\"ref\":{\"entityType\":\"claimant\",\"stableId\":\"‹claimant#1›\"},\"targetType\":\"policy\",\"via\":[\"FILED_BY\",\"UNDER_POLICY\"],\"direction\":\"both\",\"maxHops\":2},\"rationale\":\"Policies reached from the claimant through its claims in two hops: FILED_BY (in) then UNDER_POLICY (out).\"}"
+  },
+  "Which transactions have the payment reference ‹value#1›?": {
+    "plan": "{\"kind\":\"plan\",\"templateId\":\"search\",\"templateVersion\":1,\"params\":{\"entityTypes\":[\"transaction\"],\"text\":\"‹value#1›\"},\"rationale\":\"The payment reference is a value placeholder rather than an entity, so a search over transaction entities for that value answers the question.\"}"
+  },
+  "Why are ‹account#1› and ‹account#2› linked through a shared device?": {
+    "plan": "The question names two accounts and a derived rule (shared-device) and asks why they are linked. The derived-edge-support template needs two named ends and a rule and shows the stored relationships that support the link. The derived-rule-run template runs the rule from one anchor and shows the chain. Because both ends are named and the question asks what makes the link, derived-edge-support fits best.\n\n```json\n{\"kind\":\"plan\",\"templateId\":\"derived-edge-support\",\"templateVersion\":1,\"params\":{\"ruleId\":\"shared-device\",\"ends\":[{\"entityType\":\"account\",\"stableId\":\"‹account#1›\"},{\"entityType\":\"account\",\"stableId\":\"‹account#2›\"}]},\"rationale\":\"Two named accounts and the shared-device rule, asking what supports the link.\"}\n```"
+  }
+}
