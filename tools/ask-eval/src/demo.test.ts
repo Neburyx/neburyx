@@ -29,10 +29,11 @@ describe('the demo set on the committed replay', () => {
     expect(run.out.join('\n')).toContain('result: pass');
   });
 
-  it('holds no baseline value for a scripted replay, and the baseline file has the form the tool reads', () => {
-    const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as { replay?: unknown };
+  it('holds no baseline value for a scripted replay, and the counts of the measured run for a recorded one', () => {
+    const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as { replay?: { refusals: number; plans: number } };
     const replay = JSON.parse(readFileSync(REPLAY, 'utf8')) as { note?: string };
     if (replay.note === 'scripted') expect(baseline.replay).toBeUndefined();
+    else expect(baseline.replay).toMatchObject({ refusals: 8, plans: 27 });
   });
 });
 
