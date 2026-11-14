@@ -191,7 +191,8 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
         }
         let answered = body.answered;
         if (answered === undefined) throw new Error(`the question ${question.id} has neither an answer nor a refusal`);
-        if (answered.outcome === 'partial') {
+        // only a heavy stop carries a token: a read that was cut at its bound is `partial` too, and its answer is the answer (the panel decides the same way, by the token and not by the outcome)
+        if (answered.continueToken !== undefined) {
           const next = await post(rig.app, '/v1/ask/continue', { sourceId: rig.sourceId, intent: answered.intent, entities: answered.entities, continueToken: answered.continueToken });
           expect(next.statusCode, `${question.id} continue ${next.body.slice(0, 200)}`).toBe(200);
           answered = readAnswer(next.json()).answered;

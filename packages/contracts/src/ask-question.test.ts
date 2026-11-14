@@ -35,6 +35,7 @@ describe('the request to continue', () => {
     ['an entity name with a dash', { entities: { 'a-b': 'x' } }],
     ['an entity over 256 characters', { entities: { id: 'x'.repeat(257) } }],
     ['21 entities', { entities: Object.fromEntries(Array.from({ length: 21 }, (_, index) => [`p${index}`, 'v'])) }],
+    ['no token at all, as when the answer was a read cut at its bound and carried none', { continueToken: undefined }],
     ['a token without an expiry', { continueToken: 'a'.repeat(64) }],
     ['a token with upper case', { continueToken: `1.${'A'.repeat(64)}` }],
     ['a short token', { continueToken: '1.abc' }],

@@ -267,7 +267,10 @@ describe('a file-query intent', () => {
   it('is partial when the read was cut', async () => {
     const cut = { templateId: 'file-query', result: { ...(fileQueryResult() as { result: object }).result, count: { quality: 'lowerBound', value: 50, scope: 'rows' }, notices: [{ code: 'readBounded' }] } } as AskRunResult;
     const { route, request, events } = await rig({ ...ask, run: () => ({ status: 'ok', result: cut }) });
-    expect(await route.handler(request(ASK))).toMatchObject({ answered: { outcome: 'partial' } });
+    const answer = (await route.handler(request(ASK))) as { answered: { outcome: string; continueToken?: string } };
+    expect(answer).toMatchObject({ answered: { outcome: 'partial' } });
+    // a read cut at its bound is partial and complete in itself: only a heavy stop carries a token to continue with
+    expect(answer.answered.continueToken).toBeUndefined();
     expect(events[0]).toMatchObject({ result: 'partial' });
   });
 
