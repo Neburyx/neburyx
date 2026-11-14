@@ -23,7 +23,7 @@ function rig(access?: SourceAccess, mapping = savedMappingOf()) {
   const patterns: MemoryPatterns = memoryPatterns();
   const real = createSourceAccess({ mapping, seams: communitySeams(), logger: { warn: () => undefined } });
   let reads = 0;
-  const store: Pick<PatternStore, 'listPatterns' | 'readRunnablePattern'> = { listPatterns: (query) => ((reads += 1), patterns.listPatterns(query)), readRunnablePattern: (id, principalId) => patterns.readRunnablePattern(id, principalId) };
+  const store: Pick<PatternStore, 'listOwnPatterns' | 'readPattern'> = { listOwnPatterns: (query) => ((reads += 1), patterns.listOwnPatterns(query)), readPattern: (id, ownerId) => patterns.readPattern(id, ownerId) };
   const deps = { store, mapping, access: access ?? real };
   const lister = createAskPatternLister(deps);
   const finder = createAskPatternFinder(deps);
@@ -48,7 +48,7 @@ const failureOf = async (promise: Promise<unknown>): Promise<AppError | undefine
 };
 
 describe('the saved patterns offered to Ask', () => {
-  it('lists the caller’s own patterns and the shared patterns of another person, and leaves out a private pattern of another person, a deleted one and one of another source', async () => {
+  it('lists the caller’s own patterns, and leaves out the shared and the private patterns of another person, a deleted one and one of another source', async () => {
     const { save, set, list, patterns } = rig();
     const own = await save();
     const sharedByOther = await save(DEFINITION, OTHER);
@@ -59,7 +59,8 @@ describe('the saved patterns offered to Ask', () => {
     const elsewhere = await save();
     set(elsewhere, { sourceId: 'other' });
     const listing = await list(OWNER);
-    expect(listing.offers.map((offer) => offer.id).sort()).toEqual([own.id, sharedByOther.id].sort());
+    expect(listing.offers.map((offer) => offer.id).sort()).toEqual([own.id]);
+    expect(listing.offers.map((offer) => offer.id)).not.toContain(sharedByOther.id);
     expect(listing.cut).toBe(false);
   });
 
@@ -127,13 +128,14 @@ describe('the saved patterns offered to Ask', () => {
     expect(open.reads()).toBe(0);
   });
 
-  it('leaves out another person’s shared pattern that holds a condition on what the mapping marks personal, and keeps the caller’s own', async () => {
-    const personal = savedMappingOf({ entities: PATTERN_ENTITIES.map((entity) => (entity.type === 'maker' ? { ...entity, pii: ['region'] } : entity)) });
-    const { save, set, list } = rig(undefined, personal);
+  it('does not read the shared patterns of another person at all, so they neither appear nor use up a page', async () => {
+    const { save, set, list, patterns } = rig();
+    for (let index = 0; index < 30; index += 1) set(await save(DEFINITION, OTHER), { visibility: 'shared' });
     const own = await save();
-    const other = await save(DEFINITION, OTHER);
-    set(other, { visibility: 'shared' });
-    expect((await list(OWNER)).offers.map((offer) => offer.id)).toEqual([own.id]);
+    const listing = await list(OWNER);
+    expect(listing.offers.map((offer) => offer.id)).toEqual([own.id]);
+    expect(listing.cut).toBe(false);
+    expect(patterns.patternRows.filter((row) => row.ownerId === OTHER.id)).toHaveLength(30);
   });
 
   const preset = (presetId: string, templateId: string, params: Record<string, unknown>) => ({ kind: 'preset-run' as const, presetId, templateId, templateVersion: 1, params, definition: null });
@@ -165,11 +167,13 @@ describe('the saved patterns offered to Ask', () => {
       expect(await find(OWNER, old.id)).toMatchObject({ id: old.id, version: old.version, projection: { kind: 'definition', anchorType: 'maker' } });
     });
 
-    it('finds the shared pattern of another person, and nothing for a private one, a deleted one, a pattern of another source, an unknown id or one the mapping no longer supports', async () => {
+    it('finds the caller’s own pattern, and nothing for the shared or private pattern of another person, a deleted one, a pattern of another source, an unknown id or one the mapping no longer supports', async () => {
       const { save, set, find, patterns } = rig();
+      const own = await save();
+      expect((await find(OWNER, own.id))?.id).toBe(own.id);
       const shared = await save(DEFINITION, OTHER);
       set(shared, { visibility: 'shared' });
-      expect((await find(OWNER, shared.id))?.id).toBe(shared.id);
+      expect(await find(OWNER, shared.id)).toBeUndefined();
       const privateOne = await save(DEFINITION, OTHER);
       expect(await find(OWNER, privateOne.id)).toBeUndefined();
       const deleted = await save();
@@ -194,8 +198,7 @@ describe('the saved patterns offered to Ask', () => {
 
   it('offers nothing of the owner, the held starting entity or the times: the offer holds the id, version and name and the structure, and no other string', async () => {
     const { save, set, list } = rig();
-    const row = await save(DEFINITION, OTHER, { anchor: { entityType: 'maker', stableId: 'HELD-ENTITY-ID' } });
-    set(row, { visibility: 'shared' });
+    const row = await save(DEFINITION, OWNER, { anchor: { entityType: 'maker', stableId: 'HELD-ENTITY-ID' } });
     const { offers } = await list(OWNER);
     expect(offers).toHaveLength(1);
     const { id, name, projection } = offers[0] ?? { id: '', name: '', projection: {} };

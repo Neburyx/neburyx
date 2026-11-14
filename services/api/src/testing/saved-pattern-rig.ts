@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { afterAll } from 'vitest';
-import type { AuditEvent, AuditSink } from '@neburyx/contracts';
+import type { AuditEvent, AuditSink, ProfileExtension } from '@neburyx/contracts';
 import { buildApp } from '../app.js';
 import { createLogger } from '../logger.js';
 import type { Identity } from '../identity/identity.js';
@@ -77,6 +77,9 @@ export interface PatternAppOptions extends MemoryAppStoreOptions {
   readonly probes?: ReadonlyMap<string, TemplateProbe>;
   readonly now?: () => Date;
   readonly policyVersion?: () => string;
+  /** The enterprise extension and whether its preview is on: the application then mounts its routes. */
+  readonly extension?: ProfileExtension;
+  readonly previewOn?: boolean;
 }
 
 export async function patternApp(options: PatternAppOptions = {}) {
@@ -95,7 +98,7 @@ export async function patternApp(options: PatternAppOptions = {}) {
   );
   const seams: Seams = { ...communitySeams(), audit: audit.sink, ...(options.deny === true ? { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } } : {}) };
   const parts = testSourceGate(mapping, { executor });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }), ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
   return { app, store, audit, executor };
 }
 

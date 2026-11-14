@@ -83,6 +83,9 @@ export const askRunAuditDetailSchema = z.strictObject({
   querySha256: sha256Hex.optional(),
   paramsHash: sha256Hex.optional(),
   rowCount: wholeCount.optional(),
+  /** The id and version of the saved pattern a run of the intent `saved-pattern` ran; its name is never recorded. */
+  patternId: z.uuid().optional(),
+  patternVersion: z.number().int().min(1).optional(),
 });
 
 export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;

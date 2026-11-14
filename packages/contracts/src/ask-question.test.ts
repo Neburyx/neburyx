@@ -60,6 +60,15 @@ describe('the answer to a question', () => {
     expect(askAnswerSchema.safeParse({ answered: { intent: 'byId', entities: {}, outcome: 'complete', result }, refused: { cause: 'no-intent', sentence: 'x' } }).success).toBe(false);
   });
 
+  it('names the saved pattern that ran only in the answer of the intent saved-pattern, and within the name limit', () => {
+    const answered = (intent: string, patternName?: string) => ({ answered: { intent, entities: { pattern: '0195a000-0000-7000-8000-000000000001' }, outcome: 'complete', result, ...(patternName === undefined ? {} : { patternName }) } });
+    expect(askAnswerSchema.safeParse(answered('saved-pattern', 'My ring')).success).toBe(true);
+    expect(askAnswerSchema.safeParse(answered('saved-pattern')).success).toBe(true);
+    expect(askAnswerSchema.safeParse(answered('byId', 'My ring')).success).toBe(false);
+    expect(askAnswerSchema.safeParse(answered('saved-pattern', 'x'.repeat(101))).success).toBe(false);
+    expect(askAnswerSchema.safeParse(answered('saved-pattern', '   ')).success).toBe(false);
+  });
+
   it('gives a heavy result a token and no summary, and no other result a token', () => {
     const heavy = { templateId: 'shared-attribute' as const, result: { status: 'heavy' as const, templateId: 'shared-attribute', templateVersion: '1', estimate: { quality: 'lowerBound' as const, value: 1000, scope: 'test' }, threshold: 1000, continueLimit: 25, notices: [], warnings: [] } };
     expect(askAnswerSchema.safeParse({ answered: { intent: 'x', entities: {}, outcome: 'partial', result: heavy, continueToken: TOKEN } }).success).toBe(true);
@@ -73,6 +82,11 @@ describe('the audit detail of a question and the reason of a bad token', () => {
     const detail = { intent: 'byId', kind: 'template' as const, outcome: 'complete' as const, templateId: 'entity', cause: 'nothing-found', paramsHash: 'a'.repeat(64), rowCount: 1 };
     expect(askRunAuditDetailSchema.parse(detail)).toEqual(detail);
     expect(parseAuditDetail({ askRun: detail })).toEqual({ askRun: detail });
+    const pattern = { ...detail, intent: 'saved-pattern', templateId: 'saved-pattern', patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 3 };
+    expect(askRunAuditDetailSchema.parse(pattern)).toEqual(pattern);
+    for (const bad of [{ ...pattern, patternId: 'My ring' }, { ...pattern, patternVersion: 0 }, { ...pattern, patternVersion: 1.5 }, { ...pattern, patternName: 'My ring' }]) {
+      expect(askRunAuditDetailSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
     for (const bad of [{ ...detail, entity: 'A-1' }, { ...detail, paramsHash: 'short' }, { ...detail, kind: 'plan' }, { ...detail, outcome: 'ok' }, { ...detail, rowCount: -1 }, { ...detail, cause: 'Because Of Text' }, { ...detail, cause: 'smith' }, { ...detail, templateId: 'smith' }]) {
       expect(askRunAuditDetailSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
     }

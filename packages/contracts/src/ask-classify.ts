@@ -68,3 +68,7 @@ export function readClassification(text: string, allowedIntents: readonly string
   if (typeof intent !== 'string') return bad;
   return allowedIntents.includes(intent) ? { ok: true, intent, entities } : { ok: false, cause: 'unknown-intent' };
 }
+
+/** What the model is told, after the question, of the caller's saved patterns: how to name one and when a starting entity is needed. The catalog text follows it. */
+export const ASK_SAVED_PATTERN_NOTE =
+  'Saved patterns of the signed-in person, each with a key. To run one, answer with the intent "saved-pattern" and the entity "pattern" holding its key; a pattern that starts from an entity the question gives also needs the entity "anchor" holding that entity\'s stable ID.';

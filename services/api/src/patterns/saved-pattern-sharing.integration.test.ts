@@ -156,6 +156,25 @@ describe('the list in Postgres with shared patterns', () => {
     expect((await context.store.listPatterns({ ownerId: context.b.id, sourceId: context.seeded.sourceId, limit: 10, after: undefined })).rows.find((row) => row.name === 'A shared')?.ownerName).toBe('Renamed');
   });
 
+  it('lists only the caller’s own patterns on request, pages them, and reads one by id only for its owner and only when the id is a uuid', async () => {
+    const context = await started();
+    const shared = await saveFor(context, context.a, { name: 'A shared' });
+    await shareAs(context, context.a, shared, 'shared');
+    await saveFor(context, context.a, { name: 'A private' });
+    await saveFor(context, context.b, { name: 'B one' });
+    await saveFor(context, context.b, { name: 'B two' });
+    const query = { ownerId: context.b.id, sourceId: context.seeded.sourceId, limit: 1, after: undefined };
+    const first = await context.store.listOwnPatterns(query);
+    expect(first.rows.map((row) => row.name)).toEqual(['B two']);
+    const second = await context.store.listOwnPatterns({ ...query, after: first.next });
+    expect(second.rows.map((row) => [row.name, row.ownerName])).toEqual([['B one', 'Second person']]);
+    expect(second.next).toBeUndefined();
+    expect(await context.store.readPattern(shared.id, context.b.id)).toBeUndefined();
+    expect((await context.store.readPattern(shared.id, context.a.id))?.id).toBe(shared.id);
+    expect(await context.store.readPattern('not-a-uuid', context.a.id)).toBeUndefined();
+    expect(await context.store.readPattern(shared.id, 'not-a-uuid')).toBeUndefined();
+  });
+
   it('pages both halves in one order with the next position at the last row read', async () => {
     const context = await started();
     for (let index = 0; index < 8; index += 1) {

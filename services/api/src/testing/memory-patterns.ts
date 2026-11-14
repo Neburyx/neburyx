@@ -32,6 +32,16 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
   let runs = 0;
   const stamp = (): string => new Date(Date.UTC(2026, 10, 12, 10, 0, 0) + writes++ * 1000).toISOString();
   const keyOf = (row: PatternRow): PatternListPosition => ({ updatedKey: row.updatedAt.replace('Z', '000Z'), id: row.id });
+  const list = (query: Parameters<PatternStore['listPatterns']>[0], ownOnly: boolean): ReturnType<PatternStore['listPatterns']> => {
+    const shown = (row: PatternRow): ListedPatternRow => ({ ...row, ownerName: names.get(row.ownerId) ?? '' });
+    const ordered = patternRows
+      .filter((row) => row.sourceId === query.sourceId && !deleted.has(row.id) && (row.ownerId === query.ownerId || (!ownOnly && row.visibility === 'shared')))
+      .sort((a, b) => (keyOf(a).updatedKey === keyOf(b).updatedKey ? (a.id < b.id ? 1 : -1) : keyOf(a).updatedKey < keyOf(b).updatedKey ? 1 : -1))
+      .filter((row) => query.after === undefined || keyOf(row).updatedKey < query.after.updatedKey || (keyOf(row).updatedKey === query.after.updatedKey && row.id < query.after.id));
+    const page = ordered.slice(0, query.limit);
+    const last = page.at(-1);
+    return Promise.resolve({ rows: page.map(shown), next: ordered.length > query.limit && last !== undefined ? keyOf(last) : undefined });
+  };
 
   /** The events of one change are written with its rows, and the seam is called after, as the transaction helper does. */
   async function commit(events: readonly PatternEvent[], context: PatternWriteContext, apply: () => void): Promise<void> {
@@ -137,16 +147,8 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
       });
       return { outcome: 'deleted', row, deletedAt: at, purgeAfter };
     },
-    listPatterns(query) {
-      const shown = (row: PatternRow): ListedPatternRow => ({ ...row, ownerName: names.get(row.ownerId) ?? '' });
-      const ordered = patternRows
-        .filter((row) => row.sourceId === query.sourceId && !deleted.has(row.id) && (row.ownerId === query.ownerId || row.visibility === 'shared'))
-        .sort((a, b) => (keyOf(a).updatedKey === keyOf(b).updatedKey ? (a.id < b.id ? 1 : -1) : keyOf(a).updatedKey < keyOf(b).updatedKey ? 1 : -1))
-        .filter((row) => query.after === undefined || keyOf(row).updatedKey < query.after.updatedKey || (keyOf(row).updatedKey === query.after.updatedKey && row.id < query.after.id));
-      const page = ordered.slice(0, query.limit);
-      const last = page.at(-1);
-      return Promise.resolve({ rows: page.map(shown), next: ordered.length > query.limit && last !== undefined ? keyOf(last) : undefined });
-    },
+    listOwnPatterns: (query) => list(query, true),
+    listPatterns: (query) => list(query, false),
     async copyPattern(copy: PatternCopy, context) {
       const callerId = context.principal.id;
       const original = visible(copy.originalId, callerId);

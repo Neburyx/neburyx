@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_QUESTION_MAX_CODE_POINTS, ASK_REFUSAL_CAUSES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askRunResultSchema, askSummarySchema, isHeavyResult } from './ask.js';
-import { ASK_FOLDER_LIMITS, isParameterName } from './ask-folder.js';
+import { ASK_FOLDER_LIMITS, ASK_SAVED_PATTERN_INTENT, isParameterName } from './ask-folder.js';
+import { savedPatternNameSchema } from './saved-pattern.js';
 import { codePoints } from './investigations.js';
 
 /** The label that opens the canonical text a run's parameters are signed under, so no other use of the signing capability signs the same text. */
@@ -49,7 +50,10 @@ const answeredSchema = z
     result: askRunResultSchema,
     summary: askSummarySchema.optional(),
     continueToken: z.string().regex(ASK_CONTINUE_TOKEN_PATTERN).optional(),
+    /** The label of the saved pattern that ran, as its owner typed it; shown to the owner as data and never audited or logged. */
+    patternName: savedPatternNameSchema.optional(),
   })
+  .refine((answer) => answer.patternName === undefined || answer.intent === ASK_SAVED_PATTERN_INTENT, { message: 'only the answer of a saved pattern names a pattern', path: ['patternName'] })
   .refine((answer) => isHeavyResult(answer.result) === (answer.continueToken !== undefined), { message: 'a heavy result comes with a continue token and no other result does', path: ['continueToken'] })
   .refine((answer) => !(isHeavyResult(answer.result) && answer.summary !== undefined), { message: 'a result that stopped as heavy lists nothing to cite and has no summary', path: ['summary'] });
 

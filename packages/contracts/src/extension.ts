@@ -30,9 +30,9 @@ export interface ExtensionRequest {
   readonly askPlanRunner?: (scope: AskRunScope) => AskPlanRunner;
   /** Resolves when the caller may read the source and rejects with the `NOT_FOUND` refusal when the source is not configured or not the caller's; asked before anything is signed or sent. */
   readonly askSourceReadable?: (sourceId: string) => Promise<void>;
-  /** The saved patterns the caller may run on a source, available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
+  /** The caller's own saved patterns on a source (never the shared ones of other people), available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
   readonly askPatterns?: (sourceId: string) => Promise<AskPatternListing>;
-  /** One saved pattern the caller may run on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller may run now. */
+  /** One of the caller's own saved patterns on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller owns and may run now. */
   readonly askPatternFind?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
 }
 

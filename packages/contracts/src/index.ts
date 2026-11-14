@@ -172,7 +172,7 @@ export { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_
 export type { AskAvailability, AskPatternCatalog, AskPatternEntry, AskPatternListing, AskPatternOffer, AskPatternProjection, AskPatternStep, AskClassifier, AskClassifyInput, AskClassification, AskEntities, AskRefusalCause, AskRunResult, AskSummary, AskSummaryCitation } from './ask.js';
 export { checkIntentQuery } from './query-check.js';
 export { ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, hasDuplicateKeys, isParameterName, parseIntentsFile } from './ask-folder.js';
-export { ASK_REFUSAL_SENTENCES, readClassification } from './ask-classify.js';
+export { ASK_REFUSAL_SENTENCES, ASK_SAVED_PATTERN_NOTE, readClassification } from './ask-classify.js';
 export type { ReadClassification } from './ask-classify.js';
 export type { AskFolder, AskIntent, AskSourceFolder, ParsedAskIntent, ParsedIntents } from './ask-folder.js';
 export { fileQueryResultSchema } from './file-query.js';

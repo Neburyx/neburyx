@@ -133,6 +133,8 @@ export interface PatternStore {
   savePattern(input: NewPattern, context: PatternWriteContext): Promise<PatternSaveResult>;
   /** The caller's patterns on a source that are not deleted, and the shared patterns of other people on it, the most recently changed first, then by id, one page and where the next starts: the next position is the last row read. Another person's private pattern is never read. */
   listPatterns(query: PatternListQuery): Promise<PatternListResult>;
+  /** The caller's own patterns on a source that are not deleted, in the order and pages of `listPatterns`: no shared pattern of another person is read, so none uses up a page. */
+  listOwnPatterns(query: PatternListQuery): Promise<PatternListResult>;
   /** The owner's pattern that is not deleted; another owner's, a deleted one and an unknown id are `undefined`. */
   readPattern(id: string, ownerId: string): Promise<PatternRow | undefined>;
   /** The live pattern a person may run: their own, or one whose visibility is `shared`, whoever owns it (the row says who). Another person's private pattern, a deleted one, an unknown id and an id that is not a uuid are `undefined`. */
@@ -199,6 +201,7 @@ export function createPatternStore(pool: pg.Pool): PatternStore {
   return {
     savePattern: (input, context) => savePattern(pool, input, context),
     listPatterns: (query) => listPatterns(pool, query),
+    listOwnPatterns: (query) => listOwnPatterns(pool, query),
     readPattern: (id, ownerId) => readPattern(pool, id, ownerId),
     readRunnablePattern: (id, principalId) => readRunnablePattern(pool, id, principalId),
     recordPatternRun: (id, ownerId) => recordPatternRun(pool, id, ownerId),
@@ -248,7 +251,20 @@ async function listPatterns(pool: pg.Pool, query: PatternListQuery): Promise<Pat
   return { rows: page.map((record) => ({ ...patternRowOf(record), ownerName: record.display_name })), next: found.rows.length > query.limit && last !== undefined ? { updatedKey: last.updated_key, id: last.id } : undefined };
 }
 
+async function listOwnPatterns(pool: pg.Pool, query: PatternListQuery): Promise<PatternListResult> {
+  const found = await pool.query<PatternRecord & { updated_key: string; display_name: string }>(
+    `SELECT p.*, u.display_name FROM (SELECT ${PATTERN_COLUMNS}, ${UPDATED_KEY} AS updated_key FROM saved_patterns
+      WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL AND ($3::text IS NULL OR (updated_at, id) < ($3::timestamptz, $4::uuid))
+      ORDER BY updated_at DESC, id DESC LIMIT $5) p JOIN users u ON u.id = p.owner_id ORDER BY p.updated_at DESC, p.id DESC`,
+    [query.ownerId, query.sourceId, query.after?.updatedKey ?? null, query.after?.id ?? null, query.limit + 1],
+  );
+  const page = found.rows.slice(0, query.limit);
+  const last = page.at(-1);
+  return { rows: page.map((record) => ({ ...patternRowOf(record), ownerName: record.display_name })), next: found.rows.length > query.limit && last !== undefined ? { updatedKey: last.updated_key, id: last.id } : undefined };
+}
+
 async function readPattern(pool: pg.Pool, id: string, ownerId: string): Promise<PatternRow | undefined> {
+  if (!PATTERN_ID_TEXT.test(id) || !PATTERN_ID_TEXT.test(ownerId)) return undefined;
   const found = await pool.query<PatternRecord>(`SELECT ${PATTERN_COLUMNS} FROM saved_patterns WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL`, [id, ownerId]);
   const [record] = found.rows;
   return record === undefined ? undefined : patternRowOf(record);

@@ -112,7 +112,7 @@ function holdsPersonalCondition(definition: PatternDefinition, source: SourceMod
 }
 
 /** Whether a stored pattern holds a condition on what the current mapping marks personal: a mapping can mark a property personal after a pattern was saved, so sharing, copying and showing a shared pattern look again. A stored definition that no longer reads as a definition is treated as holding one. */
-export function storedHoldsPersonalCondition(row: PatternRow, source: SourceModel): boolean {
+function storedHoldsPersonalCondition(row: PatternRow, source: SourceModel): boolean {
   if (row.kind !== 'definition') return false;
   const parsed = patternDefinitionSchema.safeParse(row.definition);
   return !parsed.success || holdsPersonalCondition(parsed.data, source);

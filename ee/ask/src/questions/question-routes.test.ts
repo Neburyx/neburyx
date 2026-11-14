@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ExtensionRefusal, type AskClassification, type AskFolder, type AskPlanRun, type AskRunResult, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { ExtensionRefusal, type AskClassification, type AskPatternOffer, type AskFolder, type AskPlanRun, type AskRunResult, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AuditUnavailableError } from '../audited.js';
 import { loadAskFolder } from '../folder/load.js';
@@ -30,21 +30,23 @@ interface Rig {
   readonly runs: { plan: unknown; options: unknown; mask: boolean }[];
   readonly classified: unknown[];
   readonly signals: AbortSignal[];
+  readonly logs: { fields: unknown; message: string }[];
   request(body: unknown, over?: Partial<ExtensionRequest>): ExtensionRequest;
 }
 
-async function rig(options: { intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskPlanRun; sink?: 'fails'; readable?: boolean } = {}): Promise<Rig> {
+async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskPlanRun; sink?: 'fails'; readable?: boolean } = {}): Promise<Rig> {
   const folder: AskFolder | undefined = await loadAskFolder({ folder: makeAskFolder([SOURCE], options.intents), sourceIds: [SOURCE] }).then((loaded) => (loaded.ok ? loaded.folder : undefined));
   const events: AuditEvent[] = [];
   const rows: RunRecord[] = [];
   const runs: Rig['runs'] = [];
   const classified: unknown[] = [];
   const signals: AbortSignal[] = [];
+  const logs: Rig['logs'] = [];
   const runStore: RunStore = { record: async (row) => void rows.push(row) };
   const routeOptions: QuestionRouteOptions = {
     folder: () => folder,
     runs: () => runStore,
-    logger: () => undefined,
+    logger: () => ({ warn: (fields, message) => void logs.push({ fields, message }), info: (fields, message) => void logs.push({ fields, message }) }),
     now: () => NOW,
   };
   const request = (body: unknown, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
@@ -66,6 +68,12 @@ async function rig(options: { intents?: unknown; classify?: () => Promise<AskCla
     askSourceReadable: async () => {
       if (options.readable === false) throw new ExtensionRefusal({ code: 'NOT_FOUND' });
     },
+    ...(options.patterns === undefined
+      ? {}
+      : {
+          askPatterns: async () => ({ offers: options.patterns ?? [], cut: false }),
+          askPatternFind: async (_sourceId: string, id: string) => options.patterns?.find((offer) => offer.id === id),
+        }),
     askPlanRunner: (scope) => ({
       run: async (plan, runOptions) => {
         runs.push({ plan, options: runOptions, mask: scope.mask });
@@ -75,7 +83,7 @@ async function rig(options: { intents?: unknown; classify?: () => Promise<AskCla
     body,
     ...over,
   });
-  return { route: createAskQuestionRoute(routeOptions), continueRoute: createAskContinueRoute(routeOptions), events, rows, runs, classified, signals, request };
+  return { route: createAskQuestionRoute(routeOptions), continueRoute: createAskContinueRoute(routeOptions), events, rows, runs, classified, signals, logs, request };
 }
 
 const ASK = { sourceId: SOURCE, question: QUESTION };
@@ -104,6 +112,7 @@ describe('a question of a template intent', () => {
     expect(detailOf(events[0])).toMatchObject({ intent: 'shared', kind: 'template', outcome: 'complete', templateId: 'shared-attribute', rowCount: 2 });
     expect(detailOf(events[0])['paramsHash']).toMatch(/^[0-9a-f]{64}$/);
     expect(rows).toEqual([{ actorId: 'p-1', intent: 'shared', outcome: 'complete', rowCount: 2, elapsedMs: 0 }]);
+    expect([detailOf(events[0])['patternId'], detailOf(events[0])['patternVersion']]).toEqual([undefined, undefined]);
   });
 
   it('refuses, before the runner and with one event, a value that does not fit the template, as invalid-inputs', async () => {
@@ -348,5 +357,171 @@ describe('a result that stops as heavy, and Continue', () => {
     expect(await refusalOf(rigged.continueRoute.handler(rigged.request(continueBody(first.answered.continueToken), { signText: undefined })))).toMatchObject({ code: 'ASK_UNSUPPORTED' });
     const closed = await rig({ readable: false });
     expect(await refusalOf(closed.continueRoute.handler(closed.request(continueBody(first.answered.continueToken))))).toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+const PATTERN_HELD = '0195a000-0000-7000-8000-000000000001';
+const PATTERN_ASKED = '0195a000-0000-7000-8000-000000000002';
+const offerOf = (id: string, startingEntity: 'held' | 'asked', name: string, version = 3): AskPatternOffer => ({
+  id,
+  version,
+  name,
+  projection: { kind: 'definition', anchorType: 'widget', startingEntity, steps: [{ relationshipTypes: ['link_a'], direction: 'out', arrivesAt: 'gadget', conditions: [], windowed: false }] },
+});
+const HELD = offerOf(PATTERN_HELD, 'held', 'SECRET-HELD-NAME');
+const ASKED = offerOf(PATTERN_ASKED, 'asked', 'SECRET-ASKED-NAME', 2);
+const savedResult = (): AskRunResult => ({ templateId: 'saved-pattern', result: (okResult() as { result: unknown }).result }) as AskRunResult;
+const savedHeavy = (): AskRunResult => ({ templateId: 'saved-pattern', result: (heavyResult() as { result: unknown }).result }) as AskRunResult;
+const asks = (entities: Record<string, string>) => ({ classify: async (): Promise<AskClassification> => ({ ok: true, intent: 'saved-pattern', entities }) });
+const everything = (value: unknown): string => JSON.stringify(value);
+const SECRETS = /SECRET-HELD-NAME|SECRET-ASKED-NAME|SECRET-ANCHOR/;
+/** Nothing the person typed or named (a label, an anchor) is in an event, a row, a log line or a refusal. */
+const expectNoLeak = (rigged: { events: unknown; rows: unknown; logs: unknown }, ...more: unknown[]): void => void expect(everything([rigged.events, rigged.rows, rigged.logs, ...more])).not.toMatch(SECRETS);
+
+describe('a question that names a saved pattern', () => {
+  const patterns = [HELD, ASKED];
+
+  it('shows the classifier the catalog of the caller’s patterns, with names and descriptions and no id or version', async () => {
+    const { route, request, classified } = await rig({ patterns, ...asks({ pattern: 'pat_1' }) });
+    await route.handler(request(ASK));
+    const catalog = (classified[0] as { patternCatalog?: string }).patternCatalog ?? '';
+    expect(catalog).toContain('SECRET-HELD-NAME');
+    expect(catalog).toContain('SECRET-ASKED-NAME');
+    expect(catalog).not.toMatch(/0195a000|version/i);
+  });
+
+  it('runs a held pattern with its id and version through the runner, and answers with the pattern’s id, its label and the summary', async () => {
+    const { route, request, runs, events, rows } = await rig({ patterns: [HELD], ...asks({ pattern: 'pat_1' }), run: () => ({ status: 'ok', result: savedResult() }) });
+    const answer = (await route.handler(request(ASK))) as { answered: Record<string, unknown> };
+    expect(runs).toEqual([{ plan: { templateId: 'saved-pattern', params: { patternId: PATTERN_HELD, patternVersion: 3 } }, options: undefined, mask: false }]);
+    expect(answer.answered).toMatchObject({ intent: 'saved-pattern', entities: { pattern: PATTERN_HELD }, outcome: 'complete', patternName: 'SECRET-HELD-NAME', result: { templateId: 'saved-pattern' } });
+    expect(answer.answered['summary']).toBeDefined();
+    expect(events).toHaveLength(1);
+    expect(detailOf(events[0])).toMatchObject({ intent: 'saved-pattern', kind: 'template', outcome: 'complete', templateId: 'saved-pattern', patternId: PATTERN_HELD, patternVersion: 3, rowCount: 2 });
+    expect(detailOf(events[0])['paramsHash']).toMatch(/^[0-9a-f]{64}$/);
+    expect(rows).toEqual([{ actorId: 'p-1', intent: 'saved-pattern', outcome: 'complete', rowCount: 2, elapsedMs: 0 }]);
+  });
+
+  it('runs an asked pattern with the anchor as a reference of the type the pattern starts at, never a type from the reply', async () => {
+    const { route, request, runs } = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'SECRET-ANCHOR' }), run: () => ({ status: 'ok', result: savedResult() }) });
+    await route.handler(request(ASK));
+    expect(runs[0]?.plan).toEqual({ templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'SECRET-ANCHOR' } } });
+  });
+
+  it('keeps the typed name and the anchor out of every event, row and log line', async () => {
+    const rigged = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'SECRET-ANCHOR' }), run: () => ({ status: 'ok', result: savedResult() }) });
+    await rigged.route.handler(rigged.request(ASK));
+    expectNoLeak(rigged);
+  });
+
+  it.each([
+    ['a key that is not in the catalog', { pattern: 'pat_9' }, 'nothing-found'],
+    ['an id instead of a key', { pattern: PATTERN_HELD }, 'nothing-found'],
+    ['no pattern', { anchor: 'x' }, 'missing-inputs'],
+    ['an anchor for a held pattern', { pattern: 'pat_1', anchor: 'SECRET-ANCHOR' }, 'extra-inputs'],
+  ])('refuses %s before the runner, with one event and no row', async (_name, entities, cause) => {
+    const rigged = await rig({ patterns: [HELD], ...asks(entities) });
+    const { route, request, runs, events, rows } = rigged;
+    const answer = await route.handler(request(ASK));
+    expect(answer).toEqual({ refused: expect.objectContaining({ cause }) });
+    expectNoLeak(rigged, answer);
+    expect(runs).toEqual([]);
+    expect(events).toHaveLength(1);
+    expect(detailOf(events[0])).toMatchObject({ outcome: 'refused', cause });
+    expect(detailOf(events[0])['patternName']).toBeUndefined();
+    if (cause === 'nothing-found') expect([detailOf(events[0])['patternId'], detailOf(events[0])['patternVersion']]).toEqual([undefined, undefined]);
+    expect(rows).toEqual([]);
+  });
+
+  it('asks for the anchor of an asked pattern, naming the inputs', async () => {
+    const rigged = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1' }) });
+    const answer = await rigged.route.handler(rigged.request(ASK));
+    expect(answer).toEqual({ refused: expect.objectContaining({ cause: 'missing-inputs', parameters: ['pattern', 'anchor'], missing: ['anchor'] }) });
+    expectNoLeak(rigged, answer);
+  });
+
+  it('is an unknown intent when the application lists no patterns, and the classifier is shown no catalog', async () => {
+    const { route, request, classified } = await rig({ ...asks({ pattern: 'pat_1' }) });
+    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'unknown-intent' }) });
+    expect((classified[0] as { patternCatalog?: string }).patternCatalog).toBeUndefined();
+  });
+
+  it('fails as the application’s error, with no model call and no event, when the patterns cannot be listed', async () => {
+    const { route, request, classified, events } = await rig({ patterns: [HELD], ...asks({ pattern: 'pat_1' }) });
+    const failing = request(ASK, { askPatterns: async () => Promise.reject(new ExtensionRefusal({ code: 'NOT_FOUND' })) });
+    expect(await refusalOf(route.handler(failing))).toMatchObject({ code: 'NOT_FOUND' });
+    expect(classified).toEqual([]);
+    expect(events).toEqual([]);
+  });
+
+  it('answers nothing found, with no row, when the pattern is gone by the time it runs, and records a failed run for a conflict', async () => {
+    const gone = await rig({ patterns: [HELD], ...asks({ pattern: 'pat_1' }), run: () => ({ status: 'refused', refusal: { code: 'NOT_FOUND' } }) });
+    expect(await gone.route.handler(gone.request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'nothing-found' }) });
+    expect(gone.rows).toEqual([]);
+    const changed = await rig({ patterns: [HELD], ...asks({ pattern: 'pat_1' }), run: () => ({ status: 'refused', refusal: { code: 'CONFLICT', reason: 'pattern-changed' } }) });
+    expect(await refusalOf(changed.route.handler(changed.request(ASK)))).toMatchObject({ code: 'CONFLICT', reason: 'pattern-changed' });
+    expect(changed.rows).toEqual([{ actorId: 'p-1', intent: 'saved-pattern', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
+    expect(detailOf(changed.events[0])).toMatchObject({ outcome: 'failed', cause: 'conflict', patternId: PATTERN_HELD, patternVersion: 3 });
+    expectNoLeak(changed);
+    expectNoLeak(gone);
+  });
+
+  describe('that stops as heavy', () => {
+    const continueBody = (token: string, over: Record<string, unknown> = {}) => ({ sourceId: SOURCE, intent: 'saved-pattern', entities: { pattern: PATTERN_HELD }, continueToken: token, ...over });
+    async function stopped(offers: readonly AskPatternOffer[] = [HELD], entities: Record<string, string> = { pattern: 'pat_1' }) {
+      const rigged = await rig({ patterns: offers, ...asks(entities), run: (continuing) => ({ status: 'ok', result: continuing ? savedResult() : savedHeavy() }) });
+      const first = (await rigged.route.handler(rigged.request(ASK))) as { answered: { continueToken: string; entities: unknown; patternName: string; summary?: unknown } };
+      return { rigged, first };
+    }
+
+    it('answers the stop with a token, no summary and no row, and Continue runs the pattern for a page without a model call, naming it', async () => {
+      const { rigged, first } = await stopped();
+      expect(first.answered.continueToken).toMatch(/^[0-9]{13}\.[0-9a-f]{64}$/);
+      expect(first.answered.summary).toBeUndefined();
+      expect(rigged.rows).toEqual([]);
+      const classifiedBefore = rigged.classified.length;
+      const page = (await rigged.continueRoute.handler(rigged.request(continueBody(first.answered.continueToken)))) as { answered: Record<string, unknown> };
+      expect(page.answered).toMatchObject({ outcome: 'complete', patternName: 'SECRET-HELD-NAME', entities: { pattern: PATTERN_HELD } });
+      expect(rigged.runs.map((run) => run.options)).toEqual([undefined, { continue: true }]);
+      expect(rigged.classified.length).toBe(classifiedBefore);
+      expect(rigged.events.map((event) => event.action)).toEqual(['ask.question', 'ask.continue']);
+      expect(everything(rigged.events)).not.toContain('SECRET-HELD-NAME');
+    });
+
+    it('continues an asked pattern with the anchor as a reference of the type the pattern starts at, and names the anchor in the entities of the page', async () => {
+      const { rigged, first } = await stopped([ASKED], { pattern: 'pat_1', anchor: 'SECRET-ANCHOR' });
+      const body = continueBody(first.answered.continueToken, { entities: { pattern: PATTERN_ASKED, anchor: 'SECRET-ANCHOR' } });
+      const page = (await rigged.continueRoute.handler(rigged.request(body))) as { answered: Record<string, unknown> };
+      expect(page.answered).toMatchObject({ outcome: 'complete', patternName: 'SECRET-ASKED-NAME', entities: { pattern: PATTERN_ASKED, anchor: 'SECRET-ANCHOR' } });
+      expect(rigged.runs[1]).toMatchObject({ plan: { templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'SECRET-ANCHOR' } } }, options: { continue: true } });
+      expectNoLeak(rigged);
+    });
+
+    it('refuses the token after the pattern was edited, and a pattern that is gone, an id that is not one, a find that fails, with an event that names no source', async () => {
+      const { rigged, first } = await stopped();
+      const token = first.answered.continueToken;
+      const edited = { ...HELD, version: 4 };
+      const cases: [string, Partial<ExtensionRequest>, Record<string, unknown>?][] = [
+        ['edited', { askPatternFind: async () => edited }],
+        ['gone', { askPatternFind: async () => undefined }],
+        ['failing', { askPatternFind: async () => Promise.reject(new Error('down')) }],
+        ['not an id', {}, { entities: { pattern: 'pat_1' } }],
+      ];
+      for (const [name, over, body] of cases) {
+        expect(await refusalOf(rigged.continueRoute.handler(rigged.request(continueBody(token, body), over))), name).toMatchObject({ code: 'INVALID_REQUEST', reason: 'continue-invalid' });
+        expect(rigged.events.at(-1), name).toMatchObject({ action: 'ask.continue', result: 'refused' });
+        expect(rigged.events.at(-1)?.sourceId, name).toBeUndefined();
+      }
+      expect(rigged.runs).toHaveLength(1);
+      let finds = 0;
+      const counting = { askPatternFind: async (_sourceId: string, id: string) => ((finds += 1), id === PATTERN_HELD ? HELD : undefined) };
+      const forged = `${token.slice(0, -1)}${token.endsWith('0') ? '1' : '0'}`;
+      expect(await refusalOf(rigged.continueRoute.handler(rigged.request(continueBody(forged), counting)))).toMatchObject({ reason: 'continue-invalid' });
+      expect(finds).toBe(1);
+      expect(await refusalOf(rigged.continueRoute.handler(rigged.request(continueBody(token, { entities: { pattern: 'pat_1' } }), counting)))).toMatchObject({ reason: 'continue-invalid' });
+      expect(finds).toBe(1);
+      expectNoLeak(rigged);
+      expect(await refusalOf(rigged.continueRoute.handler(rigged.request(continueBody(token), { askPatternFind: undefined })))).toMatchObject({ code: 'ASK_UNSUPPORTED' });
+    });
   });
 });

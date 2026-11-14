@@ -5327,6 +5327,10 @@
                   "continueToken": {
                     "type": "string",
                     "pattern": "^[0-9]{1,16}\\.[0-9a-f]{64}$"
+                  },
+                  "patternName": {
+                    "type": "string",
+                    "maxLength": 100
                   }
                 },
                 "required": [

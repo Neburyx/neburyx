@@ -65,8 +65,6 @@
     "apps/web/src/ask/refusal-chips.ts": ["files"],
     "apps/web/src/shell/shell-data.tsx": ["exports"],
     "apps/web/src/workspace/tool-registry.tsx": ["exports"],
-    // Kept for the saved-pattern step of the Ask rework, which builds the catalog text for the classifier.
-    "ee/ask/src/patterns/index.ts": ["files"],
     // Used by the tests of services/api through dist, which knip cannot follow; the final sweep of the Ask rework keeps only createEnterpriseExtension here.
     "ee/ask/src/index.ts": ["exports", "types"],
     // Named aliases of one value, one name for each role in the canvas look: kept pending a decision.

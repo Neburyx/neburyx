@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AskClassifyInput, AskFolder, AuditEvent, AuditSink } from '@neburyx/contracts';
+import { ASK_SAVED_PATTERN_NOTE, type AskClassifyInput, type AskFolder, type AuditEvent, type AuditSink } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { createAuditedModelCall } from '../audited.js';
 import type { ModelProvider } from '../provider.js';
@@ -33,6 +33,14 @@ describe('the classifier of Ask', () => {
     expect(await classifier.classify(input(), SIGNAL)).toEqual({ ok: true, intent: 'byId', entities: { id: 'A-1' } });
     expect(fixture.calls).toEqual([{ promptId: 'ask.classify', version: 1, instructions: CLASSIFICATION, values: QUESTION }]);
     expect(events).toHaveLength(1);
+  });
+
+  it('sends the question alone without a catalog, and with one the question, the note and the catalog and nothing else, and may then answer saved-pattern', async () => {
+    const catalog = 'pat_1, named "My ring": anchor maker, asked\n\n';
+    const { classifier, fixture } = rig(ok('{"intent":"saved-pattern","entities":{"pattern":"pat_1"}}'));
+    expect(await classifier.classify(input({ patternCatalog: catalog }), SIGNAL)).toEqual({ ok: true, intent: 'saved-pattern', entities: { pattern: 'pat_1' } });
+    expect(fixture.calls).toEqual([{ promptId: 'ask.classify', version: 1, instructions: CLASSIFICATION, values: `${QUESTION}\n\n${ASK_SAVED_PATTERN_NOTE}\n${catalog}` }]);
+    expect(await rig(ok('{"intent":"saved-pattern","entities":{"pattern":"pat_1"}}')).classifier.classify(input(), SIGNAL)).toEqual({ ok: false, cause: 'unknown-intent' });
   });
 
   it('is available', () => {

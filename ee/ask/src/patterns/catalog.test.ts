@@ -1,4 +1,4 @@
-import type { AskPatternOffer, AskPatternProjection } from '@neburyx/contracts';
+import { PATTERN_LIMITS, type AskPatternOffer, type AskPatternProjection } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { buildPatternCatalog } from './catalog.js';
 import { PATTERN_CATALOG_CUT_SENTENCE } from './catalog-text.js';
@@ -13,6 +13,14 @@ const projection = (over: Partial<Extract<AskPatternProjection, { kind: 'definit
 const offer = (id: string, over: Partial<AskPatternOffer> = {}): AskPatternOffer => ({ id, version: 3, name: 'SECRET-NAME', projection: projection(), ...over });
 
 describe('the pattern catalog', () => {
+  it('is bounded by what feeds it: 30 offers of the largest structure the limits allow and names of the longest length stay under 66,000 characters', () => {
+    const step = { relationshipTypes: Array.from({ length: PATTERN_LIMITS.relationshipTypesPerStep }, (_, index) => `${index}`.padEnd(40, 'r')), direction: 'both' as const, arrivesAt: 'g'.repeat(60), conditions: Array.from({ length: PATTERN_LIMITS.conditionsPerElement }, () => ({ on: 'neighbor' as const, kind: 'between' as const })), windowed: true };
+    const offers = Array.from({ length: 30 }, (_, index) => offer(`id-${index}`, { name: `${index}`.padEnd(PATTERN_LIMITS.nameLength, 'n'), projection: projection({ anchorType: 'a'.repeat(60), steps: Array.from({ length: PATTERN_LIMITS.steps }, () => step) }) }));
+    const text = buildPatternCatalog({ offers, cut: true })?.catalog.text ?? '';
+    expect(text.length).toBeGreaterThan(60_000);
+    expect(text.length).toBeLessThan(66_000);
+  });
+
   it('is absent when no pattern is offered', () => {
     expect(buildPatternCatalog({ offers: [], cut: false })).toBeUndefined();
   });

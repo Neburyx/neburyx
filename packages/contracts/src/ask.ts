@@ -206,6 +206,8 @@ export interface AskClassifyInput {
   readonly actorRole: Exclude<AuditEvent['actorRole'], 'system'>;
   readonly traceId: string;
   readonly investigationId?: string;
+  /** The catalog text of the caller's own saved patterns on this source, built by the route; when it is given the model may answer the intent `saved-pattern`, and the text is sent after the question. */
+  readonly patternCatalog?: string;
 }
 
 export type AskClassification = { readonly ok: true; readonly intent: string; readonly entities: AskEntities } | { readonly ok: false; readonly cause: AskRefusalCause };
