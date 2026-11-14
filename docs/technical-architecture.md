@@ -1407,7 +1407,7 @@ is configured as its own source. Together they produce:
 | Supernodes | 1k/10k/100k: no huge payloads; count quality incl. `lowerBound`; stable load-more incl. null sort values; per-page server cost measured |
 | Gate | Every endpoint goes through the gate (an architecture test fails if a router calls the adapter directly) |
 | Cancellation | Queued, running and raced-complete jobs; source outage mid-job; the graph stays intact |
-| Ask (E) | Plan accuracy; invalid-plan repair; `unsupported`; local entity resolution (no typed names or IDs in the prompt); injection fixtures; citation check once the LLM answerer exists |
+| Ask (E) | Intent accuracy: the evaluation tool (`tools/ask-eval`) runs Ask's own classifier over the `questions.yaml` of each demo pack and scores whether it picks the right intent with the right entities, or refuses a question it should refuse; targets: every refusal refused and at least 92% of the plans right, and no fewer than the committed baseline, which names the model it was measured on. Scoring replays a committed recording with no model call (also nightly); a recording run makes exactly one call per question, within a budget. The safety suite (`tools/ask-safety-suite`, its README lists each test): the strict reply (a reply that does not fit is refused), an instruction typed into a question runs nothing, values reach the source only as parameters, a file query that writes is refused at start-up, by the gate and (against Neo4j) by the read transaction, the exact input the provider receives, no value or question in any audit event, row, log line or problem response, and nothing withheld or redacted |
 | AI summary (E) | [Design of the case summary, which is not built.] Placeholder round trip (no names or IDs in the prompt); citation check; numeric consistency; omissions line written by the server; injection fixtures; no-verdict check |
 | Assistant (E) | [Design of the assistant, which is not built; plans were removed by the rebuild of Ask.] Route accuracy; follow-up resolution against the investigation's entities; one plan per turn, no auto-run; refusals for raw-query, cross-source and verdict requests; replies pass the AI-summary suites |
 | Evidence (E) | `verify-pack`; partial capture; unavailable evidence; tamper detection |
@@ -1421,7 +1421,7 @@ is configured as its own source. Together they produce:
 
 1. **Community v0.1.** Demo-graph install ≤ 15 min; supernode suite
    passes; domain-neutrality suite passes (both packs); the author completes the demo case and the mapping task.
-2. **Ask preview [W2].** Ask accuracy meets its measured baseline; every summary statement
+2. **Ask preview [W2].** Ask meets the targets of the evaluation tool and its committed baseline on the demo packs' questions, and the Ask safety suite passes; every summary statement
    cites returned elements; [design of the unbuilt case summary and assistant:] the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline [end of the unbuilt design]; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit.
 3. **Enterprise build [Later].** Evidence-pack suite (`verify-pack`, tamper,
    partial); OIDC/RBAC/audit/PII suites; image signing and SBOM; security checklist; install

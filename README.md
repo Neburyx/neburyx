@@ -252,6 +252,8 @@ docker compose down -v
 | `deploy/demo` | Demo environment on two synthetic graphs, loopback only |
 | `tools/demo-graph` | Synthetic demo graph generator |
 | `tools/dev` | The `pnpm dev` command that runs the app locally |
+| `tools/ask-eval` | The Ask evaluation: scores the classifier's intents and entities on the demo packs' questions |
+| `tools/ask-safety-suite` | Tests that Ask keeps its safety rules, from the question to the source and every record |
 | `docs/` | Public technical documentation |
 
 This repository contains no internal or private material, and uses synthetic data only.

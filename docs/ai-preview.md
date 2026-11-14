@@ -178,6 +178,8 @@ With the switch on, `GET /v1/ai/status` answers `{ "preview": true }`. With the 
 
 When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` with `{ "preview": true }`, and `GET /v1/me` reports the edition as `enterprise`.
 
+How well Ask classifies is measured by `pnpm ask-eval --packs domain-packs --replay tools/ask-eval/data/replay.json --baseline tools/ask-eval/data/baseline.json`, which scores a committed recording of the model's replies to the demo packs' questions with no model call (see [`tools/ask-eval`](../tools/ask-eval/README.md) for recording a live run). The safety rules of Ask are tested by `pnpm test` in [`tools/ask-safety-suite`](../tools/ask-safety-suite/README.md), and its one read-transaction case by `pnpm test:neo4j` against a Neo4j Enterprise server you own.
+
 ## What you see in the app
 
 The header of the workspace shows **Ask** and **Summarize**. With the switch off, both show a padlock beside their name. With the preview on, both show a sparkle. Summarize does nothing in this build. Ask is answered by the API routes described under [The Ask folder](#the-ask-folder).
