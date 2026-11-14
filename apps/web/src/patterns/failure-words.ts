@@ -71,7 +71,7 @@ const TABLE: { readonly [C in FailureCode]: Entry } = {
   CONFLICT: (failure) => (reasonOf(failure) === 'pattern-name-taken' ? { text: nameTakenSentence, action: 'close' } : { text: 'This was changed elsewhere. Reload it, then try again.', action: 'close' }),
   EXPORT_FAILED: said('The export could not be made.', 'try-again'),
   ASK_UNSUPPORTED: said('This question cannot be answered here.', 'close'),
-  ASK_PLAN_INVALID: said('The plan for this question was not accepted.', 'close'),
+  ASK_INTENT_INVALID: said('The values of this question were not accepted.', 'close'),
   INVALID_REQUEST: (failure) => {
     const reason = reasonOf(failure);
     if (reason === 'pattern-limit') return { text: patternLimitSentence, action: 'close' };

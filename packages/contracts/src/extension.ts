@@ -122,7 +122,7 @@ const invalidRequestRefusalSchema = z.object({ name: named, code: z.literal('INV
 const accessDeniedRefusalSchema = z.object({ name: named, code: z.literal('ACCESS_DENIED'), reason: none, audited: none });
 const sourceMismatchRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_MISMATCH'), reason: none });
 const sourceBusyRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_BUSY'), reason: none });
-const askPlanInvalidRefusalSchema = z.object({ name: named, code: z.literal('ASK_PLAN_INVALID'), reason: none });
+const askIntentInvalidRefusalSchema = z.object({ name: named, code: z.literal('ASK_INTENT_INVALID'), reason: none });
 const budgetRefusalSchema = z.object({ name: named, code: z.literal('QUERY_BUDGET_EXCEEDED'), reason: none, maxPage: z.number().int().positive().optional(), maxHops: z.number().int().positive().optional() });
 const rateLimitedRefusalSchema = z.object({ name: named, code: z.literal('RATE_LIMITED'), reason: none, retryAfterMs: z.number().int().nonnegative().optional() });
 const sourceUnavailableRefusalSchema = z
@@ -142,7 +142,7 @@ const refusalSchemas = [
   accessDeniedRefusalSchema,
   sourceMismatchRefusalSchema,
   sourceBusyRefusalSchema,
-  askPlanInvalidRefusalSchema,
+  askIntentInvalidRefusalSchema,
   budgetRefusalSchema,
   rateLimitedRefusalSchema,
   sourceUnavailableRefusalSchema,

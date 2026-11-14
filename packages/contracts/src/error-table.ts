@@ -25,7 +25,7 @@ export const CONFLICT_ENTRIES: Readonly<Record<ConflictReason, Omit<ErrorEntry, 
   'investigation-read-only': { message: 'This investigation is closed or archived. Reopen it to make changes.', retryable: false },
   'source-changed': { message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false },
   'pattern-name-taken': { message: 'You already have a pattern with this name on this source. Choose another name.', retryable: false },
-  'pattern-changed': { message: 'The saved pattern changed after this plan was made, so it was not run. Ask the question again to plan the pattern as it is now.', retryable: false },
+  'pattern-changed': { message: 'The saved pattern changed after this question was classified, so it was not run. Ask the question again to run the pattern as it is now.', retryable: false },
   'pattern-unavailable': { message: 'The saved pattern can no longer run against the source. Ask the question again.', retryable: false },
 };
 
@@ -67,7 +67,7 @@ export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {
   CONFLICT: { message: 'This item was changed elsewhere. Reload to continue.', status: 409, retryable: false },
   EXPORT_FAILED: { message: 'The export could not be created.', status: 500, retryable: true },
   ASK_UNSUPPORTED: { message: 'This question is not supported.', status: 422, retryable: false },
-  ASK_PLAN_INVALID: { message: 'The values of the question do not fit what Ask can run.', status: 422, retryable: false },
+  ASK_INTENT_INVALID: { message: 'The values of the question do not fit what Ask can run.', status: 422, retryable: false },
   INVALID_REQUEST: { message: 'The request is not valid.', status: 400, retryable: false },
   UNSUPPORTED_MEDIA_TYPE: { message: 'The request content type is not supported.', status: 415, retryable: false },
   NOT_FOUND: { message: 'Not found.', status: 404, retryable: false },

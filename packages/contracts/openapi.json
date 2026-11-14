@@ -186,7 +186,7 @@
             }
           },
           "422": {
-            "description": "Ask is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), a value the template accepts is refused by the source's own checks (ASK_PLAN_INVALID), or the read would exceed its budget (QUERY_BUDGET_EXCEEDED)",
+            "description": "Ask is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), a value the template accepts is refused by the source's own checks (ASK_INTENT_INVALID), or the read would exceed its budget (QUERY_BUDGET_EXCEEDED)",
             "content": {
               "application/json": {
                 "schema": {
@@ -295,7 +295,7 @@
             }
           },
           "422": {
-            "description": "Ask is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), a value the template accepts is refused by the source's own checks (ASK_PLAN_INVALID), or the read would exceed its budget (QUERY_BUDGET_EXCEEDED)",
+            "description": "Ask is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), a value the template accepts is refused by the source's own checks (ASK_INTENT_INVALID), or the read would exceed its budget (QUERY_BUDGET_EXCEEDED)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4146,7 +4146,7 @@
             }
           }
         ],
-        "description": "Lists the built-in templates a pattern can bind, in a fixed order, each enabled for the source: its id, version, a generic name, the description the Ask planner reads, and `paramsSchema`, a JSON Schema generated from the contract schema of the parameters a caller sends. The schema states the shape: every input the run route accepts passes it, and the route also refuses inputs it accepts (a date that is not on the calendar, a range in the wrong order or too wide, a stable ID longer than the bound counted in UTF-16 units, the members a preset fixes, a name the mapping does not have, a limit or a hop count above the source budget). Lists the presets of the source as its profile gives them, in mapping order, and nothing else; a source with no presets lists none. Reads no source and no database. An unknown source is NOT_FOUND; a missing, empty or repeated sourceId, or another query member, is INVALID_REQUEST.",
+        "description": "Lists the built-in templates a pattern can bind, in a fixed order, each enabled for the source: its id, version, a generic name, the description that tells the template from the others, and `paramsSchema`, a JSON Schema generated from the contract schema of the parameters a caller sends. The schema states the shape: every input the run route accepts passes it, and the route also refuses inputs it accepts (a date that is not on the calendar, a range in the wrong order or too wide, a stable ID longer than the bound counted in UTF-16 units, the members a preset fixes, a name the mapping does not have, a limit or a hop count above the source budget). Lists the presets of the source as its profile gives them, in mapping order, and nothing else; a source with no presets lists none. Reads no source and no database. An unknown source is NOT_FOUND; a missing, empty or repeated sourceId, or another query member, is INVALID_REQUEST.",
         "responses": {
           "200": {
             "description": "The templates and the presets of the source",
@@ -14051,7 +14051,7 @@
                 "properties": {
                   "code": {
                     "type": "string",
-                    "const": "ASK_PLAN_INVALID"
+                    "const": "ASK_INTENT_INVALID"
                   },
                   "message": {
                     "type": "string",
@@ -14776,7 +14776,7 @@
                   },
                   "message": {
                     "type": "string",
-                    "const": "The saved pattern changed after this plan was made, so it was not run. Ask the question again to plan the pattern as it is now."
+                    "const": "The saved pattern changed after this question was classified, so it was not run. Ask the question again to run the pattern as it is now."
                   },
                   "retryable": {
                     "type": "boolean",

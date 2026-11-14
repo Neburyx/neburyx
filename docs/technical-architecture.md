@@ -1081,7 +1081,7 @@ Codes: `QUERY_BUDGET_EXCEEDED`, `QUERY_TIMEOUT` (504; `details.timeoutMs` is the
 slot freed within the wait, §14; retryable), `RATE_LIMITED` (per-user request rate; retryable, with
 `retryAfterMs`), `ACCESS_DENIED`, `CURSOR_INVALIDATED` (409; a cursor that is altered, malformed, expired, signed with another key or bound to another source, person, policy version, sort, template or filter; one answer for every cause, with no detail; the cursor is the text `v1.<payload>.<mac>`, valid 30 minutes, signed under `NEBURYX_CURSOR_KEY`, §8.2), `PARTIAL_RESULT`,
 `EVIDENCE_NOT_AVAILABLE` (reserved: the stored edge read reports it as a state in a `200` answer and never as an error response; the table still lists it as 404, 2026-11-09), `CONFLICTED_VIEW_VERSION`, `CONFLICT` (a stale `expectedVersion` on any
-other resource), `EXPORT_FAILED`, `ASK_UNSUPPORTED`, `ASK_PLAN_INVALID`. Five codes were added
+other resource), `EXPORT_FAILED`, `ASK_UNSUPPORTED`, `ASK_INTENT_INVALID`. Five codes were added
 with the first API skeleton (2026-10-31), for answers that had no code: `INVALID_REQUEST` (400:
 malformed URL, JSON, chunk framing or body), `UNSUPPORTED_MEDIA_TYPE` (415), `NOT_FOUND` (404),
 `INTERNAL_ERROR` (500) and `SOURCE_MISMATCH` (400: a reference names a different source than the

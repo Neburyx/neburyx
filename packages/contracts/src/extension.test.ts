@@ -143,7 +143,7 @@ describe('the refusals of a read of the gate and of a run', () => {
     ['a source mismatch', { code: 'SOURCE_MISMATCH' }],
     ['a pattern that was changed', { code: 'CONFLICT', reason: 'pattern-changed' }],
     ['a pattern that is unavailable', { code: 'CONFLICT', reason: 'pattern-unavailable' }],
-    ['an invalid plan', { code: 'ASK_PLAN_INVALID' }],
+    ['an invalid intent', { code: 'ASK_INTENT_INVALID' }],
     ['an audit that is unavailable', { code: 'AUDIT_UNAVAILABLE' }],
   ];
 
@@ -158,7 +158,7 @@ describe('the refusals of a read of the gate and of a run', () => {
     ['a wait on an unavailable source that is not the breaker', { code: 'SOURCE_UNAVAILABLE', reason: 'unreachable', retryAfterMs: 5 }],
     ['a conflict with no reason', { code: 'CONFLICT' }],
     ['a conflict with a reason that is not a pattern one', { code: 'CONFLICT', reason: 'source-changed' }],
-    ['a reason on an invalid plan', { code: 'ASK_PLAN_INVALID', reason: 'pattern-changed' }],
+    ['a reason on an invalid intent', { code: 'ASK_INTENT_INVALID', reason: 'pattern-changed' }],
     ['a reason that is not the preview one on an access refusal', { code: 'ACCESS_DENIED', reason: 'access-changed' }],
     ['a negative wait on a rate limit', { code: 'RATE_LIMITED', retryAfterMs: -1 }],
     ['a figure that is not a whole number', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 1.5 }],

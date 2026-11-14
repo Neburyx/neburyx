@@ -106,7 +106,7 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))('every question o
     const { app } = await started(pack, { folder });
     const answer = await post(app, '/v1/ask', { sourceId: pack.sourceId, question: question.wording });
     expect(answer.statusCode, answer.body).toBeGreaterThanOrEqual(400);
-    expect(answer.json().error.code).toBe('ASK_PLAN_INVALID');
+    expect(answer.json().error.code).toBe('ASK_INTENT_INVALID');
     await app.close();
   });
 });

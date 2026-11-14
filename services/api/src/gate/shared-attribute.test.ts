@@ -122,9 +122,9 @@ describe('the catalog entry of the shared-attribute template', () => {
   });
 
   it('tells which of the two templates a plain question and a question for the chain belong to', () => {
-    expect(sharedAttributeTemplate.description).toContain('Plan this template for a plain question of who shares an attribute');
-    expect(sharedAttributeTemplate.description).toContain('a question that asks for the chain that shows the link plans derived-rule-run');
-    expect(derivedRuleRunTemplate.description).toContain('Plan this template for a question that asks for the chain that shows the link');
-    expect(derivedRuleRunTemplate.description).toContain('a plain question of who shares an attribute plans shared-attribute');
+    expect(sharedAttributeTemplate.description).toContain('Use this template for a plain question of who shares an attribute');
+    expect(sharedAttributeTemplate.description).toContain('a question that asks for the chain that shows the link, use derived-rule-run');
+    expect(derivedRuleRunTemplate.description).toContain('Use this template for a question that asks for the chain that shows the link');
+    expect(derivedRuleRunTemplate.description).toContain('a plain question of who shares an attribute, use shared-attribute');
   });
 });

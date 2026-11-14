@@ -17,7 +17,7 @@ export const ERROR_DETAIL_KEYS: Readonly<Record<ErrorCode, readonly DetailKey[]>
   CONFLICT: ['reason', 'status', 'sourceState'],
   EXPORT_FAILED: [],
   ASK_UNSUPPORTED: ['reason'],
-  ASK_PLAN_INVALID: [],
+  ASK_INTENT_INVALID: [],
   INVALID_REQUEST: ['reason', 'maxEntities', 'maxRelationships', 'maxAggregates', 'exceeded'],
   UNSUPPORTED_MEDIA_TYPE: [],
   NOT_FOUND: [],

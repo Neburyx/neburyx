@@ -126,9 +126,9 @@ describe('what the mount answers to a refusal', () => {
     ['a refusal with another reason', () => ({ name: 'ExtensionRefusal', ...REFUSAL, reason: 'access-changed' })],
     ['a refusal without the audited mark', () => ({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-preview-off' })],
     ['an unknown code', () => ({ name: 'ExtensionRefusal', code: 'TEAPOT' })],
-    ['a reason of another code', () => ({ name: 'ExtensionRefusal', code: 'SOURCE_UNAVAILABLE', reason: 'plan-expired' })],
+    ['a reason of another code', () => ({ name: 'ExtensionRefusal', code: 'SOURCE_UNAVAILABLE', reason: 'unknown-reason' })],
     ['a conflict with a reason that is not a plan one', () => ({ name: 'ExtensionRefusal', code: 'CONFLICT', reason: 'source-changed' })],
-    ['a reason on a code that has none', () => ({ name: 'ExtensionRefusal', code: 'ASK_PLAN_INVALID', reason: 'plan-expired' })],
+    ['a reason on a code that has none', () => ({ name: 'ExtensionRefusal', code: 'ASK_INTENT_INVALID', reason: 'unknown-reason' })],
   ] as const)('answers INTERNAL_ERROR and logs the event name only for %s', async (_name, make) => {
     const { app, lines } = await started(extensionOf(async () => Promise.reject(make())), { previewOn: true });
     const answer = await app.inject({ url: URL_OF_ROUTE });
@@ -301,7 +301,7 @@ describe('the refusals of a read of the gate', () => {
     ['NOT_FOUND', { code: 'NOT_FOUND' }, 404, undefined],
     ['SOURCE_MISMATCH', { code: 'SOURCE_MISMATCH' }, 400, undefined],
     ['INVALID_REQUEST with a reason', { code: 'INVALID_REQUEST', reason: 'overlap' }, 400, undefined],
-    ['ASK_PLAN_INVALID', { code: 'ASK_PLAN_INVALID' }, 422, undefined],
+    ['ASK_INTENT_INVALID', { code: 'ASK_INTENT_INVALID' }, 422, undefined],
     ['AUDIT_UNAVAILABLE', { code: 'AUDIT_UNAVAILABLE' }, 503, undefined],
   ];
 

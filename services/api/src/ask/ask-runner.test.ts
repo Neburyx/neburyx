@@ -65,10 +65,10 @@ describe('a run that the gate or the services refuse', () => {
     ['a source the caller lost access to', new AppError('ACCESS_DENIED', { reason: 'access-changed' }), { code: 'ACCESS_DENIED' }],
     ['a source the caller cannot read', new AppError('NOT_FOUND'), { code: 'NOT_FOUND' }],
     ['an audit that could not be written', new AppError('AUDIT_UNAVAILABLE'), { code: 'AUDIT_UNAVAILABLE' }],
-    ['parameters the service refuses', new AppError('INVALID_REQUEST'), { code: 'ASK_PLAN_INVALID' }],
+    ['parameters the service refuses', new AppError('INVALID_REQUEST'), { code: 'ASK_INTENT_INVALID' }],
     ['a file query that the gate refuses for its text', new AppError('INVALID_REQUEST', { reason: 'file-query-text' }), { code: 'INVALID_REQUEST', reason: 'file-query-text' }],
     ['a file query that the gate refuses for its result', new AppError('INVALID_REQUEST', { reason: 'file-query-result' }), { code: 'INVALID_REQUEST', reason: 'file-query-result' }],
-    ['a reason that is not a file query\'s', new AppError('INVALID_REQUEST', { reason: 'export-too-large' }), { code: 'ASK_PLAN_INVALID' }],
+    ['a reason that is not a file query\'s', new AppError('INVALID_REQUEST', { reason: 'export-too-large' }), { code: 'ASK_INTENT_INVALID' }],
   ])('comes back as the refusal of %s, with the code and details the manual route gives and no result', async (_name, error, refusal) => {
     const { runnerFor } = rig({ entities: vi.fn(async () => Promise.reject(error)) });
     expect(await refusedWith(runnerFor().run({ templateId: 'entity', params: { ref: REF } }))).toEqual(refusal);
@@ -102,13 +102,13 @@ describe('a run that the gate or the services refuse', () => {
     ['search', { entityTypes: ['node_a'] }],
   ] as const)('refuses the parameters of a run of %s that are not the template’s as invalid parameters, and reads nothing', async (templateId, params) => {
     const { runnerFor, calls } = rig();
-    expect(await refusedWith(runnerFor().run({ templateId, params }))).toEqual({ code: 'ASK_PLAN_INVALID' });
+    expect(await refusedWith(runnerFor().run({ templateId, params }))).toEqual({ code: 'ASK_INTENT_INVALID' });
     expect(calls).toEqual([]);
   });
 
   it('refuses a rule the mapping does not hold as invalid parameters, and reads nothing', async () => {
     const { runnerFor, calls } = rig();
-    expect(await refusedWith(runnerFor().run({ templateId: 'derived-rule-run', params: { ref: REF, ruleId: 'rule_missing' } }))).toEqual({ code: 'ASK_PLAN_INVALID' });
+    expect(await refusedWith(runnerFor().run({ templateId: 'derived-rule-run', params: { ref: REF, ruleId: 'rule_missing' } }))).toEqual({ code: 'ASK_INTENT_INVALID' });
     expect(calls).toEqual([]);
   });
 });

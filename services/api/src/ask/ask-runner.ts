@@ -34,7 +34,7 @@ export interface AskRunContext {
   readonly signal?: AbortSignal;
 }
 
-const invalidRun: ExtensionRefusalFields = { code: 'ASK_PLAN_INVALID' };
+const invalidRun: ExtensionRefusalFields = { code: 'ASK_INTENT_INVALID' };
 
 /**
  * The refusal an error of a service is, with the code and the details the manual route answers it with: only the errors of the gate and of the access check are, and `INVALID_REQUEST` (the service

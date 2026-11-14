@@ -9,6 +9,6 @@ describe('the description of the expansion template, which the template list sho
   });
 
   it('tells which template a question of a chain belongs to instead', () => {
-    expect(expandNeighborsTemplate.description).toContain('plans linked-entities');
+    expect(expandNeighborsTemplate.description).toContain('use linked-entities');
   });
 });

@@ -35,8 +35,8 @@ describe('the failures of an Ask call, in words', () => {
     expect(ASK_REFUSAL_SENTENCES.unavailable.length).toBeGreaterThan(0);
   });
 
-  it('gives ASK_PLAN_INVALID and SOURCE_MISMATCH the words of Ask, with no retry', () => {
-    for (const code of ['ASK_PLAN_INVALID', 'SOURCE_MISMATCH']) expect(askFailureWords(failure(code), 'a')).toEqual({ text: 'The values of this question do not fit what it asks for. Ask it again.' });
+  it('gives ASK_INTENT_INVALID and SOURCE_MISMATCH the words of Ask, with no retry', () => {
+    for (const code of ['ASK_INTENT_INVALID', 'SOURCE_MISMATCH']) expect(askFailureWords(failure(code), 'a')).toEqual({ text: 'The values of this question do not fit what it asks for. Ask it again.' });
   });
 
   it('puts no code in any sentence, for every code of the contract', () => {

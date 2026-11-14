@@ -31,7 +31,7 @@ export function askFailureWords(failure: ApiFailure, source: string): FailureWor
     const words = typeof reason === 'string' ? FILE_QUERY_WORDS[reason] : undefined;
     if (words !== undefined) return { text: words };
   }
-  if (failure.code === 'ASK_PLAN_INVALID' || failure.code === 'SOURCE_MISMATCH') return { text: 'The values of this question do not fit what it asks for. Ask it again.' };
+  if (failure.code === 'ASK_INTENT_INVALID' || failure.code === 'SOURCE_MISMATCH') return { text: 'The values of this question do not fit what it asks for. Ask it again.' };
   // the record of the run could not be kept, so the answer is withheld; the question may have run
   if (failure.code === 'AUDIT_UNAVAILABLE') return { text: 'The record of this could not be kept, so the answer is withheld. The question may have run. Try again later.', action: 'try-again' };
   return failureWords(failure, source);

@@ -109,7 +109,7 @@ export const expandNeighborsTemplate: TemplateDefinition = {
   id: EXPAND_NEIGHBORS_ID,
   version: '1',
   auditAction: 'graph.expand',
-  description: "Reads one page of the relationships between the anchor and its neighbors of one entity type, newest first by the relationship's observed time, each with the neighbor. It takes filters on declared properties, a rank, and a window of days or of dates: the window follows each relationship type's own observed time, a relationship with no usable time is not in it, and a relationship type with no observed time is not filtered. Plan this template for a question of which neighbors an entity has, in a period or not; a question of what is reached over a chain of relationships plans linked-entities.",
+  description: "Reads one page of the relationships between the anchor and its neighbors of one entity type, newest first by the relationship's observed time, each with the neighbor. It takes filters on declared properties, a rank, and a window of days or of dates: the window follows each relationship type's own observed time, a relationship with no usable time is not in it, and a relationship type with no observed time is not filtered. Use this template for a question of which neighbors an entity has, in a period or not; for a question of what is reached over a chain of relationships, use linked-entities.",
   cypher: '@expandNeighbors(entityType)',
   expandNeighbors: { anchorParam: 'entityType', neighborParam: 'neighborType', relTypesParam: 'relTypes', directionParam: 'direction' },
   paramsSchema,
