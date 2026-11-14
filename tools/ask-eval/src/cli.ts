@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { checkExternalRun, checkOnePack, ExternalFileError, isDemoFile, isInsideCheckout } from './external.js';
 import { countWordingHits } from './scan.js';
 import { loadMapping, MappingBudgetError } from './mapping-view.js';
+import { runRecord } from './record.js';
 import { loadQuestions, QuestionFileError, type Question } from './questions.js';
 import { loadReplay, ReplayFileError } from './replay.js';
 import { replayFromQuestions } from './replay-writer.js';
@@ -106,6 +107,7 @@ function writeReplay(path: string, replay: Replay, force: boolean): void {
 
 export async function runCli(argv: readonly string[], io: CliIo, module: PlannerModule): Promise<number> {
   if (argv[0] === 'scan') return runScan(argv.slice(1), io);
+  if (argv[0] === 'record') return runRecord(argv.slice(1), io, module);
   let values;
   try {
     ({ values } = parseArgs({ args: [...argv], options: OPTIONS, strict: true }));

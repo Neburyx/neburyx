@@ -66,7 +66,7 @@ const IRREGULAR_VERBS: readonly (readonly [string, ...string[]])[] = [
 /** The closed list of irregular English verbs: base, then its past and participle forms. */
 export const IRREGULAR_VERB_LIST = IRREGULAR_VERBS;
 
-const IRREGULAR_BY_FORM: ReadonlyMap<string, readonly string[]> = new Map(IRREGULAR_VERBS.flatMap((verb) => verb.map((form) => [form, verb] as const)));
+const IRREGULAR_BY_FORM: ReadonlyMap<string, readonly [string, ...string[]]> = new Map(IRREGULAR_VERBS.flatMap((verb) => verb.map((form) => [form, verb] as const)));
 
 const MIN_BASE_LENGTH = 3;
 

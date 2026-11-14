@@ -1,6 +1,6 @@
 # ask-eval
 
-Measures how well Ask plans. It runs the real planner over a file of questions on recorded model replies, compares each plan with the one the file expects, and reports the result. It never calls a model: live accuracy is measured by hand on the operator's own server, with a recording the operator makes.
+Measures how well Ask plans. It runs the real planner over a file of questions on recorded model replies, compares each plan with the one the file expects, and reports the result. Scoring never calls a model; live accuracy is measured from a recording that `ask-eval record` makes on the operator's own server (see below).
 
 ```bash
 pnpm ask-eval --questions services/api/tests/ask/questions.yaml \
@@ -26,8 +26,23 @@ A replay maps the text the planner is given for a question to the reply the mode
 
 `--questions <path>` outside the checkout, with one `--mapping`, a `--replay`, `--refusal-target exact` and `--max-misses <n>`. The report holds question ids and counts only, never a wording or a blocked word. A path inside the checkout other than the demo file is refused. Output files (`--write-replay`, `--update-baseline`) need `--out` outside the checkout. `ask-eval scan --questions <file> --root <folder>` prints how many whole questions of a file appear in a folder tree, and nothing else.
 
+## Recording a live run
+
+`ask-eval record` asks the questions of a file through the real planner and the operator's configured provider, and writes the replies as a replay that the runner scores. It never runs on its own: every run needs an explicit call budget.
+
+```bash
+pnpm ask-eval record --questions <file> --mapping <mapping> --dry-run
+pnpm ask-eval record --questions <file> --mapping <mapping> --budget <n> --out <folder outside the checkout> [--model <name>]
+```
+
+- `--dry-run` makes no call and prints the questions to ask and the worst case (two calls a question, the planner's repair call included), so a budget can be agreed first.
+- The budget counts every model call, repairs included. A call that would pass it is not made: the run stops, exits 1 and says so, and the recording holds only the questions fully answered. A question that is not in it scores as a miss when the recording is scored; it is never dropped from the totals. A call that fails counts, is not retried, and is reported by question id and failure code only.
+- The provider is built the way the product builds its own, from the `ai` settings of the mapping and `ai.key.file` (a key file that others can read, an empty one or a missing one is refused before any call; `ai.key.env` and `ai.prompts` replacements are refused for these runs). A mapping with no `ai` section, such as the demo packs, takes `--ai <file>` outside the checkout: a file with an `ai` section (or the settings themselves). `--model` replaces the model name, for a step-up. The key is read from its file only by the provider and appears in no output.
+- `--out` names a folder outside the checkout; the recording is `recording.json` there, with mode 0600, and an existing one is replaced only with `--force`. A question asked but blocked by the allowlist is named (`blocked: <id>`); an unexpected error ends the run after the recording and the run record are written. A question file outside the checkout takes one `--mapping`; its report holds ids and counts only. A refusal by the model is recorded and scores as a refusal of the kind the planner gives it (`model-refused`).
+- The run ends with the model, the prompt ids and versions, the word-list version and the token counts, for the record of the run.
+
 ## Where the code lives
 
 The scoring, loading and reporting are here. The planner is `ee/` code (`ee/ask/src/eval`), so the entry script `entry/ask-eval-entry.mjs` imports it and hands it to the command (see [architecture checks](../../docs/architecture-checks.md)).
 
-`report` groups refusals by expected family and plans by template; `--json` writes it as one document that also holds the counts, the targets and the baseline, and sends any other line to standard error.
+`report` groups refusals by expected family and plans by template, and counts every answer by the family the planner returned (`plan`, a refusal family, `no-reply`); `--json` writes it as one document that also holds the counts, the targets and the baseline, and sends any other line to standard error.
