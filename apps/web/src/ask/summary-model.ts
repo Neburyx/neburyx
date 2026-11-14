@@ -1,15 +1,14 @@
 import type { AskSummary, AskSummaryCitation } from '@neburyx/contracts';
 import { edgeKey, elementKey } from '../state/keys.js';
-import type { Addable } from './plan-result-model.js';
+import type { Addable } from './result-model.js';
 
 export const SUMMARY_COPY = {
-  heading: 'Answer',
-  notAdded: 'It is not on the graph yet. Use Add to graph first.',
-  neverAdded: 'This kind of result does not add it to the graph.',
-  outsideView: 'It is on the graph but outside the current view.',
-  removed: 'It is no longer on the graph.',
-  expand: 'Show sources',
-  collapse: 'Hide sources',
+  notAdded: 'Use Add to graph first',
+  neverAdded: 'Not added by this answer',
+  outsideView: 'Outside the current view',
+  removed: 'No longer on the graph',
+  select: 'Select on graph',
+  selected: 'Selected on graph',
 } as const;
 
 /** The key of a citation's element in the graph: an entity or a relationship. */
@@ -21,8 +20,6 @@ export function citationKey(citation: AskSummaryCitation): string {
 export function markerNumber(key: string): string {
   return key.replace(/^n/, '');
 }
-
-export const sourcesLabel = (count: number): string => `${count} ${count === 1 ? 'source' : 'sources'}`;
 
 export interface PressInput {
   readonly key: string;
@@ -44,9 +41,4 @@ export function pressOutcome({ key, held, drawn, addable, added }: PressInput): 
   const listed = addable === undefined ? false : addable.nodes.some((node) => elementKey(node.ref) === key) || addable.edges.some((edge) => edgeKey(edge.ref) === key);
   if (!listed) return { kind: 'note', text: SUMMARY_COPY.neverAdded };
   return { kind: 'note', text: added ? SUMMARY_COPY.removed : SUMMARY_COPY.notAdded };
-}
-
-/** The citations in key order, each with the marker number: the list of sources the card draws. */
-export function sourcesOf(summary: AskSummary): readonly { readonly number: string; readonly citation: AskSummaryCitation }[] {
-  return summary.citations.map((citation) => ({ number: markerNumber(citation.key), citation }));
 }

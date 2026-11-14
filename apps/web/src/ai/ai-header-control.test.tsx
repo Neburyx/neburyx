@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { MeResponse } from '@neburyx/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,8 @@ import { clientWith, me } from '../test-utils.js';
 import { AiActionsProvider, createAiActions, type AiActions } from './ai-actions.js';
 import { AiHeaderControl } from './ai-header-control.js';
 import type { ApiClient } from '../api/client.js';
+import { createClientState } from '../state/client-state.js';
+import { ClientStateProvider } from '../state/context.js';
 
 afterEach(cleanup);
 
@@ -68,7 +70,7 @@ describe('Ask and Summarize in the header', () => {
     await user.keyboard(' ');
     expect(handler).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(ask);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getAllByRole('status').map((status) => status.textContent)).toContain('Enterprise capability, locked');
   });
 
   it('run the handler of an unlocked control once, with no message, and say it is not available after the handler is taken out', async () => {
@@ -101,5 +103,29 @@ describe('Ask and Summarize in the header', () => {
     expect(await screen.findByText('Summarize is not available in this release yet.')).toBeTruthy();
     await user.tab();
     await waitFor(() => expect(screen.queryByText('Summarize is not available in this release yet.')).toBeNull());
+  });
+});
+
+describe('the Ask control while its panel is open', () => {
+  it('is drawn active and says it is expanded, and goes back when the panel closes; Summarize says nothing of it', async () => {
+    const state = createClientState();
+    render(
+      <ClientStateProvider state={state}>
+        <ShellDataProvider store={createShellData(withEdition('enterprise'))}>
+          <AiActionsProvider value={createAiActions()}>
+            <AiHeaderControl action="ask" />
+            <AiHeaderControl action="summarize" />
+          </AiActionsProvider>
+        </ShellDataProvider>
+      </ClientStateProvider>,
+    );
+    const ask = await screen.findByRole('button', { name: 'Ask' });
+    expect(ask.getAttribute('aria-expanded')).toBe('false');
+    act(() => state.presentation.setAskOpen(true));
+    expect(ask.getAttribute('aria-expanded')).toBe('true');
+    expect(ask.className).toContain('header-ai-active');
+    expect(screen.getByRole('button', { name: 'Summarize' }).getAttribute('aria-expanded')).toBeNull();
+    act(() => state.presentation.setAskOpen(false));
+    expect(ask.className).not.toContain('header-ai-active');
   });
 });

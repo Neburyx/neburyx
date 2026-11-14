@@ -1,10 +1,10 @@
 import type { AskRunResult } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { addableOf, resultView } from './plan-result-model.js';
+import { addableOf, resultView } from './result-model.js';
 
 const count = (quality: string, value?: number) => (value === undefined ? { quality, scope: 't' } : { quality, value, scope: 't' });
 const node = (id: string) => ({ ref: { sourceId: 'demo', entityType: 'widget', stableId: id }, display: { title: `W ${id}`, type: 'widget' } });
-const edge = (id: string) => ({ ref: { id } });
+const edge = (id: string) => ({ ref: { id }, type: 'LINK', from: node('a').ref, to: node('b').ref });
 const run = (templateId: string, result: unknown): AskRunResult => ({ templateId, result }) as AskRunResult;
 
 describe('what a result adds to the graph', () => {
@@ -30,12 +30,8 @@ describe('what a result adds to the graph', () => {
 });
 
 describe('a result in words', () => {
-  it.each([
-    ['exact', '1 · exact'],
-    ['estimated', '~ 1 (estimated)'],
-    ['lowerBound', '≥ 1 · lower bound'],
-  ])('gives a count that is %s with its label', (quality, text) => {
-    expect(resultView(run('shared-attribute', { status: 'ok', nodes: [], edges: [], count: count(quality, 1), notices: [] })).lines).toEqual([{ label: 'Matches', text }]);
+  it.each([['exact'], ['estimated'], ['lowerBound']])('gives a count that is %s with its quality, to be drawn as a figure', (quality) => {
+    expect(resultView(run('shared-attribute', { status: 'ok', nodes: [], edges: [], count: count(quality, 1), notices: [] })).count).toEqual({ count: count(quality, 1), noun: 'match' });
   });
 
   it('gives a count that is unknown with no number', () => {
@@ -72,8 +68,8 @@ describe('the result of a file query', () => {
 
   it('shows the rows it returned with their quality label, and the notices in the same words as a template run', () => {
     const view = resultView(result);
-    expect(view.lines).toHaveLength(1);
-    expect(view.lines[0]?.label).toBe('Rows');
+    expect(view.count).toEqual({ count: count('lowerBound', 50), noun: 'row' });
+    expect(view.rows).toEqual(['W a → LINK → W b']);
     expect(view.notices.length).toBe(1);
   });
 });

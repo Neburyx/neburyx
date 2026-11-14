@@ -33,6 +33,8 @@ function recording(client: ApiClient) {
     deletePattern: (id, version, signal) => (calls.push('deletePattern'), client.deletePattern(id, version, signal)),
     copyPattern: (id, signal) => (calls.push('copyPattern'), client.copyPattern(id, signal)),
     runSavedPattern: (id, request, key, signal) => (calls.push('runSavedPattern'), client.runSavedPattern(id, request, key, signal)),
+    ask: (request, signal) => (calls.push('ask'), client.ask(request, signal)),
+    askContinue: (request, signal) => (calls.push('askContinue'), client.askContinue(request, signal)),
     testSource: (sourceId, signal) => (calls.push('testSource'), client.testSource(sourceId, signal)),
     getEntity: (ref, options, signal) => (calls.push('getEntity'), client.getEntity(ref, options, signal)),
     getEdge: (ref, options, signal) => (calls.push('getEdge'), client.getEdge(ref, options, signal)),

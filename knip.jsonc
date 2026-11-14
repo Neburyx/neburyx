@@ -67,12 +67,6 @@
   },
   // Findings left on purpose: each group below says why and which step of the Ask rework removes it.
   "ignoreIssues": {
-    // Kept for the Ask panel rebuilt by the Ask rework (the panel step): nothing calls them until it lands, and each line is removed there.
-    "apps/web/src/ai/ai-actions.ts": ["exports"],
-    "apps/web/src/ask/plan-result.tsx": ["exports"],
-    "apps/web/src/ask/refusal-chips.ts": ["files"],
-    "apps/web/src/shell/shell-data.tsx": ["exports"],
-    "apps/web/src/workspace/tool-registry.tsx": ["exports"],
     // Used by the tests of services/api through dist, which knip cannot follow; the final sweep of the Ask rework keeps only createEnterpriseExtension here.
     "ee/ask/src/index.ts": ["exports", "types"],
     // Imported by the entry script of the evaluation tool through the package subpath ./eval, which knip does not follow.

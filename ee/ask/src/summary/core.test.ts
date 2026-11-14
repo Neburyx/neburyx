@@ -16,6 +16,14 @@ describe('the summary builder', () => {
     expect(() => builder.add('x', [ref('skipped')])).toThrow(/does not list/);
   });
 
+  it('closes a sentence with one full stop when the title before it ends with one, and leaves an ellipsis alone', () => {
+    const builder = new SummaryBuilder(many(3));
+    builder.add('It is Rivenisica Components Ltd..', [ref('e0')]);
+    builder.add('It is Wait...', [ref('e1')]);
+    builder.add('Plain.', [ref('e2')]);
+    expect(builder.finish()?.sentences.map((sentence) => sentence.text)).toEqual(['It is Rivenisica Components Ltd.', 'It is Wait...', 'Plain.']);
+  });
+
   it('gives keys in the order of first citation, and the same key to the same element', () => {
     const builder = new SummaryBuilder(many(3));
     builder.add('first', [ref('e2')]);

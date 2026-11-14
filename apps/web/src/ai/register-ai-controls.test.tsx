@@ -9,7 +9,7 @@ import { registerAiControls } from './register-ai-controls.js';
 afterEach(cleanup);
 
 describe('the AI controls of the header', () => {
-  it('put Summarize in its slot and no Ask control in either edition, whatever the AI status says', async () => {
+  it('put Ask and Summarize in their slots in either edition, whatever the AI status says', async () => {
     for (const edition of ['community', 'enterprise'] as const) {
       const slots = createSlotRegistry();
       const remove = registerAiControls(slots);
@@ -24,15 +24,16 @@ describe('the AI controls of the header', () => {
         </ShellDataProvider>,
       );
       expect(await screen.findByRole('button', { name: /^Summarize/ })).toBeTruthy();
-      expect(screen.queryByRole('button', { name: /^Ask/ })).toBeNull();
+      expect(screen.getByRole('button', { name: /^Ask/ })).toBeTruthy();
       remove();
       cleanup();
     }
   });
 
-  it('take Summarize out again when the function returned is called', () => {
+  it('take both out again when the function returned is called', () => {
     const slots = createSlotRegistry();
     registerAiControls(slots)();
+    expect(slots.view.getState().has('ask')).toBe(false);
     expect(slots.view.getState().has('summarize')).toBe(false);
   });
 });

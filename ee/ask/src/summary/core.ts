@@ -29,7 +29,9 @@ export class SummaryBuilder {
 
   constructor(private readonly listed: ListedElements) {}
 
-  add(text: string, elements: readonly (ElementRef | EdgeRef)[]): boolean {
+  add(written: string, elements: readonly (ElementRef | EdgeRef)[]): boolean {
+    // a title that ends with a full stop leaves two at the end of the sentence that closes with its own
+    const text = written.replace(/([^.])\.\.$/, '$1.');
     if (elements.length === 0) throw new Error('a sentence cites at least one element');
     const items = elements.map((element) => {
       const item = this.listed.get(refId(element));

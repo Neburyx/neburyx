@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
+import { useClientStateWhenProvided } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useAiActions, type AiActionName } from './ai-actions.js';
 import { AI_LABELS, LOCKED_REASON, lockedName, notAvailableText } from './copy.js';
@@ -22,21 +23,50 @@ function Sparkle() {
   );
 }
 
+/** Whether the panel of the action is open: only Ask has one, and a page without client state has none. */
+function usePanelOpen(action: AiActionName): boolean {
+  const state = useClientStateWhenProvided();
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (state === undefined || action !== 'ask') return undefined;
+    const read = (): void => setOpen(state.presentation.view.getState().askOpen);
+    read();
+    return state.presentation.view.subscribe(read);
+  }, [state, action]);
+  return open;
+}
+
 /** The Ask or Summarize control of the header: locked unless `GET /v1/me` says the edition is enterprise, and nothing while that answer is not here. Activating it never sends a request: it runs the handler a feature registered, or says it is not available yet. */
 export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
   const shell = useShellData();
   const handlers = useAiActions();
   const handler = useStoreSelector(handlers.view, (held) => held.get(action));
   const [note, setNote] = useState<string | undefined>(undefined);
+  const panelOpen = usePanelOpen(action);
   const me = answeredData(shell.me);
   if (me === undefined && retainedFailure(shell.me) === undefined) return null;
   const label = AI_LABELS[action];
   if (me?.edition !== 'enterprise') {
     return (
-      <button type="button" className="header-ai header-ai-locked" aria-disabled="true" aria-label={lockedName(action)} title={LOCKED_REASON} onClick={(event) => event.preventDefault()}>
-        <Padlock />
-        {label}
-      </button>
+      <span className="header-ai-wrap" onBlur={() => setNote(undefined)} onKeyDown={(event) => (event.key === 'Escape' ? setNote(undefined) : undefined)}>
+        <button
+          type="button"
+          className="header-ai header-ai-locked"
+          aria-disabled="true"
+          aria-label={lockedName(action)}
+          title={LOCKED_REASON}
+          onClick={(event) => {
+            event.preventDefault();
+            setNote(LOCKED_REASON);
+          }}
+        >
+          <Padlock />
+          {label}
+        </button>
+        <span role="status" className={note === undefined ? 'visually-hidden' : 'header-ai-note'}>
+          {note ?? ''}
+        </span>
+      </span>
     );
   }
   const run = (): void => {
@@ -49,7 +79,7 @@ export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
   };
   return (
     <span className="header-ai-wrap" onBlur={() => setNote(undefined)} onKeyDown={(event) => (event.key === 'Escape' ? setNote(undefined) : undefined)}>
-      <button type="button" className="header-ai header-ai-unlocked" onClick={run}>
+      <button type="button" className={panelOpen ? 'header-ai header-ai-unlocked header-ai-active' : 'header-ai header-ai-unlocked'} aria-expanded={action === 'ask' ? panelOpen : undefined} onClick={run}>
         <Sparkle />
         {label}
       </button>

@@ -53,3 +53,7 @@ button.header-ai[aria-disabled='true'] {
   font-size: var(--font-size-small);
   white-space: nowrap;
 }
+
+button.header-ai-active {
+  background: var(--color-accent-surface);
+}

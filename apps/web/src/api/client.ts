@@ -49,6 +49,10 @@ import {
   type PatternListResponse,
   type SavedPattern,
   type SavedPatternRunRequest,
+  type AskAnswer,
+  type AskContinueRequest,
+  type AskQuestionRequest,
+  askAnswerSchema,
   type SavedPatternRunResponse,
   type SavePatternRequest,
   type DeletePatternResponse,
@@ -171,6 +175,10 @@ export interface ApiClient {
   copyPattern(id: string, signal?: AbortSignal): Promise<ApiResult<SavedPattern>>;
   /** Runs a saved pattern the caller may see: a pattern answer, a template answer or that the pattern cannot run now; `key` is the idempotency key, new for each press and for a continue. */
   runSavedPattern(id: string, request: SavedPatternRunRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SavedPatternRunResponse>>;
+  /** Asks a question in the source: the server classifies it, runs it through the gate and answers with the result or a refusal. */
+  ask(request: AskQuestionRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
+  /** Reads the next page of an answer that stopped as heavy, with the token that answer carried; the model is not called. */
+  askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -339,6 +347,8 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     changePattern: (id, body, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}`, savedPatternSchema, signal, 'PUT', body),
     deletePattern: (id, version, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}`, deletePatternResponseSchema, signal, 'DELETE', undefined, { headers: { 'if-match': `"${version}"` } }),
     copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
+    ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
+    askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
     runSavedPattern: (id, body, key, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/run`, savedPatternRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     testSource: async (sourceId, signal) => {

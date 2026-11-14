@@ -47,7 +47,7 @@ export function createAiActions(): AiActions {
 }
 
 /** The handlers of the page; the features behind Ask and Summarize register theirs here. */
-export const aiActions = createAiActions();
+const aiActions = createAiActions();
 
 export const registerAiAction: AiActions['register'] = (action, handler) => aiActions.register(action, handler);
 

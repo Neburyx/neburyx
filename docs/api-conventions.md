@@ -274,17 +274,17 @@ The answer is `200` with one of two shapes:
 
 | `refused.cause` | `sentence` |
 |---|---|
-| `no-intent` | Ask has no way to answer this question. |
-| `unknown-intent` | Ask could not match this question to anything it can answer. |
-| `bad-reply` | Ask could not make sense of the answer it got for this question. |
-| `model-declined` | The assistant declined to work on this question. |
-| `model-failed` | The assistant is not available right now. Try again later. |
+| `no-intent` | This question does not match any question type this source offers. |
+| `unknown-intent` | Ask picked a question type this source does not have. Nothing was run. |
+| `bad-reply` | Ask could not use the model’s reply, so nothing was run. |
+| `model-declined` | The model declined this question. Nothing was run. |
+| `model-failed` | The model could not process this question. Nothing was run. |
 | `no-ask-for-source` | Ask is not set up for this source. |
-| `unavailable` | Ask is not available in this edition. |
-| `missing-inputs` | This question does not give everything Ask needs to answer it. |
-| `extra-inputs` | This question gives something Ask cannot use for this answer. |
-| `invalid-inputs` | The values in this question do not fit what Ask needs to answer it. |
-| `nothing-found` | Ask found nothing for this question. |
+| `unavailable` | Ask is not available right now. |
+| `missing-inputs` | This question needs a value Ask could not find. |
+| `extra-inputs` | This question has a value this question type does not use. |
+| `invalid-inputs` | A value in this question is not valid for this question type. |
+| `nothing-found` | The question ran and nothing in this source matches. |
 
 `unavailable` is not sent as a refusal: it is answered as the existing `ASK_UNSUPPORTED` error (422, reason `not-in-this-edition`). An anchor that is not there is the cause `nothing-found`. A refusal of the gate or of the source (`SOURCE_UNAVAILABLE`, a read that timed out, a budget) keeps its own code and is not turned into a cause.
 

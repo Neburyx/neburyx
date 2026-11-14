@@ -30,18 +30,19 @@ function countAiRequests(page: Page): string[] {
   return seen;
 }
 
-test.describe('Summarize in the workspace header, and no Ask control while Ask is rebuilt', () => {
+test.describe('Ask and Summarize in the workspace header', () => {
   test('are locked for a community build, with a padlock and no pill, and the same after a reload', async ({ page }) => {
     await openWorkspace(page);
     await expect(control(page, 'Summarize')).toHaveAttribute('aria-disabled', 'true');
     await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize, Enterprise capability, locked');
     await expect(control(page, 'Summarize')).toHaveAttribute('title', 'Enterprise capability, locked');
     await expect(control(page, 'Summarize').locator('svg rect')).toHaveCount(1);
-    await expect(control(page, 'Ask')).toHaveCount(0);
+    await expect(control(page, 'Ask')).toHaveAttribute('aria-disabled', 'true');
+    await expect(control(page, 'Ask')).toHaveAccessibleName('Ask, Enterprise capability, locked');
     await expect(header(page).getByText('Enterprise', { exact: true })).toHaveCount(0);
     await page.reload();
     await expect(control(page, 'Summarize')).toHaveAttribute('aria-disabled', 'true');
-    await expect(control(page, 'Ask')).toHaveCount(0);
+    await expect(control(page, 'Ask')).toHaveAttribute('aria-disabled', 'true');
   });
 
   test('are unlocked for an enterprise build, and the same after a reload', async ({ page }) => {
@@ -50,10 +51,10 @@ test.describe('Summarize in the workspace header, and no Ask control while Ask i
     await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize');
     await expect(control(page, 'Summarize')).not.toHaveAttribute('aria-disabled', 'true');
     await expect(control(page, 'Summarize').locator('svg rect')).toHaveCount(0);
-    await expect(control(page, 'Ask')).toHaveCount(0);
+    await expect(control(page, 'Ask')).toHaveAccessibleName('Ask');
     await page.reload();
     await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize');
-    await expect(control(page, 'Ask')).toHaveCount(0);
+    await expect(control(page, 'Ask')).toHaveAccessibleName('Ask');
   });
 
   test('sits beside the source status and Views without the header scrolling sideways, in both states', async ({ page }) => {
@@ -61,6 +62,7 @@ test.describe('Summarize in the workspace header, and no Ask control while Ask i
       if (enterprise) await answerAsEnterprise(page);
       await openWorkspace(page);
       await expect(control(page, 'Summarize')).toBeVisible();
+      await expect(control(page, 'Ask')).toBeVisible();
       const fits = await header(page).evaluate((element) => element.scrollWidth <= element.clientWidth);
       expect(fits, `the header fits (enterprise: ${enterprise})`).toBe(true);
       const placed = await header(page).evaluate((element) => {
