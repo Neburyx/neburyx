@@ -43,7 +43,7 @@ function nameOf(source: SourceModel, type: string): string {
 }
 
 /** The preview of a definition that is acceptable for the source: typed parts, each with the words the client joins. Every number is the source's own, read from its budgets. */
-export function previewPattern(definition: PatternDefinition, source: SourceModel): PatternPreview {
+function previewPattern(definition: PatternDefinition, source: SourceModel): PatternPreview {
   const { maxHops, maxPage, heavyOpThreshold } = source.budgets;
   const start = nameOf(source, definition.anchorType);
   return {

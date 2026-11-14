@@ -3,8 +3,8 @@ import { useClientState } from '../state/context.js';
 import { useKeyBindings } from '../workspace/key-binding-registry.js';
 import type { HelpItem } from './help-items.js';
 
-export const HELP_BUTTON_LABEL = 'Help';
-export const EXTERNAL_MARK = '↗';
+const HELP_BUTTON_LABEL = 'Help';
+const EXTERNAL_MARK = '↗';
 
 interface Place {
   readonly left: number;

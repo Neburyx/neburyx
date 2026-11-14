@@ -6,10 +6,10 @@ import { expectedTypesOf, normalizeWithEvidence, type Normalized, type Normalize
 import { firstAndLast } from './observed.js';
 import { describeValue } from './node.js';
 
-export type AggregateSampleOrder = 'observed-newest' | 'source-order';
+type AggregateSampleOrder = 'observed-newest' | 'source-order';
 
 /** One sampled member: its observed time and the mapped properties it holds. It carries no identifier. */
-export interface SampledMember {
+interface SampledMember {
   readonly observedAt?: string;
   readonly properties: readonly GraphProperty[];
 }

@@ -4,7 +4,7 @@ import { DEFAULT_LAYOUT } from '../state/layout-choice.js';
 import { keptFrom, refsOf, type KeptItems } from './draft-document.js';
 import { placeholderEdge, placeholderNode, withoutUnmapped } from './unmapped.js';
 
-export interface RestoredItems {
+interface RestoredItems {
   readonly nodes: readonly GraphNode[];
   readonly edges: readonly GraphEdge[];
   readonly kept: KeptItems;

@@ -1,4 +1,4 @@
-import type { Count, ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, GraphEdge, GraphNode, Window } from '@neburyx/contracts';
+import type { Count, ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandResponse, GraphEdge, GraphNode, Window } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { EntityReader } from '../entities/entity-reader.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
@@ -13,7 +13,7 @@ import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { expandWindowInstantsOf } from './expand-window.js';
 
-export interface ExpandServiceRequest {
+interface ExpandServiceRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;
@@ -198,4 +198,3 @@ export function createExpandService(deps: { readonly gate: Gate; readonly mappin
   };
 }
 
-export type { ExpandRequest };

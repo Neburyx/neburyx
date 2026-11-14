@@ -12,7 +12,7 @@ import { linkedMappingOf } from './linked-entities-fixtures.js';
  */
 export type Direction = 'out' | 'in' | 'both';
 export type Target = 'neighbor' | 'relationship';
-export type Operator = 'eq' | 'in' | 'between-from' | 'between-to' | 'between-both';
+type Operator = 'eq' | 'in' | 'between-from' | 'between-to' | 'between-both';
 export interface Form {
   readonly target: Target;
   readonly operator: Operator;
@@ -112,7 +112,7 @@ export function subsetsOfClasses(): readonly { readonly key: string; readonly ty
 }
 export const TYPE_CLASSES = typeClassesOf();
 
-export const DIRECTIONS: readonly Direction[] = ['out', 'in', 'both'];
+const DIRECTIONS: readonly Direction[] = ['out', 'in', 'both'];
 export const TARGETS: readonly Target[] = ['neighbor', 'relationship'];
 const OPERATORS: readonly Operator[] = ['eq', 'in', 'between-from', 'between-to', 'between-both'];
 
@@ -195,7 +195,7 @@ const SELECTED_STEPS = [1, 2, CAPS.steps] as const;
 
 /** The classes the enumerator takes for the types of a step: the smallest, the largest, a split of six into 1 + 5 and into 3 + 3 where they exist, and a class with two types that have no stable ID. */
 const sizeOf = (index: number): number => Number(TYPE_CLASSES[index]?.key.split('|')[0]);
-export const SELECTED_CLASSES: readonly number[] = [...new Set([0, TYPE_CLASSES.length - 1, ...TYPE_CLASSES.flatMap((cls, index) => (cls.key.startsWith('6|') || cls.unkeyed === 2 || sizeOf(index) === 2 ? [index] : []))])].sort((a, b) => a - b);
+const SELECTED_CLASSES: readonly number[] = [...new Set([0, TYPE_CLASSES.length - 1, ...TYPE_CLASSES.flatMap((cls, index) => (cls.key.startsWith('6|') || cls.unkeyed === 2 || sizeOf(index) === 2 ? [index] : []))])].sort((a, b) => a - b);
 
 /** The shapes the enumerator covers, each once, in a fixed order. */
 export function* enumerateShapes(): Generator<Shape> {

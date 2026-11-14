@@ -4,6 +4,7 @@ Public technical documentation.
 
 - [install.md](install.md): install Community with Docker Compose on your own machine, keep it loopback-only, connect your Neo4j with a read-only login, rotate a login, set retention, upgrade and roll back.
 - [technical-architecture.md](technical-architecture.md): how Neburyx is built: the gate, the schema mapping, the templates, the API, security, deployment and testing, with the decisions behind them.
+- [unused-code.md](unused-code.md): find unused files, exports, types and dependencies with knip, and how to add an entry or an ignore.
 - [run-locally.md](run-locally.md): run the whole app on your machine with one command, against your own Neo4j and Postgres.
 - [mapping-guide.md](mapping-guide.md): write a mapping for your own Neo4j: every key, how to check it with `test-source`, what each check means, a worked example on the demo graph and what happens to saved investigations when a mapping changes.
 - [coding-guidelines.md](coding-guidelines.md): how code is written here (TypeScript rules, comments, tests, API and web client).

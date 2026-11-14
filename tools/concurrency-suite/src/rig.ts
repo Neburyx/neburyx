@@ -45,9 +45,9 @@ const START = 1_000_000;
 const parsedBody = (text: string): HttpAnswer['body'] => (text === '' ? {} : JSON.parse(text));
 
 /** What the scripted source does with a data read: keep it until the test says, or answer at once. */
-export type Mode = 'hold' | 'answer' | 'timeout';
+type Mode = 'hold' | 'answer' | 'timeout';
 
-export interface HeldRead {
+interface HeldRead {
   readonly sourceId: string;
   readonly traceId: string;
   answer(): void;
@@ -103,7 +103,6 @@ const CHAIN_ROWS: ExecuteOutcome = {
   rows: [{ p: { $type: 'path', start: NODE, segments: [{ relationship: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }, '4:fixture:r1'), end: NODE_B }, { relationship: plainRelationship('LINKS', NODE_2, NODE_B, { relId: 'L-2' }, '4:fixture:r2'), end: NODE_2 }] } }],
 };
 const EDGE_ROWS: ExecuteOutcome = { status: 'rows', rows: [{ r: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }), a: NODE, b: NODE_B }] };
-export const EDGE_PATH = `/v1/edges/${edgeRefSegmentOf({ sourceId: SOURCE, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}`;
 
 const READS = [ENTITY_LOAD_ID, EDGE_LOAD_ID, DERIVED_EDGE_SUPPORT_ID, DERIVED_RULE_RUN_ID];
 
@@ -125,7 +124,7 @@ function timers(clock: { now: number }) {
 }
 
 /** Lets pending I/O and promise steps land: a fixed number of turns of the event loop, not a wait for time. */
-export const flush = async (turns = 20): Promise<void> => {
+const flush = async (turns = 20): Promise<void> => {
   for (let i = 0; i < turns; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
 };
 

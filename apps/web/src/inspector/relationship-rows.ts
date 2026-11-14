@@ -11,7 +11,7 @@ export interface RelationshipRow {
   readonly outgoing: boolean;
 }
 
-export interface RelationshipGroup {
+interface RelationshipGroup {
   readonly type: string;
   readonly rows: readonly RelationshipRow[];
   /** The source's count of this relationship type at the entity in every direction; none until a preview is ready, and none when any direction has no count. */

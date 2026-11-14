@@ -9,7 +9,7 @@ export const SEARCH_PATH = '/search';
 export const SEARCH_BINDING_ID = 'search';
 
 /** What a page opened through the key does: put the focus in the search box and select its text. */
-export const FOCUS_SEARCH = { focusSearch: true } as const;
+const FOCUS_SEARCH = { focusSearch: true } as const;
 
 export function focusSearchRequested(state: unknown): boolean {
   return typeof state === 'object' && state !== null && 'focusSearch' in state && state.focusSearch === true;

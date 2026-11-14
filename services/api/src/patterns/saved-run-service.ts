@@ -13,7 +13,7 @@ import type { Principal } from '../seams/seams.js';
 import { availabilityOf, startTypeOf } from './availability.js';
 import type { PatternRunService } from './run-service.js';
 
-export interface SavedPatternRunCall {
+interface SavedPatternRunCall {
   readonly traceId: string;
   readonly principal: Principal;
   /** The pattern, as `find` returned it for this caller. */

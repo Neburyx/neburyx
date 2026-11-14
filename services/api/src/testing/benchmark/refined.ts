@@ -41,7 +41,7 @@ interface Case {
 }
 
 /** The cases, with the unfiltered page of the same relationship type as the baseline to read them against. `score` is `i % 20`, so an equal to 3 keeps 1 in 20 and at least 0 keeps all. */
-export const CASES: readonly Case[] = [
+const CASES: readonly Case[] = [
   { name: 'no filter, most recent (baseline)', kind: 'page' },
   { name: 'rank by a relationship property, highest first', kind: 'page', rank: { on: 'relationship', property: 'score', order: 'desc' } },
   { name: 'rank by a relationship property, lowest first', kind: 'page', rank: { on: 'relationship', property: 'score', order: 'asc' } },

@@ -75,7 +75,7 @@ export function checkBuilt(size: number, counts: BuiltCounts & { readonly uneven
   if (uneven !== 0) throw new Error(`the anchor of ${size} relationships has ${uneven} aggregate neighbors with other than ${MEMBERS_PER_NEIGHBOR} members`);
 }
 
-export async function countsOf(server: RunningNeo4j, size: number): Promise<BuiltCounts & { readonly uneven: number }> {
+async function countsOf(server: RunningNeo4j, size: number): Promise<BuiltCounts & { readonly uneven: number }> {
   const session = server.admin.session({ database: server.database });
   try {
     const result = await session.run(

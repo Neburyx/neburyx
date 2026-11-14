@@ -5,7 +5,7 @@ import { demoInstallCheck } from './demo-install.js';
 import { fuzzRealServerCheck, supernodeSuiteCheck } from './supernode.js';
 import type { Check } from './types.js';
 
-export function fuzzCheck(repoRoot: string): Check {
+function fuzzCheck(repoRoot: string): Check {
   return commandCheck({
     id: 'fuzz',
     name: 'Input fuzz and cursor-tamper suite',

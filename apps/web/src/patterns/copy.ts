@@ -55,7 +55,6 @@ export function addedText(outcome: AddedOutcome, count: Count): string {
   return `${added}${held}${more}`;
 }
 
-export const selectTypeHint = (typeName: string): string => `Select ${typeName === '' ? 'an entity' : `a ${typeName}`} to start.`;
 export const timeoutLabel = (timeoutMs: number): string => `${Math.round(timeoutMs / 100) / 10} s timeout`;
 
 /** One sentence for a notice of a run; the codes that carry names say how many. */

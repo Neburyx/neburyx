@@ -1,7 +1,7 @@
 import type { DegreeChecks, SourceTestReport } from '@neburyx/contracts';
 
 /** What the running server knows about a source's mapping: `usable`, `unusable` (a check found it does not fit), or `unchecked` (no check since this process started). */
-export type Verdict = 'usable' | 'unusable' | 'unchecked';
+type Verdict = 'usable' | 'unusable' | 'unchecked';
 
 /** The part of a stored check that sets the verdict. */
 export type VerdictCheck = Pick<SourceTestReport, 'sourceId' | 'checkedAt' | 'server' | 'mappingChecks'> & { readonly degreeChecks?: DegreeChecks };

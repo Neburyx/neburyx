@@ -7,21 +7,21 @@ import type { ReadRefsService } from '../graph/read-refs-service.js';
 import type { Principal } from '../seams/seams.js';
 import { MAX_EXPORT_AGGREGATES, MAX_EXPORT_ENTITIES, MAX_EXPORT_RELATIONSHIPS } from './limits.js';
 
-export interface ShownReference {
+interface ShownReference {
   readonly entities: readonly ElementRef[];
   readonly edges: readonly StoredEdgeRef[];
   readonly aggregates: readonly AggregateEdgeRef[];
   readonly derived: readonly DerivedEdgeRef[];
 }
 
-export interface ShownReadCall extends ShownReference {
+interface ShownReadCall extends ShownReference {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;
   readonly signal?: AbortSignal;
 }
 
-export interface ShownRead {
+interface ShownRead {
   readonly nodes: readonly GraphNode[];
   readonly edges: readonly GraphEdge[];
   /** True when something was left out because the person may not export it; nothing says what or how many. */

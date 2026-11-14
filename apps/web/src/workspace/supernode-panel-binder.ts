@@ -4,9 +4,9 @@ import { SupernodePanel } from './supernode-panel.js';
 import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from './panel-limits.js';
 import type { PanelRegistry } from './panel-registry.js';
 
-export const SUPERNODE_PANEL_ID = 'supernode';
-export const SUPERNODE_PANEL_TOP = 64;
-export const SUPERNODE_PANEL_WIDTH = 360;
+const SUPERNODE_PANEL_ID = 'supernode';
+const SUPERNODE_PANEL_TOP = 64;
+const SUPERNODE_PANEL_WIDTH = 360;
 
 const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);
 

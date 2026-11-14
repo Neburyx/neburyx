@@ -130,7 +130,7 @@ export function parseFixture(input: unknown): Fixture {
   return parsed.data;
 }
 
-export const ADDED_NODES = 25;
+const ADDED_NODES = 25;
 const MAX_ADDED = 200;
 
 const additionsParametersSchema = z.strictObject({ seed: z.number().int().nonnegative(), count: z.number().int().min(1).max(MAX_ADDED).default(ADDED_NODES) });

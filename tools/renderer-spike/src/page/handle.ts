@@ -2,7 +2,7 @@ import type { Drawing } from '../adapter.js';
 import type { IncrementalResult } from '../measure/incremental.js';
 import type { GroupingSnapshot, KeyboardState } from '../measure/probes.js';
 
-export interface SpikeHandle {
+interface SpikeHandle {
   readonly adapterName: string;
   readonly ready: Promise<void>;
   mount(): Promise<void>;

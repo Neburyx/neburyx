@@ -1,6 +1,5 @@
 /** Relationships of each type on one anchor. */
 export const SIZES = [1_000, 10_000, 100_000] as const;
-export type Size = (typeof SIZES)[number];
 
 /** The page the product asks for by default. */
 export const PAGE = 25;
@@ -13,7 +12,7 @@ export const WALK_FAILURES = 6;
 export const SAMPLES_PER_POSITION = 30;
 /** Untimed first pages before each read set is measured. */
 export const WARM_UP_PAGES = 5;
-export const DEEP_FRACTIONS = [0.1, 0.5, 0.9] as const;
+const DEEP_FRACTIONS = [0.1, 0.5, 0.9] as const;
 /** Relationships to one neighbor in the aggregate shape. */
 export const MEMBERS_PER_NEIGHBOR = 10;
 

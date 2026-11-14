@@ -25,7 +25,7 @@ const jsonOf = (body: string): unknown => {
 };
 
 /** Every `nextCursor`-like string in an answer. */
-export function cursorsOf(value: unknown): string[] {
+function cursorsOf(value: unknown): string[] {
   if (Array.isArray(value)) return value.flatMap(cursorsOf);
   if (typeof value !== 'object' || value === null) return [];
   return Object.entries(value).flatMap(([key, entry]) => (key.toLowerCase().endsWith('cursor') && typeof entry === 'string' ? [entry] : cursorsOf(entry)));
@@ -70,7 +70,7 @@ export const casesOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<str
 export const patternStatementsOfClosedSet = new WeakMap<ReadonlySet<string>, ReadonlySet<string>>();
 
 /** The registered route (`METHOD pattern`) a request URL goes to. */
-export function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): string {
+function routeKeyOf(rig: FuzzRig, method: 'GET' | 'POST', url: string): string {
   const path = url.split('?')[0] ?? url;
   const match = registeredRoutesOf(rig.app).find((route) => route.method === method && new RegExp(`^${route.url.replace(/:[A-Za-z]+/g, '[^/]+')}$`).test(path));
   if (match === undefined) throw new Error(`no registered route for ${method} ${path}`);

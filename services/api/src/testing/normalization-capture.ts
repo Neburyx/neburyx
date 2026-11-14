@@ -42,7 +42,7 @@ const captureTemplate = (id: string, cypher: string, entityParams: string[], rel
 });
 
 /** Test-only templates: fixed reads, ordered by stable ID with a fixed limit so that a second capture picks the same records. They are never in the shipped catalog. */
-export const CAPTURE_TEMPLATES: readonly TemplateDefinition[] = [
+const CAPTURE_TEMPLATES: readonly TemplateDefinition[] = [
   captureTemplate(
     'capture-values',
     "RETURN 9223372036854775807 AS bigInteger, 7 AS smallInteger, -9007199254740991 AS safeLimit, 1.5 AS decimal, true AS flag, 'text' AS words, null AS nothing, " +
@@ -153,7 +153,7 @@ export async function removeMadeRecords(target: PackServer): Promise<void> {
  * Makes three nodes on a demo container, for the shapes the demo graph does not hold: one of the pack's first entity type with no stable ID, one with a label that only
  * the other pack maps, and one with a stable ID and none of the key properties. Their marker is a property no mapping names. The caller removes them.
  */
-export async function makeRecords(target: PackServer): Promise<void> {
+async function makeRecords(target: PackServer): Promise<void> {
   const [entity] = target.source.entities;
   if (entity === undefined) throw new Error('the pack has no entity type');
   const own = new Set(target.source.entities.map((candidate) => candidate.label));

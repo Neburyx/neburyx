@@ -34,7 +34,7 @@ import { onlineIndexesOf, schemaAnswer, withSchema } from '../../../services/api
 import { assembleGate } from '../../../services/api/src/gate/assemble.js';
 import { makeWebRoot } from '../../../services/api/src/testing/web-root.js';
 
-export const SOURCE = 'demo';
+const SOURCE = 'demo';
 /** The rule of the mapping that starts from the hub. */
 export const RULE = 'shared-leaf';
 /** The preset of the mapping that a pattern run starts from the hub. */
@@ -77,7 +77,7 @@ const KINDS: Readonly<Record<string, { label: string; idKey: string; rel: string
   item: { label: 'Item', idKey: 'itemId', rel: 'HOLDS' },
 };
 /** One relationship of the hub to one neighbor of the type; `n` tells the rows of a later page from the first. */
-export const rowFor = (neighborType: string, n = 1): Record<string, unknown> => {
+const rowFor = (neighborType: string, n = 1): Record<string, unknown> => {
   const kind = KINDS[neighborType];
   if (kind === undefined) throw new Error(`no neighbor type ${neighborType}`);
   const neighbor = plainNode([kind.label], { [kind.idKey]: `${neighborType}-${n}` }, `e-${neighborType}-${n}`);
@@ -94,7 +94,7 @@ export const DERIVED_EDGE_REF = { sourceId: SOURCE, derived: { ruleId: RULE, fro
 export const EDGE_REF = { sourceId: SOURCE, type: 'LINKED', from: 'hub', to: 'leaf', stableId: 'r-edge' } as const;
 
 /** What the scripted source does with the next expansion read: wait for the test, then answer. */
-export interface Read {
+interface Read {
   readonly call: ExecuteCall;
   readonly neighborType: string;
   /** Answers with this many relationships of the neighbor type (one by default); a read of another template answers with no rows. */
@@ -197,7 +197,7 @@ export async function startRig(options: { readonly delayMs?: number; readonly bu
 }
 
 /** An executor that keeps the calls it was given. */
-export interface RecordingExecutor extends ReadExecutor {
+interface RecordingExecutor extends ReadExecutor {
   readonly calls: readonly ExecuteCall[];
 }
 

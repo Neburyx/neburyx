@@ -1,9 +1,9 @@
 import type pg from 'pg';
 import { inTransaction } from './investigations-repository.js';
 
-export type ExportKind = 'view' | 'table-csv' | 'audit-csv';
-export type ExportRowFormat = 'json' | 'csv' | 'png';
-export type ExportStatus = 'pending' | 'ready' | 'failed' | 'expired';
+type ExportKind = 'view' | 'table-csv' | 'audit-csv';
+type ExportRowFormat = 'json' | 'csv' | 'png';
+type ExportStatus = 'pending' | 'ready' | 'failed' | 'expired';
 
 export interface ExportRow {
   readonly id: string;
@@ -26,7 +26,7 @@ export interface ExportRow {
   readonly expiresAt: string;
 }
 
-export interface NewExport {
+interface NewExport {
   readonly id: string;
   readonly investigationId: string;
   readonly requestedBy: string;
@@ -36,7 +36,7 @@ export interface NewExport {
   readonly retentionDays: number;
 }
 
-export interface ReadyExport {
+interface ReadyExport {
   readonly filename: string;
   readonly storageKey: string;
   readonly sizeBytes: number;
@@ -52,7 +52,7 @@ export interface ExportWithInvestigation {
   readonly investigation: { readonly ownerId: string; readonly sourceId: string; readonly deleted: boolean } | undefined;
 }
 
-export interface ExpiredExport {
+interface ExpiredExport {
   readonly id: string;
   readonly storageKey: string | null;
 }
@@ -62,7 +62,7 @@ export type IdempotencyStart =
   | { readonly outcome: 'replay'; readonly statusCode: number; readonly response: unknown; readonly policyVersion: string }
   | { readonly outcome: 'conflict' };
 
-export interface IdempotencyKeyCall {
+interface IdempotencyKeyCall {
   readonly userId: string;
   readonly key: string;
   readonly fingerprint: string;

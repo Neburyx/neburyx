@@ -32,7 +32,7 @@ export interface OpenMenu {
 }
 
 /** A flyout is open for the registration of a tool, so a tool taken out and registered again does not bring back a flyout that was open before. */
-export interface OpenTool {
+interface OpenTool {
   readonly id: string;
   readonly registration: number;
 }
@@ -112,7 +112,7 @@ export interface PresentationState {
   readonly openMenu: OpenMenu | undefined;
 }
 
-export interface ViewChange {
+interface ViewChange {
   readonly show: 'fit' | { readonly viewport: Viewport | undefined };
 }
 

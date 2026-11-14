@@ -17,7 +17,7 @@ interface Capability {
   readonly what: string;
 }
 
-export const CAPABILITIES: readonly Capability[] = [
+const CAPABILITIES: readonly Capability[] = [
   { rule: 'system-principal', module: `${API_SRC}/gate/system-principal`, allowedFolders: [`${API_SRC}/gate`], allowedFiles: [], what: 'the system principal' },
   { rule: 'source-gate', module: `${API_SRC}/gate/source-gate`, allowedFolders: [`${API_SRC}/gate`], allowedFiles: [`${API_SRC}/start.ts`, `${API_SRC}/source-test/command.ts`], what: 'createSourceGate, which returns the system runner,' },
   // the one write path of the product: nothing but the test-source command, and nothing in gate/ or sources/ either, reaches it

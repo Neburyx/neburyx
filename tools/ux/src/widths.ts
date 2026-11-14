@@ -49,7 +49,7 @@ export const EXEMPT: Readonly<Record<string, string>> = {
   'sources-controls.spec.ts': 'asserts a button is narrower than 200 px and not as wide as its section, which the wider window tests more strictly',
 };
 
-export const isBenchmark = (file: string): boolean => file.includes('benchmark');
+const isBenchmark = (file: string): boolean => file.includes('benchmark');
 
 /** The projects a spec runs in. */
 export function projectsOf(file: string): readonly string[] {

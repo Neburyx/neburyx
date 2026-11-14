@@ -12,7 +12,7 @@ const sameNode = (a: ElementRef, b: ElementRef): boolean => a.entityType === b.e
  * Adds contributions to a loaded count: the sum of their values, and its quality is estimated when any contribution is estimated (a mix of lower-bound and estimated counts promises neither a floor nor a figure), else a lower bound when any
  * is a lower bound or has no value (those count the members known, plus one for a count with none), else exact.
  */
-export function sumOf(contributions: readonly Count[]): Count {
+function sumOf(contributions: readonly Count[]): Count {
   let value = 0;
   let estimated = false;
   let bound = false;
@@ -93,7 +93,7 @@ export function isSupernode(preview: DegreePreview | undefined): boolean {
 }
 
 /** A count as a number with its quality in front: "22", "~ 22", "≥ 22"; nothing for a count with no value. */
-export function countNumber(count: Count): string {
+function countNumber(count: Count): string {
   if (count.value === undefined) return '';
   const number = formatNumber(count.value);
   return count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;

@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-export const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../../migrations', import.meta.url));
+const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../../migrations', import.meta.url));
 
 export function shippedMigrationNames(directory: string = SHIPPED_MIGRATIONS): readonly string[] {
   const names = readdirSync(directory)

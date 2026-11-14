@@ -14,7 +14,7 @@ export function ruleOf(allowlist: SourceAllowlist, ruleId: unknown, entityType: 
 /** The entity types of the middle of the rule's chain, in order: every other entry of `via`, starting with the second. */
 export const middleTypesOf = (rule: Rule): readonly string[] => rule.via.filter((_entry, index) => index % 2 === 1);
 
-export function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): string {
+function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): string {
   const typeNames = [...middleTypesOf(rule), rule.to];
   const labels = typeNames.map((type) => allowlist.entityLabels.get(type));
   if (labels.some((label) => label === undefined) || rule.via.length !== 2 * typeNames.length - 1) throw new AppError('INVALID_REQUEST');
@@ -28,7 +28,7 @@ export function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): 
   return path ? `p = ${pattern}` : pattern;
 }
 
-export function conditionOf(rule: Rule): string {
+function conditionOf(rule: Rule): string {
   const stops = rule.stopListProperty === undefined ? [] : middleTypesOf(rule).map((_type, index) => `coalesce(m${index + 1}.${quoteName(rule.stopListProperty ?? '')}, false) <> true`);
   return ['b <> a', ...stops].join(' AND ');
 }

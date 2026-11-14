@@ -1,5 +1,5 @@
 import type { DegreeDeclaration } from '../../mapping/model.js';
-export type DegreeDirection = 'out' | 'in';
+type DegreeDirection = 'out' | 'in';
 
 export interface DegreePair {
   readonly relationshipType: string;

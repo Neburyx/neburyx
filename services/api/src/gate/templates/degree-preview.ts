@@ -37,12 +37,12 @@ function indexNeeds(params: Params, allowlist: SourceAllowlist) {
 }
 
 /** How many pairs the request's entity type has in the mapping, which is how many columns the row must hold. */
-export function pairCountOf(context: NormalizeContext): number {
+function pairCountOf(context: NormalizeContext): number {
   return degreePairsOf(context.model.relationships, String(context.params?.['entityType'])).length;
 }
 
 /** The columns `c0`, `c1`, ... of the one row, `columns` of them, each a whole number from zero to `max`; any other shape is a read the gate cannot trust. */
-export function readCounts(row: Row, max: number, columns: number): readonly number[] {
+function readCounts(row: Row, max: number, columns: number): readonly number[] {
   const names = Object.keys(row);
   const counts = names.map((_name, index) => row[`c${index}`]);
   if (names.length !== columns || names.some((name, index) => name !== `c${index}`) || !counts.every((count): count is number => typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 && count <= max)) {

@@ -9,8 +9,8 @@ import type { Action, Break, StepDraft } from './model.js';
 import { WindowTab } from './window-tab.js';
 
 export type Part = 'link' | 'conditions' | 'window';
-export const PARTS: readonly Part[] = ['link', 'conditions', 'window'];
-export const isPart = (value: string): value is Part => PARTS.some((part) => part === value);
+const PARTS: readonly Part[] = ['link', 'conditions', 'window'];
+const isPart = (value: string): value is Part => PARTS.some((part) => part === value);
 
 interface Props {
   readonly profile: SourceProfile;

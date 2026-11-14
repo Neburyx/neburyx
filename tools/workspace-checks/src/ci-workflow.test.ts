@@ -68,6 +68,7 @@ describe('CI workflow', () => {
 
   it.each([
     ['lint', 'lint', []],
+    ['unused-code', 'knip', []],
     ['typecheck', 'typecheck', []],
     ['unit', 'test', []],
     ['build', 'build', []],
@@ -84,11 +85,11 @@ describe('CI workflow', () => {
       `pnpm ${script}`,
     ]);
     expect(steps.find((step) => step.uses?.startsWith('actions/setup-node'))?.with).toEqual({ 'node-version-file': '.nvmrc' });
-    expect(Object.keys(rootScripts)).toContain(script);
+    expect(script === 'knip' || Object.keys(rootScripts).includes(script)).toBe(true);
   });
 
   it('defines exactly these jobs, and none of them runs the Neo4j tests: those run against the developer\'s Neo4j server', () => {
-    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'changes', 'compose', 'compose-images', 'contract', 'dco', 'image', 'integration', 'lint', 'quickstart', 'typecheck', 'unit', 'ux', 'ux-benchmark']);
+    expect(Object.keys(workflow.jobs).sort()).toEqual(['build', 'changes', 'compose', 'compose-images', 'contract', 'dco', 'image', 'integration', 'lint', 'quickstart', 'typecheck', 'unit', 'unused-code', 'ux', 'ux-benchmark']);
     const runs = Object.values(workflow.jobs).flatMap((job) => job.steps.flatMap((step) => step.run ?? []));
     expect(runs.filter((run) => run.includes('test:neo4j'))).toEqual([]);
   });

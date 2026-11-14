@@ -2,7 +2,7 @@ import type { Params, Plan, Row } from '../gate/types.js';
 import { CHEAP_PLAN, fittingIndexes, fittingTokens, NO_DUPLICATES } from './fitting-schema.js';
 import type { DriverFactory, DriverSettings, RowObserver, SessionConfig, TransactionConfig } from '../sources/driver.js';
 
-export type CloseBehaviour = 'ok' | 'hang' | 'reject';
+type CloseBehaviour = 'ok' | 'hang' | 'reject';
 
 export interface FakeBehaviour {
   readonly rows?: readonly Row[];
@@ -34,7 +34,7 @@ export interface FakeBehaviour {
   readonly driverClose?: CloseBehaviour;
 }
 
-export interface FakeSession {
+interface FakeSession {
   readonly config: SessionConfig;
   readonly begins: TransactionConfig[];
   readonly queries: { readonly cypher: string; readonly parameters: Params }[];
@@ -45,7 +45,7 @@ export interface FakeSession {
   observer?: RowObserver;
 }
 
-export interface FakeDriver {
+interface FakeDriver {
   readonly settings: DriverSettings;
   readonly sessions: FakeSession[];
   closeCalls: number;

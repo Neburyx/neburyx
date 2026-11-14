@@ -6,22 +6,22 @@ import { checkOffline, SafetyError } from './safety.js';
 import { quote, schemaStatements } from './schema.js';
 import { ExportError, readExport, type ExportData, type Properties } from './validate.js';
 
-export interface LoaderResult {
+interface LoaderResult {
   readonly records: readonly { get(key: string): unknown }[];
 }
 
-export interface LoaderTransaction {
+interface LoaderTransaction {
   run(cypher: string, parameters?: Record<string, unknown>): PromiseLike<LoaderResult>;
   commit(): PromiseLike<unknown>;
   rollback(): PromiseLike<unknown>;
 }
 
-export interface LoaderSession {
+interface LoaderSession {
   beginTransaction(config: { timeout: number }): PromiseLike<LoaderTransaction>;
   close(): PromiseLike<unknown>;
 }
 
-export interface LoaderDriver {
+interface LoaderDriver {
   session(config: { database: string }): LoaderSession;
   verifyConnectivity(): PromiseLike<unknown>;
   close(): PromiseLike<unknown>;
@@ -36,7 +36,7 @@ export interface LoaderSettings {
 
 export type LoaderDriverFactory = (settings: LoaderSettings) => LoaderDriver;
 
-export const neo4jLoaderDriver: LoaderDriverFactory = (settings) =>
+const neo4jLoaderDriver: LoaderDriverFactory = (settings) =>
   neo4j.driver(settings.uri, neo4j.auth.basic(settings.user, settings.password), { connectionTimeout: settings.connectionTimeout });
 
 export class LoadError extends Error {
@@ -81,7 +81,7 @@ function numbersIn(text: string): number[] {
   return text.split(/\D+/).filter((part) => part !== '').map(Number);
 }
 
-export function toDriverValue(value: Value): unknown {
+function toDriverValue(value: Value): unknown {
   if (typeof value !== 'object') return value;
   if ('$int' in value) return neo4j.int(value.$int);
   if ('$date' in value) {

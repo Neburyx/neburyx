@@ -4,10 +4,10 @@ import { useClientState, useVisibleGraph } from '../state/context.js';
 import { LAYOUT_DIRECTIONS, LAYOUTS, type LayoutDirection, type LayoutId } from '../state/layout-choice.js';
 import { useStoreSelector } from '../state/store.js';
 
-export { LAYOUTS, type LayoutId } from '../state/layout-choice.js';
+export { type LayoutId } from '../state/layout-choice.js';
 
-export const PHYSICS_FORCE_ONLY = 'Physics works with Force';
-export const physicsAboveCap = (): string => `Physics is off above ${PHYSICS_MAX_ENTITIES} entities`;
+const PHYSICS_FORCE_ONLY = 'Physics works with Force';
+const physicsAboveCap = (): string => `Physics is off above ${PHYSICS_MAX_ENTITIES} entities`;
 
 interface LayoutListProps {
   /** Layouts that cannot run now (nothing loaded, or no renderer) are shown and do nothing. */

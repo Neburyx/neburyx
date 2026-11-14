@@ -3,7 +3,7 @@ import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { SearchPanel } from './search-panel.js';
 
 export const SEARCH_PANEL_ID = 'search';
-export const SEARCH_PANEL_TOP = 64;
+const SEARCH_PANEL_TOP = 64;
 export const SEARCH_PANEL_WIDTH = 300;
 /** Clear of the tool strip: the panel sits to its right. */
 export const SEARCH_PANEL_INSET = 72;

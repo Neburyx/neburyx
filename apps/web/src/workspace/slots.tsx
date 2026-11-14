@@ -14,7 +14,7 @@ export class SlotError extends Error {
   }
 }
 
-export type SlotOccupants = ReadonlyMap<SlotName, ComponentType>;
+type SlotOccupants = ReadonlyMap<SlotName, ComponentType>;
 
 export interface SlotRegistry {
   readonly view: ReadableStore<SlotOccupants>;

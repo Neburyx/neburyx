@@ -13,7 +13,7 @@ const SEVERITY: Readonly<Record<DegreeType['result'], number>> = { cheap: 0, 'co
 const COULD_NOT_CHECK = (entityType: string, why: string): string => `Degree counts could not be checked for ${entityType}: ${why}`;
 
 /** The one sentence a type that is not `cheap` adds to the warnings. */
-export function warningOf(entry: DegreeType): string | undefined {
+function warningOf(entry: DegreeType): string | undefined {
   switch (entry.basis) {
     case 'degree-operator':
       return undefined;

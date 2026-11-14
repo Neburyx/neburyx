@@ -122,7 +122,7 @@ export interface FetchInit {
 
 export type Fetcher = (input: string, init?: FetchInit) => Promise<Response>;
 
-export type ServerFailure = ErrorResponse['error'];
+type ServerFailure = ErrorResponse['error'];
 
 export interface ClientFailure {
   readonly code: 'NETWORK_UNAVAILABLE' | 'UNREADABLE_RESPONSE' | 'SCHEMA_MISMATCH' | 'ABORTED' | 'UNEXPECTED_FAILURE';

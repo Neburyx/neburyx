@@ -9,7 +9,7 @@ export function mappingSummaryOf(source: SourceModel): SourceSummary['mappingSum
 }
 
 /** A fixed list of fields of a report, so nothing else of it can reach the sources answer. */
-export function lastTestOf(report: SourceTestReport): LastTest {
+function lastTestOf(report: SourceTestReport): LastTest {
   return {
     checkedAt: report.checkedAt,
     outcome: report.outcome,

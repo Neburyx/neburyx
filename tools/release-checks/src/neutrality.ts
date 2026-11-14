@@ -11,12 +11,12 @@ const SAVED_VIEW_OUTCOMES = ['placeholders at the saved places', 'the dropped-fi
 
 const COMPOSE_SUITE_IMAGE_PREFIX = 'neburyx-demo-test:';
 
-export interface Part {
+interface Part {
   readonly id: string;
   readonly runs: readonly VitestRun[];
 }
 
-export function neutralityParts(packCount: number): readonly Part[] {
+function neutralityParts(packCount: number): readonly Part[] {
   return [
     { id: 'domains', runs: [{ label: 'domains', package: '@neburyx/workspace-checks', args: ['src/domain-words'], needsDocker: false, required: [{ title: 'holds no pack identifier as a string literal in the product directories', atLeast: 1 }] }] },
     { id: 'packs', runs: [{ label: 'packs', package: '@neburyx/api', args: ['src/packs.test.ts'], needsDocker: false, required: [] }] },

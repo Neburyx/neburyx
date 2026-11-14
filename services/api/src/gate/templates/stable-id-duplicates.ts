@@ -8,8 +8,6 @@ export const STABLE_ID_DUPLICATES_ID = 'stable-id-duplicates';
 /** The number of `stable_id` values that occur on more than one node of the entity type; never a value. */
 export const duplicatesItemSchema = z.strictObject({ duplicated: z.number().int().nonnegative() });
 
-export type DuplicatesItem = z.infer<typeof duplicatesItemSchema>;
-
 function normalize(rows: readonly Row[]): readonly Item[] {
   const [row] = rows;
   if (rows.length !== 1 || row === undefined) return [{ unreadable: { rows: String(rows.length) } }];

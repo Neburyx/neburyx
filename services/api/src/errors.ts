@@ -1,10 +1,10 @@
 import { ACCESS_DENIED_ENTRIES, ACCESS_DENIED_REASONS, ASK_UNSUPPORTED_ENTRIES, ASK_UNSUPPORTED_REASONS, allowedDetails, CONFLICT_ENTRIES, CONFLICT_REASONS, INVALID_REQUEST_ENTRIES, INVALID_REQUEST_REASONS, ERROR_TABLE, SOURCE_UNAVAILABLE_ENTRIES, SOURCE_UNAVAILABLE_REASONS, type ErrorCode, type ErrorResponse, type SourceUnavailableReason } from '@neburyx/contracts';
 
 /** Why a read could not reach a source, as the adapter tells it; a fixed tag, sent in a response only as the public reason it maps to (`unavailableReasonOf`). */
-export const UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'credentials', 'database', 'refused', 'pool-full', 'closed'] as const;
+const UNAVAILABLE_REASONS = ['unreachable', 'authentication', 'credentials', 'database', 'refused', 'pool-full', 'closed'] as const;
 export type UnavailableReason = (typeof UNAVAILABLE_REASONS)[number];
 /** Why the gate refused a read that needs an index: the index is not there, is still building or failed, or the list of indexes could not be read whole. */
-export type IndexRefusalReason = 'index-unavailable' | 'index-building' | 'index-failed' | 'index-list-unreadable';
+type IndexRefusalReason = 'index-unavailable' | 'index-building' | 'index-failed' | 'index-list-unreadable';
 /**
  * What an `AppError` may be tagged with: an unavailable reason, an index refusal reason on the `SOURCE_UNAVAILABLE` of a read refused before any data was read, `read-failed` on the `INTERNAL_ERROR`
  * of a read the adapter could not run, `read-cut` on the `INTERNAL_ERROR` of a read of a template that is not paged and returned more rows than its limit, or `unreadable-node` or `unreadable-edge` on the

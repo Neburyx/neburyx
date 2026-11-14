@@ -8,8 +8,8 @@ export interface TabSpec {
   readonly panel: ReactNode;
 }
 
-export const tabIdOf = (base: string, id: string): string => `${base}-tab-${id}`;
-export const panelIdOf = (base: string, id: string): string => `${base}-panel-${id}`;
+const tabIdOf = (base: string, id: string): string => `${base}-tab-${id}`;
+const panelIdOf = (base: string, id: string): string => `${base}-panel-${id}`;
 
 /** Tabs that follow the pattern: arrows, Home and End move and select, and the active panel is the only one drawn. */
 export function Tabs({ idBase, label, tabs, active, onSelect }: { readonly idBase: string; readonly label: string; readonly tabs: readonly TabSpec[]; readonly active: string; readonly onSelect: (id: string) => void }) {

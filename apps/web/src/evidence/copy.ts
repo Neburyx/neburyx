@@ -83,7 +83,7 @@ export const moreInSampleLine = (more: number): string => `… ${more.toLocaleSt
 export const aggregateEvidenceLabel = (type: string, from: string, to: string): string => `Evidence of ${type}: ${from} → ${to}`;
 
 export const DIRECTED_ARROW = '→';
-export const SYMMETRIC_ARROW = '↔';
+const SYMMETRIC_ARROW = '↔';
 
 const isSymmetricRule = (rule: SourceProfile['derivedRules'][number]): boolean => rule.from === rule.to && rule.via.every((type, at) => type === rule.via[rule.via.length - 1 - at]);
 

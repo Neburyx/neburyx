@@ -4,7 +4,7 @@ export interface Rows {
   readonly records: readonly { get(key: string): unknown }[];
 }
 
-export interface BeginOptions {
+interface BeginOptions {
   readonly timeout: number;
   readonly metadata?: Readonly<Record<string, string>>;
 }

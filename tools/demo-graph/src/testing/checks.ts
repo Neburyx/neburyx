@@ -132,7 +132,7 @@ export async function derivedPairs(server: RunningNeo4j, mapping: MappingSource,
   return numberOf(rows[0]?.['pairs']);
 }
 
-export async function derivedPairExists(server: RunningNeo4j, mapping: MappingSource, ruleId: string, first: string, second: string, applyStopList: boolean): Promise<boolean> {
+async function derivedPairExists(server: RunningNeo4j, mapping: MappingSource, ruleId: string, first: string, second: string, applyStopList: boolean): Promise<boolean> {
   const { match, fromKey, toKey, stop } = derivedMatch(mapping, ruleId);
   const [low, high] = first < second ? [first, second] : [second, first];
   const rows = await query(server, `${match} WHERE a.${fromKey} = $low AND b.${toKey} = $high${stopFilter(stop, applyStopList)} RETURN count(*) AS found`, { low, high });

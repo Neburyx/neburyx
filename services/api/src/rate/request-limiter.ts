@@ -2,7 +2,7 @@ import { AppError } from '../errors.js';
 
 export const WINDOW_MS = 60_000;
 
-export interface RequestKey {
+interface RequestKey {
   readonly sourceId: string;
   readonly principalId: string;
 }

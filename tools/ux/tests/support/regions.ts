@@ -8,7 +8,7 @@ export interface Box {
 }
 
 /** The tolerance for a value the recorded frames give exactly, and for one they give as approximate (a tilde in the record). */
-export const EXACT = 0.5;
+const EXACT = 0.5;
 export const APPROXIMATE = 1.5;
 
 export async function boxOf(region: Locator): Promise<Box> {

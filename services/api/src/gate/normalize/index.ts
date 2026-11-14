@@ -5,9 +5,8 @@ import { noDrops, warningsOf, type Dropped } from './drops.js';
 import type { NormalizeContext } from './model.js';
 import { isPlainNode, normalizeNodeAs, type PlainNode } from './node.js';
 
-export { withDerivedEdges, type DerivedClaim } from './derived.js';
-export { EMPTY_MODEL, normalizeModelOf } from './model.js';
-export type { NormalizeContext, NormalizeModel } from './model.js';
+export { normalizeModelOf } from './model.js';
+export type { NormalizeContext } from './model.js';
 export type { RelationshipEvidence } from './edge.js';
 
 /**

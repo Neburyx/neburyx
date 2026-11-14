@@ -7,7 +7,7 @@ import type { AppError } from '../errors.js';
 import type { DegreeDeclaration } from '../mapping/model.js';
 import type { BreakerLimits, Principal, ReadRole } from '../seams/seams.js';
 
-export const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
+const GATE_STAGES = ['resolve', 'validate', 'authorize', 'execute', 'normalize', 'redact', 'audit'] as const;
 export type GateStage = (typeof GATE_STAGES)[number];
 
 export type { ElementRef };
@@ -16,7 +16,7 @@ export type Params = Readonly<Record<string, unknown>>;
 export type Row = Readonly<Record<string, unknown>>;
 export type Item = Readonly<Record<string, unknown>>;
 
-export type TemplateScope = 'system' | 'user';
+type TemplateScope = 'system' | 'user';
 
 /** The failure of the caller's read of the schema (a timeout, a busy or unavailable source, an answer that cannot be read or is truncated), handed to the run so that the run fails with it and is audited. */
 export interface IndexReadFailure {
@@ -328,7 +328,7 @@ export interface IndexReader {
   read(request: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly signal?: AbortSignal }): Promise<IndexSnapshot | 'unverified'>;
 }
 
-export interface SystemRequest {
+interface SystemRequest {
   readonly traceId: string;
   readonly sourceId: string;
   readonly templateId: string;

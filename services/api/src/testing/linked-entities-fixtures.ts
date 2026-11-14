@@ -39,10 +39,10 @@ export const linkedMappingOf = (options: LinkedMappingOptions = {}) =>
     'neburyx.yaml',
   );
 
-export const maker = account;
+const maker = account;
 export const tool = device;
 export const shop = (id: string) => plainNode(['Shop'], { shopId: id });
-export const link = (from: { elementId: string }, to: { elementId: string }, id: string) => plainRelationship('LINKS', from, to, { linkId: id });
+const link = (from: { elementId: string }, to: { elementId: string }, id: string) => plainRelationship('LINKS', from, to, { linkId: id });
 
 export interface LinkedRowOptions {
   readonly anchor?: string;

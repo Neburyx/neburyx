@@ -3,7 +3,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { startWithRetry } from '@neburyx/test-containers';
 import pg from 'pg';
 
-export const POSTGRES_IMAGE = 'postgres:16.15';
+const POSTGRES_IMAGE = 'postgres:16.15';
 
 export interface TestDatabase {
   readonly ownerUrl: string;

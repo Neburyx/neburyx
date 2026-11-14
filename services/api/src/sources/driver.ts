@@ -9,7 +9,7 @@ export interface RowObserver {
   onError(error: unknown): void;
 }
 
-export interface RowStream {
+interface RowStream {
   subscribe(observer: RowObserver): void;
 }
 

@@ -135,7 +135,7 @@ export async function runTimeout(backend: Backend, failures: string[]): Promise<
   }
 }
 
-export async function runQuick(backend: Backend, failures: string[]): Promise<QuickResult> {
+async function runQuick(backend: Backend, failures: string[]): Promise<QuickResult> {
   const connection = backend.connect();
   const session = connection.session('read');
   try {

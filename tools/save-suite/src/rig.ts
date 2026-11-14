@@ -44,7 +44,7 @@ function cheapDegrees() {
 }
 /** A stored relationship's reference, the kind `read-refs` takes in `edges`. */
 export type StoredEdgeRef = Extract<EdgeRef, { stableId: string }>;
-export const CONTEXT = { principalId: 'person-1', mask: false } as const;
+const CONTEXT = { principalId: 'person-1', mask: false } as const;
 
 export const ENTITY_TYPES = [
   { type: 'hub', label: 'Hub', stable_id: 'hubId' },
@@ -131,7 +131,7 @@ export class World {
 }
 
 /** The small graph most cases start from: a hub with five leaves and two parts. */
-export function defaultWorld(): World {
+function defaultWorld(): World {
   const world = new World().entity('hub', 'H-1');
   for (let at = 1; at <= 5; at += 1) world.entity('leaf', `L-${at}`).relationship('LINKED', ['hub', 'H-1'], ['leaf', `L-${at}`], `r-L${at}`);
   for (let at = 1; at <= 2; at += 1) world.entity('part', `P-${at}`).relationship('HAS', ['hub', 'H-1'], ['part', `P-${at}`], `r-P${at}`);
@@ -187,7 +187,7 @@ export interface Tab {
 }
 
 /** The draft the store holds, with its documents typed. */
-export interface StoredDraft {
+interface StoredDraft {
   readonly version: number;
   readonly notes: string | null;
   readonly basedOnViewId: string | null;
@@ -197,7 +197,7 @@ export interface StoredDraft {
 }
 
 /** An executor that keeps the calls it was given. */
-export interface RecordingExecutor extends ReadExecutor {
+interface RecordingExecutor extends ReadExecutor {
   readonly calls: readonly ExecuteCall[];
 }
 
@@ -232,7 +232,7 @@ export function idsRead(calls: readonly ExecuteCall[]): string[] {
   });
 }
 
-export const SOURCE_READ = /^(GET|POST) \/v1\/(graph|entities|search|edges|source-links)\//;
+const SOURCE_READ = /^(GET|POST) \/v1\/(graph|entities|search|edges|source-links)\//;
 /** The reads the gate asks before a data read, which no case counts: the list of indexes and tokens, and what the login may do. */
 const NOT_DATA_READS = /^(schema-|capabilities|privileges)/;
 

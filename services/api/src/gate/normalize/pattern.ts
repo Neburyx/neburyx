@@ -4,7 +4,7 @@ import { isPlainRelationship, type PlainRelationship } from './edge.js';
 import { isPlainNode, normalizeNode, normalizeNodeAs, type PlainNode } from './node.js';
 
 /** One hop of the shown path of a match: the relationship's type, the entities it joins as stored (its start, then its end) and its stable ID when the mapping's row for it has one (an aggregate edge has none). */
-export interface PatternHop {
+interface PatternHop {
   readonly relationshipType: string;
   /** `null` for an end that has no usable stable ID (counted by reason), so that the path keeps its positions. */
   readonly from: ElementRef | null;
@@ -13,7 +13,7 @@ export interface PatternHop {
 }
 
 /** One match of a pattern run: the entity the last step reached, the entities between in order, and the relationship of each hop of the shown path. */
-export interface PatternMatch {
+interface PatternMatch {
   readonly match: ElementRef;
   /** The number of steps of the path: 1 to the pattern's step count. */
   readonly hops: number;

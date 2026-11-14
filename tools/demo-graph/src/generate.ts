@@ -3,7 +3,7 @@ import type { MappingSource } from './mapping.js';
 import { createRng, type Rng } from './rng.js';
 import { evaluate, type Value } from './rules.js';
 
-export interface GeneratedFile {
+interface GeneratedFile {
   readonly kind: 'entity' | 'relationship';
   readonly type: string;
   readonly label: string;

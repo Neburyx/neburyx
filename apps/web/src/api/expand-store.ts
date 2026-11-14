@@ -50,7 +50,7 @@ export const PAGE_CEILING = 50;
 /** What the page size field shows when the node has no answered page size and no preview. */
 export const FALLBACK_PAGE_SIZE = 25;
 
-export type PageSizeCheck = { readonly ok: true; readonly value: number } | { readonly ok: false; readonly reason: 'not-whole' | 'below-one' | 'above-ceiling'; readonly ceiling: number };
+type PageSizeCheck = { readonly ok: true; readonly value: number } | { readonly ok: false; readonly reason: 'not-whole' | 'below-one' | 'above-ceiling'; readonly ceiling: number };
 
 export interface NodeExpansion {
   readonly epoch: string;
@@ -68,10 +68,10 @@ export interface NodeExpansion {
 }
 
 /** What a request did: `sent` a request left and was answered, `failed` it left and failed, `held` the heavy-operation warning stopped it and waits for the person, `stale` a newer ask or a change of investigation or masking made it moot. */
-export type ExpandOutcome = 'sent' | 'held' | 'stale' | 'failed';
+type ExpandOutcome = 'sent' | 'held' | 'stale' | 'failed';
 
 /** A selection that is expanded node after node: how many of its nodes are still to be asked, the held one included, and the rest of the run, which goes on once the held node has been let through. */
-export interface ExpandBatch {
+interface ExpandBatch {
   readonly waiting: number;
   /** How many nodes the batch asks; absent for a batch of one. */
   readonly size?: number;
@@ -86,7 +86,7 @@ interface Passed {
   readonly limit?: number | undefined;
 }
 
-export type ExpansionAction =
+type ExpansionAction =
   | ({ readonly kind: 'first'; readonly types: readonly string[]; readonly relTypes?: readonly string[] | undefined; readonly refinement?: Refinement | undefined; readonly batch?: ExpandBatch | undefined } & Passed)
   | { readonly kind: 'more'; readonly type: string }
   | { readonly kind: 'restart'; readonly type: string }
@@ -142,7 +142,7 @@ export interface ExpandStore {
   load(ref: ElementRef, plan: { readonly first: readonly string[]; readonly more: readonly string[]; readonly relTypes: readonly string[] | undefined; readonly refinement?: Refinement | undefined }): Promise<ExpandOutcome>;
 }
 
-export type Collapsibility = 'yes' | 'loading' | 'nothing';
+type Collapsibility = 'yes' | 'loading' | 'nothing';
 
 /** What is on the canvas because of expansions, in one epoch: for each element the nodes whose uncollapsed expansions returned it, and the elements nothing may remove. */
 interface Keepers {

@@ -1,9 +1,8 @@
 import { learnGrammar, type PatternGrammar } from './pattern-grammar.js';
-import { PATHS, countStatementOfShape, grammarCorpus, pathCountStatements, pathStatements, shapeAllowlist, statementOfShape } from './pattern-shapes.js';
+import { countStatementOfShape, grammarCorpus, pathCountStatements, pathStatements, shapeAllowlist, statementOfShape } from './pattern-shapes.js';
 
 /** The names the grammar of the fixture's pattern statements is learned over. */
 export const GRAMMAR_ALLOWLIST = shapeAllowlist(2, 2);
-export const PATH_COUNT = PATHS.length;
 
 let learned: PatternGrammar | undefined;
 let learnedCount: PatternGrammar | undefined;

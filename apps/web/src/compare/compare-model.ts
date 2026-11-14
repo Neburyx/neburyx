@@ -2,7 +2,7 @@ import type { GraphProperty } from '@neburyx/contracts';
 import { propertyText } from '../inspector/property-text.js';
 import { EMPTY, NOT_MAPPED, NOT_STATED, UNAVAILABLE, VARIES_BY_MEMBER } from './copy.js';
 
-export type CellKind = 'value' | 'empty' | 'unavailable' | 'masked' | 'not-mapped' | 'not-stated' | 'varies';
+type CellKind = 'value' | 'empty' | 'unavailable' | 'masked' | 'not-mapped' | 'not-stated' | 'varies';
 
 export interface Cell {
   readonly kind: CellKind;
@@ -23,7 +23,7 @@ export interface Row {
   readonly includesMasked: boolean;
 }
 
-export type ElementKind = 'entity' | 'stored' | 'aggregate' | 'derived' | 'unknown';
+type ElementKind = 'entity' | 'stored' | 'aggregate' | 'derived' | 'unknown';
 
 /** A row the element brings besides its mapped properties (a relationship's observed time, its rule, its member count). */
 export interface Extra {
@@ -74,7 +74,6 @@ const NOT_MAPPED_CELL: Cell = { kind: 'not-mapped', text: NOT_MAPPED };
 const NOT_STATED_CELL: Cell = { kind: 'not-stated', text: NOT_STATED };
 const VARIES_CELL: Cell = { kind: 'varies', text: VARIES_BY_MEMBER };
 
-export const notStated = (): Cell => NOT_STATED_CELL;
 
 function cellFor(element: CompareElement, key: string): Cell {
   if (element.kind === 'derived') return NOT_MAPPED_CELL;

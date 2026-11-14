@@ -12,7 +12,7 @@ export interface FlyoutProps {
   readonly close: () => void;
 }
 
-export type ToolKind =
+type ToolKind =
   | { readonly type: 'flyout'; readonly content: ComponentType<FlyoutProps> }
   /** The feature that registers the tool owns whatever it opens. */
   | { readonly type: 'action'; readonly activate: () => void; /** True while what the tool opened is open: the button is drawn active and the pointer's is not. */ readonly isActive?: (presentation: PresentationState) => boolean };

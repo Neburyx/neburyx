@@ -7,9 +7,9 @@ import { inWindow, instantOf } from './window-condition.js';
 export type ExpandDirection = 'out' | 'in' | 'both';
 
 /** The four phases of one neighbor type's order: every undated row comes after every dated one, and stored rows before aggregates within each. */
-export const PHASE = { storedDated: 0, aggregateDated: 1, storedUndated: 2, aggregateUndated: 3 } as const;
+const PHASE = { storedDated: 0, aggregateDated: 1, storedUndated: 2, aggregateUndated: 3 } as const;
 
-export const FLAG_NO_STABLE_ID = 'no-stable-id';
+const FLAG_NO_STABLE_ID = 'no-stable-id';
 
 export interface ExpandBranch {
   readonly type: string;

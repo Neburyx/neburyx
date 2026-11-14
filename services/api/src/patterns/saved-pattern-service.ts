@@ -14,22 +14,22 @@ import { availabilityOf } from './availability.js';
 import { presetTemplateOf } from './preset-template.js';
 
 /** The audit action of a source the person may not read, for a save. */
-export const PATTERN_SAVE_AUDIT_ACTION = 'pattern.save';
+const PATTERN_SAVE_AUDIT_ACTION = 'pattern.save';
 /** The audit action of a source the person may not read, for a list. */
 export const PATTERN_LIST_AUDIT_ACTION = 'pattern.list';
 /** The audit actions of a source the person may not read, for a change and a delete. */
-export const PATTERN_CHANGE_AUDIT_ACTION = 'pattern.change';
-export const PATTERN_DELETE_AUDIT_ACTION = 'pattern.delete';
+const PATTERN_CHANGE_AUDIT_ACTION = 'pattern.change';
+const PATTERN_DELETE_AUDIT_ACTION = 'pattern.delete';
 /** The audit action of a source the person may not read, for a copy. */
-export const PATTERN_COPY_AUDIT_ACTION = 'pattern.copy';
+const PATTERN_COPY_AUDIT_ACTION = 'pattern.copy';
 
-export interface SavePatternCall {
+interface SavePatternCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly request: SavePatternRequest;
 }
 
-export interface ListPatternsCall {
+interface ListPatternsCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;
@@ -37,20 +37,20 @@ export interface ListPatternsCall {
   readonly cursor: string | undefined;
 }
 
-export interface ChangePatternCall {
+interface ChangePatternCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly id: string;
   readonly request: ChangePatternRequest;
 }
 
-export interface CopyPatternCall {
+interface CopyPatternCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly id: string;
 }
 
-export interface DeletePatternCall {
+interface DeletePatternCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly id: string;
@@ -75,7 +75,7 @@ const LIST_SORT = 'updated-desc';
 const positionSchema = z.strictObject({ updatedKey: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/), id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) });
 
 /** A pattern as the person is shown it: the starting entity as a reference is shown elsewhere. */
-export function shownPattern(references: StoredReferences, row: PatternRow): SavedPattern {
+function shownPattern(references: StoredReferences, row: PatternRow): SavedPattern {
   const anchor = row.anchorEntityType === null || row.anchorStableId === null ? null : { entityType: row.anchorEntityType, stableId: references.entityId(row.sourceId, row.anchorEntityType, row.anchorStableId) };
   const common = { id: row.id, sourceId: row.sourceId, name: row.name, askForStartingEntity: row.askForStartingEntity, anchor, visibility: row.visibility, lastRunAt: row.lastRunAt, createdAt: row.createdAt, updatedAt: row.updatedAt, version: row.version };
   if (row.kind === 'definition') return { ...common, kind: 'definition', definition: { ...(row.definition ?? {}) } };
@@ -83,7 +83,7 @@ export function shownPattern(references: StoredReferences, row: PatternRow): Sav
 }
 
 /** A pattern as the list shows it: with its creator's name, and whether it is the caller's own. No id of another person is shown. */
-export function shownListedPattern(references: StoredReferences, row: ListedPatternRow, callerId: string, availability: PatternAvailability): ListedPattern {
+function shownListedPattern(references: StoredReferences, row: ListedPatternRow, callerId: string, availability: PatternAvailability): ListedPattern {
   const owner = { owner: { name: row.ownerName }, ownedByYou: row.ownerId === callerId };
   const shown = shownPattern(references, row);
   return shown.kind === 'definition' ? { ...shown, ...owner, availability } : { ...shown, ...owner, availability };

@@ -30,7 +30,7 @@ export interface CanvasPixels {
 
 export const EXPECTED_ELEMENTS = 300;
 /** A drag is exact in the library: the view moves by the pointer's distance, to within what a pixel round-off can add. */
-export const DRAG_TOLERANCE_PX = 2;
+const DRAG_TOLERANCE_PX = 2;
 
 export function checkDrawn(readout: Readout | undefined, notice: string | undefined, pixels: CanvasPixels): Readout {
   if (readout === undefined) throw new RunnerError('CANVAS_MISSING');
@@ -42,9 +42,9 @@ export function checkDrawn(readout: Readout | undefined, notice: string | undefi
 }
 
 /** One wheel step changes the zoom by a factor between these, in the direction of the wheel. */
-export const WHEEL_FACTOR = { min: 1.02, max: 2 } as const;
+const WHEEL_FACTOR = { min: 1.02, max: 2 } as const;
 /** The opposite step must bring the zoom back to within this share of where it was. */
-export const WHEEL_RETURN_TOLERANCE = 0.01;
+const WHEEL_RETURN_TOLERANCE = 0.01;
 
 /** A wheel turned away from the viewer (negative delta) zooms in, the other way zooms out, by a bounded factor; the renderer's own zoom must follow. */
 export function checkWheel(before: Readout, after: Readout, deltaY: number): void {
@@ -64,7 +64,7 @@ export interface Motion {
   readonly panTravel: number;
 }
 
-export const MIN_MOTION = { zoomRatio: 1.2, panTravel: 200 } as const;
+const MIN_MOTION = { zoomRatio: 1.2, panTravel: 200 } as const;
 
 export function checkMotion(motion: Motion): void {
   if (!(motion.zoomRatio >= MIN_MOTION.zoomRatio && motion.panTravel >= MIN_MOTION.panTravel)) {

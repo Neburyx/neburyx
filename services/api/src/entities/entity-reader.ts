@@ -7,7 +7,7 @@ import type { MappingModel } from '../mapping/model.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import type { Principal } from '../seams/seams.js';
 
-export interface EntityReadRequest {
+interface EntityReadRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

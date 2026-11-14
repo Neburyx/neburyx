@@ -3,7 +3,7 @@ import { DEFAULT_PATTERN_LIST_LIMIT, type ListedPattern } from '@neburyx/contrac
 import type { ApiClient, ApiFailure } from '../../api/client.js';
 import { UNEXPECTED } from '../../api/use-request.js';
 
-export type SavedListState =
+type SavedListState =
   | { readonly phase: 'loading' }
   | { readonly phase: 'failed'; readonly failure: ApiFailure }
   | {

@@ -54,8 +54,7 @@ export type AccessDeniedReason = (typeof ACCESS_DENIED_REASONS)[number];
 export const INVALID_REQUEST_REASONS = ['export-too-large', 'pattern-limit', 'pattern-personal-condition'] as const;
 
 /** The three limits of one export: entities, stored relationships, and aggregated or derived relationships. */
-export const EXPORT_LIMIT_NAMES = ['entities', 'relationships', 'aggregates'] as const;
-export type ExportLimitName = (typeof EXPORT_LIMIT_NAMES)[number];
+const EXPORT_LIMIT_NAMES = ['entities', 'relationships', 'aggregates'] as const;
 
 /** Why `ASK_UNSUPPORTED` is answered without a question being judged: Ask has no planner in this build. */
 export const ASK_UNSUPPORTED_REASONS = ['not-in-this-edition'] as const;

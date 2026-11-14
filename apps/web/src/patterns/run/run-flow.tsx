@@ -60,7 +60,7 @@ export interface RunFlowProps {
 }
 
 /** What the run view of a saved pattern is given besides the screens of a built one. */
-export interface SavedRun {
+interface SavedRun {
   readonly item: ListedPattern;
   readonly onBack: () => void;
   /** The list is out of date: the pattern is gone or cannot run any more. */

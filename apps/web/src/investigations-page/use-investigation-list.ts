@@ -10,7 +10,7 @@ export interface ListFilters {
   readonly text: string | undefined;
 }
 
-export interface ListState {
+interface ListState {
   /** What is shown: the rows of the pages read, kept while another list is being read or a read fails. */
   readonly items: readonly InvestigationListItem[] | undefined;
   readonly matching: number | undefined;
@@ -44,9 +44,9 @@ type Action =
 /** `focusId` when the row that took the focus was the last one: the caption of the table does. */
 export const NO_ROW_LEFT = '';
 
-export const INITIAL: ListState = { items: undefined, matching: undefined, savedViews: undefined, nextCursor: null, retentionDays: undefined, loading: true, loadingMore: false, failure: undefined, focusId: undefined, note: undefined, refocusFirst: false };
+const INITIAL: ListState = { items: undefined, matching: undefined, savedViews: undefined, nextCursor: null, retentionDays: undefined, loading: true, loadingMore: false, failure: undefined, focusId: undefined, note: undefined, refocusFirst: false };
 
-export function reduceList(state: ListState, action: Action): ListState {
+function reduceList(state: ListState, action: Action): ListState {
   switch (action.type) {
     case 'first-started':
       return { ...state, loading: true, loadingMore: false, failure: undefined, note: state.refocusFirst ? state.note : undefined };
@@ -76,7 +76,7 @@ export function reduceList(state: ListState, action: Action): ListState {
   }
 }
 
-export const querySoFar = (filters: ListFilters): InvestigationPageQuery => ({ ...(filters.deleted === true ? { deleted: true } : { status: filters.status }), ...(filters.sourceId === undefined ? {} : { sourceId: filters.sourceId }), ...(filters.text === undefined ? {} : { text: filters.text }) });
+const querySoFar = (filters: ListFilters): InvestigationPageQuery => ({ ...(filters.deleted === true ? { deleted: true } : { status: filters.status }), ...(filters.sourceId === undefined ? {} : { sourceId: filters.sourceId }), ...(filters.text === undefined ? {} : { text: filters.text }) });
 
 export interface InvestigationList {
   readonly state: ListState;

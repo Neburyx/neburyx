@@ -7,7 +7,7 @@ import type { Compare } from './compare.js';
 import { COMPARE_PANEL_TITLE } from './copy.js';
 import { COMPARE_DEFAULT_WIDTH, COMPARE_MAX_WIDTH } from './limits.js';
 
-export const COMPARE_PANEL_ID = 'compare';
+const COMPARE_PANEL_ID = 'compare';
 
 const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);
 

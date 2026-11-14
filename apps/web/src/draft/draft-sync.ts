@@ -26,7 +26,7 @@ export type DraftStatus =
 
 const IDLE: DraftStatus = { kind: 'idle' };
 
-export interface DraftSession {
+interface DraftSession {
   readonly version: number;
   readonly notes: string | null;
   /** The named view the draft was last saved as or restored from. */
@@ -61,18 +61,18 @@ interface Session {
   lastJson: string | undefined;
 }
 
-export interface Timers {
+interface Timers {
   readonly setTimeout: (run: () => void, ms: number) => unknown;
   readonly clearTimeout: (handle: unknown) => void;
   readonly now: () => number;
 }
 
-export interface PageEvents {
+interface PageEvents {
   addEventListener(type: 'beforeunload' | 'pagehide', listener: (event: Event) => void): void;
   removeEventListener(type: 'beforeunload' | 'pagehide', listener: (event: Event) => void): void;
 }
 
-export interface DocumentEvents {
+interface DocumentEvents {
   readonly visibilityState: string;
   addEventListener(type: 'visibilitychange', listener: () => void): void;
   removeEventListener(type: 'visibilitychange', listener: () => void): void;
@@ -87,14 +87,14 @@ export interface DraftSyncOptions {
 }
 
 /** What a write of the draft other than autosave leaves it at, when the server took it. */
-export interface DraftAccepted {
+interface DraftAccepted {
   readonly version: number;
   readonly notes: string | null;
   readonly basedOnViewId: string | null;
 }
 
 /** The draft of the investigation shown, held for one write of its own: autosave waits until `release` or `conflict`, and the write goes out with `version`. */
-export interface DraftHold {
+interface DraftHold {
   readonly id: string;
   readonly version: number;
   /** The write is over: the draft takes what the server answered, when it took the write, and autosave goes on from there. */
@@ -104,7 +104,7 @@ export interface DraftHold {
 }
 
 /** `failed`: the changes waiting could not be written, so nothing was held. `conflict`: the draft already changed elsewhere. `none`: no draft of the investigation shown can be written. */
-export type HoldOutcome = { readonly kind: 'held'; readonly hold: DraftHold } | { readonly kind: 'failed' } | { readonly kind: 'conflict' } | { readonly kind: 'none' };
+type HoldOutcome = { readonly kind: 'held'; readonly hold: DraftHold } | { readonly kind: 'failed' } | { readonly kind: 'conflict' } | { readonly kind: 'none' };
 
 export interface DraftSync {
   readonly status: ReadableStore<DraftStatus>;

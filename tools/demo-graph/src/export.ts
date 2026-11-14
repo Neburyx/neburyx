@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Generated } from './generate.js';
 
-export interface ManifestEntry {
+interface ManifestEntry {
   readonly kind: 'entity' | 'relationship';
   readonly type: string;
   readonly label: string;

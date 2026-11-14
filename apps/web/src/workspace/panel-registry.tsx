@@ -3,7 +3,7 @@ import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 import { PANEL_INITIAL_WIDTH } from './panel-limits.js';
 
-export type PanelPlacement =
+type PanelPlacement =
   | { readonly kind: 'dock' }
   /** Shown over the canvas, `top` px below its top and `inset` px from the given side (the panel gap when none is given). */
   | { readonly kind: 'floating'; readonly side: 'left' | 'right'; readonly top: number; readonly inset?: number };

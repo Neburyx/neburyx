@@ -5,7 +5,7 @@ import net from 'node:net';
  * How long an answer is used before a fresh lookup starts in the background. A hypothesis: no source gives
  * a figure; a macOS `.local` name was measured at 5.0 s per lookup, so a lookup must never sit in front of a connection.
  */
-export const ADDRESS_LIFETIME_MS = 60_000;
+const ADDRESS_LIFETIME_MS = 60_000;
 
 export type Resolve = (hostname: string, options: dns.LookupOptions) => Promise<readonly dns.LookupAddress[]>;
 

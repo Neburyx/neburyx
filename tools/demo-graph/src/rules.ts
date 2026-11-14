@@ -26,12 +26,12 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, '0');
 }
 
-export function isoDay(days: number): string {
+function isoDay(days: number): string {
   const date = new Date(days * DAY_MS);
   return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
 }
 
-export function isoDateTime(seconds: number): string {
+function isoDateTime(seconds: number): string {
   return `${isoDay(Math.floor(seconds / 86_400))}T${new Date(seconds * 1000).toISOString().slice(11, 19)}Z`;
 }
 

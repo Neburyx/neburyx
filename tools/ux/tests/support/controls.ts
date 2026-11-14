@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-export const LOOK_PROPERTIES = [
+const LOOK_PROPERTIES = [
   'display', 'height', 'min-height', 'padding-top', 'padding-right', 'padding-bottom', 'padding-left',
   'border-top-width', 'border-top-style', 'border-top-color', 'border-right-width', 'border-bottom-width', 'border-bottom-color', 'border-left-width', 'border-left-color',
   'border-top-left-radius', 'border-bottom-right-radius', 'background-color', 'background-image', 'color', 'font-family', 'font-size', 'font-weight', 'line-height',

@@ -3,7 +3,6 @@ import type { ElementRef, SourceProfile } from '@neburyx/contracts';
 import type { ExpandStore } from '../api/expand-store.js';
 import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { nodeRefOfKey } from '../state/keys.js';
-import { useStoreSelector } from '../state/store.js';
 import type { TypeFilter } from '../state/presentation-state.js';
 import { NO_TYPE_FILTER } from '../state/presentation-state.js';
 import { useClientStateWhenProvided } from '../state/context.js';
@@ -33,7 +32,7 @@ export function neighborTypesOf(profile: SourceProfile | undefined, entityType: 
   return [...new Set(ends)];
 }
 
-export type ExpandResult = 'started' | 'no-stable-id' | 'no-neighbor-types' | 'nothing-left';
+type ExpandResult = 'started' | 'no-stable-id' | 'no-neighbor-types' | 'nothing-left';
 
 /** The relationship types to send for the neighbor types asked of an entity of a type: those the mapping gives between them that are on; nothing (all sourced types) while no relationship type that joins the entity type is off. */
 export function relTypesToSend(profile: SourceProfile | undefined, filter: TypeFilter, entityType: string, neighborTypes: readonly string[]): readonly string[] | undefined {
@@ -111,7 +110,3 @@ export function useExpansionControls(): ExpansionControls | undefined {
   return store === undefined ? undefined : expansionControlsOf(store, profile, () => state?.presentation.view.getState().typeFilter ?? NO_TYPE_FILTER, (key) => state?.presentation.setSupernodePanel({ key }));
 }
 
-export function useNodeExpansion(ref: ElementRef | undefined) {
-  const store = useExpandStore();
-  return useStoreSelector(store.view, () => (ref === undefined ? undefined : store.of(ref)));
-}

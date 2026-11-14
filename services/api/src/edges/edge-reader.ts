@@ -13,7 +13,7 @@ import { buildLinkAddress } from '../mapping/link-address.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 
-export interface EdgeReadRequest {
+interface EdgeReadRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly ref: EdgeReadRef;

@@ -2,7 +2,7 @@ import type { ElementRef, GraphEdge, GraphNode, SourceProfile } from '@neburyx/c
 import { edgeKey } from '../state/keys.js';
 import { createRandom, pickIndex, type Random } from './random.js';
 
-export const GENERATOR_MARKER = 'neburyx-dev-fixture-generator';
+const GENERATOR_MARKER = 'neburyx-dev-fixture-generator';
 export const FIXTURE_ELEMENTS = 300;
 export const FIXTURE_PINS = 10;
 

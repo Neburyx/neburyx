@@ -1,4 +1,4 @@
-export const FIXTURE_ERROR_CODES = ['FIXTURE_PARAMETER_INVALID', 'FIXTURE_INVALID'] as const;
+const FIXTURE_ERROR_CODES = ['FIXTURE_PARAMETER_INVALID', 'FIXTURE_INVALID'] as const;
 
 export type FixtureErrorCode = (typeof FIXTURE_ERROR_CODES)[number];
 

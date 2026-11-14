@@ -10,7 +10,7 @@ import { StatusBanner } from '../banner/status-banner.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { ClientStateProvider } from '../state/context.js';
 import { isReadOnlyStatus, type InvestigationStatus } from '../state/investigation-state.js';
-import { key, ref, result } from '../state/test-data.js';
+import { key, result } from '../state/test-data.js';
 import { InvestigationIdentity } from '../workspace/investigation-identity.js';
 import { createSlotRegistry, SlotsProvider } from '../workspace/slots.js';
 import { ReadOnlyBannerSync } from './read-only-banner.js';
@@ -81,4 +81,3 @@ export const flush = async (): Promise<void> => {
   });
 };
 
-export { ref };

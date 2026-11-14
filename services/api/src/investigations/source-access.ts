@@ -7,7 +7,7 @@ import type { Principal, Seams } from '../seams/seams.js';
 
 const ENTITY_LOAD_AUDIT_ACTION = entityLoadTemplate.auditAction;
 
-export interface SourceAccessCall {
+interface SourceAccessCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

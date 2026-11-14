@@ -26,7 +26,7 @@ export interface ProbeTransaction {
   rollback(): Promise<void>;
 }
 
-export interface ProbeSession {
+interface ProbeSession {
   beginTransaction(config: { readonly timeout: number; readonly metadata: Readonly<Record<string, string>> }): Promise<ProbeTransaction>;
   close(): Promise<void>;
 }
@@ -39,7 +39,7 @@ export interface ProbeDriver {
 export type ProbeDriverFactory = (settings: DriverSettings) => ProbeDriver;
 
 /** A driver that exposes only what the probe calls, so no other way to run a statement is within its reach. */
-export const neo4jProbeDriverFactory: ProbeDriverFactory = (settings) => {
+const neo4jProbeDriverFactory: ProbeDriverFactory = (settings) => {
   const driver = neo4j.driver(settings.uri, neo4j.auth.basic(settings.username, settings.password), {
     maxConnectionPoolSize: settings.maxConnectionPoolSize,
     connectionAcquisitionTimeout: settings.connectionAcquisitionTimeout,

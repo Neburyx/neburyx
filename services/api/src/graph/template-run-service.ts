@@ -14,7 +14,7 @@ import type { Principal } from '../seams/seams.js';
 import { defaultTemplateProbes, estimateOf, type TemplateProbe } from './template-probes.js';
 import { windowInstantsOf } from './template-window.js';
 
-export interface TemplateRunServiceRequest {
+interface TemplateRunServiceRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

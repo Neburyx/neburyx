@@ -1,13 +1,12 @@
 import { z } from 'zod';
 import { PATTERN_LIMITS, type ListedPattern, type PatternDefinition, type TemplateListResponse } from '@neburyx/contracts';
-import { SAVED_COPY, type Tab } from './saved-copy.js';
+import { SAVED_COPY } from './saved-copy.js';
 
-export const tabOf = (item: ListedPattern): Exclude<Tab, 'built-in'> => (item.ownedByYou ? 'mine' : 'shared');
 
 /** The count of a tab from the pages read: a number when the list is whole, a lower bound while a cursor remains. */
 export const countText = (rows: number, more: boolean): string => (more ? `≥ ${rows} · lower bound` : String(rows));
 
-export const codePointsOf = (text: string): number => Array.from(text).length;
+const codePointsOf = (text: string): number => Array.from(text).length;
 
 /** Whether a name can be sent: 1 to the limit once trimmed, as the server checks it. */
 export const nameFits = (name: string): boolean => {
@@ -15,7 +14,6 @@ export const nameFits = (name: string): boolean => {
   return length >= 1 && length <= PATTERN_LIMITS.nameLength;
 };
 
-export const visibilityText = (item: Pick<ListedPattern, 'visibility'>): string => (item.visibility === 'shared' ? SAVED_COPY.everyone : SAVED_COPY.onlyMe);
 
 /** What kind of pattern a row is, in a line: built in this panel, or the name of the built-in pattern it was saved from. */
 export function kindLineOf(item: ListedPattern, presets: readonly TemplateListResponse['presets'][number][] | undefined): string {

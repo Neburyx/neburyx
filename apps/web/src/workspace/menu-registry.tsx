@@ -64,7 +64,7 @@ export interface SubmenuProps {
   readonly close: () => void;
 }
 
-export type MenuItemBehaviour =
+type MenuItemBehaviour =
   | { readonly run: (context: MenuContext) => void; readonly submenu?: never }
   /** An enabled item that opens this content beside its row; the feature that registers it draws it. */
   | { readonly submenu: ComponentType<SubmenuProps>; readonly run?: never };
@@ -107,7 +107,7 @@ export class MenuItemError extends Error {
   }
 }
 
-export type MenuItems = ReadonlyMap<MenuTargetKind, readonly RegisteredMenuItem[]>;
+type MenuItems = ReadonlyMap<MenuTargetKind, readonly RegisteredMenuItem[]>;
 
 export interface MenuRegistry {
   readonly view: ReadableStore<MenuItems>;

@@ -20,7 +20,7 @@ const paramsSchema = z
   .transform((params) => ({ hits: params.hits.map(withInteger), exact: params.exact.map(withInteger) }));
 
 /** One hit's relationship context: the positions of the hit and of the exact match in the lists the read was given, and the relationship's type and direction from the hit's side. */
-export interface ContextRow {
+interface ContextRow {
   readonly hit: number;
   readonly exact: number;
   readonly relationshipType: string;

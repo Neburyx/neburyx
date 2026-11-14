@@ -48,7 +48,7 @@ const definitionSchema = z.strictObject({
     .optional(),
 });
 
-export interface CompiledEntity {
+interface CompiledEntity {
   readonly type: string;
   readonly count: number;
   readonly properties: readonly { readonly key: string; readonly rule: Rule }[];

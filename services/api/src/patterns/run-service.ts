@@ -14,7 +14,7 @@ import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { validatePattern } from './validate.js';
 
-export const PATTERN_SCOPE = 'template:pattern';
+const PATTERN_SCOPE = 'template:pattern';
 
 export interface PatternRunCall {
   readonly traceId: string;

@@ -2,7 +2,7 @@ import type { BannerController, BannerDescriber } from './banner-controller.js';
 import type { BannerState } from './banner-state.js';
 import { RATE_LIMITED_CHIP, RATE_LIMITED_TEXT, rateLimitedHeadline, rateLimitedRetry, rateLimitedSideLabel } from './copy.js';
 
-export const RATE_LIMITED_BANNER_ID = 'rate-limited';
+const RATE_LIMITED_BANNER_ID = 'rate-limited';
 
 const TICK_MS = 1000;
 

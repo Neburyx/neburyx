@@ -3,13 +3,13 @@ import { join } from 'node:path';
 import { loadTree } from '../architecture/tree.js';
 import { collectEnvReads, type EnvRead } from './collect.js';
 
-export const ENV_SCAN_ROOT = 'services/api/src';
+const ENV_SCAN_ROOT = 'services/api/src';
 /** Test support code that reads the developer's environment; it is not the API. */
-export const ENV_SCAN_EXCLUDED: readonly string[] = ['services/api/src/testing', 'services/api/src/image', 'services/api/src/compose'];
+const ENV_SCAN_EXCLUDED: readonly string[] = ['services/api/src/testing', 'services/api/src/image', 'services/api/src/compose'];
 /** The one file, and the two reads in it, that take the variable names a mapping gives for a source's login; a scan cannot resolve them, by design. */
-export const CREDENTIAL_RESOLVER = 'services/api/src/sources/credentials.ts';
-export const CREDENTIAL_KEYS: readonly string[] = ['source.auth.usernameEnv', 'source.auth.passwordEnv'];
-export const SECRET_VARIABLES: readonly string[] = ['DATABASE_URL', 'DATABASE_MIGRATION_URL', 'NEBURYX_CURSOR_KEY'];
+const CREDENTIAL_RESOLVER = 'services/api/src/sources/credentials.ts';
+const CREDENTIAL_KEYS: readonly string[] = ['source.auth.usernameEnv', 'source.auth.passwordEnv'];
+const SECRET_VARIABLES: readonly string[] = ['DATABASE_URL', 'DATABASE_MIGRATION_URL', 'NEBURYX_CURSOR_KEY'];
 
 export interface EnvViolation {
   readonly kind: 'unlisted' | 'unused' | 'unresolved' | 'undescribed' | 'secret-has-value';

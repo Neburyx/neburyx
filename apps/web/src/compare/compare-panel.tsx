@@ -59,7 +59,7 @@ function RowView({ row }: { readonly row: Row }) {
   );
 }
 
-export interface ComparePanelViewProps {
+interface ComparePanelViewProps {
   readonly target: CompareTarget;
   readonly graph: LoadedGraph;
   readonly profile: SourceProfile | undefined;
@@ -69,7 +69,7 @@ export interface ComparePanelViewProps {
 }
 
 /** The comparison as the dock draws it: a heading, the switch and the copy of the table, a table with a column for each element, and the notes. */
-export function ComparePanelView({ target, graph, profile, choice, onClose }: ComparePanelViewProps) {
+function ComparePanelView({ target, graph, profile, choice, onClose }: ComparePanelViewProps) {
   const [differencesOnly, setDifferencesOnly] = useState(false);
   const title = useRef<HTMLHeadingElement>(null);
   const handled = useRef(0);

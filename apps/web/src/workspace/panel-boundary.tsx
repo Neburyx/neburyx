@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react';
 
-export const PANEL_FAILED = 'PANEL_FAILED';
+const PANEL_FAILED = 'PANEL_FAILED';
 
 interface PanelBoundaryProps {
   readonly title: string;

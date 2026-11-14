@@ -9,7 +9,7 @@ import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { prunedRunOf } from './derived-prune.js';
 
-export interface DerivedNeighborsServiceRequest {
+interface DerivedNeighborsServiceRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

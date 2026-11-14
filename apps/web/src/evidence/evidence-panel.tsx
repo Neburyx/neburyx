@@ -12,7 +12,7 @@ const TABS = [
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
-export const captionOf = (edge: EdgeRef): string => ('stableId' in edge ? edge.type : 'aggregate' in edge ? edge.aggregate.type : edge.derived.ruleId);
+const captionOf = (edge: EdgeRef): string => ('stableId' in edge ? edge.type : 'aggregate' in edge ? edge.aggregate.type : edge.derived.ruleId);
 const sourceIdOf = (edge: EdgeRef): string => edge.sourceId;
 
 export interface EvidencePanelViewProps {

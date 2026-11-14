@@ -3,7 +3,7 @@ import { FailureNotice } from '../failure-notice.js';
 import { READING_EVIDENCE, TRY_AGAIN } from './copy.js';
 
 /** A failure can be tried again unless the answer itself was refused as malformed or the API says a retry cannot help. */
-export function canTryAgain(failure: ApiFailure): boolean {
+function canTryAgain(failure: ApiFailure): boolean {
   if ('traceId' in failure) return failure.retryable;
   return failure.code !== 'SCHEMA_MISMATCH';
 }

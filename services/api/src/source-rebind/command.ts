@@ -11,7 +11,7 @@ const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../../migrations', import.meta
 const USAGE_ERROR = 2;
 const FAILURE = 1;
 
-export type RebindStore = Pick<AppStore, 'rebindSource' | 'close'>;
+type RebindStore = Pick<AppStore, 'rebindSource' | 'close'>;
 
 export interface RebindIo {
   readonly stdout: { write(text: string): unknown };

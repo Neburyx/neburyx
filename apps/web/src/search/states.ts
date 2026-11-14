@@ -7,7 +7,7 @@ type GroupState = 'hits' | 'empty' | 'failed' | 'not-searched' | 'hidden';
 const stateOf = (hits: number, searchable: boolean, failed: boolean, hidden: boolean): GroupState => (hidden ? 'hidden' : failed ? 'failed' : hits > 0 ? 'hits' : searchable ? 'empty' : 'not-searched');
 
 /** What the page says when no group has a row to show. */
-export type EmptyMessage = 'none' | 'no-matches' | 'unshown' | 'no-result-for-selection';
+type EmptyMessage = 'none' | 'no-matches' | 'unshown' | 'no-result-for-selection';
 
 export interface AnswerStates {
   /** True when a group was searched, no group has a hit and no group failed, and no count says the source holds more: the page says "No matching entities". */

@@ -13,7 +13,7 @@ export function portOf(app: FastifyInstance): number {
   return typeof address === 'object' && address !== null ? address.port : 0;
 }
 
-export function parseRawResponse(text: string): RawResponse {
+function parseRawResponse(text: string): RawResponse {
   const [head = '', ...rest] = text.split('\r\n\r\n');
   const [statusLine = '', ...headerLines] = head.split('\r\n');
   const headers = Object.fromEntries(

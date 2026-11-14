@@ -37,9 +37,6 @@ export const BUILDER_COPY = {
 
 export const DIRECTION_TEXT: Readonly<Record<Direction, string>> = { out: 'Outgoing', in: 'Incoming', both: 'Either direction' };
 
-export const stepTitle = (index: number): string => `Step ${index + 1}`;
-export const tooManyTypes = `At most ${PATTERN_LIMITS.relationshipTypesPerStep} relationship types in a step.`;
-export const stepsLine = (count: number, limit: number): string => `Steps ${count} (source limit ${limit})`;
 export const noArrival = (type: string): string => `No relationship type in the mapping joins ${type} in this direction.`;
 
 export function blockText(block: AddStepBlock, displayName: (type: string) => string): string {
@@ -149,9 +146,7 @@ export const kindHelp = (property: string, kind: string | undefined, operators: 
 /** The line under the values: what one looks like, and that a range includes both ends. */
 export const valueHelp = (kind: string | undefined, between: boolean): string => `${kind === undefined || kind === 'unknown' ? 'Type the value to match.' : (KIND_VALUE[kind] ?? 'Type the value to match.')}${between ? ' Both ends are included.' : ''}`;
 
-export const sideCapText = (on: 'neighbor' | 'relationship'): string => `At most ${PATTERN_LIMITS.conditionsPerElement} conditions on the ${on === 'neighbor' ? 'node' : 'relationship'} of a step.`;
-export const windowAppliesText = (types: readonly string[]): string => `Filtered by the window: ${types.join(', ')}.`;
-export const windowNotAppliedText = (types: readonly string[]): string => `Not filtered by the window: ${types.join(', ')}. They are read whole.`;
+const sideCapText = (on: 'neighbor' | 'relationship'): string => `At most ${PATTERN_LIMITS.conditionsPerElement} conditions on the ${on === 'neighbor' ? 'node' : 'relationship'} of a step.`;
 
 export function conditionBlockText(block: AddConditionBlock): string {
   switch (block.kind) {
@@ -222,7 +217,7 @@ export const directionMeaning = (direction: Direction, from: string): string => 
   return `Either: the relationship may point either way between ${from} and the next entity.`;
 };
 /** "a" or "an" before a type's name, by its first letter. */
-export const article = (name: string): string => (/^[aeiou]/i.test(name) ? 'an' : 'a');
+const article = (name: string): string => (/^[aeiou]/i.test(name) ? 'an' : 'a');
 export const leavingText = (type: string, direction: Direction): string => `Leaving ${article(type)} ${type}, ${direction === 'out' ? 'outgoing' : direction === 'in' ? 'incoming' : 'either direction'}`;
 export const removeTypeLabel = (type: string): string => `Remove ${type}`;
 

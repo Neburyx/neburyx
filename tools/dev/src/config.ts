@@ -3,7 +3,7 @@ import type { Files } from './files.js';
 import { parseEnvFile } from './settings.js';
 
 export const CONFIG_KEYS = ['NEBURYX_DEV_MAPPING', 'NEBURYX_DEV_MAPPING_ENV', 'NEBURYX_DEV_DATABASE_URL', 'NEBURYX_DEV_DATABASE_MIGRATION_URL', 'NEBURYX_DEV_DATABASE_APP_ROLE'] as const;
-export type ConfigKey = (typeof CONFIG_KEYS)[number];
+type ConfigKey = (typeof CONFIG_KEYS)[number];
 export type DevConfig = Readonly<Record<ConfigKey, string>>;
 
 export const CONFIG_VARIABLE = 'NEBURYX_DEV_CONFIG';
@@ -17,7 +17,7 @@ export class ConfigUnusable extends Error {
   }
 }
 
-export function configPath(env: Readonly<Record<string, string | undefined>>): string {
+function configPath(env: Readonly<Record<string, string | undefined>>): string {
   const named = env[CONFIG_VARIABLE] ?? '';
   if (named !== '') {
     if (!isAbsolute(named)) throw new ConfigUnusable(`${CONFIG_VARIABLE} must be an absolute path`);

@@ -11,7 +11,7 @@
     "build:lists": "node tools/ci/prebuild-lists.mjs",
     "build:deps": "pnpm --fail-if-no-match --filter \"*^...\" build",
     "typecheck": "pnpm build:deps && pnpm --fail-if-no-match --filter \"*^...\" --if-present build:node && pnpm -r typecheck",
-    "lint": "eslint . --max-warnings 0",
+    "lint": "eslint . --max-warnings 0 && knip",
     "test": "pnpm build:deps && pnpm -r test",
     "test:contract": "pnpm build:deps && pnpm -r --if-present test:contract",
     "test:integration": "pnpm --fail-if-no-match --filter \"@neburyx/api...\" --filter \"@neburyx/save-suite^...\" build && pnpm --fail-if-no-match --filter @neburyx/api test:integration && pnpm --fail-if-no-match --filter @neburyx/save-suite test:integration",
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "eslint": "10.14.0",
+    "knip": "6.44.2",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.1"
   }

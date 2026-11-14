@@ -4,7 +4,7 @@ import type { GroupState } from '../adapter.js';
 export const GROUPED_TYPE = 'type-b';
 export const KEYBOARD_KEYS = ['Tab', 'ArrowRight', 'ArrowRight', 'Enter', 'End', 'ArrowRight', 'ArrowLeft', 'Home', 'Tab', 'ArrowRight', 'Enter'] as const;
 
-export const keyboardStateSchema = z.strictObject({
+const keyboardStateSchema = z.strictObject({
   focusedId: z.string().nullable(),
   ringVisible: z.boolean(),
   activatedId: z.string().nullable(),
@@ -12,7 +12,7 @@ export const keyboardStateSchema = z.strictObject({
   announced: z.string(),
 });
 
-export const keyboardStepSchema = keyboardStateSchema.extend({ key: z.string().min(1) });
+const keyboardStepSchema = keyboardStateSchema.extend({ key: z.string().min(1) });
 
 export const keyboardResultSchema = z.strictObject({
   steps: z.array(keyboardStepSchema).min(1),

@@ -6,7 +6,7 @@ import { busyHeadline, timedOutHeadline, unavailableHeadline } from '../banner/c
 export type FailureCode = ErrorCode | ClientFailure['code'];
 
 /** What the person can do about a failure: try the same thing again, or only close what is shown; nothing when the sentence says it all. */
-export type FailureAction = 'try-again' | 'close';
+type FailureAction = 'try-again' | 'close';
 
 export interface FailureWords {
   /** One sentence, with no code, no query text and no value from the source. */
@@ -28,7 +28,7 @@ const numberDetail = (failure: ApiFailure, key: string): number | undefined => {
 };
 
 export const retryAfterMsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'retryAfterMs');
-export const timeoutMsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'timeoutMs');
+const timeoutMsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'timeoutMs');
 export const maxHopsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'maxHops');
 export const maxPageOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'maxPage');
 const reasonOf = (failure: ApiFailure): string | undefined => {

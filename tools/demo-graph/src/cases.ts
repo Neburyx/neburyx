@@ -16,8 +16,8 @@ export class CasesError extends Error {
   }
 }
 
-export const MAX_LISTED_IDS = 100;
-export const MAX_CASE_REF = MAX_PRESET_CASE_REF;
+const MAX_LISTED_IDS = 100;
+const MAX_CASE_REF = MAX_PRESET_CASE_REF;
 const MAX_ISSUES = 50;
 
 const name = z.string().min(1);
@@ -63,13 +63,13 @@ export type Expectation =
     }
   | { readonly kind: 'property'; readonly node: NodeRef; readonly property: string; readonly equals: boolean | string };
 
-export interface DemoCase {
+interface DemoCase {
   readonly id: string;
   readonly title: string;
   readonly expect: readonly Expectation[];
 }
 
-export interface Preset {
+interface Preset {
   readonly entity: NodeRef;
   readonly caseRef: string;
 }

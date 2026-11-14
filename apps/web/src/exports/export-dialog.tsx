@@ -17,7 +17,7 @@ const FORMATS: readonly ExportFormat[] = ['json', 'csv'];
 
 type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
-export function failureText(failure: ApiFailure): string {
+function failureText(failure: ApiFailure): string {
   if (!('message' in failure)) return failure.code === 'SCHEMA_MISMATCH' ? SCHEMA_FAILURE : NETWORK_FAILURE;
   // a conflict with no reason is the same key still running; one with a reason (a changed source) has its own sentence
   if (failure.code === 'CONFLICT' && failure.details?.reason === undefined) return EXPORT_BUSY;
@@ -25,12 +25,12 @@ export function failureText(failure: ApiFailure): string {
   return failure.code === 'INVALID_REQUEST' && maxEntities !== undefined && maxRelationships !== undefined && maxAggregates !== undefined ? tooLargeText(failure.message, { maxEntities, maxRelationships, maxAggregates }) : failure.message;
 }
 
-export function isSourceChanged(failure: ApiFailure): boolean {
+function isSourceChanged(failure: ApiFailure): boolean {
   return failure.code === 'ACCESS_DENIED' && 'details' in failure && failure.details?.reason === 'export-source-changed';
 }
 
 /** Whether a failed download says the person's access changed since the export was made. */
-export function isAccessChanged(failure: ApiFailure): boolean {
+function isAccessChanged(failure: ApiFailure): boolean {
   return failure.code === 'ACCESS_DENIED' && 'details' in failure && failure.details?.reason === 'access-changed';
 }
 

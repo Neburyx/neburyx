@@ -8,7 +8,7 @@ export interface OwnedViewListQuery {
   readonly after: ViewPosition | undefined;
 }
 
-export interface OwnedViewRow {
+interface OwnedViewRow {
   readonly id: string;
   readonly name: string;
   readonly createdAt: string;

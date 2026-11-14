@@ -7,7 +7,7 @@ export interface EstimateAsk {
   readonly relTypes?: readonly string[] | undefined;
 }
 
-export type EstimateQuality = 'exact' | 'estimated' | 'lowerBound';
+type EstimateQuality = 'exact' | 'estimated' | 'lowerBound';
 
 export interface HeavyEstimate {
   readonly value: number;

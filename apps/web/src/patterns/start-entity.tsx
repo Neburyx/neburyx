@@ -23,7 +23,7 @@ interface Props {
   readonly id?: string;
 }
 
-export type Found =
+type Found =
   | { readonly kind: 'none' }
   | { readonly kind: 'found'; readonly nodes: readonly GraphNode[]; readonly count: Count | undefined }
   | { readonly kind: 'failed'; readonly failure: ApiFailure };

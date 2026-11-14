@@ -18,12 +18,12 @@ export interface StartupResult {
   readonly findings: readonly MappingFinding[];
 }
 
-export interface StartupLogger {
+interface StartupLogger {
   info(fields: object, message: string): void;
   warn(fields: object, message: string): void;
 }
 
-export interface StartupStore extends CheckStore {
+interface StartupStore extends CheckStore {
   markSourceUnchecked(sourceId: string, reason: string, source: SourceHashes): Promise<void>;
 }
 

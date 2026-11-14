@@ -6,7 +6,7 @@ import type { GateContext, Item } from '../types.js';
 import { canonicalJson } from '../cursor/binding.js';
 import { FULL_MASK, maskValue } from './mask.js';
 
-export { FULL_MASK, maskValue } from './mask.js';
+export { maskValue } from './mask.js';
 
 /** A normalized result, as a data template returns it: nodes and edges. */
 function isNormalized(item: Item): item is Item & Normalized {

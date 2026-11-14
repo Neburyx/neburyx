@@ -4,7 +4,7 @@ import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, elementKey } from '../stat
 import { FIXTURE_RECORD } from './fixture-loader.js';
 
 export const FRAME_SAMPLE_SOURCE = 'frame-sample';
-export const FRAME_SAMPLE_MARKER = 'neburyx-dev-frame-sample';
+const FRAME_SAMPLE_MARKER = 'neburyx-dev-frame-sample';
 
 interface SampleEntity {
   readonly id: string;

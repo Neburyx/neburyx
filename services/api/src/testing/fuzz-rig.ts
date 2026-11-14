@@ -30,7 +30,7 @@ export const FUZZ_RELATIONSHIPS = [
   { type: 'USES', from: 'widget', to: 'phone', observed_at: 'seenAt' },
 ];
 
-export const FUZZ_DERIVED = [{ id: 'shared-gadget', from: 'widget', to: 'widget', via: ['MADE_FROM', 'gadget', 'MADE_FROM'], rule_version: 1, stop_list_property: 'weight' }, { id: 'shared-handle', from: 'phone', to: 'phone', via: ['USES', 'widget', 'USES'], rule_version: 1 }];
+const FUZZ_DERIVED = [{ id: 'shared-gadget', from: 'widget', to: 'widget', via: ['MADE_FROM', 'gadget', 'MADE_FROM'], rule_version: 1, stop_list_property: 'weight' }, { id: 'shared-handle', from: 'phone', to: 'phone', via: ['USES', 'widget', 'USES'], rule_version: 1 }];
 
 /** Two presets of the shared-attribute template: one over a relationship type with a stop-list rule, one over a type with no rule. */
 export const FUZZ_SHARED_PRESETS = [
@@ -44,7 +44,7 @@ export const FUZZ_LINKED_PRESETS = [
   { id: 'linked-widgets', name: 'Linked widgets', template: 'linked-entities', bind: { anchor: 'widget', target: 'widget', via: 'MADE_FROM' } },
 ];
 
-export const FUZZ_PRESETS = [...FUZZ_SHARED_PRESETS, ...FUZZ_LINKED_PRESETS];
+const FUZZ_PRESETS = [...FUZZ_SHARED_PRESETS, ...FUZZ_LINKED_PRESETS];
 
 /** A second source with the same shape, so a cursor of one can be replayed against the other. */
 export const FUZZ_TWIN_SOURCE = 'twin';
@@ -54,8 +54,8 @@ export const FUZZ_TWIN_SOURCE = 'twin';
  * relationship is refused.
  */
 export const FUZZ_TIGHT_SOURCE = 'tight';
-export const FUZZ_TIGHT_RELATIONSHIPS = [{ type: 'HOLDS', from: 'holder', to: 'widget' }];
-export const FUZZ_TIGHT_PRESETS = [{ id: 'linked-holders', name: 'Linked holders', template: 'linked-entities', bind: { anchor: 'widget', target: 'holder', via: 'HOLDS' } }, ...FUZZ_LINKED_PRESETS];
+const FUZZ_TIGHT_RELATIONSHIPS = [{ type: 'HOLDS', from: 'holder', to: 'widget' }];
+const FUZZ_TIGHT_PRESETS = [{ id: 'linked-holders', name: 'Linked holders', template: 'linked-entities', bind: { anchor: 'widget', target: 'holder', via: 'HOLDS' } }, ...FUZZ_LINKED_PRESETS];
 
 export const FUZZ_MAPPING = parseMapping(
   fileOf(
@@ -86,7 +86,7 @@ export function allowedNames(): ReadonlySet<string> {
 
 /** The anchor whose count probe answers more matches than the source's threshold (500 by default), so a run for it stops as heavy. */
 export const FUZZ_HEAVY_ANCHOR = 'W-HEAVY';
-export const FUZZ_HEAVY_MATCHES = 501;
+const FUZZ_HEAVY_MATCHES = 501;
 
 const MATCHES = 61;
 export const FUZZ_TEXT = 'needle';

@@ -6,9 +6,9 @@ import { unreadableOf } from './unreadable.js';
 export const SCHEMA_INDEXES_ID = 'schema-indexes';
 
 /** The most indexes one read returns; more than this many matching the mapped names is an answer the check does not judge. */
-export const INDEX_CAP = 500;
+const INDEX_CAP = 500;
 
-export const indexEntrySchema = z.strictObject({
+const indexEntrySchema = z.strictObject({
   type: z.enum(['RANGE', 'TEXT']),
   entityType: z.enum(['NODE', 'RELATIONSHIP']),
   name: z.string().min(1),
@@ -21,8 +21,6 @@ export const indexEntrySchema = z.strictObject({
 export type IndexEntry = z.infer<typeof indexEntrySchema>;
 
 export const schemaIndexesItemSchema = z.strictObject({ indexes: z.array(indexEntrySchema), truncated: z.boolean() });
-
-export type SchemaIndexesItem = z.infer<typeof schemaIndexesItemSchema>;
 
 function normalize(rows: readonly Row[]): readonly Item[] {
   const [row] = rows;

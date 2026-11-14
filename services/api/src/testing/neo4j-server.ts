@@ -45,7 +45,7 @@ const provided = (): string => {
     return '5.26';
   }
 };
-export const NEO4J_SERIES_NUMBER = provided();
+const NEO4J_SERIES_NUMBER = provided();
 export const NEO4J_SERIES = `neo4j:${NEO4J_SERIES_NUMBER}`;
 
 export const NEO4J_ENV_USER = 'NEO4J_TEST_USER';

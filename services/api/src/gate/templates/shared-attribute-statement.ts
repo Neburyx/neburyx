@@ -4,7 +4,7 @@ import { inWindow } from './window-condition.js';
 import type { Params, SourceAllowlist } from '../types.js';
 
 /** The attribute nodes shown for one match; a match that shares more says so with a notice. */
-export const EVIDENCE_NODES_PER_MATCH = 5;
+const EVIDENCE_NODES_PER_MATCH = 5;
 
 export interface SharedAttributeRequest {
   readonly anchor: string;

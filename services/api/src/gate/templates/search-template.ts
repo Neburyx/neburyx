@@ -11,7 +11,7 @@ import { integerCandidateOf } from './stable-id.js';
  * One property of one entity type that a search matches: the type and the property both come from the mapping (`search` or `reference` lists). `value` matches the text and the integer it can be
  * (a RANGE index or a constraint serves it); `text` matches the text only (a TEXT index holds strings only).
  */
-export const searchTargetSchema = z.strictObject({ entityType: z.string().min(1), property: z.string().min(1), match: z.enum(['value', 'text']) });
+const searchTargetSchema = z.strictObject({ entityType: z.string().min(1), property: z.string().min(1), match: z.enum(['value', 'text']) });
 
 export type SearchTarget = z.infer<typeof searchTargetSchema>;
 
@@ -41,7 +41,7 @@ export function normalizeSearch(rows: readonly Row[], _plan?: Plan, context?: No
 export const isNormalized = (item: unknown): item is Normalized => typeof item === 'object' && item !== null && 'nodes' in item && Array.isArray(item.nodes) && 'unreferenced' in item && Array.isArray(item.unreferenced);
 
 /** The hits a page of an entity search holds: its entities and the records it lists with no usable stable ID. */
-export function entityHitsOf(items: readonly Item[]): number {
+function entityHitsOf(items: readonly Item[]): number {
   return items.reduce((sum: number, item) => (isNormalized(item) ? sum + item.nodes.length + item.unreferenced.length : sum), 0);
 }
 
@@ -67,7 +67,7 @@ export function afterLastRow(variable: 'n' | 'r'): (rows: readonly Row[], limit:
 export const NODE_BRANCH_RETURN = 'RETURN n, @entityType AS entityType';
 
 /** The branch texts of a target of an entity type: the form a RANGE index or a constraint serves, and the form a TEXT index serves. */
-export const NODE_BRANCH = {
+const NODE_BRANCH = {
   value: `MATCH (n:@label) WHERE n.@property IN [$text, $textInteger] AND ${keysetOf('n')} WITH n ORDER BY elementId(n) LIMIT $limit + 1 ${NODE_BRANCH_RETURN}`,
   text: `MATCH (n:@label) WHERE n.@property = $text AND ${keysetOf('n')} WITH n ORDER BY elementId(n) LIMIT $limit + 1 ${NODE_BRANCH_RETURN}`,
 } as const;
@@ -76,7 +76,7 @@ export const NODE_BRANCH = {
  * The statement around the branches of an entity search: one row for each node, with the entity types of the targets that matched it, sorted by element ID again and cut at one more than the page.
  * Grouping by the node keeps the keyset on its element ID alone, so a node matched as two types is never split across two pages.
  */
-export const NODE_STATEMENT = `CALL { @searchBranches(targets) } WITH n, collect(DISTINCT entityType) AS ${ENTITY_TYPES_COLUMN} ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, ${ENTITY_TYPES_COLUMN}`;
+const NODE_STATEMENT = `CALL { @searchBranches(targets) } WITH n, collect(DISTINCT entityType) AS ${ENTITY_TYPES_COLUMN} ORDER BY elementId(n) LIMIT $limit + 1 RETURN n, ${ENTITY_TYPES_COLUMN}`;
 
 export interface SearchTemplateOptions {
   readonly id: string;

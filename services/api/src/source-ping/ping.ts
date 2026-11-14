@@ -22,14 +22,14 @@ export interface PingResult {
   readonly startedAt: number;
 }
 
-export interface PingCounters {
+interface PingCounters {
   readonly attempts: number;
   readonly reachable: number;
   readonly unreachable: number;
   readonly skipped: number;
 }
 
-export interface PingMetrics {
+interface PingMetrics {
   snapshot(): Readonly<Record<string, PingCounters>>;
 }
 

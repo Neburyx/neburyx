@@ -13,8 +13,8 @@ let sequence = 0;
 /** An idempotency key no other call of the run used. */
 export const newKey = (): string => `save-suite-${String((sequence += 1)).padStart(8, '0')}-key`;
 
-export const ENTITIES = [ref('hub', 'H-1'), ref('leaf', 'L-1'), ref('leaf', 'L-2'), ref('leaf', 'L-4'), ref('part', 'P-1')];
-export const EDGES = [LINKED('r-L1'), LINKED('r-L2')];
+const ENTITIES = [ref('hub', 'H-1'), ref('leaf', 'L-1'), ref('leaf', 'L-2'), ref('leaf', 'L-4'), ref('part', 'P-1')];
+const EDGES = [LINKED('r-L1'), LINKED('r-L2')];
 export const request = (format: ExportFormat, over: Partial<ExportRequest> = {}): ExportRequest => ({ kind: 'view', format, entities: ENTITIES, edges: EDGES, aggregates: [], derived: [], ...over });
 
 /** An investigation as a person leaves it, and a second tab that opens it again, as after a reload: the export is made from what the store brought back. */

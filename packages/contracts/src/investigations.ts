@@ -108,7 +108,7 @@ export const valueOpenRequestSchema = z.strictObject({ ...openRequestBase, entit
 export const openInvestigationRequestSchema = z.union([referenceOpenRequestSchema, valueOpenRequestSchema]);
 
 /** The named view a draft was last saved as or restored from; `null` when it never was, or when that view is gone. */
-export const basedOnViewIdSchema = z.uuid().nullable();
+const basedOnViewIdSchema = z.uuid().nullable();
 
 /** The caller's draft as an open answers it: the version the first write sends in `If-Match`, and the two fields a view save or restore changes. */
 const openDraftSchema = z.strictObject({ version: z.number().int().min(1), notes: notesSchema, basedOnViewId: basedOnViewIdSchema });

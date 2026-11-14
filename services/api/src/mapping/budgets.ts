@@ -17,7 +17,7 @@ export const BUDGET_DEFAULTS: BudgetsModel = {
   requestsPerMinute: 120,
 };
 
-export const MIN_DEFAULT_PAGE = 10;
+const MIN_DEFAULT_PAGE = 10;
 
 const CEILINGS = {
   timeoutMs: 10_000,

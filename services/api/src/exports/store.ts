@@ -9,7 +9,7 @@ export const TEMPORARY_PREFIX = '.writing-';
 
 const STORAGE_KEY = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-export interface StoredExportFile {
+interface StoredExportFile {
   /** Relative to the export directory: the export's ID, nothing else. */
   readonly storageKey: string;
   readonly sizeBytes: number;
@@ -28,7 +28,7 @@ export interface ExportFileStore {
   sweepTemporary(olderThanMs: number, now?: number): Promise<number>;
 }
 
-export function isStorageKey(value: string): boolean {
+function isStorageKey(value: string): boolean {
   return STORAGE_KEY.test(value);
 }
 

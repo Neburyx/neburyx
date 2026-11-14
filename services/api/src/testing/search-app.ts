@@ -20,7 +20,7 @@ import { makeWebRoot } from './web-root.js';
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
-export const SEARCH_ENTITIES = [
+const SEARCH_ENTITIES = [
   { type: 'widget', label: 'Widget', stable_id: 'widgetId', search: ['widgetId', 'ownerName'], pii: [{ property: 'ownerName', class: 'name' }] },
   { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', search: ['gadgetId'] },
 ];

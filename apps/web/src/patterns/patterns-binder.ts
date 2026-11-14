@@ -7,8 +7,8 @@ import { FILTERS_PANEL_INSET, FILTERS_PANEL_TOP } from '../workspace/filters-bin
 import { PatternsPanel } from './patterns-panel.js';
 import { PATTERNS_COPY } from './copy.js';
 
-export const PATTERNS_PANEL_ID = 'patterns';
-export const PATTERNS_PANEL_WIDTH = 336;
+const PATTERNS_PANEL_ID = 'patterns';
+const PATTERNS_PANEL_WIDTH = 336;
 
 /** Lives outside React, so leaving the page keeps the state and leaves no panel behind. */
 export function bindPatternsPanel(state: ClientState, panels: PanelRegistry, evidence?: Evidence): () => void {

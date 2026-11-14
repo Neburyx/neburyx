@@ -1,4 +1,4 @@
-export const ROUTE_PERMISSIONS = ['public', 'principal'] as const;
+const ROUTE_PERMISSIONS = ['public', 'principal'] as const;
 
 export type RoutePermission = (typeof ROUTE_PERMISSIONS)[number];
 

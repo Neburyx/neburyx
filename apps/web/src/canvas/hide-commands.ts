@@ -3,7 +3,7 @@ import { elementKey } from '../state/keys.js';
 import { FOCUS_LEFT } from '../state/presentation-state.js';
 import { formatNumber } from '../workspace/scope-text.js';
 
-export const hiddenAnnouncement = (count: number): string => `Hid ${formatNumber(count)} ${count === 1 ? 'entity' : 'entities'}. Show them again from the scope line.`;
+const hiddenAnnouncement = (count: number): string => `Hid ${formatNumber(count)} ${count === 1 ? 'entity' : 'entities'}. Show them again from the scope line.`;
 
 export const drawnEntityKeys = (state: ClientState): ReadonlySet<string> => new Set(state.visibleGraph().nodes.map((node) => elementKey(node.ref)));
 

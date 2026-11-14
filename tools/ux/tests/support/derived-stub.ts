@@ -3,7 +3,7 @@ import { announcement, canvasOf } from './workspace.ts';
 
 const inspector = (page: Page) => page.getByRole('complementary', { name: 'Inspector' });
 
-export const SOURCE = 'banking-demo';
+const SOURCE = 'banking-demo';
 const ref = (stableId: string) => ({ sourceId: SOURCE, entityType: 'account', stableId });
 
 const node = (stableId: string) => ({

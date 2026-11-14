@@ -18,8 +18,8 @@ import type { ExportFileStore } from './store.js';
 import type { ShownReader } from './shown-reader.js';
 import { zipOf } from './zip.js';
 
-export const EXPORT_CREATE_AUDIT_ACTION = 'export.create';
-export const EXPORT_DOWNLOAD_AUDIT_ACTION = 'export.download';
+const EXPORT_CREATE_AUDIT_ACTION = 'export.create';
+const EXPORT_DOWNLOAD_AUDIT_ACTION = 'export.download';
 const ENTITIES_FILE = 'entities.csv';
 const RELATIONSHIPS_FILE = 'relationships.csv';
 
@@ -36,7 +36,7 @@ interface Deps {
   readonly clock?: () => Date;
 }
 
-export interface CreateExportCall {
+interface CreateExportCall {
   readonly traceId: string;
   readonly principal: Principal;
   readonly investigationId: string;
@@ -44,7 +44,7 @@ export interface CreateExportCall {
   readonly signal?: AbortSignal;
 }
 
-export interface ExportDownload {
+interface ExportDownload {
   readonly bytes: Buffer;
   readonly filename: string;
   readonly contentType: string;
@@ -56,12 +56,12 @@ export interface ExportService {
   download(call: { readonly traceId: string; readonly principal: Principal; readonly id: string }): Promise<ExportDownload>;
 }
 
-export function exportRecordOf(row: ExportRow): ExportRecord {
+function exportRecordOf(row: ExportRow): ExportRecord {
   if (row.format === 'png') throw new AppError('INTERNAL_ERROR');
   return { id: row.id, status: row.status, format: row.format, filename: row.filename, sizeBytes: row.sizeBytes, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
-export function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }): Buffer {
+function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }): Buffer {
   const header = exportHeaderOf({ source, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, omitted: read.omitted });
   if (format === 'json') return exportJsonOf(header, read.nodes, read.edges);
   return zipOf([

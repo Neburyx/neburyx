@@ -21,7 +21,7 @@ export function titleProblemOf(title: string): string | undefined {
 
 type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly failure: ApiFailure };
 
-export interface RenameTarget {
+interface RenameTarget {
   readonly id: string;
   readonly title: string;
   readonly version: number;

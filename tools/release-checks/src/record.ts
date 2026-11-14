@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { CheckResult, RunRecord } from './types.js';
 
-export const DRY_RUN_LINE = 'Dry run: does not count.';
+const DRY_RUN_LINE = 'Dry run: does not count.';
 const SHORT_COMMIT_LENGTH = 7;
 
 function stamp(date: Date): string {
@@ -27,7 +27,7 @@ function figures(result: CheckResult): readonly string[] {
   return result.data === undefined ? [] : [`## ${result.id}`, '', '```json', JSON.stringify(result.data, null, 2), '```', ''];
 }
 
-export function renderMarkdown(record: RunRecord): string {
+function renderMarkdown(record: RunRecord): string {
   const failed = record.checks.filter((check) => check.status === 'failed');
   const lines = [
     ...(record.dryRun ? [DRY_RUN_LINE, ''] : []),

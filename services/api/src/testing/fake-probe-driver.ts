@@ -10,7 +10,7 @@ export interface FakeProbeBehaviour {
   readonly rollbackHang?: boolean;
 }
 
-export interface FakeProbeSession {
+interface FakeProbeSession {
   readonly config: { readonly database: string; readonly defaultAccessMode: 'WRITE' };
   readonly begins: { readonly timeout: number; readonly metadata: Readonly<Record<string, string>> }[];
   readonly statements: string[];

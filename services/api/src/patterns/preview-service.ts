@@ -5,7 +5,7 @@ import type { MappingModel } from '../mapping/model.js';
 import { previewOrProblems } from './preview.js';
 import type { PatternValidateCall } from './validate-service.js';
 
-export const PATTERN_PREVIEW_AUDIT_ACTION = 'pattern.preview';
+const PATTERN_PREVIEW_AUDIT_ACTION = 'pattern.preview';
 
 export interface PatternPreviewService {
   preview(call: PatternValidateCall): Promise<PatternPreviewResponse>;

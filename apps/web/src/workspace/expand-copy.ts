@@ -17,7 +17,6 @@ export const START_OVER = 'Start over for this type';
 export const pageNote = (pageSize: number | undefined): string => `Counts show their quality. Loads the first ${pageSize === undefined ? 'page' : pageSize} per type.`;
 export const expandLabel = (count: number, pageSize: number | undefined): string => `Expand ${count} ${count === 1 ? 'type' : 'types'}${pageSize === undefined ? '' : ` (up to ${pageSize} each)`}`;
 export const loadMoreLabel = (pageSize: number | undefined): string => `Load ${pageSize === undefined ? 'more' : `${pageSize} more`}`;
-export const loadedText = (count: number): string => `${count.toLocaleString('en-US')} loaded`;
 export const PAGED_NOTE = 'More can be loaded page by page.';
 /** What the notes line says when the filters narrowed an expansion: how many of the node's neighbor types were asked, and of its relationship types when those were narrowed. */
 export const narrowedExpansionText = (asked: number, neighborTotal: number, relationships: { readonly asked: number; readonly total: number } | undefined): string =>
@@ -103,8 +102,6 @@ export const WINDOW_ALL_TIME = 'All time';
 export const WINDOW_OTHER = 'Other number of days';
 export const WINDOW_DAYS_LABEL = 'Days';
 export const windowDaysLabel = (days: number): string => (days === 1 ? 'Last day' : `Last ${days} days`);
-/** The window as the controls and the result lines say it. */
-export const windowText = (window: 'all' | { readonly days: number }): string => (window === 'all' ? WINDOW_ALL_TIME : windowDaysLabel(window.days));
 export const WINDOW_UTC = 'UTC';
 export const WINDOW_NOTE_ALL = 'Everything is loaded, whenever it was observed.';
 export const WINDOW_NOTE_DAYS = 'Only relationships observed in this period are loaded, by the time of each relationship type.';
@@ -144,7 +141,7 @@ export function windowAllTimeText(count: Count | undefined): string | undefined 
     }
   }
 }
-export const WINDOW_UNDATED_RULE = 'Relationships with no date are not included.';
+const WINDOW_UNDATED_RULE = 'Relationships with no date are not included.';
 export const windowUndatedText = (count: number | undefined): string => (count === undefined ? WINDOW_UNDATED_RULE : `${count.toLocaleString('en-GB')} ${count === 1 ? 'relationship' : 'relationships'} with no date ${count === 1 ? 'is' : 'are'} not included.`);
 export const WINDOW_NOT_COUNTED = 'The relationships in the window could not be counted.';
 export const NOT_LOADED_ALL_TIME = 'all time';

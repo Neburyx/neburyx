@@ -2,9 +2,9 @@ import { countSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 
 export const ICON_KEYS = ['circle', 'square', 'triangle', 'diamond'] as const;
-export const ENTITY_STATES = ['open', 'review', 'closed'] as const;
+const ENTITY_STATES = ['open', 'review', 'closed'] as const;
 
-export const entityTypeSchema = z.strictObject({
+const entityTypeSchema = z.strictObject({
   id: z.string().min(1),
   displayName: z.string().min(1),
   iconKey: z.enum(ICON_KEYS),
@@ -27,7 +27,7 @@ const neighborAggregateNodeSchema = z.strictObject({
   total: countSchema,
 });
 
-export const nodeSchema = z.discriminatedUnion('kind', [entityNodeSchema, neighborAggregateNodeSchema]);
+const nodeSchema = z.discriminatedUnion('kind', [entityNodeSchema, neighborAggregateNodeSchema]);
 
 const plainRelationshipSchema = z.strictObject({
   kind: z.enum(['sourced', 'derived']),
@@ -46,7 +46,7 @@ const aggregateRelationshipSchema = z.strictObject({
   members: countSchema,
 });
 
-export const relationshipSchema = z.union([plainRelationshipSchema, aggregateRelationshipSchema]);
+const relationshipSchema = z.union([plainRelationshipSchema, aggregateRelationshipSchema]);
 
 export const fixtureSchema = z
   .strictObject({

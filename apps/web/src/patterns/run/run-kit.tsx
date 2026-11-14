@@ -1,5 +1,5 @@
 /** Helpers of the run lane's tests, copied from the builder's so that the two lanes' tests do not share a file: they build one pattern through the panel and run it. */
-import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PATTERN_LIMITS, type SourceProfile } from '@neburyx/contracts';
 import { testProfile } from '../../dev/test-profile.js';
@@ -22,7 +22,7 @@ export function builderProfile(): SourceProfile {
   };
 }
 
-export async function builderWorkspace(options: KitOptions = {}): Promise<PatternsKit> {
+async function builderWorkspace(options: KitOptions = {}): Promise<PatternsKit> {
   const kit = await patternsWorkspace({ profile: async () => ({ ok: true, value: builderProfile() }), ...options });
   await openPatterns();
   return kit;
@@ -33,24 +33,24 @@ export const openBuilder = async (): Promise<void> => {
   await settle();
 };
 
-export const builderPanel = (): HTMLElement => screen.getByRole('region', { name: 'New pattern' });
-export const startSelect = (): HTMLSelectElement => screen.getByLabelText('Starting entity type') as HTMLSelectElement;
-export const addStepButton = (): HTMLButtonElement => screen.getByRole('button', { name: '+ Step' }) as HTMLButtonElement;
-export const stepTab = (n: number): HTMLElement => within(builderPanel()).getByRole('tab', { name: new RegExp(`^Step ${n}( !)?$`) });
+const builderPanel = (): HTMLElement => screen.getByRole('region', { name: 'New pattern' });
+const startSelect = (): HTMLSelectElement => screen.getByLabelText('Starting entity type') as HTMLSelectElement;
+const addStepButton = (): HTMLButtonElement => screen.getByRole('button', { name: '+ Step' }) as HTMLButtonElement;
+const stepTab = (n: number): HTMLElement => within(builderPanel()).getByRole('tab', { name: new RegExp(`^Step ${n}( !)?$`) });
 /** The panel of step n, which is the one shown while its tab is selected. */
-export const stepCard = (n: number): HTMLElement => within(builderPanel()).getByRole('tabpanel', { name: new RegExp(`^Step ${n}( !)?$`) });
+const stepCard = (n: number): HTMLElement => within(builderPanel()).getByRole('tabpanel', { name: new RegExp(`^Step ${n}( !)?$`) });
 
-export type PartName = 'Link' | 'Conditions' | 'Window';
+type PartName = 'Link' | 'Conditions' | 'Window';
 const partTab = (n: number, part: PartName): HTMLElement => within(stepCard(n)).getByRole('tab', { name: new RegExp(`^${part}`) });
 
 /** Selects step n and its part, as a person does with the two rows of tabs. */
-export async function openStep(n: number, part?: PartName): Promise<void> {
+async function openStep(n: number, part?: PartName): Promise<void> {
   if (stepTab(n).getAttribute('aria-selected') !== 'true') await userEvent.click(stepTab(n));
   if (part !== undefined && partTab(n, part).getAttribute('aria-selected') !== 'true') await userEvent.click(partTab(n, part));
 }
 
 /** Runs `act` on one part of step n and leaves the part that was open open again. */
-export async function inPart(n: number, part: PartName, act: () => Promise<void>): Promise<void> {
+async function inPart(n: number, part: PartName, act: () => Promise<void>): Promise<void> {
   await openStep(n);
   const open = within(stepCard(n)).getAllByRole('tab').find((tab) => tab.getAttribute('aria-selected') === 'true');
   const was = (['Link', 'Conditions', 'Window'] as const).find((name) => open?.textContent?.startsWith(name)) ?? 'Link';
@@ -59,7 +59,7 @@ export async function inPart(n: number, part: PartName, act: () => Promise<void>
   if (was !== part) await openStep(n, was);
 }
 
-export const field = (n: number, label: string): HTMLSelectElement => within(stepCard(n)).getByLabelText(label) as HTMLSelectElement;
+const field = (n: number, label: string): HTMLSelectElement => within(stepCard(n)).getByLabelText(label) as HTMLSelectElement;
 
 export async function chooseStart(type: string): Promise<void> {
   if (screen.getByRole('tab', { name: 'Start' }).getAttribute('aria-selected') !== 'true') await userEvent.click(screen.getByRole('tab', { name: 'Start' }));
@@ -67,9 +67,9 @@ export async function chooseStart(type: string): Promise<void> {
 }
 
 const DIRECTION_NAME = { out: 'Outgoing', in: 'Incoming', both: 'Either' } as const;
-export const chooseDirection = (n: number, direction: keyof typeof DIRECTION_NAME): Promise<void> =>
+const chooseDirection = (n: number, direction: keyof typeof DIRECTION_NAME): Promise<void> =>
   inPart(n, 'Link', () => userEvent.click(within(stepCard(n)).getByRole('radio', { name: DIRECTION_NAME[direction] })));
-export const chooseArrival = (n: number, type: string): Promise<void> => inPart(n, 'Link', () => userEvent.selectOptions(field(n, 'Arrives at'), type));
+const chooseArrival = (n: number, type: string): Promise<void> => inPart(n, 'Link', () => userEvent.selectOptions(field(n, 'Arrives at'), type));
 
 /** Ticks or unticks a relationship type in the Add type menu of step n, and closes the menu. */
 export const toggleType = (n: number, type: string): Promise<void> =>
@@ -78,12 +78,6 @@ export const toggleType = (n: number, type: string): Promise<void> =>
     await userEvent.click(screen.getByRole('menuitemcheckbox', { name: new RegExp(`^${type}(?![\\w-])`) }));
     await userEvent.keyboard('{Escape}');
   });
-/** The relationship types chosen in step n, from its chips. */
-export const chosenTypes = (n: number): string[] =>
-  within(within(stepCard(n)).getByRole('group', { name: 'Relationship types' }))
-    .queryAllByRole('button', { name: /^Remove / })
-    .map((button) => (button.getAttribute('aria-label') ?? '').slice('Remove '.length));
-
 /** Adds a step (the new step is selected) and chooses its direction, arrival type and relationship types. */
 export async function buildStep(n: number, direction: keyof typeof DIRECTION_NAME, arrivesAt: string, types: readonly string[]): Promise<void> {
   await userEvent.click(addStepButton());
@@ -98,7 +92,7 @@ export async function afterDebounce(): Promise<void> {
   await settle();
 }
 
-export { cleanup, fireEvent, screen, within, userEvent };
+export { cleanup,  screen, within, userEvent };
 
 const mapped = (type: string, from: string, to: string, observedAt: string | null, filterable: readonly string[]) => ({ ...row(type, from, to), observedAt, filterable: [...filterable] });
 

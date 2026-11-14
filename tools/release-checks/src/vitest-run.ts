@@ -8,7 +8,7 @@ const reportSchema = z.object({
   testResults: z.array(z.object({ assertionResults: z.array(z.object({ title: z.string(), fullName: z.string(), status: z.string() })) })),
 });
 
-export interface RequiredTest {
+interface RequiredTest {
   /** The start of the test's title. */
   readonly title: string;
   /** The least number of passed tests that must start with the title. */

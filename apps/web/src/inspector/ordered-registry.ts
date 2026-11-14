@@ -6,7 +6,7 @@ export interface Ordered {
   readonly order: number;
 }
 
-export class RegistryError extends Error {
+class RegistryError extends Error {
   readonly code = 'ENTRY_TAKEN';
 
   constructor(readonly entryId: string) {

@@ -1,7 +1,7 @@
 import { accessSync, constants, mkdirSync, statSync } from 'node:fs';
 
 /** Group and others get nothing on the export directory or on a file in it. */
-export const EXPORT_DIRECTORY_MODE = 0o700;
+const EXPORT_DIRECTORY_MODE = 0o700;
 export const EXPORT_FILE_MODE = 0o600;
 const OTHERS_AND_GROUP = 0o077;
 

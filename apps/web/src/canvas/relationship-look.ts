@@ -2,7 +2,7 @@ import type { Count, GraphEdge } from '@neburyx/contracts';
 import { isNotReadEdge, isUnmappedEdge, NO_LONGER_MAPPED } from '../draft/unmapped.js';
 import { degreeCountText } from '../workspace/degree-text.js';
 
-export type Origin = GraphEdge['semantics'];
+type Origin = GraphEdge['semantics'];
 
 export interface RelationshipLook {
   readonly aggregate: boolean;
@@ -25,7 +25,7 @@ export function memberCountText(count: Count): string | undefined {
 }
 
 /** The word for an origin that is not stored; a stored relationship has none on the canvas. The one definition, shared by the canvas labels and the menu headers. */
-export function originWord(origin: Origin): string | undefined {
+function originWord(origin: Origin): string | undefined {
   switch (origin) {
     case 'stored':
       return undefined;

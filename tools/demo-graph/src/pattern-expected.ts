@@ -1,5 +1,5 @@
 /** One relationship of an export: the stable ID of its start and of its end. */
-export interface Edge {
+interface Edge {
   readonly f: string;
   readonly t: string;
 }

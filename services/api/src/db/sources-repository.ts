@@ -23,7 +23,7 @@ interface ListedRow {
   readonly last_test_at: Date | null;
 }
 
-export function secretRefOf(source: SourceModel): string {
+function secretRefOf(source: SourceModel): string {
   return `${source.auth.usernameEnv}:${source.auth.passwordEnv}`;
 }
 

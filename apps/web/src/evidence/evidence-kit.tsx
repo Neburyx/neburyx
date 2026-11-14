@@ -6,7 +6,7 @@ import { TYPE } from '../inspector/inspector-kit.js';
 import { edgeKey } from '../state/keys.js';
 import { loadGraph } from '../workspace/context-menu-kit.js';
 
-export const DEFAULT_NODES = ['n1', 'n2', 'n3'];
+const DEFAULT_NODES = ['n1', 'n2', 'n3'];
 
 export function detailOf(edge: GraphEdge, overrides: Partial<StoredEdgeDetail> = {}): StoredEdgeDetail {
   if (!('stableId' in edge.ref)) throw new Error('a stored edge is needed');
@@ -42,7 +42,7 @@ export const selectEdge = (rig: ReturnType<typeof evidenceRig>, edge: GraphEdge)
 export const answerEdge = (ask: Ask<EdgeDetail> | undefined, value: EdgeDetail) => act(async () => ask?.answer({ ok: true, value }));
 export const failEdge = (ask: Ask<EdgeDetail> | undefined, code: string, retryable = false) => act(async () => ask?.answer({ ok: false, failure: failure(code, retryable) }));
 export const openOn = (rig: ReturnType<typeof evidenceRig>, edge: GraphEdge): void => void act(() => void rig.evidence.open(edge.ref));
-export { at, keyOf };
+export { keyOf };
 
 export const SHARED = derivedEdge('n1', 'n3', 'SHARED');
 const end = (id: string) => ({ ref: at(id), title: `Title ${id}`, type: TYPE });

@@ -22,7 +22,7 @@ function typeOf(edge: GraphEdge): string {
 }
 
 /** The chain of the rule: the supports are the rule's relationship types in order, and they join `from` to `to` through the rule's entity types, each in either direction. */
-export function followsRule(rule: DerivedNormalizer, claim: DerivedClaim, supports: readonly GraphEdge[]): boolean {
+function followsRule(rule: DerivedNormalizer, claim: DerivedClaim, supports: readonly GraphEdge[]): boolean {
   const hops = (rule.via.length + 1) / 2;
   if (!Number.isInteger(hops) || supports.length !== hops) return false;
   if (claim.from.entityType !== rule.from || claim.to.entityType !== rule.to) return false;

@@ -20,12 +20,12 @@ const drawnOf = (state: ClientState, selection: readonly string[]): readonly str
   return selection.filter((key) => drawn.has(key));
 };
 
-export function compareSetOf(state: ClientState, selection: readonly string[]): CompareSet | undefined {
+function compareSetOf(state: ClientState, selection: readonly string[]): CompareSet | undefined {
   return pickSet(drawnOf(state, selection));
 }
 
 /** Opens the comparison for a selection: the note to show instead when the selection is not two or more of one kind. */
-export function openCompare(state: ClientState, compare: Compare, selection: readonly string[], opener?: HTMLElement | null): string | undefined {
+function openCompare(state: ClientState, compare: Compare, selection: readonly string[], opener?: HTMLElement | null): string | undefined {
   const set = compareSetOf(state, selection);
   if (set === undefined) return NOT_BOTH_KINDS;
   const graph = state.visibleGraph();

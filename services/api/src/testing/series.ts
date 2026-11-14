@@ -1,5 +1,5 @@
 /** The release series the Neo4j tests accept: the last 5.x LTS and the 2026 calendar releases. */
-export const ACCEPTED_SERIES: readonly string[] = ['5.26', '2026'];
+const ACCEPTED_SERIES: readonly string[] = ['5.26', '2026'];
 
 /** The series of a server version, or undefined when the tests do not accept it. */
 export function seriesOf(version: string): string | undefined {

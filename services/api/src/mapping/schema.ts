@@ -61,7 +61,7 @@ function isPlainData(root: unknown): boolean {
   return true;
 }
 
-export const uriSchema = z.string().superRefine((value, context) => {
+const uriSchema = z.string().superRefine((value, context) => {
   let url: URL;
   try {
     url = new URL(value);

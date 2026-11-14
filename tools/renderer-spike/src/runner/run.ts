@@ -35,7 +35,7 @@ export interface RunnerDeps {
   writeReport(path: string, report: Report): void;
 }
 
-export interface Deadlines {
+interface Deadlines {
   readonly readyMs: number;
   readonly runMs: number;
   readonly incrementalMs: number;
@@ -54,7 +54,7 @@ export interface RunOptions {
 const SEED = 1;
 const RUN_DEADLINE_FACTOR = 3;
 
-export const DEFAULT_DEADLINES: Deadlines = { readyMs: 30_000, runMs: RUN_DURATION_MS * RUN_DEADLINE_FACTOR, incrementalMs: 60_000, probeMs: 30_000, cleanupMs: 30_000 };
+const DEFAULT_DEADLINES: Deadlines = { readyMs: 30_000, runMs: RUN_DURATION_MS * RUN_DEADLINE_FACTOR, incrementalMs: 60_000, probeMs: 30_000, cleanupMs: 30_000 };
 
 function withDeadline<T>(action: Promise<T>, deadlineMs: number): Promise<T> {
   let timer: NodeJS.Timeout | undefined;

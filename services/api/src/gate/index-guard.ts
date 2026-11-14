@@ -3,7 +3,7 @@ import { schemaIndexesItemSchema, SCHEMA_INDEXES_ID } from './templates/schema-i
 import type { GatePage, IndexNeed, IndexSnapshot, RelationshipIndexNeed, SourceAllowlist } from './types.js';
 
 /** The form in which a property has an ONLINE single-property index: `value` for a RANGE index or a constraint (any value, including an integer), `text` for a TEXT index (strings only). */
-export type OnlineForm = 'value' | 'text';
+type OnlineForm = 'value' | 'text';
 
 /** Why a property has no online index: none is there (or none of the kind asked for), the one there is still being built, or it failed. */
 export type IndexGap = 'index-unavailable' | 'index-building' | 'index-failed';

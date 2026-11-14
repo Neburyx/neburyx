@@ -1,7 +1,7 @@
 import type { Additions, Fixture } from './fixture/schema.js';
 import type { IconKey } from './look.js';
 
-export const ADAPTER_ERROR_CODES = ['ADAPTER_UNKNOWN', 'ADAPTER_ALREADY_MOUNTED', 'ADAPTER_NOT_MOUNTED', 'ADAPTER_NEEDS_BROWSER', 'ADAPTER_EXISTS', 'ADAPTER_UNSUPPORTED', 'ADAPTER_GROUP_EMPTY', 'ADAPTER_NODE_UNKNOWN'] as const;
+const ADAPTER_ERROR_CODES = ['ADAPTER_UNKNOWN', 'ADAPTER_ALREADY_MOUNTED', 'ADAPTER_NOT_MOUNTED', 'ADAPTER_NEEDS_BROWSER', 'ADAPTER_EXISTS', 'ADAPTER_UNSUPPORTED', 'ADAPTER_GROUP_EMPTY', 'ADAPTER_NODE_UNKNOWN'] as const;
 
 export type AdapterErrorCode = (typeof ADAPTER_ERROR_CODES)[number];
 
@@ -15,7 +15,7 @@ export class AdapterError extends Error {
   }
 }
 
-export interface DrawnNode {
+interface DrawnNode {
   readonly id: string;
   readonly kind: 'entity' | 'neighborAggregate';
   readonly label: string;
@@ -25,7 +25,7 @@ export interface DrawnNode {
   readonly dashedBorder: boolean;
 }
 
-export interface DrawnRelationship {
+interface DrawnRelationship {
   readonly id: string;
   readonly kind: 'sourced' | 'derived' | 'aggregate';
   readonly lineStyle: 'solid' | 'dashed';

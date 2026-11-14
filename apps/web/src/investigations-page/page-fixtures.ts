@@ -5,7 +5,7 @@ import { testProfile } from '../dev/test-profile.js';
 import { investigationOf, investigationOfRow, listItemOf, nodeOf, readOf } from '../investigations/test-data.js';
 import { me, source } from '../test-utils.js';
 
-export const idOf = (index: number): string => `0192f000-0000-7000-8000-${String(index).padStart(12, '0')}`;
+const idOf = (index: number): string => `0192f000-0000-7000-8000-${String(index).padStart(12, '0')}`;
 
 /** `count` rows, newest first, alternating over `source-a` and `source-b`, with unique titles and starting entities. */
 export function rowsOf(count: number, overrides: (index: number) => Partial<InvestigationListItem> = () => ({})): InvestigationListItem[] {
@@ -39,7 +39,7 @@ export interface Recorded {
   readonly restores: { id: string; version: number }[];
 }
 
-export function listResponse(items: readonly InvestigationListItem[], matching: number, nextCursor: string | null, savedViews = 0): InvestigationListResponse {
+function listResponse(items: readonly InvestigationListItem[], matching: number, nextCursor: string | null, savedViews = 0): InvestigationListResponse {
   return {
     items: [...items],
     nextCursor,

@@ -21,7 +21,7 @@ import type { ListPosition } from '../db/investigations-repository.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export interface OpenCall {
+interface OpenCall {
   readonly traceId: string;
   readonly principal: Principal;
   /** The entity is already a reference: the route turns a raw value into one before the service runs. */
@@ -30,7 +30,7 @@ export interface OpenCall {
   readonly signal?: AbortSignal;
 }
 
-export interface OpenAnswer {
+interface OpenAnswer {
   readonly created: boolean;
   readonly body: OpenInvestigationResponse;
 }
@@ -52,7 +52,7 @@ export interface InvestigationService {
   restore(call: { readonly traceId: string; readonly id: string; readonly principal: Principal; readonly expectedVersion: number }): Promise<InvestigationResponse>;
 }
 
-export interface InvestigationListCall {
+interface InvestigationListCall {
   readonly principal: Principal;
   readonly limit?: number | undefined;
   readonly cursor?: string | undefined;

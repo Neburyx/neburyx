@@ -6,7 +6,7 @@ import type { Principal } from '../seams/seams.js';
 import { checkSource, type CheckRequest, type CheckStore } from './check.js';
 import type { WriteProbe } from './probe.js';
 
-export interface SourceTestRequest {
+interface SourceTestRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

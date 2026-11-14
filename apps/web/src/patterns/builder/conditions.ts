@@ -9,7 +9,7 @@ export type ConditionRow = FilterDraft & { readonly touched?: boolean };
 /** The window of a step as chosen: none, a number of days, or two dates, each typed. */
 export type WindowDraft = { readonly kind: 'none' } | { readonly kind: 'days'; readonly text: string } | { readonly kind: 'dates'; readonly from: string; readonly to: string };
 
-export const NO_WINDOW: WindowDraft = { kind: 'none' };
+const NO_WINDOW: WindowDraft = { kind: 'none' };
 
 export const windowOf = (step: StepDraft): WindowDraft => step.window ?? NO_WINDOW;
 export const rowsOf = (step: StepDraft): readonly ConditionRow[] => step.conditions ?? [];
@@ -58,7 +58,7 @@ export function conditionSummary(row: ConditionRow): string {
 }
 
 /** The mapping rows of the step's chosen relationship types that carry it from the previous node type in its direction: the rows the server reads, so that what is offered is what is accepted. */
-export function carryingRows(profile: SourceProfile, from: string | undefined, step: StepDraft): readonly MappingRow[] {
+function carryingRows(profile: SourceProfile, from: string | undefined, step: StepDraft): readonly MappingRow[] {
   const { direction, arrivesAt } = step;
   if (from === undefined || direction === undefined || arrivesAt === undefined) return [];
   const carries = (row: MappingRow, way: Direction): boolean => (way === 'out' ? row.from === from && row.to === arrivesAt : way === 'in' ? row.from === arrivesAt && row.to === from : (row.from === from && row.to === arrivesAt) || (row.from === arrivesAt && row.to === from));
@@ -72,11 +72,6 @@ export function offeredProperties(profile: SourceProfile, from: string | undefin
   const lists = carryingRows(profile, from, step).map((row) => [...new Set([...row.filterable, ...(row.observedAt === null ? [] : [row.observedAt])])]);
   const relationship = (lists[0] ?? []).filter((property) => lists.every((list) => list.includes(property)));
   return { neighbor, relationship };
-}
-
-/** Whether masking took a property away that the node would offer otherwise. */
-export function maskLeftOut(profile: SourceProfile, from: string | undefined, step: StepDraft, mask: boolean): boolean {
-  return mask && step.arrivesAt !== undefined && offeredProperties(profile, from, step, false).neighbor.length > offeredProperties(profile, from, step, true).neighbor.length;
 }
 
 export const isOffered = (row: ConditionRow, offered: Declared): boolean => (row.on === 'neighbor' ? offered.neighbor : offered.relationship).includes(row.property);
@@ -125,7 +120,7 @@ export function readRows(rows: readonly ConditionRow[]): ReadRows {
   return { filters, problems };
 }
 
-export const WINDOW_SENTENCES = {
+const WINDOW_SENTENCES = {
   days: `Enter a whole number of days from 1 to ${WINDOW_MAX_DAYS}.`,
   date: 'Enter a calendar date like 2026-03-01.',
   order: 'Before the start date',

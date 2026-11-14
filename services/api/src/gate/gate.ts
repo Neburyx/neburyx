@@ -249,6 +249,3 @@ export function createGates(deps: GateDeps): { readonly gate: Gate; readonly sys
   };
 }
 
-export function createGate(deps: GateDeps): Gate {
-  return createGates(deps).gate;
-}

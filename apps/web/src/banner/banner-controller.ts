@@ -13,12 +13,13 @@ export class BannerCauseError extends Error {
   }
 }
 
-export interface PartialWording {
+interface PartialWording {
   readonly itemNoun: string;
   readonly reason?: string;
   readonly review?: { readonly label: string; readonly run: () => void };
 }
 
+/** @public Named by the declared type of a test helper that returns the banner controller. */
 export interface FailureOptions {
   readonly partial?: PartialWording;
   /** The display name of the source the request read, for a state that names it. */
@@ -27,7 +28,7 @@ export interface FailureOptions {
   readonly resend?: () => void;
 }
 
-export interface BannerCauseContext {
+interface BannerCauseContext {
   readonly partial?: PartialWording;
   readonly source?: string;
   /** The Retry action of the banner with this ID, or undefined when the caller gave nothing to send again. It dismisses the banner first, then sends once. */
@@ -36,7 +37,7 @@ export interface BannerCauseContext {
 
 export type BannerDescriber = (failure: ServerFailure, context: BannerCauseContext) => BannerState | undefined;
 
-export interface Announcement {
+interface Announcement {
   readonly tone: BannerTone;
   readonly text: string;
 }

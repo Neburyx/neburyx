@@ -42,7 +42,7 @@ export function useVisibleGraph(): LoadedGraph {
 }
 
 /** The entities of the loaded graph that are left out of the view, by hand or by a filter. */
-export function useExcludedKeys(graph: LoadedGraph): ReadonlySet<string> {
+function useExcludedKeys(graph: LoadedGraph): ReadonlySet<string> {
   const state = useClientState();
   const hidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
   const neighborhoodFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus);

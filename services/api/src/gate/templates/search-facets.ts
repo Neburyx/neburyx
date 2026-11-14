@@ -16,13 +16,11 @@ const entityFacetTargetSchema = z.strictObject({ kind: z.enum(['search', 'refere
 /** An evidence property of a relationship mapping row that a probe matches. */
 const evidenceFacetTargetSchema = z.strictObject({ kind: z.literal('evidence'), relationshipType: z.string().min(1), from: z.string().min(1), to: z.string().min(1), property: z.string().min(1), match: form });
 
-export const facetTargetSchema = z.discriminatedUnion('kind', [entityFacetTargetSchema, evidenceFacetTargetSchema]);
+const facetTargetSchema = z.discriminatedUnion('kind', [entityFacetTargetSchema, evidenceFacetTargetSchema]);
 export type FacetTarget = z.infer<typeof facetTargetSchema>;
-export type EntityFacetTarget = z.infer<typeof entityFacetTargetSchema>;
-export type EvidenceFacetTarget = z.infer<typeof evidenceFacetTargetSchema>;
 
 /** One probe: a non-empty list of targets of one kind, whose matches are counted together, each once. */
-export const facetProbeSchema = z.strictObject({ targets: z.array(facetTargetSchema).min(1).max(MAX_SEARCH_PROPERTIES + MAX_REFERENCE_PROPERTIES + MAX_EVIDENCE_PROPERTIES) });
+const facetProbeSchema = z.strictObject({ targets: z.array(facetTargetSchema).min(1).max(MAX_SEARCH_PROPERTIES + MAX_REFERENCE_PROPERTIES + MAX_EVIDENCE_PROPERTIES) });
 export type FacetProbe = z.infer<typeof facetProbeSchema>;
 
 const probesSchema = z.array(facetProbeSchema).max(MAX_FACET_PROBES);

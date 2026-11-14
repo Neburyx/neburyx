@@ -6,7 +6,7 @@ export type DbHitCause =
   | { readonly checked: false; readonly series: string };
 
 /** The release series of the server the cause was found on. */
-export const CAUSE_SERIES = '5.26';
+const CAUSE_SERIES = '5.26';
 
 export const DB_HIT_CAUSE: DbHitCause = {
   checked: true,

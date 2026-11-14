@@ -17,7 +17,7 @@ const NO_MATCHES: readonly ExactMatch[] = [];
 const NO_DISABLED: readonly DisabledType[] = [];
 
 /** Why the last Show more of a group added nothing: the read of its page failed (`group`), the request failed (`request`), or the cursor no longer fits the search (`invalidated`). */
-export type PageProblem = { readonly kind: 'group'; readonly failure: GroupFailure } | { readonly kind: 'request'; readonly failure: ApiFailure } | { readonly kind: 'invalidated' };
+type PageProblem = { readonly kind: 'group'; readonly failure: GroupFailure } | { readonly kind: 'request'; readonly failure: ApiFailure } | { readonly kind: 'invalidated' };
 
 interface Stored<Hit> {
   readonly more: readonly Hit[];

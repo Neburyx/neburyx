@@ -5,7 +5,7 @@ import type { LoadedGraph } from '../state/loaded-graph.js';
 import { PhysicsLoop, type Clock, type Follower } from './physics-loop.js';
 import type { CanvasRenderer, Scene } from './scene.js';
 
-export const browserClock: Clock = {
+const browserClock: Clock = {
   request: (frame) => requestAnimationFrame(frame),
   cancel: (handle) => cancelAnimationFrame(handle),
   visible: () => document.visibilityState !== 'hidden',

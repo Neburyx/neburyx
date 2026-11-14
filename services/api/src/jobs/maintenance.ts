@@ -8,7 +8,7 @@ import type { AuditSink } from '../seams/seams.js';
 import type { Task } from './tasks.js';
 
 /** What the purge needs of the store: the deletion of what has passed its purge date. */
-export interface PurgeStore {
+interface PurgeStore {
   purgeExpiredInvestigations(beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<number>;
   purgeExpiredPatterns(beforeDelete: (purged: PurgedPattern) => Promise<void>): Promise<number>;
 }

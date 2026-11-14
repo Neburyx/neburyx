@@ -10,7 +10,7 @@ const INVALID = { error: { code: 'INVALID_REQUEST', message: 'The request is not
 const BUSY = { error: { code: 'SOURCE_BUSY', message: 'The data source is busy. Try again shortly.', retryable: true, traceId: 'tr-support' } };
 
 /** The starting entities for which the support server answers something other than the ring: no match, a heavy stop, a run that waits until the client leaves, a busy source. */
-export const RUN_ANCHORS = { none: 'EMPTY-1', heavy: 'HEAVY-1', slow: 'SLOW-1', busy: 'BUSY-1', paged: 'PAGED-1', long: 'LONG-1' } as const;
+const RUN_ANCHORS = { none: 'EMPTY-1', heavy: 'HEAVY-1', slow: 'SLOW-1', busy: 'BUSY-1', paged: 'PAGED-1', long: 'LONG-1' } as const;
 
 export const LONG_MATCHES = { titled: `Ørestad Hafenbetriebsgesellschaft ${'mit sehr langem Namen '.repeat(6)}`.trim(), untitledId: `IMO-${'9'.repeat(70)}` } as const;
 

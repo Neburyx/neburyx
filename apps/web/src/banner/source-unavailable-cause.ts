@@ -2,7 +2,7 @@ import type { BannerController, BannerDescriber } from './banner-controller.js';
 import type { BannerState } from './banner-state.js';
 import { RETRY, rateLimitedRetry, rateLimitedSideLabel, REPEATED_TIMEOUTS_CHIP, repeatedTimeoutsHeadline, UNAVAILABLE_CHIP, UNAVAILABLE_SIDE_LABEL, UNAVAILABLE_TEXT, unavailableHeadline } from './copy.js';
 
-export const SOURCE_UNAVAILABLE_BANNER_ID = 'source-unavailable';
+const SOURCE_UNAVAILABLE_BANNER_ID = 'source-unavailable';
 
 const TICK_MS = 1000;
 

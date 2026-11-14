@@ -17,7 +17,7 @@ export interface DocLink {
   readonly line: number;
 }
 
-export const slugOf = (heading: string): string => heading.toLowerCase().replace(/[^a-z0-9 -]/g, '').trim().replace(/ /g, '-');
+const slugOf = (heading: string): string => heading.toLowerCase().replace(/[^a-z0-9 -]/g, '').trim().replace(/ /g, '-');
 
 export class Doc {
   readonly path: string;

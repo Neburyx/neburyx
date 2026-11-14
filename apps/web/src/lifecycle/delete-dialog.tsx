@@ -5,7 +5,7 @@ import { ConfirmDialog } from './confirm-dialog.js';
 import { DELETE_INVESTIGATION, DELETE_TEXT, DELETE_TITLE, DELETING, RELOAD } from './copy.js';
 import { messageOf } from './status-flow.js';
 
-export interface DeleteTarget {
+interface DeleteTarget {
   readonly id: string;
   readonly version: number;
 }

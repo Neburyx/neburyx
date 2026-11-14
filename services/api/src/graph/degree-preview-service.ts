@@ -13,7 +13,7 @@ import type { DegreeCache } from './degree-cache.js';
 import { sumOf } from './degree-sum.js';
 import { neighborCountsOf, SCOPE_SUFFIX } from './neighbor-counts.js';
 
-export interface DegreePreviewRequest {
+interface DegreePreviewRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

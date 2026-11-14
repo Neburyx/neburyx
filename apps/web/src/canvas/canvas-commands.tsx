@@ -22,7 +22,7 @@ export interface CanvasCommandsHandle {
   attach(renderer: CanvasRenderer, onFailure: () => void, layout: () => void): () => void;
 }
 
-export function createCanvasCommandsHandle(): CanvasCommandsHandle {
+function createCanvasCommandsHandle(): CanvasCommandsHandle {
   const store = createStore<CanvasCommands | undefined>(undefined);
   return {
     view: readable(store),

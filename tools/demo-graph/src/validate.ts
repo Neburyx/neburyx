@@ -37,14 +37,14 @@ const manifestSchema = z.strictObject({
 
 export type Properties = Record<string, Value>;
 
-export interface ExportedEntity {
+interface ExportedEntity {
   readonly file: string;
   readonly type: string;
   readonly label: string;
   readonly rows: readonly Properties[];
 }
 
-export interface ExportedRelationship {
+interface ExportedRelationship {
   readonly file: string;
   readonly type: string;
   readonly from: string;

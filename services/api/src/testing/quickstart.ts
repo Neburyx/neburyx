@@ -2,7 +2,7 @@ import { Doc } from './doc.js';
 
 export const readme = new Doc('README.md');
 
-export const stripComment = (command: string): string => command.replace(/\s+#.*$/, '').trim();
+const stripComment = (command: string): string => command.replace(/\s+#.*$/, '').trim();
 
 const COMMAND_WORDS = /^(docker|cd|cp|openssl) /;
 
@@ -39,4 +39,3 @@ export function quickstartOf(doc: Doc) {
 const own = quickstartOf(readme);
 export const inQuickstart = own.inside;
 export const quickstartCommands = own.commands;
-export const fencedCommands = own.fenced;

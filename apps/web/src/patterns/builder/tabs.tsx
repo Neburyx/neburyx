@@ -1,6 +1,6 @@
 import { useRef, type KeyboardEvent, type ReactNode } from 'react';
 
-export interface TabSpec {
+interface TabSpec {
   readonly id: string;
   readonly label: ReactNode;
   /** A tab that a part of its panel is wrong in, marked by a word as well as by colour. */

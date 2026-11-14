@@ -3,7 +3,7 @@ import { normalizeRows, type Normalized, type NormalizeContext } from './index.j
 import { isPlainNode, normalizeNode, normalizeNodeAs, type PlainNode } from './node.js';
 
 /** One match of a linked-entities run with how it was reached: in one or two hops, and the entity in between when there were two. */
-export interface LinkedMatch {
+interface LinkedMatch {
   readonly match: ElementRef;
   readonly hops: 1 | 2;
   readonly through?: ElementRef;

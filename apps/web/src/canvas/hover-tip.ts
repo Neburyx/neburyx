@@ -1,6 +1,6 @@
 export const HOVER_TIP_CLASS = 'canvas-tip';
 
-export interface TipContent {
+interface TipContent {
   /** The first line, the title of an entity or the label of a relationship. */
   readonly title: string;
   /** The line under it, the type of an entity; none for a relationship. */
@@ -8,7 +8,7 @@ export interface TipContent {
 }
 
 /** Where the tip hangs: the horizontal middle of its anchor, and the top, in the canvas element's own pixels. */
-export interface TipAnchor {
+interface TipAnchor {
   readonly x: number;
   readonly y: number;
 }

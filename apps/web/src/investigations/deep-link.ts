@@ -9,8 +9,8 @@ export interface DeepLink {
 
 export type ReadLink = { readonly ok: true; readonly link: DeepLink } | { readonly ok: false; readonly reason: 'malformed' | 'foreign' };
 
-export const DEEP_LINK_ENTITY_SEGMENT = 'entity';
-export const CASE_REF_PARAMETER = 'caseRef';
+const DEEP_LINK_ENTITY_SEGMENT = 'entity';
+const CASE_REF_PARAMETER = 'caseRef';
 
 export const SOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;

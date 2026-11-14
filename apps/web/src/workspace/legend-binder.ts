@@ -5,7 +5,7 @@ import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from './panel-limits.js';
 import type { PanelRegistry } from './panel-registry.js';
 
 export const LEGEND_PANEL_ID = 'legend';
-export const LEGEND_TOP = 64;
+const LEGEND_TOP = 64;
 
 /** The distance from the right edge: the panel gap, and past the inspector at the width it has now while that is open. */
 function insetOf(state: ClientState, panels: PanelRegistry): number | undefined {

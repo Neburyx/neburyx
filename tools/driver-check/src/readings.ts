@@ -24,11 +24,11 @@ export type CloseEnd =
   | { readonly kind: 'unsettled'; readonly calledAtMs: number };
 
 /** A look sent longer ago than this at the moment asked about no longer says anything about it. */
-export const STALE_MS = 1000;
+const STALE_MS = 1000;
 /** The server enforces a timeout some time after it is reached, and sampling adds up to one interval. */
 export const TIMEOUT_GRACE_MS = 2000;
 
-export function seenRunning(samples: readonly Sample[], byMs: number): boolean {
+function seenRunning(samples: readonly Sample[], byMs: number): boolean {
   return samples.some((s) => s.state === 'running' && s.atMs <= byMs);
 }
 
@@ -48,7 +48,7 @@ export interface Transition {
 }
 
 /** When the last look that found the query running was answered, and the first later look that found the transaction gone. */
-export function transitionOf(samples: readonly Sample[]): Transition {
+function transitionOf(samples: readonly Sample[]): Transition {
   const running = samples.filter((s) => s.state === 'running').map((s) => s.atMs);
   if (running.length === 0) return {};
   const lastRunningMs = Math.max(...running);
@@ -60,7 +60,7 @@ export function transitionOf(samples: readonly Sample[]): Transition {
  * `gone-at-next-look`: the first look sent after the call ended found the transaction gone.
  * `gone-later`: a later look did; the looks between found it running or could not read the list.
  */
-export type TimeoutVerdict = 'gone-at-next-look' | 'gone-later' | 'still-running' | 'inconclusive';
+type TimeoutVerdict = 'gone-at-next-look' | 'gone-later' | 'still-running' | 'inconclusive';
 
 export interface TimeoutReading extends Transition {
   readonly verdict: TimeoutVerdict;
@@ -92,7 +92,7 @@ export function readTimeout(
 }
 
 /** `TIMEOUT_GRACE_MS` is 2,000 ms: the last two verdicts are about the state 2 s after the transaction's timeout. */
-export type CloseVerdict =
+type CloseVerdict =
   | 'gone-within-5s'
   | 'gone-within-15s'
   | 'gone-by-timeout-plus-2s'

@@ -9,8 +9,6 @@ const operatorSchema = z.strictObject({ name: z.string(), details: z.string().nu
 /** The operators of the plan the server showed for the probe, or null when it showed none; never a count of the anchor node. */
 export const degreeProbeItemSchema = z.strictObject({ operators: z.array(operatorSchema).nullable() });
 
-export type DegreeProbeItem = z.infer<typeof degreeProbeItemSchema>;
-
 function normalize(rows: readonly Row[], plan: Plan = null): readonly Item[] {
   // one row holds the two counts of the anchor node, none if the label has no node; neither says anything about the source and both are dropped
   if (rows.length > 1) return [{ unreadable: { rows: String(rows.length) } }];

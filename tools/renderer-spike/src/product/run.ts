@@ -7,8 +7,8 @@ import { evaluateTarget, TARGET } from './target.js';
 import type { AddCapture, AddReport } from './add.js';
 import type { LayoutCapture, LayoutReport } from './layout.js';
 
-export const WHEEL_STEP = -100;
-export const DRAG_STEP = { dx: 60, dy: 40 } as const;
+const WHEEL_STEP = -100;
+const DRAG_STEP = { dx: 60, dy: 40 } as const;
 const READY_MS = 30_000;
 const STEP_MS = 30_000;
 const RUN_DEADLINE_FACTOR = 3;

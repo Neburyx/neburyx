@@ -4,7 +4,7 @@ import { ICON_KEYS, type Fixture, type FixtureNode, type FixtureRelationship } f
 
 export type IconKey = (typeof ICON_KEYS)[number];
 
-export const AREA = { width: 1200, height: 800 } as const;
+const AREA = { width: 1200, height: 800 } as const;
 
 const ICON_PATHS: Readonly<Record<IconKey, string>> = {
   circle: '<circle cx="12" cy="12" r="6" fill="white"/>',

@@ -1,14 +1,14 @@
 import type { DegreePreview } from '@neburyx/contracts';
 
 /** Hypotheses: a preview is served to a preview request for five minutes after it was read, and the cache keeps the 5,000 most recently used. */
-export const DEFAULT_CACHE_LIFETIME_MS = 5 * 60 * 1000;
-export const DEFAULT_CACHE_ENTRIES = 5000;
+const DEFAULT_CACHE_LIFETIME_MS = 5 * 60 * 1000;
+const DEFAULT_CACHE_ENTRIES = 5000;
 
 /**
  * A hypothesis: coverage counts a preview while it is used at least every five minutes, but never for more than an hour after it was read. The coverage line is a sum of previews, so one that kept
  * being used must not outlive a normal session while the source changes underneath it.
  */
-export const DEFAULT_COVERAGE_MAX_AGE_MS = 60 * 60 * 1000;
+const DEFAULT_COVERAGE_MAX_AGE_MS = 60 * 60 * 1000;
 
 export interface DegreeCacheOptions {
   readonly lifetimeMs?: number;

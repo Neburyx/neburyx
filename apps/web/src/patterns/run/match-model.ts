@@ -81,7 +81,7 @@ function rowsOfProperties(properties: readonly GraphProperty[], mask: boolean, p
   });
 }
 
-export const MAX_KEY_ROWS = 3;
+const MAX_KEY_ROWS = 3;
 
 /**
  * What a match shows besides its path: the key properties of the entity matched, as the mapping names them for its type, at most three, in that order (a type with none shows the first three the answer carries); and, folded away, every

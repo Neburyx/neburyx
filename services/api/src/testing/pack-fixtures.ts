@@ -6,7 +6,7 @@ import { parseMapping } from '../mapping/load.js';
 import type { SourceModel } from '../mapping/model.js';
 
 export const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url));
-export const FIXTURES_DIR = join(repoRoot, 'tools', 'demo-graph', 'fixtures', 'normalization');
+const FIXTURES_DIR = join(repoRoot, 'tools', 'demo-graph', 'fixtures', 'normalization');
 
 export const PACKS = ['banking-fraud', 'insurance-claims'] as const;
 export type Pack = (typeof PACKS)[number];
@@ -51,7 +51,7 @@ export function canonicalise<T>(value: T): T {
 
 export type Fixture = Record<string, unknown>;
 
-export function fixturePath(pack: Pack): string {
+function fixturePath(pack: Pack): string {
   return join(FIXTURES_DIR, `${pack}.json`);
 }
 

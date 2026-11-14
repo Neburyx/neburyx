@@ -2,9 +2,9 @@ import type { ClientState } from '../state/client-state.js';
 import { FiltersPanel } from './filters-panel.js';
 import type { PanelRegistry } from './panel-registry.js';
 
-export const FILTERS_PANEL_ID = 'filters';
+const FILTERS_PANEL_ID = 'filters';
 export const FILTERS_PANEL_TOP = 64;
-export const FILTERS_PANEL_WIDTH = 300;
+const FILTERS_PANEL_WIDTH = 300;
 /** Clear of the tool strip: the panel sits to its right. */
 export const FILTERS_PANEL_INSET = 72;
 

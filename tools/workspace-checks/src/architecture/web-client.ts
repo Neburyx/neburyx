@@ -4,12 +4,12 @@ import ts from 'typescript';
 import { mayNameTarget } from './imports.js';
 import type { SourceFile } from './tree.js';
 
-export const WEB_SOURCE_ROOT = 'apps/web/src';
-export const WEB_API_FOLDER = 'apps/web/src/api';
+const WEB_SOURCE_ROOT = 'apps/web/src';
+const WEB_API_FOLDER = 'apps/web/src/api';
 
-export const WEB_RENDERER_MODULE = 'apps/web/src/canvas/cytoscape-renderer.ts';
+const WEB_RENDERER_MODULE = 'apps/web/src/canvas/cytoscape-renderer.ts';
 
-export type WebRule = 'web-fetch' | 'web-wire-type' | 'web-query-text' | 'web-database-dependency' | 'web-renderer-import';
+type WebRule = 'web-fetch' | 'web-wire-type' | 'web-query-text' | 'web-database-dependency' | 'web-renderer-import';
 
 export interface WebViolation {
   readonly rule: WebRule;

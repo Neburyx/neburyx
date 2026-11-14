@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useMenuPlacement } from '../menu-placement.js';
 import { SAVED_COPY } from './saved-copy.js';
 
-export interface MenuItem {
+interface MenuItem {
   readonly key: string;
   readonly label: string;
   readonly onChoose: () => void;
@@ -13,7 +13,7 @@ export interface MenuItem {
 }
 
 /** A line of the menu that is not an item: it says why the items after it do nothing. */
-export interface MenuNote {
+interface MenuNote {
   readonly key: string;
   readonly note: string;
 }

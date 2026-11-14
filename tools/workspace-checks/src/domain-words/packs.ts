@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { parseDocument } from 'yaml';
 import { z } from 'zod';
 
-export type IdentifierKind = 'entity type' | 'label' | 'relationship type' | 'property key';
+type IdentifierKind = 'entity type' | 'label' | 'relationship type' | 'property key';
 
 export interface Identifier {
   readonly name: string;

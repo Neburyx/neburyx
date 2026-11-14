@@ -8,7 +8,7 @@ export interface Excerpt {
   readonly failure?: ApiFailure;
 }
 
-export type ExcerptsState = ReadonlyMap<string, Excerpt>;
+type ExcerptsState = ReadonlyMap<string, Excerpt>;
 
 export interface Excerpts extends ReadableStore<ExcerptsState> {
   readonly newOpening: () => string;

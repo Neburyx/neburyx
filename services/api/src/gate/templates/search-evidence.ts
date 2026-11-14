@@ -14,7 +14,7 @@ export const SEARCH_EVIDENCE_ID = 'relationship-evidence';
  * One evidence property of one relationship mapping row: the relationship type and the entity types of its two ends and the property all come from the mapping.
  * `value` matches the text and the integer it can be (a RANGE index or a constraint serves it); `text` matches the text only (a TEXT index holds strings only).
  */
-export const evidenceTargetSchema = z.strictObject({ relationshipType: z.string().min(1), from: z.string().min(1), to: z.string().min(1), property: z.string().min(1), match: z.enum(['value', 'text']) });
+const evidenceTargetSchema = z.strictObject({ relationshipType: z.string().min(1), from: z.string().min(1), to: z.string().min(1), property: z.string().min(1), match: z.enum(['value', 'text']) });
 
 export type EvidenceTarget = z.infer<typeof evidenceTargetSchema>;
 

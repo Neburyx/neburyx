@@ -5,7 +5,7 @@ import type { Sample, Summary } from './stats.js';
 import type { DbHitCause } from './db-hit-cause.js';
 import { MEMBERS_PER_NEIGHBOR, PAGE, SAMPLES_PER_POSITION, type ReadSet } from './plan.js';
 
-export const TARGET_MS = 3000;
+const TARGET_MS = 3000;
 const BASELINE_SIZE = 100_000;
 
 export interface Stopped {

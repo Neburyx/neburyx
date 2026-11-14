@@ -4,11 +4,11 @@ import { registerRateLimitedCause } from './rate-limited-cause.js';
 import { registerSourceUnavailableCause } from './source-unavailable-cause.js';
 import { BUSY_CHIP, BUSY_SIDE_LABEL, BUSY_TEXT, busyHeadline, PARTIAL_CHIP, PARTIAL_TEXT, RETRY, TIMED_OUT_CHIP, TIMED_OUT_SIDE_LABEL, TIMED_OUT_TEXT, timedOutHeadline } from './copy.js';
 
-export const PARTIAL_BANNER_ID = 'partial';
-export const BUSY_BANNER_ID = 'busy';
-export const TIMED_OUT_BANNER_ID = 'timed-out';
+const PARTIAL_BANNER_ID = 'partial';
+const BUSY_BANNER_ID = 'busy';
+const TIMED_OUT_BANNER_ID = 'timed-out';
 
-export const describePartial: BannerDescriber = (failure, context) => {
+const describePartial: BannerDescriber = (failure, context) => {
   const { partial } = context;
   const counts = partialDetailsSchema.safeParse(failure.details);
   if (partial === undefined || partial.itemNoun.trim() === '' || !counts.success) return undefined;
@@ -26,7 +26,7 @@ export const describePartial: BannerDescriber = (failure, context) => {
 };
 
 /** No read slot freed within the wait: nothing was read, and Retry sends the same request again. A state with no source name to give says nothing rather than guess one. */
-export const describeBusy: BannerDescriber = (_failure, context) => {
+const describeBusy: BannerDescriber = (_failure, context) => {
   if (context.source === undefined || context.source.trim() === '') return undefined;
   const retry = context.retry(BUSY_BANNER_ID, RETRY);
   return {
@@ -41,7 +41,7 @@ export const describeBusy: BannerDescriber = (_failure, context) => {
 };
 
 /** The source did not answer within the limit that stopped the request, and nothing was merged. A failure that names no limit, or a state with no source name, builds nothing: the banner never states a number it was not given. */
-export const describeTimedOut: BannerDescriber = (failure, context) => {
+const describeTimedOut: BannerDescriber = (failure, context) => {
   const limit = failure.details?.timeoutMs;
   if (context.source === undefined || context.source.trim() === '' || limit === undefined || !Number.isInteger(limit) || limit < 1) return undefined;
   const retry = context.retry(TIMED_OUT_BANNER_ID, RETRY);
@@ -56,7 +56,7 @@ export const describeTimedOut: BannerDescriber = (failure, context) => {
   };
 };
 
-export function registerBuiltInBannerCauses(controller: BannerController): void {
+function registerBuiltInBannerCauses(controller: BannerController): void {
   controller.registerCause('PARTIAL_RESULT', describePartial);
   controller.registerCause('SOURCE_BUSY', describeBusy);
   controller.registerCause('QUERY_TIMEOUT', describeTimedOut);

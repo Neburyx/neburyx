@@ -2,7 +2,7 @@
 export type ExpandWindow = { readonly days: number } | 'all';
 
 /** The window of an expansion until a person chooses another: the last 7 days, shown in the controls. */
-export const DEFAULT_WINDOW_DAYS = 7;
+const DEFAULT_WINDOW_DAYS = 7;
 export const DEFAULT_WINDOW: ExpandWindow = { days: DEFAULT_WINDOW_DAYS };
 
 /** The most days a window may name, as the server takes it; "All time" has no limit. */

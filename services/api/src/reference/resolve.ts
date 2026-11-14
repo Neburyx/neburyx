@@ -9,7 +9,7 @@ import { makeToken } from './token.js';
  * request is not masked, because naming a personal value to a masked view would let it confirm that the value exists; a reference that is already a token is passed on for the gate to read.
  * A source or an entity type the mapping does not name is passed on unchanged, for the read to answer as it answers any such request.
  */
-export function canonicalStableId(mapping: MappingModel, keys: ReferenceKeys, place: { readonly sourceId: string; readonly entityType: string }, form: { readonly stableId: string } | { readonly value: string }, mask: boolean): string {
+function canonicalStableId(mapping: MappingModel, keys: ReferenceKeys, place: { readonly sourceId: string; readonly entityType: string }, form: { readonly stableId: string } | { readonly value: string }, mask: boolean): string {
   const entity = mapping.sources.find((source) => source.id === place.sourceId)?.entities.find((type) => type.type === place.entityType);
   if ('stableId' in form) return form.stableId;
   if (entity === undefined || !isKeyed(entity)) return form.value;

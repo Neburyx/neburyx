@@ -6,10 +6,10 @@ import type { Params, SourceAllowlist } from '../types.js';
 /** The most hops this template reads; the source's `max_hops` may lower it (the gate refuses more). */
 export const LINKED_MAX_HOPS = 2;
 
-export type LinkedDirection = 'out' | 'in' | 'both';
+type LinkedDirection = 'out' | 'in' | 'both';
 
 /** One way to cross a relationship row from a `near` entity type to a `far` one. */
-export interface LinkedStep {
+interface LinkedStep {
   readonly type: string;
   readonly near: string;
   readonly far: string;

@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 
 /** Fixed for every fuzz file: a failing run prints this seed and the shrunk input, and the same seed replays it. */
-export const FUZZ_SEED = 5017;
+const FUZZ_SEED = 5017;
 export const FUZZ_RUNS = 120;
 
 export const fuzzParams = (runs = FUZZ_RUNS): fc.Parameters<unknown> => ({ seed: FUZZ_SEED, numRuns: runs, verbose: 0 });

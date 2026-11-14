@@ -38,7 +38,7 @@ export interface SearchRequest {
 }
 
 /** The next page of one group of a search, from the cursor that group's last page gave; the text, the mask and the entity types are those of that search. */
-export interface SearchMoreRequest {
+interface SearchMoreRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;

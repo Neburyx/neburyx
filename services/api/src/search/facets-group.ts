@@ -7,7 +7,7 @@ import { AppError } from '../errors.js';
 import type { SourceModel } from '../mapping/model.js';
 
 /** What one probe of the facet read counts: the entities of an entity type, the matches of a match mode, or every entity matched by any target. */
-export type FacetEntry = { readonly kind: 'entityType'; readonly entityType: string } | { readonly kind: 'matchMode'; readonly mode: SearchMatchMode } | { readonly kind: 'total' };
+type FacetEntry = { readonly kind: 'entityType'; readonly entityType: string } | { readonly kind: 'matchMode'; readonly mode: SearchMatchMode } | { readonly kind: 'total' };
 
 export interface FacetPlan {
   /** The probes, in the order of their counts in the read's one row. */

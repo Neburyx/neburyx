@@ -25,7 +25,7 @@ const ENV_USER = 'DEMO_RUN_USER';
 const ENV_PASSWORD = 'DEMO_RUN_PASSWORD';
 
 /** A pack's API as a person using it sees it: saving patterns, listing them and running a saved one, with a key of its own prefix. */
-export interface SavedPatternApi {
+interface SavedPatternApi {
   /** `POST /v1/patterns` for the pack's source: the pattern saved, or the refusal. */
   readonly save: (body: Record<string, unknown>) => Promise<{ readonly status: number; readonly json: unknown }>;
   /** `GET /v1/patterns` for the pack's source. */

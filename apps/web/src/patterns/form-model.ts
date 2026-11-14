@@ -2,9 +2,9 @@ import { WINDOW_MAX_DAYS, type SourceProfile } from '@neburyx/contracts';
 
 type Preset = SourceProfile['presets'][number];
 
-export type FieldKind = 'window' | 'integer' | 'choice';
+type FieldKind = 'window' | 'integer' | 'choice';
 
-export interface FieldOption {
+interface FieldOption {
   readonly value: string;
   readonly text: string;
 }

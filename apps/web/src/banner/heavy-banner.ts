@@ -7,7 +7,7 @@ export const HEAVY_BANNER_ID = 'heavy';
 const WHOLE = new Intl.NumberFormat('en-US');
 
 /** The estimate as the person reads it: exact as it is, "~" for an estimate, "≥" for a lower bound. */
-export function estimateText(estimate: HeavyEstimate): string {
+function estimateText(estimate: HeavyEstimate): string {
   const number = WHOLE.format(estimate.value);
   return estimate.quality === 'exact' ? number : estimate.quality === 'estimated' ? `~${number}` : `≥ ${number}`;
 }

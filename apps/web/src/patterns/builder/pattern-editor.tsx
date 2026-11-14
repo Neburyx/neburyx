@@ -14,7 +14,6 @@ import { StepPanel, type Part } from './step-panel.js';
 import { TabList, panelId, tabId } from './tabs.js';
 import { usePatternCheck, type CheckState } from './use-check.js';
 
-export type { CheckState };
 export { CHECK_DEBOUNCE_MS } from './use-check.js';
 
 export type ProfileView = { readonly kind: 'loading' } | { readonly kind: 'failed'; readonly failure?: ApiFailure } | { readonly kind: 'ready'; readonly profile: SourceProfile };
@@ -30,15 +29,8 @@ export interface EditingView {
   readonly stepNotes: ReadonlyMap<number, readonly string[]>;
 }
 
-/** Why a pattern cannot be saved or run yet, and what it starts from, handed to whatever the footer shows. */
-export interface SaveContext {
-  readonly anchor: { readonly entityType: string; readonly stableId: string } | undefined;
-  /** Why nothing can be saved yet, in the order the person meets it, or nothing. */
-  readonly block: string | undefined;
-}
-
 /** What the editor knows and the footer needs: the definition the draft makes, the check on it and where focus goes back to. */
-export interface FooterState {
+interface FooterState {
   readonly profile: SourceProfile;
   readonly definition: PatternDefinition | undefined;
   readonly anchorType: string | undefined;

@@ -131,7 +131,7 @@ export interface StubOptions {
 }
 
 /** A renderer that draws nothing and records what it was given. */
-export function stubRenderer(options: StubOptions = {}): StubRenderer {
+function stubRenderer(options: StubOptions = {}): StubRenderer {
   let drawn: Scene | undefined;
   let failures = options.failDraws ?? Number.POSITIVE_INFINITY;
   const stub: StubRenderer = {

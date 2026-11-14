@@ -20,7 +20,7 @@ export type ViewListState =
       readonly moreFailed: boolean;
     };
 
-export type RenameOutcome = 'renamed' | 'failed' | 'conflict' | 'unknown';
+type RenameOutcome = 'renamed' | 'failed' | 'conflict' | 'unknown';
 
 /** What a delete of a view came to: the view is gone from the list, or the list was read again because it was changed or deleted elsewhere. */
 export type RemoveOutcome = { readonly kind: 'deleted' } | { readonly kind: 'changed-elsewhere' } | { readonly kind: 'gone' } | { readonly kind: 'failed'; readonly failure: ApiFailure } | { readonly kind: 'unknown' };

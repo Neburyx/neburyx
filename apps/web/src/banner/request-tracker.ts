@@ -3,15 +3,15 @@ import type { BannerController } from './banner-controller.js';
 import type { BannerState } from './banner-state.js';
 import { cancelledHeadline, CANCELLED_CHIP, CANCELLED_SIDE_LABEL, CANCELLED_TEXT, PREVIEW_CANCELLED_HEADLINE, PREVIEW_CANCELLED_SIDE_LABEL, RUN_AGAIN, RUNNING_CHIP, RUNNING_TEXT, runningHeadline, runningSideLabel, type RequestKind } from './copy.js';
 
-export const RUNNING_BANNER_ID = 'running';
-export const CANCELLED_BANNER_ID = 'cancelled';
+const RUNNING_BANNER_ID = 'running';
+const CANCELLED_BANNER_ID = 'cancelled';
 
 /** How long a request runs before its Running state is shown, so that a read that answers at once never flashes a banner. */
 export const RUNNING_DELAY_MS = 1000;
 /** How often the elapsed time of the Running state is redrawn. */
 const TICK_MS = 200;
 
-export interface TrackedCall {
+interface TrackedCall {
   readonly kind: RequestKind;
   readonly ref: ElementRef;
   /** Stops the request: aborts its fetch. */
@@ -20,7 +20,7 @@ export interface TrackedCall {
   readonly again: () => void;
 }
 
-export interface TrackedHandle {
+interface TrackedHandle {
   /** True once the person cancelled it; the request's caller then drops any answer and leaves what it had. */
   readonly cancelled: boolean;
   /** The request ended (answered, failed, or was superseded): its Running state goes, without a Cancelled state. */

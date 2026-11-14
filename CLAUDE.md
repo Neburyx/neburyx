@@ -73,7 +73,8 @@ Node 24 LTS (`.nvmrc`; with nvm, `nvm use`) and pnpm through Corepack, at the ve
 | Install | `corepack enable`, then `pnpm install --frozen-lockfile` |
 | Build | `pnpm build` |
 | Type-check | `pnpm typecheck` |
-| Lint | `pnpm lint` |
+| Lint (eslint, then knip, which fails on unused files, exports, types and dependencies; see `docs/unused-code.md`) | `pnpm lint` |
+| Unused code only | `pnpm knip` |
 | Unit tests (include the input fuzz suite, [docs/fuzz-suite.md](docs/fuzz-suite.md)) | `pnpm test` |
 | Contract test | `pnpm test:contract` |
 | Integration tests (a Postgres container; needs Docker; the API's and the save suite's) | `pnpm test:integration` |
@@ -108,7 +109,7 @@ To create or upgrade the database (after `pnpm build`): `DATABASE_MIGRATION_URL=
 The API listens on `127.0.0.1:8080` unless `NEBURYX_HOST` and `NEBURYX_PORT` say otherwise, and logs a
 warning if started outside a container on a non-loopback address.
 
-CI (`.github/workflows/ci.yml`) runs on pushes to branches and on pull requests, not on tags. Its jobs are separate: lint, type-check, unit tests, the contract test, the integration tests, the build, `image` (the image test on every push, and the build for both platforms only when `pnpm-lock.yaml`, a `package.json` at the root, `.nvmrc`, a file under `deploy/` or `.github/workflows/` changed, decided by the `changes` job (`tools/ci/changed-paths.mjs`); a release builds both platforms itself), the compose tests (`compose-images` builds the image and the demo loader image once, and the `compose` jobs run the compose test files in parallel on that archive; the README quickstart test runs in the `quickstart` job when the README, `deploy/` or the files it reads changed, and in the release workflow), and the browser tests (`ux` in three shards, and `ux-benchmark` alone). A release refuses a commit that has no green CI run on `main` (`deploy/release/README.md`). The demo
+CI (`.github/workflows/ci.yml`) runs on pushes to branches and on pull requests, not on tags. Its jobs are separate: lint, unused code (`pnpm knip`), type-check, unit tests, the contract test, the integration tests, the build, `image` (the image test on every push, and the build for both platforms only when `pnpm-lock.yaml`, a `package.json` at the root, `.nvmrc`, a file under `deploy/` or `.github/workflows/` changed, decided by the `changes` job (`tools/ci/changed-paths.mjs`); a release builds both platforms itself), the compose tests (`compose-images` builds the image and the demo loader image once, and the `compose` jobs run the compose test files in parallel on that archive; the README quickstart test runs in the `quickstart` job when the README, `deploy/` or the files it reads changed, and in the release workflow), and the browser tests (`ux` in three shards, and `ux-benchmark` alone). A release refuses a commit that has no green CI run on `main` (`deploy/release/README.md`). The demo
 environment is in `deploy/demo`.
 
 ## Conventions

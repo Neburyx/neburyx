@@ -13,7 +13,7 @@ export interface TestRun {
 
 export const IDLE: TestRun = { running: false };
 
-export type TestRunsState = ReadonlyMap<string, TestRun>;
+type TestRunsState = ReadonlyMap<string, TestRun>;
 
 export interface TestRuns extends ReadableStore<TestRunsState> {
   readonly start: (sourceId: string) => void;

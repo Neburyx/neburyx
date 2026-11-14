@@ -6,8 +6,8 @@ export const READINESS_LIMIT_MS = 2000;
 export const MIN_READINESS_LIMIT_MS = 500;
 export const MAX_READINESS_LIMIT_MS = 60_000;
 /** The part of the limit kept for the query after the connection is open. A hypothesis: 500 ms makes the connection step 1 500 ms at the 2 000 ms default, as it was. */
-export const PROBE_QUERY_RESERVE_MS = 500;
-export const MIN_PROBE_STEP_MS = 250;
+const PROBE_QUERY_RESERVE_MS = 500;
+const MIN_PROBE_STEP_MS = 250;
 
 /** The readiness limit from the setting: absent or empty is the default; `undefined` is a value that is not a whole number of milliseconds in range. */
 export function parseReadinessLimit(value: string | undefined): number | undefined {

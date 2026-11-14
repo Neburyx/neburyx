@@ -24,16 +24,16 @@ const node = (sourceId: string, entityType: string, stableId: string) => ({
 });
 
 /** How many accounts the scripted six-account ring holds besides the one the run starts from. */
-export const RING_MATES = 5;
+const RING_MATES = 5;
 
 /**
  * What the support server does with a run, chosen by what the form sends, so a spec reaches each state with the form alone: a `limit` of 1 gives no match, 3 a run that waits until the client leaves, 4 a busy source, 5 a cut result (a lower-bound count), 6 a result with the stop-list notice; a `minShared` of 2 gives a heavy stop,
  * whose `continueLimit` is the product's 25 lowered by the page the run asked for, as the API does, and the same request with the continue flag gives the ring. Any other request gets the ring.
  */
-export const LIMITS = { none: 1, slow: 3, busy: 4, cut: 5, stopList: 6 } as const;
-export const HEAVY_MIN_SHARED = 2;
+const LIMITS = { none: 1, slow: 3, busy: 4, cut: 5, stopList: 6 } as const;
+const HEAVY_MIN_SHARED = 2;
 /** The start type for which the support server answers one problem. */
-export const SCRIPTED_START = 'merchant';
+const SCRIPTED_START = 'merchant';
 const CONTINUE_LIMIT = 25;
 
 const evidenceEdge = (sourceId: string, type: string, fromType: string, toType: string, id: string, from: string, to: string, evidence: string[]) => ({

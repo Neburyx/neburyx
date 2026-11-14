@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { OwnedView } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 
-export interface OwnedViewsState {
+interface OwnedViewsState {
   readonly items: readonly OwnedView[] | undefined;
   readonly count: number | undefined;
   readonly nextCursor: string | null;
@@ -32,7 +32,7 @@ const INITIAL: OwnedViewsState = { items: undefined, count: undefined, nextCurso
 /** `focusId` when the view that left was the last one: the caption of the table takes the focus. */
 export const NO_VIEW_LEFT = '';
 
-export function reduceViews(state: OwnedViewsState, action: Action): OwnedViewsState {
+function reduceViews(state: OwnedViewsState, action: Action): OwnedViewsState {
   switch (action.type) {
     case 'first-started':
       return { ...state, loading: true, loadingMore: false, failure: undefined };

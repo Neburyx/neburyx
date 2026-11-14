@@ -5,7 +5,7 @@ import { inTransaction } from './investigations-repository.js';
 import { inPatternTransaction } from '../patterns/pattern-events.js';
 import type { Principal } from '../seams/seams.js';
 
-export type PatternKind = 'preset-run' | 'definition';
+type PatternKind = 'preset-run' | 'definition';
 
 /** A saved pattern as it is stored. The anchor's stable id is the stored form of the reference. */
 export interface PatternRow {
@@ -48,7 +48,7 @@ export interface NewPattern {
   readonly anchor: { readonly entityType: string; readonly stableId: string } | null;
 }
 
-export type PatternSaveResult = { readonly outcome: 'saved'; readonly row: PatternRow } | { readonly outcome: 'limit' } | { readonly outcome: 'name-taken' };
+type PatternSaveResult = { readonly outcome: 'saved'; readonly row: PatternRow } | { readonly outcome: 'limit' } | { readonly outcome: 'name-taken' };
 
 /** Where a page of patterns starts: after the pattern changed at `updatedKey` (microsecond text, as the database holds it) with this `id`. */
 export interface PatternListPosition {
@@ -56,7 +56,7 @@ export interface PatternListPosition {
   readonly id: string;
 }
 
-export interface PatternListQuery {
+interface PatternListQuery {
   /** The caller: their own patterns, and the shared patterns of other people, are listed. */
   readonly ownerId: string;
   readonly sourceId: string;
@@ -69,7 +69,7 @@ export interface ListedPatternRow extends PatternRow {
   readonly ownerName: string;
 }
 
-export interface PatternListResult {
+interface PatternListResult {
   readonly rows: readonly ListedPatternRow[];
   readonly next: PatternListPosition | undefined;
 }
@@ -89,7 +89,7 @@ export interface PatternChange {
   readonly action?: 'changed' | 'shared' | 'unshared';
 }
 
-export type PatternChangeResult = { readonly outcome: 'changed'; readonly row: PatternRow } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' } | { readonly outcome: 'name-taken' };
+type PatternChangeResult = { readonly outcome: 'changed'; readonly row: PatternRow } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' } | { readonly outcome: 'name-taken' };
 
 export interface PatternDeletion {
   readonly id: string;
@@ -105,7 +105,7 @@ export const patternNameKey = (name: string): string => [...name.replace(/^ +| +
 /** At most this many tries for the name of a copy that a concurrent rename takes between the choice of the name and the insert. */
 const COPY_NAME_TRIES = 5;
 
-export type PatternDeleteResult = { readonly outcome: 'deleted'; readonly row: PatternRow; readonly deletedAt: string; readonly purgeAfter: string } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' };
+type PatternDeleteResult = { readonly outcome: 'deleted'; readonly row: PatternRow; readonly deletedAt: string; readonly purgeAfter: string } | { readonly outcome: 'not-found' } | { readonly outcome: 'conflict' };
 
 /** What a copy needs: the original, the name of the copy from the original's name, and whether the original may be copied now. Both are decided on the row as it is read under the lock. */
 export interface PatternCopy {
@@ -115,7 +115,7 @@ export interface PatternCopy {
   readonly accept: (original: PatternRow) => boolean;
 }
 
-export type PatternCopyResult =
+type PatternCopyResult =
   | { readonly outcome: 'copied'; readonly row: PatternRow; readonly original: PatternRow }
   | { readonly outcome: 'not-found' }
   | { readonly outcome: 'refused' }
@@ -149,7 +149,7 @@ export interface PatternStore {
   purgeExpiredPatterns(beforeDelete: (purged: PurgedPattern) => Promise<void>): Promise<number>;
 }
 
-export interface PatternRecord {
+interface PatternRecord {
   readonly id: string;
   readonly owner_id: string;
   readonly source_id: string;
@@ -170,9 +170,9 @@ export interface PatternRecord {
   readonly version: number;
 }
 
-export const PATTERN_COLUMNS = `id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id, visibility, last_run_at, created_at, updated_at, version`;
+const PATTERN_COLUMNS = `id, owner_id, source_id, name, kind, preset_id, template_id, template_version, params, definition, ask_for_starting_entity, anchor_entity_type, anchor_stable_id, visibility, last_run_at, created_at, updated_at, version`;
 
-export function patternRowOf(record: PatternRecord): PatternRow {
+function patternRowOf(record: PatternRecord): PatternRow {
   return {
     id: record.id,
     ownerId: record.owner_id,

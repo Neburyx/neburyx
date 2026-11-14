@@ -2,7 +2,7 @@ import { loadTree } from '../architecture/tree.js';
 
 /** The one file that defines a pattern; every other file imports it. */
 export const PATTERN_DEFINITION_FILE = 'packages/contracts/src/pattern.ts';
-export const PATTERN_SCAN_ROOTS: readonly string[] = ['apps', 'packages', 'services', 'tools', 'ee'];
+const PATTERN_SCAN_ROOTS: readonly string[] = ['apps', 'packages', 'services', 'tools', 'ee'];
 
 export interface PatternDefinitionViolation {
   readonly file: string;

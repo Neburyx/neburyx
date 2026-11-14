@@ -8,8 +8,6 @@ export const SCHEMA_TOKENS_ID = 'schema-tokens';
 /** The mapped labels and relationship types that exist on the source: a label or type is listed while a node or relationship carries it. */
 export const schemaTokensItemSchema = z.strictObject({ labels: z.array(z.string()), types: z.array(z.string()) });
 
-export type SchemaTokensItem = z.infer<typeof schemaTokensItemSchema>;
-
 function normalize(rows: readonly Row[]): readonly Item[] {
   const [row] = rows;
   if (rows.length !== 1 || row === undefined) return [{ unreadable: { rows: String(rows.length) } }];

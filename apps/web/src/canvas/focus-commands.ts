@@ -4,7 +4,7 @@ import { FOCUS_LEFT } from '../state/presentation-state.js';
 import { formatNumber } from '../workspace/scope-text.js';
 import { drawnEntityKeys } from './hide-commands.js';
 
-export const focusAnnouncement = (count: number): string => `Focus on ${formatNumber(count)} ${count === 1 ? 'entity' : 'entities'}. Leave focus from the scope line.`;
+const focusAnnouncement = (count: number): string => `Focus on ${formatNumber(count)} ${count === 1 ? 'entity' : 'entities'}. Leave focus from the scope line.`;
 
 /** The one command behind the node menu and F: puts focus on a drawn entity and tells a screen reader how many entities are drawn. Does nothing for an entity that is not drawn. */
 export function enterFocus(state: ClientState, key: string, canvas?: CanvasCommands): void {

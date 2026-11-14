@@ -1,4 +1,4 @@
-export type CheckStatus = 'passed' | 'failed';
+type CheckStatus = 'passed' | 'failed';
 
 export interface ExecRequest {
   readonly command: string;

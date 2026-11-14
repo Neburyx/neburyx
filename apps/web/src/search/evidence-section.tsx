@@ -79,7 +79,7 @@ function AggregateRow({ hit, profile, focus, focusMember }: { readonly hit: Aggr
 
 const storedKey = (hit: StoredEvidenceHit): string => JSON.stringify(['stored', hit.supports.type, hit.supports.from, hit.supports.to, hit.supports.stableId]);
 const aggregateKey = (hit: AggregateEvidenceHit): string => JSON.stringify(['aggregate', hit.aggregate.type, hit.aggregate.from, hit.aggregate.to]);
-export const evidenceKey = (hit: EvidenceHit): string => ('supports' in hit ? storedKey(hit) : aggregateKey(hit));
+const evidenceKey = (hit: EvidenceHit): string => ('supports' in hit ? storedKey(hit) : aggregateKey(hit));
 
 /** One row of the evidence list, and where the focus goes in it when the page that added it is the last one read. */
 export interface EvidenceRow {

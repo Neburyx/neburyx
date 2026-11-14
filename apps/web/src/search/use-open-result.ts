@@ -6,7 +6,7 @@ import { openEntity } from '../investigations/open-flow.js';
 import { EXPLORE_PATH } from '../shell/navigation.js';
 import { useClientState, useSessionMask } from '../state/context.js';
 
-export type OpenRefusal = { readonly kind: 'failure'; readonly failure: ApiFailure };
+type OpenRefusal = { readonly kind: 'failure'; readonly failure: ApiFailure };
 
 export interface OpenResult {
   readonly open: (node: GraphNode) => void;

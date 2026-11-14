@@ -98,7 +98,7 @@ export const listed = (overrides: { readonly id: string; readonly name: string }
 };
 
 /** What the saved-pattern routes were asked, in order, with the method that asked. */
-export interface PatternCall {
+interface PatternCall {
   readonly method: 'listPatterns' | 'savePattern' | 'changePattern' | 'deletePattern' | 'copyPattern' | 'runSavedPattern';
   readonly args: readonly unknown[];
 }

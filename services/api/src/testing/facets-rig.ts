@@ -11,7 +11,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
 import { prepareParameters } from '../sources/parameters.js';
 import { LOCAL_PRINCIPAL } from './gate.js';
-import { envFor, runAll, runAdmin, sourceFor, startNeo4j, type RunningNeo4j } from './neo4j-server.js';
+import { envFor, runAll, runAdmin, sourceFor, startNeo4j } from './neo4j-server.js';
 import { communityAccess } from './source-access.js';
 
 export interface FacetsRigOptions {
@@ -115,4 +115,3 @@ function isPlanNode(value: unknown): value is PlanNode {
 }
 
 export type FacetsRig = Awaited<ReturnType<typeof startFacetsRig>>;
-export type { RunningNeo4j };

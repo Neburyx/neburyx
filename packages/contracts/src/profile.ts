@@ -6,7 +6,7 @@ const name = z.string().min(1);
 const nameList = z.array(name);
 
 /** A property's kind as a client may show it: one of the filter kinds the mapping declares, or `unknown` (never guessed from values or names). */
-export const FILTER_KINDS_OR_UNKNOWN = [...FILTER_KINDS, 'unknown'] as const;
+const FILTER_KINDS_OR_UNKNOWN = [...FILTER_KINDS, 'unknown'] as const;
 const filterKindsSchema = z.record(name, z.enum(FILTER_KINDS_OR_UNKNOWN));
 
 export const BIND_KEYS = ['anchor', 'attribute', 'target', 'via'] as const;

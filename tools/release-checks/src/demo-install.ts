@@ -39,7 +39,7 @@ export interface DemoInstallDeps {
   readonly writeSettings: (content: string) => Promise<{ readonly path: string; readonly remove: () => Promise<void> }>;
 }
 
-export const realDemoInstallDeps: DemoInstallDeps = {
+const realDemoInstallDeps: DemoInstallDeps = {
   freePort: () =>
     new Promise((resolve, reject) => {
       const server = createServer();

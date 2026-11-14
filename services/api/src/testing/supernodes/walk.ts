@@ -13,7 +13,7 @@ export interface WalkedPage {
   readonly hasMore: boolean;
 }
 
-export const keyOf = (edge: GraphEdge): string => JSON.stringify([edge.type, edge.ref]);
+const keyOf = (edge: GraphEdge): string => JSON.stringify([edge.type, edge.ref]);
 
 /** The time a row is ordered by: a stored edge's `observedAt`, an aggregate's latest. */
 export const timeOf = (edge: GraphEdge): string | undefined => edge.observedAt ?? edge.observedLast;

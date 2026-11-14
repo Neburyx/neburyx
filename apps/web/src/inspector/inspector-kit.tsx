@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 import type { DegreePreview, DerivedNeighborsResponse, EdgeDetail, GraphNode, GraphProperty, SourceProfile } from '@neburyx/contracts';
@@ -135,4 +135,3 @@ export const answerEntity = (ask: Ask<GraphNode> | undefined, value: GraphNode) 
 export const failEntity = (ask: Ask<GraphNode> | undefined, code: string, retryable = false) => act(async () => ask?.answer({ ok: false, failure: failure(code, retryable) }));
 export const count = (value: number | undefined, quality: 'exact' | 'lowerBound' | 'estimated' | 'unknown') => (value === undefined ? { quality: 'unknown' as const, scope: 'x' } : { value, quality, scope: 'x' });
 export const spy = () => vi.fn<(selection: readonly string[]) => void | string>();
-export { render };

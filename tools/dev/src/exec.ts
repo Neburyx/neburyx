@@ -6,7 +6,7 @@ const STOP_GRACE_MS = 5000;
 const CANCELLED = 130;
 const NOT_STARTED = 127;
 
-export interface RunResult {
+interface RunResult {
   readonly code: number;
   readonly stdout: string;
   readonly stderr: string;

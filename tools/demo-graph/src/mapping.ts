@@ -49,7 +49,7 @@ export interface MappedEntity {
   readonly properties: ReadonlySet<string>;
 }
 
-export interface DerivedRule {
+interface DerivedRule {
   readonly id: string;
   readonly from: string;
   readonly to: string;
@@ -57,7 +57,7 @@ export interface DerivedRule {
   readonly stopListProperty: string | undefined;
 }
 
-export interface MappedRelationship {
+interface MappedRelationship {
   readonly type: string;
   readonly from: string;
   readonly to: string;

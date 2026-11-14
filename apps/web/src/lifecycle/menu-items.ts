@@ -1,7 +1,7 @@
 import type { InvestigationStatus } from '../state/investigation-state.js';
 import { ARCHIVE, CLOSE, DELETE, RENAME, RENAME_DISABLED, RENAME_DISABLED_SOURCE, REOPEN } from './copy.js';
 
-export type LifecycleActionId = 'rename' | 'reopen' | 'close' | 'archive' | 'delete';
+type LifecycleActionId = 'rename' | 'reopen' | 'close' | 'archive' | 'delete';
 
 export interface LifecycleAction {
   readonly id: LifecycleActionId;

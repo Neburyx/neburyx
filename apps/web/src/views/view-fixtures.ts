@@ -68,7 +68,7 @@ export function rig(options: { readonly saveView?: (call: SaveViewCall) => ApiRe
   return { state, client, saves, drafts };
 }
 
-export const DRAFT_UPDATED_AT = '2026-11-10T09:42:00.000Z';
+const DRAFT_UPDATED_AT = '2026-11-10T09:42:00.000Z';
 
 export function namedView(n: number, overrides: Partial<NamedView> = {}): NamedView {
   return { id: `0192f000-0000-7000-8000-${String(n).padStart(12, '0')}`, name: `View ${n}`, notes: null, savedBy: { name: 'Maya Chen' }, createdAt: `2026-10-30T09:${String(n).padStart(2, '0')}:00.000Z`, version: 1, ...overrides };

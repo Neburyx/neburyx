@@ -117,7 +117,7 @@ export interface BudgetsModel {
   readonly requestsPerMinute: number;
 }
 
-export interface DemoCaseModel {
+interface DemoCaseModel {
   readonly entityType: string;
   readonly stableId: string;
   readonly caseRef: string;

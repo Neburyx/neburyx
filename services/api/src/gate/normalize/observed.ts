@@ -11,7 +11,7 @@ const ZONED = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2
 const LOCAL = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?)?$/;
 
 /** The moment a plain value stands for, or nothing when it is not a date, a dateTime or a localDateTime, or its text is not one the product can read. */
-export function momentOf(value: unknown): Moment | undefined {
+function momentOf(value: unknown): Moment | undefined {
   if (!isObject(value) || typeof value['value'] !== 'string') return undefined;
   const text = value['value'];
   if (value['$type'] === 'dateTime') {

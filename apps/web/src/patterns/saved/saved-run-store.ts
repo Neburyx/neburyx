@@ -6,7 +6,7 @@ import type { DefinitionAsk, RunRequestMaker } from '../run/definition-run-store
 
 /** What one press of Run on a saved pattern sends: the pattern, the entity it starts from when it holds none, and whether it continues a run that stopped as heavy. */
 /** Whether the saved pattern is a built-in run, whose answer is a template answer: the kind the person pressed Run on says which to expect. */
-export type SavedKind = 'definition' | 'preset-run';
+type SavedKind = 'definition' | 'preset-run';
 
 export interface SavedAsk {
   readonly id: string;
@@ -16,7 +16,7 @@ export interface SavedAsk {
 }
 
 /** The answer of a saved run, as the kind of the pattern says: the answer of a built pattern or of a built-in run. */
-export type SavedResult = { readonly kind: 'pattern'; readonly answer: PatternRunOk } | { readonly kind: 'template'; readonly answer: TemplateRunOk };
+type SavedResult = { readonly kind: 'pattern'; readonly answer: PatternRunOk } | { readonly kind: 'template'; readonly answer: TemplateRunOk };
 export type SavedHeavy = { readonly kind: 'pattern'; readonly answer: PatternRunHeavy } | { readonly kind: 'template'; readonly answer: TemplateRunHeavy };
 
 export interface SavedRunView {

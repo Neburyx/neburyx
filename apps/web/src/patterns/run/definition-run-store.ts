@@ -15,12 +15,12 @@ export interface DefinitionAsk {
 }
 
 /** A page the client kept, with the moment its answer arrived. */
-export interface KeptPage {
+interface KeptPage {
   readonly answer: PatternRunOk;
   readonly at: Date;
 }
 
-export interface DefinitionRunView {
+interface DefinitionRunView {
   readonly running: boolean;
   /** The page on screen, with the ask of the run that made its first page: it is shown only while the definition and the entity of the run are those of the ask. */
   readonly result: { readonly ask: DefinitionAsk; readonly answer: PatternRunOk } | undefined;

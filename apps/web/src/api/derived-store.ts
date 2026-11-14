@@ -7,7 +7,7 @@ import type { ApiClient } from './client.js';
 import { mergeIntoLoaded } from './merge-into-loaded.js';
 import { createRequestStore, type RequestStore } from './request-store.js';
 
-export interface ShownOutcome {
+interface ShownOutcome {
   /** The nodes and the edges that the view did not hold and now does. */
   readonly nodes: number;
   readonly edges: number;

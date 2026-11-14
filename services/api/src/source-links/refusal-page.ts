@@ -7,7 +7,7 @@ const styleHash = createHash('sha256').update(STYLE).digest('base64');
 /** No script, no outside load, no framing, and only the one inline style this page holds. */
 export const REFUSAL_PAGE_CSP = `default-src 'none'; style-src 'sha256-${styleHash}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
 
-export const REFUSAL_TEXT = "This source record can't be opened from Neburyx.";
+const REFUSAL_TEXT = "This source record can't be opened from Neburyx.";
 
 const escaped = (text: string): string => text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 

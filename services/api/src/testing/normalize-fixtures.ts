@@ -5,7 +5,7 @@ import type { GateContext } from '../gate/types.js';
 import { EMPTY_ALLOWLIST, LOCAL_PRINCIPAL } from './gate.js';
 
 /** A source with two entity types and one relationship, and the context a template is normalized with, for the rules that need records the packs do not hold. */
-export const source = mappingOf(
+const source = mappingOf(
   sourceWith('alpha', {
     entities: [
       { type: 'gadget', label: 'Gadget', stable_id: 'gadgetId', title: 'Gadget {title}', search: ['title'], filterable: ['kind'], display: { key_properties: ['kind', 'madeOn'] } },

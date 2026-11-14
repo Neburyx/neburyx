@@ -9,7 +9,7 @@ export interface NotRetrieved {
   readonly uncounted: number;
 }
 
-export interface CoverageInput {
+interface CoverageInput {
   /** Absent when nothing is loaded. */
   readonly sourceId: string | undefined;
   readonly mask: boolean;

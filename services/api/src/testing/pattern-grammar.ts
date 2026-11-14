@@ -25,13 +25,13 @@ function kindsOf(allowlist: SourceAllowlist): ReadonlyMap<string, string> {
   return new Map([...found].map(([name, set]) => [name, [...set].sort().join('+')]));
 }
 
-export interface Abstract {
+interface Abstract {
   readonly text: string;
   /** The names the statement quotes that the allowlist does not hold. */
   readonly unmapped: readonly string[];
 }
 
-export function abstractOf(statement: string, allowlist: SourceAllowlist): Abstract {
+function abstractOf(statement: string, allowlist: SourceAllowlist): Abstract {
   const kinds = kindsOf(allowlist);
   const unmapped: string[] = [];
   const text = statement
@@ -51,7 +51,7 @@ const TOKEN = /\$steps\[\d+\](?:\.[A-Za-z]+(?:\[(?:\d+|#)\])?)*|⟦[A-Z+?]+⟧|\
 const ENDS = '⊣';
 const START = '⊢';
 
-export const tokensOf = (text: string): string[] => text.match(TOKEN) ?? [];
+const tokensOf = (text: string): string[] => text.match(TOKEN) ?? [];
 
 function windowsOf(tokens: readonly string[], k: number): string[] {
   const padded = [...Array.from({ length: k - 1 }, () => START), ...tokens, ENDS];

@@ -7,12 +7,12 @@ import { announcement, canvasOf, menuOf, openSample, screenOf } from './workspac
  * evidence panel alone. A case is written in what a person sees and does (roles, names, keys), never in how the page is built, and it runs in an *environment* that says how to reach each kind of
  * relationship. This repository runs them in three environments (the development sample, the sample with record links, and a stubbed API); a later end-to-end test imports `TRUST_CASES` and brings an environment over a real demo graph.
  */
-export type RelationshipKind = 'stored-with-evidence' | 'stored-without-evidence' | 'derived' | 'aggregate';
+type RelationshipKind = 'stored-with-evidence' | 'stored-without-evidence' | 'derived' | 'aggregate';
 
 /** How a person reaches the evidence of a relationship. */
-export type Way = 'menu-by-pointer' | 'menu-by-keyboard' | 'inspector-row';
+type Way = 'menu-by-pointer' | 'menu-by-keyboard' | 'inspector-row';
 
-export interface Reach {
+interface Reach {
   readonly kind: RelationshipKind;
   readonly way: Way;
   /** Does what a person does to ask for the evidence of the relationship, up to the panel being asked for (not yet awaited). */
@@ -35,13 +35,13 @@ export interface TrustEnvironment {
   readonly reaches: readonly Reach[];
 }
 
-export const inspectorOf = (page: Page): Locator => page.getByRole('complementary', { name: 'Inspector' });
+const inspectorOf = (page: Page): Locator => page.getByRole('complementary', { name: 'Inspector' });
 export const evidenceOf = (page: Page): Locator => page.getByRole('complementary', { name: 'Relationship evidence' });
 
 /** What no screen of the epic may show: an element ID of the source's database, or an address of a source record. */
-export const NEVER_SHOWN: readonly RegExp[] = [/\b\d+:[0-9a-f-]{8,}:\d+\b/, /https?:\/\//];
+const NEVER_SHOWN: readonly RegExp[] = [/\b\d+:[0-9a-f-]{8,}:\d+\b/, /https?:\/\//];
 /** The graph word a person must not read where the product means a relationship. */
-export const GRAPH_WORD = /\bedges?\b/i;
+const GRAPH_WORD = /\bedges?\b/i;
 
 export interface TrustCase {
   readonly id: string;
@@ -148,7 +148,7 @@ export const sampleEnvironment: TrustEnvironment = {
 };
 
 /** A stubbed API with a rule-derived relationship of two groups of supports, one of them without retained records. */
-export const derivedEnvironment: TrustEnvironment = {
+const derivedEnvironment: TrustEnvironment = {
   name: 'derived',
   openEntity: openWithDerived,
   reaches: [
@@ -179,7 +179,7 @@ export const derivedEnvironment: TrustEnvironment = {
 };
 
 /** The development sample with source record links on: the HAS_LINE relationship has a record that can be opened. */
-export const linkedSampleEnvironment: TrustEnvironment = {
+const linkedSampleEnvironment: TrustEnvironment = {
   name: 'sample with record links',
   openEntity: async (page) => {
     await openSample(page, '?evidence=on&links=on');

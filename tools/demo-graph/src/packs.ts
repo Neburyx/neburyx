@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const PACKS_FOLDER = join(repositoryRoot, 'domain-packs');
 
 const PACK_NAME = /^[a-z0-9][a-z0-9-]*$/;

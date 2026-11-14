@@ -13,7 +13,7 @@ export function lengthOf(text: string): TextLength {
   return characters > MAX_SEARCH_TEXT_LENGTH ? 'long' : 'ok';
 }
 
-export interface TypeaheadAnswer {
+interface TypeaheadAnswer {
   /** The text the answer is for, which is not the typed text while a newer search waits or runs. */
   readonly text: string;
   readonly result: SearchResult;

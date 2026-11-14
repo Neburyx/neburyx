@@ -72,7 +72,7 @@ export interface DraftWrite {
 export type DraftWriteResult = { readonly outcome: 'saved' | 'unchanged'; readonly version: number; readonly save: InvestigationSave } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' } | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus };
 
 /** What a title change or a status change asks of the investigation of `investigationId`. */
-export interface InvestigationChange {
+interface InvestigationChange {
   readonly investigationId: string;
   readonly ownerId: string;
   readonly expectedVersion: number;
@@ -151,7 +151,7 @@ export interface ListPosition {
 }
 
 /** Where a page of the deleted list starts: after the row deleted at `editedKey` (microsecond text) with this `id`. */
-export interface DeletedListQuery {
+interface DeletedListQuery {
   readonly ownerId: string;
   readonly sourceIds: readonly string[];
   readonly sourceId: string | undefined;
@@ -160,16 +160,16 @@ export interface DeletedListQuery {
   readonly after: ListPosition | undefined;
 }
 
-export type DeletedMatchQuery = Omit<DeletedListQuery, 'limit' | 'after'>;
+type DeletedMatchQuery = Omit<DeletedListQuery, 'limit' | 'after'>;
 
-export interface ListFilters {
+interface ListFilters {
   readonly status: 'open' | 'closed' | 'archived';
   readonly sourceId: string | undefined;
   /** A fragment of the title or the case reference. */
   readonly text: string | undefined;
 }
 
-export interface ListQuery extends ListFilters {
+interface ListQuery extends ListFilters {
   readonly ownerId: string;
   readonly sourceIds: readonly string[];
   readonly limit: number;
@@ -178,17 +178,17 @@ export interface ListQuery extends ListFilters {
 
 export type MatchQuery = Omit<ListQuery, 'limit' | 'after'>;
 
-export interface CountQuery {
+interface CountQuery {
   readonly ownerId: string;
   readonly sourceIds: readonly string[];
 }
 
-export interface InvestigationCounts {
+interface InvestigationCounts {
   readonly investigations: number;
   readonly sources: number;
 }
 
-export interface NamedViewCounts {
+interface NamedViewCounts {
   readonly views: number;
   readonly lastEditedAt: string | null;
 }
@@ -534,7 +534,7 @@ interface ListedRecord extends InvestigationRecord {
   readonly saved_at: Date | null;
 }
 
-export async function listInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
+async function listInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
   const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND deleted_at IS NULL`, [ownerId]);
   return result.rows.map((record) => record.source_id);
 }
@@ -546,13 +546,13 @@ const FILTER_WHERE = `i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.st
      AND ($5::text IS NULL OR i.title ILIKE $5 OR i.case_ref ILIKE $5)`;
 
 /** The text becomes an ILIKE pattern that matches it as a fragment, with `\`, `%` and `_` standing for themselves. */
-export function containsPattern(text: string | undefined): string | null {
+function containsPattern(text: string | undefined): string | null {
   return text === undefined ? null : `%${text.replace(/[\\%_]/g, '\\$&')}%`;
 }
 
 const filterParameters = (query: MatchQuery) => [query.ownerId, [...query.sourceIds], query.status, query.sourceId ?? null, containsPattern(query.text)];
 
-export async function listInvestigations(db: pg.Pool | pg.PoolClient, query: ListQuery): Promise<ListedInvestigation[]> {
+async function listInvestigations(db: pg.Pool | pg.PoolClient, query: ListQuery): Promise<ListedInvestigation[]> {
   const after = query.after;
   const result = await db.query<ListedRecord>(
     `SELECT ${QUALIFIED_COLUMNS}, s.alias AS source_alias, ${EDITED_KEY} AS last_edited_key,
@@ -579,12 +579,12 @@ export async function listInvestigations(db: pg.Pool | pg.PoolClient, query: Lis
   }));
 }
 
-export async function countMatching(db: pg.Pool | pg.PoolClient, query: MatchQuery): Promise<number> {
+async function countMatching(db: pg.Pool | pg.PoolClient, query: MatchQuery): Promise<number> {
   const result = await db.query<{ total: number }>(`SELECT count(*)::int AS total FROM investigations i WHERE ${FILTER_WHERE}`, filterParameters(query));
   return result.rows[0]?.total ?? 0;
 }
 
-export async function countInvestigations(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<InvestigationCounts> {
+async function countInvestigations(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<InvestigationCounts> {
   const result = await db.query<{ investigations: number; sources: number }>(
     `SELECT count(*)::int AS investigations, count(DISTINCT source_id)::int AS sources
      FROM investigations
@@ -596,7 +596,7 @@ export async function countInvestigations(db: pg.Pool | pg.PoolClient, query: Co
   return { investigations: row.investigations, sources: row.sources };
 }
 
-export async function countNamedViews(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<NamedViewCounts> {
+async function countNamedViews(db: pg.Pool | pg.PoolClient, query: CountQuery): Promise<NamedViewCounts> {
   const result = await db.query<{ views: number; last_edited_at: Date | null }>(
     `SELECT count(*)::int AS views, max(v.updated_at) AS last_edited_at
      FROM saved_views v
@@ -609,7 +609,7 @@ export async function countNamedViews(db: pg.Pool | pg.PoolClient, query: CountQ
   return { views: row.views, lastEditedAt: row.last_edited_at === null ? null : row.last_edited_at.toISOString() };
 }
 
-export async function listDeletedInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
+async function listDeletedInvestigationSourceIds(db: pg.Pool | pg.PoolClient, ownerId: string): Promise<string[]> {
   const result = await db.query<{ source_id: string }>(`SELECT DISTINCT source_id FROM investigations WHERE owner_id = $1 AND deleted_at IS NOT NULL AND purge_after > now()`, [ownerId]);
   return result.rows.map((record) => record.source_id);
 }
@@ -622,7 +622,7 @@ const DELETED_WHERE = `i.owner_id = $1 AND i.source_id = ANY($2::text[]) AND i.d
 
 const deletedParameters = (query: DeletedMatchQuery) => [query.ownerId, [...query.sourceIds], query.sourceId ?? null, containsPattern(query.text)];
 
-export async function listDeletedInvestigations(db: pg.Pool | pg.PoolClient, query: DeletedListQuery): Promise<ListedInvestigation[]> {
+async function listDeletedInvestigations(db: pg.Pool | pg.PoolClient, query: DeletedListQuery): Promise<ListedInvestigation[]> {
   const after = query.after;
   const result = await db.query<ListedRecord & { deleted_at: Date; purge_after: Date }>(
     `SELECT ${QUALIFIED_COLUMNS}, i.deleted_at, i.purge_after, s.alias AS source_alias, ${DELETED_KEY} AS last_edited_key,
@@ -650,7 +650,7 @@ export async function listDeletedInvestigations(db: pg.Pool | pg.PoolClient, que
   }));
 }
 
-export async function countDeletedMatching(db: pg.Pool | pg.PoolClient, query: DeletedMatchQuery): Promise<number> {
+async function countDeletedMatching(db: pg.Pool | pg.PoolClient, query: DeletedMatchQuery): Promise<number> {
   const result = await db.query<{ total: number }>(`SELECT count(*)::int AS total FROM investigations i WHERE ${DELETED_WHERE}`, deletedParameters(query));
   return result.rows[0]?.total ?? 0;
 }

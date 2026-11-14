@@ -3,10 +3,10 @@ export const PAGE = 25;
 /** The largest page the gate allows by default (`max_page`). */
 export const MAX_PAGE = 50;
 /** What an edge may add to the serialized size of a page. */
-export const BYTES_PER_EDGE = 4_000;
+const BYTES_PER_EDGE = 4_000;
 export const PAGE_BYTES = PAGE * BYTES_PER_EDGE;
 /** The answer to a degree preview holds counts and type names, never neighbors. */
-export const PREVIEW_BYTES = 16_000;
+const PREVIEW_BYTES = 16_000;
 
 export interface PageShape {
   readonly edges: readonly unknown[];

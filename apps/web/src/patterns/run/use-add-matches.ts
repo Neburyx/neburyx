@@ -9,7 +9,7 @@ import { useExpandStoreWhenProvided } from '../../workspace/expand-context.js';
 import { addResultToGraph, type AddedOutcome } from '../add-to-graph.js';
 
 /** The entities and relationships of one match, or of a whole page: what an add merges. */
-export interface Addable {
+interface Addable {
   readonly nodes: readonly GraphNode[];
   readonly edges: readonly GraphEdge[];
 }

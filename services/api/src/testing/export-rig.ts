@@ -28,15 +28,15 @@ const ENTITIES = [
 ];
 const RELATIONSHIPS = [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId' }];
 
-export const exportMapping = (extra: { readonly userConcurrency?: number; readonly requestsPerMinute?: number; readonly retention?: { readonly exports_days: number } } = {}) => {
+const exportMapping = (extra: { readonly userConcurrency?: number; readonly requestsPerMinute?: number; readonly retention?: { readonly exports_days: number } } = {}) => {
   const source = baseSource({ id: 'demo', entities: ENTITIES, relationships: RELATIONSHIPS, ...(extra.userConcurrency === undefined && extra.requestsPerMinute === undefined ? {} : { budgets: { ...(extra.userConcurrency === undefined ? {} : { user_concurrency: extra.userConcurrency }), ...(extra.requestsPerMinute === undefined ? {} : { requests_per_minute: extra.requestsPerMinute }) } }) });
   const text = extra.retention === undefined ? fileOf(source) : stringify({ sources: [source], retention: extra.retention }, { aliasDuplicateObjects: false, blockQuote: false });
   return parseMapping(text, 'neburyx.yaml');
 };
 
-export const widget = (id: string, name = 'Ana Silva') => plainNode(['Widget'], { widgetId: id, ownerName: name }, `4:s:${id}`);
-export const gadget = (id = 'GT-1') => plainNode(['Gadget'], { gadgetId: id }, `4:s:${id}`);
-export const link = (id: string, from = 'W-1') => ({ r: plainRelationship('MADE_FROM', widget(from), gadget(), { linkId: id }, `5:s:${id}`), a: widget(from), b: gadget() });
+const widget = (id: string, name = 'Ana Silva') => plainNode(['Widget'], { widgetId: id, ownerName: name }, `4:s:${id}`);
+const gadget = (id = 'GT-1') => plainNode(['Gadget'], { gadgetId: id }, `4:s:${id}`);
+const link = (id: string, from = 'W-1') => ({ r: plainRelationship('MADE_FROM', widget(from), gadget(), { linkId: id }, `5:s:${id}`), a: widget(from), b: gadget() });
 export const el = (entityType: string, stableId: string) => ({ sourceId: 'demo', entityType, stableId });
 export const linkRef = (id: string) => ({ sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: id });
 

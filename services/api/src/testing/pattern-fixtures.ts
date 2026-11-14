@@ -34,7 +34,7 @@ export const patternParams = (steps: readonly Record<string, unknown>[] = [step(
 export const parsedPatternParams = (steps: readonly Record<string, unknown>[] = [step()], over: Record<string, unknown> = {}) => patternParamsSchema.parse(patternParams(steps, over));
 
 export const plainMaker = (id: string) => plainNode(['Maker'], { makerId: id });
-export const plainTool = (id: string) => plainNode(['Tool'], { toolId: id });
+const plainTool = (id: string) => plainNode(['Tool'], { toolId: id });
 const ID_PROPERTY: Record<string, string | undefined> = { LINKS: 'linkId', USES_TOOL: 'useId', ENDORSES: 'endorseId' };
 export const plainRel = (type: string, from: { elementId: string }, to: { elementId: string }, id: string) => plainRelationship(type, from, to, ID_PROPERTY[type] === undefined ? {} : { [ID_PROPERTY[type] ?? '']: id });
 

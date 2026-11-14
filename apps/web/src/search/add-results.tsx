@@ -50,7 +50,7 @@ function HitRow({ node, type, onCanvas, adding, failure, focus, matchLine, onAdd
   );
 }
 
-export interface Environment {
+interface Environment {
   readonly sourceId: string;
   readonly profile: SourceProfile | undefined;
   readonly loaded: ReadonlySet<string>;

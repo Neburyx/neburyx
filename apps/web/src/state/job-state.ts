@@ -1,6 +1,6 @@
 import { createStore, readable, type ReadableStore } from './store.js';
 
-export interface JobOperation {
+interface JobOperation {
   readonly id: string;
   readonly phase: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
   readonly cancelRequested: boolean;

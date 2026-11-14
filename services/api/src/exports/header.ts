@@ -10,7 +10,7 @@ export interface HeaderFacts {
   readonly omitted: boolean;
 }
 
-export function maskingLine(maskedFields: number): string {
+function maskingLine(maskedFields: number): string {
   return maskedFields === 0 ? 'masking: off' : `masking: ${maskedFields} critical fields masked`;
 }
 

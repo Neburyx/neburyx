@@ -1,11 +1,11 @@
 import { createContext, useContext } from 'react';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 
-export const AI_ACTION_NAMES = ['ask', 'summarize'] as const;
+const AI_ACTION_NAMES = ['ask', 'summarize'] as const;
 
 export type AiActionName = (typeof AI_ACTION_NAMES)[number];
 
-export type AiActionHandler = () => void;
+type AiActionHandler = () => void;
 
 export class AiActionError extends Error {
   readonly code = 'AI_ACTION_TAKEN';
@@ -16,7 +16,7 @@ export class AiActionError extends Error {
   }
 }
 
-export type AiActionHandlers = ReadonlyMap<AiActionName, AiActionHandler>;
+type AiActionHandlers = ReadonlyMap<AiActionName, AiActionHandler>;
 
 export interface AiActions {
   readonly view: ReadableStore<AiActionHandlers>;

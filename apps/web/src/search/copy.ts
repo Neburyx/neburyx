@@ -27,7 +27,7 @@ export const SEARCH_COPY = {
 
 export const captionOf = (source: string): string => `Searches only configured, indexed properties in ${source}.`;
 export const unknownSourceText = (sourceId: string): string => `The source “${sourceId}” is not configured.`;
-export const REFERENCED_ID = 'Referenced ID';
+const REFERENCED_ID = 'Referenced ID';
 export const referencesLine = (text: string, properties: readonly string[]): string => (properties.length === 0 ? REFERENCED_ID : `References ${text} in ${properties.join(', ')}`);
 /** The line of an exact hit: the `search` properties that hold the typed text; none when the server could not name one. */
 export const matchesLine = (text: string, properties: readonly string[] | undefined): string | undefined => (properties === undefined || properties.length === 0 ? undefined : `Matches ${text} in ${properties.join(', ')}`);
@@ -48,7 +48,7 @@ export const NO_SEARCH_PROPERTIES = 'No property of this source is configured fo
 export const NO_RELATED_PROPERTIES = 'No property of this source is configured for related records.';
 export const NO_EVIDENCE_PROPERTIES = 'No relationship of this source is configured for evidence records.';
 /** What a record whose value is neither text nor a number says, with the property that holds it: never an empty value. */
-export const UNREADABLE_VALUE = 'Value cannot be shown';
+const UNREADABLE_VALUE = 'Value cannot be shown';
 export const evidenceRecordText = (record: EvidenceRecord): string => ('unreadable' in record ? `${record.property}: ${UNREADABLE_VALUE}` : record.sourceRecordId);
 export const evidenceRecordsText = (records: readonly EvidenceRecord[]): string => `${records.length} ${records.length === 1 ? 'record' : 'records'}: ${records.map(evidenceRecordText).join(', ')}`;
 /** What an aggregate's members are: relationships with no stable ID, each told by its records and its time, and never by an ID. */
@@ -147,7 +147,7 @@ export const hiddenBySelection = (group: 'exact' | 'related' | 'evidence'): stri
 export const GRAPH_UNCHANGED = 'Your graph was not changed.';
 
 /** The seconds a source allows a read, without a trailing zero: 5000 ms is "5", 2500 ms is "2.5". */
-export const secondsOf = (milliseconds: number): string => String(Number((milliseconds / 1000).toFixed(2)));
+const secondsOf = (milliseconds: number): string => String(Number((milliseconds / 1000).toFixed(2)));
 
 export const timedOutText = (timeoutMs: number | undefined): string => (timeoutMs === undefined ? 'Search timed out' : `Search timed out after ${secondsOf(timeoutMs)} s`);
 

@@ -19,7 +19,7 @@ import { definitionStartType } from './saved-model.js';
 import type { SavedAsk, SavedHeavy, SavedRunStore, SavedRunView } from './saved-run-store.js';
 
 /** The type of entity a saved pattern starts from: its definition's start type, or the type its built-in pattern is bound to. */
-export function startTypeOf(item: ListedPattern, presets: TemplateListResponse['presets'] | undefined): string | undefined {
+function startTypeOf(item: ListedPattern, presets: TemplateListResponse['presets'] | undefined): string | undefined {
   return item.kind === 'definition' ? definitionStartType(item.definition) : presets?.find((preset) => preset.id === item.presetId)?.bind.anchor;
 }
 

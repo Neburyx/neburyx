@@ -24,7 +24,7 @@ export const EMPTY_DRAFT: Draft = { steps: [] };
 
 type Row = SourceProfile['relationshipTypes'][number];
 
-export const joins = (row: Row, from: string, to: string, direction: Direction): boolean => {
+const joins = (row: Row, from: string, to: string, direction: Direction): boolean => {
   const forward = row.from === from && row.to === to;
   const backward = row.to === from && row.from === to;
   return direction === 'out' ? forward : direction === 'in' ? backward : forward || backward;
@@ -72,7 +72,7 @@ export function typeOptions(profile: SourceProfile, from: string, direction: Dir
 }
 
 /** Whether any relationship type of the mapping touches a node type, in any direction. */
-export const hasAnyRelationship = (profile: SourceProfile, type: string): boolean => profile.relationshipTypes.some((row) => row.from === type || row.to === type);
+const hasAnyRelationship = (profile: SourceProfile, type: string): boolean => profile.relationshipTypes.some((row) => row.from === type || row.to === type);
 
 export const hasConditions = (step: StepDraft): boolean => rowsOf(step).length > 0;
 
@@ -82,7 +82,7 @@ export const isComplete = (step: StepDraft): boolean => step.direction !== undef
 export const previousTypeOf = (draft: Draft, index: number): string | undefined => (index === 0 ? draft.anchorType : draft.steps[index - 1]?.arrivesAt);
 
 /** The node type the pattern has reached so far. */
-export const lastTypeOf = (draft: Draft): string | undefined => (draft.steps.length === 0 ? draft.anchorType : draft.steps[draft.steps.length - 1]?.arrivesAt);
+const lastTypeOf = (draft: Draft): string | undefined => (draft.steps.length === 0 ? draft.anchorType : draft.steps[draft.steps.length - 1]?.arrivesAt);
 
 export type Action =
   | { readonly type: 'start'; readonly anchorType: string | undefined }

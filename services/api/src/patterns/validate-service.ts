@@ -5,7 +5,7 @@ import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { validatePattern } from './validate.js';
 
-export const PATTERN_VALIDATE_AUDIT_ACTION = 'pattern.validate';
+const PATTERN_VALIDATE_AUDIT_ACTION = 'pattern.validate';
 
 export interface PatternValidateCall {
   readonly traceId: string;

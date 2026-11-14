@@ -14,7 +14,7 @@ import type { MappingModel, SourceModel } from '../mapping/model.js';
 import type { AuditSink, Principal } from '../seams/seams.js';
 
 /** The audit action of a read by references; the reads inside it are audited by the gate under their own template's action. */
-export const READ_REFS_AUDIT_ACTION = 'graph.read_refs';
+const READ_REFS_AUDIT_ACTION = 'graph.read_refs';
 
 export interface ReadRefsCall {
   readonly traceId: string;

@@ -5,12 +5,12 @@ import { isPlainRelationship, type PlainRelationship, type RelationshipEvidence 
 import { normalizeRows, normalizeWithEvidence, type Normalized, type NormalizedEvidence, type NormalizeContext } from './index.js';
 import { isPlainNode, normalizeNode, type PlainNode } from './node.js';
 
-export interface PlainPath {
+interface PlainPath {
   readonly start: PlainNode;
   readonly segments: readonly { readonly relationship: PlainRelationship; readonly end: PlainNode }[];
 }
 
-export function pathOf(row: Readonly<Record<string, unknown>>): PlainPath | undefined {
+function pathOf(row: Readonly<Record<string, unknown>>): PlainPath | undefined {
   const value = row['p'];
   if (typeof value !== 'object' || value === null || !('start' in value) || !('segments' in value) || !Array.isArray(value.segments)) return undefined;
   if (!isPlainNode(value.start)) return undefined;
@@ -32,7 +32,7 @@ function joins(edge: GraphEdge, one: ElementRef, other: ElementRef): boolean {
 }
 
 /** The entity type of each node of a path, in order, from the rule: its `from`, the middle entity types of the chain, and its `to`. */
-export function typesOf(via: readonly string[], from: string, to: string): readonly string[] {
+function typesOf(via: readonly string[], from: string, to: string): readonly string[] {
   return [from, ...via.filter((_entry, index) => index % 2 === 1), to];
 }
 
@@ -40,7 +40,7 @@ export function typesOf(via: readonly string[], from: string, to: string): reado
  * The claim of one path: the rule, the two ends and the supporting edges in chain order, each found among the edges that this one path normalizes to (so a stored support is the relationship the path followed,
  * and an aggregate is the one of its type and ends). A path with a node or a relationship the normalizer left out has no claim.
  */
-export function claimOf(context: NormalizeContext, ruleId: string, types: readonly string[], path: PlainPath, edges: readonly GraphEdge[]): DerivedClaim | undefined {
+function claimOf(context: NormalizeContext, ruleId: string, types: readonly string[], path: PlainPath, edges: readonly GraphEdge[]): DerivedClaim | undefined {
   const nodes = [path.start, ...path.segments.map((segment) => segment.end)];
   const refs: ElementRef[] = [];
   for (const [index, plain] of nodes.entries()) {
@@ -61,7 +61,7 @@ export function claimOf(context: NormalizeContext, ruleId: string, types: readon
   return from === undefined || to === undefined ? undefined : { ruleId, from, to, supports };
 }
 
-export function expectedOf(paths: readonly PlainPath[], types: readonly string[]): ReadonlyMap<string, readonly string[]> {
+function expectedOf(paths: readonly PlainPath[], types: readonly string[]): ReadonlyMap<string, readonly string[]> {
   const expected = new Map<string, readonly string[]>();
   for (const path of paths) {
     const nodes = [path.start, ...path.segments.map((segment) => segment.end)];
@@ -102,7 +102,7 @@ export function normalizeDerivedRun(context: NormalizeContext, rows: readonly Re
 }
 
 /** One chain of the supports of a derived edge: the middle entities in the order of the chain and the supporting edges. */
-export interface SupportChain {
+interface SupportChain {
   readonly middle: readonly ElementRef[];
   readonly supports: readonly EdgeRef[];
 }

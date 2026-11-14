@@ -10,7 +10,7 @@ import { EVIDENCE_PANEL_TITLE } from './copy.js';
 import type { Evidence } from './evidence.js';
 import { EvidencePanelView } from './evidence-panel.js';
 
-export const EVIDENCE_PANEL_ID = 'evidence';
+const EVIDENCE_PANEL_ID = 'evidence';
 
 const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);
 

@@ -10,9 +10,9 @@ import type { ReferenceKeys } from '../reference/keys.js';
 import { readToken } from '../reference/token.js';
 import type { AuditEvent, AuditResult, AuditSink, Principal } from '../seams/seams.js';
 
-export const SOURCE_LINK_AUDIT_ACTION = 'source.link';
+const SOURCE_LINK_AUDIT_ACTION = 'source.link';
 
-export interface SourceLinkRequest {
+interface SourceLinkRequest {
   readonly traceId: string;
   readonly principal: Principal;
   readonly link: SourceLinkRef;
