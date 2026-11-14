@@ -42,6 +42,7 @@ export { ASK_RUN_ACTION, ASK_RUN_URL, askRunRoute, createAskRunRoute } from './r
 export { paramsHashOf } from './plans/params-hash.js';
 export { summarizeRun } from './plans/run-summary.js';
 export type { RunSummary } from './plans/run-summary.js';
+export { citedKeysExist, listedElements } from './summary/index.js';
 export { ASK_EDIT_URL, EDITED_RATIONALE, askEditRoute, createAskEditRoute } from './routes/ask-edit.js';
 export { ASK_CANCEL_URL, askCancelRoute, createAskCancelRoute } from './routes/ask-cancel.js';
 export { refusalOfPlan } from './plans/refusals.js';

@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { askPlanSchema, askRunResponseSchema, type AskPlan, type AskPlanner, type AskSummary } from '@neburyx/contracts';
-import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { citedKeysExist, createEnterpriseExtension, listedElements } from '@neburyx/ee-ask';
 import { forwardTo, type Forwarder } from '@neburyx/test-neo4j';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import neo4j from 'neo4j-driver';
 import { parse } from 'yaml';
 import { buildApp } from '../app.js';
 import { createSourceGate, type SourceGate } from '../gate/source-gate.js';
@@ -85,9 +86,9 @@ afterAll(async () => {
 });
 
 /** The one JSON object of a recorded reply, which may have a sentence before it or a fence around it. */
-function planOf(wording: string): AskPlan {
+function planOf(id: string, wording: string): AskPlan {
   const entry = replay[wording];
-  if (entry === undefined) throw new Error(`the replay has no entry for the question ${wording.length} characters long`);
+  if (entry === undefined) throw new Error(`the replay has no entry for the question ${id}`);
   for (const text of [entry.repair, entry.plan]) {
     if (text === undefined) continue;
     const start = text.indexOf('{');
@@ -100,7 +101,7 @@ function planOf(wording: string): AskPlan {
       // try the other reply
     }
   }
-  throw new Error('the replay holds no plan for the question');
+  throw new Error(`the replay holds no plan for the question ${id}`);
 }
 
 /** The stable ID of the n-th entity of a type in the demo graph, so that a placeholder stands for a record that exists. */
@@ -111,7 +112,7 @@ async function entityOf(pack: string, entityType: string, n: number): Promise<{ 
   if (server === undefined || entity === undefined) throw new Error(`no entity type ${entityType} in the ${pack} pack`);
   const session = server.admin.session({ database: server.database });
   try {
-    const result = await session.run(`MATCH (n:${quote(entity.label)}) WHERE n.${quote(entity.stableId)} IS NOT NULL RETURN n.${quote(entity.stableId)} AS id ORDER BY id SKIP $skip LIMIT 1`, { skip: neo4jInt(n - 1) });
+    const result = await session.run(`MATCH (n:${quote(entity.label)}) WHERE n.${quote(entity.stableId)} IS NOT NULL RETURN n.${quote(entity.stableId)} AS id ORDER BY id SKIP $skip LIMIT 1`, { skip: neo4j.int(n - 1) });
     const id = result.records[0]?.get('id');
     if (id === undefined) throw new Error(`the demo graph holds no ${entityType} number ${n}`);
     return { entityType, stableId: String(id) };
@@ -119,8 +120,6 @@ async function entityOf(pack: string, entityType: string, n: number): Promise<{ 
     await session.close();
   }
 }
-
-const neo4jInt = (value: number): { low: number; high: number } => ({ low: value, high: 0 });
 
 const PLACEHOLDER = /^‹([A-Za-z0-9_-]+)#([1-9][0-9]*)›$/;
 
@@ -142,6 +141,9 @@ async function hydrated(pack: string, value: unknown): Promise<unknown> {
 
 const available: AskPlanner = { availability: () => ({ available: true }), plan: () => Promise.reject(new Error('not used')) };
 
+/** The lines the application logged, so that a summary the product dropped is seen and not mistaken for a run that listed nothing. */
+const logged: string[] = [];
+
 async function started(pack: string) {
   const mapping = { sources: [sourceOf(pack)] };
   const server = servers.get(pack);
@@ -150,19 +152,15 @@ async function started(pack: string) {
   gates.push(gate);
   const plans = createListPlanStore();
   const seams = communitySeams();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: gate.gate, seams: { ...seams, askPlanner: available } as Seams, extension: createEnterpriseExtension({ planStore: plans }), previewOn: true });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void logged.push(line) }), store: memoryAppStore(), mapping, gate: gate.gate, seams: { ...seams, askPlanner: available } as Seams, extension: createEnterpriseExtension({ planStore: plans }), previewOn: true });
   return { app, plans, sourceId: mapping.sources[0]?.id ?? '' };
 }
 
-/** Every statement cites at least one key, every key is held, and every cited element is in the page the run answered. */
-function checkCited(id: string, summary: AskSummary | undefined, result: unknown): void {
+/** Every statement cites at least one key, every key is held and every cited element is one the result lists: the product's own check. */
+function checkCited(id: string, summary: AskSummary | undefined, result: Parameters<typeof listedElements>[0]): void {
   if (summary === undefined) throw new Error(`the question ${id} has no summary`);
-  const held = new Set(summary.citations.map((citation) => citation.key));
-  const page = JSON.stringify(result);
-  for (const sentence of summary.sentences) {
-    if (sentence.cites.length === 0 || !sentence.cites.every((key) => held.has(key))) throw new Error(`the question ${id} has a statement that is not cited`);
-  }
-  for (const citation of summary.citations) if (!page.includes(JSON.stringify(citation.element))) throw new Error(`the question ${id} cites an element that is not in the page`);
+  const listed = listedElements(result);
+  if (listed === undefined || !citedKeysExist(summary, listed)) throw new Error(`the question ${id} has a statement or a citation that is not backed by the result`);
 }
 
 describe.each(PACKS)(`every demo question of the %s pack, from the committed replay through the real run route and the real gate on ${NEO4J_SERIES}`, (pack) => {
@@ -177,28 +175,34 @@ describe.each(PACKS)(`every demo question of the %s pack, from the committed rep
     let ran = 0;
     let refused = 0;
     let summarized = 0;
-    for (const [index, question] of mine.entries()) {
-      const plan = planOf(question.wording);
-      if (question.expect.kind === 'unsupported') {
-        expect(plan.kind).toBe('unsupported');
-        refused += 1;
-        continue;
+    try {
+      for (const [index, question] of mine.entries()) {
+        const plan = planOf(question.id, question.wording);
+        if (question.expect.kind === 'unsupported') {
+          expect(plan.kind).toBe('unsupported');
+          refused += 1;
+          continue;
+        }
+        expect(plan.kind).toBe('plan');
+        if (plan.kind !== 'plan') continue;
+        const stored = rig.plans.put({ id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`, userId: principalFixture.id, sourceId: rig.sourceId, templateId: plan.templateId, templateVersion: plan.templateVersion, params: (await hydrated(pack, plan.params)) as never });
+        const response = await rig.app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: stored.id } });
+        if (response.statusCode !== 200) throw new Error(`the question ${question.id} ran with the status ${response.statusCode}`);
+        const body = askRunResponseSchema.parse(response.json());
+        ran += 1;
+        const listed = listedElements(body.result);
+        // a run that lists something has a summary, and a summary that the product dropped is a failure, not a run that listed nothing
+        if (listed !== undefined && listed.size > 0 && body.summary === undefined) throw new Error(`the question ${question.id} lists elements and has no summary`);
+        if (body.summary !== undefined) {
+          checkCited(question.id, body.summary, body.result);
+          summarized += 1;
+        }
       }
-      expect(plan.kind).toBe('plan');
-      if (plan.kind !== 'plan') continue;
-      const stored = rig.plans.put({ id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`, userId: principalFixture.id, sourceId: rig.sourceId, templateId: plan.templateId, templateVersion: plan.templateVersion, params: (await hydrated(pack, plan.params)) as never });
-      const response = await rig.app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: stored.id } });
-      if (response.statusCode !== 200) throw new Error(`the question ${question.id} ran with the status ${response.statusCode}`);
-      const body = askRunResponseSchema.parse(response.json());
-      ran += 1;
-      // a run that lists nothing has no summary; one that lists something has a cited one
-      if (body.summary !== undefined) {
-        checkCited(question.id, body.summary, body.result);
-        summarized += 1;
-      }
+      expect(logged.filter((line) => line.includes('ask-summary-dropped'))).toEqual([]);
+      expect(ran + refused).toBe(mine.length);
+      expect(summarized).toBeGreaterThan(0);
+    } finally {
+      await rig.app.close();
     }
-    expect(ran + refused).toBe(mine.length);
-    expect(summarized).toBeGreaterThan(0);
-    await rig.app.close();
   }, 300_000);
 });
