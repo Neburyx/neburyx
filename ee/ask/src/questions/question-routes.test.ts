@@ -288,6 +288,52 @@ describe('a file-query intent', () => {
   });
 });
 
+describe('a run that fails without being refused by the gate', () => {
+  const failing = (code?: string) => (): never => {
+    throw code === undefined ? new Error('SENTINEL-DRIVER-TEXT') : Object.assign(new Error('SENTINEL-DRIVER-TEXT'), { code });
+  };
+
+  it.each([
+    ['an error with a code of the product', 'INTERNAL_ERROR', 'internal-error'],
+    ['a timeout', 'QUERY_TIMEOUT', 'query-timeout'],
+    ['an error with no code', undefined, 'internal-error'],
+    ['an error with a code the product does not know', 'DRIVER_FAILURE', 'internal-error'],
+  ])('writes the question\'s event as failed with the cause, and the row as failed, then fails the call with the same error: %s', async (_name, code, cause) => {
+    const rigged = await rig({ run: failing(code) });
+    const error = await rigged.route.handler(rigged.request(ASK)).then(() => undefined, (thrown: unknown) => thrown);
+    expect((error as Error).message).toBe('SENTINEL-DRIVER-TEXT');
+    expect(rigged.events).toHaveLength(1);
+    expect(rigged.events[0]).toMatchObject({ action: 'ask.question', result: 'failed', sourceId: SOURCE });
+    expect(detailOf(rigged.events[0])).toMatchObject({ intent: 'shared', kind: 'template', outcome: 'failed', cause, templateId: 'shared-attribute' });
+    expect(detailOf(rigged.events[0])['paramsHash']).toMatch(/^[0-9a-f]{64}$/);
+    expect(rigged.rows).toEqual([{ actorId: 'p-1', intent: 'shared', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
+    expect(JSON.stringify([rigged.events, rigged.rows])).not.toMatch(/SENTINEL-DRIVER-TEXT|A-1/);
+  });
+
+  it('records a failed file query the same way, with the hash of its query and no value', async () => {
+    const rigged = await rig({ classify: async () => ({ ok: true, intent: 'byId', entities: { id: 'SECRET-ID' } }), run: failing('INTERNAL_ERROR') });
+    await expect(rigged.route.handler(rigged.request(ASK))).rejects.toThrow('SENTINEL-DRIVER-TEXT');
+    expect(detailOf(rigged.events[0])).toMatchObject({ kind: 'query', outcome: 'failed', cause: 'internal-error' });
+    expect(detailOf(rigged.events[0])['querySha256']).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify([rigged.events, rigged.rows])).not.toContain('SECRET-ID');
+  });
+
+  it('keeps the audit failure as the failure of the call when the event cannot be written', async () => {
+    const rigged = await rig({ sink: 'fails', run: failing('INTERNAL_ERROR') });
+    expect(await refusalOf(rigged.route.handler(rigged.request(ASK)))).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    expect(rigged.rows).toEqual([]);
+  });
+
+  it('records a failed continue as ask.continue', async () => {
+    const heavy = await rig({ run: (continuing) => (continuing ? failing('INTERNAL_ERROR')() : { status: 'ok', result: heavyResult() }) });
+    const first = (await heavy.route.handler(heavy.request(ASK))) as { answered: { continueToken: string } };
+    const body = { sourceId: SOURCE, intent: 'shared', entities: { id: 'A-1' }, continueToken: first.answered.continueToken };
+    await expect(heavy.continueRoute.handler(heavy.request(body))).rejects.toThrow('SENTINEL-DRIVER-TEXT');
+    expect(heavy.events.map((event) => [event.action, event.result])).toEqual([['ask.question', 'partial'], ['ask.continue', 'failed']]);
+    expect(heavy.rows).toEqual([{ actorId: 'p-1', intent: 'shared', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
+  });
+});
+
 describe('a result that stops as heavy, and Continue', () => {
   async function heavyAnswer() {
     const rigged = await rig({ run: (continuing) => ({ status: 'ok', result: continuing ? okResult() : heavyResult() }) });

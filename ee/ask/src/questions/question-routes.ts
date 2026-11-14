@@ -2,6 +2,7 @@ import {
   ASK_REFUSAL_SENTENCES,
   ASK_RUN_PARAMS_LABEL,
   ASK_SAVED_PATTERN_INTENT,
+  ERROR_CODES,
   SAVED_PATTERN_TEMPLATE_ID,
   ExtensionRefusal,
   askAnswerSchema,
@@ -18,6 +19,7 @@ import {
   type AskIntent,
   type AskRefusalCause,
   type AskRunAuditDetail,
+  type AskRun,
   type AskRunInput,
   type AskRunResult,
   type AuditEvent,
@@ -225,7 +227,14 @@ async function execute(run: Execution): Promise<AskAnswer> {
   const { base, input, params, templateId, entities } = prepared;
   const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
   const started = (options.now ?? Date.now)();
-  const outcome = await capabilities.askRunner({ sourceId, mask: run.mask }).run(input, run.continuing ? { continue: true } : undefined);
+  let outcome: AskRun;
+  try {
+    outcome = await capabilities.askRunner({ sourceId, mask: run.mask }).run(input, run.continuing ? { continue: true } : undefined);
+  } catch (error) {
+    // a failure that is not one of the gate's refusals (a source failure, a timeout, the refusal of a read transaction): the run is audited as failed with the code of the error, never a value, and the error goes on as it was
+    await failedRun(run, error, { ...base, ...(templateId === undefined ? {} : { templateId }), paramsHash }, Math.max(0, (options.now ?? Date.now)() - started), logger);
+    throw error;
+  }
   const elapsedMs = Math.max(0, (options.now ?? Date.now)() - started);
   if (outcome.status === 'refused') return refusedRun(run, outcome.refusal, { ...base, ...(templateId === undefined ? {} : { templateId }), paramsHash }, elapsedMs, logger);
   const result: AskRunResult = outcome.result;
@@ -242,6 +251,18 @@ async function execute(run: Execution): Promise<AskAnswer> {
   const summary = heavy ? undefined : result.templateId === 'file-query' ? summaryOfFileQuery(result.result, sourceId, logger) : summaryOfRun(result, { sourceId, params }, logger);
   const continueToken = heavy ? issueContinueToken(capabilities.signText, { principalId: request.principalId, sourceId, intent: name, definition: prepared.definition, entities, mask: run.mask }, (options.now ?? Date.now)()) : undefined;
   return { answered: { intent: name, entities, outcome: answerOutcome, result, ...(summary === undefined ? {} : { summary }), ...(continueToken === undefined ? {} : { continueToken }), ...(prepared.patternName === undefined ? {} : { patternName: prepared.patternName }) } };
+}
+
+/** The code of an error as an audit cause: the lower-case form of its error code when it has one the product knows, and an internal error otherwise. */
+function causeOfError(error: unknown): NonNullable<AskRunAuditDetail['cause']> {
+  const code: unknown = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+  return typeof code === 'string' && (ERROR_CODES as readonly string[]).includes(code) ? causeOfCode(code) : 'internal-error';
+}
+
+/** A run that failed without being refused: one event of the question with the outcome `failed` and its cause, and the row of the run as failed. An event that cannot be written fails the call as the audit's own failure. */
+async function failedRun(run: Execution, error: unknown, detail: AskRunAuditDetail, elapsedMs: number, logger: ExtensionLogger | undefined): Promise<void> {
+  await writeEvent(run.request, run.action, 'failed', run.sourceId, { ...detail, outcome: 'failed', cause: causeOfError(error) });
+  await writeRow(run.options.runs(), logger, { actorId: run.request.principalId, intent: run.intent, outcome: 'failed', rowCount: 0, elapsedMs });
 }
 
 /** A run the gate refused: an anchor that is not there is an answer (nothing found); any other refusal is a failed run, recorded and audited, and then given back as the gate gives it. */
