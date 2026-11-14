@@ -4,6 +4,7 @@ import { degreeListed, summarizeDegree } from './degree.js';
 import { derivedEdgeListed, derivedRuleListed, summarizeDerivedEdge, summarizeDerivedRule } from './derived.js';
 import { entityListed, summarizeEntity } from './entity.js';
 import { expandListed, summarizeExpand } from './expand.js';
+import { savedPatternListed, summarizeSavedPattern } from './saved-pattern.js';
 import { searchListed, summarizeSearch } from './search.js';
 import { summarizeTemplateRun, templateRunListed } from './template-run.js';
 
@@ -35,8 +36,7 @@ export function listedElements(run: AskRunResult): ListedElements | undefined {
     case 'search':
       return searchListed(run.result);
     case 'saved-pattern':
-      // a saved-pattern answer has no summary yet; its own variant builds on this core
-      return undefined;
+      return savedPatternListed(run.result);
     default: {
       const unreachable: never = run;
       return unreachable;
@@ -62,7 +62,7 @@ function build(run: AskRunResult, context: SummaryContext): AskSummary | undefin
     case 'search':
       return summarizeSearch(run.result);
     case 'saved-pattern':
-      return undefined;
+      return summarizeSavedPattern(run.result, context.anchor);
     default: {
       const unreachable: never = run;
       return unreachable;

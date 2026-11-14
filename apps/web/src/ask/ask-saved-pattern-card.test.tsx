@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { AskPatternCard, AskPlan } from '@neburyx/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -73,6 +73,20 @@ describe('the plan card of a saved pattern', () => {
     expect(runs[0]?.request).toEqual({ planId: PLAN_ID });
     await answer(runs[0], ok(savedResult()));
     expect(screen.getByRole('region', { name: 'Review before running' }).textContent).toContain('Ran saved-pattern');
+  });
+
+  it('draws the answer of a saved-pattern run under its result, with its sources, by the card that draws it for a template', async () => {
+    const { runs } = await drawPlan(plan(), { card: CARD });
+    await userEvent.click(button('Run'));
+    const summary = {
+      sentences: [{ text: 'Matches of the saved pattern from Widget w-1: 1 · exact.', cites: ['n1'] }],
+      citations: [{ key: 'n1', element: NODE('w-1').ref, type: 'widget', title: 'Widget w-1' }],
+      omissions: '1 shown.',
+    };
+    await answer(runs[0], ok({ ...savedResult(), summary } as AskRunAnswer));
+    const section = screen.getByRole('region', { name: 'Answer' });
+    expect(within(section).getAllByRole('listitem')[0]?.textContent).toBe('Matches of the saved pattern from Widget w-1: 1 · exact.[1]');
+    expect(within(section).getByText('1 shown.')).toBeTruthy();
   });
 
   it.each([
