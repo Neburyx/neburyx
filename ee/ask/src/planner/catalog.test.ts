@@ -77,6 +77,19 @@ describe('the vocabulary of the prompt', () => {
     expect(text).toContain('names no relationship type');
   });
 
+  it('says that a path with hops in different directions, whose leading relationship already reaches the target type, is refused, and does not say it of a path through a middle type', () => {
+    const text = CATALOG.find((entry) => entry.id === 'linked-entities')?.description ?? '';
+    expect(text).toContain('A path whose hops run in different directions, when the relationship type that leads the path already joins the anchor to entities of the target type, is not answered by one run');
+    expect(text).toContain("the anchor's own neighbors of the target type would be returned beside the answer. Refuse that question.");
+    expect(text).toContain('list every relationship type of the path in via and set maxHops to 2');
+  });
+
+  it('says that a question about an individual’s personal details is refused, and that a shared attribute and a quoted value are not that, with no word of any pack', () => {
+    const text = CATALOG.find((entry) => entry.id === 'search')?.description ?? '';
+    expect(text).toContain('asks for an individual\'s personal details, or that looks an individual up by such a detail, is answered by no template: refuse it');
+    expect(text).toContain('A question about which records share an attribute is not this, nor is a value lookup of a reference, other than a personal detail, that the question quotes as a value placeholder.');
+  });
+
   it('adds to the words a question may use only words that are not surnames of the public list, and the surnames it already holds are named', () => {
     const names = new Set(readFileSync(fileURLToPath(new URL('../testing/names/census-2010-surnames.txt', import.meta.url)), 'utf8').split(/\r?\n/).map((line) => line.trim().toLowerCase()));
     const surnameParts = [...new Set(catalogWords().flatMap((word) => word.toLowerCase().split('-')).filter((part) => names.has(part) && !COMMON_WORDS.includes(part)))].sort();
