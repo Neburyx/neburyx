@@ -46,7 +46,7 @@ describe('the whole demo set', () => {
     expect((await cli([...base(replay), '--write-replay'])).code).toBe(EXIT_OK);
     const result = await cli(base(replay));
     expect(result.code).toBe(EXIT_OK);
-    expect(result.out.slice(0, 5)).toEqual(['refusals: 8 of 8 refused', 'plans: 25 of 25 right (at most 2 may miss)', 'family: 0 of 0 as expected', 'blocked: 0 of 0 expected', 'repaired: 0']);
+    expect(result.out.slice(0, 5)).toEqual(['refusals: 8 of 8 refused', 'plans: 25 of 25 right (at most 2 may miss)', 'family: 8 of 8 as expected', 'blocked: 0 of 0 expected', 'repaired: 0']);
     for (const id of KNOWN_BLOCKED) expect(result.out).toContain(`blocked-unexpectedly: ${id}`);
     expect(result.out.some((line) => line.startsWith('target missed'))).toBe(false);
     expect(result.out).toContain('answered unsupported: 8 of 33');
@@ -75,7 +75,7 @@ describe('the whole demo set', () => {
     for (const mode of ['replay', 'live']) {
       const result = await cli([...base(replay), '--baseline', baseline, '--mode', mode]);
       expect(result.code).toBe(EXIT_OK);
-      expect(result.out.slice(0, 2)).toEqual(['refusals: 8 of 8 refused', 'plans: 25 of 25 right (at most 2 may miss)']);
+      expect(result.out.slice(0, 3)).toEqual(['refusals: 8 of 8 refused', 'plans: 25 of 25 right (at most 2 may miss)', 'family: 8 of 8 as expected']);
     }
     const entries = Object.values(parseReplay(readFileSync(replay, 'utf8'))).flatMap((entry) => [entry.plan, ...(entry.repair === undefined ? [] : [entry.repair])]).map((text) => ({ promptId: 'ask.plan' as const, version: 7, reply: { kind: 'ok' as const, text } }));
     expect(checkRecording({ format: 1, entries })).toEqual([]);

@@ -12,7 +12,7 @@ function replyOf(question: Question): string | undefined {
     case 'plan':
       return JSON.stringify({ kind: 'plan', templateId: expect.template, templateVersion: PLAN_TEMPLATE_VERSION, params: expect.params, rationale: PLAN_RATIONALE });
     case 'unsupported':
-      return JSON.stringify({ kind: 'unsupported', reason: REFUSAL_REASON });
+      return JSON.stringify({ kind: 'unsupported', ...(expect.family === undefined ? {} : { family: expect.family }), reason: REFUSAL_REASON });
     case 'blocked':
       return undefined;
     default: {

@@ -104,32 +104,32 @@ questions:
   - id: shortest-path-between-accounts
     pack: banking-fraud
     wording: What is the shortest path between ‹account#1› and ‹account#2›?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: path }
   - id: accounts-related-to-an-account
     pack: banking-fraud
     wording: Which accounts are related to ‹account#1›?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: unnamed-relation }
   - id: accounts-sharing-two-kinds-of-attribute
     pack: banking-fraud
     wording: Which accounts share both a device and an address with ‹account#1›?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: attribute-combination }
   - id: accounts-opened-last-month
     pack: banking-fraud
     wording: Which accounts were opened last month?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: property-selection }
   - id: duplicate-addresses
     pack: insurance-claims
     wording: Which addresses are duplicates of ‹address#1›?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: similar-records }
   - id: is-an-account-fraudulent
     pack: banking-fraud
     wording: Is ‹account#1› fraudulent?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: judgement }
   - id: accounts-on-screen
     pack: banking-fraud
     wording: How many accounts are on screen?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: loaded-view }
   - id: claimant-with-the-most-claims
     pack: insurance-claims
     wording: Which of these claimants has the most claims?
-    expect: { kind: unsupported }
+    expect: { kind: unsupported, family: ranking-or-aggregate }

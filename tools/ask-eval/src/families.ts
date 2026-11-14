@@ -1,4 +1,4 @@
-/** The refusal families the question file may name; a copy of the closed list of the refusal feature, compared with it by a test once it exists. */
+/** The refusal families the question file may name; a copy of the model-selectable part of the closed list `ASK_REFUSAL_FAMILIES` of the contracts (the two families only the server sets are left out); `family.test.ts` compares the two. */
 export const REFUSAL_FAMILIES = [
   'path',
   'property-selection',

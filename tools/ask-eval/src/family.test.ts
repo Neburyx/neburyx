@@ -1,4 +1,6 @@
+import { ASK_REFUSAL_FAMILIES } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
+import { REFUSAL_FAMILIES } from './families.js';
 import { parseQuestions } from './questions.js';
 import type { QuestionResult } from './run.js';
 import { tally } from './targets.js';
@@ -30,5 +32,11 @@ describe('the family count', () => {
   it('does not count a refusal that was not refused, even when the family field is there', () => {
     const found = tally(questions, [{ id: 'one', verdict: 'wrongly-planned', fields: [], repaired: false, answered: 'plan', family: 'judgement' }, refused('two', 'loaded-view'), refused('three')]);
     expect(found.family.right).toBe(1);
+  });
+});
+
+describe('the families of the question file', () => {
+  it('are the families of the closed list of the contracts that the model may name, and no other', () => {
+    expect([...REFUSAL_FAMILIES].sort()).toEqual(ASK_REFUSAL_FAMILIES.filter((family) => family !== 'plan-not-usable' && family !== 'model-refused').sort());
   });
 });
