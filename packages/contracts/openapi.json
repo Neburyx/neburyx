@@ -4455,6 +4455,105 @@
         }
       }
     },
+    "/v1/graph/paths": {
+      "post": {
+        "operationId": "findPaths",
+        "summary": "Find the shortest paths between two entities of one source",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PathsRequest"
+              }
+            }
+          }
+        },
+        "description": "Reads through the gate, as the calling principal, the paths of minimal length between two entities of one source over the listed relationship types, at most the limit of them, with the nodes and relationships the steps name. The hop count is checked against the source's `max_hops` (product ceiling 4) and the limit against its `path_results_cap` (product ceiling 25) before anything is read; more is `QUERY_BUDGET_EXCEEDED`.",
+        "responses": {
+          "200": {
+            "description": "The paths found, possibly none",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PathsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid, or names a relationship type or entity type the mapping does not have",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "An end is not in the source, or the source is not configured or may not be read (one answer for all)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The hop count or the limit is above what the source allows (QUERY_BUDGET_EXCEEDED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The read could not be completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source is not available, or is busy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The source did not answer in time",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/graph/read-refs": {
       "post": {
         "operationId": "readRefs",
@@ -13682,6 +13781,11 @@
                         "type": "integer",
                         "exclusiveMinimum": 0,
                         "maximum": 9007199254740991
+                      },
+                      "pathResultsCap": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "additionalProperties": false
@@ -19796,6 +19900,935 @@
               "investigation",
               "created",
               "draft"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "PathsRequest": {
+        "type": "object",
+        "properties": {
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "from": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stableId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 266691
+              }
+            },
+            "required": [
+              "entityType",
+              "stableId"
+            ],
+            "additionalProperties": false
+          },
+          "to": {
+            "type": "object",
+            "properties": {
+              "entityType": {
+                "type": "string",
+                "minLength": 1
+              },
+              "stableId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 266691
+              }
+            },
+            "required": [
+              "entityType",
+              "stableId"
+            ],
+            "additionalProperties": false
+          },
+          "relTypes": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "maxHops": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "out",
+              "in",
+              "both"
+            ]
+          },
+          "continue": {
+            "type": "boolean"
+          },
+          "mask": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sourceId",
+          "from",
+          "to",
+          "relTypes",
+          "maxHops",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "PathsResponse": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "ok"
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "hops": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 9007199254740991
+                    },
+                    "steps": {
+                      "minItems": 1,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "from": {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "entityType": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "stableId": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "entityType",
+                              "stableId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "to": {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "entityType": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "stableId": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "entityType",
+                              "stableId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "relationshipType": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "evidenceRefs": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "from",
+                          "to",
+                          "relationshipType",
+                          "evidenceRefs"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "hops",
+                    "steps"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "nodes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/GraphNode"
+                }
+              },
+              "edges": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ref": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "from": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "stableId": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "type",
+                            "from",
+                            "to",
+                            "stableId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "aggregate": {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "from": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "entityType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stableId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "entityType",
+                                    "stableId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "to": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "entityType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stableId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "entityType",
+                                    "stableId"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "from",
+                                "to"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "aggregate"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "sourceId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "derived": {
+                              "type": "object",
+                              "properties": {
+                                "ruleId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "from": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "entityType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stableId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "entityType",
+                                    "stableId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "to": {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "entityType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stableId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "entityType",
+                                    "stableId"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "ruleId",
+                                "from",
+                                "to"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "sourceId",
+                            "derived"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "memberCount": {
+                      "type": "object",
+                      "properties": {
+                        "value": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quality": {
+                          "type": "string",
+                          "enum": [
+                            "exact",
+                            "estimated",
+                            "lowerBound",
+                            "unknown"
+                          ]
+                        },
+                        "scope": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "quality",
+                        "scope"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "from-to",
+                        "out",
+                        "in"
+                      ]
+                    },
+                    "semantics": {
+                      "type": "string",
+                      "enum": [
+                        "stored",
+                        "derived",
+                        "unknown"
+                      ]
+                    },
+                    "observedFirst": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "observedLast": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "derivation": {
+                      "type": "object",
+                      "properties": {
+                        "ruleId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "ruleVersion": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "supportingEdgeRefs": {
+                          "type": "array",
+                          "items": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "sourceId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "from": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "to": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "stableId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "sourceId",
+                                  "type",
+                                  "from",
+                                  "to",
+                                  "stableId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "sourceId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "aggregate": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "from": {
+                                        "type": "object",
+                                        "properties": {
+                                          "sourceId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "entityType": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "stableId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "sourceId",
+                                          "entityType",
+                                          "stableId"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "to": {
+                                        "type": "object",
+                                        "properties": {
+                                          "sourceId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "entityType": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "stableId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "sourceId",
+                                          "entityType",
+                                          "stableId"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "type",
+                                      "from",
+                                      "to"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "sourceId",
+                                  "aggregate"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "sourceId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "derived": {
+                                    "type": "object",
+                                    "properties": {
+                                      "ruleId": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "from": {
+                                        "type": "object",
+                                        "properties": {
+                                          "sourceId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "entityType": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "stableId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "sourceId",
+                                          "entityType",
+                                          "stableId"
+                                        ],
+                                        "additionalProperties": false
+                                      },
+                                      "to": {
+                                        "type": "object",
+                                        "properties": {
+                                          "sourceId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "entityType": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "stableId": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "sourceId",
+                                          "entityType",
+                                          "stableId"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    },
+                                    "required": [
+                                      "ruleId",
+                                      "from",
+                                      "to"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                },
+                                "required": [
+                                  "sourceId",
+                                  "derived"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "ruleId",
+                        "ruleVersion",
+                        "supportingEdgeRefs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "properties": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "value": {},
+                          "dataClass": {
+                            "type": "string",
+                            "enum": [
+                              "text",
+                              "number",
+                              "boolean",
+                              "date",
+                              "dateTime",
+                              "localDateTime",
+                              "time",
+                              "localTime",
+                              "duration",
+                              "point",
+                              "list",
+                              "other",
+                              "unknown",
+                              "name",
+                              "email",
+                              "phone"
+                            ]
+                          },
+                          "masked": {
+                            "type": "boolean"
+                          },
+                          "maskedBy": {
+                            "type": "string",
+                            "enum": [
+                              "policy",
+                              "request"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "dataClass",
+                          "masked"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "evidenceRefs": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "observedAt": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "validFrom": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "validTo": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "qualityFlags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ref",
+                    "from",
+                    "to",
+                    "type",
+                    "direction",
+                    "semantics",
+                    "properties",
+                    "evidenceRefs",
+                    "qualityFlags"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "capReached": {
+                "type": "boolean"
+              },
+              "partial": {
+                "type": "boolean"
+              },
+              "retained": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "requested": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "elapsedMs": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "estimate": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "estimated",
+                      "lowerBound",
+                      "unknown"
+                    ]
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "observedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "quality",
+                  "scope"
+                ],
+                "additionalProperties": false
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "paths",
+              "nodes",
+              "edges",
+              "capReached",
+              "partial",
+              "elapsedMs",
+              "warnings"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "heavy"
+              },
+              "estimate": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "exact",
+                      "estimated",
+                      "lowerBound",
+                      "unknown"
+                    ]
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "observedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "quality",
+                  "scope"
+                ],
+                "additionalProperties": false
+              },
+              "threshold": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "continueLimit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 25
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "estimate",
+              "threshold",
+              "continueLimit",
+              "warnings"
             ],
             "additionalProperties": false
           }

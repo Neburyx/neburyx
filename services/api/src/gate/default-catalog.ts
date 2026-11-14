@@ -6,6 +6,8 @@ import { degreePreviewBoundedTemplate, degreePreviewCheapTemplate } from './temp
 import { degreeProbeTemplate } from './templates/degree-probe.js';
 import { derivedEdgeSupportTemplate } from './templates/derived-edge-support.js';
 import { derivedRuleRunTemplate } from './templates/derived-rule-run.js';
+import { shortestPathsCountTemplate } from './templates/shortest-paths-count.js';
+import { shortestPathsTemplate } from './templates/shortest-paths.js';
 import { linkedEntitiesTemplate } from './templates/linked-entities.js';
 import { linkedEntitiesCountTemplate } from './templates/linked-entities-count.js';
 import { patternCountTemplate } from './templates/pattern-count.js';
@@ -32,7 +34,7 @@ import { stableIdDuplicatesTemplate } from './templates/stable-id-duplicates.js'
 import { fileQueryTemplate } from './templates/file-query.js';
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [fileQueryTemplate, connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, sharedAttributeCountTemplate, linkedEntitiesTemplate, linkedEntitiesCountTemplate, patternCountTemplate, patternTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
+  return [fileQueryTemplate, connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, sharedAttributeCountTemplate, linkedEntitiesTemplate, linkedEntitiesCountTemplate, shortestPathsTemplate, shortestPathsCountTemplate, patternCountTemplate, patternTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

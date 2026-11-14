@@ -15,6 +15,8 @@ export interface ExecuteDeps {
 export interface ExecuteResult {
   readonly rows: readonly Row[];
   readonly hasMore: boolean;
+  /** True when the read timed out and these are the rows it had streamed, for a template that keeps them. */
+  readonly timedOut?: true;
   /** The plan of a profiled read; absent for a read that is not profiled. */
   readonly plan?: Plan;
 }
@@ -132,6 +134,7 @@ export async function executeRead(
       parameters: rendered.parameters,
       integerParameters: template.integerParameters,
       ...(template.profile === true ? { profile: true } : {}),
+      ...(template.partialOnTimeout === true ? { partialOnTimeout: true as const } : {}),
       accessMode: 'READ',
       timeoutMs: context.budgets.timeoutMs,
       rowLimit: limit + 1,
@@ -152,6 +155,7 @@ export async function executeRead(
   }
   switch (outcome.status) {
     case 'timeout':
+      if (template.partialOnTimeout === true && outcome.rows !== undefined && outcome.rows.length > 0) return { rows: outcome.rows.slice(0, limit), hasMore: false, timedOut: true };
       // the adapter gives the read the lesser of the source's timeout and the time left to the deadline, so a read started with less left than the timeout was stopped by the deadline
       throw timedOut(context, context.deadlineAt - startedAt < context.budgets.timeoutMs);
     case 'cancelled':

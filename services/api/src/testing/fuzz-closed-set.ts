@@ -1,4 +1,4 @@
-import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
+import { edgeRefSegmentOf, pathsResponseSchema, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import type { SourceAllowlist } from '../gate/types.js';
@@ -186,6 +186,26 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     await served('/v1/templates/linked-entities/run', { sourceId: FUZZ_SOURCE, params: { ref: anchor, targetType: 'gadget', via: ['MADE_FROM', 'USES'], ...(window === undefined ? {} : { window }) } });
     keep();
   }
+  /** The legal choices of a path run: each hop count up to the product's ceiling, the smallest and the largest result size, each direction and the session's masking setting. */
+  for (const maxHops of [1, 2, 3, 4]) {
+    for (const limit of [1, 25]) {
+      for (const [direction, mask] of [undefined, 'out', 'in', 'both'].flatMap((way) => [undefined, true, false].map((masked) => [way, masked] as const))) {
+        const response = await post('/v1/graph/paths', { sourceId: FUZZ_SOURCE, from: anchor, to: { entityType: 'gadget', stableId: 'GD-P' }, relTypes: ['MADE_FROM'], maxHops, limit, ...(direction === undefined ? {} : { direction }), ...(mask === undefined ? {} : { mask }) });
+        if (response.statusCode !== 200) throw new Error(`the closed set expected the path run to be served, and it answered ${response.statusCode}`);
+        cases.add('paths');
+        keep();
+      }
+    }
+  }
+  const pathEnds = { sourceId: FUZZ_SOURCE, to: { entityType: 'gadget', stableId: 'GD-P' }, relTypes: ['MADE_FROM'], maxHops: 2, limit: 25 };
+  const heavyPaths = await post('/v1/graph/paths', { ...pathEnds, from: { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR } });
+  if (heavyPaths.statusCode !== 200 || pathsResponseSchema.parse(JSON.parse(heavyPaths.body)).status !== 'heavy') throw new Error(`the closed set expected the path run to stop as heavy: ${heavyPaths.body.slice(0, 120)}`);
+  cases.add('paths:heavy');
+  keep();
+  const continuedPaths = await post('/v1/graph/paths', { ...pathEnds, from: { entityType: 'widget', stableId: FUZZ_HEAVY_ANCHOR }, continue: true });
+  if (continuedPaths.statusCode !== 200) throw new Error(`the closed set expected the continued path run to be served, and it answered ${continuedPaths.statusCode}`);
+  cases.add('paths:continue');
+  keep();
   /** The runs of the third source that are served: one hop under its budget of one, and the relationship with no time property without a window. */
   await served('/v1/templates/linked-gadgets/run', { sourceId: FUZZ_TIGHT_SOURCE, params: { ref: anchor, maxHops: 1 } });
   keep();

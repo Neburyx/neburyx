@@ -162,6 +162,8 @@ export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning }
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
 export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEMPOTENCY_KEY_PATTERN, exportFileSchema, exportHeaderSchema, exportMaskingSchema, exportRequestSchema, exportSchema } from './exports.js';
 export type { ExportFile, ExportFormat, ExportHeader, ExportRecord, ExportRequest } from './exports.js';
+export { pathSchema, pathStepSchema, pathsHeavySchema, pathsOkSchema, pathsRequestSchema, pathsResponseSchema } from './paths.js';
+export type { PathStep, PathsHeavy, PathsOk, PathsRequest, PathsResponse } from './paths.js';
 export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
 export type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';
 export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTERN_LIST_LIMIT, listedPatternSchema, MAX_PATTERN_LIST_LIMIT, PATTERN_UNAVAILABLE_CODES, patternAvailabilitySchema, patternListQuerySchema, patternListResponseSchema, patternUnavailableReasonSchema, SAVED_PATTERN_KINDS, SAVED_PATTERN_VISIBILITIES, savedPatternAnchorSchema, savedPatternNameSchema, savedPatternSchema, savePatternRequestSchema } from './saved-pattern.js';

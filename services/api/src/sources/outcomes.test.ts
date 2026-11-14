@@ -218,3 +218,39 @@ describe('the cleanup after a call', () => {
     expect(hanging.logs).toHaveLength(1);
   });
 });
+
+describe('a read of a template that keeps the rows it had streamed when it times out', () => {
+  it('answers the timeout with the rows read, whether the server stopped the transaction or the deadline came first', async () => {
+    useClock();
+    const stopped = rig({ manual: true });
+    const first = stopped.executor.execute(callFor({ partialOnTimeout: true }));
+    await flush();
+    const observer = stopped.fake.drivers[0]?.sessions[0]?.observer;
+    observer?.onNext({ n: 1 });
+    observer?.onNext({ n: 2 });
+    observer?.onError(neo4jError('Neo.ClientError.Transaction.TransactionTimedOutClientConfiguration'));
+    expect(await first).toEqual({ status: 'timeout', rows: [{ n: 1 }, { n: 2 }] });
+    const late = rig({ manual: true });
+    const second = late.executor.execute(callFor({ partialOnTimeout: true, deadlineAt: NOW + 1000 }));
+    await flush();
+    late.fake.drivers[0]?.sessions[0]?.observer?.onNext({ n: 1 });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await second).toEqual({ status: 'timeout', rows: [{ n: 1 }] });
+  });
+
+  it('answers a timeout with no rows when none was read, and for a call that does not keep them', async () => {
+    useClock();
+    const none = rig({ manual: true });
+    const first = none.executor.execute(callFor({ partialOnTimeout: true }));
+    await flush();
+    none.fake.drivers[0]?.sessions[0]?.observer?.onError(neo4jError('Neo.ClientError.Transaction.TransactionTimedOutClientConfiguration'));
+    expect(await first).toEqual({ status: 'timeout' });
+    const other = rig({ manual: true });
+    const second = other.executor.execute(callFor());
+    await flush();
+    const observer = other.fake.drivers[0]?.sessions[0]?.observer;
+    observer?.onNext({ n: 1 });
+    observer?.onError(neo4jError('Neo.ClientError.Transaction.TransactionTimedOutClientConfiguration'));
+    expect(await second).toEqual({ status: 'timeout' });
+  });
+});

@@ -141,7 +141,7 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
       const fail = (error: unknown): void => {
         settle(() => {
           const kind = classify(error);
-          if (kind === 'timeout') resolve(TIMEOUT);
+          if (kind === 'timeout') resolve(timedOut());
           else if (kind === 'unreachable' || kind === 'pool-full') resolve(unavailable(kind));
           else if (kind === 'authentication') {
             options.logger.warn({ event: 'source.sign_in_refused', sourceId: source.id, serverCode: serverCodeOf(error) }, 'source sign-in refused');
@@ -157,7 +157,8 @@ export function createNeo4jExecutor(options: Neo4jExecutorOptions): Neo4jExecuto
         });
       };
 
-      guard = setTimeout(() => settle(() => resolve(TIMEOUT)), remainingMs);
+      const timedOut = (): ExecuteOutcome => (call.partialOnTimeout === true && rows.length > 0 ? { status: 'timeout', rows } : TIMEOUT);
+      guard = setTimeout(() => settle(() => resolve(timedOut())), remainingMs);
       call.signal?.addEventListener('abort', onAbort, { once: true });
       try {
         session = driver.session({ database: source.database, defaultAccessMode: 'READ', fetchSize: call.rowLimit });

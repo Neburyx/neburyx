@@ -20,6 +20,8 @@ interface Progress {
   action: string;
   /** What the event adds to its detail besides the reason of a cancelled or timed-out read; set by a template that has something to say of its run (the file query), and by no other. */
   detail?: FileQueryAuditDetail;
+  /** Set when the read timed out and the page holds the rows it had streamed: the event's result is then `partial`. */
+  partial?: boolean;
 }
 
 async function inStage<T>(deps: GateDeps, progress: Progress, stage: GateStage, work: () => T | Promise<T>): Promise<T> {
@@ -88,7 +90,8 @@ async function finishPage(deps: GateDeps, progress: Progress, request: GateReque
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request, with the hits held so far when the template counts them
     const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;
     const signed = position === undefined ? undefined : { ...mapPositionReferences(template, position, context, (entityType, stableId) => makeToken(deps.references, { sourceId: context.sourceId, entityType }, stableId)), ...(held === undefined ? {} : { [HELD_FIELD]: held }) };
-    return { items: redacted, hasMore: result.hasMore, ...(signed === undefined ? {} : { nextCursor: deps.cursors.mint(binding, signed) }), ...(held === undefined ? {} : { held }) };
+    if (result.timedOut === true) progress.partial = true;
+    return { items: redacted, hasMore: result.hasMore, ...(result.timedOut === true ? { partial: true as const } : {}), ...(signed === undefined ? {} : { nextCursor: deps.cursors.mint(binding, signed) }), ...(held === undefined ? {} : { held }) };
   });
 }
 
@@ -181,7 +184,7 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
     actorId: request.principal.id,
     actorRole: request.principal.role,
     action: progress.action,
-    result: auditResultFor(failure),
+    result: failure === undefined && progress.partial === true ? 'partial' : auditResultFor(failure),
     sourceId: request.sourceId,
     traceId: request.traceId,
     ...detailOf(progress, failure),

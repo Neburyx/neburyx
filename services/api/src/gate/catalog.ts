@@ -69,7 +69,7 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
   const degree = markersOf(definition.cypher).filter((marker) => marker.kind === 'degreeCounts');
   // a degree statement reads the entity type's label and stable ID property, so its parameter counts as used by an entity marker and a stable id marker
   const used = [
-    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'linkedEntities' && marker.kind !== 'pattern' && marker.kind !== 'aggregateRead'),
+    ...markersOf(definition.cypher).filter((marker) => marker.kind !== 'searchBranches' && marker.kind !== 'facetProbes' && marker.kind !== 'degreeCounts' && marker.kind !== 'expandNeighbors' && marker.kind !== 'relatedContext' && marker.kind !== 'edgeLoad' && marker.kind !== 'derivedRule' && marker.kind !== 'derivedSupport' && marker.kind !== 'sharedAttribute' && marker.kind !== 'linkedEntities' && marker.kind !== 'shortestPaths' && marker.kind !== 'pattern' && marker.kind !== 'aggregateRead'),
     ...markersOf(definition.cypher).filter((marker) => marker.kind === 'derivedRule').flatMap(() => (definition.derivedRule === undefined ? [] : [{ kind: 'entity' as const, name: definition.derivedRule.entityTypeParam }, { kind: 'stableId' as const, name: definition.derivedRule.entityTypeParam }])),
     ...markersOf(definition.cypher)
       .filter((marker) => marker.kind === 'sharedAttribute')
@@ -77,6 +77,9 @@ function checkMarkers(definition: TemplateDefinition, shape: Shape): void {
     ...markersOf(definition.cypher)
       .filter((marker) => marker.kind === 'linkedEntities')
       .flatMap(() => (definition.linkedEntities === undefined ? [] : [{ kind: 'entity' as const, name: definition.linkedEntities.entityTypeParam }, { kind: 'stableId' as const, name: definition.linkedEntities.entityTypeParam }, { kind: 'entity' as const, name: definition.linkedEntities.targetTypeParam }, { kind: 'relationship' as const, name: definition.linkedEntities.viaParam }])),
+    ...markersOf(definition.cypher)
+      .filter((marker) => marker.kind === 'shortestPaths')
+      .flatMap(() => (definition.shortestPaths === undefined ? [] : [{ kind: 'relationship' as const, name: definition.shortestPaths.viaParam }])),
     ...markersOf(definition.cypher)
       .filter((marker) => marker.kind === 'pattern')
       .flatMap(() => (definition.pattern === undefined ? [] : [{ kind: 'entity' as const, name: definition.pattern.entityTypeParam }, { kind: 'stableId' as const, name: definition.pattern.entityTypeParam }])),
@@ -372,6 +375,29 @@ function checkDerivedSupport(definition: TemplateDefinition, shape: Shape): void
 }
 
 /**
+ * The shortest-paths template's own declaration: its Cypher is exactly the one `@shortestPaths(<relationship types parameter>)` marker, its schema has the two ends as a list that it reads back as references and the
+ * relationship types as a list declared as a relationship parameter, it names its hop count, it is not paged and not profiled, its cut means a lower bound, it names the stable-ID indexes it needs, and the gate
+ * fills `limit` for it (the schema has none).
+ */
+function checkShortestPaths(definition: TemplateDefinition, shape: Shape): void {
+  const used = markersOf(definition.cypher).filter((marker) => marker.kind === 'shortestPaths');
+  const spec = definition.shortestPaths;
+  if (spec === undefined) {
+    if (used.length > 0) throw new CatalogError(definition.id, 'uses the shortest paths marker without declaring a shortest paths read');
+    return;
+  }
+  if (used.length !== 1 || used[0]?.name !== spec.viaParam || definition.cypher !== `@shortestPaths(${spec.viaParam})`) throw new CatalogError(definition.id, 'declares a shortest paths read and its Cypher is not exactly its one shortest paths marker');
+  if (shape.properties.get(spec.endsParam) !== 'array' || shape.properties.get(spec.viaParam) !== 'array' || definition.referenceLists?.includes(spec.endsParam) !== true || !definition.relationshipParams.includes(spec.viaParam)) {
+    throw new CatalogError(definition.id, 'declares a shortest paths read for parameters its schema does not have as lists, or does not declare its ends as reference lists and its relationship types as relationship parameters');
+  }
+  if (definition.hops === undefined || 'listParam' in definition.hops) throw new CatalogError(definition.id, 'declares a shortest paths read and does not name its hop count');
+  if (shape.properties.has('limit')) throw new CatalogError(definition.id, 'declares a shortest paths read and has a limit in its schema, which the gate fills');
+  if (definition.paged || definition.profile === true || definition.cutMeans !== 'lowerBound' || definition.scope !== 'user') throw new CatalogError(definition.id, "declares a shortest paths read and is paged, profiled or not declared cutMeans: 'lowerBound'");
+  if (definition.indexNeeds === undefined || definition.usedProperties === undefined) throw new CatalogError(definition.id, 'declares a shortest paths read and does not name its indexes and the properties it uses');
+  if (definition.referenceParams !== undefined || definition.entityParams.length > 0) throw new CatalogError(definition.id, 'declares a shortest paths read with reference lists and also reference parameters or entity parameters');
+}
+
+/**
  * The edge template's own declaration: its Cypher is exactly the one `@edgeLoad(<type parameter>)` marker, its schema has the three text parameters it names and the stable ID (its integer form is derived from it), it is not paged, its cut means a duplicate,
  * and it names the index of the relationship's `stable_id` it needs, and the properties it uses.
  */
@@ -462,7 +488,7 @@ function checkFileQuery(definition: TemplateDefinition, shape: Shape): void {
   if (definition.cypher !== '') throw new CatalogError(definition.id, 'declares a file query and has Cypher of its own');
   if (shape.properties.get(spec.intentParam) !== 'string' || shape.properties.get(spec.valuesParam) !== 'object' || shape.properties.size !== 2) throw new CatalogError(definition.id, 'declares a file query for parameters its schema does not have as text and an object, or holds more');
   if (definition.paged || definition.cutMeans !== 'lowerBound' || definition.profile === true || definition.scope !== 'user' || definition.rows !== undefined) throw new CatalogError(definition.id, "declares a file query and is paged, profiled, a system template or not declared cutMeans: 'lowerBound'");
-  const others = [definition.searchBranches, definition.facetProbes, definition.degreeCounts, definition.expandNeighbors, definition.relatedContext, definition.derivedRule, definition.derivedSupport, definition.sharedAttribute, definition.linkedEntities, definition.pattern, definition.edgeLoad, definition.aggregateRead];
+  const others = [definition.searchBranches, definition.facetProbes, definition.degreeCounts, definition.expandNeighbors, definition.relatedContext, definition.derivedRule, definition.derivedSupport, definition.sharedAttribute, definition.linkedEntities, definition.shortestPaths, definition.pattern, definition.edgeLoad, definition.aggregateRead];
   if (others.some((other) => other !== undefined) || (definition.gateParameters ?? []).length > 0 || definition.entityParams.length > 0 || definition.relationshipParams.length > 0) throw new CatalogError(definition.id, 'declares a file query and is also another kind of template');
 }
 
@@ -485,6 +511,7 @@ function build(definition: TemplateDefinition): Template {
   checkDerivedSupport(definition, shape);
   checkSharedAttribute(definition, shape);
   checkLinkedEntities(definition, shape);
+  checkShortestPaths(definition, shape);
   checkPattern(definition, shape);
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);

@@ -162,6 +162,16 @@ export interface Template {
    */
   readonly linkedEntities?: { readonly entityTypeParam: string; readonly targetTypeParam: string; readonly viaParam: string; /** The count of the run's matches, in place of the matches: at most `$countCap + 1` of them are read and counted (the heavy-operation probe, TAS §8.1). */ readonly count?: true };
   /**
+   * The shortest-paths template's own declaration, for no other template: a statement that finds the shortest paths between two entities over the listed relationship types. The Cypher is the one marker
+   * `@shortestPaths(<relationship types parameter>)`; the two ends are a list of two references and the relationship types are a list, both checked against the mapping, and the gate writes the whole statement from
+   * the mapping (every name quoted from the allowlist). The paths are bounded by the hop count and by `$limit + 1`.
+   */
+  /** True for a template whose `limit` counts paths: the gate refuses a limit above the source's `path_results_cap` before anything is read. */
+  readonly pathResults?: true;
+  /** True for a template whose read streams a row for each result and whose answer keeps the rows read when the read times out, labelled partial; the read still counts as a timeout for the circuit breaker. */
+  readonly partialOnTimeout?: true;
+  readonly shortestPaths?: { readonly endsParam: string; readonly viaParam: string; /** The count of the frontier at the two ends, in place of the paths: at most `$countCap + 1` relationships at each end (the heavy-operation probe, TAS §8.1). */ readonly count?: true };
+  /**
    * The pattern template's own declaration, for no other template: a statement that follows the steps of a pattern from the anchor, at most `$countCap + 1` rows at each step. The Cypher is the one marker
    * `@pattern(<anchor type parameter>)`; the anchor's entity type, the steps and every name in them are checked against the mapping, and the gate writes the whole statement from the mapping rows (every name quoted from the
    * allowlist). The conditions and windows of the steps are parameters read by position, never text.
@@ -253,6 +263,8 @@ export interface Budgets {
   readonly countCap: number;
   /** The source's `max_hops`: the most hops a template that names hops may read, when its own maximum is not lower. */
   readonly maxHops: number;
+  /** The source's `path_results_cap`: the most paths a template that declares `pathResults` may return. */
+  readonly pathResultsCap: number;
   /** The source's read slots: per person, for everyone, and the wait for both. */
   readonly userConcurrency: number;
   readonly sourceConcurrency: number;
@@ -301,6 +313,8 @@ export interface GateContext {
 export interface GatePage {
   readonly items: readonly Item[];
   readonly hasMore: boolean;
+  /** True when the read timed out and the items are made of the rows it had streamed. */
+  readonly partial?: true;
   /** Signed for this request; present only when the read found more than the page and the template says where the next one starts. */
   readonly nextCursor?: string;
   /** For a template that counts its hits across pages (`heldOf`): the hits of the earlier pages, from the signed cursor, plus those of this page. */

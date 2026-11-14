@@ -84,6 +84,7 @@ export function validateRequest(catalog: TemplateCatalog, template: Template, re
   const parsed = template.paramsSchema.safeParse(readReferences(template, request.params, context, references));
   if (!parsed.success) throw new AppError('INVALID_REQUEST');
   if (!Number.isInteger(request.limit) || request.limit < 1) throw new AppError('INVALID_REQUEST');
+  if (template.pathResults === true && request.limit > context.budgets.pathResultsCap && context.budgets.pathResultsCap <= context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { pathResultsCap: context.budgets.pathResultsCap });
   if (request.limit > context.budgets.maxPage) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxPage: context.budgets.maxPage });
   const hops = template.hops;
   if (hops !== undefined) {

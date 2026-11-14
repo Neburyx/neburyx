@@ -42,6 +42,7 @@ export function budgetsFrom(source: SourceModel): Budgets {
     requestTimeoutMs: DEFAULT_BUDGETS.requestTimeoutMs,
     countCap: source.budgets.heavyOpThreshold,
     maxHops: source.budgets.maxHops,
+    pathResultsCap: source.budgets.pathResultsCap,
     userConcurrency: source.budgets.userConcurrency,
     sourceConcurrency: source.budgets.sourceConcurrency,
     queueWaitMs: source.budgets.queueWaitMs,

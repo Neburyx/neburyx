@@ -7,6 +7,7 @@ export const DEFAULT_BUDGETS: Budgets = {
   requestTimeoutMs: 10_000,
   countCap: 500,
   maxHops: BUDGET_DEFAULTS.maxHops,
+  pathResultsCap: BUDGET_DEFAULTS.pathResultsCap,
   userConcurrency: 2,
   sourceConcurrency: 32,
   queueWaitMs: 2000,

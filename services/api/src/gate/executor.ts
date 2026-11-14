@@ -11,6 +11,8 @@ export interface ExecuteCall {
   /** True for a template that profiles its read; the outcome then carries the plan. */
   readonly profile?: boolean;
   readonly accessMode: 'READ';
+  /** True for a template that keeps the rows streamed before a timeout: the outcome of a timed-out read then carries them. */
+  readonly partialOnTimeout?: true;
   readonly timeoutMs: number;
   readonly rowLimit: number;
   readonly deadlineAt: number;
@@ -26,7 +28,7 @@ export interface ExecuteCall {
 
 export type ExecuteOutcome =
   | { readonly status: 'rows'; readonly rows: readonly Row[]; readonly plan?: Plan }
-  | { readonly status: 'timeout' }
+  | { readonly status: 'timeout'; /** The rows a read of a template that keeps a partial outcome had streamed when it timed out (see `ExecuteCall.partialOnTimeout`); absent when none was kept. */ readonly rows?: readonly Row[] }
   | { readonly status: 'cancelled' }
   | { readonly status: 'unavailable'; readonly reason: UnavailableReason };
 

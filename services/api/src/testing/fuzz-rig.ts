@@ -131,6 +131,19 @@ const linkedRow = (index: number, call: ExecuteCall) => {
   return { a: widget, bounded: false, heavy: [], stopListed: false, x: match, mid: null, r1: plainRelationship(phones ? 'USES' : 'MADE_FROM', widget, match, phones ? {} : { linkId: `rl1-${index}` }, `rel-l1-${index}`), r2: null, hops: 1 };
 };
 
+/** The stable ID of the first end of a shortest-paths call. */
+const firstEndOf = (call: ExecuteCall): unknown => {
+  const ends: unknown = call.parameters['ends'];
+  const first: unknown = Array.isArray(ends) ? ends[0] : undefined;
+  return typeof first === 'object' && first !== null && 'stableId' in first ? first.stableId : undefined;
+};
+
+/** The one row of a shortest-paths read: a widget and a gadget joined by one `MADE_FROM` relationship. */
+const pathsRow = () => {
+  const gadget = neighbor('GD-P');
+  return { a: widget, b: gadget, p: { $type: 'path', start: widget, segments: [{ relationship: plainRelationship('MADE_FROM', widget, gadget, { linkId: 'rp1' }, 'rel-p1'), end: gadget }] } };
+};
+
 const derivedRow = (index: number) => {
   const other = plainNode(['Widget'], { widgetId: `W-D${index}` }, `e-wd-${index}`);
   const via = neighbor(`gd${index}`);
@@ -209,6 +222,8 @@ export function respond(call: ExecuteCall): Promise<ExecuteOutcome> {
   if (call.templateId === 'shared-attribute-count') return Promise.resolve({ status: 'rows', rows: [{ matches: call.parameters['stableId'] === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, anchorBounded: false, skipped: false }] });
   if (call.templateId === 'shared-attribute') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => sharedRow(index, call)) });
   if (call.templateId === 'linked-entities-count') return Promise.resolve({ status: 'rows', rows: [{ matches: call.parameters['stableId'] === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, frontierBounded: false, supernodeSkipped: false }] });
+  if (call.templateId === 'shortest-paths-count') return Promise.resolve({ status: 'rows', rows: [{ toFound: true, fromDegree: firstEndOf(call) === FUZZ_HEAVY_ANCHOR ? FUZZ_HEAVY_MATCHES : 0, toDegree: 0 }] });
+  if (call.templateId === 'shortest-paths') return Promise.resolve({ status: 'rows', rows: [pathsRow()] });
   if (call.templateId === 'linked-entities') return Promise.resolve({ status: 'rows', rows: Array.from({ length: Math.min(call.rowLimit, 3) }, (_, index) => linkedRow(index, call)) });
   if (call.templateId === 'pattern-count') {
     const anchorId = call.parameters['stableId'];

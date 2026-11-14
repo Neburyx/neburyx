@@ -5,6 +5,9 @@ import { isNormalizedPatternCount } from '../gate/normalize/pattern-count.js';
 import { LINKED_ENTITIES_ID } from '../gate/templates/linked-entities.js';
 import { LINKED_ENTITIES_COUNT_ID } from '../gate/templates/linked-entities-count.js';
 import { linkedEntitiesRequestOf } from '../gate/templates/linked-entities-statement.js';
+import { isNormalizedPathsCount } from '../gate/normalize/shortest-paths-count.js';
+import { SHORTEST_PATHS_ID } from '../gate/templates/shortest-paths.js';
+import { SHORTEST_PATHS_COUNT_ID } from '../gate/templates/shortest-paths-count.js';
 import { PATTERN_ID } from '../gate/templates/pattern.js';
 import { PATTERN_COUNT_ID } from '../gate/templates/pattern-count.js';
 import { patternNoticesOf } from '../gate/templates/pattern-notices.js';
@@ -83,7 +86,16 @@ const patternProbe: TemplateProbe = {
   },
 };
 
+/** The probe of the shortest-paths run: the relationships at the two ends the search has to expand; it counts no path, since counting them is the search itself. */
+const shortestPathsProbe: TemplateProbe = {
+  templateId: SHORTEST_PATHS_COUNT_ID,
+  read(item) {
+    if (!isNormalizedPathsCount(item)) return undefined;
+    return { anchorFound: item.anchorFound, usable: item.usable, matches: item.matches, bounded: false, notices: [] };
+  },
+};
+
 /** The probes of the built-in pattern templates, by template ID. */
 export function defaultTemplateProbes(): ReadonlyMap<string, TemplateProbe> {
-  return new Map([[SHARED_ATTRIBUTE_ID, sharedAttributeProbe], [LINKED_ENTITIES_ID, linkedEntitiesProbe], [PATTERN_ID, patternProbe]]);
+  return new Map([[SHARED_ATTRIBUTE_ID, sharedAttributeProbe], [LINKED_ENTITIES_ID, linkedEntitiesProbe], [PATTERN_ID, patternProbe], [SHORTEST_PATHS_ID, shortestPathsProbe]]);
 }
