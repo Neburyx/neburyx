@@ -178,8 +178,8 @@ describe('the demo stack', () => {
 
   it('shows both demo sources as connected and synthetic', sourcesAreConnected);
 
-  it('answers the AI status route as refused, since the preview is off unless the override is added', async () => {
-    expect((await fetch(`${stack.url}/v1/ai/status`)).status).toBe(403);
+  it('answers the AI status route with 404, since the preview is off unless the override is added and the AI paths then do not exist', async () => {
+    expect((await fetch(`${stack.url}/v1/ai/status`)).status).toBe(404);
   });
 
   it('finishes the config container and both loaders with exit code 0 before the api container starts', async () => {
@@ -499,7 +499,7 @@ const resolvedService = (stdout: string, name: string) =>
         z.string(),
         z.object({
           environment: z.record(z.string(), z.string().nullable()).optional(),
-          command: z.array(z.string()).optional(),
+          command: z.array(z.string()).nullable().optional(),
           volumes: z.array(z.object({ type: z.string(), source: z.string().optional(), target: z.string(), read_only: z.boolean().optional(), bind: z.object({ create_host_path: z.boolean().optional() }).optional() })).optional(),
           depends_on: z.record(z.string(), z.object({ condition: z.string() })).optional(),
         }),
