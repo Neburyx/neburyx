@@ -13,6 +13,8 @@ export interface QuestionResult {
   readonly fields: readonly string[];
   readonly repaired: boolean;
   readonly family?: string;
+  /** Set when the plan was right by a named rule of equivalence. */
+  readonly rule?: string;
   readonly answered: 'plan' | 'unsupported' | 'blocked' | 'no-reply';
 }
 
@@ -47,7 +49,7 @@ export async function runQuestions(questions: readonly Question[], targetOf: (qu
     const target = targetOf(question);
     const answer = await target.planner.answer(question.wording);
     const score = scorePlan(question.expect, answer, target.context);
-    results.push({ id: question.id, verdict: score.verdict, fields: score.fields, repaired: answer.kind === 'answered' && answer.repaired, answered: answeredOf(answer), ...familyOf(answer) });
+    results.push({ id: question.id, verdict: score.verdict, fields: score.fields, repaired: answer.kind === 'answered' && answer.repaired, answered: answeredOf(answer), ...familyOf(answer), ...(score.rule === undefined ? {} : { rule: score.rule }) });
   }
   return results;
 }

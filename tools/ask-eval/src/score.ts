@@ -15,7 +15,12 @@ export interface ScoreContext {
 export interface Score {
   readonly verdict: Verdict;
   readonly fields: readonly string[];
+  /** Set when the plan is right by a named rule of equivalence and not by being the expected template. */
+  readonly rule?: typeof ONE_HOP_RULE;
 }
+
+/** The name of the rule that counts `expand` and `linked-entities` as the same plan for one neighbor type over one relationship type (see `oneHopForm`). */
+export const ONE_HOP_RULE = 'one-hop-neighbors';
 
 type Params = Readonly<Record<string, unknown>>;
 type Direction = 'out' | 'in' | 'both';
@@ -87,9 +92,39 @@ function differing(left: Params, right: Params): readonly string[] {
   return [...new Set([...Object.keys(left), ...Object.keys(right)])].filter((key) => !isDeepStrictEqual(left[key], right[key])).sort();
 }
 
+/**
+ * The one-hop rule. An `expand` plan and a `linked-entities` plan are the same plan when each reads as: the entities of one target type at the other end of one relationship type from the anchor,
+ * in one direction, with the same window and limit. For `linked-entities` that is one relationship type in `via`, `maxHops` 1 after the default and a direction given or derived from the mapping; for `expand` it is
+ * one relationship type in `relTypes`, one type in `neighborTypes`, the direction (`both` when it is omitted), the default sort and no rank, filter or cursor. Anything else (two hops, two relationship types, another
+ * direction or target type, another window or limit, a sort or a rank) has no such form and is a different plan.
+ */
+export function oneHopForm(template: string, params: Params, context: ScoreContext): Params | undefined {
+  const filled = normalize(template, params, context);
+  if (filled === undefined) return undefined;
+  const single = (value: unknown): unknown => (Array.isArray(value) && value.length === 1 ? value[0] : undefined);
+  if (template === 'linked-entities') {
+    const via = single(filled['via']);
+    if (via === undefined || filled['maxHops'] !== 1) return undefined;
+    return { ref: filled['ref'], relationship: via, direction: filled['direction'], target: filled['targetType'], window: filled['window'], limit: filled['limit'] };
+  }
+  if (template === 'expand') {
+    const relationship = single(filled['relTypes']);
+    const target = single(filled['neighborTypes']);
+    if (relationship === undefined || target === undefined) return undefined;
+    if (filled['sort'] !== ASK_EVAL_DEFAULTS.expandSort || 'rank' in filled || 'filters' in filled || 'cursors' in filled) return undefined;
+    return { ref: filled['ref'], relationship, direction: filled['direction'], target, window: filled['window'], limit: filled['limit'] };
+  }
+  return undefined;
+}
+
 function scorePlanAnswer(expect: Extract<Expectation, { kind: 'plan' }>, plan: AskPlan, context: ScoreContext): Score {
   if (plan.kind !== 'plan') return { verdict: 'wrong', fields: NO_FIELDS };
-  if (plan.templateId !== expect.template) return { verdict: 'wrong', fields: ['template'] };
+  if (plan.templateId !== expect.template) {
+    const wanted = oneHopForm(expect.template, expect.params, context);
+    const given = oneHopForm(plan.templateId, plan.params, context);
+    if (wanted !== undefined && given !== undefined && isDeepStrictEqual(wanted, given)) return { verdict: 'right', fields: NO_FIELDS, rule: ONE_HOP_RULE };
+    return { verdict: 'wrong', fields: ['template'] };
+  }
   const expected = normalize(expect.template, expect.params, context);
   const actual = normalize(plan.templateId, plan.params, context);
   if (expected === undefined || actual === undefined) return { verdict: 'wrong', fields: ['direction-underivable'] };
