@@ -97,6 +97,8 @@ export interface AiMappingView {
   readonly types: readonly AiViewType[];
   /** The derived rules of the mapping, by ID and end types: names only. */
   readonly derivedRules?: readonly AiViewRule[];
+  /** The most hops a plan that follows relationships may ask for, by source ID: the smaller of what the template allows and the source's own limit. A plan above it is refused by a run, so the planner does not offer it. */
+  readonly maxHopsBySource?: Readonly<Record<string, number>>;
 }
 
 export interface ConfigureWarning {

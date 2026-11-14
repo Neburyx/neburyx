@@ -11,6 +11,8 @@ export interface PlanCheckInput {
   /** `placeholders` (the default) for a plan the model made, whose references are placeholders of `text`; `references` for the parameters of an edit, whose references are real ones the investigator gave. */
   readonly mode?: 'placeholders' | 'references';
   readonly view: AiMappingView | undefined;
+  /** The source the question or the plan to edit is about: its bound on the hops of a plan is the one that is checked; with none known, the smallest bound of the view is. */
+  readonly sourceId?: string | undefined;
   /** What a plan that names a saved pattern is checked against: the entries of the pattern catalog the model was shown, by key. */
   readonly patterns?: ReadonlyMap<string, AskPatternEntry>;
 }
@@ -33,6 +35,16 @@ function names(view: AiMappingView | undefined) {
     relationships: new Set(types.filter((type) => type.kind === 'relationship').map((type) => type.name)),
     rules: new Set((view?.derivedRules ?? []).map((rule) => rule.id)),
   };
+}
+
+/** The most hops a plan may ask for on a source; the smallest bound of the view when the source is not known; undefined when the view states none. */
+function hopBoundOf(view: AiMappingView | undefined, sourceId: string | undefined): number | undefined {
+  const bounds = view?.maxHopsBySource;
+  if (bounds === undefined) return undefined;
+  const own = sourceId !== undefined && Object.hasOwn(bounds, sourceId) ? bounds[sourceId] : undefined;
+  if (own !== undefined) return own;
+  const all = Object.values(bounds);
+  return all.length === 0 ? undefined : Math.min(...all);
 }
 
 /** The problems of a plan against the catalog, the vocabulary and the text it was made for, as paths and codes: none means the plan may leave the planner. */
@@ -79,11 +91,14 @@ export function problemsOfPlan(plan: AskPlan, input: PlanCheckInput): readonly s
         entityType('params.attributeType', candidate.params.attributeType);
         if (candidate.params.via !== undefined) relationshipType('params.via', candidate.params.via);
         break;
-      case 'linked-entities':
+      case 'linked-entities': {
         entityPlaceholder('params.ref', candidate.params.ref);
+        const bound = hopBoundOf(input.view, input.sourceId);
+        if (bound !== undefined && candidate.params.maxHops !== undefined && candidate.params.maxHops > bound) problems.push(`params.maxHops: above ${bound}`);
         entityType('params.targetType', candidate.params.targetType);
         for (const [index, via] of (candidate.params.via ?? []).entries()) relationshipType(`params.via.${index}`, via);
         break;
+      }
       case 'entity':
       case 'degree-preview':
         entityPlaceholder('params.ref', candidate.params.ref);

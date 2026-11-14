@@ -70,6 +70,18 @@ describe('the planner', () => {
     expect(provider.calls).toHaveLength(2);
   });
 
+  it('sends a plan above the hop bound of its source to the repair call, which lists the path and the bound, and a repair above the bound ends plan-not-usable', async () => {
+    const view: AiMappingView = { ...DEFAULT_VIEW, maxHopsBySource: { demo: 2 } };
+    const linked = (maxHops: number) => JSON.stringify({ kind: 'plan', templateId: 'linked-entities', templateVersion: 1, params: { ref: { entityType: 'widget', stableId: '‹widget#1›' }, targetType: 'attr_type', via: ['attr_link'], direction: 'out', maxHops }, rationale: 'x' });
+    const fixed = await rig(ok(linked(4)), { view, repair: ok(linked(2)) });
+    expect((await fixed.planner.plan({ text: TEXT, context: CONTEXT })).kind).toBe('plan');
+    expect(fixed.provider.calls).toHaveLength(2);
+    expect(String(fixed.provider.calls[1]?.parameters['problems'])).toBe('params.maxHops: above 2');
+    const stuck = await rig(ok(linked(4)), { view, repair: ok(linked(3)) });
+    expect(await stuck.planner.plan({ text: TEXT, context: CONTEXT })).toEqual({ kind: 'unsupported', family: 'plan-not-usable', reason: INVALID_PLAN_REASON });
+    expect(stuck.provider.calls).toHaveLength(2);
+  });
+
   it('keeps a version written as text invalid when the repair repeats it, after prose', async () => {
     const asText = JSON.stringify({ ...PLAN, templateVersion: '1' });
     const { planner } = await rig(ok(asText), { repair: ok('Again. ' + asText) });

@@ -58,7 +58,7 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
     );
   }
 
-  function judge(answer: ModelAnswer, text: string, patterns: AskPatternCatalog | undefined): Judged {
+  function judge(answer: ModelAnswer, text: string, patterns: AskPatternCatalog | undefined, sourceId: string | undefined): Judged {
     switch (answer.status) {
       case 'refused':
         return { kind: 'ended', plan: unsupported('model-refused', MODEL_REFUSED_REASON) };
@@ -66,7 +66,7 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
         throw new PlannerCallFailed(answer.code);
       case 'ok': {
         const reading = readReply(answer.text);
-        const problems = reading.ok ? problemsOfPlan(reading.plan, { text, view: deps.view, ...(patterns === undefined ? {} : { patterns: patterns.entries }) }) : reading.problems;
+        const problems = reading.ok ? problemsOfPlan(reading.plan, { text, view: deps.view, sourceId, ...(patterns === undefined ? {} : { patterns: patterns.entries }) }) : reading.problems;
         if (reading.ok && problems.length === 0) return { kind: 'plan', plan: reading.plan };
         return { kind: 'invalid', reply: answer.text, problems };
       }
@@ -82,9 +82,9 @@ export function createAskPlanner(deps: PlannerDeps): AskPlanner {
     offersPatterns: () => deps.model.takes('ask.plan', 'patterns'),
     async plan({ text, context, patterns }) {
       const section = patterns?.text ?? '';
-      const first = judge(await ask(deps.requestBuilder.ask({ question: text, catalog, vocabulary, patterns: section }), context, patterns), text, patterns);
+      const first = judge(await ask(deps.requestBuilder.ask({ question: text, catalog, vocabulary, patterns: section }), context, patterns), text, patterns, context.sourceId);
       if (first.kind !== 'invalid') return first.plan;
-      const repaired = judge(await ask(deps.requestBuilder.askRepair({ question: text, catalog, vocabulary, patterns: section, reply: first.reply, problems: first.problems.join('\n') }), context, patterns), text, patterns);
+      const repaired = judge(await ask(deps.requestBuilder.askRepair({ question: text, catalog, vocabulary, patterns: section, reply: first.reply, problems: first.problems.join('\n') }), context, patterns), text, patterns, context.sourceId);
       return repaired.kind === 'invalid' ? unsupported('plan-not-usable', INVALID_PLAN_REASON) : repaired.plan;
     },
   };

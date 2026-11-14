@@ -50,7 +50,7 @@ export function createAskEditRoute(options: AskEditRouteOptions = {}): Extension
       if (edited.status === 'invalid') throw invalid();
       const candidate = askPlanSchema.safeParse({ kind: 'plan', templateId: body.templateId, templateVersion: entry.version, rationale: EDITED_RATIONALE, params: edited.params });
       if (!candidate.success || candidate.data.kind !== 'plan') throw invalid();
-      if (problemsOfPlan(candidate.data, { text: '', view: viewOf(), mode: 'references' }).length > 0) throw invalid();
+      if (problemsOfPlan(candidate.data, { text: '', view: viewOf(), sourceId: current.sourceId, mode: 'references' }).length > 0) throw invalid();
       const result = await plans.edit({ planId: body.planId, userId: request.principalId, templateId: body.templateId, templateVersion: entry.version, params: candidate.data.params });
       if (result.status !== 'edited') throw refusalOfPlan(result.status);
       return { plan: candidate.data, planId: result.plan.id, expiresAt: result.plan.expiresAt.toISOString() };

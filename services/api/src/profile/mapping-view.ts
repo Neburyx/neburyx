@@ -1,6 +1,7 @@
 import type { AiMappingView, AiViewEnds, AiViewProperty, AiViewRule, AiViewType } from '@neburyx/contracts';
 import { entityProjection, relationshipProjection } from '../mapping/projection.js';
 import type { MappingModel } from '../mapping/model.js';
+import { LINKED_MAX_HOPS } from '../gate/templates/linked-entities-statement.js';
 
 interface Collected {
   readonly name: string;
@@ -38,5 +39,6 @@ export function aiMappingViewOf(mapping: MappingModel): AiMappingView {
       ...(type.kind === 'relationship' ? { ends: [...type.ends.values()] } : {}),
     })),
     ...(rules.size === 0 ? {} : { derivedRules: [...rules.values()] }),
+    ...(mapping.sources.length === 0 ? {} : { maxHopsBySource: Object.fromEntries(mapping.sources.map((source) => [source.id, Math.min(LINKED_MAX_HOPS, source.budgets.maxHops)])) }),
   };
 }

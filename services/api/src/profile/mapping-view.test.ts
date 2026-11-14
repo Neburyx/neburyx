@@ -2,6 +2,7 @@ import { stringify } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from '../mapping/load.js';
 import { baseSource } from '../testing/mapping.js';
+import { LINKED_MAX_HOPS } from '../gate/templates/linked-entities-statement.js';
 import { aiMappingViewOf } from './mapping-view.js';
 
 const viewOf = (...sources: Record<string, unknown>[]) => aiMappingViewOf(parseMapping(stringify({ sources }), 'neburyx.yaml'));
@@ -86,5 +87,13 @@ describe('the mapping view of the AI settings', () => {
   it('holds names of types and rules only: no property name of a relationship appears among the ends or the rules', () => {
     const text = JSON.stringify({ ends: typeOf(viewOf(FIRST), 'KNOWS', 'relationship')?.ends });
     for (const property of ['since', 'note', 'weight', 'rel_id']) expect(text).not.toContain(property);
+  });
+
+  it('holds the most hops a plan may ask for, by source: the smaller of the template cap and the limit of the source', () => {
+    const limited = baseSource({ id: 'one-hop', budgets: { max_hops: 1 }, entities: [{ type: 'person', label: 'Person', stable_id: 'id' }], relationships: [] });
+    const roomy = baseSource({ id: 'four-hops', budgets: { max_hops: 4 }, entities: [{ type: 'person', label: 'Person', stable_id: 'id' }], relationships: [] });
+    const view = viewOf(limited, roomy);
+    expect(view.maxHopsBySource).toEqual({ 'one-hop': 1, 'four-hops': LINKED_MAX_HOPS });
+    expect(LINKED_MAX_HOPS).toBe(2);
   });
 });

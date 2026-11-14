@@ -180,4 +180,15 @@ describe('editing a plan that names a saved pattern', () => {
     const route = createAskEditRoute({ plans: () => plans, view: () => VIEW });
     expect(await refusal(route.handler(request({ planId: stored.id, templateId: 'saved-pattern', params: { patternId: PATTERN, patternVersion: 3, ref: ref('a-2') } })))).toEqual({ code: 'ASK_PLAN_INVALID' });
   });
+
+  it('answers ASK_PLAN_INVALID for an edit of a linked plan above the hop bound of its source, and stores nothing; an edit at the bound is stored', async () => {
+    const plans = createMemoryPlanStore();
+    const stored = await plans.insert({ userId: 'u-1', sourceId: 'demo', templateId: 'linked-entities', templateVersion: 1, params: { ref: { entityType: 'node_a', stableId: 'a-1' }, targetType: 'node_b', via: ['link_a'], direction: 'out', maxHops: 1 }, planningTraceId: 'tr-0' });
+    const bounded = { ...VIEW, maxHopsBySource: { demo: 2 } };
+    const route = createAskEditRoute({ plans: () => plans, view: () => bounded });
+    const edit = (maxHops: number) => route.handler(request({ planId: stored.id, templateId: 'linked-entities', params: { ref: ref('a-2'), targetType: 'node_b', via: ['link_a'], direction: 'out', maxHops } }));
+    expect(parseExtensionRefusal(await edit(3).catch((error: unknown) => error))).toEqual({ code: 'ASK_PLAN_INVALID' });
+    expect(plans.plans).toEqual([stored]);
+    expect(await edit(2)).toMatchObject({ plan: { params: { maxHops: 2 } } });
+  });
 });

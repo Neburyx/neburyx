@@ -104,3 +104,34 @@ describe('a plan that names a saved pattern', () => {
     expect(checked(saved({ patternId: '0195a000-0000-7000-8000-000000000001', patternVersion: 1 }))).toEqual(['params.patternKey: a saved pattern is named by its key']);
   });
 });
+
+describe('the hops of a plan, against the bound of its source', () => {
+  const BOUNDED: AiMappingView = { ...VIEW, maxHopsBySource: { roomy: 2, tight: 1 } };
+  const hops = (maxHops: number | undefined) => plan('linked-entities', { ref: ref(), targetType: 'node_b', via: ['link_a'], direction: 'out', ...(maxHops === undefined ? {} : { maxHops }) });
+  const on = (candidate: AskPlan, sourceId: string | undefined, mode: 'placeholders' | 'references' = 'placeholders') => problemsOfPlan(candidate, { text: TEXT, view: BOUNDED, sourceId, mode });
+
+  it('has the problem `params.maxHops: above N` for a plan above the bound of its source, and none at the bound', () => {
+    expect(on(hops(3), 'roomy')).toEqual(['params.maxHops: above 2']);
+    expect(on(hops(2), 'roomy')).toEqual([]);
+    expect(on(hops(2), 'tight')).toEqual(['params.maxHops: above 1']);
+    expect(on(hops(1), 'tight')).toEqual([]);
+    expect(on(hops(4), 'roomy')).toEqual(['params.maxHops: above 2']);
+  });
+
+  it('is not affected by the bound of another source, and uses the smallest bound when the source is not known', () => {
+    expect(on(hops(2), undefined)).toEqual(['params.maxHops: above 1']);
+    expect(on(hops(2), 'unlisted')).toEqual(['params.maxHops: above 1']);
+    expect(on(hops(2), 'constructor')).toEqual(['params.maxHops: above 1']);
+    expect(on(hops(2), 'toString')).toEqual(['params.maxHops: above 1']);
+  });
+
+  it('has no problem for a plan without maxHops, for another template, and for a view that states no bound', () => {
+    expect(on(hops(undefined), 'tight')).toEqual([]);
+    expect(on(plan('expand', { ref: ref(), neighborTypes: ['node_b'], direction: 'out' }), 'tight')).toEqual([]);
+    expect(problemsOfPlan(hops(9), { text: TEXT, view: VIEW, sourceId: 'tight' })).toEqual([]);
+  });
+
+  it('checks an edit the same way, in the mode of references', () => {
+    expect(on(plan('linked-entities', { ref: { entityType: 'node_a', stableId: 'a-1' }, targetType: 'node_b', via: ['link_a'], direction: 'out', maxHops: 3 }), 'roomy', 'references')).toEqual(['params.maxHops: above 2']);
+  });
+});
