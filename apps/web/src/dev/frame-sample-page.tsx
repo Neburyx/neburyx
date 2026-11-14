@@ -36,8 +36,8 @@ const LONG_LABEL_LENGTH = 60;
 
 /** The sample's profile, with more neutral entity types when the address says `?legendTypes=40`, and the first type's label as one unbroken word of 60 characters when it says `?legendLabel=long`, to try the legend with a long list and a long label. */
 export function sampleProfile(search: string): SourceProfile {
-  const base = frameSampleProfile();
   const params = new URLSearchParams(search);
+  const base = frameSampleProfile(timesOn(search));
   const extra = Math.max(0, Number(params.get('legendTypes') ?? 0) - base.entityTypes.length);
   const template = base.entityTypes[0];
   const more = template === undefined ? [] : Array.from({ length: extra }, (_unused, index) => ({ ...template, type: `kind-${index}`, label: `Kind ${index}`, displayName: `Kind ${index}` }));
@@ -45,6 +45,11 @@ export function sampleProfile(search: string): SourceProfile {
   if (params.get('links') !== 'on') return { ...base, entityTypes };
   const linked = entityTypes.map((type) => (type.type === 'holder' ? { ...type, recordLink: 'always' as const } : type));
   return { ...base, entityTypes: linked, relationshipTypes: [{ type: 'HAS_LINE', from: 'holder', to: 'line', aggregate: false, observedAt: null, stableIdProperty: 'id', filterable: [], sortable: [], evidence: ['recordId'], properties: ['id', 'recordId'], recordLink: true }] };
+}
+
+/** `?times=on` gives the sample's stored relationships a time and its relationship types a time property, to try the time window. */
+function timesOn(search: string): boolean {
+  return new URLSearchParams(search).get('times') === 'on';
 }
 
 /** `?links=on` gives the holder type and the HAS_LINE relationship a source record link, and its records answer as linkable. */
@@ -59,7 +64,7 @@ function knownProfile(): ProfileStore {
 
 /** The sample, with the investigation's title taken from the address (`?title=...`) to try a long one in the header. */
 export function titledSample(search: string): ClientState {
-  const state = createFrameSampleState();
+  const state = createFrameSampleState(timesOn(search));
   if (exportOn(search)) giveId(state);
   const title = new URLSearchParams(search).get('title');
   if (title !== null && title !== '') state.describeInvestigation({ ...FIXTURE_RECORD, title });

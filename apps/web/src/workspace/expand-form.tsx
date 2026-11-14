@@ -6,6 +6,7 @@ import { canRetry, FailureNotice } from '../failure-notice.js';
 import { useClientState, useLoadedGraph, useSessionMask } from '../state/context.js';
 import { elementKey } from '../state/keys.js';
 import { filteredKeys } from '../state/loaded-graph.js';
+import { useUtcDay } from '../state/utc-day.js';
 import { useStoreSelector } from '../state/store.js';
 import { degreeCountText } from './degree-text.js';
 import {
@@ -90,6 +91,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
   const client = useClientState();
   const typeFilter = useStoreSelector(client.presentation.view, (current) => current.typeFilter);
   const graph = useLoadedGraph();
+  useUtcDay();
   const options = relationshipOptions(profile, node.entityType);
   const onOptions = options.filter((option) => !typeFilter.offRelationshipTypes.has(option.type));
   // exactly one relationship type left on of several: it is chosen at the start; two or more left: the choice "Selected in Filters" is offered
@@ -157,7 +159,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
     setMaskNote(droppedFilters || droppedRank);
   }, [mask, drafts, rankChoice, declaredFilterable, declaredSortable]);
 
-  const filteredNow = filteredKeys(graph, typeFilter);
+  const filteredNow = filteredKeys(graph, { ...typeFilter, time: undefined });
   const handHidden = useStoreSelector(client.presentation.view, (current) => current.hidden);
   const hiddenEnds = graph.edges.flatMap((edge) => {
     const from = elementKey(edge.from);
@@ -258,7 +260,7 @@ export function ExpandForm({ node, only }: { readonly node: ElementRef; /** The 
         )}
       </div>
 
-      <ExpandWindowField window={windowChoice} onChange={(chosen) => expansions.setWindow(node, chosen)} range={[...expansion.types.entries()].find(([type, progress]) => progress.range !== undefined && windowKey(expansions.refinementOf(node, type)?.window ?? DEFAULT_WINDOW) === windowKey(windowChoice))?.[1].range} dated={dated} onProblem={setWindowProblem} />
+      <ExpandWindowField window={windowChoice} prefilled={expansions.isWindowPrefilled(node)} onChange={(chosen) => expansions.setWindow(node, chosen)} range={[...expansion.types.entries()].find(([type, progress]) => progress.range !== undefined && windowKey(expansions.refinementOf(node, type)?.window ?? DEFAULT_WINDOW) === windowKey(windowChoice))?.[1].range} dated={dated} onProblem={setWindowProblem} />
       <RankField declared={declaredSortable} neighborName={neighborName} rank={rank} onChange={setRankChoice} observedNote={dated === 'all' ? RANK_NOTE_TIME : dated === 'some' ? RANK_NOTE_MIXED : RANK_NOTE_NONE} />
       <FilterField declared={declaredFilterable} neighborName={neighborName} drafts={drafts} problems={read.problems} next={() => ++draftIds.current} onChange={setDrafts} />
       {personalHidden ? <p className="neighbor-types-note">{PERSONAL_DATA_NOT_OFFERED}</p> : null}

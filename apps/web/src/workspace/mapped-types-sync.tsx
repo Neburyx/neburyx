@@ -7,7 +7,7 @@ export function MappedTypesSync() {
   const state = useClientState();
   const profile = useProfileWhenProvided();
   useEffect(() => {
-    state.presentation.setMappedTypes(profile === undefined ? undefined : { entityTypes: profile.entityTypes.map((type) => type.type), relationshipTypes: [...new Set(profile.relationshipTypes.map((type) => type.type))] });
+    state.presentation.setMappedTypes(profile === undefined ? undefined : { entityTypes: profile.entityTypes.map((type) => type.type), relationshipTypes: [...new Set(profile.relationshipTypes.map((type) => type.type))], datedRelationships: profile.relationshipTypes.filter((row) => row.observedAt !== null).map((row) => ({ type: row.type, from: row.from, to: row.to })) });
   }, [state, profile]);
   return null;
 }

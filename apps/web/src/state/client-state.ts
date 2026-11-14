@@ -1,4 +1,4 @@
-import type { EdgeRef, ElementRef } from '@neburyx/contracts';
+import type { EdgeRef, ElementRef, Window } from '@neburyx/contracts';
 import { StateError } from './errors.js';
 import { createInvestigationStore, type InvestigationRecord, type InvestigationState, type LoadedInvestigation } from './investigation-state.js';
 import { createJobStore, type JobState } from './job-state.js';
@@ -7,6 +7,7 @@ import { deriveLoadedGraph, excludedKeys, filteredKeys, neighborhoodOf, visibleG
 import { createPresentationStore, type PresentationActions, type PresentationSnapshot, type Viewport } from './presentation-state.js';
 import { createServerStore, type GraphResult, type ServerState } from './server-state.js';
 import { createStore, readable, type ReadableStore } from './store.js';
+import { timeFilteredOf } from './time-window.js';
 
 /** `current`: the investigation was already the one shown; `resumed`: it came back as it was left in this session; `fresh`: nothing was held of it. */
 export type Activation = 'current' | 'resumed' | 'fresh';
@@ -15,7 +16,7 @@ export interface ClientState {
   readonly server: ReadableStore<ServerState> & { get(key: QueryKey): GraphResult | undefined };
   readonly investigation: ReadableStore<InvestigationState>;
   /** Hiding goes through `hide` of the state, which also takes the relationships of the hidden entities out of the selection. */
-  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn' | 'setEntityTypeOff' | 'setRelationshipTypeOff'>;
+  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn' | 'setEntityTypeOff' | 'setRelationshipTypeOff' | 'setTimeWindow'>;
   readonly jobs: ReadableStore<JobState>;
   /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
   readonly mask: ReadableStore<boolean>;
@@ -48,6 +49,8 @@ export interface ClientState {
   focusOn(key: string, viewport?: Viewport): void;
   /** Switches an entity type off or on; the selected relationships that touch an entity of an off type leave the selection with it. */
   setEntityTypeOff(type: string, off: boolean): void;
+  /** Sets or clears the time window; what it filters out stops being selected, focused or open. */
+  setTimeWindow(window: Window | undefined): void;
   /** Switches a relationship type off or on; the loaded relationships of the type leave the selection with it. */
   setRelationshipTypeOff(type: string, off: boolean): void;
 }
@@ -190,7 +193,7 @@ export function createClientState(): ClientState {
     visibleGraph: () => {
       const { hidden, neighborhoodFocus, typeFilter } = presentation.view.getState();
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
-      return withoutRelationshipTypes(visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus, filtered: filteredKeys(graph, typeFilter) })), typeFilter.offRelationshipTypes);
+      return withoutRelationshipTypes(visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus, filtered: filteredKeys(graph, typeFilter) })), typeFilter.offRelationshipTypes, timeFilteredOf(graph, typeFilter.time).relationships);
     },
     focusOn(key, viewport) {
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
@@ -207,6 +210,14 @@ export function createClientState(): ClientState {
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
       const ofType = new Set(graph.nodes.filter((node) => node.ref.entityType === type).map((node) => elementKey(node.ref)));
       presentation.setEntityTypeOff(type, off, graph.edges.filter((edge) => ofType.has(elementKey(edge.from)) || ofType.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref)));
+    },
+    setTimeWindow(window) {
+      const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
+      const rows = presentation.view.getState().mappedTypes?.datedRelationships ?? [];
+      const filtered = window === undefined ? undefined : timeFilteredOf(graph, { window, rows });
+      const entities = filtered?.entities ?? new Set<string>();
+      const touching = graph.edges.filter((edge) => entities.has(elementKey(edge.from)) || entities.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));
+      presentation.setTimeWindow(window, [...entities, ...(filtered?.relationships ?? []), ...touching]);
     },
     hide(keys) {
       const hiding = new Set(keys);

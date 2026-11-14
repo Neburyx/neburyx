@@ -1,5 +1,7 @@
-/** The window of an expansion as the person chose it: a number of days, or all time (no window is sent). */
-export type ExpandWindow = { readonly days: number } | 'all';
+import type { Window } from '@neburyx/contracts';
+
+/** The window of an expansion as the person chose it: a number of days, the days from one UTC date to another (both included), or all time (no window is sent). */
+export type ExpandWindow = Window | 'all';
 
 /** The window of an expansion until a person chooses another: the last 7 days, shown in the controls. */
 const DEFAULT_WINDOW_DAYS = 7;
@@ -8,10 +10,10 @@ export const DEFAULT_WINDOW: ExpandWindow = { days: DEFAULT_WINDOW_DAYS };
 /** The most days a window may name, as the server takes it; "All time" has no limit. */
 export const MAX_WINDOW_DAYS = 3650;
 
-export const windowKey = (window: ExpandWindow): string => (window === 'all' ? 'all' : `days:${window.days}`);
+export const windowKey = (window: ExpandWindow): string => (window === 'all' ? 'all' : 'days' in window ? `days:${window.days}` : `dates:${window.from}..${window.to}`);
 
 /** What the request carries for a window: nothing for all time. */
-export const windowRequestOf = (window: ExpandWindow): { readonly window: { readonly days: number } } | Record<string, never> => (window === 'all' ? {} : { window: { days: window.days } });
+export const windowRequestOf = (window: ExpandWindow): { readonly window: Window } | Record<string, never> => (window === 'all' ? {} : { window: 'days' in window ? { days: window.days } : { from: window.from, to: window.to } });
 
 export type DaysRead = { readonly ok: true; readonly days: number } | { readonly ok: false; readonly reason: string };
 

@@ -126,3 +126,30 @@ describe('a type that is mapped again', () => {
     expect(suite.store.namedViews.at(-1)?.queryContext.filters.entityTypes).toEqual(['hub', 'leaf']);
   });
 });
+
+describe('a time window saved with an investigation', () => {
+  it('is set again when it is reopened, and stays in the draft while the mapping has no relationship type with a time, filtering nothing', async () => {
+    suite = await startSuite();
+    const tab = suite.tab();
+    await tab.open(ref('hub', 'H-1'));
+    const id = tab.state.investigation.getState().id ?? '';
+    tab.mapTypes(['hub', 'leaf', 'part'], ['LINKED', 'HAS']);
+    await tab.load([ref('leaf', 'L-1')], [LINKED('r-L1')]);
+    tab.state.setTimeWindow({ from: '2026-10-01', to: '2026-10-31' });
+    await suite.advance(AUTOSAVE_DELAY_MS);
+    await tab.written();
+    expect(suite.draft()?.queryContext.filters.time).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    tab.dispose();
+
+    await suite.restart(mappingOf());
+    const again = suite.tab();
+    expect(await again.openById(id)).toMatchObject({ kind: 'shown', id });
+    again.mapTypes(['hub', 'leaf', 'part'], ['LINKED', 'HAS']);
+    expect(again.state.presentation.view.getState().typeFilter.time?.window).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    expect(again.state.visibleGraph().nodes).toHaveLength(2);
+    again.state.presentation.setPositions(new Map([[again.nodeKey('leaf', 'L-1'), { x: 5, y: 5 }]]));
+    await suite.advance(AUTOSAVE_DELAY_MS);
+    await again.written();
+    expect(suite.draft()?.queryContext.filters.time).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+  });
+});

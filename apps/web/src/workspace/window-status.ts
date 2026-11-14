@@ -1,11 +1,11 @@
-import type { Count, ElementRef } from '@neburyx/contracts';
+import type { Count, ElementRef, Window } from '@neburyx/contracts';
 import type { ExpandStore, TypeProgress } from '../api/expand-store.js';
 import type { ExpandWindow } from '../api/expand-window.js';
 import { degreeCountText } from './degree-text.js';
 import { WINDOW_NOT_COUNTED, windowCountLine, windowEverythingLoaded, windowNotFilteredText, windowUndatedText } from './expand-copy.js';
 
 /** The window a chain was read with, when it narrowed what the chain brings: a number of days that the server says it applied to some relationship type. All time, a window that applied to none, and an answer that says nothing of a window narrow nothing. */
-export function narrowingWindowOf(chainWindow: ExpandWindow | undefined, progress: TypeProgress | undefined): { readonly days: number } | undefined {
+export function narrowingWindowOf(chainWindow: ExpandWindow | undefined, progress: TypeProgress | undefined): Window | undefined {
   if (chainWindow === undefined || chainWindow === 'all') return undefined;
   return progress?.window === undefined || progress.window.applied === 'none' ? undefined : chainWindow;
 }
@@ -16,7 +16,7 @@ export interface WindowStatus {
   /** What the window did not do: the types it did not apply to, and the relationships with no date. */
   readonly notes: readonly string[];
   /** The window, when it left nothing: no relationship of the type lies in it and no page follows. */
-  readonly empty: { readonly days: number } | undefined;
+  readonly empty: Window | undefined;
   /** Said when the chain has ended and everything of the window is loaded. */
   readonly ended: string | undefined;
 }

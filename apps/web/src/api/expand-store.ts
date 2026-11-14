@@ -119,8 +119,10 @@ export interface ExpandStore {
   setPageSize(ref: ElementRef, value: number): PageSizeCheck;
   /** The relationship types the loaded chain of a neighbor type was started with; undefined for all sourced types or when there is no chain. */
   relTypesOf(ref: ElementRef, neighborType: string): readonly string[] | undefined;
-  /** The window the node is expanded with: the last 7 days until the person chooses another number of days or all time. Every way of expanding the node sends it. */
+  /** The window the node is expanded with: the one the person chose, else the time window of the Filters panel when one is set, else the last 7 days. Every way of expanding the node sends it. */
   windowOf(ref: ElementRef): ExpandWindow;
+  /** Whether the window of the node is the Filters panel's time window, which the person has not chosen over. */
+  isWindowPrefilled(ref: ElementRef): boolean;
   setWindow(ref: ElementRef, window: ExpandWindow): void;
   /** The windows the person chose, by node key; changes when one is chosen. */
   readonly windows: ReadableStore<ReadonlyMap<string, ExpandWindow>>;
@@ -181,6 +183,7 @@ function neighborTypeOf(edge: GraphEdge, ref: ElementRef): string {
 export function createExpandStore(client: ApiClient, state: ClientState, person: () => string, report?: FailureReporter, heavy?: HeavyGuard, tracker?: RequestTracker): ExpandStore {
   const store = createStore<ReadonlyMap<string, NodeExpansion>>(new Map());
   const choices = createStore<ReadonlyMap<string, ExpandWindow>>(new Map());
+  const startingWindow = (): ExpandWindow => state.presentation.view.getState().typeFilter.time?.window ?? DEFAULT_WINDOW;
   const notes = createStore<readonly string[]>([]);
   const chains = new Map<string, Map<string, Chain>>();
   const newest = new Map<string, number>();
@@ -321,7 +324,7 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     const nodeKey = elementKey(ref);
     const epoch = epochOf();
     // an ask that names no window takes the node's own choice, and the chain it begins keeps it: every entry sends the window the person sees
-    let action: ExpansionAction = given.kind === 'first' || given.kind === 'pages' ? { ...given, refinement: { filters: given.refinement?.filters ?? [], rank: given.refinement?.rank, window: given.refinement?.window ?? choices.getState().get(nodeKey) ?? DEFAULT_WINDOW } } : given;
+    let action: ExpansionAction = given.kind === 'first' || given.kind === 'pages' ? { ...given, refinement: { filters: given.refinement?.filters ?? [], rank: given.refinement?.rank, window: given.refinement?.window ?? choices.getState().get(nodeKey) ?? startingWindow() } } : given;
     touch(ref);
     heavy?.release(ref);
     const mine = (newest.get(nodeKey) ?? 0) + 1;
@@ -548,7 +551,8 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
       return { ok: true, value };
     },
     relTypesOf: (ref, neighborType) => chains.get(`${epochOf()}|${elementKey(ref)}`)?.get(neighborType)?.relTypes,
-    windowOf: (ref) => choices.getState().get(elementKey(ref)) ?? DEFAULT_WINDOW,
+    windowOf: (ref) => choices.getState().get(elementKey(ref)) ?? startingWindow(),
+    isWindowPrefilled: (ref) => !choices.getState().has(elementKey(ref)) && state.presentation.view.getState().typeFilter.time !== undefined,
     setWindow(ref, window) {
       const next = new Map(choices.getState());
       next.set(elementKey(ref), window);

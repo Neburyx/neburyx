@@ -4,8 +4,11 @@ import { useClientState, useLoadedGraph } from '../state/context.js';
 import { elementKey } from '../state/keys.js';
 import { filteredKeys, outsideFocusKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
+import { useUtcDay } from '../state/utc-day.js';
+import { timeFilteredOf } from '../state/time-window.js';
 import { FILTERS_PANEL_COPY, selectedRelationshipTypesText } from './filters-copy.js';
 import { focusFiltersTool } from './filters-tool.js';
+import { TimeWindowControl } from './time-window-control.js';
 import { filterResultLine, relationshipResultLine } from './scope-text.js';
 
 /** The Filters panel: the entity types of the mapping as chips, each on or off. */
@@ -17,6 +20,7 @@ export function FiltersPanel() {
   const off = typeFilter.offEntityTypes;
   const handHidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
   const neighborhoodFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus);
+  useUtcDay();
   const graph = useLoadedGraph();
   const filtered = filteredKeys(graph, typeFilter);
   // an entity out of the view by hand or outside the neighborhood focus is counted by those parts, not here
@@ -25,7 +29,8 @@ export function FiltersPanel() {
   const result = filterResultLine(loaded, hidden, filtered);
   const relationshipTypes = [...new Set((profile?.relationshipTypes ?? []).map((type) => type.type))];
   const offRelationships = typeFilter.offRelationshipTypes;
-  const relationshipResult = relationshipResultLine(graph, hidden, filtered, offRelationships);
+  const timedOut = typeFilter.time === undefined ? undefined : timeFilteredOf(graph, typeFilter.time).relationships;
+  const relationshipResult = relationshipResultLine(graph, hidden, filtered, offRelationships, timedOut);
   const anyOff = off.size > 0 || typeFilter.offRelationshipTypes.size > 0;
   const close = (): void => {
     state.presentation.setFiltersOpen(false);
@@ -80,6 +85,7 @@ export function FiltersPanel() {
           </button>
         ) : null}
       </div>
+      <TimeWindowControl />
       {profile === undefined ? null : (
         <div role="group" aria-label={FILTERS_PANEL_COPY.relationshipTypes} className="filters-section">
           <span className="supernode-label">{FILTERS_PANEL_COPY.relationshipTypes}</span>

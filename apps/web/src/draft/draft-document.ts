@@ -114,7 +114,7 @@ export function draftOf(inputs: DraftInputs): DraftWriteRequest {
     schemaVersion: SCHEMA_VERSION,
     loaded: { nodes: allNodes.map(({ t, id }) => ({ t, id })), edges: allEdges },
     expansions: inputs.carried?.expansions ?? [],
-    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: inputs.carried?.time ?? null, properties: inputs.carried?.properties ?? [] },
+    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: presentation.typeFilter.time?.window ?? inputs.carried?.time ?? null, properties: inputs.carried?.properties ?? [] },
   };
   return { layout, queryContext, notes: inputs.notes };
 }

@@ -43,6 +43,7 @@ The in-memory store's clock advances one second a delete, so no purge date is ev
 | A deleted investigation restores until its purge date | `src/pg-purge.integration.test.ts` | restores with its draft and views as they were while its purge date is in the future |
 | It is gone after its purge date | `src/pg-purge.integration.test.ts` | removes the investigation, its draft and its views when the purge task has run |
 | A type removed from the mapping shows placeholders and the dropped-filter notice with no error | `src/mapping-change.test.ts` | shows a placeholder at the saved place for each unmapped item |
+| A saved time window is set again on reopen and stays in the draft while the mapping has no relationship type with a time | `src/mapping-change.test.ts` | is set again when it is reopened, and stays in the draft while the mapping has no relationship type with a time, filtering nothing |
 | The same on real Postgres, with the stored mapping hash | `src/pg-mapping.integration.test.ts` | shows the placeholders and the dropped-filter notice with no error |
 | A re-pointed or removed source is read not at all | `src/source-change-layout.test.ts` | refuses a view save, rename, restore and delete |
 | The rebind command opens it normally, with nothing read before | `../cancellation-suite/src/source-change.test.ts` | opens read-only on its saved layout with no read of any kind, and opens normally after the rebind |

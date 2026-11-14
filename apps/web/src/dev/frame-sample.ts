@@ -58,14 +58,26 @@ const RELATIONSHIPS: ReadonlyArray<readonly [string, string, string, 'stored' | 
 
 const STATE_PROPERTY = 'status';
 
-export function frameSampleProfile(): SourceProfile {
+/** The relationship rows of the sample, each with a time property when `timed`: one row for each type with its two entity types. */
+function sampleRelationshipRows(timed: boolean): SourceProfile['relationshipTypes'] {
+  if (!timed) return [];
+  const typeOf = (id: string): string => ENTITIES.find((entity) => entity.id === id)?.type ?? id;
+  const rows = new Map<string, SourceProfile['relationshipTypes'][number]>();
+  for (const [from, to, type, kind] of RELATIONSHIPS) {
+    if (kind === 'derived') continue;
+    rows.set(`${type}|${typeOf(from)}|${typeOf(to)}`, { type, from: typeOf(from), to: typeOf(to), aggregate: kind === 'aggregate', observedAt: 'seenAt', stableIdProperty: kind === 'aggregate' ? null : 'id', filterable: [], sortable: [], evidence: [], properties: [] });
+  }
+  return [...rows.values()];
+}
+
+export function frameSampleProfile(timed = false): SourceProfile {
   const entityTypes = TYPES.map((entry) => ({ type: entry.type, label: entry.label, keyed: false, stableIdProperty: 'id', displayName: entry.label, icon: entry.icon, title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: STATE_PROPERTY, searchable: [], filterable: [STATE_PROPERTY], sortable: [STATE_PROPERTY], pii: [], properties: [STATE_PROPERTY] }));
   return {
     sourceId: FRAME_SAMPLE_SOURCE,
     synthetic: true,
     vocabulary: { caseRef: null },
     entityTypes,
-    relationshipTypes: [],
+    relationshipTypes: sampleRelationshipRows(timed),
     derivedRules: [],
     presets: [],
     mappingExcerpt: FRAME_SAMPLE_MARKER,
@@ -73,7 +85,8 @@ export function frameSampleProfile(): SourceProfile {
 }
 
 /** A client state holding the Explore design's graph, every entity placed where the design draws it, so the canvas can be put beside the design. */
-export function createFrameSampleState(): ClientState {
+/** With `timed`, the stored relationships carry a time: those at an even position in October 2026 and the others in January 2026. */
+export function createFrameSampleState(timed = false): ClientState {
   const state = createClientState();
   const refOf = (id: string): ElementRef => {
     const entity = ENTITIES.find((candidate) => candidate.id === id);
@@ -94,7 +107,7 @@ export function createFrameSampleState(): ClientState {
     const common = { from: fromRef, to: toRef, type, direction: 'from-to' as const, properties: [], evidenceRefs: [], qualityFlags: [] };
     if (kind === 'aggregate') return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, aggregate: { type, from: fromRef, to: toRef } }, semantics: 'stored' as const, memberCount: { value: 42, quality: 'exact' as const, scope: 'members of this relationship type between the two entities' } };
     if (kind === 'derived') return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, derived: { ruleId: type, from: fromRef, to: toRef } }, semantics: 'derived' as const, derivation: { ruleId: type, ruleVersion: 1, supportingEdgeRefs: [] } };
-    return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, type, from: fromRef.entityType, to: toRef.entityType, stableId: `sample-r-${index}` }, semantics: 'stored' as const };
+    return { ...common, ref: { sourceId: FRAME_SAMPLE_SOURCE, type, from: fromRef.entityType, to: toRef.entityType, stableId: `sample-r-${index}` }, semantics: 'stored' as const, ...(timed ? { observedAt: index % 2 === 0 ? '2026-10-15T10:00:00Z' : '2026-01-15T10:00:00Z' } : {}) };
   });
   const key = { sourceId: FRAME_SAMPLE_SOURCE, principalId: 'frame-sample', policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: FRAME_SAMPLE_MARKER, mask: false };
   state.bindSource(FRAME_SAMPLE_SOURCE);

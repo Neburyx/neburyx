@@ -1,7 +1,9 @@
+import type { Window } from '@neburyx/contracts';
 import { DEFAULT_DIRECTION, DEFAULT_LAYOUT, type LayoutDirection, type LayoutId } from './layout-choice.js';
 import { StateError } from './errors.js';
 import { nodeRefOfKey } from './keys.js';
 import { createStore, readable, type ReadableStore } from './store.js';
+import { sameWindow, type DatedRow, type TimeFilter } from './time-window.js';
 
 export interface Position {
   readonly x: number;
@@ -43,6 +45,8 @@ export type SearchTab = 'canvas' | 'source';
 export interface TypeFilter {
   readonly offEntityTypes: ReadonlySet<string>;
   readonly offRelationshipTypes: ReadonlySet<string>;
+  /** The time window filtered by, when one is set. */
+  readonly time?: TimeFilter | undefined;
 }
 
 export const NO_TYPE_FILTER: TypeFilter = { offEntityTypes: new Set(), offRelationshipTypes: new Set() };
@@ -51,6 +55,8 @@ export const NO_TYPE_FILTER: TypeFilter = { offEntityTypes: new Set(), offRelati
 export interface MappedTypes {
   readonly entityTypes: readonly string[];
   readonly relationshipTypes: readonly string[];
+  /** The relationship rows of the mapping that have a time, which a time window can judge. */
+  readonly datedRelationships?: readonly DatedRow[] | undefined;
 }
 
 export interface PresentationState {
@@ -115,6 +121,8 @@ export interface PresentationState {
 interface ViewChange {
   readonly show: 'fit' | { readonly viewport: Viewport | undefined };
 }
+
+const sameRows = (a: readonly DatedRow[] = [], b: readonly DatedRow[] = []): boolean => a.length === b.length && a.every((row, at) => row.type === b[at]?.type && row.from === b[at]?.from && row.to === b[at]?.to);
 
 /** What a screen reader is told when focus ends. */
 export const FOCUS_LEFT = 'Focus left.';
@@ -195,8 +203,10 @@ export interface PresentationActions {
   showAllHidden(): void;
   /** Tells which types the mapping names; an off type a known mapping does not name is dropped from the filter. Undefined when no profile is known: the filter is kept as it is. */
   setMappedTypes(types: MappedTypes | undefined): void;
-  /** Switches every type on again. */
+  /** Switches every type on again; a time window is left as it is. */
   resetTypeFilter(): void;
+  /** Sets or clears the time window. `leaving` are the keys of the items it filters out, which stop being selected, focused or open. */
+  setTimeWindow(window: Window | undefined, leaving?: readonly string[]): void;
   setFiltersOpen(open: boolean): void;
   setPatternsOpen(open: boolean): void;
   setAskOpen(open: boolean): void;
@@ -393,7 +403,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     setMappedTypes(mappedTypes) {
       const current = store.getState();
       const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, at) => item === b[at]);
-      if (current.mappedTypes === mappedTypes || (current.mappedTypes !== undefined && mappedTypes !== undefined && same(current.mappedTypes.entityTypes, mappedTypes.entityTypes) && same(current.mappedTypes.relationshipTypes, mappedTypes.relationshipTypes))) return;
+      if (current.mappedTypes === mappedTypes || (current.mappedTypes !== undefined && mappedTypes !== undefined && same(current.mappedTypes.entityTypes, mappedTypes.entityTypes) && same(current.mappedTypes.relationshipTypes, mappedTypes.relationshipTypes) && sameRows(current.mappedTypes.datedRelationships, mappedTypes.datedRelationships))) return;
       if (mappedTypes === undefined) {
         store.setState({ ...current, mappedTypes });
         return;
@@ -401,12 +411,32 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const offEntityTypes = new Set([...current.typeFilter.offEntityTypes].filter((type) => mappedTypes.entityTypes.includes(type)));
       const offRelationshipTypes = new Set([...current.typeFilter.offRelationshipTypes].filter((type) => mappedTypes.relationshipTypes.includes(type)));
       const kept = offEntityTypes.size === current.typeFilter.offEntityTypes.size && offRelationshipTypes.size === current.typeFilter.offRelationshipTypes.size;
-      store.setState({ ...current, mappedTypes, typeFilter: kept ? current.typeFilter : { offEntityTypes, offRelationshipTypes } });
+      const time = current.typeFilter.time === undefined ? undefined : { window: current.typeFilter.time.window, rows: mappedTypes.datedRelationships ?? [] };
+      store.setState({ ...current, mappedTypes, typeFilter: kept && time === current.typeFilter.time ? current.typeFilter : { offEntityTypes, offRelationshipTypes, time } });
     },
     resetTypeFilter() {
       const { typeFilter } = store.getState();
       if (typeFilter.offEntityTypes.size === 0 && typeFilter.offRelationshipTypes.size === 0) return;
-      store.setState({ ...store.getState(), typeFilter: NO_TYPE_FILTER });
+      store.setState({ ...store.getState(), typeFilter: typeFilter.time === undefined ? NO_TYPE_FILTER : { ...NO_TYPE_FILTER, time: typeFilter.time } });
+    },
+    setTimeWindow(window, leaving = []) {
+      const current = store.getState();
+      const held = current.typeFilter.time?.window;
+      if (window === undefined ? held === undefined : held !== undefined && sameWindow(window, held)) return;
+      const time = window === undefined ? undefined : { window, rows: current.mappedTypes?.datedRelationships ?? [] };
+      const typeFilter = { ...current.typeFilter, time };
+      const gone = new Set(leaving);
+      const endsFocus = current.neighborhoodFocus !== undefined && gone.has(current.neighborhoodFocus);
+      store.setState({
+        ...current,
+        ...(endsFocus ? endedFocus(current) : {}),
+        typeFilter,
+        selection: new Set([...current.selection].filter((key) => !gone.has(key))),
+        focused: current.focused !== undefined && gone.has(current.focused) ? undefined : current.focused,
+        supernodePanel: current.supernodePanel !== undefined && gone.has(current.supernodePanel.key) ? undefined : current.supernodePanel,
+        openMenu: current.openMenu?.key !== undefined && gone.has(current.openMenu.key) ? undefined : current.openMenu,
+        moveNote: endsFocus ? { text: FOCUS_LEFT, serial: (current.moveNote?.serial ?? 0) + 1 } : undefined,
+      });
     },
     setFiltersOpen(filtersOpen) {
       if (store.getState().filtersOpen === filtersOpen) return;

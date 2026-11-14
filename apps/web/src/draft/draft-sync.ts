@@ -1,4 +1,4 @@
-import { ERROR_TABLE, type DraftWriteRequest, type ErrorCode, type QueryContextDocument } from '@neburyx/contracts';
+import { ERROR_TABLE, windowSchema, type DraftWriteRequest, type ErrorCode, type QueryContextDocument } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
@@ -223,6 +223,8 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     const held = state.investigation.getState();
     // the first other layout the person picks ends the carry of a layout name the web does not offer, for good
     if (session.carried?.layout !== undefined && state.presentation.view.getState().layout !== session.carried.layout.shown) session.carried = { ...session.carried, layout: undefined };
+    // a stored time window the web cannot read is written back until the person sets a window of their own
+    if (session.carried !== undefined && session.carried.time !== null && state.presentation.view.getState().typeFilter.time !== undefined) session.carried = { ...session.carried, time: null };
     return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carried: session.carried, carriedTypes: session.carriedTypes, keepLists: keepListsOf(session) });
   };
 
@@ -454,6 +456,11 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     session.carriedTypes = { entityTypes: filters.entityTypes.filter((type) => !mapped.entityTypes.includes(type)), relTypes: filters.relTypes.filter((type) => !mapped.relationshipTypes.includes(type)) };
     if (filters.entityTypes.length > 0) for (const type of mapped.entityTypes) if (!filters.entityTypes.includes(type)) state.setEntityTypeOff(type, true);
     if (filters.relTypes.length > 0) for (const type of mapped.relationshipTypes) if (!filters.relTypes.includes(type)) state.setRelationshipTypeOff(type, true);
+    const stored = windowSchema.safeParse(filters.time);
+    if (stored.success) {
+      state.setTimeWindow(stored.data);
+      session.carried = session.carried === undefined ? undefined : { ...session.carried, time: null };
+    }
     const filter = state.presentation.view.getState().typeFilter;
     session.applied = { entityTypes: { listed: filters.entityTypes.length > 0, off: offKey(filter.offEntityTypes) }, relTypes: { listed: filters.relTypes.length > 0, off: offKey(filter.offRelationshipTypes) } };
     const shown = shownSession();

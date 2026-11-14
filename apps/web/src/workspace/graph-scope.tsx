@@ -11,6 +11,7 @@ import { useCoverageStoreWhenProvided } from './coverage-context.js';
 import { usePreviewAnswers } from './preview-context.js';
 import { showHiddenAndFocusCanvas } from '../canvas/hide-commands.js';
 import { leaveFocusAndFocusCanvas } from '../canvas/focus-commands.js';
+import { useUtcDay } from '../state/utc-day.js';
 import { isSourceChanged } from '../state/investigation-state.js';
 import { filteredOnlyCount, hiddenByFiltersLine, hiddenFromViewLine, outsideFocusLine, formatNumber, loadedLine, notDrawnLine, remainderLine, savedLayoutLine, savedLayoutShownLine, shownCount, UNKNOWN_REMAINDER } from './scope-text.js';
 
@@ -78,6 +79,7 @@ export function GraphScope() {
   const savedLayout = useStoreSelector(state.investigation, (held) => isSourceChanged(held.record?.sourceState));
   const focusing = neighborhoodFocus !== undefined && neighborhoodOf(graph, neighborhoodFocus).size > 0;
   const outside = useMemo(() => outsideFocusKeys(graph, neighborhoodFocus, hidden), [graph, neighborhoodFocus, hidden]);
-  const filtered = useMemo(() => filteredKeys(graph, typeFilter), [graph, typeFilter]);
+  const day = useUtcDay();
+  const filtered = useMemo(() => filteredKeys(graph, typeFilter), [graph, typeFilter, day]);
   return <GraphScopeLines savedLayout={savedLayout} graph={graph} hidden={hidden} filtered={filtered} outside={outside} notRetrieved={useNotRetrieved()} onShowHidden={() => showHiddenAndFocusCanvas(state)} onLeaveFocus={focusing ? () => leaveFocusAndFocusCanvas(state) : undefined} />;
 }

@@ -3,6 +3,7 @@ import type { InvestigationState } from './investigation-state.js';
 import { edgeKey, elementKey, queryKeyText } from './keys.js';
 import type { TypeFilter } from './presentation-state.js';
 import type { ServerState } from './server-state.js';
+import { timeFilteredOf } from './time-window.js';
 
 export interface LoadedGraph {
   readonly nodes: readonly GraphNode[];
@@ -141,7 +142,7 @@ const filteredSets = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, Reado
 const NO_KEYS: ReadonlySet<string> = new Set();
 
 /** The keys of the loaded entities whose type the filters have switched off. The same two inputs give the same set. */
-export function filteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySet<string> {
+function typeFilteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySet<string> {
   if (filter.offEntityTypes.size === 0) return NO_KEYS;
   let byOff = filteredSets.get(graph);
   if (byOff === undefined) {
@@ -155,20 +156,45 @@ export function filteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySe
   return keys;
 }
 
-const withoutTypes = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, LoadedGraph>>();
+const combinedSets = new WeakMap<LoadedGraph, WeakMap<TypeFilter, { readonly timed: ReadonlySet<string>; readonly keys: ReadonlySet<string> }>>();
 
-/** The graph without the relationships of the types that are off; the entities stay. The same two inputs give the same object. */
-export function withoutRelationshipTypes(graph: LoadedGraph, off: ReadonlySet<string>): LoadedGraph {
-  if (off.size === 0) return graph;
+/** The keys of the loaded entities the filters leave out: those of a type switched off and those the time window filters out. The same inputs give the same set. */
+export function filteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySet<string> {
+  const typed = typeFilteredKeys(graph, filter);
+  const timed = timeFilteredOf(graph, filter.time).entities;
+  if (timed.size === 0) return typed;
+  let byFilter = combinedSets.get(graph);
+  if (byFilter === undefined) {
+    byFilter = new WeakMap();
+    combinedSets.set(graph, byFilter);
+  }
+  const known = byFilter.get(filter);
+  if (known !== undefined && known.timed === timed) return known.keys;
+  const keys: ReadonlySet<string> = new Set([...typed, ...timed]);
+  byFilter.set(filter, { timed, keys });
+  return keys;
+}
+
+const withoutTypes = new WeakMap<LoadedGraph, WeakMap<ReadonlySet<string>, WeakMap<ReadonlySet<string>, LoadedGraph>>>();
+const NO_EDGES: ReadonlySet<string> = new Set();
+
+/** The graph without the relationships of the types that are off and the relationships the time window filters out; the entities stay. The same inputs give the same object. */
+export function withoutRelationshipTypes(graph: LoadedGraph, off: ReadonlySet<string>, timedOut: ReadonlySet<string> = NO_EDGES): LoadedGraph {
+  if (off.size === 0 && timedOut.size === 0) return graph;
   let byOff = withoutTypes.get(graph);
   if (byOff === undefined) {
     byOff = new WeakMap();
     withoutTypes.set(graph, byOff);
   }
-  const known = byOff.get(off);
+  let byTimed = byOff.get(off);
+  if (byTimed === undefined) {
+    byTimed = new WeakMap();
+    byOff.set(off, byTimed);
+  }
+  const known = byTimed.get(timedOut);
   if (known !== undefined) return known;
-  const kept: LoadedGraph = { ...graph, edges: graph.edges.filter((edge) => !off.has(edge.type)) };
-  byOff.set(off, kept);
+  const kept: LoadedGraph = { ...graph, edges: graph.edges.filter((edge) => !off.has(edge.type) && !timedOut.has(edgeKey(edge.ref))) };
+  byTimed.set(timedOut, kept);
   return kept;
 }
 

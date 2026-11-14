@@ -16,7 +16,7 @@ import { loadGraph } from './context-menu-kit.js';
 import { ExpandForm } from './expand-form.js';
 import { ExpandProvider } from './expand-context.js';
 import { PreviewProvider } from './preview-context.js';
-import { answerExpand, answerPreview, count, failExpand, inPanel, nodeOf, panelRig, previewOf, response } from './supernode-kit.js';
+import { answerExpand, answerPreview, count, failExpand, inPanel, nodeOf, panelRig, previewOf, relation, response } from './supernode-kit.js';
 
 afterEach(() => cleanup());
 
@@ -82,6 +82,18 @@ describe('the Expand relationships panel under the filters', () => {
     await answerExpand(expansions[0], response());
     expect(inPanel().getByText(/1 loaded entity is hidden by filters\./)).not.toBeNull();
     act(() => state.hide([elementKey(ref('a', 'kind-b', 'b1'))]));
+    expect(inPanel().queryByText(/hidden by filters/)).toBeNull();
+  });
+
+  it('does not name a neighbor that only the time window filters out among those the type filters hide', async () => {
+    const { open, previews, expansions, state } = panelRig();
+    state.presentation.setMappedTypes({ ...mapped, datedRelationships: [{ type: 'link-a', from: 'type-a', to: 'kind-b' }] });
+    state.setTimeWindow({ days: 7 });
+    await open();
+    await answerPreview(previews[0], preview);
+    await userEvent.setup().click(inPanel().getByRole('button', { name: 'Load 25 per type' }));
+    await answerExpand(expansions[0], response({ edges: [{ ...relation('r1', 'n1', 'b1'), observedAt: '2020-01-01' }] }));
+    expect(state.visibleGraph().nodes.map((node) => node.ref.stableId)).not.toContain('b1');
     expect(inPanel().queryByText(/hidden by filters/)).toBeNull();
   });
 

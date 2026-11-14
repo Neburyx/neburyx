@@ -1,6 +1,6 @@
 import { notRetrievedText, type Count } from '@neburyx/contracts';
 import type { NotRetrieved } from '../api/coverage-store.js';
-import { elementKey } from '../state/keys.js';
+import { edgeKey, elementKey } from '../state/keys.js';
 import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 
 /** No loaded node carries a degree preview yet, so what is still out there is not known. */
@@ -111,12 +111,12 @@ export function filterResultLine(loaded: readonly string[], hidden: ReadonlySet<
   return `${formatNumber(counted.length - hiding)} of ${formatNumber(counted.length)} match · exact · ${formatNumber(hiding)} hidden`;
 }
 
-/** The relationships line of the Filters panel while a relationship type is off: "M of L relationships match", where L is the relationships with both ends loaded that touch no entity hidden by hand and M those of them that are drawn (their type is on and neither end is filtered). Nothing while no relationship type is off. */
-export function relationshipResultLine(graph: LoadedGraph, hidden: ReadonlySet<string>, filtered: ReadonlySet<string>, offTypes: ReadonlySet<string>): string | undefined {
-  if (offTypes.size === 0) return undefined;
+/** The relationships line of the Filters panel while a relationship type is off or a time window is set: "M of L relationships match", where L is the relationships with both ends loaded that touch no entity hidden by hand and M those of them that are drawn (their type is on, the time window leaves them and neither end is filtered). `timedOut` holds the keys of the relationships the time window filters out, and is undefined while no window is set. Nothing while neither filter is on. */
+export function relationshipResultLine(graph: LoadedGraph, hidden: ReadonlySet<string>, filtered: ReadonlySet<string>, offTypes: ReadonlySet<string>, timedOut?: ReadonlySet<string>): string | undefined {
+  if (offTypes.size === 0 && timedOut === undefined) return undefined;
   const { drawable } = partitionEdges(graph);
   const counted = drawable.filter((edge) => !hidden.has(elementKey(edge.from)) && !hidden.has(elementKey(edge.to)));
-  const matching = counted.filter((edge) => !offTypes.has(edge.type) && !filtered.has(elementKey(edge.from)) && !filtered.has(elementKey(edge.to)));
+  const matching = counted.filter((edge) => !offTypes.has(edge.type) && !timedOut?.has(edgeKey(edge.ref)) && !filtered.has(elementKey(edge.from)) && !filtered.has(elementKey(edge.to)));
   return `${formatNumber(matching.length)} of ${formatNumber(counted.length)} ${counted.length === 1 ? 'relationship matches' : 'relationships match'}`;
 }
 

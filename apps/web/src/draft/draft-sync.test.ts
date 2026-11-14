@@ -706,3 +706,69 @@ describe('discarding the draft of a deleted investigation', () => {
   });
 });
 
+
+describe('the time window of a stored draft', () => {
+  const adoptWith = (time: unknown, writable = true) => {
+    const made = rig(undefined, false);
+    const stored = { layout: { schemaVersion: 1 as const, layout: 'force', nodes: [], edges: [], groups: [] }, queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time, properties: [] } } };
+    made.sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: stored.queryContext.filters, carried: carriedOf(stored, 'force', true), writable });
+    return made;
+  };
+  const dated = [{ type: 'rel-a', from: 'type-a', to: 'type-a' }];
+  const mapped = { entityTypes: ['type-a'], relationshipTypes: ['rel-a'], datedRelationships: dated };
+
+  it('is put on the view once the mapping is known, and written back as it was', async () => {
+    const { writes, move, state } = adoptWith({ days: 30 });
+    state.presentation.setMappedTypes(mapped);
+    expect(state.presentation.view.getState().typeFilter.time).toEqual({ window: { days: 30 }, rows: dated });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toEqual({ days: 30 });
+  });
+
+  it('is written as dates when the person chooses dates, and as null once it is reset', async () => {
+    const { writes, state } = adoptWith(null);
+    state.presentation.setMappedTypes(mapped);
+    state.setTimeWindow({ from: '2026-10-21', to: '2026-10-28' });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toEqual({ from: '2026-10-21', to: '2026-10-28' });
+    state.setTimeWindow(undefined);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toBeNull();
+  });
+
+  it('is not put on the view when it is not a valid window, opens the investigation, and is written back until the person sets a window', async () => {
+    const stored = { from: '2024-01-01' };
+    const { writes, move, state } = adoptWith(stored);
+    state.presentation.setMappedTypes(mapped);
+    expect(state.presentation.view.getState().typeFilter.time).toBeUndefined();
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toEqual(stored);
+    state.setTimeWindow({ days: 7 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toEqual({ days: 7 });
+    state.setTimeWindow(undefined);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toBeNull();
+  });
+
+  it('stays in the draft and filters nothing while the mapping has no dated relationship', async () => {
+    const { writes, move, state } = adoptWith({ days: 7 });
+    state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: ['rel-a'] });
+    expect(state.presentation.view.getState().typeFilter.time).toEqual({ window: { days: 7 }, rows: [] });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.time).toEqual({ days: 7 });
+    expect(state.visibleGraph().nodes).toHaveLength(1);
+  });
+
+  it('filters a view the person may not write and writes nothing', async () => {
+    const { writes, state } = adoptWith(null, false);
+    state.presentation.setMappedTypes(mapped);
+    state.setTimeWindow({ days: 7 });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(state.presentation.view.getState().typeFilter.time?.window).toEqual({ days: 7 });
+    expect(writes).toHaveLength(0);
+  });
+});
