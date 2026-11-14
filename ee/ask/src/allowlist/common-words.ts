@@ -3,7 +3,7 @@ import { FUNCTION_WORDS, ORDINARY_WORDS_ALSO_SURNAMES } from './function-words.j
 export const COMMON_WORDS_NOTE = [
   'The words are written in this repository: grammatical function words and general words.',
   'Every word that is a surname in the public list below is removed, except the closed set of function words in FUNCTION_WORDS (articles, prepositions, conjunctions, pronouns, determiners, auxiliary and modal verbs, question words, and the adverbs not, here, very, now, then, just, only, still, too, so, ever, yet, again, also), which stays because a question cannot be put without it.',
-  'Seven ordinary words that are also surnames stay by a decision of 2026-11-13, because ordinary questions need them (ORDINARY_WORDS_ALSO_SURNAMES): chain, made, money, payment, screen, show, shows.',
+  'Eight ordinary words that are also surnames stay by decisions of 2026-11-13, because ordinary questions need them (ORDINARY_WORDS_ALSO_SURNAMES): chain, made, money, payment, screen, show, shows (the first decision) and match (a second decision, after a question that asks which records match could not be asked).',
   'Public name lists used: US Census Bureau, "Frequently Occurring Surnames from the 2010 Census" (surnames held by at least 100 people), file Names_2010Census.csv from www2.census.gov/topics/genealogy/2010surnames/names.zip, downloaded 2026-11-13 (archive sha-256 117c41cb4668727b7627b2845b6df3f83eb2a22a1813f42c0ff4bdcab86de135); 162,253 names after the row "all other names" is dropped; no cutoff beyond the Bureau\'s own.',
   'Licence terms: a US federal statistical product; the Bureau\'s page on citing its data asks that the Census Bureau be named as the source; no other licence text was found on the file\'s pages.',
   'Given names: not yet removed (a second list is awaited), so a given name that is also an ordinary word can still be on this list.',
@@ -11,7 +11,7 @@ export const COMMON_WORDS_NOTE = [
   'Residual risks: a function word that is also a surname passes as the word; a name missing from the lists passes if it is a listed word; a form of a vocabulary word, or a base of one, can also be a surname (a short stem is taken only with its `e`, so `nam` is blocked and `name` is allowed from `named`; a longer ambiguous stem keeps both, so `limite` is allowed from `limited`; `chang` is blocked and `change` allowed from `changing`, and `hanging` gives `hange` (a surname) and no `hang`, `banging` gives `bange` (a surname) and no `bang`, `hinging`, `cringing` and `sponging` give no `hinge`, `cringe` or `sponge`; `toes` and `shoes` give no `toe` or `shoe`, and `owed` gives no `owe`); a date of birth written as YYYY-MM-DD is a date and is allowed.',
 ].join('\n');
 
-export const COMMON_WORDS_VERSION = 'common-words-3';
+export const COMMON_WORDS_VERSION = 'common-words-4';
 
 const WORDS: readonly string[] = [
   'a', 'about', 'above', 'across', 'after', 'again', 'against', 'all', 'along', 'already', 'also', 'although', 'always', 'am', 'among',

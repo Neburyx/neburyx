@@ -14,9 +14,9 @@ const NAMES = fileURLToPath(new URL('../testing/names/census-2010-surnames.txt',
 const INDEX = fileURLToPath(new URL('./index.ts', import.meta.url));
 const SOURCE = fileURLToPath(new URL('.', import.meta.url));
 
-const PINNED_VERSION = 'common-words-3';
+const PINNED_VERSION = 'common-words-4';
 const PINNED_FORMS = '21c613f77a06f6b02ec02a4edf9d9732da1cfda9e0a162a62c63f89e40899bab';
-const PINNED_HASH = '944c1588a1bc0a5a48f5560bd7ba628d7807c989c0f278af67c4325072d8687b';
+const PINNED_HASH = 'a9451140b44b1bf948b26db916b5848192b3e97c43882f7320cd686a2f330d59';
 
 const MIN_SURNAMES = 100_000;
 
@@ -54,9 +54,9 @@ describe('the common-word list', () => {
     expect(new Set(FUNCTION_WORDS).size).toBe(FUNCTION_WORDS.length);
   });
 
-  it('keeps the seven named ordinary words, which are surnames, and no other word is allowed that way', () => {
+  it('keeps the eight named ordinary words, which are surnames, and no other word is allowed that way', () => {
     const names = surnames();
-    expect([...ORDINARY_WORDS_ALSO_SURNAMES]).toEqual(['chain', 'made', 'money', 'payment', 'screen', 'show', 'shows']);
+    expect([...ORDINARY_WORDS_ALSO_SURNAMES]).toEqual(['chain', 'made', 'match', 'money', 'payment', 'screen', 'show', 'shows']);
     for (const word of ORDINARY_WORDS_ALSO_SURNAMES) {
       expect(names.has(word)).toBe(true);
       expect(COMMON_WORDS).toContain(word);
@@ -89,7 +89,7 @@ describe('the common-word list', () => {
   });
 
   it('names the public list, its publisher, its edition, its terms and the residual risks in the version note', () => {
-    for (const part of ['Census Bureau', '2010 Census', 'downloaded', 'Licence terms', 'Given names: not yet removed', 'date of birth', 'adverbs not, here, very, now', 'ORDINARY_WORDS_ALSO_SURNAMES', '2026-11-13', 'base or other regular form', 'IRREGULAR_VERB_LIST', 'never on their own', 'or a base of one']) expect(entry.COMMON_WORDS_NOTE).toContain(part);
+    for (const part of ['Census Bureau', '2010 Census', 'downloaded', 'Licence terms', 'Given names: not yet removed', 'date of birth', 'adverbs not, here, very, now', 'ORDINARY_WORDS_ALSO_SURNAMES', '2026-11-13', 'a second decision', 'base or other regular form', 'IRREGULAR_VERB_LIST', 'never on their own', 'or a base of one']) expect(entry.COMMON_WORDS_NOTE).toContain(part);
   });
 });
 

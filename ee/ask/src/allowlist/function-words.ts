@@ -19,4 +19,4 @@ export const FUNCTION_WORDS: readonly string[] = [
  * Ordinary words that are also surnames in the public list and stay on the common-word list by a decision of 2026-11-13, because
  * ordinary questions need them. A closed, named list; every word that is a name and is in neither this list nor `FUNCTION_WORDS` is removed.
  */
-export const ORDINARY_WORDS_ALSO_SURNAMES: readonly string[] = ['chain', 'made', 'money', 'payment', 'screen', 'show', 'shows'];
+export const ORDINARY_WORDS_ALSO_SURNAMES: readonly string[] = ['chain', 'made', 'match', 'money', 'payment', 'screen', 'show', 'shows'];
