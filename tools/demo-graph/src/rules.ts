@@ -18,6 +18,8 @@ export type Rule =
 export interface Context {
   readonly index: number;
   readonly rng: Rng;
+  /** Whole days added to every date and time drawn; absent or 0 leaves the draws as they are. */
+  readonly shiftDays?: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -26,8 +28,12 @@ function pad(value: number, width: number): string {
   return String(value).padStart(width, '0');
 }
 
+/** A shifted date that leaves the years 0001 to 9999. */
+export class DateRangeError extends Error {}
+
 function isoDay(days: number): string {
   const date = new Date(days * DAY_MS);
+  if (date.getUTCFullYear() < 1 || date.getUTCFullYear() > 9999) throw new DateRangeError('a date is moved outside the years 0001 to 9999');
   return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;
 }
 
@@ -58,9 +64,9 @@ export function evaluate(rule: Rule, context: Context): Value | undefined {
     case 'decimal':
       return context.rng.between(rule.low, rule.high) / 10 ** rule.places;
     case 'date':
-      return { $date: isoDay(context.rng.between(rule.fromDay, rule.toDay)) };
+      return { $date: isoDay(context.rng.between(rule.fromDay, rule.toDay) + (context.shiftDays ?? 0)) };
     case 'datetime':
-      return { $datetime: isoDateTime(context.rng.between(rule.fromSecond, rule.toSecond)) };
+      return { $datetime: isoDateTime(context.rng.between(rule.fromSecond, rule.toSecond) + (context.shiftDays ?? 0) * 86_400) };
     case 'join':
       return rule.parts.map((part) => text(evaluate(part, context))).join('');
     case 'cycle':

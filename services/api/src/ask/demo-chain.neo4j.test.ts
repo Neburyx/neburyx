@@ -23,6 +23,10 @@ import { configuredWith, copyOfAskFolder, demoPacks, removeDemoFolders, type Dem
 
 // The demo graph tool is a developer tool that the product may not import, so the graphs are built the way a person builds them: by running its command line.
 // Every name of the pack (its types, labels, properties) is read from its own files; none is written here.
+/** The day the demo graphs are built for and the instant the application takes as now: every date of the graph is relative to the build day, so the windows of the questions find the same data on every run. */
+const BUILD_DAY = '2026-11-14';
+const NOW = new Date(`${BUILD_DAY}T12:00:00Z`);
+
 const run = promisify(execFile);
 const repoRoot = new URL('../../../../', import.meta.url).pathname;
 const TOOL = join(repoRoot, 'tools', 'demo-graph', 'dist', 'main.js');
@@ -59,7 +63,7 @@ beforeAll(async () => {
   for (const [pack, server] of started) {
     const forwarder = await forwardTo(server.boltUri);
     forwarders.push(forwarder);
-    await run('node', [TOOL, 'build', '--mapping', mappingFile(pack, server), '--definition', join(pack.dir, 'demo.yaml'), '--uri', forwarder.uri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
+    await run('node', [TOOL, 'build', '--mapping', mappingFile(pack, server), '--definition', join(pack.dir, 'demo.yaml'), '--build-date', BUILD_DAY, '--uri', forwarder.uri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
     await runAdmin(server, 'CALL db.awaitIndexes(120)');
   }
 }, 600_000);
@@ -108,7 +112,7 @@ async function started(pack: DemoPack, extra: ReadonlyMap<string, unknown> = new
     fileQueries: fileQueryDepsOf(() => extension.askFolder?.()),
   });
   gates.push(gate);
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void logged.push(line) }), store: memoryAppStore(), mapping, gate: watched(gate.gate), seams: { ...communitySeams(), askClassifier: scriptedClassifier(pack, extra) }, extension, previewOn: true });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void logged.push(line) }), store: memoryAppStore(), mapping, gate: watched(gate.gate), seams: { ...communitySeams(), askClassifier: scriptedClassifier(pack, extra) }, extension, previewOn: true, templateRunClock: () => NOW });
   return { app, server, sourceId: pack.sourceId };
 }
 
@@ -134,12 +138,6 @@ type Answer = ReturnType<typeof askAnswerSchema.parse>;
 type Answered = Extract<Answer, { answered: unknown }>['answered'];
 type Refused = Extract<Answer, { refused: unknown }>['refused'];
 const readAnswer = (value: unknown): { readonly answered?: Answered; readonly refused?: Refused } => askAnswerSchema.parse(value);
-
-/**
- * The questions of an intent whose settings fix a window of days. The demo graphs hold fixed dates and a window counts back from now, so these come back empty once the dates are old enough: they are the one exception to
- * "every question finds something", and the exception is named here (and in the record of the feature) so that it cannot widen unseen.
- */
-const hasWindow = (pack: DemoPack, question: DemoQuestion): boolean => question.expect !== 'refuse' && JSON.stringify(pack.intents[question.expect.intent]?.settings ?? {}).includes('"window"');
 
 /** How many rows the intent's own query returns for the text, as the product would count them before any cap. */
 async function queryMatches(server: RunningNeo4j, query: string, name: string): Promise<number> {
@@ -189,8 +187,7 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
           continue;
         }
         if (body.refused !== undefined) {
-          if (!hasWindow(pack, question) || body.refused.cause !== 'nothing-found') throw new Error(`the question ${question.id} was refused (${body.refused.cause})`);
-          continue;
+          throw new Error(`the question ${question.id} was refused (${body.refused.cause})`);
         }
         let answered = body.answered;
         if (answered === undefined) throw new Error(`the question ${question.id} has neither an answer nor a refusal`);
@@ -201,7 +198,6 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
           if (answered === undefined) throw new Error(`the question ${question.id} did not continue to an answer`);
         }
         const listed = listedElements(answered.result);
-        if (hasWindow(pack, question) && (listed === undefined || listed.size === 0)) continue;
         if (listed === undefined || listed.size === 0) throw new Error(`the question ${question.id} lists nothing from the demo graph`);
         checkCited(question.id, answered.summary, answered.result);
         summarized += 1;

@@ -14,7 +14,7 @@ A deliberately small mapping for a synthetic graph of insurance claims. It shows
 
 Each preset gives its parameters a label ("Starting claimant").
 
-**Demo data.** `demo.yaml` describes the synthetic demo graph of this pack, built by `tools/demo-graph`: rings of claimants that share a phone or an address, a phone on the stop list, duplicated addresses (the same street and city under different IDs) and some missing timestamps. The graph has no supernode: no record has more than 100 neighbors.
+**Demo data.** `demo.yaml` describes the synthetic demo graph of this pack, built by `tools/demo-graph`: rings of claimants that share a phone or an address, a phone on the stop list, duplicated addresses (the same street and city under different IDs) and some missing timestamps. The graph has no supernode: no record has more than 100 neighbors. The dates of the data are relative to the day the graph is built (the definition states the `reference_date` its ranges were written for; `--build-date` sets the day, and the default is today in UTC); a restart builds the graph again for the new day.
 
 To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
 

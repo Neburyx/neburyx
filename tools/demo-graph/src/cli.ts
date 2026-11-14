@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { CombineError, combinePacks } from './combine.js';
 import { DefinitionError, readDefinition } from './definition.js';
 import { ExportExistsError, writeExport } from './export.js';
-import { generate } from './generate.js';
+import { dayOf, generate } from './generate.js';
 import { LoadError, loadExport, type LoaderDriverFactory } from './load.js';
 import { MappingError, readMappingSource } from './mapping.js';
 import { packFiles, PackNameError } from './packs.js';
@@ -13,9 +13,9 @@ import { SchemaError } from './schema.js';
 import { ExportError } from './validate.js';
 
 export const USAGE = `usage:
-  demo-graph generate (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] --out <dir>
+  demo-graph generate (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--build-date <YYYY-MM-DD>] --out <dir>
   demo-graph load     (--pack <name> | --mapping <file>) [--source <id>] --dir <dir> [--uri <address>] [--reset]
-  demo-graph build    (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--out <dir>] [--uri <address>] [--reset]
+  demo-graph build    (--pack <name> | --mapping <file> --definition <file>) [--source <id>] [--seed <n>] [--build-date <YYYY-MM-DD>] [--out <dir>] [--uri <address>] [--reset]
   demo-graph combine  --packs <name>,<name>... [--addresses <source-id>=<bolt-address>,...] [--ask] --out <file>`;
 
 export interface CliIo {
@@ -24,6 +24,8 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly createDriver?: LoaderDriverFactory;
   readonly packsFolder?: string;
+  /** The clock for the build date a definition with a reference date takes when none is given; a test pins it. */
+  readonly today?: () => Date;
 }
 
 interface Arguments {
@@ -36,9 +38,9 @@ interface Arguments {
 type Command = Arguments['command'];
 
 const ALLOWED: Readonly<Record<Command, ReadonlySet<string>>> = {
-  generate: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out']),
+  generate: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'build-date', 'out']),
   load: new Set(['pack', 'mapping', 'source', 'dir', 'uri', 'reset']),
-  build: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'out', 'uri', 'reset']),
+  build: new Set(['pack', 'mapping', 'definition', 'source', 'seed', 'build-date', 'out', 'uri', 'reset']),
   combine: new Set(['packs', 'addresses', 'out', 'ask']),
 };
 const REQUIRED: Readonly<Record<Command, readonly string[]>> = { generate: ['out'], load: ['dir'], build: [], combine: ['packs', 'out'] };
@@ -119,13 +121,20 @@ export async function runCli(argv: readonly string[], io: CliIo): Promise<number
       io.err(USAGE);
       return 2;
     }
+    const givenDate = parsed.values.get('build-date');
+    if (givenDate !== undefined && dayOf(givenDate) === undefined) {
+      io.err(USAGE);
+      return 2;
+    }
     const source = readMappingSource(files.mapping, parsed.values.get('source'));
     let directory = parsed.command === 'load' ? parsed.values.get('dir') : parsed.values.get('out');
     if (parsed.command !== 'load') {
       const definition = readDefinition(files.definition, source);
       const usedSeed = seed ?? definition.seed;
       directory ??= mkdtempSync(join(tmpdir(), 'demo-graph-'));
-      const manifest = writeExport(directory, generate(source, definition, usedSeed));
+      const given = parsed.values.get('build-date');
+      const buildDate = given ?? (definition.referenceDay === undefined ? undefined : (io.today?.() ?? new Date()).toISOString().slice(0, 10));
+      const manifest = writeExport(directory, generate(source, definition, usedSeed, buildDate));
       io.out(`wrote ${manifest.files.length} files for seed ${usedSeed} to ${directory}`);
     }
     if (parsed.command === 'generate') return 0;

@@ -25,6 +25,7 @@ const edges = z.strictObject({ min: count, max: count });
 
 const definitionSchema = z.strictObject({
   seed: z.number().int().min(0).optional(),
+  reference_date: z.string().optional(),
   entities: z.record(z.string(), z.strictObject({ count: z.number().int().min(1), properties: z.record(z.string(), z.unknown()) })),
   relationships: z
     .array(
@@ -73,6 +74,8 @@ export interface CompiledBlock {
 
 export interface Definition {
   readonly seed: number;
+  /** The calendar day (as days since 1970-01-01) the ranges of the dates were written for; absent when the definition's dates are fixed. */
+  readonly referenceDay?: number;
   readonly entities: readonly CompiledEntity[];
   readonly blocks: readonly CompiledBlock[];
 }
@@ -374,8 +377,10 @@ export function parseDefinition(text: string, mapping: MappingSource): Definitio
       if (block.properties.some((property) => property.key === 'stable_id')) report(`relationships.${relationship.type}`, 'has no stable ID in the mapping');
     }
   }
+  const referenceDay = raw.reference_date === undefined ? undefined : day(raw.reference_date);
+  if (raw.reference_date !== undefined && referenceDay === undefined) report('reference_date', 'needs a calendar day (YYYY-MM-DD)');
   if (issues.length > 0) throw new DefinitionError(issues);
-  return { seed: raw.seed ?? 0, entities, blocks };
+  return { seed: raw.seed ?? 0, ...(referenceDay === undefined ? {} : { referenceDay }), entities, blocks };
 }
 
 export function readDefinition(path: string, mapping: MappingSource): Definition {

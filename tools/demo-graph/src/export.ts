@@ -18,6 +18,8 @@ export interface Manifest {
   readonly version: 1;
   readonly seed: number;
   readonly sourceId: string;
+  /** The day the dates were placed relative to, when they were (a calendar day); older exports have none. */
+  readonly buildDate?: string;
   readonly files: readonly ManifestEntry[];
 }
 
@@ -40,7 +42,7 @@ export function writeExport(directory: string, generated: Generated): Manifest {
     writeFileSync(join(directory, path), bytes);
     return { kind: file.kind, type: file.type, label: file.label, from: file.from, to: file.to, file: path.split('\\').join('/'), count: file.lines.length, sha256: createHash('sha256').update(bytes).digest('hex') };
   });
-  const manifest: Manifest = { version: 1, seed: generated.seed, sourceId: generated.sourceId, files };
+  const manifest: Manifest = { version: 1, seed: generated.seed, sourceId: generated.sourceId, ...(generated.buildDate === undefined ? {} : { buildDate: generated.buildDate }), files };
   writeFileSync(join(directory, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return manifest;
 }

@@ -1,5 +1,7 @@
 # Demo dataset for the banking pack: a synthetic graph with three supernodes, rings, NAT devices on the stop list and gaps.
 seed: 20261101
+# The day the date ranges below were written for. A build moves every date by the days between this day and the build date, so the graph ends at the day it was built.
+reference_date: "2026-09-30"
 
 entities:
   customer:
@@ -73,7 +75,7 @@ relationships:
       lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
       sourceRecordId: { join: ["SRC-UD-", { sequence: { width: 7 } }] }
       channel: { choice: [app, web, branch] }
-  # Rings: forty groups of six accounts, each group on a device of its own.
+  # Rings: forty groups of six accounts, each group on a device of its own. The devices were last seen in the five days before the reference day, so a question about the last days finds them on every build.
   - type: USES_DEVICE
     from: account
     to: device
@@ -84,7 +86,7 @@ relationships:
     toStart: 10
     properties:
       eventId: { sequence: { prefix: "UD-", width: 7 } }
-      lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
+      lastSeen: { datetime: { from: "2026-09-25T00:00:00Z", to: "2026-09-29T23:59:59Z" }, missing: 0.06 }
       sourceRecordId: { join: ["SRC-UD-", { sequence: { width: 7 } }] }
       channel: { choice: [app, web, branch] }
 
@@ -111,7 +113,7 @@ relationships:
     toStart: 10
     properties:
       eventId: { sequence: { prefix: "CF-", width: 7 } }
-      lastSeen: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.06 }
+      lastSeen: { datetime: { from: "2026-09-25T00:00:00Z", to: "2026-09-29T23:59:59Z" }, missing: 0.06 }
       sourceRecordId: { join: ["SRC-CF-", { sequence: { width: 7 } }] }
 
   # Transactions: each has one initiating account; one merchant receives 100,000 of them.
@@ -120,9 +122,21 @@ relationships:
     to: transaction
     pattern: random
     perTo: { min: 1, max: 1 }
+    toRange: { start: 0, count: 119990 }
     properties:
       eventId: { sequence: { prefix: "IN-", width: 7 } }
       initiatedAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.04 }
+  # The last ten transactions are initiated by the first account of the first ring, in the twenty days before the reference day, so that a question about its last weeks finds them on every build. Each transaction still has one initiating account.
+  - type: INITIATED
+    from: account
+    to: transaction
+    pattern: random
+    perTo: { min: 1, max: 1 }
+    fromRange: { start: 2000, count: 1 }
+    toRange: { start: 119990, count: 10 }
+    properties:
+      eventId: { sequence: { prefix: "IN-", width: 7 } }
+      initiatedAt: { datetime: { from: "2026-09-10T00:00:00Z", to: "2026-09-29T23:59:59Z" } }
   - type: PAID_TO
     from: transaction
     to: merchant

@@ -21,6 +21,7 @@ const manifestSchema = z.strictObject({
   version: z.literal(1),
   seed: z.number().int(),
   sourceId: z.string().min(1),
+  buildDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   files: z.array(
     z.strictObject({
       kind: z.enum(['entity', 'relationship']),

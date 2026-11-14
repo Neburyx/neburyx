@@ -82,6 +82,9 @@ const CAPTURE_TEMPLATES: readonly TemplateDefinition[] = [
   captureTemplate('capture-node', 'MATCH (n:@entity(entityType)) RETURN n ORDER BY n.@stableId(entityType) LIMIT 1', ['entityType'], [], { entityType: z.string() }),
 ];
 
+/** The captures hold the demo dates as the definitions wrote them, so the graph is built for the day they were written for. */
+const REFERENCE_DAY = '2026-09-30';
+
 export interface PackServer {
   readonly pack: Pack;
   readonly server: RunningNeo4j;
@@ -107,7 +110,7 @@ export async function startPackServers(): Promise<PackServer[]> {
     const mapping = join(folder, `${pack}.yaml`);
     writeFileSync(mapping, packMappingText(pack, undefined, server.database));
     try {
-      await run('node', [TOOL, 'build', '--mapping', mapping, '--definition', join(repoRoot, 'domain-packs', pack, 'demo.yaml'), '--uri', forwarder.uri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
+      await run('node', [TOOL, 'build', '--mapping', mapping, '--definition', join(repoRoot, 'domain-packs', pack, 'demo.yaml'), '--build-date', REFERENCE_DAY, '--uri', forwarder.uri], { cwd: repoRoot, env: { ...process.env, DEMO_NEO4J_USER: server.user, DEMO_NEO4J_PASSWORD: server.password } });
     } finally {
       await forwarder.close();
       rmSync(folder, { recursive: true, force: true });

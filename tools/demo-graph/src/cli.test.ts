@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseArguments, runCli, USAGE } from './cli.js';
@@ -9,7 +9,7 @@ import { recordingDriver } from './testing/recording-driver.js';
 function run(argv: string[], env: Record<string, string | undefined> = ENV, createDriver = recordingDriver().factory) {
   const out: string[] = [];
   const err: string[] = [];
-  return runCli(argv, { out: (text) => out.push(text), err: (text) => err.push(text), env, createDriver }).then((code) => ({ code, out, err }));
+  return runCli(argv, { out: (text) => out.push(text), err: (text) => err.push(text), env, createDriver, today: () => new Date('2026-11-14T10:00:00Z') }).then((code) => ({ code, out, err }));
 }
 
 const FILES = ['--mapping', miniMappingPath, '--definition', miniDefinitionPath];
@@ -33,6 +33,11 @@ describe('the arguments', () => {
     [['generate', ...FILES, '--out', 'd', '--uri', 'bolt://localhost:7687']],
     [['generate', ...FILES, '--out', 'd', '--reset']],
     [['build', ...FILES, '--reset', '--reset']],
+    [['load', '--mapping', miniMappingPath, '--dir', 'd', '--build-date', '2026-11-14']],
+    [['combine', '--packs', 'a', '--out', 'd', '--build-date', '2026-11-14']],
+    [['generate', ...FILES, '--out', 'd', '--build-date', '14-11-2026']],
+    [['generate', ...FILES, '--out', 'd', '--build-date', '2026-02-31']],
+    [['build', ...FILES, '--build-date', '2026-02-31']],
   ])('print the usage and exit 2 for %j', async (argv) => {
     const result = await run(argv);
     expect(result.code).toBe(2);
@@ -129,5 +134,35 @@ describe('the commands for the shipped packs', () => {
     const result = await run(['load', '--pack', 'banking-fraud', '--dir', out, '--uri', 'bolt://localhost:7687'], PACK_ENV);
     expect(result.code).toBe(1);
     expect(result.err.join('\n')).toContain('another source');
+  });
+});
+
+describe('the build date', () => {
+  it('moves the dates of a pack by the days from its reference date, and says so in the manifest', async () => {
+    const at = async (date: string) => {
+      const out = join(scratch(), 'export');
+      const result = await run(['generate', '--pack', 'insurance-claims', '--build-date', date, '--out', out]);
+      expect(result.code, result.err.join()).toBe(0);
+      return JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8')) as { buildDate?: string };
+    };
+    expect((await at('2026-10-30')).buildDate).toBe('2026-10-30');
+  });
+
+  it('takes the day of the clock of the command when a definition with a reference date is given no build date', async () => {
+    const out = join(scratch(), 'export');
+    expect((await run(['generate', '--pack', 'insurance-claims', '--out', out])).code).toBe(0);
+    expect((JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8')) as { buildDate?: string }).buildDate).toBe('2026-11-14');
+  });
+
+  it('writes no build date, and shifts nothing, for a definition with no reference date and none given', async () => {
+    const out = join(scratch(), 'export');
+    expect((await run(['generate', ...FILES, '--out', out])).code).toBe(0);
+    expect(JSON.parse(readFileSync(join(out, 'manifest.json'), 'utf8'))).not.toHaveProperty('buildDate');
+  });
+
+  it('refuses a build date for a definition with no reference date, naming the key', async () => {
+    const result = await run(['generate', ...FILES, '--build-date', '2026-11-14', '--out', join(scratch(), 'export')]);
+    expect(result.code).toBe(1);
+    expect(result.err.join('\n')).toContain('reference_date');
   });
 });

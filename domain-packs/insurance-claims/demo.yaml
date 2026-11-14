@@ -1,5 +1,7 @@
 # Demo dataset for the insurance pack: a small synthetic graph with rings, a shared phone on the stop list, duplicate addresses and gaps. No supernode.
 seed: 20261101
+# The day the date ranges below were written for. A build moves every date by the days between this day and the build date, so the graph ends at the day it was built.
+reference_date: "2026-09-30"
 
 entities:
   claim:

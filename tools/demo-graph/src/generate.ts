@@ -1,7 +1,7 @@
 import { DefinitionError, type CompiledBlock, type Definition, type Issue } from './definition.js';
 import type { MappingSource } from './mapping.js';
 import { createRng, type Rng } from './rng.js';
-import { evaluate, type Value } from './rules.js';
+import { DateRangeError, evaluate, type Value } from './rules.js';
 
 interface GeneratedFile {
   readonly kind: 'entity' | 'relationship';
@@ -14,18 +14,26 @@ interface GeneratedFile {
 
 export interface Generated {
   readonly seed: number;
+  /** The calendar day the dates are placed relative to (YYYY-MM-DD); absent when the dates are as the definition wrote them. */
+  readonly buildDate?: string;
   readonly sourceId: string;
   readonly files: readonly GeneratedFile[];
 }
 
 type Properties = Record<string, Value>;
 
-function propertiesOf(rules: CompiledBlock['properties'], index: number, rngs: ReadonlyMap<string, Rng>): Properties {
+function propertiesOf(rules: CompiledBlock['properties'], index: number, rngs: ReadonlyMap<string, Rng>, shiftDays: number, at: string): Properties {
   const properties: Properties = {};
   for (const { key, rule } of rules) {
     const rng = rngs.get(key);
     if (rng === undefined) continue;
-    const value = evaluate(rule, { index, rng });
+    let value: Value | undefined;
+    try {
+      value = evaluate(rule, { index, rng, shiftDays });
+    } catch (error) {
+      if (error instanceof DateRangeError) refuse(`${at}.properties.${key}`, error.message);
+      throw error;
+    }
     if (value !== undefined) properties[key] = value;
   }
   return properties;
@@ -74,7 +82,23 @@ function refuse(path: string, reason: string): never {
   throw new DefinitionError([issue]);
 }
 
-export function generate(mapping: MappingSource, definition: Definition, seed: number): Generated {
+const DAY_MS = 86_400_000;
+
+/** A calendar day as days since 1970-01-01 and back, for the build date. */
+export const dayOf = (text: string): number | undefined => (/^\d{4}-\d{2}-\d{2}$/.test(text) && new Date(`${text}T00:00:00Z`).toISOString().slice(0, 10) === text ? Date.parse(`${text}T00:00:00Z`) / DAY_MS : undefined);
+
+/**
+ * Generates the data. With a build date (a calendar day), every date and time is moved by the whole days between the definition's reference date and the build date, so the pattern of days back from the end is kept and the end is the build date;
+ * the draws of the seeded generator are the same. A definition with no reference date takes no build date.
+ */
+export function generate(mapping: MappingSource, definition: Definition, seed: number, buildDate?: string): Generated {
+  let shiftDays = 0;
+  if (buildDate !== undefined) {
+    const built = dayOf(buildDate);
+    if (built === undefined) refuse('build_date', 'needs a calendar day (YYYY-MM-DD)');
+    if (definition.referenceDay === undefined) refuse('reference_date', 'is needed to place the dates relative to a build date');
+    shiftDays = built - definition.referenceDay;
+  }
   const files: GeneratedFile[] = [];
   const ids = new Map<string, string[]>();
 
@@ -86,7 +110,7 @@ export function generate(mapping: MappingSource, definition: Definition, seed: n
     const typeIds: string[] = [];
     const seen = new Set<string>();
     for (let index = 0; index < compiled.count; index++) {
-      const properties = propertiesOf(compiled.properties, index, rngs);
+      const properties = propertiesOf(compiled.properties, index, rngs, shiftDays, `entities.${entity.type}`);
       const id = properties[entity.stableId];
       if (typeof id !== 'string' || seen.has(id)) refuse(`entities.${entity.type}.properties.${entity.stableId}`, 'does not give every node its own identifier');
       seen.add(id);
@@ -111,7 +135,7 @@ export function generate(mapping: MappingSource, definition: Definition, seed: n
       const rng = createRng(seed, `edges:${relationship.type}:${blockIndex}`);
       const edges = block.pattern === 'ring' ? ringEdges(block) : randomEdges(block, { from: fromIds.length, to: toIds.length }, rng);
       for (const [source, target] of edges) {
-        const properties = propertiesOf(block.properties, edgeIndex, rngs);
+        const properties = propertiesOf(block.properties, edgeIndex, rngs, shiftDays, `relationships.${relationship.type}`);
         const identifier = relationship.stableId === undefined ? undefined : properties[relationship.stableId];
         if (relationship.stableId !== undefined) {
           const key = typeof identifier === 'string' ? identifier : '';
@@ -124,5 +148,5 @@ export function generate(mapping: MappingSource, definition: Definition, seed: n
     });
     files.push({ kind: 'relationship', type: relationship.type, label: '', from: relationship.from, to: relationship.to, lines });
   }
-  return { seed, sourceId: mapping.id, files };
+  return { seed, ...(buildDate === undefined ? {} : { buildDate }), sourceId: mapping.id, files };
 }

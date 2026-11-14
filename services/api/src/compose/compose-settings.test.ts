@@ -74,6 +74,12 @@ describe('the demo compose file', () => {
     expect(demo['migrate']?.volumes).toEqual([]);
   });
 
+  it('builds the graphs with the date of the day: its loader commands name no build date', () => {
+    const text = readFileSync(join(repository, 'deploy/demo/compose.yaml'), 'utf8');
+    expect(text).not.toMatch(/--build-date/);
+    for (const name of ['load-banking', 'load-insurance']) expect((demo[name] as { command?: readonly string[] } | undefined)?.command, name).toEqual(['build', '--pack', name === 'load-banking' ? 'banking-fraud' : 'insurance-claims', '--reset']);
+  });
+
   it('holds nothing of Ask that switches it on: no key file, no key mount and no folder of the demo\'s own', () => {
     const text = readFileSync(join(repository, 'deploy/demo/compose.yaml'), 'utf8');
     expect(text).not.toMatch(/NEBURYX_ASK_API_KEY|NEBURYX_DEMO_ASK_KEY_FILE|\/run\/ask|--ask|enterprise/);
