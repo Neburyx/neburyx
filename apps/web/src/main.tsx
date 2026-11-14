@@ -64,6 +64,7 @@ import './styles/exports.css';
 import './styles/views.css';
 import './styles/investigations.css';
 import './styles/ask.css';
+import './styles/ask-summary.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');

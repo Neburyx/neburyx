@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Count } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { degreeCountText } from './degree-text.js';
@@ -16,5 +18,13 @@ describe('the text of a lower bound', () => {
 
   it('shows no number for an unknown count', () => {
     expect(degreeCountText({ quality: 'unknown', scope: 'x' })).toBe('no count');
+  });
+});
+
+describe('the words of counts, against the table the Ask summary of the server reads too', () => {
+  it('writes every case of the shared table as the table says', () => {
+    const table = JSON.parse(readFileSync(join(process.cwd(), '..', '..', 'packages', 'contracts', 'fixtures', 'count-words.json'), 'utf8')) as { cases: { count: Count; words: string }[] };
+    expect(table.cases.length).toBeGreaterThan(5);
+    for (const { count, words } of table.cases) expect(degreeCountText(count)).toBe(words);
   });
 });

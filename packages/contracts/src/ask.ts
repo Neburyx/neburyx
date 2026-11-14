@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { AuditEvent } from './audit.js';
-import { countSchema, elementRefSchema, nodeSchema, type Count, type ElementRef } from './graph.js';
+import { countSchema, edgeRefSchema, elementRefSchema, nodeSchema, type Count, type ElementRef } from './graph.js';
 import { codePoints } from './investigations.js';
 import { referenceTextSchema } from './entities.js';
 import { EXPAND_DIRECTIONS, EXPAND_SORTS } from './expand.js';
@@ -232,19 +232,58 @@ export function isHeavyResult(run: AskRunResult): boolean {
   return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities' || run.templateId === SAVED_PATTERN_TEMPLATE_ID) && run.result.status === 'heavy';
 }
 
+/** The limits of a summary, in sentences, characters of a sentence and citations. Working limits, not taken from a source. */
+export const ASK_SUMMARY_MAX_SENTENCES = 12;
+export const ASK_SUMMARY_MAX_SENTENCE_LENGTH = 300;
+export const ASK_SUMMARY_MAX_CITATIONS = 40;
+/** The longest key a citation has: a handle of one answer, not an element ID of the source. */
+export const ASK_SUMMARY_MAX_KEY_LENGTH = 16;
+
+const summaryKey = z.string().min(1).max(ASK_SUMMARY_MAX_KEY_LENGTH);
+const summaryText = z.string().min(1).refine((value) => codePoints(value) <= ASK_SUMMARY_MAX_SENTENCE_LENGTH, { message: `at most ${ASK_SUMMARY_MAX_SENTENCE_LENGTH} characters` }).meta({ maxLength: ASK_SUMMARY_MAX_SENTENCE_LENGTH });
+
+/** A sentence of a summary and the keys of the citations it rests on: at least one. */
+export const askSummarySentenceSchema = z.strictObject({ text: summaryText, cites: z.array(summaryKey).min(1).max(ASK_SUMMARY_MAX_CITATIONS) });
+
+/** What a key stands for: a node or a relationship the result lists, with its type and title as they arrived (the title of a relationship is its type with the titles of both ends). */
+export const askSummaryCitationSchema = z.strictObject({ key: summaryKey, element: z.union([elementRefSchema, edgeRefSchema]), type: z.string().min(1), title: z.string() });
+
+/**
+ * The summary of a run: sentences built from the result alone, each citing elements the result lists, and one sentence that says what was left out. Every sentence has a key, every key has a citation,
+ * every citation is cited, the keys are unique and the citations are of one source. The schema cannot see the result: the route checks that the cited elements are the result's and the source is the plan's.
+ */
+export const askSummarySchema = z
+  .strictObject({
+    sentences: z.array(askSummarySentenceSchema).min(1).max(ASK_SUMMARY_MAX_SENTENCES),
+    citations: z.array(askSummaryCitationSchema).min(1).max(ASK_SUMMARY_MAX_CITATIONS),
+    omissions: summaryText.optional(),
+  })
+  .superRefine((summary, context) => {
+    const keys = summary.citations.map((citation) => citation.key);
+    if (new Set(keys).size !== keys.length) context.addIssue({ code: 'custom', message: 'a key is held by one citation only', path: ['citations'] });
+    const cited = new Set(summary.sentences.flatMap((sentence) => sentence.cites));
+    const known = new Set(keys);
+    if ([...cited].some((key) => !known.has(key))) context.addIssue({ code: 'custom', message: 'a sentence cites a key no citation holds', path: ['sentences'] });
+    if (keys.some((key) => !cited.has(key))) context.addIssue({ code: 'custom', message: 'every citation is cited by a sentence', path: ['citations'] });
+    if (new Set(summary.citations.map((citation) => citation.element.sourceId)).size > 1) context.addIssue({ code: 'custom', message: 'the citations are of one source', path: ['citations'] });
+  });
+
 /**
  * What a run answers. A result that stopped as heavy comes with `continueToken` (the plan is `proposed` again, nothing was run or recorded), and only such a result does: the token is the signature that
  * lets `POST /v1/ask/run` with `continue: true` read it.
  */
 export const askRunResponseSchema = z
-  .strictObject({ planId: z.uuid(), outcome: z.enum(ASK_RUN_ANSWER_OUTCOMES), result: askRunResultSchema, continueToken: z.string().regex(ASK_PREVIEW_HASH_PATTERN).optional() })
-  .refine((answer) => isHeavyResult(answer.result) === (answer.continueToken !== undefined), { message: 'a heavy result comes with a continue token and no other result does', path: ['continueToken'] });
+  .strictObject({ planId: z.uuid(), outcome: z.enum(ASK_RUN_ANSWER_OUTCOMES), result: askRunResultSchema, continueToken: z.string().regex(ASK_PREVIEW_HASH_PATTERN).optional(), summary: askSummarySchema.optional() })
+  .refine((answer) => isHeavyResult(answer.result) === (answer.continueToken !== undefined), { message: 'a heavy result comes with a continue token and no other result does', path: ['continueToken'] })
+  .refine((answer) => !(isHeavyResult(answer.result) && answer.summary !== undefined), { message: 'a result that stopped as heavy lists nothing to cite and has no summary', path: ['summary'] });
 
 export type AskPlan = z.infer<typeof askPlanSchema>;
 export type AskPlanAnswer = z.infer<typeof askPlanAnswerSchema>;
 export type AskRefusalFamily = z.infer<typeof askRefusalFamilySchema>;
 export type AskPlanRequest = z.infer<typeof askPlanRequestSchema>;
 export type AskRunResult = z.infer<typeof askRunResultSchema>;
+export type AskSummary = z.infer<typeof askSummarySchema>;
+export type AskSummaryCitation = z.infer<typeof askSummaryCitationSchema>;
 export type AskEditRequest = z.infer<typeof askEditRequestSchema>;
 export type AskCancelRequest = z.infer<typeof askCancelRequestSchema>;
 export type AskRunRequest = z.infer<typeof askRunRequestSchema>;

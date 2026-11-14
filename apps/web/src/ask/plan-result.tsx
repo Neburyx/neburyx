@@ -3,6 +3,7 @@ import { PLAN_COPY } from './plan-copy.js';
 import { resultView } from './plan-result-model.js';
 import { addedText } from '../patterns/copy.js';
 import { degreeCountText } from '../workspace/degree-text.js';
+import { SummaryView } from './plan-summary.js';
 import type { PlanPanel } from './use-plan.js';
 
 /** The count of a result that has none of its own (an entity, an expansion): an exact one, so the words say only what was added and what the graph held. */
@@ -24,6 +25,7 @@ export function ResultView({ panel }: { readonly panel: PlanPanel }) {
           </div>
         ))}
       </dl>
+      {stage.run.summary === undefined ? null : <SummaryView panel={panel} summary={stage.run.summary} />}
       {view.notices.length === 0 ? null : (
         <ul className="ask-plan-notices">
           {view.notices.map((notice) => (

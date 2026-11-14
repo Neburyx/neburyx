@@ -519,3 +519,69 @@ describe('a plan that names a saved pattern', () => {
     expect(JSON.stringify(rg.events)).not.toMatch(/a-secret-1|pat_/);
   });
 });
+
+describe('the summary of a run answer', () => {
+  const warnings: { fields: Record<string, unknown>; message: string }[] = [];
+  const withLogger = (rg: Rig) => createAskRunRoute({ plans: () => rg.plans, logger: () => ({ warn: (fields, message) => void warnings.push({ fields, message }) }) });
+
+  it('carries a summary of the result of a run that completes, built after the run is recorded and audited, and the answer is the same otherwise', async () => {
+    warnings.length = 0;
+    const rg = rig();
+    const plan = await rg.plan();
+    const answer = askRunResponseSchema.parse(await withLogger(rg).handler(rg.request({ planId: plan.id })));
+    expect(answer.summary?.sentences[0]?.text).toBe('A is of type node_a.');
+    expect(answer).toMatchObject({ planId: plan.id, outcome: 'complete', result: entityResult });
+    expect(rg.events).toHaveLength(1);
+    expect(warnings).toEqual([]);
+  });
+
+  it('carries a summary of a partial run too, with the count of the cut in its words', async () => {
+    const rg = rig(async () => ({ status: 'ok', result: sharedResult('lowerBound') }));
+    const plan = await rg.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    const answer = askRunResponseSchema.parse(await withLogger(rg).handler(rg.request({ planId: plan.id })));
+    expect(answer.outcome).toBe('partial');
+    expect(answer.summary?.sentences.map((sentence) => sentence.text).join(' ')).toContain('≥ 2 · lower bound');
+  });
+
+  it('leaves no summary text in the audit event or the run row, and leaves the plan run', async () => {
+    const rg = rig();
+    const plan = await rg.plan();
+    const answer = askRunResponseSchema.parse(await withLogger(rg).handler(rg.request({ planId: plan.id })));
+    expect(answer.summary).toBeDefined();
+    expect(JSON.stringify(rg.events)).not.toContain('is of type');
+    expect(JSON.stringify(rg.plans.runs)).not.toContain('is of type');
+    expect(rg.plans.plans[0]?.state).toBe('run');
+    expect(Object.keys(rg.events[0]?.detail ?? {})).toEqual(['askRun']);
+  });
+
+  it('drops a summary whose citations are not of the plan’s source, logs one warning with a fixed code and no value, and leaves the outcome and the result as they were', async () => {
+    warnings.length = 0;
+    const rg = rig();
+    const plan = await rg.plan({ sourceId: 'other-source' });
+    const answer = askRunResponseSchema.parse(await withLogger(rg).handler(rg.request({ planId: plan.id })));
+    expect(answer).toEqual({ planId: plan.id, outcome: 'complete', result: entityResult });
+    expect(warnings).toEqual([{ fields: { event: 'ask-summary-dropped', code: 'other-source' }, message: 'a summary was left out of a run answer' }]);
+    expect(rg.plans.plans[0]?.state).toBe('run');
+  });
+
+  it('drops a summary when the builder throws, and answers as before', async () => {
+    warnings.length = 0;
+    const hostile = { ...entityResult, result: new Proxy(node, { get: (target, key) => (key === 'display' ? Reflect.get(target, key) : (() => { throw new Error('boom'); })()) }) } as unknown as AskRunResult;
+    const rg = rig(async () => ({ status: 'ok', result: hostile }));
+    const plan = await rg.plan();
+    const answer = await withLogger(rg).handler(rg.request({ planId: plan.id }));
+    expect(answer).not.toHaveProperty('summary');
+    expect(warnings.map((entry) => entry.fields)).toEqual([{ event: 'ask-summary-dropped', code: 'builder-threw' }]);
+    expect(rg.events).toHaveLength(1);
+  });
+
+  it('has no summary for a run that stops as heavy, and none for a run that fails', async () => {
+    const heavy = rig(async () => ({ status: 'ok', result: heavyResult }));
+    const stopped = await heavy.plan({ templateId: 'shared-attribute', params: TEMPLATE_PARAMS });
+    expect(await withLogger(heavy).handler(heavy.request({ planId: stopped.id }))).not.toHaveProperty('summary');
+    const failing = rig(async () => Promise.reject(new Error('read failed')));
+    const failed = await failing.plan();
+    const thrown = await withLogger(failing).handler(failing.request({ planId: failed.id })).catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(Error);
+  });
+});

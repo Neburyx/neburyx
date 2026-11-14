@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHeavyResult, ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, askRunResponseSchema, askRunResultSchema, askEditRequestSchema, askEditResponseSchema, askCancelRequestSchema, askCancelResponseSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH } from './ask.js';
+import { isHeavyResult, ASK_PLAN_PARAM_NAMES, ASK_PLAN_TEMPLATE_IDS, askPlanRequestSchema, askPlanResponseSchema, askPlanSchema, askResolutionSchema, askResolutionsSchema, askRunRequestSchema, askRunResponseSchema, askRunResultSchema, askEditRequestSchema, askEditResponseSchema, askCancelRequestSchema, askCancelResponseSchema, ASK_MAX_RESOLUTIONS, ASK_MESSAGE_MAX_LENGTH, askSummarySchema, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH } from './ask.js';
 
 const REF = { entityType: 'node_a', stableId: 'A-1' };
 const SHARED = { kind: 'plan', templateId: 'shared-attribute', templateVersion: 1, params: { ref: REF, attributeType: 'attr_type', via: 'attr_link', window: { days: 90 }, limit: 25 }, rationale: 'People who share a device.' };
@@ -328,5 +328,51 @@ describe('a plan that names a saved pattern', () => {
     expect(askEditRequestSchema.safeParse({ planId: '0195a000-0000-7000-8000-000000000002', templateId: 'saved-pattern', params: {} }).success).toBe(true);
     expect(askEditRequestSchema.safeParse({ planId: '0195a000-0000-7000-8000-000000000002', templateId: 'free-query', params: {} }).success).toBe(false);
     expect(askEditResponseSchema.safeParse({ plan: stored, planId: '0195a000-0000-7000-8000-000000000003', expiresAt: '2026-11-13T10:00:00.000Z' }).success).toBe(true);
+  });
+});
+
+describe('the summary of a run answer', () => {
+  const planId = '0192f000-0000-7000-8000-0000000000a1';
+  const ref = { sourceId: 'demo', entityType: 'node_a', stableId: 'a-1' };
+  const citation = (key: string, over: object = {}) => ({ key, element: ref, type: 'node_a', title: 'A', ...over });
+  const summary = { sentences: [{ text: 'One match.', cites: ['n1'] }], citations: [citation('n1')] };
+  const node = { ref, display: { title: 'A', type: 'node_a' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+  const answer = (over: object = {}) => ({ planId, outcome: 'complete', result: { templateId: 'entity', result: node }, ...over });
+
+  it('refuses a sentence with no key, a key no citation holds, a citation no sentence cites and two citations with one key', () => {
+    expect(askSummarySchema.safeParse({ ...summary, sentences: [{ text: 'x', cites: [] }] }).success).toBe(false);
+    expect(askSummarySchema.safeParse({ ...summary, sentences: [{ text: 'x', cites: ['n9'] }] }).success).toBe(false);
+    expect(askSummarySchema.safeParse({ ...summary, citations: [citation('n1'), citation('n2')] }).success).toBe(false);
+    expect(askSummarySchema.safeParse({ ...summary, citations: [citation('n1'), citation('n1')] }).success).toBe(false);
+  });
+
+  it('refuses citations of more than one source, and takes a relationship reference as an element', () => {
+    const other = { sourceId: 'other', entityType: 'node_a', stableId: 'a-2' };
+    const both = { sentences: [{ text: 'x', cites: ['n1', 'n2'] }], citations: [citation('n1'), citation('n2', { element: other })] };
+    expect(askSummarySchema.safeParse(both).success).toBe(false);
+    const edge = { sourceId: 'demo', type: 'HOLDS', from: 'a-1', to: 'a-2', stableId: 'r-1' };
+    expect(askSummarySchema.safeParse({ ...summary, citations: [citation('n1', { element: edge, type: 'HOLDS', title: 'HOLDS: A → B' })] }).success).toBe(true);
+  });
+
+  it('refuses a summary over the limits of sentences, of a sentence and of citations, and takes one at each limit', () => {
+    const keys = Array.from({ length: ASK_SUMMARY_MAX_CITATIONS }, (_, index) => `n${index + 1}`);
+    const atLimit = { sentences: Array.from({ length: ASK_SUMMARY_MAX_SENTENCES }, (_, index) => ({ text: 'x'.repeat(ASK_SUMMARY_MAX_SENTENCE_LENGTH), cites: index === 0 ? keys : ['n1'] })), citations: keys.map((key) => citation(key)) };
+    expect(askSummarySchema.safeParse(atLimit).success).toBe(true);
+    expect(askSummarySchema.safeParse({ ...atLimit, sentences: [...atLimit.sentences, { text: 'x', cites: ['n1'] }] }).success).toBe(false);
+    expect(askSummarySchema.safeParse({ ...atLimit, sentences: [{ text: 'x'.repeat(ASK_SUMMARY_MAX_SENTENCE_LENGTH + 1), cites: keys }] }).success).toBe(false);
+    expect(askSummarySchema.safeParse({ ...atLimit, citations: [...atLimit.citations, citation('n41')] }).success).toBe(false);
+  });
+
+  it('takes an answer with no summary, and one with a summary and an omissions line', () => {
+    expect(askRunResponseSchema.safeParse(answer()).success).toBe(true);
+    expect(askRunResponseSchema.safeParse(answer({ summary: { ...summary, omissions: '2 statements were left out.' } })).success).toBe(true);
+    expect(askRunResponseSchema.safeParse(answer({ summary: { ...summary, omissions: '' } })).success).toBe(false);
+  });
+
+  it('refuses a summary on a result that stopped as heavy', () => {
+    const heavy = { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { quality: 'lowerBound', value: 1000, scope: 'test' }, threshold: 1000, continueLimit: 25, notices: [], warnings: [] };
+    const stop = answer({ outcome: 'partial', result: { templateId: 'shared-attribute', result: heavy }, continueToken: 'c'.repeat(64) });
+    expect(askRunResponseSchema.safeParse(stop).success).toBe(true);
+    expect(askRunResponseSchema.safeParse({ ...stop, summary }).success).toBe(false);
   });
 });

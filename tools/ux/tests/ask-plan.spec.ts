@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { askPanel, scriptAsk } from './support/ask-panel.ts';
+import { canvasOf } from './support/workspace.ts';
 import { NEW_PLAN_ID, PLAN_ID, openPlanCard, scriptPlan } from './support/ask-plan.ts';
 
 const card = (page: import('@playwright/test').Page) => askPanel(page).getByRole('region', { name: 'Review before running' });
@@ -91,5 +92,31 @@ test.describe('the plan card of the Ask panel', () => {
       expect(box.x + box.width).toBeLessThanOrEqual(size.width);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     }
+  });
+
+  test('draws the answer under the result with its markers and sources, says why a marker cannot select, and stays inside the window', async ({ page }) => {
+    await scriptAsk(page);
+    await scriptPlan(page, 'summary');
+    await openPlanCard(page);
+    await card(page).getByRole('button', { name: 'Run' }).click();
+    const answer = card(page).getByRole('region', { name: 'Answer' });
+    await expect(answer.getByText('1 shown.')).toBeVisible();
+    await expect(answer.getByRole('button', { name: /^Source 1:/ })).toBeVisible();
+    await answer.getByRole('button', { name: /^Source 2:/ }).click();
+    await expect(answer.getByText('It is not on the graph yet. Use Add to graph first.')).toBeVisible();
+    // once the result is on the graph, a marker selects its element, and the canvas read-out says so
+    await card(page).getByRole('button', { name: 'Add to graph' }).click();
+    await answer.getByRole('button', { name: /^Source 1:/ }).first().click();
+    await expect.poll(async () => canvasOf(page).evaluate((element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '')).toMatch(/1 selected/);
+    const toggle = answer.getByRole('button', { name: '2 sources' });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(answer.getByRole('listitem').filter({ hasText: /account AC-2$/ })).toBeVisible();
+    const box = await askPanel(page).boundingBox();
+    const size = page.viewportSize();
+    expect(box).not.toBeNull();
+    if (box === null || size === null) return;
+    expect(box.x + box.width).toBeLessThanOrEqual(size.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 });

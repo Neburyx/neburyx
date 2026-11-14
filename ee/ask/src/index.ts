@@ -124,7 +124,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
             handler: async () => ({ preview: true }),
           },
           createAskPlanRoute({ vocabulary: () => questionVocabulary({ view: mappingView, catalogWords: catalogWords() }), view: () => mappingView, plans: () => options.planStore ?? plans }),
-          createAskRunRoute({ plans: () => options.planStore ?? plans }),
+          createAskRunRoute({ plans: () => options.planStore ?? plans, logger: () => logger }),
           createAskEditRoute({ plans: () => options.planStore ?? plans, view: () => mappingView }),
           createAskCancelRoute({ plans: () => options.planStore ?? plans }),
         ],

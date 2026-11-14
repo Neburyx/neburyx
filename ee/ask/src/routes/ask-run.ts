@@ -1,9 +1,10 @@
-import { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, storedSavedPatternParamsSchema, askRunRequestSchema, isHeavyResult, askRunResponseSchema, ExtensionRefusal, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, storedSavedPatternParamsSchema, askRunRequestSchema, isHeavyResult, askRunResponseSchema, ExtensionRefusal, type AuditEvent, type ExtensionLogger, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { continueTokenOf, verifyContinueToken } from '../plans/continue-token.js';
 import { paramsHashOf } from '../plans/params-hash.js';
 import type { PlanStore, RunOutcome, StoredPlan } from '../plans/index.js';
 import { refusalOfPlan } from '../plans/refusals.js';
 import { summarizeRun } from '../plans/run-summary.js';
+import { summaryOfRun } from '../summary/attach.js';
 
 export const ASK_RUN_URL = '/v1/ask/run';
 /** The action of the audit event of a run of a plan. */
@@ -12,6 +13,8 @@ export const ASK_RUN_ACTION = 'ask.run';
 export interface AskRunRouteOptions {
   /** The store of plans, asked each time because the application builds it after the route is made. */
   readonly plans?: () => PlanStore | undefined;
+  /** The application's logger, asked each time: a summary that is dropped logs one warning with a fixed code. */
+  readonly logger?: () => ExtensionLogger | undefined;
 }
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
@@ -110,7 +113,9 @@ export function createAskRunRoute(options: AskRunRouteOptions = {}): ExtensionRo
       if (failure !== undefined) throw failure.error;
       if (refusal !== undefined) throw new ExtensionRefusal(refusal);
       if (run?.status !== 'ok' || outcome === 'failed') throw new ExtensionRefusal({ code: 'ASK_PLAN_INVALID' });
-      return { planId: plan.id, outcome, result: run.result };
+      // after the run is recorded and audited: a summary never changes the outcome, the run row, the event or the plan
+      const cited = summaryOfRun(run.result, plan, options.logger?.());
+      return { planId: plan.id, outcome, result: run.result, ...(cited === undefined ? {} : { summary: cited }) };
     },
   };
 }

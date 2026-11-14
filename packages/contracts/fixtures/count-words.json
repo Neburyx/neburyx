@@ -1,0 +1,12 @@
+{
+  "note": "Counts and the words the application writes for them. The Ask summary of the server and the web app both read this table, so the two copies of the words cannot drift.",
+  "cases": [
+    { "count": { "quality": "exact", "value": 0, "scope": "s" }, "words": "0 · exact" },
+    { "count": { "quality": "exact", "value": 999, "scope": "s" }, "words": "999 · exact" },
+    { "count": { "quality": "exact", "value": 1000, "scope": "s" }, "words": "1,000 · exact" },
+    { "count": { "quality": "exact", "value": 1234567, "scope": "s" }, "words": "1,234,567 · exact" },
+    { "count": { "quality": "estimated", "value": 1500, "scope": "s" }, "words": "~ 1,500 (estimated)" },
+    { "count": { "quality": "lowerBound", "value": 40, "scope": "s" }, "words": "≥ 40 · lower bound" },
+    { "count": { "quality": "unknown", "scope": "s" }, "words": "no count" }
+  ]
+}

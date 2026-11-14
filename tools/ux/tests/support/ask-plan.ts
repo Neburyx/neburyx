@@ -13,7 +13,7 @@ export interface AskPlanRequests {
   readonly calls: Array<{ readonly path: string; readonly body: Record<string, unknown> }>;
 }
 
-export type RunScript = 'complete' | 'heavy' | 'expired';
+export type RunScript = 'complete' | 'heavy' | 'expired' | 'summary';
 
 /** Answers the endpoints of a plan so a spec can reach each state: a confirmed question is answered with a plan, and a run, an edit and a cancel are answered as the script says. */
 export async function scriptPlan(page: Page, run: RunScript = 'complete'): Promise<AskPlanRequests> {
@@ -32,6 +32,12 @@ export async function scriptPlan(page: Page, run: RunScript = 'complete'): Promi
       return route.fulfill({ json: { planId: PLAN_ID, outcome: 'partial', result: { templateId: 'shared-attribute', result }, continueToken: 'c'.repeat(64) } });
     }
     const result = { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: 1, scope: 'template:shared-attribute' }, matchIds: [node('AC-2').ref], nodes: [node('AC-1'), node('AC-2')], edges: [], notices: [], warnings: [] };
+    if (run === 'summary') {
+      const citation = (key: string, stableId: string) => ({ key, element: node(stableId).ref, type: 'account', title: stableId });
+      const long = 'Other records that share a device with AC-1: 1 · exact, which is a long sentence that has to wrap inside the narrow window and never push the page sideways, whatever its length is.';
+      const summary = { sentences: [{ text: long, cites: ['n1'] }, { text: 'It is AC-2.', cites: ['n2'] }], citations: [citation('n1', 'AC-1'), citation('n2', 'AC-2')], omissions: '1 shown.' };
+      return route.fulfill({ json: { planId: PLAN_ID, outcome: 'complete', result: { templateId: 'shared-attribute', result }, summary } });
+    }
     return route.fulfill({ json: { planId: PLAN_ID, outcome: 'complete', result: { templateId: 'shared-attribute', result } } });
   });
   await page.route((url) => url.pathname === '/v1/ask/edit', async (route) => {

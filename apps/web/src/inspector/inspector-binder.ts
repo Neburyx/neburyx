@@ -4,6 +4,15 @@ import { inspectorContent } from './inspector-panel.js';
 import type { Inspector } from './inspector.js';
 import { INSPECTOR_PANEL_ID, INSPECTOR_PANEL_TOP, INSPECTOR_PANEL_WIDTH } from './inspector-layout.js';
 import { inspectedKey } from './inspected.js';
+import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/ask-binder.js';
+import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-limits.js';
+
+/** While the Ask panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is the Ask panel's width between two gaps. */
+function insetOf(state: ClientState): number {
+  const view = state.presentation.view.getState();
+  // held to the limits the panel is drawn with, so a stored width below the least is not trusted
+  return view.askOpen ? PANEL_GAP + Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, view.panelSizes.get(ASK_PANEL_ID) ?? ASK_PANEL_WIDTH)) + PANEL_GAP : PANEL_GAP;
+}
 
 const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);
 
@@ -13,6 +22,7 @@ const epochOf = (state: ClientState): string => JSON.stringify([state.investigat
  */
 export function bindInspector(state: ClientState, panels: PanelRegistry, inspector: Inspector): () => void {
   let remove: (() => void) | undefined;
+  let placedAt = PANEL_GAP;
   let epoch = epochOf(state);
   const Content = inspectorContent(inspector);
   const sync = (): void => {
@@ -26,8 +36,16 @@ export function bindInspector(state: ClientState, panels: PanelRegistry, inspect
     const dismissed = inspector.dismissed.getState();
     if (dismissed !== undefined && dismissed !== shown) inspector.clearDismissal();
     const open = shown !== undefined && inspector.dismissed.getState() !== shown;
-    if (open && remove === undefined) remove = panels.register({ id: INSPECTOR_PANEL_ID, title: 'Inspector', placement: { kind: 'floating', side: 'right', top: INSPECTOR_PANEL_TOP }, initialWidth: INSPECTOR_PANEL_WIDTH, content: Content });
-    else if (!open && remove !== undefined) {
+    const inset = insetOf(state);
+    const placement = { kind: 'floating' as const, side: 'right' as const, top: INSPECTOR_PANEL_TOP, ...(inset === PANEL_GAP ? {} : { inset }) };
+    if (open && remove === undefined) {
+      placedAt = inset;
+      remove = panels.register({ id: INSPECTOR_PANEL_ID, title: 'Inspector', placement, initialWidth: INSPECTOR_PANEL_WIDTH, content: Content });
+    } else if (open && inset !== placedAt) {
+      // moved, not registered again, so what the inspector holds stays
+      placedAt = inset;
+      panels.place(INSPECTOR_PANEL_ID, placement);
+    } else if (!open && remove !== undefined) {
       remove();
       remove = undefined;
     }
