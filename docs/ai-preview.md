@@ -101,6 +101,8 @@ A word that Cypher reserves for a command (for example `start`, `next`, `offset`
 
 A name that is not an intent of the folder is refused as an unknown intent, and any other departure from the form as a reply that does not fit. Both get a fixed sentence and nothing runs. Whether the names in `entities` are the intent's parameters is checked afterwards, when the entities are bound to the intent: a missing, extra or invalid input is refused with its own fixed sentence.
 
+`classification.md` must also name the reserved intent `saved-pattern` as an allowed answer, with its two entity keys, or the classifier never picks a saved pattern: `pattern`, the key of one of the saved patterns in the list the product sends after the question, and `anchor`, the stable ID of the starting entity, only for a pattern that starts from an entity the question gives. The product's own sentence before that list says how to name a pattern, but it travels in the content after the question, not in the instructions of the call, so a `classification.md` that says the intent must be one of its own list contradicts it. `saved-pattern` is accepted only when the person's saved patterns were sent with the question; for a person with none, a reply that names it is refused as an unknown intent. The shipped files of the two domain packs list only their own intents: add `saved-pattern` to them to let a question run a saved pattern. See [Asking for a saved pattern](#asking-for-a-saved-pattern).
+
 ### Template intents
 
 `settings` is the template's own parameters, with the fixed parts written out and each value the question supplies written as the string `"$name"`, where `name` is one of the intent's `parameters`:
@@ -128,13 +130,24 @@ A name that is not an intent of the folder is refused as an unknown intent, and 
 
 ### What a question does
 
-With the preview on, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with one call to the model (below), binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops with its estimate, no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
+With the preview on, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with one call to the model (below), binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops before reading it, with a count that is a lower bound at the source's `heavy_op_threshold` (never an estimate of the full size), no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
 
 A question that cannot be answered gets one fixed sentence for its cause, never text from the model. An intent with a `query` is checked at start-up as above and run by the same route through the gate: the entities are the query's parameters and reach it only as parameters, the read is bounded by the source's limits and its result must be nodes and relationships of the source's mapping (the rules the gate applies are in the architecture notes). The answer lists what the query returned, with a count labelled as a lower bound when the read was cut.
 
 The model receives the source's `classification.md` as the instructions of the call and, as its content, the question exactly as typed and, for a person with saved patterns on the source, one fixed sentence and the catalog of that person's own patterns (a key, the label and a description of the structure of each, and a fixed sentence when not all of them are listed; see below). Nothing else is sent: no property value, no entity value of a result, no other person's pattern. Nothing is withheld or redacted from the question before the call. The intent names of the folder are sent only if `classification.md` lists them, so it should. The reply must have [the reply form](#the-reply-form).
 
-What Ask sends to the model, and that nothing else reaches it, is pinned by the tests of `tools/ask-safety-suite` (see its README for the list of what each test proves).
+The tests of `tools/ask-safety-suite` prove these promises, each by a named test (its README lists them):
+
+- A value from a question reaches the source only as a parameter, and the statement is the folder's own text or the template's: for a file query, a template that takes an ID and a search, and through Continue with no new model call.
+- An instruction typed into a question runs nothing. A reply that fits runs once, with its entities only; a reply with an entity too many, too few or too long is refused.
+- A folder with a write, a call, `LOAD CSV` or a second statement, or with a parameter that is not declared, is refused at start-up, and the loader names the intent, never the query text. A query forced past the loader is refused by the gate before any read, the route and the gate each check the folder, and a result of a type the mapping does not name is refused whole. With `pnpm test:neo4j`, the read transaction refuses a write that passed every text check.
+- The provider receives the instructions and the question as typed (with caching on and off, and for a question that holds text that looks like an instruction), the model is called once for each question, and no property value of a result reaches it. For a person with saved patterns it receives their own catalog and no ID, version, anchor or other person's pattern.
+- No audit event, `ask_runs` row, log line or problem response holds an entity value, the question or a saved pattern's label or anchor.
+- Nothing is redacted or withheld in the request path, and masking applies to the result nodes only: the model and the source receive the same either way.
+- The settings that once withheld a property from the model are refused as unknown keys of the mapping file.
+- Each check fails on a leaky input (a canary for each), and a case that never ran cannot pass.
+
+The suite does not measure how well Ask classifies; that is `tools/ask-eval` (see [Checking it](#checking-it)).
 
 ### Asking for a saved pattern
 
@@ -182,7 +195,45 @@ How well Ask classifies is measured by `pnpm ask-eval --packs domain-packs --rep
 
 ## What you see in the app
 
-The header of the workspace shows **Ask** and **Summarize**. With the switch off, both show a padlock beside their name. With the preview on, both show a sparkle. Summarize does nothing in this build. Ask is answered by the API routes described under [The Ask folder](#the-ask-folder).
+The header of the workspace shows **Ask** and **Summarize**. In a build without the preview (`GET /v1/me` does not report the edition as `enterprise`), both show a padlock and are locked: pressing one says "Enterprise capability, locked" and opens nothing. With the preview on, both show a sparkle. Summarize only says that it is not available in this release yet. **Ask** opens and closes the Ask panel beside the canvas; it is answered by the API routes described under [The Ask folder](#the-ask-folder).
+
+### Asking
+
+The panel asks one question at a time, read-only, and does not remember earlier questions. Type the question in **Your question** and press **Send**, or Enter (Shift+Enter adds a line). A counter shows the characters used out of 1,000; typing or pasting stops at the limit and the panel says so. Send is off for a blank question, while a question is out, and while the source has changed (the panel then says that questions are paused).
+
+While Ask works, the panel says **Asking…** and the field cannot be edited. **Cancel**, or Escape, stops the question: no answer is shown and the question stays in the field. A second Escape, or Escape with no question out, closes the panel and gives the focus back to the Ask control.
+
+### An answer
+
+An answer shows, from the top:
+
+- **Understood as**: the question type Ask picked, in words, and **Values taken from your question**: each entity it named, with the name of the input it fills. A file query is marked **From a file query**.
+- The result: for a result with a count, the figure and its quality word, **Exact**, **Estimated**, **Lower bound** or **Unknown** (an estimated figure starts with `~`, a lower bound with `≥`); for any other result, one line for each count with its quality, or the entity it shows. A partial result says that the source was read only up to its limit, and the notices of the run follow.
+- For a file query, **Rows** with one line for each row it returned: a relationship as `from → type → to`, an entity on its own line.
+- **Answer**: the summary the server wrote from the result, each sentence followed by numbered markers. A marker, and each entry of **Sources** below it (the element's name and type), selects that element on the canvas when it is drawn. When it is not, the panel says why: add the result to the graph first, the element is not in this answer, it is outside the current view, or it is no longer on the graph. When the summary left elements out, a line under the sources says so.
+- **Add to graph**: draws what the result lists. Its label gives the number it adds (**Add first …** when the result counts more than it lists), and after a press the panel says what was added. A result with nothing to draw says so instead. It is off while the source has changed.
+
+When the question ran one of your own saved patterns, the answer shows the pattern's label with **Your saved pattern**, and its starting entity as **Start**, never the pattern's ID. A note says that only you see the label: others who use Ask never see it.
+
+### A result too large to read
+
+When a result would read more than the source allows without being asked, Ask stops before reading anything. The card shows what the question was understood as and a figure that is a lower bound at the source's threshold (for example `≥ 500 matches`, tagged **Lower bound**), never an estimate of the full size, and **Continue**. Continue reads a first page only (**Reading a first page…**) and shows it as an answer. If the stop has expired (after 15 minutes) or the graph or your access changed, the panel says that Continue is no longer valid and offers **Ask again**, which sends the same question.
+
+### When Ask does not answer
+
+A question Ask cannot answer gets a card titled **Ask did not answer**, with the number and name of its cause and the fixed sentence of that cause (the sentences are listed under [Asking a question](api-conventions.md#asking-a-question)); never text from the model. Below it are your question as typed, shown as text, and, where they help:
+
+- for missing, extra and invalid inputs: **Needs** (the inputs of the question type), **Found**, and **Missing** or **Extra**, as names; what is wrong is marked;
+- for nothing found: **Used**, the question type that ran;
+- a line of what to try, for the causes where rewording can help.
+
+Every card ends with **Or do it by hand** and the manual tools, which work without Ask: **Open Paths** (when the Paths tool is there), **Open Filters**, **Search by stable ID** and **Expand** (which explains how to expand a selected entity). A build without Ask in it shows the card of the cause unavailable.
+
+A failure, such as an unavailable service, a busy source, a timeout or a rate limit, shows a short title and a sentence in words and, where trying again can help, **Try again**, which sends the same question (or the same Continue) again, held back for the wait a rate limit asks for. When the audit record cannot be written, the answer is withheld and the panel says that the question may have run.
+
+### Closing, a new investigation and masking
+
+Closing the panel keeps the question and the last answer: they are there when it opens again, until another investigation is opened. A question still out when the panel closes is cancelled. Changing masking clears an answer, a heavy stop or a question that is out, and the panel says so: ask again to see the answer with the new masking.
 
 ## Upgrading
 
