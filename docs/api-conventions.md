@@ -254,6 +254,47 @@ The app offers "Open source record" only where the mapping declares a `link` (fo
 
 A call to the model of the Enterprise and AI preview is recorded in the audit table after it returns, and an answer is never returned when its record could not be written. When the write fails the call returns nothing and the answer is `AUDIT_UNAVAILABLE` (`503`, retryable, no details): the database may recover, so a later call can succeed. It is the code of the model calls only; the two routes that already fail closed on an audit write, opening a source record and the status change of an investigation, keep answering `INTERNAL_ERROR`.
 
+## Asking a question
+
+Two routes answer a question, both with the AI preview on (see [Switch the AI preview on](ai-preview.md)). With the preview off, and the enterprise code loaded, both answer `403` (`ACCESS_DENIED`, reason `ai-preview-off`). Both declare `principal`.
+
+**`POST /v1/ask`** takes `{ sourceId, question, mask? }`. `question` is text that is not blank, at most 1,000 characters. In this order the route checks that the caller may read the source (a source that is not configured, or not the caller's, is `NOT_FOUND`, before any model call), classifies the question with the source's Ask folder, binds the entities to the intent's parameters, runs the intent through the gate (read-only, bounded, as the person's own reads, with `mask` as the person chose it) and builds the answer. An intent is either a built-in template or a file query of the source's Ask folder; a file query runs through the gate as the manual route for it does, with the entities as its values only, and its audit event holds the SHA-256 of the query's text (`querySha256`). A file query that returns no node and no relationship answers `nothing-found`, as a template that finds nothing does. The gate's own refusals of a file query keep their codes (`INVALID_REQUEST` with a `file-query-*` reason), and an intent whose entities do not fit its template's parameters is the cause `invalid-inputs`. A value the template accepts but the source's own checks refuse, such as an unknown entity type or a limit over the maximum page, is `ASK_PLAN_INVALID` (422).
+
+The answer is `200` with one of two shapes:
+
+```json
+{ "answered": { "intent": "…", "entities": { "id": "…" }, "outcome": "complete", "result": { }, "summary": { } } }
+{ "refused": { "cause": "missing-inputs", "sentence": "…", "intent": "…", "parameters": ["…"], "found": [], "missing": ["…"], "extra": [] } }
+```
+
+- `answered.outcome` is `complete` or `partial`. `entities` are text, at most 256 characters each, as the person typed them. `result` is what the intent's template answers, and `summary` is the cited summary the server builds from it; the model does not write it.
+- A result that would read more than the source allows without being asked (a heavy stop) answers `outcome: partial` with a `continueToken` and no `summary`; it holds no rows, and the page comes from the Continue route.
+- A question that cannot be answered is `200` with `refused`, not an error. `cause` is one of the fixed set below and `sentence` is its one fixed sentence; nothing the model, the question or the folder holds can reach the person through it. `intent` and, for the three causes that concern the inputs, `parameters`, `found`, `missing` and `extra` (names only) are sent when they are known.
+
+| `refused.cause` | `sentence` |
+|---|---|
+| `no-intent` | Ask has no way to answer this question. |
+| `unknown-intent` | Ask could not match this question to anything it can answer. |
+| `bad-reply` | Ask could not make sense of the answer it got for this question. |
+| `model-declined` | The assistant declined to work on this question. |
+| `model-failed` | The assistant is not available right now. Try again later. |
+| `no-ask-for-source` | Ask is not set up for this source. |
+| `unavailable` | Ask is not available in this edition. |
+| `missing-inputs` | This question does not give everything Ask needs to answer it. |
+| `extra-inputs` | This question gives something Ask cannot use for this answer. |
+| `invalid-inputs` | The values in this question do not fit what Ask needs to answer it. |
+| `nothing-found` | Ask found nothing for this question. |
+
+`unavailable` is not sent as a refusal: it is answered as the existing `ASK_UNSUPPORTED` error (422, reason `not-in-this-edition`). An anchor that is not there is the cause `nothing-found`. A refusal of the gate or of the source (`SOURCE_UNAVAILABLE`, a read that timed out, a budget) keeps its own code and is not turned into a cause.
+
+**`POST /v1/ask/continue`** takes `{ sourceId, intent, entities, continueToken, mask? }`. It verifies the token, runs the same intent for one more bounded page without calling a model, and answers as `POST /v1/ask` does (a page that is again heavy gives a new token).
+
+The `continueToken` is `<expiry in milliseconds>.<64 hex characters>`: an HMAC over the person, the source, the intent, the entities, the `mask` choice and the expiry. It expires 15 minutes after the answer and may be used more than once. The token also binds a fingerprint of the intent's definition in the folder, so a changed folder does not continue an old token. A token of another person, source, intent, entities or `mask`, a token of an intent the folder no longer holds, an expired token and an altered one are `INVALID_REQUEST` (400) with `details.reason` `continue-invalid`, with no read.
+
+Errors: a body that does not fit is `INVALID_REQUEST`; an unknown or not-readable source is `NOT_FOUND`; an event that cannot be written is `AUDIT_UNAVAILABLE` (503), and the answer is withheld; a failed write of the `ask_runs` row is only logged.
+
+**Audit.** A question writes one event `ask.question`, and a continue writes `ask.continue`, with `resourceType` `ask-intent` and `resourceRef` the intent's name. Its `detail.askRun` holds the intent, its kind, the outcome, the cause when there is one, the template id, a keyed hash of the parameters and the number of elements the result listed. It never holds an entity value, the question or a sentence. The model call of the classification is audited by its own event (action `ask.classify`). If an event cannot be written, the answer is withheld (`AUDIT_UNAVAILABLE`). Each run that is answered, or that fails, also writes a row of the table `ask_runs` (intent, outcome, row count and time); a refusal, a `nothing-found` and a heavy stop write none. The refusal of a Continue token writes an event with no source.
+
 ## Permission per route
 
 Every route says who may call it, in its route options:

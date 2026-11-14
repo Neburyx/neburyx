@@ -101,7 +101,7 @@ describe('the request an extension handler is given', () => {
   });
 });
 
-describe('the refusal of an Ask call that no planner can answer', () => {
+describe('the refusal of an Ask call that cannot be answered here', () => {
   it('is recognised by its shape, carries no audited mark and is never taken for the preview refusal', () => {
     const thrown = new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
     expect([thrown.code, thrown.reason, thrown.audited]).toEqual(['ASK_UNSUPPORTED', 'not-in-this-edition', undefined]);

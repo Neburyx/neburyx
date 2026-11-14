@@ -125,7 +125,7 @@ describe('the ask_runs table of the preview', () => {
     await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'local', $2, 'Test user')`, [id, id]);
     return id;
   };
-  const INSERT_RUN = 'INSERT INTO ask_runs (id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5)';
+  const INSERT_RUN = `INSERT INTO ask_runs (id, actor_id, intent, outcome, row_count, elapsed_ms) VALUES ($1, $2, 'entity', $3, $4, $5)`;
 
   it('has the columns of the data model, all required, with the id as primary key and created_at defaulting to the database clock', async () => {
     const database = await migratedWithPreview();
@@ -136,6 +136,7 @@ describe('the ask_runs table of the preview', () => {
       { column_name: 'row_count', data_type: 'integer', is_nullable: 'NO' },
       { column_name: 'elapsed_ms', data_type: 'integer', is_nullable: 'NO' },
       { column_name: 'created_at', data_type: 'timestamp with time zone', is_nullable: 'NO' },
+      { column_name: 'intent', data_type: 'text', is_nullable: 'NO' },
     ]);
     const constraints = await rows(database.ownerUrl, `SELECT contype, pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'ask_runs'::regclass AND contype IN ('p', 'f') ORDER BY contype`);
     expect(constraints).toEqual([
@@ -187,6 +188,25 @@ describe('the preview migrations that retired the stored plans', () => {
     expect(await rows(database.ownerUrl, `SELECT indexname FROM pg_indexes WHERE tablename = 'audit_events' AND indexdef LIKE '%(trace_id)%'`)).toEqual([{ indexname: 'audit_events_trace' }]);
     const again = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
     expect([again.code, again.stdout]).toEqual([0, 'nothing to apply\n']);
+  });
+
+  it('adds the intent of ask_runs to a database migrated to 0004: the rows stay with the intent unknown, and the column is required', async () => {
+    const UNTIL_0004 = [...EARLIER_FILES, '0004-drop-ask-plans.sql'];
+    const until0004: ExtensionLoader = {
+      load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: fixtureFolder(Object.fromEntries(UNTIL_0004.map((name) => [name, readFileSync(join(PREVIEW_MIGRATIONS, name), 'utf8')]))) }),
+    };
+    const database = await postgres.newDatabase();
+    expect((await runInProcess(previewOn(database), SHIPPED, { extensionLoader: until0004 })).code).toBe(0);
+    const owner = randomUUID();
+    await rows(database.ownerUrl, `INSERT INTO users (id, issuer, subject, display_name) VALUES ($1, 'local', $2, 'Test user')`, [owner, owner]);
+    const runs = [randomUUID(), randomUUID()];
+    for (const id of runs) await rows(database.ownerUrl, `INSERT INTO ask_runs (id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, 'complete', 2, 10)`, [id, owner]);
+
+    const migrated = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
+    expect([migrated.code, migrated.stderr]).toEqual([0, '']);
+    expect(await rows(database.ownerUrl, 'SELECT id, intent FROM ask_runs ORDER BY id')).toEqual([...runs].sort().map((id) => ({ id, intent: 'unknown' })));
+    expect(await rows(database.ownerUrl, `SELECT is_nullable FROM information_schema.columns WHERE table_name = 'ask_runs' AND column_name = 'intent'`)).toEqual([{ is_nullable: 'NO' }]);
+    expect(await attempt(database.appUrl, 'INSERT INTO ask_runs (id, actor_id, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, 1, 1)', [randomUUID(), owner, 'complete'])).toMatch(/intent/);
   });
 
   it('indexes the audit table by trace ID on a fresh database', async () => {

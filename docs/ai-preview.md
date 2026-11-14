@@ -81,7 +81,38 @@ The folder is read once at start-up; a change needs a restart. The start-up chec
 
 A word that Cypher reserves for a command (for example `start`, `next`, `offset`, `set`, `create`, `use`) cannot be used as a name in a query: put it in backticks.
 
-In this build Ask does not answer questions yet: the folder is read and checked, and the questions come later.
+### Template intents
+
+`settings` is the template's own parameters, with the fixed parts written out and each value the question supplies written as the string `"$name"`, where `name` is one of the intent's `parameters`:
+
+```json
+{
+  "devices-shared-with": {
+    "parameters": ["id"],
+    "template": "shared-attribute",
+    "settings": {
+      "ref": { "entityType": "account", "stableId": "$id" },
+      "attributeType": "device",
+      "via": "USES_DEVICE"
+    }
+  }
+}
+```
+
+- A string that is exactly `$name` is replaced by the value wherever a value stands, inside objects and arrays. Keys are never replaced. `"$a$b"`, `"$"` and `"x $id"` are plain text, and a fixed value that looks like `$name` cannot be written.
+- The placeholders must be exactly the intent's `parameters`.
+- Start-up checks the settings against the template with each placeholder set to text, and refuses what does not fit. A placeholder may stand only where the template takes text: not in a number, not in a choice from a list (a direction or a sort), and not in the time window. A date window cannot come from a question. For a time-bounded question, write an intent with a fixed window in its settings.
+- Where a template takes a list of text (`via` of linked-entities, `relTypes` and `neighborTypes` of expand, `entityTypes` of search), a placeholder fills one element, as in `["$t"]`. A placeholder that stands for the whole list is refused.
+
+(The entity type, attribute type and relationship type above are examples. They come from your mapping file or your domain pack, as in the rest of this guide.)
+
+### What a question does
+
+With the preview on, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with `classification.md` and the intent names, binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops with its estimate, no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
+
+A question that cannot be answered gets one fixed sentence for its cause, never text from the model. An intent with a `query` is checked at start-up as above and run by the same route through the gate: the entities are the query's parameters and reach it only as parameters, the read is bounded by the source's limits and its result must be nodes and relationships of the source's mapping (the rules the gate applies are in the architecture notes). The answer lists what the query returned, with a count labelled as a lower bound when the read was cut.
+
+Each question writes one audit event, `ask.question` (`ask.continue` for a continue), with the intent's name, the kind, the outcome, the cause, the template id, a keyed hash of the parameters and the number of elements listed. It never holds an entity value, the question or a sentence. The model call that classifies is audited by its own event (`ask.classify`), as under [Prompt caching](#prompt-caching). If an event cannot be written, the answer is withheld.
 
 ## The key file
 
@@ -121,7 +152,7 @@ When the API starts with a problem in these settings, it writes one line for eac
 
 ## What you see in the app
 
-The header of the workspace shows **Ask** and **Summarize**. With the switch off, both show a padlock beside their name. With the preview on, both show a sparkle. Neither does anything in this build: Ask is offline until the rebuilt Ask arrives, and Summarize arrives in a later release.
+The header of the workspace shows **Ask** and **Summarize**. With the switch off, both show a padlock beside their name. With the preview on, both show a sparkle. Summarize does nothing in this build. Ask is answered by the API routes described under [The Ask folder](#the-ask-folder).
 
 ## Upgrading
 
@@ -140,7 +171,7 @@ Ask's settings moved from the `ai` block of the mapping file to the environment.
 
 Remove the keys from the mapping file, leaving `ai: preview: true`, and set the variables. `NEBURYX_ASK_MAPPING_FOLDER` is new and required.
 
-Ask is not yet answering questions in this build: the `/v1/ask/*` routes do not exist and answer 404. The settings for prompt files, property lists and the PII override are gone too (a mapping file that still has one is refused at start; remove it).
+The `/v1/ask` and `/v1/ask/continue` routes are back and answer questions for template intents and file queries (see [The Ask folder](#the-ask-folder)). The settings for prompt files, property lists and the PII override are gone too (a mapping file that still has one is refused at start; remove it).
 
 The database migration of an earlier change drops the table `ask_plans` and the column `ask_runs.plan_id`. It cannot be undone, so the previous image cannot run against the migrated database. To go back to the previous image, restore a backup taken before the upgrade.
 

@@ -1,4 +1,4 @@
-import { ASK_PLAN_PARAMS, SAVED_PATTERN_TEMPLATE_ID, parseExtensionRefusal, storedSavedPatternParamsSchema, type AskPlanRun, type AskPlanRunner, type AskRunResult, type AskRunScope, type ExtensionRefusalFields } from '@neburyx/contracts';
+import { ASK_PLAN_PARAMS, FILE_QUERY_RESULT_ID, SAVED_PATTERN_TEMPLATE_ID, parseExtensionRefusal, storedSavedPatternParamsSchema, type AskPlanRun, type AskPlanRunner, type AskRunInput, type AskRunResult, type AskRunScope, type ExtensionRefusalFields, type FileQueryResult } from '@neburyx/contracts';
 import type { EdgeReader } from '../edges/edge-reader.js';
 import type { EntityReader } from '../entities/entity-reader.js';
 import { AppError, detailsOf, errorResponse } from '../errors.js';
@@ -8,6 +8,7 @@ import type { ExpandService } from '../graph/expand-service.js';
 import type { TemplateRunService } from '../graph/template-run-service.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { SavedPatternRunService } from '../patterns/saved-run-service.js';
+import type { FileQueryRequest } from '../gate/types.js';
 import type { SearchService } from '../search/search-service.js';
 import type { Principal } from '../seams/seams.js';
 
@@ -21,6 +22,8 @@ export interface AskPlanRunnerServices {
   readonly edges: Pick<EdgeReader, 'read'>;
   readonly searching: Pick<SearchService, 'search'>;
   readonly savedRuns: Pick<SavedPatternRunService, 'find' | 'run'>;
+  /** The file queries of the operator's Ask folder, through the gate. */
+  readonly fileQueries: { run(request: FileQueryRequest): Promise<FileQueryResult> };
   readonly mapping: MappingModel;
 }
 
@@ -35,11 +38,16 @@ const invalidPlan: ExtensionRefusalFields = { code: 'ASK_PLAN_INVALID' };
 
 /**
  * The refusal an error of a service is, with the code and the details the manual route answers it with: only the errors of the gate and of the access check are, and `INVALID_REQUEST` (the service
- * refused the parameters a stored plan holds) is an invalid plan. Any other error is not a refusal and is not given back.
+ * refused the parameters of the run) is invalid parameters. Any other error is not a refusal and is not given back.
  */
 export function refusalOfError(error: unknown): ExtensionRefusalFields | undefined {
   if (!(error instanceof AppError)) return undefined;
-  if (error.code === 'INVALID_REQUEST') return invalidPlan;
+  if (error.code === 'INVALID_REQUEST') {
+    // the refusals of a file query say which rule refused it; any other refusal of the parameters is an invalid one
+    const details = detailsOf(error);
+    const reason: unknown = typeof details === 'object' && details !== null && 'reason' in details ? details.reason : undefined;
+    return typeof reason === 'string' && reason.startsWith('file-query-') ? parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'INVALID_REQUEST', reason }) ?? invalidPlan : invalidPlan;
+  }
   const details = errorResponse(error.code, '', detailsOf(error)).error.details;
   const fields = error.code === 'ACCESS_DENIED' ? {} : (details ?? {});
   return parseExtensionRefusal({ name: 'ExtensionRefusal', code: error.code, ...fields });
@@ -73,8 +81,12 @@ interface Base {
   readonly signal?: AbortSignal;
 }
 
-/** The result of one plan, or undefined when the parameters it holds are not the template's. */
-async function runOf(services: AskPlanRunnerServices, base: Base, plan: { readonly templateId: keyof typeof ASK_PLAN_PARAMS | typeof SAVED_PATTERN_TEMPLATE_ID; readonly params: unknown }, continuing: boolean): Promise<AskRunResult | undefined> {
+/** The result of one input, a template run or a file query, or undefined when the parameters it holds are not the template's. */
+async function runOf(services: AskPlanRunnerServices, base: Base, plan: AskRunInput, continuing: boolean): Promise<AskRunResult | undefined> {
+  if ('fileQuery' in plan) {
+    const result = await services.fileQueries.run({ traceId: base.traceId, principal: base.principal, sourceId: base.sourceId, intent: plan.fileQuery.intent, values: plan.fileQuery.values, mask: base.mask, ...(base.signal === undefined ? {} : { signal: base.signal }) });
+    return { templateId: FILE_QUERY_RESULT_ID, result };
+  }
   switch (plan.templateId) {
     case 'shared-attribute':
     case 'linked-entities': {

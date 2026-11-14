@@ -8,12 +8,12 @@ import { AI_STATUS_URL, createEnterpriseExtension } from './index.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 describe('the enterprise extension', () => {
-  it('has one route group with only the status route, which answers its declared schema', async () => {
+  it('has one route group of the status route, which answers its declared schema, and the two routes of a question', async () => {
     const extension = createEnterpriseExtension();
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
     const [route, ...more] = group?.routes ?? [];
-    expect(more).toEqual([]);
+    expect(more.map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal']]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', AI_STATUS_URL, 'principal']);
     const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, signal: new AbortController().signal });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
@@ -41,6 +41,7 @@ describe('the enterprise extension', () => {
     expect(statements).toContain('CREATE TABLE audit_events');
     expect(statements).toContain('CREATE TABLE ask_runs');
     expect(statements).toContain('DROP TABLE ask_plans');
+    expect(statements).toContain('ALTER TABLE ask_runs ADD COLUMN intent');
   });
 
   it('hands the sink it mounted to the audited call, which has none before the application built it, and returns the mounted sink unchanged', async () => {
@@ -50,6 +51,20 @@ describe('the enterprise extension', () => {
     expect(mounted).toBeDefined();
     expect(extension.auditSink()).toBe(mounted?.sink);
     await mounted?.close();
+  });
+
+  it('mounts a run store with the sink, and one close ends both, attempting the second when the first fails', async () => {
+    const closed: string[] = [];
+    const runStore = () => ({ record: async () => undefined, close: async () => void closed.push('runs') });
+    const extension = createEnterpriseExtension({ runStore });
+    const mounted = extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined });
+    await mounted?.close();
+    await mounted?.close();
+    expect(closed).toEqual(['runs']);
+
+    const failing = createEnterpriseExtension({ runStore: () => ({ record: async () => undefined, close: () => Promise.reject(new Error('end failed')) }) });
+    const other = failing.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined });
+    await expect(other?.close()).rejects.toThrow('end failed');
   });
 
   it('has no plan store, no maintenance task and no Ask planner, and no classifier before it is configured and the audit is mounted', () => {

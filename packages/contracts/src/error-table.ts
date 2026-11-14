@@ -45,6 +45,7 @@ export const ASK_UNSUPPORTED_ENTRIES: Readonly<Record<AskUnsupportedReason, Omit
 export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit<ErrorEntry, 'status'>>> = {
   'export-too-large': { message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false },
   'pattern-limit': { message: 'You have saved as many patterns on this source as are allowed. Delete one, then save again.', retryable: false },
+  'continue-invalid': { message: 'This continue is no longer valid. Ask the question again.', retryable: false },
   'pattern-personal-condition': { message: 'A saved pattern cannot hold a condition on personal data. Remove it, then save again.', retryable: false },
   'file-query-text': { message: 'This query is not allowed to run.', retryable: false },
   'file-query-intent': { message: 'This question has no query for this source.', retryable: false },
@@ -66,7 +67,7 @@ export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {
   CONFLICT: { message: 'This item was changed elsewhere. Reload to continue.', status: 409, retryable: false },
   EXPORT_FAILED: { message: 'The export could not be created.', status: 500, retryable: true },
   ASK_UNSUPPORTED: { message: 'This question is not supported.', status: 422, retryable: false },
-  ASK_PLAN_INVALID: { message: 'The question could not be turned into a valid plan.', status: 422, retryable: false },
+  ASK_PLAN_INVALID: { message: 'The values of the question do not fit what Ask can run.', status: 422, retryable: false },
   INVALID_REQUEST: { message: 'The request is not valid.', status: 400, retryable: false },
   UNSUPPORTED_MEDIA_TYPE: { message: 'The request content type is not supported.', status: 415, retryable: false },
   NOT_FOUND: { message: 'Not found.', status: 404, retryable: false },

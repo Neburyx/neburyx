@@ -3,8 +3,8 @@ import { summarizeFileQueryResult } from './file-query.js';
 import { summarize, type SummaryOutcome } from './index.js';
 
 /** The event of the warning logged when a summary is dropped. It carries a fixed code and nothing of the result. */
-export const SUMMARY_DROPPED_EVENT = 'ask-summary-dropped';
-export type SummaryDropCode = 'builder-threw' | 'other-source' | 'check-failed' | 'schema';
+const SUMMARY_DROPPED_EVENT = 'ask-summary-dropped';
+type SummaryDropCode = 'builder-threw' | 'other-source' | 'check-failed' | 'schema';
 
 /** The anchor a plan's own parameters name, when they name one: the plan's source, the entity type and the stable ID. */
 export function anchorOfParams(sourceId: string, params: unknown): ElementRef | undefined {

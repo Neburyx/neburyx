@@ -7,7 +7,7 @@ const read = (text: string) => readClassification(text, NAMES);
 
 describe('a reply of the classifier', () => {
   it('is read when it is exactly one object of the form, with whitespace around it allowed', () => {
-    expect(read('{"intent":"byId","entities":{"id":"A-1","limit":5,"strict":true}}')).toEqual({ ok: true, intent: 'byId', entities: { id: 'A-1', limit: 5, strict: true } });
+    expect(read('{"intent":"byId","entities":{"id":"A-1","name":"Zoë 007"}}')).toEqual({ ok: true, intent: 'byId', entities: { id: 'A-1', name: 'Zoë 007' } });
     expect(read('\n  {"entities":{},"intent":"shared"}  \n')).toEqual({ ok: true, intent: 'shared', entities: {} });
   });
 
@@ -37,6 +37,9 @@ describe('a reply of the classifier', () => {
     ['an intent that is a number', '{"intent":1,"entities":{}}'],
     ['entities that are an array', '{"intent":"byId","entities":[]}'],
     ['entities that are null', '{"intent":"byId","entities":null}'],
+    ['an entity that is a number', '{"intent":"byId","entities":{"id":5}}'],
+    ['an entity that is a boolean', '{"intent":"byId","entities":{"id":true}}'],
+    ['an entity that is empty text', '{"intent":"byId","entities":{"id":""}}'],
     ['an entity that is null', '{"intent":"byId","entities":{"id":null}}'],
     ['an entity that is an object', '{"intent":"byId","entities":{"id":{"a":1}}}'],
     ['an entity that is a list', '{"intent":"byId","entities":{"id":["a"]}}'],
@@ -45,21 +48,20 @@ describe('a reply of the classifier', () => {
     ['a string with a control character', '{"intent":"byId","entities":{"id":"a\\u0000b"}}'],
     ['a string with a newline', '{"intent":"byId","entities":{"id":"a\\nb"}}'],
     ['a string with a lone surrogate', '{"intent":"byId","entities":{"id":"\\ud800"}}'],
-    ['a string over 1,000 code points', `{"intent":"byId","entities":{"id":"${'x'.repeat(1001)}"}}`],
+    ['a string over 256 code points', `{"intent":"byId","entities":{"id":"${'x'.repeat(257)}"}}`],
     ['no intent with entities', '{"intent":null,"entities":{"id":"a"}}'],
     ['an entity named __proto__', '{"intent":null,"entities":{"__proto__":"x"}}'],
     ['an entity named __proto__ with an intent', '{"intent":"byId","entities":{"__proto__":"x","id":"a"}}'],
-    ['a number that is not finite', '{"intent":"byId","entities":{"id":1e999}}'],
   ])('is a reply that does not fit: %s', (_name, text) => {
     expect(read(text)).toEqual({ ok: false, cause: 'bad-reply' });
   });
 
-  it('takes 20 entities and refuses 21, and takes a string of 1,000 code points of any width', () => {
-    const entities = (count: number): string => JSON.stringify(Object.fromEntries(Array.from({ length: count }, (_, index) => [`p${index}`, index])));
+  it('takes 20 entities and refuses 21, and takes a string of 256 code points of any width', () => {
+    const entities = (count: number): string => JSON.stringify(Object.fromEntries(Array.from({ length: count }, (_, index) => [`p${index}`, `v${index}`])));
     expect(read(`{"intent":"byId","entities":${entities(20)}}`)).toMatchObject({ ok: true });
     expect(read(`{"intent":"byId","entities":${entities(21)}}`)).toEqual({ ok: false, cause: 'bad-reply' });
-    expect(read(`{"intent":"byId","entities":{"id":"${'😀'.repeat(1000)}"}}`)).toMatchObject({ ok: true });
-    expect(read(`{"intent":"byId","entities":{"id":"${'😀'.repeat(1001)}"}}`)).toEqual({ ok: false, cause: 'bad-reply' });
+    expect(read(`{"intent":"byId","entities":{"id":"${'😀'.repeat(256)}"}}`)).toMatchObject({ ok: true });
+    expect(read(`{"intent":"byId","entities":{"id":"${'😀'.repeat(257)}"}}`)).toEqual({ ok: false, cause: 'bad-reply' });
   });
 
   it('is refused in bounded time when it is huge or deeply nested or not text', () => {

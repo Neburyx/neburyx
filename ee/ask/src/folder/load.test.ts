@@ -11,7 +11,7 @@ afterEach(() => {
 });
 
 const QUERY = 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 5';
-const INTENTS = JSON.stringify({ byId: { parameters: ['id'], query: QUERY }, shared: { parameters: ['ref'], template: 'shared-attribute', settings: { attributeType: 'shape' } } });
+const INTENTS = JSON.stringify({ byId: { parameters: ['id'], query: QUERY }, shared: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } } });
 const sha = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
 
 /** A folder with a subfolder for each id in `sources`, each holding the two files unless `files` says otherwise. */
@@ -43,7 +43,7 @@ describe('the Ask folder', () => {
     expect(demo?.classification).toEqual({ text: 'Choose an intent.', sha256: sha('Choose an intent.') });
     expect(demo?.intents.map((intent) => intent.name)).toEqual(['byId', 'shared']);
     expect(loaded.folder.intent('demo', 'byId')).toEqual({ name: 'byId', parameters: ['id'], kind: 'query', query: { text: QUERY, sha256: sha(QUERY) } });
-    expect(loaded.folder.intent('demo', 'shared')).toMatchObject({ kind: 'template', template: 'shared-attribute', settings: { attributeType: 'shape' } });
+    expect(loaded.folder.intent('demo', 'shared')).toMatchObject({ kind: 'template', template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } });
     expect(loaded.folder.intent('demo', 'missing')).toBeUndefined();
     expect(Object.isFrozen(loaded.folder)).toBe(true);
     expect(Object.isFrozen(demo?.intents)).toBe(true);

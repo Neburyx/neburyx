@@ -10,6 +10,7 @@ import { patternRunResponseSchema } from './pattern-run.js';
 import { derivedNeighborsResponseSchema } from './derived-neighbors.js';
 import { derivedEdgeDetailSchema } from './edge-detail.js';
 import { expandResponseSchema } from './expand.js';
+import { fileQueryResultSchema } from './file-query.js';
 import { linkedEntitiesParamsSchema, sharedAttributeParamsSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
 
 const name = z.string().min(1);
@@ -46,6 +47,9 @@ export const SAVED_PATTERN_TEMPLATE_VERSION = 1;
 
 /** The parameters of a saved-pattern plan as it is stored. */
 export const storedSavedPatternParamsSchema = z.strictObject({ patternId: z.uuid(), patternVersion: z.number().int().min(1), ref: anchor.optional() });
+/** The `templateId` of the result of a file query in a run result: the file query has no template of the catalog. */
+export const FILE_QUERY_RESULT_ID = 'file-query';
+
 export const ASK_RUN_OUTCOMES = ['complete', 'partial', 'failed'] as const;
 
 /** The longest text an entity value of a question may hold. */
@@ -61,6 +65,8 @@ export const askRunResultSchema = z.union([
   z.strictObject({ templateId: z.literal('derived-rule-run'), result: derivedNeighborsResponseSchema }),
   z.strictObject({ templateId: z.literal('derived-edge-support'), result: derivedEdgeDetailSchema }),
   z.strictObject({ templateId: z.literal('search'), result: searchResultSchema }),
+  /** A run of a file query of the Ask folder: the typed answer of the gate, nodes and relationships of the source's mapping. */
+  z.strictObject({ templateId: z.literal(FILE_QUERY_RESULT_ID), result: fileQueryResultSchema }),
   /** A run of a saved pattern is the saved run's own answer for its kind: a pattern answer with `matches`, or a template answer for a saved run of a preset; a pattern that cannot run is a refusal. */
   z.strictObject({ templateId: z.literal(SAVED_PATTERN_TEMPLATE_ID), result: z.union([patternRunResponseSchema, templateRunResponseSchema]) }),
 ]);
@@ -182,13 +188,14 @@ export const ASK_REFUSAL_CAUSES = [
   'unavailable',
   'missing-inputs',
   'extra-inputs',
+  'invalid-inputs',
   'nothing-found',
 ] as const;
 
 export type AskRefusalCause = (typeof ASK_REFUSAL_CAUSES)[number];
 
 /** The values the classifier extracted from a question, named as the parameters of the intent it chose. */
-export type AskEntities = Readonly<Record<string, string | number | boolean>>;
+export type AskEntities = Readonly<Record<string, string>>;
 
 /** Who asked and about which source: ids only, so the audit of the call can name the actor. */
 export interface AskClassifyInput {

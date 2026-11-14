@@ -2,7 +2,7 @@
 
 SQL migrations for the tables of the `ee/` modules, applied by `neburyx migrate` only when the Enterprise and AI preview is switched on (both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in the mapping file are set). They are recorded in a history table of their own, so a new migration of the Community product never sorts before one already applied here.
 
-A file is named `NNNN-what-it-does.sql`, one statement list per file, in the order it must run. `0001-audit-events.sql` and `0002-ask-runs.sql` create the preview's audit table and the table of Ask runs, `0003-ask-plans.sql` created the table of Ask plans, tied the runs to it and indexed the audit table by trace ID, and `0004-drop-ask-plans.sql` drops that table and the plan column of the runs again (the stored plans went with the old Ask path; the runs stay). A migration is forward-only: after `0004` the previous image cannot run against the database, and going back means restoring a backup.
+A file is named `NNNN-what-it-does.sql`, one statement list per file, in the order it must run. `0001-audit-events.sql` and `0002-ask-runs.sql` create the preview's audit table and the table of Ask runs, `0003-ask-plans.sql` created the table of Ask plans, tied the runs to it and indexed the audit table by trace ID, and `0004-drop-ask-plans.sql` drops that table and the plan column of the runs again (the stored plans went with the old Ask path; the runs stay), and `0005-ask-runs-intent.sql` adds the intent of a run, marking the rows written before it as `unknown`. A migration is forward-only: after `0005` the previous image cannot run against the database, and going back means restoring a backup.
 
 ## Rights
 

@@ -52,7 +52,7 @@ const accessDeniedVariants = ACCESS_DENIED_REASONS.map((reason) =>
   }),
 );
 
-/** An Ask call that no planner can answer says why in its details, with that reason's sentence. */
+/** An Ask call that cannot be answered here says why in its details, with that reason's sentence. */
 const askUnsupportedVariants = ASK_UNSUPPORTED_REASONS.map((reason) =>
   z.strictObject({
     code: z.literal('ASK_UNSUPPORTED'),

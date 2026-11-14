@@ -62,3 +62,18 @@ describe('a result in words', () => {
     expect(resultView(run('entity', node('a'))).notices).toEqual([]);
   });
 });
+
+describe('the result of a file query', () => {
+  const result = run('file-query', { status: 'ok', intent: 'byName', nodes: [node('a'), node('b')], edges: [edge('e')], count: count('lowerBound', 50), notices: [{ code: 'readBounded' }], warnings: [] });
+
+  it('adds its nodes and edges to the graph', () => {
+    expect(addableOf(result)).toMatchObject({ nodes: [{ ref: { stableId: 'a' } }, { ref: { stableId: 'b' } }], edges: [{ ref: { id: 'e' } }], templateId: 'file-query' });
+  });
+
+  it('shows the rows it returned with their quality label, and the notices in the same words as a template run', () => {
+    const view = resultView(result);
+    expect(view.lines).toHaveLength(1);
+    expect(view.lines[0]?.label).toBe('Rows');
+    expect(view.notices.length).toBe(1);
+  });
+});

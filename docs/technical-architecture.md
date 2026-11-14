@@ -627,7 +627,17 @@ policy, citations and an audit trail.
 
 ### 9.1 State of Ask in this build
 
-Ask is not available in this build. The earlier design (a typed question rebuilt from an allowlist, a stored plan, a preview and a confirmation) was removed, and its routes (`/v1/ask/*`), its plan table and its settings are gone. The rebuilt Ask is described here when it is available.
+With the AI preview on, `POST /v1/ask` answers a question for template intents, and `POST /v1/ask/continue` gives one more bounded page of a result that was stopped as heavy. The earlier design (a typed question, a stored plan, a preview and a confirmation) is gone. A question goes through these steps in order:
+
+1. **Source check.** The caller must be allowed to read the source; a source that is not configured or not theirs is `NOT_FOUND` before any model call.
+2. **Folder.** The source's Ask folder (`classification.md`, `intents.json`) is read once at start-up and checked.
+3. **Classification.** One audited model call maps the question to an intent name and its entities, in a strict reply form. Anything else is a refusal with a fixed sentence.
+4. **Binding.** The entities (text, as typed) are put into the intent's template settings where a `"$name"` placeholder stands; the parameters must match exactly.
+5. **Run through the gate.** The template runs read-only and bounded, as the person's own read. A heavy result stops as a partial answer with a continue token (an HMAC over person, source, intent, entities and mask, valid 15 minutes).
+6. **Cited summary.** The server builds the summary from the result; it cites the elements it lists and the model does not write it.
+7. **Audit.** An event `ask.question` or `ask.continue` with the intent, outcome, cause, template id and a keyed hash of the parameters, never an entity value, the question or a sentence, and a row of `ask_runs`. If the event cannot be written, the answer is withheld.
+
+An intent that holds a file query runs through the same route: the entities are its parameters, and the gate runs the folder's text under rules the file cannot change (§7.1).
 
 What holds for Ask whatever its design:
 
@@ -638,7 +648,7 @@ What holds for Ask whatever its design:
 
 ### 9.4 Data sent to the model
 
-The product withholds nothing from a model call by setting: there is no property list and no override. What a call carries is what the feature that makes it needs, and the audit records the call (§9.1). Masking of what a person sees stays in the gate. Ask is not available in this build, and Summarize is not available either: the data it sends is decided when it is built. A limit per role on what reaches a model is not built.
+The product withholds nothing from a model call by setting: there is no property list and no override. What a call carries is what the feature that makes it needs, and the audit records the call (§9.1). Masking of what a person sees stays in the gate. Summarize is not available: the data it sends is decided when it is built. A limit per role on what reaches a model is not built.
 
 ### 9.5 AI case summary (Enterprise) [W2]
 

@@ -26,6 +26,7 @@ function rig(overrides: Partial<Record<keyof Omit<AskPlanRunnerServices, 'mappin
     derivedNeighbors: { derive: overrides.derivedNeighbors ?? answering('derivedNeighbors', { ref: { sourceId: SOURCE, ...REF }, results: [{ ruleId: 'rule_one', ruleVersion: 3, count: { quality: 'exact', value: 1, scope: 'derived:neighbors' }, nodes: [], edges: [], warnings: [] }, { ruleId: 'rule_two', ruleVersion: 1, count: { quality: 'exact', value: 5, scope: 'derived:neighbors' }, nodes: [], edges: [], warnings: [] }] }) },
     edges: { read: overrides.edges ?? answering('edges', { semantics: 'derived' }) },
     searching: { search: overrides.searching ?? answering('searching', { sourceId: SOURCE }) },
+    fileQueries: { run: overrides.fileQueries ?? answering('fileQueries', { status: 'ok', intent: 'byName', count: { quality: 'exact', value: 0, scope: 'rows' }, nodes: [], edges: [], notices: [], warnings: [] }) },
     mapping,
   } as unknown as AskPlanRunnerServices;
   const runnerFor = (scope = { sourceId: SOURCE, mask: true }) => createAskPlanRunnerFactory(services)({ principal: principalFixture, traceId: 'tr-1', signal })(scope);
@@ -37,6 +38,21 @@ const refusedWith = async (run: Promise<AskPlanRun>) => {
   if (answer.status !== 'refused') throw new Error('not refused');
   return answer.refusal;
 };
+
+describe('the run of a file query', () => {
+  it('goes to the gate with the intent, the values as text, the source, the caller, the mask and the signal, and answers the typed result', async () => {
+    const { calls, runnerFor } = rig();
+    const answer = await runnerFor({ sourceId: SOURCE, mask: false }).run({ fileQuery: { intent: 'byName', values: { name: 'Ada' } } });
+    expect(answer).toMatchObject({ status: 'ok', result: { templateId: 'file-query', result: { intent: 'byName' } } });
+    expect(calls).toEqual([{ service: 'fileQueries', request: { traceId: 'tr-1', principal: principalFixture, sourceId: SOURCE, intent: 'byName', values: { name: 'Ada' }, mask: false, signal } }]);
+  });
+
+  it('is never a run of a template: no template service is called', async () => {
+    const { calls, runnerFor } = rig();
+    await runnerFor().run({ fileQuery: { intent: 'byName', values: { name: 'Ada' } } });
+    expect(calls.map((call) => call.service)).toEqual(['fileQueries']);
+  });
+});
 
 describe('a run that the gate or the services refuse', () => {
   it.each([
@@ -50,6 +66,9 @@ describe('a run that the gate or the services refuse', () => {
     ['a source the caller cannot read', new AppError('NOT_FOUND'), { code: 'NOT_FOUND' }],
     ['an audit that could not be written', new AppError('AUDIT_UNAVAILABLE'), { code: 'AUDIT_UNAVAILABLE' }],
     ['parameters the service refuses', new AppError('INVALID_REQUEST'), { code: 'ASK_PLAN_INVALID' }],
+    ['a file query that the gate refuses for its text', new AppError('INVALID_REQUEST', { reason: 'file-query-text' }), { code: 'INVALID_REQUEST', reason: 'file-query-text' }],
+    ['a file query that the gate refuses for its result', new AppError('INVALID_REQUEST', { reason: 'file-query-result' }), { code: 'INVALID_REQUEST', reason: 'file-query-result' }],
+    ['a reason that is not a file query\'s', new AppError('INVALID_REQUEST', { reason: 'export-too-large' }), { code: 'ASK_PLAN_INVALID' }],
   ])('comes back as the refusal of %s, with the code and details the manual route gives and no result', async (_name, error, refusal) => {
     const { runnerFor } = rig({ entities: vi.fn(async () => Promise.reject(error)) });
     expect(await refusedWith(runnerFor().run({ templateId: 'entity', params: { ref: REF } }))).toEqual(refusal);
@@ -81,13 +100,13 @@ describe('a run that the gate or the services refuse', () => {
     ['derived-rule-run', { ref: REF }],
     ['derived-edge-support', { ruleId: 'rule_one', ends: [REF] }],
     ['search', { entityTypes: ['node_a'] }],
-  ] as const)('refuses the parameters of a plan of %s that are not the template’s as an invalid plan, and reads nothing', async (templateId, params) => {
+  ] as const)('refuses the parameters of a plan of %s that are not the template’s as invalid parameters, and reads nothing', async (templateId, params) => {
     const { runnerFor, calls } = rig();
     expect(await refusedWith(runnerFor().run({ templateId, params }))).toEqual({ code: 'ASK_PLAN_INVALID' });
     expect(calls).toEqual([]);
   });
 
-  it('refuses a rule the mapping does not hold as an invalid plan, and reads nothing', async () => {
+  it('refuses a rule the mapping does not hold as invalid parameters, and reads nothing', async () => {
     const { runnerFor, calls } = rig();
     expect(await refusedWith(runnerFor().run({ templateId: 'derived-rule-run', params: { ref: REF, ruleId: 'rule_missing' } }))).toEqual({ code: 'ASK_PLAN_INVALID' });
     expect(calls).toEqual([]);

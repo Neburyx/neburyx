@@ -28,6 +28,8 @@ export interface ExtensionRequest {
    * scope, and its reads refuse, as `NOT_FOUND` and before anything is read, a source that is not configured or that the caller may not read; that refusal comes with the run, so a plan that meets it is a failed run.
    */
   readonly askPlanRunner?: (scope: AskRunScope) => AskPlanRunner;
+  /** Resolves when the caller may read the source and rejects with the `NOT_FOUND` refusal when the source is not configured or not the caller's; asked before anything is signed or sent. */
+  readonly askSourceReadable?: (sourceId: string) => Promise<void>;
   /** The saved patterns the caller may run on a source, available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
   readonly askPatterns?: (sourceId: string) => Promise<AskPatternListing>;
   /** One saved pattern the caller may run on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller may run now. */
@@ -43,9 +45,14 @@ export interface AskRunScope {
 /** What a run of a plan came to: the result, or the refusal of the gate with the code and details the manual route gives, never a partial result. */
 export type AskPlanRun = { readonly status: 'ok'; readonly result: AskRunResult } | { readonly status: 'refused'; readonly refusal: ExtensionRefusalFields };
 
+/** What a runner runs: a template with its parameters, or the file query of an intent of the Ask folder with the entities' values as text (the gate takes the query from the folder, never from here). */
+export type AskRunInput =
+  | { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number] | typeof SAVED_PATTERN_TEMPLATE_ID; readonly params: unknown }
+  | { readonly fileQuery: { readonly intent: string; readonly values: Readonly<Record<string, string>> } };
+
 export interface AskPlanRunner {
-  /** Runs a template with the parameters a stored plan holds, as the service of its manual route would; `continue` is set only by a verified token and lets a heavy run read its bounded page. */
-  run(plan: { readonly templateId: (typeof ASK_PLAN_TEMPLATE_IDS)[number] | typeof SAVED_PATTERN_TEMPLATE_ID; readonly params: unknown }, options?: { readonly continue?: boolean }): Promise<AskPlanRun>;
+  /** Runs a template with the parameters of the input, or a file query of the Ask folder with its values, as the service of the manual route would; `continue` is set only by a verified token and lets a heavy run read its bounded page. */
+  run(plan: AskRunInput, options?: { readonly continue?: boolean }): Promise<AskPlanRun>;
 }
 
 export type ExtensionRouteMethod = 'GET' | 'POST';
@@ -143,7 +150,7 @@ const refusalSchemas = [
 ] as const;
 
 /**
- * What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask having no planner in this build, a thing the call names not being there, a request
+ * What a refusal is made of: the preview being off (with whether the refusal's own audit event was written), Ask not being available in this build, a thing the call names not being there, a request
  * whose parts the route cannot accept (with the reason), a call that ran out of time (with the limit), or one of the gate's refusals of a read or a plan's refusals, each with the figures and the
  * reason the error model allows for its code and nothing else.
  */

@@ -1,5 +1,6 @@
 import { ASK_PLAN_TEMPLATE_IDS } from './ask.js';
 import { checkIntentQuery } from './query-check.js';
+import { checkTemplateSettings } from './ask-bind.js';
 
 /** The limits of the files of an Ask folder: working limits, not taken from a source. */
 export const ASK_FOLDER_LIMITS = {
@@ -164,7 +165,10 @@ export function parseIntentsFile(text: string): ParsedIntents {
     const settings = entry['settings'] ?? {};
     if (typeof template !== 'string' || !TEMPLATE_IDS.includes(template)) problems.push(`intent "${name}": the template is not one of ${TEMPLATE_IDS.join(', ')}`);
     else if (!isRecord(settings)) problems.push(`intent "${name}": settings must be an object`);
-    else if (problems.length === before) intents.push({ name, parameters, kind: 'template', template, settings });
+    else {
+      problems.push(...checkTemplateSettings({ intent: name, template, parameters, settings }));
+      if (problems.length === before) intents.push({ name, parameters, kind: 'template', template, settings });
+    }
   }
   return problems.length > 0 ? { ok: false, problems } : { ok: true, intents: intents.map((intent) => deepFreeze(intent)) };
 }

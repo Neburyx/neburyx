@@ -8,10 +8,9 @@ import { savedPatternListed, summarizeSavedPattern } from './saved-pattern.js';
 import { searchListed, summarizeSearch } from './search.js';
 import { summarizeTemplateRun, templateRunListed } from './template-run.js';
 
-export { SummaryBuilder, citedKeysExist, listOf } from './core.js';
-export type { Listed, ListedElements } from './core.js';
-export { countWords } from './counts.js';
-export { fileQueryListed, summarizeFileQuery, summarizeFileQueryResult } from './file-query.js';
+export { citedKeysExist } from './core.js';
+export type { ListedElements } from './core.js';
+import { fileQueryListed, summarizeFileQuery } from './file-query.js';
 
 export interface SummaryContext {
   /** The anchor of the plan, when it has one: a run of a template names it in its zero-match sentence. */
@@ -38,6 +37,8 @@ export function listedElements(run: AskRunResult): ListedElements | undefined {
       return searchListed(run.result);
     case 'saved-pattern':
       return savedPatternListed(run.result);
+    case 'file-query':
+      return fileQueryListed(run.result);
     default: {
       const unreachable: never = run;
       return unreachable;
@@ -64,6 +65,8 @@ function build(run: AskRunResult, context: SummaryContext): AskSummary | undefin
       return summarizeSearch(run.result);
     case 'saved-pattern':
       return summarizeSavedPattern(run.result, context.anchor);
+    case 'file-query':
+      return summarizeFileQuery(run.result);
     default: {
       const unreachable: never = run;
       return unreachable;

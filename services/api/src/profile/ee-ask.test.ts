@@ -178,7 +178,7 @@ describe('a model failure in the real enterprise extension in a start', () => {
   });
 });
 
-describe('the removed Ask routes', () => {
+describe('the old Ask routes of plans', () => {
   const PLAN_ID = '0192f000-0000-7000-8000-0000000000a1';
   const CALLS = [
     ['/v1/ask/plan', { message: 'Who shares a device?', sourceId: 'demo' }],
@@ -196,7 +196,8 @@ describe('the removed Ask routes', () => {
     const seams: Seams = { ...communitySeams(), audit: { record: async (event) => void events.push(event) } };
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams, ...(previewOn === undefined ? {} : { extension: createEnterpriseExtension(), previewOn }) });
     for (const [url, payload] of CALLS) expect((await app.inject({ method: 'POST', url, payload })).statusCode, url).toBe(404);
-    expect(registeredRoutesOf(app).filter((route) => route.url.startsWith('/v1/ask'))).toEqual([]);
+    // only the two routes of a question exist, and only with the enterprise code and the preview switched on
+    expect(registeredRoutesOf(app).filter((route) => route.url.startsWith('/v1/ask')).map((route) => route.url).sort()).toEqual(previewOn === undefined ? [] : ['/v1/ask', '/v1/ask/continue']);
     expect(events).toEqual([]);
     await app.close();
   });

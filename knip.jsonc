@@ -67,9 +67,6 @@
     "apps/web/src/workspace/tool-registry.tsx": ["exports"],
     // Kept for the saved-pattern step of the Ask rework, which builds the catalog text for the classifier.
     "ee/ask/src/patterns/index.ts": ["files"],
-    // Kept for the run step of the Ask rework, which attaches the cited summary to its answer.
-    "ee/ask/src/summary/attach.ts": ["exports", "types"],
-    "ee/ask/src/summary/index.ts": ["exports", "types"],
     // Used by the tests of services/api through dist, which knip cannot follow; the final sweep of the Ask rework keeps only createEnterpriseExtension here.
     "ee/ask/src/index.ts": ["exports", "types"],
     // Named aliases of one value, one name for each role in the canvas look: kept pending a decision.

@@ -1,6 +1,8 @@
 import type { Socket } from 'node:net';
 import { z } from 'zod';
 import { ASK_INTENT_NAME } from './ask-folder.js';
+import { ASK_PLAN_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
+import { ERROR_CODES } from './error-codes.js';
 import { roleSchema } from './me.js';
 
 /** The id the system principal and the system actor of an event are stored under. */
@@ -65,6 +67,26 @@ export function parseAiAuditDetail(value: unknown): AiAuditDetail {
 
 const wholeCount = z.number().int().nonnegative();
 
+/**
+ * What a question of Ask leaves in the audit event: the intent, whether it was a template or a file query, the outcome or the cause of a refusal, the template, the SHA-256 of the file query's text, a keyed hash of the
+ * parameters and the number of elements the result listed; never a value, a question or a sentence. The parameters' hash is an HMAC made with the signing capability of the application over the canonical text
+ * `['ask-run-params', 1, intent, entities]`, so a short value cannot be confirmed by guessing; the key is the application's.
+ */
+const ASK_RUN_CAUSES = [...ASK_REFUSAL_CAUSES, 'continue-invalid', ...ERROR_CODES.map((code) => code.toLowerCase().replace(/_/g, '-'))] as [string, ...string[]];
+
+export const askRunAuditDetailSchema = z.strictObject({
+  intent: label.optional(),
+  kind: z.enum(['template', 'query']),
+  outcome: z.enum(['complete', 'partial', 'refused', 'failed']),
+  cause: z.enum(ASK_RUN_CAUSES).optional(),
+  templateId: z.enum([...ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]).optional(),
+  querySha256: sha256Hex.optional(),
+  paramsHash: sha256Hex.optional(),
+  rowCount: wholeCount.optional(),
+});
+
+export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;
+
 /** The per-action fields of an audit event, one shape at a time: every shape holds counts and codes only. */
 export const auditDetailSchema = z.union([
   z.strictObject({ reason: z.enum(['cancelled', 'timeout']) }),
@@ -80,14 +102,15 @@ export const auditDetailSchema = z.union([
     }),
   }),
   z.strictObject({ ai: aiAuditDetailSchema }),
+  z.strictObject({ askRun: askRunAuditDetailSchema }),
   z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
 ]);
 
 export type AuditDetail =
-  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never }
-  | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never }
+  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
+  | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** How many items a read by references returned and could not find: counts only, never a value or an ID. */
-  | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never }
+  | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What an export or a download of one was: the format, and for an export how many items it holds and how many fields were masked; never a value, an ID or a file name; a refused download adds which of the two refusals it was. */
   | {
       readonly export: { readonly format: 'json' | 'csv'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly refusal?: 'access-changed' | 'export-source-changed' };
@@ -99,9 +122,11 @@ export type AuditDetail =
       readonly askRun?: never;
       readonly fileQuery?: never;
     }
-  | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
+  | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** A run of a file query of the Ask folder: the intent's name and the SHA-256 of its query (each present only when the folder holds the intent) and, for a read that was cancelled or timed out, the reason; never an entity value, a query text or a row. */
-  | { readonly fileQuery: { readonly intent?: string; readonly queryHash?: string }; readonly reason?: 'cancelled' | 'timeout'; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly target?: never; readonly type?: never }
+  | { readonly fileQuery: { readonly intent?: string; readonly queryHash?: string }; readonly reason?: 'cancelled' | 'timeout'; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly target?: never; readonly type?: never; readonly askRun?: never }
+  /** What a question of Ask was: the intent, the outcome or cause, and hashes and counts only. */
+  | { readonly askRun: AskRunAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
 
 export function parseAuditDetail(value: unknown): AuditDetail {
   return auditDetailSchema.parse(value);

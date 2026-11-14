@@ -28,6 +28,7 @@ export function addableOf(result: AskRunResult): Addable | undefined {
     case 'shared-attribute':
     case 'linked-entities':
     case 'saved-pattern':
+    case 'file-query':
       return result.result.status === 'ok' ? { nodes: result.result.nodes, edges: result.result.edges, templateId: result.templateId } : undefined;
     case 'entity':
       return { nodes: [result.result], edges: [], templateId: result.templateId };
@@ -57,6 +58,8 @@ export function resultView(result: AskRunResult): ResultView {
       return result.result.status === 'ok'
         ? { lines: [countLine('Matches', result.result.count)], notices: result.result.notices.map(noticeText), addable }
         : { lines: [countLine('Estimate', result.result.estimate)], notices: result.result.notices.map(noticeText), addable };
+    case 'file-query':
+      return { lines: [countLine('Rows', result.result.count)], notices: result.result.notices.map(noticeText), addable };
     case 'entity':
       return { lines: [{ label: 'Entity', text: result.result.display.title === '' ? result.result.ref.stableId : result.result.display.title }], notices: [], addable };
     case 'degree-preview':

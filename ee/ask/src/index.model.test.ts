@@ -10,6 +10,8 @@ const sink: AuditSink = { record: (event) => (events.push(event), Promise.resolv
 
 vi.mock('@neburyx/ee-audit', () => ({ createAuditSink: () => ({ sink, close: async () => undefined }) }));
 
+vi.mock('./questions/pg-run-store.js', () => ({ createPgRunStore: () => ({ record: async () => undefined, close: async () => undefined }) }));
+
 const { createEnterpriseExtension } = await import('./index.js');
 const { createFailureReporter } = await import('./failure-line.js');
 

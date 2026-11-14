@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ASK_FOLDER_LIMITS, parseIntentsFile } from './ask-folder.js';
 
+const SHARED_SETTINGS = { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' };
 const QUERY = 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 5';
 const file = (intents: unknown): string => JSON.stringify(intents);
 const problemsOf = (intents: unknown): readonly string[] => {
@@ -10,18 +11,19 @@ const problemsOf = (intents: unknown): readonly string[] => {
 
 describe('the intents file', () => {
   it('reads a query intent and a template intent in file order', () => {
-    const parsed = parseIntentsFile(file({ byId: { parameters: ['id'], query: QUERY }, shared: { parameters: ['ref'], template: 'shared-attribute', settings: { attributeType: 'shape' } } }));
+    const parsed = parseIntentsFile(file({ byId: { parameters: ['id'], query: QUERY }, shared: { parameters: ['id'], template: 'shared-attribute', settings: SHARED_SETTINGS } }));
     expect(parsed).toEqual({
       ok: true,
       intents: [
         { name: 'byId', parameters: ['id'], kind: 'query', query: QUERY },
-        { name: 'shared', parameters: ['ref'], kind: 'template', template: 'shared-attribute', settings: { attributeType: 'shape' } },
+        { name: 'shared', parameters: ['id'], kind: 'template', template: 'shared-attribute', settings: SHARED_SETTINGS },
       ],
     });
   });
 
   it('takes a template without settings as empty settings', () => {
-    expect(parseIntentsFile(file({ one: { parameters: ['ref'], template: 'entity' } }))).toMatchObject({ ok: true, intents: [{ settings: {} }] });
+    expect(problemsOf({ one: { parameters: ['ref'], template: 'entity' } }).join(' ')).toContain('has no placeholder');
+    expect(parseIntentsFile(file({ one: { parameters: [], template: 'degree-preview', settings: { ref: { entityType: 'widget', stableId: 'A-1' } } } }))).toMatchObject({ ok: true });
   });
 
   it.each([
@@ -72,14 +74,14 @@ describe('the intents file', () => {
     const text = '{"same": {"parameters": [], "template": "entity"}, "other": {"parameters": [], "template": "entity"}, "same": {"parameters": [], "template": "entity"}}';
     expect(problemsOf(text)).toEqual(['a key is used twice in an object of the file']);
     expect(problemsOf('{"a": {"parameters": [], "template": "entity", "settings": {"same": 1, "same": 2}}}')).toEqual(['a key is used twice in an object of the file']);
-    expect(problemsOf('{"a": {"parameters": [], "template": "entity", "settings": {"list": [{"x": 1}, {"x": 2}]}}}')).toEqual([]);
+    expect(problemsOf('{"a": {"parameters": [], "template": "entity", "settings": {"list": [{"x": 1}, {"x": 2}]}}}').join(' ')).not.toContain('used twice');
     const spaced = `{"a": {"parameters": [], "template": "entity"}, "a"${' '.repeat(80)}: {"parameters": [], "template": "entity"}}`;
     expect(problemsOf(spaced)).toEqual(['a key is used twice in an object of the file']);
   });
 
   it('prints a key only when it is plain, and freezes what it returns', () => {
     expect(problemsOf({ named: { parameters: [], template: 'entity', 'bad key\n\u001b[31m': 1 } }).join(' ')).toContain('a key is not known');
-    const parsed = parseIntentsFile(file({ one: { parameters: ['id'], template: 'entity', settings: { a: { b: 1 } } } }));
+    const parsed = parseIntentsFile(file({ one: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } } }));
     expect(parsed.ok && Object.isFrozen(parsed.intents[0]?.parameters)).toBe(true);
     expect(parsed.ok && parsed.intents[0]?.kind === 'template' && Object.isFrozen(parsed.intents[0].settings)).toBe(true);
   });

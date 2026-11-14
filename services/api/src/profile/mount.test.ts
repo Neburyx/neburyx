@@ -1,11 +1,13 @@
 import { rmSync } from 'node:fs';
 import { ExtensionRefusal, type AuditEvent, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
+import Fastify from 'fastify';
 import { z } from 'zod';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import { AppError } from '../errors.js';
+import { mountExtensionRoutes } from './mount.js';
 import { createLogger } from '../logger.js';
-import { communitySeams } from '../seams/community-seams.js';
+import { communityAskClassifier, communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -184,7 +186,7 @@ describe('a POST route of an extension', () => {
   });
 });
 
-describe('a refusal that no planner can answer', () => {
+describe('a refusal that cannot be answered here', () => {
   it('answers 422 ASK_UNSUPPORTED with its reason and sentence, writes no audit event and logs no failed audit', async () => {
     const { app, lines, events } = await started(extensionOf(async () => Promise.reject(new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' }))), { previewOn: true });
     const answer = await app.inject({ url: URL_OF_ROUTE });
@@ -311,5 +313,32 @@ describe('the refusals of a read of the gate', () => {
     expect(lines.filter((line) => line.includes('extension.audit_failed'))).toEqual([]);
     expect(name).not.toBe('');
     await app.close();
+  });
+});
+
+describe('the check of the source that an extension is given', () => {
+  async function seenWith(askSourceReadableFor: Parameters<typeof mountExtensionRoutes>[3]['askSourceReadableFor']): Promise<ExtensionRequest | undefined> {
+    const app = Fastify();
+    let seen: ExtensionRequest | undefined;
+    mountExtensionRoutes(app, extensionOf(async (request) => ((seen = request), 'ok')), { current: async () => ({ principal: { id: 'p-1', role: 'investigator' } }) } as never, {
+      previewOn: true,
+      audit: { record: async () => undefined },
+      askClassifier: communityAskClassifier,
+      ...(askSourceReadableFor === undefined ? {} : { askSourceReadableFor }),
+    });
+    await app.inject({ url: URL_OF_ROUTE });
+    await app.close();
+    return seen;
+  }
+
+  it('is the check the application built for this caller and trace', async () => {
+    const contexts: unknown[] = [];
+    const seen = await seenWith((context) => async (sourceId) => void contexts.push([context.principal.id, sourceId]));
+    await seen?.askSourceReadable?.('demo');
+    expect(contexts).toEqual([['p-1', 'demo']]);
+  });
+
+  it('is absent when the application gives none', async () => {
+    expect((await seenWith(undefined))?.askSourceReadable).toBeUndefined();
   });
 });

@@ -1,11 +1,14 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AskClassifier, type AskFolder, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AskClassifier, type AskFolder, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { createAskClassifier } from './classify/classifier.js';
 import { createFailureReporter } from './failure-line.js';
+import { createAskContinueRoute, createAskQuestionRoute } from './questions/question-routes.js';
+import { createPgRunStore } from './questions/pg-run-store.js';
+import type { RunStore } from './questions/run-store.js';
 import { loadAskFolder } from './folder/load.js';
 import { guardAiRouteGroup } from './route-guard.js';
 
@@ -35,6 +38,8 @@ export interface EnterpriseExtension extends ProfileExtension {
 export interface EnterpriseExtensionOptions {
   /** Only a test sets this, to a stub on the loopback address; the model client otherwise calls the service. */
   readonly modelBaseUrl?: string;
+  /** Only a test sets this, to a store that opens no connection; the run store otherwise writes `ask_runs` on a pool of its own. */
+  readonly runStore?: (context: AuditSinkContext) => RunStore & { close(): Promise<void> };
 }
 
 export function createEnterpriseExtension(options: EnterpriseExtensionOptions = {}): EnterpriseExtension {
@@ -43,7 +48,12 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let mounted: MountedAuditSink | undefined;
   let logger: ExtensionLogger | undefined;
   let folder: AskFolder | undefined;
+  let runs: RunStore | undefined;
   const reportFailure = createFailureReporter(() => logger);
+  const askClassifier = (): AskClassifier | undefined => {
+    const model = modelOf();
+    return model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
+  };
   const modelOf = (): AuditedModelCall | undefined => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink }));
   return {
     name: 'ask',
@@ -53,10 +63,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     },
     configuration: () => configuration,
     askFolder: () => folder,
-    askClassifier: () => {
-      const model = modelOf();
-      return model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
-    },
+    askClassifier,
     async configure(_settings, env, context) {
       const configured = await configureAsk(env);
       configuration = configured.configuration;
@@ -73,8 +80,20 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     auditSink: () => mounted?.sink,
     model: modelOf,
     createAuditSink(context) {
-      mounted = createAuditSink(context);
-      return mounted;
+      const audit = createAuditSink(context);
+      const store = (options.runStore ?? createPgRunStore)(context);
+      mounted = audit;
+      runs = store;
+      // one close ends both pools, and a failure to end one does not leave the other open
+      let closing: Promise<void> | undefined;
+      return {
+        sink: audit.sink,
+        close: () =>
+          (closing ??= Promise.allSettled([audit.close(), store.close()]).then((results) => {
+            const failed = results.find((result) => result.status === 'rejected');
+            if (failed?.status === 'rejected') throw failed.reason;
+          })),
+      };
     },
     routeGroups: [
       guardAiRouteGroup({
@@ -86,6 +105,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
             responseSchema: aiStatusResponseSchema,
             handler: async () => ({ preview: true }),
           },
+          createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }),
+          createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger }),
         ],
       }),
     ],

@@ -16,6 +16,8 @@ export interface ExtensionMount {
   readonly signText?: ExtensionRequest['signText'];
   /** The runner of plans for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs a plan refuses. */
   readonly askPlanRunnerFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['askPlanRunner'];
+  /** Whether the caller may read a source, for one request; absent, a route that asks it refuses. */
+  readonly askSourceReadableFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askSourceReadable'];
   /** The saved patterns the caller may run on a source, for one request; absent, no saved pattern is offered to Ask. */
   readonly askPatternsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatterns'];
   /** One saved pattern by its id, for one request; absent, an edit of a plan that names a pattern is refused. */
@@ -43,6 +45,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           }
           let reply: unknown;
           try {
+            const askSourceReadable = mount.askSourceReadableFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
             const askPatternFind = mount.askPatternFindFor?.({ principal, traceId: request.id });
             const askPlanRunner = mount.signalOf === undefined ? undefined : mount.askPlanRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
@@ -55,6 +58,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               askClassifier: mount.askClassifier !== communityAskClassifier ? mount.askClassifier : (extension.askClassifier?.() ?? mount.askClassifier),
               signal: mount.signalOf?.(request) ?? NEVER_ABORTED.signal,
               ...(mount.signText === undefined ? {} : { signText: mount.signText }),
+              ...(askSourceReadable === undefined ? {} : { askSourceReadable }),
               ...(askPatterns === undefined ? {} : { askPatterns }),
               ...(askPatternFind === undefined ? {} : { askPatternFind }),
               ...(askPlanRunner === undefined ? {} : { askPlanRunner }),

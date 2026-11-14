@@ -1,4 +1,4 @@
-import type { AskEntities, AskRefusalCause } from './ask.js';
+import { ASK_ENTITY_TEXT_MAX_LENGTH, type AskEntities, type AskRefusalCause } from './ask.js';
 import { ASK_FOLDER_LIMITS, hasDuplicateKeys, isParameterName } from './ask-folder.js';
 import { codePoints } from './investigations.js';
 
@@ -13,12 +13,11 @@ export const ASK_REFUSAL_SENTENCES: Readonly<Record<AskRefusalCause, string>> = 
   unavailable: 'Ask is not available in this edition.',
   'missing-inputs': 'This question does not give everything Ask needs to answer it.',
   'extra-inputs': 'This question gives something Ask cannot use for this answer.',
+  'invalid-inputs': 'The values in this question do not fit what Ask needs to answer it.',
   'nothing-found': 'Ask found nothing for this question.',
 };
 
-/** The longest text of one entity value, in code points. */
-const ENTITY_TEXT_MAX_CODE_POINTS = 1000;
-/** A reply longer than this is not read: a reply of the form is far shorter (20 entities of 1,000 characters and their keys), and a text written with escapes beyond this size is refused as one that does not fit. */
+/** A reply longer than this is not read: a reply of the form is far shorter (20 entities of 256 characters and their keys), and a text written with escapes beyond this size is refused as one that does not fit. */
 const REPLY_MAX_CHARACTERS = 100_000;
 
 const CONTROL = /[\u0000-\u001F\u007F]/;
@@ -35,15 +34,12 @@ function entitiesOf(value: unknown): AskEntities | undefined {
   if (!isRecord(value)) return undefined;
   const keys = Object.keys(value);
   if (keys.length > ASK_FOLDER_LIMITS.parameters) return undefined;
-  const entities: Record<string, string | number | boolean> = {};
+  const entities: Record<string, string> = {};
   for (const key of keys) {
     const entity = value[key];
-    if (!isParameterName(key)) return undefined;
-    if (typeof entity === 'string') {
-      if (codePoints(entity) > ENTITY_TEXT_MAX_CODE_POINTS || CONTROL.test(entity) || LONE_SURROGATE.test(entity)) return undefined;
-    } else if (typeof entity === 'number') {
-      if (!Number.isFinite(entity)) return undefined;
-    } else if (typeof entity !== 'boolean') return undefined;
+    if (!isParameterName(key) || typeof entity !== 'string') return undefined;
+    const length = codePoints(entity);
+    if (length === 0 || length > ASK_ENTITY_TEXT_MAX_LENGTH || CONTROL.test(entity) || LONE_SURROGATE.test(entity)) return undefined;
     entities[key] = entity;
   }
   return entities;

@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { isHeavyResult, ASK_PLAN_PARAMS, ASK_PLAN_TEMPLATE_IDS, askRunResultSchema, askSummarySchema, storedSavedPatternParamsSchema, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH } from './ask.js';
 
 describe('the result of a run', () => {
-  it('has a variant for each template of the catalog and one for a saved pattern, and no other', () => {
-    expect(askRunResultSchema.options).toHaveLength(ASK_PLAN_TEMPLATE_IDS.length + 1);
-    expect(askRunResultSchema.options.map((option) => option.shape.templateId.value).sort()).toEqual([...ASK_PLAN_TEMPLATE_IDS, 'saved-pattern'].sort());
+  it('has a variant for each template of the catalog, one for a file query and one for a saved pattern, and no other', () => {
+    expect(askRunResultSchema.options).toHaveLength(ASK_PLAN_TEMPLATE_IDS.length + 2);
+    expect(askRunResultSchema.options.map((option) => option.shape.templateId.value).sort()).toEqual([...ASK_PLAN_TEMPLATE_IDS, 'file-query', 'saved-pattern'].sort());
   });
 
   it('says a saved run that stopped as heavy is heavy, and a saved run that ran is not', () => {

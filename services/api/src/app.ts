@@ -58,6 +58,7 @@ import { readinessResponse } from './health/readiness.js';
 import { communityAskClassifier, communitySeams } from './seams/community-seams.js';
 import { searchExactTemplate } from './gate/templates/search-exact.js';
 import { createAskPatternFinder, createAskPatternLister } from './ask/patterns-lister.js';
+import { createFileQueryRunner } from './ask/file-query-run.js';
 import { createAskPlanRunnerFactory } from './ask/plan-runner.js';
 import { createSigner, deriveSigningKey } from './ask/signing-key.js';
 import { COMMUNITY_POLICY_VERSION } from './investigations/draft.js';
@@ -365,6 +366,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
   const fallbackKeyMaterial = randomBytes(32);
   const askRunners: { current?: NonNullable<ExtensionMount['askPlanRunnerFor']> } = {};
+  const askSourceChecks: { current?: NonNullable<ExtensionMount['askSourceReadableFor']> } = {};
   const askPatternLists: { current?: NonNullable<ExtensionMount['askPatternsFor']> } = {};
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
   if (options.extension !== undefined) {
@@ -374,6 +376,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       askClassifier: (options.seams ?? communitySeams()).askClassifier ?? communityAskClassifier,
       signText: createSigner(options.signingKey ?? deriveSigningKey(fallbackKeyMaterial)),
       askPlanRunnerFor: (context) => askRunners.current?.(context),
+      askSourceReadableFor: (context) => askSourceChecks.current?.(context),
       askPatternsFor: (context) => askPatternLists.current?.(context),
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
       signalOf,
@@ -654,9 +657,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       const answer = await expansions.expand({ traceId: request.id, principal: identity.principal, sourceId, entityType: ref.entityType, stableId: ref.stableId, ...(relTypes === undefined ? {} : { relTypes }), neighborTypes, direction: direction ?? 'both', signal: signalOf(request), ...(filters === undefined ? {} : { filters }), ...(rank === undefined ? {} : { rank }), ...(window === undefined ? {} : { window }), ...(limit === undefined ? {} : { limit }), ...(cursors === undefined ? {} : { cursors }), mask: mask === true });
       return expandResponseSchema.parse(answer);
     });
+    askSourceChecks.current = ({ principal, traceId }) => (sourceId) => access.require({ traceId, principal, sourceId, auditAction: 'ask.question' });
     askPatternLists.current = createAskPatternLister({ store: options.store, mapping, access });
     askPatternFinders.current = createAskPatternFinder({ store: options.store, mapping, access });
-    askRunners.current = (context) => createAskPlanRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, savedRuns, mapping })(context);
+    const fileQueries = createFileQueryRunner({ gate: options.gate });
+    askRunners.current = (context) => createAskPlanRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, savedRuns, fileQueries, mapping })(context);
 
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });
