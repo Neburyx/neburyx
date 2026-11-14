@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classify, loadSource, plannedSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
+import { classify, loadSource, runSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
 import type { EvalHooks, RecordedAnswer } from '../hooks.js';
 
 const made: string[] = [];
@@ -36,7 +36,7 @@ export function hooksWith(answer: (question: string) => RecordedAnswer): EvalHoo
     classify: (source, provider, model, question) => classify(source as never, provider as never, model, question),
     replayProvider: (answers) => replayProvider(answers as never),
     recordingProvider: (provider, budget) => recordingProvider(provider as never, budget) as never,
-    plannedSettings,
+    runSettings,
     liveProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium' }),
   };
 }

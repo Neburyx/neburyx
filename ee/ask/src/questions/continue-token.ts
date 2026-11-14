@@ -15,7 +15,7 @@ export interface ContinueBinding {
 const textOf = (binding: ContinueBinding, expiresAtMs: number): string =>
   canonicalText([ASK_CONTINUE_LABEL, 1, binding.principalId, binding.sourceId, binding.intent, binding.definition, binding.entities, binding.mask, expiresAtMs]);
 
-/** A token that lets the person continue one answer that stopped as heavy: when it expires and the HMAC of what it binds, made with the application's signing capability. It holds no plan and is stored nowhere. */
+/** A token that lets the person continue one answer that stopped as heavy: when it expires and the HMAC of what it binds, made with the application's signing capability. It holds nothing of the question and is stored nowhere. */
 export function issueContinueToken(sign: (text: string) => string, binding: ContinueBinding, now: number): string {
   const expiresAtMs = now + ASK_CONTINUE_LIFETIME_MS;
   return `${expiresAtMs}.${sign(textOf(binding, expiresAtMs))}`;

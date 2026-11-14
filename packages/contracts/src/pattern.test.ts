@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FILTER_TEXT, MAX_FILTER_VALUES, MAX_FILTERS } from './expand.js';
-import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternPreviewRequestSchema, patternPreviewResponseSchema, patternDefinitionSchema, patternProblemsOf, patternValidateRequestSchema, patternValidateResponseSchema } from './pattern.js';
+import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternValidateRequestSchema, patternPreviewResponseSchema, patternDefinitionSchema, patternProblemsOf, patternValidateResponseSchema } from './pattern.js';
 
 const step = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker', ...extra });
 const definition = (extra: Record<string, unknown> = {}) => ({ anchorType: 'maker', steps: [step()], ...extra });
@@ -162,8 +162,8 @@ describe('the request and the answer of the preview route', () => {
   };
 
   it('takes the envelope of the validation, and answers a preview of typed parts or the problems of the validation with no preview', () => {
-    expect(patternPreviewRequestSchema.safeParse({ sourceId: 's', definition: {}, mask: true }).success).toBe(true);
-    expect(patternPreviewRequestSchema.safeParse({ sourceId: 's', definition: {}, other: 1 }).success).toBe(false);
+    expect(patternValidateRequestSchema.safeParse({ sourceId: 's', definition: {}, mask: true }).success).toBe(true);
+    expect(patternValidateRequestSchema.safeParse({ sourceId: 's', definition: {}, other: 1 }).success).toBe(false);
     expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview }).success).toBe(true);
     expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview: { ...preview, extra: 1 } }).success).toBe(false);
     expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview: { ...preview, steps: [] } }).success).toBe(false);

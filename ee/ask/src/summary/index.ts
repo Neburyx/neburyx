@@ -13,7 +13,7 @@ export type { ListedElements } from './core.js';
 import { fileQueryListed, summarizeFileQuery } from './file-query.js';
 
 export interface SummaryContext {
-  /** The anchor of the plan, when it has one: a run of a template names it in its zero-match sentence. */
+  /** The anchor of the run, when it has one: a run of a template names it in its zero-match sentence. */
   readonly anchor?: ElementRef | undefined;
 }
 

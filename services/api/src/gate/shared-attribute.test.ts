@@ -121,7 +121,7 @@ describe('the catalog entry of the shared-attribute template', () => {
     expect(SHARED_RELATIONSHIPS).toHaveLength(1);
   });
 
-  it('tells the planner which of the two templates a plain question and a question for the chain plan', () => {
+  it('tells which of the two templates a plain question and a question for the chain belong to', () => {
     expect(sharedAttributeTemplate.description).toContain('Plan this template for a plain question of who shares an attribute');
     expect(sharedAttributeTemplate.description).toContain('a question that asks for the chain that shows the link plans derived-rule-run');
     expect(derivedRuleRunTemplate.description).toContain('Plan this template for a question that asks for the chain that shows the link');

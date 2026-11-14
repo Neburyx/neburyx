@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { afterAll, describe, expect, it } from 'vitest';
-import { AI_STATUS_URL, createEnterpriseExtension } from './index.js';
+import { createEnterpriseExtension } from './index.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 describe('the enterprise extension', () => {
@@ -14,7 +14,7 @@ describe('the enterprise extension', () => {
     expect(others).toEqual([]);
     const [route, ...more] = group?.routes ?? [];
     expect(more.map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal']]);
-    expect([route?.method, route?.url, route?.permission]).toEqual(['GET', AI_STATUS_URL, 'principal']);
+    expect([route?.method, route?.url, route?.permission]).toEqual(['GET', '/v1/ai/status', 'principal']);
     const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, signal: new AbortController().signal });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
     expect(route?.responseSchema).toBe(aiStatusResponseSchema);
@@ -67,7 +67,7 @@ describe('the enterprise extension', () => {
     await expect(other?.close()).rejects.toThrow('end failed');
   });
 
-  it('has no plan store, no maintenance task and no Ask planner, and no classifier before it is configured and the audit is mounted', () => {
+  it('has no stored question, no maintenance task and no second Ask path, and no classifier before it is configured and the audit is mounted', () => {
     const extension = createEnterpriseExtension() as unknown as Record<string, unknown>;
     expect(extension['planStore']).toBeUndefined();
     expect(extension['maintenanceTasks']).toBeUndefined();

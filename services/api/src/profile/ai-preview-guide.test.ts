@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AI_DEFAULTS, AI_LIMITS } from '@neburyx/contracts';
-import { configureAsk } from '@neburyx/ee-ask';
-import { describe, expect, it } from 'vitest';
+import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { afterAll, describe, expect, it } from 'vitest';
 import { parseMapping } from '../mapping/load.js';
+import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 
 const GUIDE = readFileSync(join(fileURLToPath(new URL('../../../../', import.meta.url)), 'docs', 'ai-preview.md'), 'utf8');
 
@@ -38,12 +39,14 @@ const MOVED_KEYS: Readonly<Record<string, readonly string[]>> = {
   cache: ['NEBURYX_AI_CACHE', 'NEBURYX_AI_CACHE_TTL'],
 };
 
+afterAll(removeAskFolders);
+
 describe('the example of the AI settings in the AI preview guide', () => {
   it('is accepted by the mapping schema and by configure', async () => {
     const example = yamlBlockAfter('What to set in the mapping file');
     const mapping = parseMapping(`sources: []\n${example}`, 'ai-preview.md');
     expect(mapping.ai).toEqual({ preview: true });
-    const { outcome } = await configureAsk({ NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder' });
+    const outcome = await createEnterpriseExtension().configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder([]) }, { sourceIds: [] });
     expect(outcome).toEqual({ ok: true });
   });
 

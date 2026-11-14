@@ -17,10 +17,10 @@ const name = z.string().min(1);
 const anchor = z.strictObject({ entityType: name, stableId: referenceTextSchema });
 
 /**
- * The typed parameters of each template Ask can plan. Each holds what the template's request holds that a plan may choose, and none holds a source, a mask, a cursor or a continue flag: the application sets those.
- * `limit` is at least 1; its upper bound is the source's, checked when the plan runs.
+ * The typed parameters of each template an intent can name. Each holds what the template's request holds that an intent may choose, and none holds a source, a mask, a cursor or a continue flag: the application sets those.
+ * `limit` is at least 1; its upper bound is the source's, checked when the run is made.
  */
-export const ASK_PLAN_PARAMS = {
+export const ASK_TEMPLATE_PARAMS = {
   'shared-attribute': sharedAttributeParamsSchema,
   'linked-entities': linkedEntitiesParamsSchema,
   entity: z.strictObject({ ref: anchor }),
@@ -39,13 +39,13 @@ export const ASK_PLAN_PARAMS = {
   search: z.strictObject({ entityTypes: z.array(name).min(1), text: searchTextSchema }),
 } as const;
 
-export const ASK_PLAN_TEMPLATE_IDS = Object.keys(ASK_PLAN_PARAMS) as (keyof typeof ASK_PLAN_PARAMS)[];
+export const ASK_TEMPLATE_IDS = Object.keys(ASK_TEMPLATE_PARAMS) as (keyof typeof ASK_TEMPLATE_PARAMS)[];
 
-/** The template identifier of a plan that runs one of the investigator's saved patterns; it is not a template of the catalog, so the planner is told of it by the pattern catalog of the request. */
+/** The template identifier of a run of one of the investigator's saved patterns; it is not a template of the catalog, so the classifier is told of it by the pattern catalog of the request. */
 export const SAVED_PATTERN_TEMPLATE_ID = 'saved-pattern';
 export const SAVED_PATTERN_TEMPLATE_VERSION = 1;
 
-/** The parameters of a saved-pattern plan as it is stored. */
+/** The parameters of a saved-pattern run as it is stored. */
 export const storedSavedPatternParamsSchema = z.strictObject({ patternId: z.uuid(), patternVersion: z.number().int().min(1), ref: anchor.optional() });
 /** The `templateId` of the result of a file query in a run result: the file query has no template of the catalog. */
 export const FILE_QUERY_RESULT_ID = 'file-query';
@@ -55,7 +55,7 @@ export const ASK_RUN_OUTCOMES = ['complete', 'partial', 'failed'] as const;
 /** The longest text an entity value of a question may hold. */
 export const ASK_ENTITY_TEXT_MAX_LENGTH = 256;
 
-/** What a run of a plan answers: the template it ran and the answer of the service its manual route uses, whole, so a run reads exactly as the person's own click would. */
+/** What a run of an intent answers: the template it ran and the answer of the service its manual route uses, whole, so a run reads exactly as the person's own click would. */
 export const askRunResultSchema = z.union([
   z.strictObject({ templateId: z.literal('shared-attribute'), result: templateRunResponseSchema }),
   z.strictObject({ templateId: z.literal('linked-entities'), result: templateRunResponseSchema }),
@@ -71,7 +71,7 @@ export const askRunResultSchema = z.union([
   z.strictObject({ templateId: z.literal(SAVED_PATTERN_TEMPLATE_ID), result: z.union([patternRunResponseSchema, templateRunResponseSchema]) }),
 ]);
 
-/** Whether a result is the stop of a run that would read more than the source allows without being asked again: the plan was given back, so the answer carries the token to continue it. */
+/** Whether a result is the stop of a run that would read more than the source allows without being asked again: the run was given back, so the answer carries the token to continue it. */
 export function isHeavyResult(run: AskRunResult): boolean {
   return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities' || run.templateId === SAVED_PATTERN_TEMPLATE_ID) && run.result.status === 'heavy';
 }
@@ -94,7 +94,7 @@ export const askSummaryCitationSchema = z.strictObject({ key: summaryKey, elemen
 
 /**
  * The summary of a run: sentences built from the result alone, each citing elements the result lists, and one sentence that says what was left out. Every sentence has a key, every key has a citation,
- * every citation is cited, the keys are unique and the citations are of one source. The schema cannot see the result: the route checks that the cited elements are the result's and the source is the plan's.
+ * every citation is cited, the keys are unique and the citations are of one source. The schema cannot see the result: the route checks that the cited elements are the result's and the source is the run's.
  */
 export const askSummarySchema = z
   .strictObject({
@@ -118,7 +118,7 @@ export type AskSummaryCitation = z.infer<typeof askSummaryCitationSchema>;
 
 export type AskAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
-/** What a pattern needs of the plan that names it, by its key: the type of the entity it starts at, and whether the question gives that entity or the pattern holds it. */
+/** What a pattern needs of the intent that names it, by its key: the type of the entity it starts at, and whether the question gives that entity or the pattern holds it. */
 export interface AskPatternEntry {
   readonly anchorType: string;
   readonly startingEntity: 'asked' | 'held';
@@ -132,7 +132,7 @@ export interface AskPatternCatalog {
   readonly entries: ReadonlyMap<string, AskPatternEntry>;
 }
 
-/** One step of a saved pattern as a plan may be told of it: types and kinds only, never a property, a value or a name. */
+/** One step of a saved pattern as an intent may be told of it: types and kinds only, never a property, a value or a name. */
 export interface AskPatternStep {
   readonly relationshipTypes: readonly string[];
   readonly direction: 'out' | 'in' | 'both';
@@ -141,7 +141,7 @@ export interface AskPatternStep {
   readonly windowed: boolean;
 }
 
-/** The structure of a saved pattern that may reach the planner. It has no field for a name, a description, a value, an owner, an identifier or a time. */
+/** The structure of a saved pattern that may reach the classifier. It has no field for a name, a description, a value, an owner, an identifier or a time. */
 export type AskPatternProjection =
   | {
       readonly kind: 'definition';

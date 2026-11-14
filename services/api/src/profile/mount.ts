@@ -14,13 +14,13 @@ export interface ExtensionMount {
   readonly askClassifier: AskClassifier;
   /** Signs a text (the Continue token); absent, a route that needs it refuses. */
   readonly signText?: ExtensionRequest['signText'];
-  /** The runner of plans for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs a plan refuses. */
-  readonly askPlanRunnerFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['askPlanRunner'];
+  /** The runner of Ask for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs Ask refuses. */
+  readonly askRunnerFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['askRunner'];
   /** Whether the caller may read a source, for one request; absent, a route that asks it refuses. */
   readonly askSourceReadableFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askSourceReadable'];
   /** The saved patterns the caller may run on a source, for one request; absent, no saved pattern is offered to Ask. */
   readonly askPatternsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatterns'];
-  /** One saved pattern by its id, for one request; absent, an edit of a plan that names a pattern is refused. */
+  /** One saved pattern by its id, for one request; absent, a run that names a pattern is refused. */
   readonly askPatternFindFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatternFind'];
   /** The signal that is aborted when the client gives up the request. */
   readonly signalOf?: (request: FastifyRequest) => AbortSignal;
@@ -48,7 +48,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             const askSourceReadable = mount.askSourceReadableFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
             const askPatternFind = mount.askPatternFindFor?.({ principal, traceId: request.id });
-            const askPlanRunner = mount.signalOf === undefined ? undefined : mount.askPlanRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
+            const askRunner = mount.signalOf === undefined ? undefined : mount.askRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
             reply = await route.handler({
               principalId: principal.id,
               principalRole: principal.role,
@@ -61,7 +61,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(askSourceReadable === undefined ? {} : { askSourceReadable }),
               ...(askPatterns === undefined ? {} : { askPatterns }),
               ...(askPatternFind === undefined ? {} : { askPatternFind }),
-              ...(askPlanRunner === undefined ? {} : { askPlanRunner }),
+              ...(askRunner === undefined ? {} : { askRunner }),
               ...(body === undefined ? {} : { body }),
             });
           } catch (error) {

@@ -8,7 +8,7 @@ export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
 export { ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
 export type { ExtensionRefusalFields } from './extension.js';
-export type { ConfigureContext, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskPlanRun, AskPlanRunner, AskRunInput, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
+export type { ConfigureContext, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskRun, AskRunner, AskRunInput, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiCacheTtl, AiEffort, AiSettings, AiStatusResponse } from './ai.js';
 export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
@@ -143,7 +143,7 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
-export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewConditionSchema, patternPreviewRequestSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewWindowSchema, patternProblemsOf, patternStepBaseSchema, patternValidateRequestSchema, patternValidateResponseSchema, refinePatternStep } from './pattern.js';
+export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewConditionSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewWindowSchema, patternProblemsOf, patternStepBaseSchema, patternValidateRequestSchema, patternValidateResponseSchema, refinePatternStep } from './pattern.js';
 export type { PatternDefinition, PatternPreview, PatternPreviewRequest, PatternPreviewResponse, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
 export { patternHopSchema, patternMatchSchema, patternRunHeavySchema, patternRunOkSchema, patternRunRequestSchema, patternRunResponseSchema } from './pattern-run.js';
 export type { PatternHop, PatternMatch, PatternRunHeavy, PatternRunOk, PatternRunRequest, PatternRunResponse } from './pattern-run.js';
@@ -164,11 +164,11 @@ export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEM
 export type { ExportFile, ExportFormat, ExportHeader, ExportRecord, ExportRequest } from './exports.js';
 export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
 export type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';
-export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTERN_LIST_LIMIT, listedPatternSchema, MAX_PATTERN_LIST_LIMIT, PATTERN_UNAVAILABLE_CODES, patternAvailabilitySchema, patternListQuerySchema, patternListResponseSchema, patternUnavailableReasonSchema, SAVED_PATTERN_KINDS, SAVED_PATTERN_VISIBILITIES, savedPatternAnchorSchema, savedPatternNameSchema, savedPatternSchema, savePatternRequestSchema, savePatternResponseSchema } from './saved-pattern.js';
+export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTERN_LIST_LIMIT, listedPatternSchema, MAX_PATTERN_LIST_LIMIT, PATTERN_UNAVAILABLE_CODES, patternAvailabilitySchema, patternListQuerySchema, patternListResponseSchema, patternUnavailableReasonSchema, SAVED_PATTERN_KINDS, SAVED_PATTERN_VISIBILITIES, savedPatternAnchorSchema, savedPatternNameSchema, savedPatternSchema, savePatternRequestSchema } from './saved-pattern.js';
 export type { ChangePatternRequest, DeletePatternResponse, ListedPattern, PatternAvailability, PatternListResponse, SavedPattern, SavePatternRequest } from './saved-pattern.js';
 export { patternUnavailableSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema } from './saved-pattern-run.js';
 export type { PatternUnavailable, SavedPatternRunRequest, SavedPatternRunResponse } from './saved-pattern-run.js';
-export { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_PLAN_PARAMS, ASK_PLAN_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_QUESTION_MAX_CODE_POINTS, ASK_RUN_OUTCOMES, FILE_QUERY_RESULT_ID, askRunResultSchema, isHeavyResult } from './ask.js';
+export { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_TEMPLATE_PARAMS, ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_QUESTION_MAX_CODE_POINTS, ASK_RUN_OUTCOMES, FILE_QUERY_RESULT_ID, askRunResultSchema, isHeavyResult } from './ask.js';
 export type { AskAvailability, AskPatternCatalog, AskPatternEntry, AskPatternListing, AskPatternOffer, AskPatternProjection, AskPatternStep, AskClassifier, AskClassifyInput, AskClassification, AskEntities, AskRefusalCause, AskRunResult, AskSummary, AskSummaryCitation } from './ask.js';
 export { checkIntentQuery } from './query-check.js';
 export { ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, hasDuplicateKeys, isParameterName, parseIntentsFile } from './ask-folder.js';

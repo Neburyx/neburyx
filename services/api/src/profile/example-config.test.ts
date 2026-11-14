@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { configureAsk } from '@neburyx/ee-ask';
-import { describe, expect, it } from 'vitest';
+import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { afterAll, describe, expect, it } from 'vitest';
 import { parseMapping } from '../mapping/load.js';
+import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 
 const EXAMPLE = readFileSync(join(fileURLToPath(new URL('../../../../', import.meta.url)), 'deploy', 'compose', 'config', 'neburyx.example.yaml'), 'utf8');
 const START = '# >>> ai preview example';
@@ -17,6 +18,8 @@ function uncommented(): string {
   expect(to, 'the end marker').toBeGreaterThan(from);
   return [...lines.slice(0, from), ...lines.slice(from + 1, to).map((line) => line.replace(/^# ?/, '')), ...lines.slice(to + 1)].join('\n');
 }
+
+afterAll(removeAskFolders);
 
 describe('the example mapping file of the compose install', () => {
   it('is valid as it is, with the AI preview block still commented', () => {
@@ -37,7 +40,7 @@ describe('the example mapping file of the compose install', () => {
   it('is accepted by the mapping schema and by configure once the block is uncommented and its key variable is set', async () => {
     const mapping = parseMapping(uncommented(), 'neburyx.example.yaml');
     expect(mapping.ai).toEqual({ preview: true });
-    const { outcome } = await configureAsk({ NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder' });
+    const outcome = await createEnterpriseExtension().configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder([]) }, { sourceIds: [] });
     expect(outcome).toEqual({ ok: true });
   });
 });

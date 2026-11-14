@@ -1,9 +1,9 @@
-import { parseExtensionRefusal, type AskPlanRun } from '@neburyx/contracts';
+import { parseExtensionRefusal, type AskRun } from '@neburyx/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { AppError, RequestCancelled } from '../errors.js';
 import type { MappingModel } from '../mapping/model.js';
 import { principalFixture } from '../testing/principal-fixture.js';
-import { createAskPlanRunnerFactory, refusalOfError, type AskPlanRunnerServices } from './plan-runner.js';
+import { createAskRunnerFactory, refusalOfError, type AskRunnerServices } from './ask-runner.js';
 
 const SOURCE = 'demo';
 const mapping = { sources: [{ id: SOURCE, derived: [{ id: 'rule_one', ruleVersion: 3, from: 'node_a', to: 'node_a' }] }] } as unknown as MappingModel;
@@ -11,7 +11,7 @@ const REF = { entityType: 'node_a', stableId: 'a-1' };
 const signal = new AbortController().signal;
 
 /** Services that record how they were called and answer a marked result, so what the runner passes and what it returns can be read. */
-function rig(overrides: Partial<Record<keyof Omit<AskPlanRunnerServices, 'mapping'>, unknown>> = {}) {
+function rig(overrides: Partial<Record<keyof Omit<AskRunnerServices, 'mapping'>, unknown>> = {}) {
   const calls: { service: string; request: Record<string, unknown> }[] = [];
   const answering = (service: string, answer: unknown) =>
     vi.fn(async (request: Record<string, unknown>) => {
@@ -28,12 +28,12 @@ function rig(overrides: Partial<Record<keyof Omit<AskPlanRunnerServices, 'mappin
     searching: { search: overrides.searching ?? answering('searching', { sourceId: SOURCE }) },
     fileQueries: { run: overrides.fileQueries ?? answering('fileQueries', { status: 'ok', intent: 'byName', count: { quality: 'exact', value: 0, scope: 'rows' }, nodes: [], edges: [], notices: [], warnings: [] }) },
     mapping,
-  } as unknown as AskPlanRunnerServices;
-  const runnerFor = (scope = { sourceId: SOURCE, mask: true }) => createAskPlanRunnerFactory(services)({ principal: principalFixture, traceId: 'tr-1', signal })(scope);
+  } as unknown as AskRunnerServices;
+  const runnerFor = (scope = { sourceId: SOURCE, mask: true }) => createAskRunnerFactory(services)({ principal: principalFixture, traceId: 'tr-1', signal })(scope);
   return { calls, runnerFor };
 }
 
-const refusedWith = async (run: Promise<AskPlanRun>) => {
+const refusedWith = async (run: Promise<AskRun>) => {
   const answer = await run;
   if (answer.status !== 'refused') throw new Error('not refused');
   return answer.refusal;
@@ -100,7 +100,7 @@ describe('a run that the gate or the services refuse', () => {
     ['derived-rule-run', { ref: REF }],
     ['derived-edge-support', { ruleId: 'rule_one', ends: [REF] }],
     ['search', { entityTypes: ['node_a'] }],
-  ] as const)('refuses the parameters of a plan of %s that are not the template’s as invalid parameters, and reads nothing', async (templateId, params) => {
+  ] as const)('refuses the parameters of a run of %s that are not the template’s as invalid parameters, and reads nothing', async (templateId, params) => {
     const { runnerFor, calls } = rig();
     expect(await refusedWith(runnerFor().run({ templateId, params }))).toEqual({ code: 'ASK_PLAN_INVALID' });
     expect(calls).toEqual([]);
@@ -122,7 +122,7 @@ describe('what a run is bound to', () => {
     ['derived-rule-run', { ref: REF, ruleId: 'rule_one' }, 'derivedNeighbors'],
     ['derived-edge-support', { ruleId: 'rule_one', ends: [REF, { entityType: 'node_a', stableId: 'a-2' }] }, 'edges'],
     ['search', { entityTypes: ['node_a'], text: 'ref 77' }, 'searching'],
-  ] as const)('reads a plan of %s as the caller, on the source of the scope, with the trace, the mask and the abort signal of the request', async (templateId, params, service) => {
+  ] as const)('reads a run of %s as the caller, on the source of the scope, with the trace, the mask and the abort signal of the request', async (templateId, params, service) => {
     const { runnerFor, calls } = rig();
     await runnerFor({ sourceId: SOURCE, mask: false }).run({ templateId, params });
     expect(calls.map((call) => call.service)).toEqual([service]);
@@ -166,7 +166,7 @@ describe('the run of each template', () => {
     expect(calls[0]?.request).toMatchObject({ entityType: 'node_a', stableId: 'a-1', rate: 'count' });
   });
 
-  it('expands with both directions unless the plan names one, and passes the types, the window and the limit', async () => {
+  it('expands with both directions unless the run names one, and passes the types, the window and the limit', async () => {
     const { runnerFor, calls } = rig();
     await runnerFor().run({ templateId: 'expand', params: { ref: REF, neighborTypes: ['node_b'], relTypes: ['link_a'], window: { days: 30 }, limit: 10 } });
     await runnerFor().run({ templateId: 'expand', params: { ref: REF, neighborTypes: ['node_b'], direction: 'out' } });
@@ -175,7 +175,7 @@ describe('the run of each template', () => {
     expect(calls[1]?.request).not.toHaveProperty('relTypes');
   });
 
-  it('keeps only the rule of the plan from the derived neighbors of the entity', async () => {
+  it('keeps only the rule of the run from the derived neighbors of the entity', async () => {
     const { runnerFor } = rig();
     const answer = await runnerFor().run({ templateId: 'derived-rule-run', params: { ref: REF, ruleId: 'rule_one' } });
     expect(answer).toMatchObject({ status: 'ok', result: { templateId: 'derived-rule-run', result: { results: [{ ruleId: 'rule_one', count: { value: 1 } }] } } });
@@ -188,13 +188,13 @@ describe('the run of each template', () => {
     expect(answer).toEqual({ status: 'ok', result: { templateId: 'derived-rule-run', result: { ref: { sourceId: SOURCE, ...REF }, results: [{ ruleId: 'rule_one', ruleVersion: 3, count: { quality: 'exact', value: 0, scope: 'derived:neighbors' }, nodes: [], edges: [], warnings: [] }] } } });
   });
 
-  it('reads the support of a derived edge by the edge reader with both ends of the plan in the source of the scope', async () => {
+  it('reads the support of a derived edge by the edge reader with both ends of the run in the source of the scope', async () => {
     const { runnerFor, calls } = rig();
     await runnerFor().run({ templateId: 'derived-edge-support', params: { ruleId: 'rule_one', ends: [REF, { entityType: 'node_a', stableId: 'a-2' }] } });
     expect(calls[0]?.request).toMatchObject({ ref: { sourceId: SOURCE, derived: { ruleId: 'rule_one', from: { sourceId: SOURCE, ...REF }, to: { sourceId: SOURCE, entityType: 'node_a', stableId: 'a-2' } } }, rate: 'count' });
   });
 
-  it('searches the types of the plan for its text as a parameter of the search, nothing else', async () => {
+  it('searches the types of the run for its text as a parameter of the search, nothing else', async () => {
     const { runnerFor, calls } = rig();
     await runnerFor().run({ templateId: 'search', params: { entityTypes: ['node_a', 'node_b'], text: 'ref 77' } });
     expect(calls[0]?.request).toMatchObject({ text: 'ref 77', entityTypes: ['node_a', 'node_b'] });

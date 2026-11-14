@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ExtensionRefusal, type AskClassification, type AskPatternOffer, type AskFolder, type AskPlanRun, type AskRunResult, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { ExtensionRefusal, type AskClassification, type AskPatternOffer, type AskFolder, type AskRun, type AskRunResult, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { AuditUnavailableError } from '../audited.js';
 import { loadAskFolder } from '../folder/load.js';
@@ -27,14 +27,14 @@ interface Rig {
   readonly continueRoute: ExtensionRoute;
   readonly events: AuditEvent[];
   readonly rows: RunRecord[];
-  readonly runs: { plan: unknown; options: unknown; mask: boolean }[];
+  readonly runs: { asked: unknown; options: unknown; mask: boolean }[];
   readonly classified: unknown[];
   readonly signals: AbortSignal[];
   readonly logs: { fields: unknown; message: string }[];
   request(body: unknown, over?: Partial<ExtensionRequest>): ExtensionRequest;
 }
 
-async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskPlanRun; sink?: 'fails'; readable?: boolean } = {}): Promise<Rig> {
+async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskRun; sink?: 'fails'; readable?: boolean } = {}): Promise<Rig> {
   const folder: AskFolder | undefined = await loadAskFolder({ folder: makeAskFolder([SOURCE], options.intents), sourceIds: [SOURCE] }).then((loaded) => (loaded.ok ? loaded.folder : undefined));
   const events: AuditEvent[] = [];
   const rows: RunRecord[] = [];
@@ -74,9 +74,9 @@ async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: u
           askPatterns: async () => ({ offers: options.patterns ?? [], cut: false }),
           askPatternFind: async (_sourceId: string, id: string) => options.patterns?.find((offer) => offer.id === id),
         }),
-    askPlanRunner: (scope) => ({
-      run: async (plan, runOptions) => {
-        runs.push({ plan, options: runOptions, mask: scope.mask });
+    askRunner: (scope) => ({
+      run: async (asked, runOptions) => {
+        runs.push({ asked, options: runOptions, mask: scope.mask });
         return options.run === undefined ? { status: 'ok', result: okResult() } : options.run(runOptions?.continue === true);
       },
     }),
@@ -102,7 +102,7 @@ describe('a question of a template intent', () => {
   it('is classified, bound to the template and run once through the gate, and answered with its summary, one event and one row', async () => {
     const { route, request, events, rows, runs, classified } = await rig();
     const answer = (await route.handler(request(ASK))) as { answered: Record<string, unknown> };
-    expect(runs).toEqual([{ plan: { templateId: 'shared-attribute', params: { ref: { entityType: 'widget', stableId: 'A-1' }, attributeType: 'shape', via: 'USES_SHAPE' } }, options: undefined, mask: false }]);
+    expect(runs).toEqual([{ asked: { templateId: 'shared-attribute', params: { ref: { entityType: 'widget', stableId: 'A-1' }, attributeType: 'shape', via: 'USES_SHAPE' } }, options: undefined, mask: false }]);
     expect(answer.answered).toMatchObject({ intent: 'shared', entities: { id: 'A-1' }, outcome: 'complete', result: { templateId: 'shared-attribute' } });
     expect(answer.answered['summary']).toBeDefined();
     expect(answer.answered['continueToken']).toBeUndefined();
@@ -215,7 +215,7 @@ describe('what comes before a question is classified', () => {
     expect(events).toEqual([]);
   });
 
-  it.each(['askPlanRunner', 'signText', 'askSourceReadable'] as const)('is the unsupported refusal when the application gives no %s', async (name) => {
+  it.each(['askRunner', 'signText', 'askSourceReadable'] as const)('is the unsupported refusal when the application gives no %s', async (name) => {
     const { route, request } = await rig();
     expect(await refusalOf(route.handler(request(ASK, { [name]: undefined })))).toMatchObject({ code: 'ASK_UNSUPPORTED' });
   });
@@ -243,7 +243,7 @@ describe('a file-query intent', () => {
   it('runs the query of the folder through the runner with the entities as its values, and answers with its summary, one event with the query hash and one row', async () => {
     const { route, request, runs, events, rows } = await rig({ ...ask, run: () => ({ status: 'ok', result: fileQueryResult() }) });
     const answer = (await route.handler(request(ASK))) as { answered: Record<string, unknown> };
-    expect(runs).toEqual([{ plan: { fileQuery: { intent: 'byId', values: { id: 'A-1' } } }, options: undefined, mask: false }]);
+    expect(runs).toEqual([{ asked: { fileQuery: { intent: 'byId', values: { id: 'A-1' } } }, options: undefined, mask: false }]);
     expect(answer.answered).toMatchObject({ intent: 'byId', entities: { id: 'A-1' }, outcome: 'complete', result: { templateId: 'file-query' } });
     expect(answer.answered['summary']).toBeDefined();
     expect(events).toHaveLength(1);
@@ -393,7 +393,7 @@ describe('a question that names a saved pattern', () => {
   it('runs a held pattern with its id and version through the runner, and answers with the pattern’s id, its label and the summary', async () => {
     const { route, request, runs, events, rows } = await rig({ patterns: [HELD], ...asks({ pattern: 'pat_1' }), run: () => ({ status: 'ok', result: savedResult() }) });
     const answer = (await route.handler(request(ASK))) as { answered: Record<string, unknown> };
-    expect(runs).toEqual([{ plan: { templateId: 'saved-pattern', params: { patternId: PATTERN_HELD, patternVersion: 3 } }, options: undefined, mask: false }]);
+    expect(runs).toEqual([{ asked: { templateId: 'saved-pattern', params: { patternId: PATTERN_HELD, patternVersion: 3 } }, options: undefined, mask: false }]);
     expect(answer.answered).toMatchObject({ intent: 'saved-pattern', entities: { pattern: PATTERN_HELD }, outcome: 'complete', patternName: 'SECRET-HELD-NAME', result: { templateId: 'saved-pattern' } });
     expect(answer.answered['summary']).toBeDefined();
     expect(events).toHaveLength(1);
@@ -405,7 +405,7 @@ describe('a question that names a saved pattern', () => {
   it('runs an asked pattern with the anchor as a reference of the type the pattern starts at, never a type from the reply', async () => {
     const { route, request, runs } = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'SECRET-ANCHOR' }), run: () => ({ status: 'ok', result: savedResult() }) });
     await route.handler(request(ASK));
-    expect(runs[0]?.plan).toEqual({ templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'SECRET-ANCHOR' } } });
+    expect(runs[0]?.asked).toEqual({ templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'SECRET-ANCHOR' } } });
   });
 
   it('keeps the typed name and the anchor out of every event, row and log line', async () => {
@@ -493,7 +493,7 @@ describe('a question that names a saved pattern', () => {
       const body = continueBody(first.answered.continueToken, { entities: { pattern: PATTERN_ASKED, anchor: 'SECRET-ANCHOR' } });
       const page = (await rigged.continueRoute.handler(rigged.request(body))) as { answered: Record<string, unknown> };
       expect(page.answered).toMatchObject({ outcome: 'complete', patternName: 'SECRET-ASKED-NAME', entities: { pattern: PATTERN_ASKED, anchor: 'SECRET-ANCHOR' } });
-      expect(rigged.runs[1]).toMatchObject({ plan: { templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'SECRET-ANCHOR' } } }, options: { continue: true } });
+      expect(rigged.runs[1]).toMatchObject({ asked: { templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'SECRET-ANCHOR' } } }, options: { continue: true } });
       expectNoLeak(rigged);
     });
 

@@ -85,7 +85,7 @@ export interface Template {
   readonly cutMeans?: 'duplicate' | 'lowerBound';
   /** A generic name for the template, shown where a source's own preset names are not (the template list); a template a preset can bind has one. */
   readonly name?: string;
-  /** What the template answers, in the words the Ask planner is given to choose between templates. */
+  /** What the template answers, in the words that tell a template from another in the template list. */
   readonly description?: string;
   readonly entityParams: readonly string[];
   readonly relationshipParams: readonly string[];

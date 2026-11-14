@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { FAILURE_CODES, promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type TokenUsage } from './index.js';
+import { FAILURE_CODES, promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type TokenUsage } from './provider.js';
 
 const PROMPT: ModelAnswer['prompt'] = { id: 'test.prompt', version: 1, sha256: 'a'.repeat(64) };
 

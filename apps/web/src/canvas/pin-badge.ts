@@ -1,5 +1,5 @@
 import pin from '../assets/lucide/pin.svg?raw';
-import { PIN_BADGE_COLOR, PIN_BADGE_FILL, PIN_BADGE_SIZE } from './look.js';
+import { DERIVED_COLOR, NODE_FILL, PIN_BADGE_SIZE } from './look.js';
 
 const GLYPH_BOX = 24;
 const GLYPH_ON_BADGE = 9;
@@ -11,6 +11,6 @@ export function pinBadgeUri(): string {
   const half = PIN_BADGE_SIZE / 2;
   const scale = GLYPH_ON_BADGE / GLYPH_BOX;
   const offset = (PIN_BADGE_SIZE - GLYPH_ON_BADGE) / 2;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PIN_BADGE_SIZE}" height="${PIN_BADGE_SIZE}" viewBox="0 0 ${PIN_BADGE_SIZE} ${PIN_BADGE_SIZE}"><circle cx="${half}" cy="${half}" r="${half - 0.75}" fill="${PIN_BADGE_FILL}" stroke="${PIN_BADGE_COLOR}" stroke-width="1.5"/><g transform="translate(${offset} ${offset}) scale(${scale})" fill="none" stroke="${PIN_BADGE_COLOR}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PIN_BADGE_SIZE}" height="${PIN_BADGE_SIZE}" viewBox="0 0 ${PIN_BADGE_SIZE} ${PIN_BADGE_SIZE}"><circle cx="${half}" cy="${half}" r="${half - 0.75}" fill="${NODE_FILL}" stroke="${DERIVED_COLOR}" stroke-width="1.5"/><g transform="translate(${offset} ${offset}) scale(${scale})" fill="none" stroke="${DERIVED_COLOR}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</g></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

@@ -8,10 +8,13 @@
     "ee/audit": {},
     "services/api": {},
     "packages/test-containers": {},
+    "tools/cancellation-suite": {},
+    "tools/concurrency-suite": {},
     "tools/dco-check": {},
     "tools/demo-graph": {},
     "tools/driver-check": {},
     "tools/release-checks": {},
+    "tools/save-suite": {},
     "tools/workspace-checks": {},
     "apps/web": {
       // Built one by one by production-absence.test.ts, which reads each path.
@@ -30,21 +33,9 @@
       // Exported as the ./check subpath, run by hand.
       "entry": ["src/index.ts", "src/check.ts"]
     },
-    "tools/cancellation-suite": {
-      // Declared so the Neo4j scripts build the package first: kept pending a decision.
-      "ignoreDependencies": ["@neburyx/test-neo4j"]
-    },
     "tools/ask-safety-suite": {
       // Mocked by name with vi.mock in each test file, which knip does not count as a use; the package is declared so that the mock resolves.
       "ignoreDependencies": ["@neburyx/ee-audit"]
-    },
-    "tools/concurrency-suite": {
-      // Declared so the Neo4j scripts build the package first: kept pending a decision.
-      "ignoreDependencies": ["@neburyx/test-neo4j"]
-    },
-    "tools/save-suite": {
-      // Declared so the Neo4j and integration scripts build the packages first: kept pending a decision.
-      "ignoreDependencies": ["@neburyx/test-containers", "@neburyx/test-neo4j"]
     },
     "tools/ask-eval": {
       // The entry script loads the enterprise classifier by package name and hands it to the command in src/cli.ts.
@@ -64,18 +55,6 @@
       // Run by hand to regenerate the fixtures; its README names it.
       "entry": ["scripts/make-profile.mjs"]
     }
-  },
-  // Findings left on purpose: each group below says why and which step of the Ask rework removes it.
-  "ignoreIssues": {
-    // Used by the tests of services/api through dist, which knip cannot follow; the final sweep of the Ask rework keeps only createEnterpriseExtension here.
-    "ee/ask/src/index.ts": ["exports", "types"],
-    // Imported by the entry script of the evaluation tool through the package subpath ./eval, which knip does not follow.
-    "ee/ask/src/eval/index.ts": ["exports"],
-    // Named aliases of one value, one name for each role in the canvas look: kept pending a decision.
-    "apps/web/src/canvas/look.ts": ["duplicates"],
-    // Public schema names that point at one schema: kept pending a decision.
-    "packages/contracts/src/pattern.ts": ["duplicates"],
-    "packages/contracts/src/saved-pattern.ts": ["duplicates"]
   },
   // Fixture trees of the workspace checks hold deliberate violations and are read as text, not built.
   "ignore": ["**/fixtures/**"]

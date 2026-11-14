@@ -6,7 +6,7 @@ import { summarize, type SummaryOutcome } from './index.js';
 const SUMMARY_DROPPED_EVENT = 'ask-summary-dropped';
 type SummaryDropCode = 'builder-threw' | 'other-source' | 'check-failed' | 'schema';
 
-/** The anchor a plan's own parameters name, when they name one: the plan's source, the entity type and the stable ID. */
+/** The anchor the parameters of a run name, when they name one: the run's source, the entity type and the stable ID. */
 export function anchorOfParams(sourceId: string, params: unknown): ElementRef | undefined {
   if (typeof params !== 'object' || params === null || !('ref' in params)) return undefined;
   const { ref } = params;
@@ -15,7 +15,7 @@ export function anchorOfParams(sourceId: string, params: unknown): ElementRef | 
 }
 
 /**
- * The summary a run answer carries, or nothing. It is built after the run is recorded and audited, from the result alone, so it never changes the outcome. A summary whose citations are not of the plan's source,
+ * The summary a run answer carries, or nothing. It is built after the run is recorded and audited, from the result alone, so it never changes the outcome. A summary whose citations are not of the asked's source,
  * or a builder that throws, is dropped whole and a warning with a fixed code is logged (no value of the result).
  */
 function guarded(build: () => SummaryOutcome, sourceId: string, logger: ExtensionLogger | undefined): AskSummary | undefined {
@@ -40,8 +40,8 @@ function guarded(build: () => SummaryOutcome, sourceId: string, logger: Extensio
   }
 }
 
-export function summaryOfRun(run: AskRunResult, plan: { readonly sourceId: string; readonly params: unknown }, logger: ExtensionLogger | undefined): AskSummary | undefined {
-  return guarded(() => summarize(run, { anchor: anchorOfParams(plan.sourceId, plan.params) }), plan.sourceId, logger);
+export function summaryOfRun(run: AskRunResult, asked: { readonly sourceId: string; readonly params: unknown }, logger: ExtensionLogger | undefined): AskSummary | undefined {
+  return guarded(() => summarize(run, { anchor: anchorOfParams(asked.sourceId, asked.params) }), asked.sourceId, logger);
 }
 
 /** The summary of a file-query result, dropped whole under the same rules and codes as the summary of a template run. */

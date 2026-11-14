@@ -30,7 +30,7 @@ import {
 import { createHash } from 'node:crypto';
 import { AuditUnavailableError } from '../audited.js';
 import { buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
-import { summarizeRun } from '../plans/run-summary.js';
+import { summarizeRun } from './run-summary.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
 import { canonicalText } from './canonical.js';
 import { issueContinueToken, verifyContinueToken } from './continue-token.js';
@@ -53,15 +53,15 @@ export interface QuestionRouteOptions {
 }
 
 type Entities = AskEntities;
-type Capabilities = { readonly askPlanRunner: NonNullable<ExtensionRequest['askPlanRunner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<ExtensionRequest['askSourceReadable']> };
+type Capabilities = { readonly askRunner: NonNullable<ExtensionRequest['askRunner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<ExtensionRequest['askSourceReadable']> };
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
 const unavailableAudit = (): ExtensionRefusal => new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
 
 function capabilitiesOf(request: ExtensionRequest): Capabilities {
-  const { askPlanRunner, signText, askSourceReadable } = request;
-  if (askPlanRunner === undefined || signText === undefined || askSourceReadable === undefined) throw unsupported();
-  return { askPlanRunner, signText, askSourceReadable };
+  const { askRunner, signText, askSourceReadable } = request;
+  if (askRunner === undefined || signText === undefined || askSourceReadable === undefined) throw unsupported();
+  return { askRunner, signText, askSourceReadable };
 }
 
 const refusal = (cause: AskRefusalCause, more: Partial<Extract<AskAnswer, { refused: unknown }>['refused']> = {}): AskAnswer => ({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause], ...more } });
@@ -225,7 +225,7 @@ async function execute(run: Execution): Promise<AskAnswer> {
   const { base, input, params, templateId, entities } = prepared;
   const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
   const started = (options.now ?? Date.now)();
-  const outcome = await capabilities.askPlanRunner({ sourceId, mask: run.mask }).run(input, run.continuing ? { continue: true } : undefined);
+  const outcome = await capabilities.askRunner({ sourceId, mask: run.mask }).run(input, run.continuing ? { continue: true } : undefined);
   const elapsedMs = Math.max(0, (options.now ?? Date.now)() - started);
   if (outcome.status === 'refused') return refusedRun(run, outcome.refusal, { ...base, ...(templateId === undefined ? {} : { templateId }), paramsHash }, elapsedMs, logger);
   const result: AskRunResult = outcome.result;

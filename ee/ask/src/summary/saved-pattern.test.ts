@@ -40,7 +40,7 @@ describe('no summary where there is nothing to cite', () => {
     expect(buildSummary(heavy, {})).toBeUndefined();
   });
 
-  it('gives none for an exact zero with no start to cite, and one sentence citing the start of the plan when there is one', () => {
+  it('gives none for an exact zero with no start to cite, and one sentence citing the start of the run when there is one', () => {
     expect(buildSummary(saved(run()), {})).toBeUndefined();
     const result = saved(run({ nodes: [start] }));
     expect(words(result, start.ref)).toBe('No match was found for the saved pattern from Alice.');
@@ -81,7 +81,7 @@ describe('the summary of a pattern run', () => {
     expect(words(cut, start.ref)).toBe('The matches of the saved pattern from Alice include Bob and Cy.');
   });
 
-  it('names the start from the first hop of the first match when the plan has none, and never guesses one that is not listed', () => {
+  it('names the start from the first hop of the first match when the run has none, and never guesses one that is not listed', () => {
     const held = saved(run({ count: count('exact', 1), matches: [match('b-1')], nodes: [start, bob] }));
     expect(words(held)).toContain('from Alice');
     const unlisted = saved(run({ count: count('exact', 1), matches: [match('b-1')], nodes: [bob] }));

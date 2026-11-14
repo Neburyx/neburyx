@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternPreviewRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateRequestSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -59,7 +59,7 @@ import { communityAskClassifier, communitySeams } from './seams/community-seams.
 import { searchExactTemplate } from './gate/templates/search-exact.js';
 import { createAskPatternFinder, createAskPatternLister } from './ask/patterns-lister.js';
 import { createFileQueryRunner } from './ask/file-query-run.js';
-import { createAskPlanRunnerFactory } from './ask/plan-runner.js';
+import { createAskRunnerFactory } from './ask/ask-runner.js';
 import { createSigner, deriveSigningKey } from './ask/signing-key.js';
 import { COMMUNITY_POLICY_VERSION } from './investigations/draft.js';
 import { mountExtensionRoutes, type ExtensionMount } from './profile/mount.js';
@@ -365,7 +365,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
 
   const fallbackKeyMaterial = randomBytes(32);
-  const askRunners: { current?: NonNullable<ExtensionMount['askPlanRunnerFor']> } = {};
+  const askRunners: { current?: NonNullable<ExtensionMount['askRunnerFor']> } = {};
   const askSourceChecks: { current?: NonNullable<ExtensionMount['askSourceReadableFor']> } = {};
   const askPatternLists: { current?: NonNullable<ExtensionMount['askPatternsFor']> } = {};
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
@@ -375,7 +375,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       audit: (options.seams ?? communitySeams()).audit,
       askClassifier: (options.seams ?? communitySeams()).askClassifier ?? communityAskClassifier,
       signText: createSigner(options.signingKey ?? deriveSigningKey(fallbackKeyMaterial)),
-      askPlanRunnerFor: (context) => askRunners.current?.(context),
+      askRunnerFor: (context) => askRunners.current?.(context),
       askSourceReadableFor: (context) => askSourceChecks.current?.(context),
       askPatternsFor: (context) => askPatternLists.current?.(context),
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
@@ -583,7 +583,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
     const patternPreview = createPatternPreviewService({ mapping, access });
     app.post('/v1/patterns/preview', { config: { permission: 'principal' } }, async (request) => {
-      const body = patternPreviewRequestSchema.safeParse(request.body);
+      const body = patternValidateRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
       const identity = await options.store.current();
       const answer = await patternPreview.preview({ traceId: request.id, principal: identity.principal, sourceId: body.data.sourceId, definition: body.data.definition, mask: body.data.mask === true });
@@ -661,7 +661,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     askPatternLists.current = createAskPatternLister({ store: options.store, mapping, access });
     askPatternFinders.current = createAskPatternFinder({ store: options.store, mapping, access });
     const fileQueries = createFileQueryRunner({ gate: options.gate });
-    askRunners.current = (context) => createAskPlanRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, savedRuns, fileQueries, mapping })(context);
+    askRunners.current = (context) => createAskRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, savedRuns, fileQueries, mapping })(context);
 
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });

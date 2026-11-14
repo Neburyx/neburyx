@@ -40,7 +40,6 @@ export const savedPatternSchema = z.discriminatedUnion('kind', [z.strictObject(d
 /** What a listed pattern shows of who made it: the creator's current display name, and whether it is the caller's own (no id of another person is shown). */
 const listedOwner = { owner: z.strictObject({ name: z.string() }), ownedByYou: z.boolean() };
 
-
 /**
  * `POST /v1/patterns`: the source, the name and one of the two kinds. A definition is any object here, so that a bad one is refused with one answer, `INVALID_REQUEST`, and the client asks
  * `POST /v1/patterns/validate` for the list of problems.
@@ -49,8 +48,6 @@ export const savePatternRequestSchema = z.discriminatedUnion('kind', [
   z.strictObject({ sourceId: text, kind: z.literal('definition'), name: savedPatternNameSchema, definition: z.record(z.string(), z.unknown()), anchor: savedPatternAnchorSchema.optional() }),
   z.strictObject({ sourceId: text, kind: z.literal('preset-run'), name: savedPatternNameSchema, presetId: text, params: z.record(z.string(), z.unknown()), anchor: savedPatternAnchorSchema.optional() }),
 ]);
-
-export const savePatternResponseSchema = savedPatternSchema;
 
 export type SavedPattern = z.infer<typeof savedPatternSchema>;
 export type SavePatternRequest = z.infer<typeof savePatternRequestSchema>;

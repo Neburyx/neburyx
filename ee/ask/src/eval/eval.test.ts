@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { classify, loadSource } from './evaluate.js';
-import { LiveProviderError, liveProvider, plannedSettings } from './live.js';
+import { LiveProviderError, liveProvider, runSettings } from './live.js';
 import { BudgetReached, recordingProvider } from './recording.js';
 import { replayProvider, type ReplayAnswer } from './replay.js';
 import { promptRecordOf, type ModelProvider } from '../provider.js';
@@ -136,8 +136,8 @@ describe('the live provider', () => {
     expect(built.maxRetries).toBe(0);
   });
 
-  it('plans the model and the effort without a key', () => {
-    expect(plannedSettings({})).toEqual({ model: 'claude-haiku-5-5', effort: 'medium' });
-    expect(plannedSettings({ NEBURYX_ASK_CLASSIFICATION_MODEL: 'other-model', NEBURYX_ASK_EFFORT: 'low' })).toEqual({ model: 'other-model', effort: 'low' });
+  it('settles the model and the effort without a key', () => {
+    expect(runSettings({})).toEqual({ model: 'claude-haiku-5-5', effort: 'medium' });
+    expect(runSettings({ NEBURYX_ASK_CLASSIFICATION_MODEL: 'other-model', NEBURYX_ASK_EFFORT: 'low' })).toEqual({ model: 'other-model', effort: 'low' });
   });
 });

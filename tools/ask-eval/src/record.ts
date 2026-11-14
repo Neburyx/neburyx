@@ -23,15 +23,15 @@ const count = (sets: readonly SourceSet[]): number => sets.reduce((total, set) =
  */
 export async function recordRun(sets: readonly SourceSet[], options: RecordOptions, hooks: EvalHooks, env: Readonly<Record<string, string | undefined>>): Promise<{ readonly lines: string[]; readonly code: number }> {
   const questions = count(sets);
-  const planned = hooks.plannedSettings(env);
+  const settings = hooks.runSettings(env);
   if (options.dryRun) {
     return {
       code: 0,
       lines: [
         `questions to ask: ${questions}`,
         `calls: ${questions}`,
-        `model: ${planned.model}`,
-        `effort: ${planned.effort}`,
+        `model: ${settings.model}`,
+        `effort: ${settings.effort}`,
         ...sets.map((set) => `prompt hash ${set.label}: ${set.source.classificationSha256}`),
         `questions hash: ${questionsHash(sets)}`,
       ],

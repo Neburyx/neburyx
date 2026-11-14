@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PIN_BADGE_COLOR, PIN_BADGE_SIZE } from './look.js';
+import { DERIVED_COLOR, PIN_BADGE_SIZE } from './look.js';
 import { pinBadgeUri } from './pin-badge.js';
 
 const svgOf = (): string => decodeURIComponent(pinBadgeUri().replace('data:image/svg+xml;utf8,', ''));
@@ -15,7 +15,7 @@ describe('the pin badge', () => {
 
   it('is drawn in the accent colour on a white disc, not filled in amber like a review flag', () => {
     const svg = svgOf();
-    expect(svg).toContain(`stroke="${PIN_BADGE_COLOR}"`);
+    expect(svg).toContain(`stroke="${DERIVED_COLOR}"`);
     expect(svg).toContain('fill="#ffffff"');
     expect(svg.toLowerCase()).not.toMatch(/#db850d|amber/);
   });

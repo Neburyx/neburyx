@@ -20,7 +20,7 @@ export function savedPatternListed(result: SavedPatternResult): ListedElements |
   return isPatternRun(result) ? patternRunListed(result) : templateRunListed(result);
 }
 
-/** The start the summary names: the node of the plan's own anchor when the result lists it, or else the entity the first hop of the first match leaves from, when the result lists that. Never a guess. */
+/** The start the summary names: the node of the run's own anchor when the result lists it, or else the entity the first hop of the first match leaves from, when the result lists that. Never a guess. */
 function startOf(run: PatternRunOk, anchor: ElementRef | undefined, nodes: ReadonlyMap<string, GraphNode>): GraphNode | undefined {
   if (anchor !== undefined) {
     const named = nodes.get(refId(anchor));
@@ -30,7 +30,7 @@ function startOf(run: PatternRunOk, anchor: ElementRef | undefined, nodes: Reado
   return from === null || from === undefined ? undefined : nodes.get(refId(from));
 }
 
-/** The summary of a run of a saved pattern, by fixed rules from the result alone: one sentence that names the matches (the count and the notices are drawn by the application), and one more for the matches reached through entities; a run of a saved preset is summarised as a run of its template is. `anchor` is the plan's own anchor, when it has one. */
+/** The summary of a run of a saved pattern, by fixed rules from the result alone: one sentence that names the matches (the count and the notices are drawn by the application), and one more for the matches reached through entities; a run of a saved preset is summarised as a run of its template is. `anchor` is the run's own anchor, when it has one. */
 export function summarizeSavedPattern(result: SavedPatternResult, anchor?: ElementRef): ReturnType<SummaryBuilder['finish']> {
   if (result.status !== 'ok') return undefined;
   if (!isPatternRun(result)) return summarizeTemplateRun(result, anchor);

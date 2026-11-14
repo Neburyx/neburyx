@@ -12,18 +12,22 @@ import type { RunStore } from './questions/run-store.js';
 import { loadAskFolder } from './folder/load.js';
 import { guardAiRouteGroup } from './route-guard.js';
 
+/** @public Used by the audited-call integration test of `services/api`, which needs the real audit sink of the application and a real Postgres, so it cannot go through `createEnterpriseExtension()`. */
 export { AuditUnavailableError, createAuditedModelCall } from './audited.js';
+/** @public The type of the context an audited call carries: the audited-call integration test of `services/api` builds one for the real audit sink, as for `createAuditedModelCall` above. */
 export type { AuditedCallContext } from './audited.js';
-export { configureAsk } from './configure.js';
+/** @public Used by the Neo4j demo-chain test of `services/api`, which checks the citations of the answers of the real application with the product's own check. */
 export { citedKeysExist, listedElements } from './summary/index.js';
+/** @public Used by the preview-guard test of `services/api`, which mounts the guard on the real application beside the other route groups. */
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
-export { FAILURE_CODES, promptRecordOf } from './provider.js';
-export type { FailureCode, ModelAnswer, ModelProvider, ModelRequest, TokenUsage } from './provider.js';
+/** @public The type of a request to the model: the audited-call integration test of `services/api` builds one, and the application of `services/api` is what gives it a real audit sink. */
+export type { ModelRequest } from './provider.js';
 
-export const AI_STATUS_URL = '/v1/ai/status';
+const AI_STATUS_URL = '/v1/ai/status';
 
 const MIGRATIONS_DIRECTORY = fileURLToPath(new URL('../../migrations', import.meta.url));
 
+/** @public The type `services/api/src/testing/demo-packs.ts` returns from `createEnterpriseExtension()`: without the export its typecheck fails with TS4058, the name cannot be written in the declaration of that exported helper. */
 export interface EnterpriseExtension extends ProfileExtension {
   /** The Ask folder read at start-up; undefined before `configure` accepted it. */
   readonly askFolder: () => AskFolder | undefined;
@@ -36,7 +40,7 @@ export interface EnterpriseExtension extends ProfileExtension {
   readonly model: () => AuditedModelCall | undefined;
 }
 
-export interface EnterpriseExtensionOptions {
+interface EnterpriseExtensionOptions {
   /** Only a test sets this, to a stub on the loopback address; the model client otherwise calls the service. */
   readonly modelBaseUrl?: string;
   /** Only a test sets this, to a store that opens no connection; the run store otherwise writes `ask_runs` on a pool of its own. */

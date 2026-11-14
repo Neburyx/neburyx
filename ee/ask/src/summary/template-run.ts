@@ -8,7 +8,7 @@ export function templateRunListed(run: TemplateRunOk): ListedElements {
   return listOf([...run.nodes.map(nodeItem), ...run.edges.map((edge) => edgeItem(edge, nodes))]);
 }
 
-/** The anchor of a run: the node of the plan's anchor when the result lists it, or else the first node it lists. */
+/** The anchor of a run: the node of the run's anchor when the result lists it, or else the first node it lists. */
 function anchorOf(run: TemplateRunOk, anchor: ElementRef | undefined): GraphNode | undefined {
   return (anchor === undefined ? undefined : run.nodes.find((node) => refId(node.ref) === refId(anchor))) ?? run.nodes[0];
 }
@@ -40,7 +40,7 @@ export function addReachedThrough(builder: SummaryBuilder, reached: readonly { r
   builder.add(chosen.text, [...chosen.named.map((node) => node.ref), ...chosen.via.map((node) => node.ref)]);
 }
 
-/** The summary of a shared-attribute or a linked-entities run: one sentence that names the matches (the count and the notices are drawn by the application), and one more for the matches reached through an entity. `anchor` is the plan's own anchor, when the caller has it. */
+/** The summary of a shared-attribute or a linked-entities run: one sentence that names the matches (the count and the notices are drawn by the application), and one more for the matches reached through an entity. `anchor` is the run's own anchor, when the caller has it. */
 export function summarizeTemplateRun(run: TemplateRunOk, anchor?: ElementRef): ReturnType<SummaryBuilder['finish']> {
   const builder = new SummaryBuilder(templateRunListed(run));
   const nodes = nodeMap(run.nodes);

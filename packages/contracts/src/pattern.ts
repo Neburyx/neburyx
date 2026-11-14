@@ -176,12 +176,6 @@ export const patternValidateResponseSchema = z.discriminatedUnion('status', [
 export type PatternValidateRequest = z.infer<typeof patternValidateRequestSchema>;
 export type PatternValidateResponse = z.infer<typeof patternValidateResponseSchema>;
 
-/**
- * `POST /v1/patterns/preview`: the same envelope as the validation, and the preview of an acceptable definition as typed parts, each with the words the client joins; the server writes every phrase and the client none. A definition that
- * does not validate answers its problems and no preview. Every number of the bounds is the source's own.
- */
-export const patternPreviewRequestSchema = patternValidateRequestSchema;
-
 const previewText = z.string().min(1);
 const previewName = z.strictObject({ type: name, name: previewText });
 const previewBound = z.strictObject({ value: z.number().int().nonnegative(), text: previewText });
@@ -224,11 +218,16 @@ export const patternPreviewSchema = z.strictObject({
   bounds: z.strictObject({ hopLimit: previewBound, pageLimit: previewBound, countCap: previewBound }),
 });
 
+/**
+ * `POST /v1/patterns/preview`: the same envelope as the validation, and the preview of an acceptable definition as typed parts, each with the words the client joins; the server writes every phrase and the client none. A definition that
+ * does not validate answers its problems and no preview. Every number of the bounds is the source's own.
+ */
 export const patternPreviewResponseSchema = z.discriminatedUnion('status', [
   z.strictObject({ status: z.literal('ok'), preview: patternPreviewSchema }),
   z.strictObject({ status: z.literal('invalid'), problems: z.array(patternProblemSchema).min(1) }),
 ]);
 
-export type PatternPreviewRequest = z.infer<typeof patternPreviewRequestSchema>;
+/** A preview is asked with the body of a validation. */
+export type PatternPreviewRequest = z.infer<typeof patternValidateRequestSchema>;
 export type PatternPreview = z.infer<typeof patternPreviewSchema>;
 export type PatternPreviewResponse = z.infer<typeof patternPreviewResponseSchema>;

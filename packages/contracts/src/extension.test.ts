@@ -131,7 +131,7 @@ describe('the refusal of a call whose audit event could not be written', () => {
   });
 });
 
-describe('the refusals of a read of the gate and of a plan', () => {
+describe('the refusals of a read of the gate and of a run', () => {
   const recognised: ReadonlyArray<[string, Record<string, unknown>]> = [
     ['a query budget with its figures', { code: 'QUERY_BUDGET_EXCEEDED', maxPage: 50, maxHops: 3 }],
     ['a query budget with none', { code: 'QUERY_BUDGET_EXCEEDED' }],

@@ -1,4 +1,4 @@
-import { ASK_PLAN_TEMPLATE_IDS } from './ask.js';
+import { ASK_TEMPLATE_IDS } from './ask.js';
 import { checkIntentQuery } from './query-check.js';
 import { checkTemplateSettings } from './ask-bind.js';
 
@@ -19,7 +19,7 @@ export const ASK_INTENT_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const INTENT_NAME = ASK_INTENT_NAME;
 
 const PARAMETER_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
-const TEMPLATE_IDS: readonly string[] = ASK_PLAN_TEMPLATE_IDS;
+const TEMPLATE_IDS: readonly string[] = ASK_TEMPLATE_IDS;
 
 /** An intent as the file states it, before the loader adds the hash of its query. */
 export type ParsedAskIntent =

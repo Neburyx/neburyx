@@ -13,7 +13,7 @@ export class LiveProviderError extends Error {
 }
 
 /** What a run will use, without a key and without reading a key file: the model and the effort. */
-export function plannedSettings(env: Env): { readonly model: string; readonly effort: string } {
+export function runSettings(env: Env): { readonly model: string; readonly effort: string } {
   const given = (name: string): string | undefined => (env[name] === undefined || env[name] === '' ? undefined : env[name]);
   return { model: given('NEBURYX_ASK_CLASSIFICATION_MODEL') ?? DEFAULT_ASK_MODEL, effort: given('NEBURYX_ASK_EFFORT') ?? AI_DEFAULTS.effort };
 }

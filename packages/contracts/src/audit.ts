@@ -1,7 +1,7 @@
 import type { Socket } from 'node:net';
 import { z } from 'zod';
 import { ASK_INTENT_NAME } from './ask-folder.js';
-import { ASK_PLAN_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
+import { ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
 import { ERROR_CODES } from './error-codes.js';
 import { roleSchema } from './me.js';
 
@@ -79,7 +79,7 @@ export const askRunAuditDetailSchema = z.strictObject({
   kind: z.enum(['template', 'query']),
   outcome: z.enum(['complete', 'partial', 'refused', 'failed']),
   cause: z.enum(ASK_RUN_CAUSES).optional(),
-  templateId: z.enum([...ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]).optional(),
+  templateId: z.enum([...ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]).optional(),
   querySha256: sha256Hex.optional(),
   paramsHash: sha256Hex.optional(),
   rowCount: wholeCount.optional(),

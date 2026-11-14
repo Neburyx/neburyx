@@ -28,6 +28,6 @@ export interface EvalHooks {
   readonly classify: (source: SourceHandle, provider: unknown, model: string, question: string) => Promise<AskClassification>;
   readonly replayProvider: (answers: ReadonlyMap<string, RecordedAnswer>) => unknown;
   readonly recordingProvider: (inner: unknown, budget: number) => { readonly provider: unknown; readonly answers: () => ReadonlyMap<string, RecordedAnswer>; readonly usage: () => RunUsage };
-  readonly plannedSettings: (env: Readonly<Record<string, string | undefined>>) => { readonly model: string; readonly effort: string };
+  readonly runSettings: (env: Readonly<Record<string, string | undefined>>) => { readonly model: string; readonly effort: string };
   readonly liveProvider: (env: Readonly<Record<string, string | undefined>>, folder: string) => Promise<{ readonly provider: unknown; readonly model: string; readonly effort: string }>;
 }

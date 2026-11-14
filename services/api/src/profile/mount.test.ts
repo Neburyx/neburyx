@@ -54,13 +54,13 @@ describe('what the mount gives an extension handler', () => {
     await app.close();
   });
 
-  it('gives no runner of plans when the application has no gate to read through, and no search tools either', async () => {
+  it('gives no runner of Ask when the application has no gate to read through, and no search tools either', async () => {
     let seen: ExtensionRequest | undefined;
     let abortedWhileHandling: boolean | undefined;
     const { app } = await started(extensionOf(async (request) => ((seen = request), (abortedWhileHandling = request.signal.aborted), 'ok')), { previewOn: true });
     await app.inject({ url: URL_OF_ROUTE });
     expect(seen).toBeDefined();
-    expect(seen).not.toHaveProperty('askPlanRunner');
+    expect(seen).not.toHaveProperty('askRunner');
     expect(abortedWhileHandling).toBe(false);
     expect(seen).not.toHaveProperty('askEntityTools');
     expect(seen).not.toHaveProperty('askPatterns');

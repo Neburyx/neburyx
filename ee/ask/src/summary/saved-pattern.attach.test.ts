@@ -9,13 +9,13 @@ const warnings: Record<string, unknown>[] = [];
 const logger = { warn: (fields: Record<string, unknown>) => void warnings.push(fields) };
 
 describe('the summary of a saved-pattern run answer, with the real builders', () => {
-  it('is attached, naming the start of the plan', () => {
+  it('is attached, naming the start of the run', () => {
     const summary = summaryOfRun(result, { sourceId: 'demo', params }, logger);
     expect(summary?.sentences[0]?.text).toBe('Bob matches the saved pattern from Alice.');
     expect(warnings).toEqual([]);
   });
 
-  it('is dropped with the code other-source when the plan is of another source, and the run answer is unchanged', () => {
+  it('is dropped with the code other-source when the run is of another source, and the run answer is unchanged', () => {
     warnings.length = 0;
     expect(summaryOfRun(result, { sourceId: 'other', params }, logger)).toBeUndefined();
     expect(warnings).toEqual([{ event: 'ask-summary-dropped', code: 'other-source' }]);

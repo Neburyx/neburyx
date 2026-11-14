@@ -1,7 +1,7 @@
-import { ASK_PLAN_PARAMS, ASK_PLAN_TEMPLATE_IDS, type AskEntities, type AskRefusalCause } from './ask.js';
+import { ASK_TEMPLATE_PARAMS, ASK_TEMPLATE_IDS, type AskEntities, type AskRefusalCause } from './ask.js';
 
 /** The template ids a template intent may name. */
-export type AskTemplateId = (typeof ASK_PLAN_TEMPLATE_IDS)[number];
+export type AskTemplateId = (typeof ASK_TEMPLATE_IDS)[number];
 
 const PLACEHOLDER = /^\$([A-Za-z_][A-Za-z0-9_]*)$/;
 /** The text a placeholder takes while the settings of an intent are checked at start-up. */
@@ -41,7 +41,7 @@ export function checkTemplateSettings(input: { readonly intent: string; readonly
   const extra = names.filter((name) => !input.parameters.includes(name));
   if (missing.length > 0) problems.push(`intent "${input.intent}": the parameter ${missing.join(', ')} has no placeholder in the settings`);
   if (extra.length > 0) problems.push(`intent "${input.intent}": the settings use the placeholder ${extra.join(', ')}, which is not a parameter`);
-  const schema = (ASK_PLAN_PARAMS as Readonly<Record<string, (typeof ASK_PLAN_PARAMS)[AskTemplateId] | undefined>>)[input.template];
+  const schema = (ASK_TEMPLATE_PARAMS as Readonly<Record<string, (typeof ASK_TEMPLATE_PARAMS)[AskTemplateId] | undefined>>)[input.template];
   if (schema === undefined) return problems;
   const probed = schema.safeParse(substitute(input.settings, () => PROBE));
   if (!probed.success) {
@@ -74,7 +74,7 @@ export function bindTemplateIntent(intent: { readonly template: AskTemplateId; r
   const refusal = (cause: 'missing-inputs' | 'extra-inputs' | 'invalid-inputs'): BindResult => ({ ok: false, cause, parameters: intent.parameters, found, missing, extra });
   if (missing.length > 0) return refusal('missing-inputs');
   if (extra.length > 0) return refusal('extra-inputs');
-  const bound = ASK_PLAN_PARAMS[intent.template].safeParse(substitute(intent.settings, (name) => entities[name] ?? ''));
+  const bound = ASK_TEMPLATE_PARAMS[intent.template].safeParse(substitute(intent.settings, (name) => entities[name] ?? ''));
   return bound.success ? { ok: true, template: intent.template, params: bound.data } : refusal('invalid-inputs');
 }
 

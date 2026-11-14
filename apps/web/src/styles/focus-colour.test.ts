@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FOCUS_COLOR, FOCUS_RING_WIDTH } from '../canvas/look.js';
+import { DERIVED_COLOR, FOCUS_RING_WIDTH } from '../canvas/look.js';
 
 const tokens = readFileSync(join(import.meta.dirname, 'tokens.css'), 'utf8');
 const token = (name: string): string => {
@@ -24,12 +24,12 @@ const contrast = (first: string, second: string): number => {
 describe('the focus colour', () => {
   it('is the accent of the design, in the page and on the canvas, from one token', () => {
     expect(token('--color-focus')).toBe(token('--color-accent'));
-    expect(FOCUS_COLOR.toLowerCase()).toBe(token('--color-accent').toLowerCase());
+    expect(DERIVED_COLOR.toLowerCase()).toBe(token('--color-accent').toLowerCase());
   });
 
   it('reaches 3:1 against every surface it is drawn on', () => {
     for (const surface of ['--color-surface', '--color-canvas', '--color-surface-muted', '--color-row-chosen', '--color-accent-surface', '--color-workspace-border']) {
-      expect(contrast(FOCUS_COLOR, token(surface)), surface).toBeGreaterThanOrEqual(3);
+      expect(contrast(DERIVED_COLOR, token(surface)), surface).toBeGreaterThanOrEqual(3);
     }
   });
 

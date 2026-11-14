@@ -1,7 +1,7 @@
-import { classify, liveProvider, loadSource, plannedSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
+import { classify, liveProvider, loadSource, runSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
 import { runCli } from '../dist/cli.js';
 
-const hooks = { loadSource, classify, replayProvider, recordingProvider, plannedSettings, liveProvider };
+const hooks = { loadSource, classify, replayProvider, recordingProvider, runSettings, liveProvider };
 
 process.exitCode = await runCli(
   process.argv.slice(2),

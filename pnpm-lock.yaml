@@ -451,9 +451,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
     devDependencies:
-      '@neburyx/test-neo4j':
-        specifier: workspace:*
-        version: link:../../packages/test-neo4j
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
@@ -470,9 +467,6 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
     devDependencies:
-      '@neburyx/test-neo4j':
-        specifier: workspace:*
-        version: link:../../packages/test-neo4j
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
@@ -622,13 +616,7 @@ importers:
       '@neburyx/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@neburyx/test-containers':
-        specifier: workspace:*
-        version: link:../../packages/test-containers
     devDependencies:
-      '@neburyx/test-neo4j':
-        specifier: workspace:*
-        version: link:../../packages/test-neo4j
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
