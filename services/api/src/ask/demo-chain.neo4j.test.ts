@@ -156,6 +156,31 @@ async function diagnosis(pack: string, rig: Awaited<ReturnType<typeof started>>,
   ].join('\n');
 }
 
+/** Two ends that the rule of the plan really links, found as a person finds them (the first entity of the type whose derived neighbors, through the manual route, hold another of the type), and one end that the rule does not link to the first. */
+async function endsOf(pack: string, rig: Awaited<ReturnType<typeof started>>, params: { readonly ruleId: string; readonly ends: readonly { readonly entityType: string }[] }): Promise<{ readonly linked: unknown; readonly unlinked: unknown }> {
+  const type = params.ends[0]?.entityType ?? '';
+  const otherType = params.ends[1]?.entityType ?? type;
+  const preset = /entity:\s*\{\s*type:\s*(\S+?),\s*id:\s*(\S+?)\s*\}/.exec(readFileSync(join(repoRoot, 'domain-packs', pack, 'cases.yaml'), 'utf8'));
+  for (let n = 0; n <= 60; n += 1) {
+    // the entity the pack names as its preset is on a case of the pack, so it is tried first; then the entities in order
+    const anchor = n === 0 ? (preset?.[1] === type && preset[2] !== undefined ? { entityType: type, stableId: preset[2] } : undefined) : await entityOf(pack, type, n);
+    if (anchor === undefined) continue;
+    const response = await rig.app.inject({ method: 'POST', url: '/v1/graph/derived-neighbors', payload: { sourceId: rig.sourceId, ref: anchor } });
+    if (response.statusCode !== 200) continue;
+    const results = (response.json() as { results: { ruleId: string; nodes: { ref: { entityType: string; stableId: string } }[] }[] }).results;
+    const others = results.filter((result) => result.ruleId === params.ruleId).flatMap((result) => result.nodes).filter((node) => node.ref.entityType === otherType && node.ref.stableId !== anchor.stableId);
+    const first = others[0];
+    if (first === undefined) continue;
+    const known = new Set(others.map((node) => node.ref.stableId));
+    for (let m = 1; m <= 60; m += 1) {
+      const candidate = await entityOf(pack, otherType, m);
+      if (candidate.stableId === anchor.stableId || known.has(candidate.stableId)) continue;
+      return { linked: { ruleId: params.ruleId, ends: [anchor, { entityType: otherType, stableId: first.ref.stableId }] }, unlinked: { ruleId: params.ruleId, ends: [anchor, candidate] } };
+    }
+  }
+  throw new Error(`the demo graph holds no ${type} entities that the rule ${params.ruleId} links`);
+}
+
 const available: AskPlanner = { availability: () => ({ available: true }), plan: () => Promise.reject(new Error('not used')) };
 
 /** The lines the application logged, so that a summary the product dropped is seen and not mistaken for a run that listed nothing. */
@@ -211,9 +236,15 @@ describe.each(PACKS)(`every demo question of the %s pack, from the committed rep
         }
         expect(plan.kind).toBe('plan');
         if (plan.kind !== 'plan') continue;
-        const stored = rig.plans.put({ id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`, userId: principalFixture.id, sourceId: rig.sourceId, templateId: plan.templateId, templateVersion: plan.templateVersion, params: (await hydrated(pack, plan.params)) as never });
+        const stored = rig.plans.put({ id: `0192f000-0000-7000-8000-${String(index + 1).padStart(12, '0')}`, userId: principalFixture.id, sourceId: rig.sourceId, templateId: plan.templateId, templateVersion: plan.templateVersion, params: (plan.templateId === 'derived-edge-support' ? (await endsOf(pack, rig, plan.params as never)).linked : await hydrated(pack, plan.params)) as never });
         const response = await rig.app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: stored.id } });
         if (response.statusCode !== 200) throw new Error(`${await diagnosis(pack, rig, plan, stored.params)}\n` + `the question ${question.id} ran with the status ${response.statusCode}: ${response.body.slice(0, 400)} (template ${plan.templateId}; ${logged.slice(-6).join(' | ').slice(0, 1500)})`);
+        if (plan.templateId === 'derived-edge-support') {
+          // a pair that the rule does not link is answered as not found, and nothing is made up
+          const unlinked = rig.plans.put({ id: `0192f000-0000-7000-9000-${String(index + 1).padStart(12, '0')}`, userId: principalFixture.id, sourceId: rig.sourceId, templateId: plan.templateId, templateVersion: plan.templateVersion, params: (await endsOf(pack, rig, plan.params as never)).unlinked as never });
+          const refused = await rig.app.inject({ method: 'POST', url: '/v1/ask/run', payload: { planId: unlinked.id } });
+          expect(refused.statusCode).toBe(404);
+        }
         const body = askRunResponseSchema.parse(response.json());
         ran += 1;
         const listed = listedElements(body.result);
