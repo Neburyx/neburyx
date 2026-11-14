@@ -21,8 +21,10 @@ export function summarize(found: Tally, results: readonly QuestionResult[], maxP
     `blocked: ${found.blocked.blocked} of ${found.blocked.total} expected`,
     `repaired: ${found.repaired}`,
   ];
-  const byRule = results.filter((entry) => entry.rule !== undefined).length;
+  const byRule = results.filter((entry) => entry.rule === 'one-hop-neighbors').length;
   if (byRule > 0) lines.push(`scored right by the one-hop rule: ${byRule}`);
+  const blockedRefusals = results.filter((entry) => entry.rule === 'blocked-before-planning').length;
+  if (blockedRefusals > 0) lines.push(`scored refused because the allowlist blocked the question: ${blockedRefusals}`);
   for (const result of results.filter((entry) => !GOOD.has(entry.verdict))) lines.push(result.fields.length === 0 ? `${result.verdict}: ${result.id}` : `${result.verdict}: ${result.id} (${result.fields.join(', ')})`);
   if (!outcome.refusalsMet) lines.push('target missed: every refusal must be refused');
   if (!outcome.plansMet) lines.push(`target missed: more than ${maxPlanMisses} plans missed`);

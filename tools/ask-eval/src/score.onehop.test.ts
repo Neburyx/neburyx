@@ -1,7 +1,7 @@
 import { askPlanSchema, type AiMappingView } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { Expectation } from './questions.js';
-import { ONE_HOP_RULE, scorePlan, type ScoreContext } from './score.js';
+import { BLOCKED_REFUSAL_RULE, ONE_HOP_RULE, scorePlan, type ScoreContext } from './score.js';
 import type { PlannerAnswer } from './types.js';
 
 const VIEW: AiMappingView = {
@@ -66,6 +66,25 @@ describe('the one-hop rule', () => {
     expect(score.rule).toBeUndefined();
   });
 
+  it('keeps apart a linked-entities plan with no target type and an expand plan with one neighbor type', () => {
+    const { targetType: _omitted, ...anyTarget } = LINKED;
+    expect(anyTarget).not.toHaveProperty('targetType');
+    expect(scorePlan(expected('expand', EXPAND), answered('linked-entities', anyTarget as never), CONTEXT).rule).toBeUndefined();
+  });
+
+  it('keeps apart plans of another anchor', () => {
+    const other = { entityType: 'widget', stableId: '‹widget#2›' };
+    expect(scorePlan(expected('linked-entities', LINKED), answered('expand', { ...EXPAND, ref: other }), CONTEXT).verdict).toBe('wrong');
+  });
+
+  it('gives no form to a linked-entities plan whose direction the mapping cannot derive, and takes an explicit direction both on both sides', () => {
+    const view: AiMappingView = { types: [{ name: 'widget', kind: 'entity', properties: [] }, { name: 'loops', kind: 'relationship', properties: [], ends: [{ from: 'widget', to: 'widget', timed: false }, { from: 'widget', to: 'widget', timed: false }] }, { name: 'gadget', kind: 'entity', properties: [] }] };
+    const ambiguous = { ref, targetType: 'gadget', via: ['absent'] };
+    expect(scorePlan(expected('linked-entities', ambiguous), answered('expand', { ref, relTypes: ['absent'], neighborTypes: ['gadget'], direction: 'out' }), { view, defaultPage: 25 }).verdict).toBe('wrong');
+    const both = scorePlan(expected('linked-entities', { ...LINKED, direction: 'both' }), answered('expand', { ...EXPAND, direction: 'both' }), CONTEXT);
+    expect(both).toEqual({ verdict: 'right', fields: [], rule: ONE_HOP_RULE });
+  });
+
   it('keeps them apart the other way round too, for two hops and another relationship type', () => {
     expect(scorePlan(expected('expand', EXPAND), answered('linked-entities', { ...LINKED, maxHops: 2 }), CONTEXT).verdict).toBe('wrong');
     expect(scorePlan(expected('expand', EXPAND), answered('linked-entities', { ...LINKED, via: ['made'] }), CONTEXT).verdict).toBe('wrong');
@@ -85,5 +104,31 @@ describe('the report of the one-hop rule', () => {
     const result = { id: 'one', verdict: 'right' as const, fields: [], repaired: false, answered: 'plan' as const };
     expect(summarize(tally(questions, [{ ...result, rule: ONE_HOP_RULE }]), [{ ...result, rule: ONE_HOP_RULE }], 2, 'replay', undefined).lines).toContain('scored right by the one-hop rule: 1');
     expect(summarize(tally(questions, [result]), [result], 2, 'replay', undefined).lines.join('\n')).not.toContain('one-hop');
+  });
+});
+
+describe('the blocked-before-planning rule', () => {
+  const blockedAnswer: PlannerAnswer = { kind: 'blocked' };
+
+  it('counts an expected refusal that the allowlist blocks as refused, and names the rule', () => {
+    expect(scorePlan({ kind: 'unsupported' }, blockedAnswer, CONTEXT)).toEqual({ verdict: 'refused', fields: [], rule: BLOCKED_REFUSAL_RULE });
+    expect(BLOCKED_REFUSAL_RULE).toBe('blocked-before-planning');
+  });
+
+  it('does not extend to a plan question that is blocked, which stays a miss, nor to a question expected blocked', () => {
+    expect(scorePlan(expected('expand', EXPAND), blockedAnswer, CONTEXT)).toEqual({ verdict: 'blocked-unexpectedly', fields: [] });
+    expect(scorePlan({ kind: 'blocked' }, blockedAnswer, CONTEXT)).toEqual({ verdict: 'blocked', fields: [] });
+  });
+
+  it('counts such a question among the refusals in the tally and prints how many, without a wording', async () => {
+    const { parseQuestions } = await import('./questions.js');
+    const { summarize } = await import('./report.js');
+    const { tally } = await import('./targets.js');
+    const questions = parseQuestions('questions:\n  - id: one\n    wording: Is ‹widget#1› fraudulent?\n    expect: { kind: unsupported }\n');
+    const result = { id: 'one', verdict: 'refused' as const, fields: [], repaired: false, answered: 'blocked' as const, rule: BLOCKED_REFUSAL_RULE };
+    const summary = summarize(tally(questions, [result]), [result], 2, 'replay', undefined);
+    expect(summary.lines[0]).toBe('refusals: 1 of 1 refused');
+    expect(summary.lines).toContain('scored refused because the allowlist blocked the question: 1');
+    expect(summary.met).toBe(true);
   });
 });

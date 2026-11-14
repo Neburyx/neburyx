@@ -16,11 +16,14 @@ export interface Score {
   readonly verdict: Verdict;
   readonly fields: readonly string[];
   /** Set when the plan is right by a named rule of equivalence and not by being the expected template. */
-  readonly rule?: typeof ONE_HOP_RULE;
+  readonly rule?: typeof ONE_HOP_RULE | typeof BLOCKED_REFUSAL_RULE;
 }
 
 /** The name of the rule that counts `expand` and `linked-entities` as the same plan for one neighbor type over one relationship type (see `oneHopForm`). */
 export const ONE_HOP_RULE = 'one-hop-neighbors';
+
+/** The name of the rule that counts a question that is expected to be refused and that the allowlist blocks before planning as refused: nothing was sent to the model and the investigator is told the question cannot be asked. */
+export const BLOCKED_REFUSAL_RULE = 'blocked-before-planning';
 
 type Params = Readonly<Record<string, unknown>>;
 type Direction = 'out' | 'in' | 'both';
@@ -134,7 +137,10 @@ function scorePlanAnswer(expect: Extract<Expectation, { kind: 'plan' }>, plan: A
 
 export function scorePlan(expect: Expectation, answer: PlannerAnswer, context: ScoreContext): Score {
   if (answer.kind === 'no-reply') return { verdict: expect.kind === 'blocked' ? 'not-blocked' : 'no-reply', fields: NO_FIELDS };
-  if (answer.kind === 'blocked') return { verdict: expect.kind === 'blocked' ? 'blocked' : 'blocked-unexpectedly', fields: NO_FIELDS };
+  if (answer.kind === 'blocked') {
+    if (expect.kind === 'unsupported') return { verdict: 'refused', fields: NO_FIELDS, rule: BLOCKED_REFUSAL_RULE };
+    return { verdict: expect.kind === 'blocked' ? 'blocked' : 'blocked-unexpectedly', fields: NO_FIELDS };
+  }
   const { plan } = answer;
   if (!askPlanSchema.safeParse(plan).success) return { verdict: 'wrong', fields: NO_FIELDS };
   switch (expect.kind) {
