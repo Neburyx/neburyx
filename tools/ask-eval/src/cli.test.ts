@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -325,13 +325,22 @@ describe('the files a private run writes', () => {
 });
 
 describe('the temporary folders of a run', () => {
-  it('leaves none behind after a scoring run of the packs', async () => {
-    const mine = () => readdirSync(tmpdir()).filter((name) => name.startsWith('ask-eval-') && !name.startsWith('ask-eval-test-')).length;
-    const before = mine();
+  it('leaves none behind after a scoring run of the packs, in a temporary folder of its own that no other test shares', async () => {
     const { fileURLToPath } = await import('node:url');
     const packs = fileURLToPath(new URL('../../../domain-packs', import.meta.url));
-    await runCli(['--packs', packs, '--write-replay', join(scratch(), 'r.json')], io().io, hooks());
-    expect(mine()).toBe(before);
+    const out = join(scratch(), 'r.json');
+    const own = mkdtempSync(join(tmpdir(), 'ask-eval-test-tmp-'));
+    const saved = process.env['TMPDIR'];
+    process.env['TMPDIR'] = own;
+    try {
+      expect(tmpdir()).toBe(own);
+      expect(await runCli(['--packs', packs, '--write-replay', out], io().io, hooks())).toBe(0);
+      expect(readdirSync(own)).toEqual([]);
+    } finally {
+      if (saved === undefined) delete process.env['TMPDIR'];
+      else process.env['TMPDIR'] = saved;
+      rmSync(own, { recursive: true, force: true });
+    }
   });
 });
 
