@@ -32,6 +32,13 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))('the Ask folder o
     expect([...Object.keys(pack.intents)].filter((name) => !named.has(name))).toEqual([]);
   });
 
+  it('names the reserved intent saved-pattern with its two inputs, which the folder does not hold as an intent of its own', () => {
+    const text = readFileSync(join(pack.dir, 'ask', 'classification.md'), 'utf8');
+    const line = text.split('\n').find((row) => row.startsWith('- `saved-pattern`'));
+    expect(line).toContain('(inputs: pattern, anchor)');
+    expect(Object.keys(pack.intents)).not.toContain('saved-pattern');
+  });
+
   it('keeps every number, window and limit out of a placeholder: a placeholder stands for text the question gives', () => {
     for (const [name, intent] of Object.entries(pack.intents)) {
       if (intent.template === undefined) continue;

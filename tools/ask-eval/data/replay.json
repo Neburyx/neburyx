@@ -1,12 +1,12 @@
 {
   "model": "claude-haiku-5-5",
   "folders": {
-    "banking-demo": "821858a6bae051b601a862d03ad7bcd4fe2a7db0206c99ef688e4d3f0e3c9dc3",
-    "insurance-demo": "d89e9f5765d91b58869c0c075521ec6ac3e96e6d25be17a66df3f2b375a61598"
+    "banking-demo": "fd7b1c81263c4a262990854a4dd513de8b0fdd0f3acfb4189b1c8249ed3fb5c9",
+    "insurance-demo": "c97f04c42023ce6d270a0091337b8b4ab00311354d4e82748e8ea2c16dea6315"
   },
   "answers": {
     "Which accounts use the same device as AC-0002000?": {
-      "reply": "{\"intent\":\"accounts-on-the-same-device\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"accounts-on-the-same-device\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which accounts connect from the same address as AC-0002000?": {
       "reply": "{\"intent\": \"accounts-on-the-same-address\", \"entities\": {\"account\": \"AC-0002000\"}}"
@@ -15,28 +15,28 @@
       "reply": "{\"intent\": \"same-device-in-the-last-90-days\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which accounts share at least 2 devices with AC-0002000?": {
-      "reply": "{\"intent\":\"two-shared-devices\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"two-shared-devices\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Show 10 accounts that use the same address as AC-0002000.": {
-      "reply": "{\"intent\":\"ten-accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"ten-accounts-on-the-same-address\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which accounts has AC-0002000 transferred money to?": {
       "reply": "{\"intent\": \"accounts-paid-by-an-account\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which accounts sent money to AC-0002001?": {
-      "reply": "{\"intent\":\"accounts-that-paid-an-account\",\"entities\":{\"account\":\"AC-0002001\"}}"
+      "reply": "{\"intent\": \"accounts-that-paid-an-account\", \"entities\": {\"account\": \"AC-0002001\"}}"
     },
     "Which accounts are connected to AC-0002000 by transfers within 2 steps?": {
-      "reply": "{\"intent\":\"accounts-within-two-transfers\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"accounts-within-two-transfers\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which merchants has AC-0002000 paid?": {
-      "reply": "{\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"merchants-an-account-paid\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which merchants did AC-0002000 pay in the last 30 days?": {
       "reply": "{\"intent\": \"merchants-paid-in-the-last-30-days\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Show me AC-0002000.": {
-      "reply": "{\"intent\":\"show-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"show-an-account\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "How many devices and addresses is AC-0002000 connected to?": {
       "reply": "{\"intent\": \"devices-and-addresses-of-an-account\", \"entities\": {\"account\": \"AC-0002000\"}}"
@@ -45,19 +45,19 @@
       "reply": "{\"intent\": \"accounts-using-a-device\", \"entities\": {\"device\": \"DV-000010\"}}"
     },
     "Show the latest transactions of AC-0002000.": {
-      "reply": "{\"intent\":\"latest-transactions-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"latest-transactions-of-an-account\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Show the payments made to MR-0100.": {
-      "reply": "{\"intent\":\"payments-made-to-a-merchant\",\"entities\":{\"merchant\":\"MR-0100\"}}"
+      "reply": "{\"intent\": \"payments-made-to-a-merchant\", \"entities\": {\"merchant\": \"MR-0100\"}}"
     },
     "Which devices did AC-0002000 use in the last 7 days?": {
-      "reply": "{\"intent\":\"devices-used-in-the-last-7-days\",\"entities\":{\"account\":\"AC-0002000\"}}"
+      "reply": "{\"intent\": \"devices-used-in-the-last-7-days\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Which accounts are linked to AC-0002000 by a shared device, and what chain shows it?": {
       "reply": "{\"intent\": \"shared-device-chain\", \"entities\": {\"account\": \"AC-0002000\"}}"
     },
     "Why are AC-0002000 and AC-0002001 linked through a shared device?": {
-      "reply": "{\"intent\":\"why-two-accounts-are-linked\",\"entities\":{\"first\":\"AC-0002000\",\"second\":\"AC-0002001\"}}"
+      "reply": "{\"intent\": \"why-two-accounts-are-linked\", \"entities\": {\"first\": \"AC-0002000\", \"second\": \"AC-0002001\"}}"
     },
     "Which transactions have the payment reference PR-00000010?": {
       "reply": "{\"intent\": \"transactions-with-a-payment-reference\", \"entities\": {\"reference\": \"PR-00000010\"}}"
