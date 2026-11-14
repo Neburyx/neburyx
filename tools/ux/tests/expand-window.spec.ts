@@ -42,7 +42,9 @@ test.describe('the time window in the Expand relationships panel', () => {
   const panel = (page: Page) => page.getByRole('complementary', { name: 'Expand relationships' });
   const windowField = (page: Page) => panel(page).getByRole('combobox', { name: /Time window/ });
   const load = (page: Page) => panel(page).getByRole('button', { name: /^Load \d+ per type$/ });
+  // Load is aria-disabled while a load is under way, and Enter on it does nothing: a run waits until the one before it has finished, so a slow machine cannot swallow the key
   const run = async (page: Page): Promise<void> => {
+    await expect(load(page)).not.toHaveAttribute('aria-disabled', 'true');
     await load(page).focus();
     await page.keyboard.press('Enter');
   };
