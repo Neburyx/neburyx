@@ -63,14 +63,19 @@ const askUnsupportedVariants = ASK_UNSUPPORTED_REASONS.map((reason) =>
   }),
 );
 
-/** A request refused for its size names the three limits and the one it went over in its details. */
+/** A request refused for its size (`export-too-large`) names the three limits and the one it went over in its details; every other reason of a refused request names only itself. */
 const invalidRequestVariants = INVALID_REQUEST_REASONS.map((reason) =>
   z.strictObject({
     code: z.literal('INVALID_REQUEST'),
     message: z.literal(INVALID_REQUEST_ENTRIES[reason].message),
     retryable: z.literal(INVALID_REQUEST_ENTRIES[reason].retryable),
     traceId: z.string().min(1),
-    details: z.strictObject({ reason: z.literal(reason), maxEntities: errorDetailsSchema.shape.maxEntities.unwrap(), maxRelationships: errorDetailsSchema.shape.maxRelationships.unwrap(), maxAggregates: errorDetailsSchema.shape.maxAggregates.unwrap(), exceeded: errorDetailsSchema.shape.exceeded.unwrap() }),
+    details: z.strictObject({
+      reason: z.literal(reason),
+      ...(reason === 'export-too-large'
+        ? { maxEntities: errorDetailsSchema.shape.maxEntities.unwrap(), maxRelationships: errorDetailsSchema.shape.maxRelationships.unwrap(), maxAggregates: errorDetailsSchema.shape.maxAggregates.unwrap(), exceeded: errorDetailsSchema.shape.exceeded.unwrap() }
+        : {}),
+    }),
   }),
 );
 

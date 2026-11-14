@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ERROR_CODES } from './error-codes.js';
+import { ERROR_CODES, INVALID_REQUEST_REASONS, type InvalidRequestReason } from './error-codes.js';
+import { INVALID_REQUEST_ENTRIES } from './error-table.js';
 import { errorResponseSchema } from './error-response.js';
 
 const TAS_CODES = [
@@ -117,5 +118,27 @@ describe('ErrorResponse', () => {
     const timeout = { code: 'QUERY_TIMEOUT', message: 'The source did not answer in time. Try again or refine your filters.', retryable: true, traceId: 'tr-1' };
     expect(errorResponseSchema.safeParse({ error: { ...timeout, details: { timeoutMs: 5000 } } }).success).toBe(true);
     expect(errorResponseSchema.safeParse({ error: { ...timeout, code: 'ACCESS_DENIED', details: { timeoutMs: 5000 } } }).success).toBe(false);
+  });
+});
+
+describe('the INVALID_REQUEST bodies of the strict parse', () => {
+  const LIMITS = { maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'entities' };
+  const bodyOf = (reason: string, extra: Record<string, unknown> = {}, message?: string) => ({
+    error: { code: 'INVALID_REQUEST', message: message ?? INVALID_REQUEST_ENTRIES[reason as InvalidRequestReason].message, retryable: false, traceId: 't-1', details: { reason, ...extra } },
+  });
+
+  it.each(INVALID_REQUEST_REASONS)('accepts the body of the reason %s with the details it carries', (reason) => {
+    expect(errorResponseSchema.safeParse(bodyOf(reason, reason === 'export-too-large' ? LIMITS : {})).success).toBe(true);
+  });
+
+  it.each(INVALID_REQUEST_REASONS.filter((reason) => reason !== 'export-too-large'))('refuses the limits of an export on the reason %s, and a limit alone', (reason) => {
+    expect(errorResponseSchema.safeParse(bodyOf(reason, LIMITS)).success).toBe(false);
+    expect(errorResponseSchema.safeParse(bodyOf(reason, { maxEntities: 300 })).success).toBe(false);
+  });
+
+  it('refuses export-too-large without its limits, with another reason\'s sentence, and with a field it does not know', () => {
+    expect(errorResponseSchema.safeParse(bodyOf('export-too-large')).success).toBe(false);
+    expect(errorResponseSchema.safeParse(bodyOf('export-too-large', LIMITS, INVALID_REQUEST_ENTRIES['continue-invalid'].message)).success).toBe(false);
+    expect(errorResponseSchema.safeParse(bodyOf('continue-invalid', { other: 1 })).success).toBe(false);
   });
 });
