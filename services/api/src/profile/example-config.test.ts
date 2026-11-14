@@ -28,19 +28,16 @@ describe('the example mapping file of the compose install', () => {
     expect(existsSync(join(fileURLToPath(new URL('../../../../', import.meta.url)), 'docs', 'ai-preview.md'))).toBe(true);
   });
 
-  it('shows claude-sonnet-5-5, no default model, and the key by reference, all commented', () => {
+  it('shows the preview switch only, commented, and none of the settings that moved to the environment', () => {
     const block = EXAMPLE.slice(EXAMPLE.indexOf(START), EXAMPLE.indexOf(END));
-    expect(block).toContain('model: claude-sonnet-5-5');
-    expect(block).toContain('env: ANTHROPIC_API_KEY');
-    expect(block).not.toMatch(/prompts|properties|pii_override/);
-    for (const line of block.split('\n').slice(1).filter((entry) => entry !== '')) expect(line.startsWith('#'), line).toBe(true);
-    expect(block).not.toMatch(/\bsk-[A-Za-z0-9]/);
+    expect(block.split('\n').slice(1).filter((entry) => entry !== '')).toEqual(['# ai:', '#   preview: true']);
+    expect(block).not.toMatch(/provider|model|key|effort|cache|prompts|properties|pii_override|\bsk-[A-Za-z0-9]/);
   });
 
   it('is accepted by the mapping schema and by configure once the block is uncommented and its key variable is set', async () => {
     const mapping = parseMapping(uncommented(), 'neburyx.example.yaml');
-    expect(mapping.ai).toMatchObject({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'ANTHROPIC_API_KEY' } });
-    const { outcome } = await configureAsk(mapping.ai ?? {}, { ANTHROPIC_API_KEY: 'not-a-real-key' });
+    expect(mapping.ai).toEqual({ preview: true });
+    const { outcome } = await configureAsk({ NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder' });
     expect(outcome).toEqual({ ok: true });
   });
 });

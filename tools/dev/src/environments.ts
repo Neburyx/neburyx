@@ -11,6 +11,18 @@ export const DEFAULT_CONNECT_LIMIT_MS = 10_000;
 
 const CACHE_VARIABLES = ['NEBURYX_AI_CACHE', 'NEBURYX_AI_CACHE_TTL'] as const;
 
+const ASK_VARIABLES = [
+  'NEBURYX_ASK_PROVIDER',
+  'NEBURYX_ASK_CLASSIFICATION_MODEL',
+  'NEBURYX_ASK_API_KEY',
+  'NEBURYX_ASK_API_KEY_FILE',
+  'NEBURYX_ASK_MAPPING_FOLDER',
+  'NEBURYX_ASK_EFFORT',
+  'NEBURYX_ASK_TIMEOUT_MS',
+  'NEBURYX_ASK_MAX_RETRIES',
+  'NEBURYX_ASK_MAX_TOKENS',
+] as const;
+
 type Source = Readonly<Record<string, string | undefined>>;
 export type Environment = Readonly<Record<string, string>>;
 
@@ -35,6 +47,11 @@ export function limitsEnvironment(source: Source): Environment {
 /** The two prompt-cache settings the developer may set; only the API reads them, so the migrate step and the web server are not given them. */
 export function cacheEnvironment(source: Source): Environment {
   return pick(source, CACHE_VARIABLES);
+}
+
+/** The settings of Ask the developer may set in the shell; only the API reads them, so the migrate step and the web server are not given them, and the mapping's env file never carries them. */
+export function askEnvironment(source: Source): Environment {
+  return pick(source, ASK_VARIABLES);
 }
 
 /** The connect limit the children will use, for the wait that must outlast it; a value they would refuse counts as the default, since they stop on it themselves. */

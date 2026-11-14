@@ -1,5 +1,5 @@
 import { stringify } from 'yaml';
-import { AI_DEFAULTS, type AiSettings } from '@neburyx/contracts';
+import type { AiSettings } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { MappingError } from './diagnostics.js';
 import { parseMapping } from './load.js';
@@ -17,93 +17,69 @@ const refusal = (ai: unknown): MappingError => {
 };
 const diagnostics = (error: MappingError): string => JSON.stringify(error.issues);
 
+/** The moved keys and their replacement, as AI_MOVED_KEYS in packages/contracts/src/ai.ts holds them (not exported from the package index). */
+const AI_MOVED_KEYS: Readonly<Record<string, string>> = {
+  provider: 'NEBURYX_ASK_PROVIDER',
+  model: 'NEBURYX_ASK_CLASSIFICATION_MODEL',
+  key: 'NEBURYX_ASK_API_KEY or NEBURYX_ASK_API_KEY_FILE',
+  effort: 'NEBURYX_ASK_EFFORT',
+  timeout_ms: 'NEBURYX_ASK_TIMEOUT_MS',
+  max_retries: 'NEBURYX_ASK_MAX_RETRIES',
+  max_tokens: 'NEBURYX_ASK_MAX_TOKENS',
+  cache: 'NEBURYX_AI_CACHE and NEBURYX_AI_CACHE_TTL',
+};
+
+const MOVED_VALUES: Readonly<Record<string, unknown>> = {
+  provider: 'anthropic',
+  model: 'claude-sonnet-5-5',
+  key: { env: 'ANTHROPIC_API_KEY' },
+  effort: 'high',
+  timeout_ms: 30_000,
+  max_retries: 2,
+  max_tokens: 4_096,
+  cache: { enabled: false, ttl: '1h' },
+};
+
 describe('the ai section of the mapping file', () => {
-  it('holds every key as written, and every key but the preview switch is optional', () => {
-    const ai = {
-      preview: true,
-      provider: 'anthropic',
-      model: 'claude-sonnet-5-5',
-      key: { env: 'ANTHROPIC_API_KEY' },
-      timeout_ms: 30_000,
-      max_retries: 2,
-      max_tokens: 4_096,
-    };
-    const model: AiSettings | undefined = parseWith(ai).ai;
-    expect(model).toEqual(ai);
-    expect(parseWith({ preview: true }).ai).toEqual({ preview: true });
-    expect(parseWith({ key: { file: '/home/node/.config/neburyx/anthropic.env' } }).ai).toEqual({ key: { file: '/home/node/.config/neburyx/anthropic.env' } });
+  it('holds the preview switch as written, and the switch is optional', () => {
+    const model: AiSettings | undefined = parseWith({ preview: true }).ai;
+    expect(model).toEqual({ preview: true });
+    expect(parseWith({ preview: false }).ai).toEqual({ preview: false });
+    expect(parseWith({}).ai).toEqual({});
   });
 
-  it('holds the cache settings as written, and refuses an unknown value or key, naming ai.cache', () => {
-    expect(parseWith({ cache: { enabled: false, ttl: '1h' } }).ai).toEqual({ cache: { enabled: false, ttl: '1h' } });
-    expect(parseWith({ cache: {} }).ai).toEqual({ cache: {} });
-    for (const cache of [{ ttl: '2h' }, { enabled: 'yes' }, { other: 1 }, 'on']) {
-      expect(refusal({ cache }).issues.map((issue) => issue.path).join(' ')).toContain('ai.cache');
+  it('has a test value for every key that moved', () => {
+    expect(Object.keys(MOVED_VALUES).sort()).toEqual(Object.keys(AI_MOVED_KEYS).sort());
+  });
+
+  it.each(Object.keys(AI_MOVED_KEYS))('refuses %s, naming the key and the variable that replaces it', (key) => {
+    const error = refusal({ preview: true, [key]: MOVED_VALUES[key] });
+    const text = error.issues.map((issue) => `${issue.path} ${issue.reason}`).join(' ');
+    expect(text).toContain(`ai.${key}`);
+    expect(text).toContain(AI_MOVED_KEYS[key]);
+  });
+
+  it('never prints the value of a refused key', () => {
+    const error = refusal({ preview: true, key: 'sk-SECRET-VALUE-1234', model: 'MODEL-SENTINEL', cache: { ttl: 'TTL-SENTINEL' } });
+    for (const sentinel of ['sk-SECRET-VALUE-1234', 'MODEL-SENTINEL', 'TTL-SENTINEL']) {
+      expect(diagnostics(error)).not.toContain(sentinel);
+      expect(error.message).not.toContain(sentinel);
     }
-    expect(AI_DEFAULTS.cache).toEqual({ enabled: true, ttl: '5m' });
   });
 
-  it('refuses a provider other than anthropic, naming ai.provider', () => {
-    expect(refusal({ provider: 'other' }).issues.map((issue) => issue.path)).toContain('ai.provider');
+  it('names every moved key of a block that has several', () => {
+    const text = refusal({ preview: true, provider: 'anthropic', max_tokens: 1 }).issues.map((issue) => issue.reason).join(' ');
+    expect(text).toContain('NEBURYX_ASK_PROVIDER');
+    expect(text).toContain('NEBURYX_ASK_MAX_TOKENS');
   });
 
-  it.each([
-    ['a text', 'sk-SECRET-VALUE-1234'],
-    ['both env and file', { env: 'ANTHROPIC_API_KEY', file: '/run/secrets/key' }],
-    ['neither env nor file', {}],
-    ['an unknown key', { env: 'ANTHROPIC_API_KEY', value: 'sk-SECRET-VALUE-1234' }],
-  ])('refuses a key given as %s, naming ai.key and never printing the value', (_name, key) => {
-    const error = refusal({ key });
-    expect(error.issues.some((issue) => issue.path.startsWith('ai.key'))).toBe(true);
-    expect(diagnostics(error)).not.toContain('sk-SECRET-VALUE-1234');
-    expect(error.message).not.toContain('sk-SECRET-VALUE-1234');
+  it.each(['prompts', 'properties', 'pii_override', 'temperature', 'top_p', 'top_k', 'thinking', 'api_key', 'send_property_values'])('refuses %s as a key the section does not have', (key) => {
+    const error = refusal({ [key]: 1 });
+    expect(diagnostics(error)).toContain(`ai.${key}`);
+    expect(diagnostics(error)).toContain('is not a known key');
   });
 
-  it.each([
-    ['a relative path', { file: 'keys/anthropic' }, 'ai.key.file'],
-    ['an empty path', { file: '' }, 'ai.key.file'],
-    ['a variable name that starts with a digit', { env: '1KEY' }, 'ai.key.env'],
-    ['a variable name with a dash', { env: 'MY-KEY' }, 'ai.key.env'],
-    ['an empty variable name', { env: '' }, 'ai.key.env'],
-  ])('refuses %s', (_name, key, path) => {
-    expect(refusal({ key }).issues.map((issue) => issue.path)).toContain(path);
-  });
-
-  it.each([
-    ['a timeout under its range', { timeout_ms: 999 }, 'ai.timeout_ms'],
-    ['a timeout over its range', { timeout_ms: 600_001 }, 'ai.timeout_ms'],
-    ['a fractional timeout', { timeout_ms: 1500.5 }, 'ai.timeout_ms'],
-    ['retries over their range', { max_retries: 6 }, 'ai.max_retries'],
-    ['negative retries', { max_retries: -1 }, 'ai.max_retries'],
-    ['a token limit of zero', { max_tokens: 0 }, 'ai.max_tokens'],
-    ['a token limit over its range', { max_tokens: 32_769 }, 'ai.max_tokens'],
-    ['a limit given as text', { max_tokens: '8192' }, 'ai.max_tokens'],
-    ['an effort that is not one of the five', { effort: 'extreme' }, 'ai.effort'],
-    ['an effort given as a number', { effort: 3 }, 'ai.effort'],
-    ['an empty effort', { effort: '' }, 'ai.effort'],
-  ])('refuses %s, naming the key', (_name, ai, path) => {
-    expect(refusal(ai).issues.map((issue) => issue.path).some((issuePath) => issuePath.startsWith(path))).toBe(true);
-  });
-
-  it.each(['prompts', 'properties', 'pii_override', 'temperature', 'top_p', 'top_k', 'thinking', 'api_key'])('refuses %s as a key the section does not have', (key) => {
-    expect(() => parseWith({ [key]: 1 })).toThrow(MappingError);
-  });
-
-  it('refuses send_property_values as a key the section does not have', () => {
-    expect(() => parseWith({ send_property_values: true })).toThrow(MappingError);
-  });
-
-  it.each(['low', 'medium', 'high', 'xhigh', 'max'])('accepts the effort %s', (effort) => {
-    expect(parseWith({ effort }).ai).toEqual({ effort });
-  });
-
-  it('accepts the limits at both ends of their ranges', () => {
-    expect(parseWith({ timeout_ms: 1_000, max_retries: 0, max_tokens: 1 }).ai).toEqual({ timeout_ms: 1_000, max_retries: 0, max_tokens: 1 });
-    expect(parseWith({ timeout_ms: 600_000, max_retries: 5, max_tokens: 32_768 }).ai).toEqual({ timeout_ms: 600_000, max_retries: 5, max_tokens: 32_768 });
-  });
-
-  it('has hypothesis defaults inside the ranges the file accepts', () => {
-    expect(AI_DEFAULTS).toEqual({ timeoutMs: 60_000, maxRetries: 0, maxTokens: 8_192, effort: 'medium', cache: { enabled: true, ttl: '5m' } });
-    expect(parseWith({ timeout_ms: AI_DEFAULTS.timeoutMs, max_retries: AI_DEFAULTS.maxRetries, max_tokens: AI_DEFAULTS.maxTokens, effort: AI_DEFAULTS.effort }).ai).toBeDefined();
+  it('refuses a preview that is not a boolean', () => {
+    expect(() => parseWith({ preview: 'yes' })).toThrow(MappingError);
   });
 });

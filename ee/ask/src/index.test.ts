@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { AI_STATUS_URL, createEnterpriseExtension } from './index.js';
+import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 describe('the enterprise extension', () => {
   it('has one route group with only the status route, which answers its declared schema', async () => {
@@ -59,8 +60,11 @@ describe('the enterprise extension', () => {
   });
 
   describe('the model behind the audit', () => {
-    const SETTINGS = { preview: true, provider: 'anthropic' as const, model: 'claude-sonnet-5-5', key: { env: 'MODEL_TEST_KEY' } };
-    const ENV = { MODEL_TEST_KEY: 'not-a-real-key' };
+    const SETTINGS = { preview: true };
+    const CONTEXT = { sourceIds: ['source-a'] };
+    const FOLDER = makeAskFolder(CONTEXT.sourceIds);
+    afterAll(removeAskFolders);
+    const ENV = { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: FOLDER, NEBURYX_ASK_CLASSIFICATION_MODEL: 'claude-sonnet-5-5' };
     const SINK_CONTEXT = { databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined };
 
     it('is undefined before the configuration and the mounted sink both exist', async () => {
@@ -71,13 +75,13 @@ describe('the enterprise extension', () => {
       await mounted?.close();
 
       const withoutSink = createEnterpriseExtension();
-      expect((await withoutSink.configure?.(SETTINGS, ENV))?.ok).toBe(true);
+      expect((await withoutSink.configure?.(SETTINGS, ENV, CONTEXT))?.ok).toBe(true);
       expect(withoutSink.model()).toBeUndefined();
     });
 
     it('is the audited call once both exist, and stays undefined when the configuration is refused', async () => {
       const extension = createEnterpriseExtension();
-      expect((await extension.configure?.(SETTINGS, ENV))?.ok).toBe(true);
+      expect((await extension.configure?.(SETTINGS, ENV, CONTEXT))?.ok).toBe(true);
       const mounted = extension.createAuditSink?.(SINK_CONTEXT);
       const model = extension.model();
       expect(model).toBeDefined();
@@ -86,7 +90,7 @@ describe('the enterprise extension', () => {
       await mounted?.close();
 
       const refused = createEnterpriseExtension();
-      expect((await refused.configure?.({ ...SETTINGS, model: undefined }, ENV))?.ok).toBe(false);
+      expect((await refused.configure?.(SETTINGS, { ...ENV, NEBURYX_ASK_API_KEY: undefined }, CONTEXT))?.ok).toBe(false);
       const other = refused.createAuditSink?.(SINK_CONTEXT);
       expect(refused.model()).toBeUndefined();
       await other?.close();

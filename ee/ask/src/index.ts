@@ -1,10 +1,11 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AskFolder, type AuditSink, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { createFailureReporter } from './failure-line.js';
+import { loadAskFolder } from './folder/load.js';
 import { guardAiRouteGroup } from './route-guard.js';
 
 export { AuditUnavailableError, createAuditedModelCall } from './audited.js';
@@ -19,6 +20,8 @@ export const AI_STATUS_URL = '/v1/ai/status';
 const MIGRATIONS_DIRECTORY = fileURLToPath(new URL('../../migrations', import.meta.url));
 
 export interface EnterpriseExtension extends ProfileExtension {
+  /** The Ask folder read at start-up; undefined before `configure` accepted it. */
+  readonly askFolder: () => AskFolder | undefined;
   readonly configuration: () => AskConfiguration | undefined;
   /** The audit sink the application mounted, or undefined before it was built; the audited model call records through it. */
   readonly auditSink: () => AuditSink | undefined;
@@ -36,6 +39,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let environment: Readonly<Record<string, string | undefined>> = {};
   let mounted: MountedAuditSink | undefined;
   let logger: ExtensionLogger | undefined;
+  let folder: AskFolder | undefined;
   const reportFailure = createFailureReporter(() => logger);
   return {
     name: 'ask',
@@ -44,10 +48,18 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       logger = attached;
     },
     configuration: () => configuration,
-    async configure(settings, env) {
-      const configured = await configureAsk(settings, env);
+    askFolder: () => folder,
+    async configure(_settings, env, context) {
+      const configured = await configureAsk(env);
       configuration = configured.configuration;
       environment = env;
+      if (!configured.outcome.ok || configured.configuration === undefined) return configured.outcome;
+      const loaded = await loadAskFolder({ folder: configured.configuration.mappingFolder, sourceIds: context.sourceIds });
+      if (!loaded.ok) {
+        configuration = undefined;
+        return { ok: false, problems: loaded.problems };
+      }
+      folder = loaded.folder;
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,

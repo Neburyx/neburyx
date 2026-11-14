@@ -15,12 +15,28 @@ const demo = services('deploy/demo/compose.yaml');
 const example = readFileSync(join(repository, 'deploy/compose/.env.example'), 'utf8');
 
 const API_SETTINGS = ['NEBURYX_PROFILE', 'NEBURYX_AI_CACHE', 'NEBURYX_AI_CACHE_TTL', 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS', 'NEBURYX_READINESS_LIMIT_MS'];
+const ASK_SETTINGS = ['NEBURYX_ASK_PROVIDER', 'NEBURYX_ASK_CLASSIFICATION_MODEL', 'NEBURYX_ASK_EFFORT', 'NEBURYX_ASK_TIMEOUT_MS', 'NEBURYX_ASK_MAX_RETRIES', 'NEBURYX_ASK_MAX_TOKENS'];
 const MIGRATE_SETTINGS = ['NEBURYX_PROFILE', 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS'];
 const MAPPING_MOUNT = '${NEBURYX_CONFIG_DIR:-./config}:/etc/neburyx:ro';
 
 describe('the settings the Community compose file passes', () => {
   it('gives the api service the profile, the cache settings and the two database limits, each with an empty default', () => {
     for (const name of API_SETTINGS) expect(community['api']?.environment?.[name], name).toBe(`\${${name}:-}`);
+  });
+
+  it('gives the api service the settings of Ask with an empty default, and the folder of intents at a fixed path in the mounted config folder', () => {
+    for (const name of ASK_SETTINGS) expect(community['api']?.environment?.[name], name).toBe(`\${${name}:-}`);
+    expect(community['api']?.environment?.['NEBURYX_ASK_MAPPING_FOLDER']).toBe('/etc/neburyx/ask');
+    expect(community['api']?.volumes).toContain(MAPPING_MOUNT);
+  });
+
+  it('passes the key of Ask by no name: it comes from source.env', () => {
+    const text = readFileSync(join(repository, 'deploy/compose/compose.yaml'), 'utf8');
+    expect(text).not.toMatch(/NEBURYX_ASK_API_KEY/);
+  });
+
+  it('gives the migrate service none of the settings of Ask', () => {
+    for (const name of [...ASK_SETTINGS, 'NEBURYX_ASK_MAPPING_FOLDER', 'NEBURYX_ASK_API_KEY', 'NEBURYX_ASK_API_KEY_FILE']) expect(community['migrate']?.environment, name).not.toHaveProperty(name);
   });
 
   it('gives the migrate service the profile and the connect limit with an empty default, and neither the cache settings nor the readiness limit', () => {
@@ -37,7 +53,7 @@ describe('the settings the Community compose file passes', () => {
 
   it('holds no secret, and no default other than empty, for a setting', () => {
     const text = readFileSync(join(repository, 'deploy/compose/compose.yaml'), 'utf8');
-    for (const name of API_SETTINGS) expect(text).not.toMatch(new RegExp(`\\$\\{${name}:-[^}]`));
+    for (const name of [...API_SETTINGS, ...ASK_SETTINGS]) expect(text).not.toMatch(new RegExp(`\\$\\{${name}:-[^}]`));
   });
 
   it('lists the five in the settings example as optional, commented out, each with a description above it', () => {

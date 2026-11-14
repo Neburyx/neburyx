@@ -19,19 +19,23 @@ import { checkOperations } from '../testing/contract-check.js';
 import { loadCommittedDocument } from '../testing/document.js';
 import { makeExportDirectory } from '../testing/export-directory.js';
 import { makeWebRoot } from '../testing/web-root.js';
+import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
+import { baseSource } from '../testing/mapping.js';
 
 vi.mock('@neburyx/ee-audit', () => ({ createAuditSink: () => ({ sink: { record: () => Promise.resolve() }, close: async () => undefined }) }));
 
 const webRoot = makeWebRoot();
 const exportDirectory = makeExportDirectory();
 const folder = mkdtempSync(join(tmpdir(), 'ee-ask-'));
-afterAll(() => rmSync(folder, { recursive: true, force: true }));
+afterAll(() => {
+  rmSync(folder, { recursive: true, force: true });
+  removeAskFolders();
+});
 
 const previewFile = join(folder, 'preview.yaml');
-const COMPLETE_AI = { preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } };
-writeFileSync(previewFile, stringify({ sources: [], ai: COMPLETE_AI }));
-const incompleteFile = join(folder, 'incomplete.yaml');
-writeFileSync(incompleteFile, stringify({ sources: [], ai: { preview: true, provider: 'anthropic', key: { env: 'AI_TEST_KEY' } } }));
+const PREVIEW_AI = { preview: true };
+writeFileSync(previewFile, stringify({ sources: [], ai: PREVIEW_AI }));
+const ASK_ENV = { NEBURYX_ASK_API_KEY: 'present', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder() };
 const plainFile = join(folder, 'plain.yaml');
 writeFileSync(plainFile, stringify({ sources: [] }));
 
@@ -58,7 +62,7 @@ describe('the real enterprise extension in a start', () => {
   });
 
   it('answers 200 with the status and declares the principal permission when the switch is on', async () => {
-    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, startIo());
+    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', ...ASK_ENV }, startIo());
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const answer = await result.app.inject({ url: '/v1/ai/status' });
@@ -68,24 +72,39 @@ describe('the real enterprise extension in a start', () => {
     await result.app.close();
   });
 
-  it('refuses a start with the real configuration unmet, naming the setting, and a key variable that is not set', async () => {
+  it('refuses a start with the real configuration unmet, naming each variable that is missing', async () => {
     const errors: string[] = [];
     const io = { ...startIo(), stderr: { write: (text: string) => errors.push(text) } };
-    expect(await start({ DATABASE_URL, NEBURYX_CONFIG: incompleteFile, NEBURYX_PROFILE: 'enterprise' }, io)).toEqual({ exitCode: 1 });
-    expect(errors).toEqual(['invalid configuration: ai.model is required when the AI preview is on\n', 'invalid configuration: ai.key.env: the variable AI_TEST_KEY is not set or is empty\n']);
+    expect(await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise' }, io)).toEqual({ exitCode: 1 });
+    expect(errors).toEqual(['invalid configuration: NEBURYX_ASK_MAPPING_FOLDER is required when the AI preview is on\n', 'invalid configuration: NEBURYX_ASK_API_KEY or NEBURYX_ASK_API_KEY_FILE is required when the AI preview is on\n']);
   });
 
   it.each([
     ['prompts', { prompts: { 'ask.plan': '/etc/neburyx/prompts/ask-plan.txt' } }],
     ['properties', { properties: { person: ['name'] } }],
     ['pii_override', { pii_override: true }],
+    ['model', { model: 'claude-sonnet-5-5' }],
+    ['key', { key: { env: 'AI_TEST_KEY' } }],
   ])('refuses a start whose ai block still has the removed key %s, with exit 1', async (name, ai) => {
     const file = join(folder, `removed-${name}.yaml`);
-    writeFileSync(file, stringify({ sources: [], ai: { ...COMPLETE_AI, ...ai } }));
+    writeFileSync(file, stringify({ sources: [], ai: { ...PREVIEW_AI, ...ai } }));
     const errors: string[] = [];
     const io = { ...startIo(), stderr: { write: (text: string) => errors.push(text) } };
-    expect(await start({ DATABASE_URL, NEBURYX_CONFIG: file, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, io)).toEqual({ exitCode: 1 });
+    expect(await start({ DATABASE_URL, NEBURYX_CONFIG: file, NEBURYX_PROFILE: 'enterprise', ...ASK_ENV }, io)).toEqual({ exitCode: 1 });
     expect(errors.join('')).toContain(name);
+  });
+
+  it('refuses a start whose Ask folder holds a query that writes, with exit 1, naming the file and the intent and holding no query text or secret', async () => {
+    const file = join(folder, 'bad-folder.yaml');
+    writeFileSync(file, stringify({ sources: [baseSource({ id: 'demo' })], ai: PREVIEW_AI }));
+    const bad = makeAskFolder(['demo']);
+    writeFileSync(join(bad, 'demo', 'intents.json'), JSON.stringify({ wipe: { parameters: [], query: "MATCH (n) WHERE n.x = 'SENTINEL_TEXT' DETACH DELETE n" } }));
+    const errors: string[] = [];
+    const io = { ...startIo(), stderr: { write: (text: string) => errors.push(text) } };
+    expect(await start({ DATABASE_URL, NEBURYX_CONFIG: file, NEBURYX_PROFILE: 'enterprise', ...ASK_ENV, NEBURYX_ASK_API_KEY: 'SENTINEL-KEY', NEBURYX_ASK_MAPPING_FOLDER: bad }, io)).toEqual({ exitCode: 1 });
+    const text = errors.join('');
+    expect(text).toContain('NEBURYX_ASK_MAPPING_FOLDER/demo/intents.json: intent "wipe"');
+    expect(text).not.toContain('SENTINEL');
   });
 
   it.each([true, false])('is described by the committed contract when mounted with the preview on %s', async (previewOn) => {
@@ -107,7 +126,7 @@ describe('what a start tells the routes of an extension', () => {
   it('tells them the preview is on when the switch is on', async () => {
     const seen: boolean[] = [];
     const probe = { name: 'probe', routeGroups: [{ routes: [{ method: 'GET' as const, url: '/v1/probe', permission: 'principal' as const, responseSchema: z.unknown(), handler: async (request: { readonly previewOn: boolean }) => (seen.push(request.previewOn), 'ok') }] }] };
-    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'present' }, { ...startIo(), extensionLoader: { load: async () => probe } });
+    const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', ...ASK_ENV }, { ...startIo(), extensionLoader: { load: async () => probe } });
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     expect((await result.app.inject({ url: '/v1/probe' })).statusCode).toBe(200);
@@ -135,10 +154,10 @@ describe('a model failure in the real enterprise extension in a start', () => {
     const err = vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
     const extension = createEnterpriseExtension({ modelBaseUrl: `http://127.0.0.1:${(address as AddressInfo).port}` });
     const aiFile = join(folder, 'failing.yaml');
-    writeFileSync(aiFile, stringify({ sources: [], ai: { ...COMPLETE_AI, max_retries: 0 } }));
+    writeFileSync(aiFile, stringify({ sources: [], ai: PREVIEW_AI }));
     try {
       const io = { ...startIo(), logger: pino({ level: 'info' }, { write: (line: string) => void lines.push(line) }), extensionLoader: { load: async () => extension } };
-      const result = await start({ DATABASE_URL, NEBURYX_CONFIG: aiFile, NEBURYX_PROFILE: 'enterprise', AI_TEST_KEY: 'SENTINEL-KEY' }, io);
+      const result = await start({ DATABASE_URL, NEBURYX_CONFIG: aiFile, NEBURYX_PROFILE: 'enterprise', ...ASK_ENV, NEBURYX_ASK_API_KEY: 'SENTINEL-KEY', NEBURYX_ASK_MAX_RETRIES: '0' }, io);
       expect(result.exitCode).toBe(0);
       if (result.exitCode !== 0) return;
       const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, instructions: 'SENTINEL-PROMPT', values: 'SENTINEL-VALUES' }, { action: 'ai.summary', actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator', traceId: 'tr-1' }, new AbortController().signal);

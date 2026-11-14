@@ -29,27 +29,31 @@ export const AI_LIMITS = {
   maxTokens: { min: 1, max: 32_768 },
 } as const;
 
-const ENVIRONMENT_VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const absolutePathSchema = z.string().min(1).startsWith('/');
+/** The variables that took the place of the keys the mapping file once held for Ask, by the key's name. */
+export const AI_MOVED_KEYS: Readonly<Record<string, string>> = {
+  provider: 'NEBURYX_ASK_PROVIDER',
+  model: 'NEBURYX_ASK_CLASSIFICATION_MODEL',
+  key: 'NEBURYX_ASK_API_KEY or NEBURYX_ASK_API_KEY_FILE',
+  effort: 'NEBURYX_ASK_EFFORT',
+  timeout_ms: 'NEBURYX_ASK_TIMEOUT_MS',
+  max_retries: 'NEBURYX_ASK_MAX_RETRIES',
+  max_tokens: 'NEBURYX_ASK_MAX_TOKENS',
+  cache: 'NEBURYX_AI_CACHE and NEBURYX_AI_CACHE_TTL',
+};
 
-const aiKeySchema = z
-  .strictObject({ env: z.string().regex(ENVIRONMENT_VARIABLE_NAME).optional(), file: absolutePathSchema.optional() })
-  .refine((key) => (key.env === undefined) !== (key.file === undefined), { message: 'give exactly one of env and file' });
-
-function limitedInteger(limits: { readonly min: number; readonly max: number }) {
-  return z.number().int().min(limits.min).max(limits.max);
+function unrecognizedKeys(keys: readonly string[]): string {
+  return keys
+    .map((key) => {
+      const moved = AI_MOVED_KEYS[key];
+      return moved === undefined ? `ai.${key} is not a setting` : `ai.${key} is no longer set in the mapping file; set ${moved} in the environment`;
+    })
+    .join('; ');
 }
 
-export const aiSettingsSchema = z.strictObject({
-  preview: z.boolean().optional(),
-  provider: z.enum(AI_PROVIDERS).optional(),
-  model: z.string().min(1).optional(),
-  key: aiKeySchema.optional(),
-  timeout_ms: limitedInteger(AI_LIMITS.timeoutMs).optional(),
-  max_retries: limitedInteger(AI_LIMITS.maxRetries).optional(),
-  max_tokens: limitedInteger(AI_LIMITS.maxTokens).optional(),
-  effort: z.enum(AI_EFFORTS).optional(),
-  cache: z.strictObject({ enabled: z.boolean().optional(), ttl: z.enum(AI_CACHE_TTLS).optional() }).optional(),
-});
+/** The mapping file's `ai` block holds the preview switch only; everything else about Ask is in the environment. */
+export const aiSettingsSchema = z.strictObject(
+  { preview: z.boolean().optional() },
+  { error: (issue) => (issue.code === 'unrecognized_keys' ? unrecognizedKeys(issue.keys) : undefined) },
+);
 
 export type AiSettings = z.infer<typeof aiSettingsSchema>;

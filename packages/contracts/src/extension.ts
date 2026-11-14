@@ -1,5 +1,6 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
+import type { AskFolder } from './ask-folder.js';
 import type { ASK_PLAN_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskPlanner, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
@@ -61,6 +62,11 @@ export interface ExtensionRouteGroup {
   readonly routes: readonly ExtensionRoute[];
 }
 
+/** What the application tells the extension when it configures it: the ids of the sources of the mapping file. */
+export interface ConfigureContext {
+  readonly sourceIds: readonly string[];
+}
+
 export interface ConfigureWarning {
   readonly event: string;
   readonly message: string;
@@ -83,7 +89,9 @@ export interface ProfileExtension {
   readonly attachLogger?: (logger: ExtensionLogger) => void;
   /** The planner of the extension, once it can plan (the model is configured and the audit sink is mounted); a planner given to the application through its seams wins over it, and the Community default is used when there is none. */
   readonly askPlanner?: () => AskPlanner | undefined;
-  readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>) => Promise<ConfigureOutcome>;
+  /** The Ask folder as it was read at start-up: undefined before `configure` has run or when it refused. */
+  readonly askFolder?: () => AskFolder | undefined;
+  readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, context: ConfigureContext) => Promise<ConfigureOutcome>;
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
 }

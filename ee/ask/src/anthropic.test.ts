@@ -79,13 +79,29 @@ const message = (extra: Record<string, unknown> = {}): Record<string, unknown> =
   ...extra,
 });
 
-async function configurationWith(limits: Partial<{ timeout_ms: number; max_retries: number; max_tokens: number; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; cache: { enabled?: boolean; ttl?: '5m' | '1h' } }> = {}, key: { env: string } | { file: string } = { env: 'STUB_KEY' }, model = 'claude-sonnet-5-5'): Promise<AskConfiguration> {
-  const { configuration } = await configureAsk({ preview: true, provider: 'anthropic', model, key, ...limits }, { STUB_KEY: KEY });
+type Limits = Partial<{ timeout_ms: number; max_retries: number; max_tokens: number; effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max'; cache: { enabled?: boolean; ttl?: '5m' | '1h' } }>;
+
+/** The settings of Ask are in the environment: the same names an operator sets. */
+function askEnv(limits: Limits = {}, key: { env: string } | { file: string } = { env: 'NEBURYX_ASK_API_KEY' }, model = 'claude-sonnet-5-5'): Record<string, string> {
+  const env: Record<string, string> = { NEBURYX_ASK_MAPPING_FOLDER: '/etc/neburyx/mapping', NEBURYX_ASK_CLASSIFICATION_MODEL: model };
+  if ('file' in key) env.NEBURYX_ASK_API_KEY_FILE = key.file;
+  else env.NEBURYX_ASK_API_KEY = KEY;
+  if (limits.timeout_ms !== undefined) env.NEBURYX_ASK_TIMEOUT_MS = String(limits.timeout_ms);
+  if (limits.max_retries !== undefined) env.NEBURYX_ASK_MAX_RETRIES = String(limits.max_retries);
+  if (limits.max_tokens !== undefined) env.NEBURYX_ASK_MAX_TOKENS = String(limits.max_tokens);
+  if (limits.effort !== undefined) env.NEBURYX_ASK_EFFORT = limits.effort;
+  if (limits.cache?.enabled !== undefined) env.NEBURYX_AI_CACHE = limits.cache.enabled ? 'on' : 'off';
+  if (limits.cache?.ttl !== undefined) env.NEBURYX_AI_CACHE_TTL = limits.cache.ttl;
+  return env;
+}
+
+async function configurationWith(limits: Limits = {}, key: { env: string } | { file: string } = { env: 'NEBURYX_ASK_API_KEY' }, model = 'claude-sonnet-5-5'): Promise<AskConfiguration> {
+  const { configuration } = await configureAsk(askEnv(limits, key, model));
   if (configuration === undefined) throw new Error('the configuration of the test is not valid');
   return configuration;
 }
 
-async function complete(configuration: AskConfiguration, env: Record<string, string | undefined> = { STUB_KEY: KEY }, signal: AbortSignal = SIGNAL): Promise<ModelAnswer> {
+async function complete(configuration: AskConfiguration, env: Record<string, string | undefined> = { NEBURYX_ASK_API_KEY: KEY }, signal: AbortSignal = SIGNAL): Promise<ModelAnswer> {
   return createAnthropicProvider({ configuration, env, baseUrl }).complete(REQUEST, signal);
 }
 
@@ -136,8 +152,8 @@ describe('the request', () => {
   it('reads the key from its variable at each call, and from an owner-only file', async () => {
     handler = reply(200, message());
     const configuration = await configurationWith();
-    await complete(configuration, { STUB_KEY: 'first-key' });
-    await complete(configuration, { STUB_KEY: 'second-key' });
+    await complete(configuration, { NEBURYX_ASK_API_KEY: 'first-key' });
+    await complete(configuration, { NEBURYX_ASK_API_KEY: 'second-key' });
     expect(seen.map((s) => s.headers.authorization)).toEqual(['Bearer first-key', 'Bearer second-key']);
     const path = join(folder, 'key-file');
     writeFileSync(path, 'file-key\n');
@@ -213,8 +229,8 @@ describe('the request', () => {
 
 describe('a key that cannot be read when the call is made', () => {
   it.each([
-    ['a variable that is unset', { env: 'STUB_KEY' }, {}],
-    ['a variable that is empty', { env: 'STUB_KEY' }, { STUB_KEY: '' }],
+    ['a variable that is unset', { env: 'NEBURYX_ASK_API_KEY' }, {}],
+    ['a variable that is empty', { env: 'NEBURYX_ASK_API_KEY' }, { NEBURYX_ASK_API_KEY: '' }],
   ])('makes no request for %s and answers rejected', async (_name, key, env) => {
     handler = reply(200, message());
     const answer = await complete(await configurationWith({}, key), env);
@@ -355,7 +371,7 @@ describe('failures', () => {
     await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
     const port = (closed.address() as AddressInfo).port;
     await new Promise<void>((resolve) => closed.close(() => resolve()));
-    const refused = await createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl: `http://127.0.0.1:${port}` }).complete(REQUEST, SIGNAL);
+    const refused = await createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl: `http://127.0.0.1:${port}` }).complete(REQUEST, SIGNAL);
     expect(refused).toMatchObject({ status: 'failed', code: 'unreachable' });
     handler = (captured, response) => {
       void captured;
@@ -397,7 +413,7 @@ describe('failures', () => {
   it('answers timeout and stops waiting when the caller aborts', async () => {
     handler = () => undefined;
     const controller = new AbortController();
-    const pending = complete(await configurationWith({ timeout_ms: 60_000, max_retries: 0 }), { STUB_KEY: KEY }, controller.signal);
+    const pending = complete(await configurationWith({ timeout_ms: 60_000, max_retries: 0 }), { NEBURYX_ASK_API_KEY: KEY }, controller.signal);
     setTimeout(() => controller.abort(), 100);
     const started = Date.now();
     expect(await pending).toMatchObject({ status: 'failed', code: 'timeout' });
@@ -408,7 +424,7 @@ describe('failures', () => {
     handler = reply(200, message());
     const controller = new AbortController();
     controller.abort();
-    expect(await complete(await configurationWith(), { STUB_KEY: KEY }, controller.signal)).toMatchObject({ status: 'failed', code: 'timeout' });
+    expect(await complete(await configurationWith(), { NEBURYX_ASK_API_KEY: KEY }, controller.signal)).toMatchObject({ status: 'failed', code: 'timeout' });
     expect(seen).toHaveLength(0);
   });
 });
@@ -417,7 +433,7 @@ describe('a model name the client library has retired', () => {
   it('can make the library write one warning with the model name only, never the key or the prompt', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     handler = reply(200, message());
-    await complete(await configurationWith({}, { env: 'STUB_KEY' }, 'claude-sonnet-4-5'));
+    await complete(await configurationWith({}, { env: 'NEBURYX_ASK_API_KEY' }, 'claude-sonnet-4-5'));
     const written = warn.mock.calls.map((call) => String(call[0])).join('');
     expect(written).toContain("'claude-sonnet-4-5'");
     expect(written).not.toContain(KEY);
@@ -426,7 +442,7 @@ describe('a model name the client library has retired', () => {
 });
 
 describe('the failure record', () => {
-  async function failureOf(handlerOfTest: Handler, limits: Parameters<typeof configurationWith>[0] = { max_retries: 0 }, env: Record<string, string | undefined> = { STUB_KEY: KEY }): Promise<{ answer: ModelAnswer; records: ProviderFailure[] }> {
+  async function failureOf(handlerOfTest: Handler, limits: Parameters<typeof configurationWith>[0] = { max_retries: 0 }, env: Record<string, string | undefined> = { NEBURYX_ASK_API_KEY: KEY }): Promise<{ answer: ModelAnswer; records: ProviderFailure[] }> {
     handler = handlerOfTest;
     const records: ProviderFailure[] = [];
     const answer = await createAnthropicProvider({ configuration: await configurationWith(limits), env, baseUrl, onFailure: (record) => void records.push(record) }).complete(REQUEST, SIGNAL);
@@ -465,7 +481,7 @@ describe('the failure record', () => {
     expect(unparsed.records).toEqual([{ code: 'bad-reply' }]);
     expect(unparsed.answer).toMatchObject({ status: 'failed', code: 'bad-reply' });
     expect((await failureOf(reply(200, message()), { max_retries: 0 }, {})).records).toEqual([{ code: 'rejected' }]);
-    const timed = await failureOf(() => undefined, { timeout_ms: 100, max_retries: 0 });
+    const timed = await failureOf(() => undefined, { timeout_ms: 1_000, max_retries: 0 });
     expect(timed.records).toEqual([{ code: 'timeout' }]);
   });
 
@@ -478,7 +494,7 @@ describe('the failure record', () => {
     expect((await failureOf(reply(200, message()))).records).toEqual([]);
     expect((await failureOf(reply(200, message({ stop_reason: 'refusal' })))).records).toEqual([]);
     handler = reply(500, apiError('api_error'));
-    const throwing = createAnthropicProvider({ configuration: await configurationWith({ max_retries: 0 }), env: { STUB_KEY: KEY }, baseUrl, onFailure: () => { throw new Error('SENTINEL-THROW'); } });
+    const throwing = createAnthropicProvider({ configuration: await configurationWith({ max_retries: 0 }), env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl, onFailure: () => { throw new Error('SENTINEL-THROW'); } });
     expect(await throwing.complete(REQUEST, SIGNAL)).toMatchObject({ status: 'failed', code: 'provider-error' });
   });
 
@@ -529,7 +545,7 @@ describe('the usage of a failed answer', () => {
     handler = reply(200, message());
     expect(await complete(await configurationWith({ max_retries: 0 }), {})).toMatchObject({ status: 'failed', code: 'rejected', usage: { kind: 'unknown' } });
     handler = () => undefined;
-    expect(await complete(await configurationWith({ timeout_ms: 100, max_retries: 0 }))).toMatchObject({ status: 'failed', code: 'timeout', usage: { kind: 'unknown' } });
+    expect(await complete(await configurationWith({ timeout_ms: 1_000, max_retries: 0 }))).toMatchObject({ status: 'failed', code: 'timeout', usage: { kind: 'unknown' } });
     handler = (_captured, response) => {
       response.destroy();
     };
@@ -549,9 +565,9 @@ describe('prompt caching', () => {
 
   async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST): Promise<AskConfiguration> {
     handler = reply(200, message());
-    const { configuration } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, ...settings }, { STUB_KEY: KEY });
+    const { configuration } = await configureAsk(askEnv(settings));
     if (configuration === undefined) throw new Error('the configuration of the test is not valid');
-    await createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl }).complete(request, SIGNAL);
+    await createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl }).complete(request, SIGNAL);
     return configuration;
   }
 

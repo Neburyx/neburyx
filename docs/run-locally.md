@@ -67,7 +67,9 @@ pnpm dev
 3. migrates the database with the migration login;
 4. runs the API with the app login and the logins of your mapping, and the web dev server, with their compilers in watch mode.
 
-To run the AI preview, set `NEBURYX_PROFILE=enterprise` in your shell and the preview settings in your mapping file ([Switch the AI preview on](ai-preview.md)): the command then loads the enterprise code (built in step 2) and applies the migrations of the preview. Set neither and it starts as a Community build.
+To run the AI preview, set `NEBURYX_PROFILE=enterprise` in your shell and `ai: preview: true` in your mapping file ([Switch the AI preview on](ai-preview.md)): the command then loads the enterprise code (built in step 2) and applies the migrations of the preview. Set neither and it starts as a Community build.
+
+The settings of Ask are not in the mapping file: set the `NEBURYX_ASK_*` variables in your shell before `pnpm dev`, with `NEBURYX_ASK_MAPPING_FOLDER` pointing to a local folder of intents (the folder is described in [Switch the AI preview on](ai-preview.md#the-ask-folder)) and the key in `NEBURYX_ASK_API_KEY` or in a file named by `NEBURYX_ASK_API_KEY_FILE`. The command passes them, and `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL`, to the API only, not to the migrate step or the web dev server. They cannot come from the env file in `NEBURYX_DEV_MAPPING_ENV`, which refuses `NEBURYX_*` names. Other secrets of your shell are not passed.
 
 It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists the sources of your mapping. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command. The command does not check that the source login is read-only; use `test-source` for that (see the repository's `CLAUDE.md`).
 

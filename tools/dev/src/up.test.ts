@@ -120,6 +120,18 @@ describe('pnpm dev', () => {
     expect(plain.supervision()?.api.env).not.toHaveProperty('NEBURYX_AI_CACHE_TTL');
   });
 
+  it('gives the API, and no other child, the settings of Ask when they are set, and not the other secrets', async () => {
+    const run = rig({ env: { NEBURYX_ASK_API_KEY: 'ask-key-value', NEBURYX_ASK_MAPPING_FOLDER: '/ask', NEBURYX_ASK_EFFORT: 'high', ANTHROPIC_API_KEY: 'not passed', NEBURYX_SECRET: 'not passed' } });
+    await up(run.deps);
+    expect(run.supervision()?.api.env).toMatchObject({ NEBURYX_ASK_API_KEY: 'ask-key-value', NEBURYX_ASK_MAPPING_FOLDER: '/ask', NEBURYX_ASK_EFFORT: 'high' });
+    expect(JSON.stringify(run.supervision()?.api.env)).not.toContain('not passed');
+    for (const call of run.calls) expect(JSON.stringify(call.options.env)).not.toContain('NEBURYX_ASK_');
+    expect(JSON.stringify(run.supervision()?.children.map((child) => child.env))).not.toContain('NEBURYX_ASK_');
+    const plain = rig();
+    await up(plain.deps);
+    expect(Object.keys(plain.supervision()?.api.env ?? {}).filter((name) => name.startsWith('NEBURYX_ASK_'))).toEqual([]);
+  });
+
   it('does not give an empty profile to any child', async () => {
     const empty = rig({ env: { NEBURYX_PROFILE: '' } });
     await up(empty.deps);

@@ -165,6 +165,10 @@ describe('the enterprise code in the one image', () => {
     return join(folder, 'neburyx.yaml');
   }
 
+  const askFolder = mkdtempSync(join(tmpdir(), 'image-ask-'));
+  scratch.push(askFolder);
+  const ASK_ENV = ['-e', 'NEBURYX_ASK_API_KEY=not-a-real-key', '-e', 'NEBURYX_ASK_MAPPING_FOLDER=/ask-folder', '-v', `${askFolder}:/ask-folder:ro`];
+
   const withMapping = (file: string, profile: string | undefined): string[] => [
     '-v', `${file}:/etc/neburyx/neburyx.yaml:ro`, '-e', 'NEBURYX_CONFIG=/etc/neburyx/neburyx.yaml',
     ...(profile === undefined ? [] : ['-e', `NEBURYX_PROFILE=${profile}`]),
@@ -204,12 +208,12 @@ describe('the enterprise code in the one image', () => {
   });
 
   it('migrates and starts as the preview with both parts set: the AI status route answers and the edition is enterprise', async () => {
-    const file = mappingFolder({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } });
+    const file = mappingFolder({ preview: true });
     const database = await postgres.newDatabase();
     const migrated = await migrateWith(database, withMapping(file, 'enterprise'));
     expect(migrated.code, migrated.stderr).toBe(0);
     expect(await rows(database.ownerUrl, `SELECT to_regclass('public.kysely_migration_ee') IS NOT NULL AS found`)).toEqual([{ found: true }]);
-    const api = await startWith(database, [...withMapping(file, 'enterprise'), '-e', 'AI_TEST_KEY=not-a-real-key']);
+    const api = await startWith(database, [...withMapping(file, 'enterprise'), ...ASK_ENV]);
     expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ preview: true });
     expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'enterprise' });
     const logs = await docker(['logs', api.name]);
@@ -217,10 +221,10 @@ describe('the enterprise code in the one image', () => {
   });
 
   it('records the audit events of a preview start in audit_events through the extension, and keeps none in a Community start', async () => {
-    const file = mappingFolder({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } });
+    const file = mappingFolder({ preview: true });
     const database = await postgres.newDatabase();
     expect((await migrateWith(database, withMapping(file, 'enterprise'))).code).toBe(0);
-    const api = await startWith(database, [...withMapping(file, 'enterprise'), '-e', 'AI_TEST_KEY=not-a-real-key']);
+    const api = await startWith(database, [...withMapping(file, 'enterprise'), ...ASK_ENV]);
     expect((await fetch(`${api.url}/v1/entities/no-such-source/thing/1`)).status).toBeGreaterThanOrEqual(400);
     await vi.waitFor(async () => expect(await rows(database.ownerUrl, 'SELECT result, actor_role FROM audit_events')).toEqual([{ result: 'denied', actor_role: 'administrator' }]), { timeout: 20_000, interval: 250 });
     const community = await migratedDatabase();

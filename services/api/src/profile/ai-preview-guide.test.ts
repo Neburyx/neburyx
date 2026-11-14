@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { AI_DEFAULTS, AI_LIMITS } from '@neburyx/contracts';
 import { configureAsk } from '@neburyx/ee-ask';
 import { describe, expect, it } from 'vitest';
 import { parseMapping } from '../mapping/load.js';
@@ -14,13 +15,57 @@ function yamlBlockAfter(heading: string): string {
   return match?.[1] ?? '';
 }
 
+const ASK_VARIABLES = {
+  provider: 'NEBURYX_ASK_PROVIDER',
+  model: 'NEBURYX_ASK_CLASSIFICATION_MODEL',
+  key: 'NEBURYX_ASK_API_KEY',
+  keyFile: 'NEBURYX_ASK_API_KEY_FILE',
+  folder: 'NEBURYX_ASK_MAPPING_FOLDER',
+  effort: 'NEBURYX_ASK_EFFORT',
+  timeoutMs: 'NEBURYX_ASK_TIMEOUT_MS',
+  maxRetries: 'NEBURYX_ASK_MAX_RETRIES',
+  maxTokens: 'NEBURYX_ASK_MAX_TOKENS',
+} as const;
+
+const MOVED_KEYS: Readonly<Record<string, readonly string[]>> = {
+  provider: [ASK_VARIABLES.provider],
+  model: [ASK_VARIABLES.model],
+  key: [ASK_VARIABLES.key, ASK_VARIABLES.keyFile],
+  effort: [ASK_VARIABLES.effort],
+  timeout_ms: [ASK_VARIABLES.timeoutMs],
+  max_retries: [ASK_VARIABLES.maxRetries],
+  max_tokens: [ASK_VARIABLES.maxTokens],
+  cache: ['NEBURYX_AI_CACHE', 'NEBURYX_AI_CACHE_TTL'],
+};
+
 describe('the example of the AI settings in the AI preview guide', () => {
   it('is accepted by the mapping schema and by configure', async () => {
     const example = yamlBlockAfter('What to set in the mapping file');
     const mapping = parseMapping(`sources: []\n${example}`, 'ai-preview.md');
-    expect(mapping.ai).toMatchObject({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'ANTHROPIC_API_KEY' } });
-    const { outcome } = await configureAsk(mapping.ai ?? {}, { ANTHROPIC_API_KEY: 'present' });
+    expect(mapping.ai).toEqual({ preview: true });
+    const { outcome } = await configureAsk({ NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder' });
     expect(outcome).toEqual({ ok: true });
+  });
+
+  it('names every variable Ask reads, with the default and the range of each limit as the product has them', () => {
+    for (const name of Object.values(ASK_VARIABLES)) expect(GUIDE, name).toContain(`\`${name}\``);
+    const row = (name: string): string => GUIDE.split('\n').find((line) => line.startsWith(`| \`${name}\``)) ?? '';
+    const limits = [
+      [ASK_VARIABLES.timeoutMs, AI_LIMITS.timeoutMs, AI_DEFAULTS.timeoutMs],
+      [ASK_VARIABLES.maxRetries, AI_LIMITS.maxRetries, AI_DEFAULTS.maxRetries],
+      [ASK_VARIABLES.maxTokens, AI_LIMITS.maxTokens, AI_DEFAULTS.maxTokens],
+    ] as const;
+    for (const [name, range, fallback] of limits) {
+      expect(row(name), name).toContain(`from ${range.min} to ${range.max}`);
+      expect(row(name), name).toContain(`The default is ${fallback}`);
+    }
+  });
+
+  it('lists each key that moved to the environment with the variable that replaces it', () => {
+    for (const [key, variables] of Object.entries(MOVED_KEYS)) {
+      const line = GUIDE.split('\n').find((entry) => entry.startsWith(`| \`ai.${key}\``)) ?? '';
+      for (const name of variables) expect(line, key).toContain(name);
+    }
   });
 
   it('names none of the removed settings or flow', () => {

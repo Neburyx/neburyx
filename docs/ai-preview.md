@@ -9,54 +9,98 @@ With only one of the two, the `api` and `migrate` commands stop and say which is
 
 ## What to set in the mapping file
 
-The `ai` block is described key by key in the [mapping guide](mapping-guide.md#the-ai-section). With the preview on, three keys are required (the optional keys, such as `cache`, are in the mapping guide):
-
-| Key | What to give |
-|---|---|
-| `provider` | `anthropic`. Other providers are refused for now |
-| `model` | The model to use, for example `claude-sonnet-5-5`. There is no default model: you choose one, and you can change it later without changing anything else. Give the name without a date suffix |
-| `key` | Where the API key is, by reference: `env: NAME` for an environment variable, or `file: /absolute/path` for a file. The key is never written in the mapping file, and a key written there is refused |
-
-For example:
+The `ai` block of the mapping file holds one key, `preview`. It is described in the [mapping guide](mapping-guide.md#the-ai-section).
 
 ```yaml
 ai:
   preview: true
-  provider: anthropic
-  model: claude-sonnet-5-5
-  key:
-    env: ANTHROPIC_API_KEY
 ```
 
 `neburyx.example.yaml` in `deploy/compose/config/` has a commented block to copy.
 
-The model client reads only what the mapping file names. The `ANTHROPIC_*` variables of the environment (a key, a token, a profile, a base address, log or tracing switches) are ignored: the key comes from `key` and nowhere else. The one exception is `ANTHROPIC_CUSTOM_HEADERS`, which would add headers to every call, so the server refuses to start while it is set.
+Everything else about Ask is set in the environment of the API process. The mapping file refuses a key it once held (see [Upgrading](#upgrading)), and a key written there is never read.
+
+## What to set in the environment
+
+With the preview on, the API reads these variables. An empty value counts as not set.
+
+| Variable | What to give |
+|---|---|
+| `NEBURYX_ASK_PROVIDER` | `anthropic`, the default and the only value for now |
+| `NEBURYX_ASK_CLASSIFICATION_MODEL` | The model that classifies a question, for example `claude-haiku-5-5` (the default). Give the name without a date suffix |
+| `NEBURYX_ASK_API_KEY` | The API key itself. Give this or `NEBURYX_ASK_API_KEY_FILE`, not both; one of the two is required |
+| `NEBURYX_ASK_API_KEY_FILE` | The absolute path of a file that holds the key and that only its owner can read (mode 0600); see [The key file](#the-key-file) |
+| `NEBURYX_ASK_MAPPING_FOLDER` | Required. The absolute path of the Ask folder, described below |
+| `NEBURYX_ASK_EFFORT` | How much work the model puts into a reply: `low`, `medium`, `high`, `xhigh` or `max`. The default is `medium` |
+| `NEBURYX_ASK_TIMEOUT_MS` | How long one call to the model may take, from 1000 to 600000. The default is 60000 |
+| `NEBURYX_ASK_MAX_RETRIES` | How many times a failed call is tried again, from 0 to 5. The default is 0 |
+| `NEBURYX_ASK_MAX_TOKENS` | The most tokens a reply may use, from 1 to 32768. The default is 8192 |
+| `NEBURYX_AI_CACHE` | `on` or `off`. The default is `on`; see [Prompt caching](#prompt-caching) |
+| `NEBURYX_AI_CACHE_TTL` | `5m` or `1h`. The default is `5m` |
+
+The defaults are hypotheses that will change with measurement. A value that is set and not accepted stops the start and names the variable, never the value. The variables are checked only when the preview is on.
+
+In Docker Compose, put the settings in `.env`: the compose file passes the provider, model, effort and limit variables, and the cache variables, to the `api` service, and sets the folder to `/etc/neburyx/ask`. The key is not in `.env`; see [The key file](#the-key-file). With `pnpm dev`, see [Running it with `pnpm dev`](#running-it-with-pnpm-dev).
+
+The model client reads only these variables. The other `ANTHROPIC_*` variables of the environment (a token, a profile, a base address, log or tracing switches) are ignored. The one exception is `ANTHROPIC_CUSTOM_HEADERS`, which would add headers to every call, so the server refuses to start while it is set, even when it is empty.
 
 If you name a model that the service has announced as retired, the client library writes one warning to the console with the model's name when a call is made. The warning holds neither the key nor any prompt. Choose a current model to avoid it.
 
+## The Ask folder
+
+The folder named by `NEBURYX_ASK_MAPPING_FOLDER` holds what Ask knows about each source, in one subfolder per source id:
+
+```text
+<folder>/
+  <sourceId>/
+    classification.md
+    intents.json
+```
+
+- `classification.md` is text for the model, at most 64 KiB.
+- `intents.json` is at most 1 MiB and holds at most 200 intents. Each intent is a name and either a parameterised read-only query or a built-in template:
+
+```json
+{
+  "accounts-of-person": {
+    "parameters": ["personId"],
+    "query": "MATCH (p:Person {id: $personId})-[:OWNS]->(a:Account) RETURN a.id AS account ORDER BY account LIMIT 25"
+  }
+}
+```
+
+A template intent has `parameters`, `template` (one of the eight built-in template ids) and `settings` instead of `query`. An intent has exactly one of `query` and `template`. Values reach the source only as parameters, never as query text. The intent name `saved-pattern` is reserved.
+
+A source without a subfolder has no Ask. Anything else in the folder stops the start: a subfolder that is not a configured source, a link, or any other file (names that start with a dot are ignored). With no source configured the folder only has to exist. With the AI preview on, the folder must exist: in Docker Compose that is `config/ask/` next to your mapping file (empty is fine with no source; with sources configured it needs a subfolder for at least one of them). A link is refused even inside the folder, so a Kubernetes ConfigMap volume, which mounts its files as links, cannot be used directly: copy the files into the folder (for example from an init step).
+
+The folder is read once at start-up; a change needs a restart. The start-up checks each query and stops, naming the intent and the clause but never the query text, when:
+
+- the `$` parameter names in the query are not exactly the intent's `parameters`;
+- the query has anything but read clauses: `MATCH`, `OPTIONAL MATCH`, `WHERE`, `WITH`, `RETURN`, `ORDER BY`, `SKIP`, `LIMIT` and `UNWIND`, with plain functions, the built-in date, time, duration, point and vector functions, and `EXISTS`, `COUNT` and `COLLECT` subqueries under the same rules;
+- the query has a write clause, `LOAD CSV`, `USE`, `CALL`, `FOREACH`, `UNION`, a second statement or a namespaced function (`apoc.*`, `db.*`), or a character outside plain ASCII and whitespace outside a string, comment or backticked name.
+
+A word that Cypher reserves for a command (for example `start`, `next`, `offset`, `set`, `create`, `use`) cannot be used as a name in a query: put it in backticks.
+
+In this build Ask does not answer questions yet: the folder is read and checked, and the questions come later.
+
 ## The key file
 
-A key in a file is the simplest way to keep it out of the environment of every process:
+The key is given to the API in one of two ways: `NEBURYX_ASK_API_KEY` holds the key itself, or `NEBURYX_ASK_API_KEY_FILE` names a file that holds it. There is no reference by name in the mapping file any more. A key in a file is the simplest way to keep it out of the environment of every process:
 
 1. Put the key in a file, for example `anthropic.key`. The file holds either the bare key, or one assignment line, `ANTHROPIC_API_KEY=value` (the name is capital letters, digits and underscores; `export ` before it and matching quotes around the value are accepted). Blank lines and lines that start with `#` are ignored. A file with more than one assignment, more than one non-blank non-comment line, an assignment with an empty value, or no key at all is refused when the API starts, with a message that names the file and shows nothing from it.
 2. Make it readable by its owner only: `chmod 600 anthropic.key`. A file that group or others can read is refused when the API starts.
-3. In a container the API runs as the `node` user (uid 1000), so that user must own the file: `chown 1000 anthropic.key`. Mount it read-only and name the path inside the container in `key.file`.
-4. On Kubernetes, a file from a secret volume is owned by root, so a container that runs as `node` cannot satisfy the owner-only check. Give the key as an environment variable filled from the secret (`env.valueFrom.secretKeyRef`) and use `key: { env: NAME }` instead of a file.
+3. In a container the API runs as the `node` user (uid 1000), so that user must own the file: `chown 1000 anthropic.key`. Mount it read-only and give its path inside the container in `NEBURYX_ASK_API_KEY_FILE`.
+4. On Kubernetes, a file from a secret volume is owned by root, so a container that runs as `node` cannot satisfy the owner-only check. Fill `NEBURYX_ASK_API_KEY` from the secret (`env.valueFrom.secretKeyRef`) instead of using a file.
 
-The API checks that the file exists, is not empty, can be read by the process and holds one of the two forms. It reads the file at start only to check its form and keeps nothing; the key itself is read again at each call. With `env`, the variable must be set and not empty.
+In Docker Compose the key is not passed by name in `compose.yaml`. Put `NEBURYX_ASK_API_KEY=` and the key in `source.env`, next to `.env` (chmod 0600, never committed): it is the optional file the `api` service reads. Do not put it in `.env`: Compose uses `.env` only to fill in variables of the compose file, so a key put there never reaches the `api` service.
+
+The API checks that the file exists, is not empty, can be read by the process and holds one of the two forms. It reads the file at start only to check its form and keeps nothing; the key itself is read again at each call. With `NEBURYX_ASK_API_KEY`, the variable must be set and not empty.
 
 ## Prompt caching
 
 Each model call has two parts: fixed instructions, and the values of the investigation that follow them. With caching on, the provider is asked to keep the fixed instructions in its prompt cache, so a later call that starts with the same instructions reads them back at a lower price and faster. Only the instructions are marked for the cache; a value of an investigation is never in the cached part: it travels in the user message after it. With caching off, the call is one user message with the whole prompt, and no cache marker is sent.
 
-```yaml
-ai:
-  cache:
-    enabled: true   # the default
-    ttl: 5m         # the default; or 1h
-```
-
-The environment variables `NEBURYX_AI_CACHE` (`on` or `off`) and `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`) win over the file. An empty value counts as not set; any other value that is not accepted refuses the start and names the variable. They are read from the environment of the API process: in Docker Compose, set them in `.env` (the compose file passes them to the `api` service), and with `pnpm dev`, set them in your shell (the dev command passes them to the API). Like the other `ai` settings, they are checked only when the preview is on.
+Two variables set it: `NEBURYX_AI_CACHE` (`on` or `off`, the default is `on`) and `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`, the default is `5m`). An empty value counts as not set; any other value that is not accepted refuses the start and names the variable. They are read from the environment of the API process: in Docker Compose, set them in `.env` (the compose file passes them to the `api` service), and with `pnpm dev`, set them in your shell (the dev command passes them to the API). They are checked only when the preview is on.
 
 | Lifetime | What it costs to write the cache | When to choose it |
 |---|---|---|
@@ -81,10 +125,36 @@ The header of the workspace shows **Ask** and **Summarize**. With the switch off
 
 ## Upgrading
 
-Ask is offline in this build until the rebuilt Ask arrives: the `/v1/ask/*` routes no longer exist and answer 404, and the settings for prompt files, property lists and the PII override are gone (a mapping file that still has one is refused at start; remove it).
+Ask's settings moved from the `ai` block of the mapping file to the environment. A mapping file that still has one of the old keys now fails to start, and the message names the key and the variable that replaces it:
 
-The database migration of this change drops the table `ask_plans` and the column `ask_runs.plan_id`. It cannot be undone, so the previous image cannot run against the migrated database. To go back to the previous image, restore a backup taken before the upgrade.
+| Old key | Replaced by |
+|---|---|
+| `ai.provider` | `NEBURYX_ASK_PROVIDER` |
+| `ai.model` | `NEBURYX_ASK_CLASSIFICATION_MODEL` |
+| `ai.key` (`env` or `file`) | `NEBURYX_ASK_API_KEY` or `NEBURYX_ASK_API_KEY_FILE` |
+| `ai.effort` | `NEBURYX_ASK_EFFORT` |
+| `ai.timeout_ms` | `NEBURYX_ASK_TIMEOUT_MS` |
+| `ai.max_retries` | `NEBURYX_ASK_MAX_RETRIES` |
+| `ai.max_tokens` | `NEBURYX_ASK_MAX_TOKENS` |
+| `ai.cache` | `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL` |
+
+Remove the keys from the mapping file, leaving `ai: preview: true`, and set the variables. `NEBURYX_ASK_MAPPING_FOLDER` is new and required.
+
+Ask is not yet answering questions in this build: the `/v1/ask/*` routes do not exist and answer 404. The settings for prompt files, property lists and the PII override are gone too (a mapping file that still has one is refused at start; remove it).
+
+The database migration of an earlier change drops the table `ask_plans` and the column `ask_runs.plan_id`. It cannot be undone, so the previous image cannot run against the migrated database. To go back to the previous image, restore a backup taken before the upgrade.
 
 ## Running it with `pnpm dev`
 
-`pnpm dev` loads the enterprise code when `NEBURYX_PROFILE=enterprise` is set in your shell and `ai.preview: true`, `ai.provider`, `ai.model` and `ai.key` are in the mapping file the settings file names ([Run it locally](run-locally.md)). The migrate step then applies the migrations of the preview too. A key given as `env: NAME` must also be in the env file the settings name, since the dev command gives the API only the variables of that file; a key file works as it does elsewhere. The enterprise code is built once when the command starts: a change under `ee/` needs a restart.
+`pnpm dev` loads the enterprise code when `NEBURYX_PROFILE=enterprise` is set in your shell and `ai.preview: true` is in the mapping file the settings file names ([Run it locally](run-locally.md)). The migrate step then applies the migrations of the preview too.
+
+The `NEBURYX_ASK_*` variables, `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL` are passed from your shell to the API process only, not to the migrate step or the web dev server, and never from the env file the settings name, which refuses `NEBURYX_*` names. Set them in your shell before `pnpm dev`, with `NEBURYX_ASK_MAPPING_FOLDER` pointing to a local folder, for example:
+
+```bash
+export NEBURYX_PROFILE=enterprise
+export NEBURYX_ASK_API_KEY_FILE=$HOME/.neburyx/anthropic.key
+export NEBURYX_ASK_MAPPING_FOLDER=$HOME/.neburyx/ask
+pnpm dev
+```
+
+The enterprise code is built once when the command starts: a change under `ee/` needs a restart, and so does a change in the Ask folder.

@@ -1,14 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { aiSettingsSchema } from './ai.js';
+import { AI_MOVED_KEYS, aiSettingsSchema } from './ai.js';
 
-describe('the ai settings', () => {
-  it('take the settings that are kept', () => {
-    expect(aiSettingsSchema.safeParse({ preview: true, model: 'm', timeout_ms: 30000, cache: { enabled: true } }).success).toBe(true);
+const messageOf = (value: unknown): string => {
+  const result = aiSettingsSchema.safeParse(value);
+  return result.success ? '' : result.error.issues.map((issue) => issue.message).join('; ');
+};
+
+describe('the ai settings of the mapping file', () => {
+  it('hold the preview switch only', () => {
+    expect(aiSettingsSchema.safeParse({ preview: true }).success).toBe(true);
     expect(aiSettingsSchema.safeParse({}).success).toBe(true);
+    expect(aiSettingsSchema.safeParse({ preview: 'yes' }).success).toBe(false);
   });
 
-  it.each(['prompts', 'properties', 'pii_override'])('refuse the old key %s', (key) => {
-    expect(aiSettingsSchema.safeParse({ [key]: {} }).success).toBe(false);
-    expect(aiSettingsSchema.safeParse({ preview: true, [key]: [] }).success).toBe(false);
+  it.each(Object.entries(AI_MOVED_KEYS))('refuse the key %s and name the variable that replaces it', (key, variable) => {
+    const message = messageOf({ preview: true, [key]: 'x' });
+    expect(message).toContain(`ai.${key}`);
+    expect(message).toContain(variable);
+  });
+
+  it.each(['prompts', 'properties', 'pii_override', 'anything_else'])('refuse the key %s as not a setting', (key) => {
+    expect(messageOf({ [key]: {} })).toBe(`ai.${key} is not a setting`);
+  });
+
+  it('never repeat a value of a refused key', () => {
+    expect(messageOf({ key: { env: 'SECRET-VALUE-123' } })).not.toContain('SECRET-VALUE-123');
   });
 });

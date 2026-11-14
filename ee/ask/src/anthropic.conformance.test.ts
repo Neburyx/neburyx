@@ -74,7 +74,7 @@ afterAll(async () => {
 });
 
 async function configurationWith(): Promise<AskConfiguration> {
-  const { configuration, outcome } = await configureAsk({ preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'STUB_KEY' }, timeout_ms: 1_000, max_retries: 0 }, { STUB_KEY: KEY });
+  const { configuration, outcome } = await configureAsk({ NEBURYX_ASK_MAPPING_FOLDER: '/etc/neburyx/mapping', NEBURYX_ASK_CLASSIFICATION_MODEL: 'claude-sonnet-5-5', NEBURYX_ASK_API_KEY: KEY, NEBURYX_ASK_TIMEOUT_MS: '1000', NEBURYX_ASK_MAX_RETRIES: '0' });
   if (configuration === undefined) throw new Error(JSON.stringify(outcome));
   return configuration;
 }
@@ -85,7 +85,7 @@ describe('the conformance suite on the Anthropic provider, over a stub server', 
       const configuration = await configurationWith();
       bodies = [];
       await conformanceCase.run({
-        provider: createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl }),
+        provider: createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl }),
         arrange: (scenario) => {
           next = SCENARIOS[scenario];
         },
@@ -104,7 +104,7 @@ function recordingSink(): { readonly sink: AuditSink; readonly events: AuditEven
 
 async function audited(configuration: AskConfiguration) {
   const recorded = recordingSink();
-  const call = createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: { STUB_KEY: KEY }, baseUrl }), configuration, sink: recorded.sink });
+  const call = createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl }), configuration, sink: recorded.sink });
   return { call, ...recorded };
 }
 

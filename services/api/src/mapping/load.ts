@@ -49,6 +49,17 @@ function contextOf(data: unknown, segments: Segments): string | undefined {
   return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
+/** The reason a key of the `ai` block gives when it moved to the environment: the schema's own sentence for that key, without the path the diagnostic already shows. */
+function movedKeyReason(issue: ZodIssue, segments: Segments): string | undefined {
+  const key = segments.at(-1);
+  if (issue.code !== 'unrecognized_keys' || segments.length !== 2 || segments[0] !== 'ai' || typeof key !== 'string') return undefined;
+  const prefix = `ai.${key} is no longer set in the mapping file`;
+  const start = issue.message.indexOf(prefix);
+  const tail = ' in the environment';
+  const end = issue.message.indexOf(tail, start);
+  return start < 0 || end < 0 ? undefined : issue.message.slice(start + `ai.${key} `.length, end + tail.length);
+}
+
 function reasonFor(issue: ZodIssue, data: unknown): string {
   switch (issue.code) {
     case 'invalid_type':
@@ -127,7 +138,7 @@ function loadDocument(text: string, file: string): MappingModel {
     const issues = parsed.error.issues.flatMap((issue) =>
       zodSegments(issue).map((segments): MappingIssue => {
         const context = contextOf(data, segments);
-        return { path: pathOf(segments), ...(context === undefined ? {} : { context }), reason: reasonFor(issue, data), ...locate(document, lines, segments) };
+        return { path: pathOf(segments), ...(context === undefined ? {} : { context }), reason: movedKeyReason(issue, segments) ?? reasonFor(issue, data), ...locate(document, lines, segments) };
       }),
     );
     throw new MappingError(file, issues);

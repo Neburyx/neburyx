@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { AuditEvent, AuditSink, ExtensionLogger } from '@neburyx/contracts';
 import type { ModelRequest } from './provider.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 const events: AuditEvent[] = [];
 const sink: AuditSink = { record: (event) => (events.push(event), Promise.resolve()) };
@@ -13,7 +14,11 @@ const { createEnterpriseExtension } = await import('./index.js');
 const { createFailureReporter } = await import('./failure-line.js');
 
 const SINK_CONTEXT = { databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined };
-const SETTINGS = { preview: true, provider: 'anthropic' as const, model: 'claude-sonnet-5-5', key: { env: 'ONLY_IN_THE_START_ENV' }, timeout_ms: 5_000 };
+const SETTINGS = { preview: true };
+const CONTEXT = { sourceIds: ['source-a'] };
+const FOLDER = makeAskFolder(CONTEXT.sourceIds);
+afterAll(removeAskFolders);
+const askEnv = (key: string, extra: Record<string, string> = {}): Record<string, string> => ({ NEBURYX_ASK_API_KEY: key, NEBURYX_ASK_MAPPING_FOLDER: FOLDER, NEBURYX_ASK_CLASSIFICATION_MODEL: 'claude-sonnet-5-5', NEBURYX_ASK_TIMEOUT_MS: '5000', ...extra });
 
 let server: Server;
 let status = 200;
@@ -46,7 +51,7 @@ afterAll(async () => {
 describe('the model of the extension', () => {
   it('is the audited provider: one call reaches the stub with the key from the environment given at start-up, and one event is recorded', async () => {
     const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
-    expect((await extension.configure?.(SETTINGS, { ONLY_IN_THE_START_ENV: 'key-from-the-start-environment' }))?.ok).toBe(true);
+    expect((await extension.configure?.(SETTINGS, askEnv('key-from-the-start-environment'), CONTEXT))?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
     const model = extension.model();
     expect(model).toBeDefined();
@@ -77,7 +82,7 @@ describe('the failure line of the extension', () => {
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
       extension.attachLogger?.(logger ?? { warn: (fields, message) => void logged.push({ fields, message }) });
-      await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
+      await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY', { NEBURYX_ASK_MAX_RETRIES: '0' }), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       const answer = await extension.model()?.call(request, context, new AbortController().signal);
       return { logged, written, answer };
@@ -119,7 +124,7 @@ describe('the failure line of the extension', () => {
     failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'cut' }], stop_reason: 'max_tokens', usage: { input_tokens: 12, output_tokens: 256 } };
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
-      await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
+      await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY', { NEBURYX_ASK_MAX_RETRIES: '0' }), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'a view' }, context, new AbortController().signal);
       expect(answer).toMatchObject({ status: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 12, outputTokens: 256 } });
@@ -136,7 +141,7 @@ describe('the failure line of the extension', () => {
     failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'A synthetic answer.' }], stop_reason: 'end_turn', usage: { input_tokens: 12, output_tokens: 5, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 } };
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
-      await extension.configure?.(SETTINGS, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
+      await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY'), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'a view' }, context, new AbortController().signal);
       expect(events).toHaveLength(1);
@@ -160,7 +165,7 @@ describe('the failure line of the extension', () => {
     vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
     try {
       const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
-      await extension.configure?.({ ...SETTINGS, max_retries: 0 }, { ONLY_IN_THE_START_ENV: 'SENTINEL-KEY' });
+      await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY', { NEBURYX_ASK_MAX_RETRIES: '0' }), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'x' }, context, new AbortController().signal);
       expect(answer).toMatchObject({ status: 'failed', code: 'provider-error' });

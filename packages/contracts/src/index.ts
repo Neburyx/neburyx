@@ -8,7 +8,7 @@ export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
 export { ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
 export type { ExtensionRefusalFields } from './extension.js';
-export type { ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskPlanRun, AskPlanRunner, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
+export type { ConfigureContext, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskPlanRun, AskPlanRunner, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiCacheTtl, AiEffort, AiSettings, AiStatusResponse } from './ai.js';
 export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
@@ -170,3 +170,6 @@ export { patternUnavailableSchema, savedPatternRunRequestSchema, savedPatternRun
 export type { PatternUnavailable, SavedPatternRunRequest, SavedPatternRunResponse } from './saved-pattern-run.js';
 export { ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_PLAN_PARAMS, ASK_PLAN_TEMPLATE_IDS, ASK_REFUSAL_FAMILIES, askRefusalFamilySchema, ASK_RUN_OUTCOMES, askRunResultSchema, isHeavyResult } from './ask.js';
 export type { AskAvailability, AskPatternCatalog, AskPatternEntry, AskPatternListing, AskPatternOffer, AskPatternProjection, AskPatternStep, AskPlanner, AskRefusalFamily, AskRunResult, AskSummary, AskSummaryCitation } from './ask.js';
+export { checkIntentQuery } from './query-check.js';
+export { ASK_FOLDER_LIMITS, ASK_SAVED_PATTERN_INTENT, parseIntentsFile } from './ask-folder.js';
+export type { AskFolder, AskIntent, AskSourceFolder, ParsedAskIntent, ParsedIntents } from './ask-folder.js';

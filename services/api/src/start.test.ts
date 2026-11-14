@@ -330,14 +330,14 @@ describe('the enterprise extension at start', () => {
 
   describe('configuring the extension', () => {
     const aiFile = join(folder, 'ai.yaml');
-    const AI = { preview: true, provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } };
+    const AI = { preview: true };
     writeFileSync(aiFile, stringify({ sources: [], ai: AI }));
     const CONFIGURED = { ...DATABASE_ENV, NEBURYX_CONFIG: aiFile, NEBURYX_PROFILE: 'enterprise' };
 
     function configuring(configure: NonNullable<ProfileExtension['configure']>) {
       const events: string[] = [];
-      const calls: { settings: unknown; env: unknown }[] = [];
-      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env) => (events.push('configure'), calls.push({ settings, env }), configure(settings, env)) };
+      const calls: { settings: unknown; env: unknown; context: unknown }[] = [];
+      const extension: ProfileExtension = { ...extensionWith(route()), configure: async (settings, env, context) => (events.push('configure'), calls.push({ settings, env, context }), configure(settings, env, context)) };
       const lines: string[] = [];
       const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
       const base = io({ portOverride: 0, logger, extensionLoader: { load: async () => extension } });
@@ -345,12 +345,12 @@ describe('the enterprise extension at start', () => {
       return { ...base, io: { ...base.io, openStore: opened }, events, calls, lines };
     }
 
-    it('calls configure once, with the settings and the environment, before the store is opened', async () => {
+    it('calls configure once, with the settings, the environment and the source ids, before the store is opened', async () => {
       const rig = configuring(async () => ({ ok: true }));
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['configure', 'open-store']);
-      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED }]);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [] } }]);
       if (result.exitCode === 0) await result.app.close();
     });
 
@@ -373,9 +373,9 @@ describe('the enterprise extension at start', () => {
     });
 
     it('writes every problem on a line of its own and exits 1 without opening the store', async () => {
-      const rig = configuring(async () => ({ ok: false, problems: ['ai.model is required when the AI preview is on', 'ai.key.env: the variable AI_TEST_KEY is not set or is empty'] }));
+      const rig = configuring(async () => ({ ok: false, problems: ['NEBURYX_ASK_MAPPING_FOLDER is required when the AI preview is on', 'NEBURYX_ASK_API_KEY or NEBURYX_ASK_API_KEY_FILE is required when the AI preview is on'] }));
       expect(await start(CONFIGURED, rig.io)).toEqual({ exitCode: 1 });
-      expect(rig.errors.join('')).toBe('invalid configuration: ai.model is required when the AI preview is on\ninvalid configuration: ai.key.env: the variable AI_TEST_KEY is not set or is empty\n');
+      expect(rig.errors.join('')).toBe('invalid configuration: NEBURYX_ASK_MAPPING_FOLDER is required when the AI preview is on\ninvalid configuration: NEBURYX_ASK_API_KEY or NEBURYX_ASK_API_KEY_FILE is required when the AI preview is on\n');
       expect(rig.events).toEqual(['configure']);
     });
 
@@ -392,11 +392,11 @@ describe('the enterprise extension at start', () => {
       expect(rig.lines.join('')).not.toContain('SENTINEL-CONTENT');
     });
 
-    it('never loads the extension or calls configure when the switch is off, whatever ai keys the file has', async () => {
+    it('never loads the extension or calls configure when the switch is off, whatever Ask variables the environment has', async () => {
       const offWithKeys = join(folder, 'off-with-keys.yaml');
-      writeFileSync(offWithKeys, stringify({ sources: [], ai: { provider: 'anthropic', model: 'claude-sonnet-5-5', key: { env: 'AI_TEST_KEY' } } }));
+      writeFileSync(offWithKeys, stringify({ sources: [], ai: { preview: false } }));
       const rig = configuring(async () => ({ ok: true }));
-      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: offWithKeys }, rig.io);
+      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: offWithKeys, NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder-not-read' }, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['open-store']);
       if (result.exitCode === 0) await result.app.close();

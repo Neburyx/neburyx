@@ -160,7 +160,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     if (extension.configure !== undefined) {
       let outcome;
       try {
-        outcome = await extension.configure(mapping.ai ?? {}, env);
+        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id) });
       } catch (error) {
         io.logger.error({ event: 'profile.extension_configure_failed', cause: causeOf(error) }, 'enterprise extension could not be configured');
         io.stderr.write(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);

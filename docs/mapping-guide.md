@@ -93,7 +93,7 @@ Each table lists every key the product accepts at that level. "Required" means t
 |---|---|---|
 | `sources` | yes | The list of sources. The product reads every source in the file |
 | `retention` | no | How long deleted investigations and export files are kept. It belongs to the deployment, not to a source |
-| `ai` | no | Settings of the AI features, which are off unless the deployment also sets `NEBURYX_PROFILE=enterprise` |
+| `ai` | no | The switch of the AI preview, which is off unless the deployment also sets `NEBURYX_PROFILE=enterprise` |
 
 ### Retention
 
@@ -107,36 +107,14 @@ The `retention` block is optional, and so is each key in it. Each is a whole num
 
 ### The ai section
 
-The `ai` block is optional, and so is each key in it. It belongs to the deployment, not to a source. The AI features are off unless the deployment also sets the environment variable `NEBURYX_PROFILE=enterprise` and `preview: true` here; the server refuses to start when only one of the two is set. When the preview is on, `provider`, `model` and `key` are required too: there is no default model, you choose one. The limits below have defaults, and the defaults are hypotheses that will change with measurement.
+The `ai` block is optional and holds one key. It belongs to the deployment, not to a source. The AI features are off unless the deployment also sets the environment variable `NEBURYX_PROFILE=enterprise` and `preview: true` here; the server refuses to start when only one of the two is set.
 
 <!-- keys: ai -->
 | Key | Required | What it does |
 |---|---|---|
 | `preview` | no | `true` switches the AI preview on, together with `NEBURYX_PROFILE=enterprise` |
-| `provider` | no | The model provider. Only `anthropic` is accepted for now; another value is refused |
-| `model` | no | The model to use, for example `claude-sonnet-5-5`. There is no default. Give the name without a date suffix |
-| `key` | no | Where the API key is: a map with exactly one of `env` and `file`, never the key itself |
-| `timeout_ms` | no | How long one call to the model may take, from 1000 to 600000. The default is 60000 |
-| `max_retries` | no | How many times a failed call is tried again, from 0 to 5. The default is 0 |
-| `max_tokens` | no | The most tokens a reply may use, from 1 to 32768. The default is 8192 |
-| `effort` | no | How much work the model puts into a reply: `low`, `medium`, `high`, `xhigh` or `max`. The default is `medium`, a hypothesis that will change with measurement |
-| `cache` | no | Prompt caching: a map with `enabled` and `ttl`, described below. The default is on, with a 5-minute lifetime |
 
-How to switch the preview on, and how to make the key file, is in [Switch the AI preview on](ai-preview.md). The key is given by reference. `env` names an environment variable that holds it; `file` is the absolute path of a file that holds it, which only its owner may read (mode 0600).
-
-<!-- keys: ai.key -->
-| Key | Required | What it does |
-|---|---|---|
-| `env` | no | The name of the environment variable that holds the key (letters, digits and underscores, not starting with a digit). Give this or `file`, not both |
-| `file` | no | The absolute path of the file that holds the key. Give this or `env`, not both |
-
-<!-- keys: ai.cache -->
-| Key | Required | What it does |
-|---|---|---|
-| `enabled` | no | `true` or `false`: whether the fixed instructions of a prompt are cached by the provider. The default is `true`. The environment variable `NEBURYX_AI_CACHE` (`on` or `off`) wins over this |
-| `ttl` | no | How long the provider keeps the cached instructions: `5m` or `1h`. The default is `5m`. The environment variable `NEBURYX_AI_CACHE_TTL` (`5m` or `1h`) wins over this |
-
-What is cached, what it costs and when it does not apply is in [Switch the AI preview on](ai-preview.md#prompt-caching).
+Everything else about Ask (the provider, the model, the key, the limits, prompt caching and the folder of intents) is set in the environment, not in the mapping file. A mapping file that still has one of the old keys (`provider`, `model`, `key`, `effort`, `timeout_ms`, `max_retries`, `max_tokens`, `cache`) is refused at start, and the message names the variable that replaces it. The variables, the folder and the upgrade are in [Switch the AI preview on](ai-preview.md).
 
 ### A source
 
