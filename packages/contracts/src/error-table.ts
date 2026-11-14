@@ -46,6 +46,10 @@ export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit
   'export-too-large': { message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false },
   'pattern-limit': { message: 'You have saved as many patterns on this source as are allowed. Delete one, then save again.', retryable: false },
   'pattern-personal-condition': { message: 'A saved pattern cannot hold a condition on personal data. Remove it, then save again.', retryable: false },
+  'file-query-text': { message: 'This query is not allowed to run.', retryable: false },
+  'file-query-intent': { message: 'This question has no query for this source.', retryable: false },
+  'file-query-values': { message: 'The values of this question do not match its query.', retryable: false },
+  'file-query-result': { message: 'This query returned something that cannot be drawn on the graph.', retryable: false },
 };
 
 export const ERROR_TABLE: Readonly<Record<ErrorCode, ErrorEntry>> = {

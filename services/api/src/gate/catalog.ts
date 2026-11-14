@@ -449,6 +449,23 @@ function checkBoundedBy(definition: TemplateDefinition, shape: Shape): void {
   if (definition.rows !== 'bounded' || definition.paged || shape.properties.get(definition.boundedBy) !== 'array') throw new CatalogError(definition.id, "is bounded by a list its schema does not have as a list, or is not declared rows: 'bounded'");
 }
 
+/**
+ * The file-query template's own declaration: its Cypher is empty (the statement comes from the operator's folder, never from the template), its schema is a strict object that holds the intent's name as text and the
+ * values as an object, it is a capped read whose cut means a lower bound, and it is no other kind of template. A template that is not a file query has a statement of its own.
+ */
+function checkFileQuery(definition: TemplateDefinition, shape: Shape): void {
+  const spec = definition.fileQuery;
+  if (spec === undefined) {
+    if (definition.cypher.trim() === '') throw new CatalogError(definition.id, 'has no Cypher and does not declare a file query');
+    return;
+  }
+  if (definition.cypher !== '') throw new CatalogError(definition.id, 'declares a file query and has Cypher of its own');
+  if (shape.properties.get(spec.intentParam) !== 'string' || shape.properties.get(spec.valuesParam) !== 'object' || shape.properties.size !== 2) throw new CatalogError(definition.id, 'declares a file query for parameters its schema does not have as text and an object, or holds more');
+  if (definition.paged || definition.cutMeans !== 'lowerBound' || definition.profile === true || definition.scope !== 'user' || definition.rows !== undefined) throw new CatalogError(definition.id, "declares a file query and is paged, profiled, a system template or not declared cutMeans: 'lowerBound'");
+  const others = [definition.searchBranches, definition.facetProbes, definition.degreeCounts, definition.expandNeighbors, definition.relatedContext, definition.derivedRule, definition.derivedSupport, definition.sharedAttribute, definition.linkedEntities, definition.pattern, definition.edgeLoad, definition.aggregateRead];
+  if (others.some((other) => other !== undefined) || (definition.gateParameters ?? []).length > 0 || definition.entityParams.length > 0 || definition.relationshipParams.length > 0) throw new CatalogError(definition.id, 'declares a file query and is also another kind of template');
+}
+
 function build(definition: TemplateDefinition): Template {
   const shape = shapeOf(definition);
   for (const name of RESERVED) if (shape.properties.has(name)) throw new CatalogError(definition.id, `declares the reserved parameter ${name}`);
@@ -471,6 +488,7 @@ function build(definition: TemplateDefinition): Template {
   checkPattern(definition, shape);
   checkEdgeLoad(definition, shape);
   checkAggregateRead(definition, shape);
+  checkFileQuery(definition, shape);
   checkBoundedBy(definition, shape);
   checkHops(definition, shape);
   checkListed(definition);

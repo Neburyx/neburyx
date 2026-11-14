@@ -134,7 +134,7 @@ export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', s
     const defaults = communitySeams();
     const second = createSourceGate({ mapping: model, env: { [ENV_USER]: server.user, [ENV_PASSWORD]: server.password }, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit: defaults.audit }, logger: { warn: () => undefined } });
     let calls = 0;
-    const counting: Gate = { run: (request) => ((calls += 1), second.gate.run(request)), runMany: (requests) => ((calls += 1), second.gate.runMany(requests)) };
+    const counting: Gate = { run: (request) => ((calls += 1), second.gate.run(request)), runMany: (requests) => ((calls += 1), second.gate.runMany(requests)), fileQuery: (request) => ((calls += 1), second.gate.fileQuery(request)) };
     const other = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: model, gate: counting, seams: communitySeams() });
     await other.ready();
     return {

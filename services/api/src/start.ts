@@ -20,6 +20,7 @@ import { createAddressCache, lookupStream } from './db/lookup.js';
 import { POOL_SIZE } from './db/pool.js';
 import { uuidv7 } from './identity/uuid.js';
 import { communitySeams } from './seams/community-seams.js';
+import { fileQueryDepsOf } from './gate/file-query.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
 import { createReachabilityCache, seedFromStartup } from './source-ping/cache.js';
@@ -227,7 +228,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       onConnectionError: () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
     });
     const seams = mountedAudit === undefined ? community : { ...community, audit: mountedAudit.sink };
-    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys });
+    sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys, ...(extension?.askFolder === undefined ? {} : { fileQueries: fileQueryDepsOf(() => extension?.askFolder?.()) }) });
     const gate = sourceGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));

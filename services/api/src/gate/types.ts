@@ -180,6 +180,12 @@ export interface Template {
    * with the count and the earliest and latest observed time of every member. Every name is quoted from the allowlist and the request holds values only.
    */
   readonly aggregateRead?: { readonly typeParam: string; readonly endsParam: string; readonly form: 'sample' | 'summary' };
+  /**
+   * The file-query template's own declaration, for no other template: a read whose statement is the query of an intent of the operator's Ask folder, never text of a request or of the template (its `cypher` is empty).
+   * The request names the intent (`intentParam`) and gives the entities' values as text (`valuesParam`); the gate finds the query by the request's source and the intent's name, checks it again, and
+   * sends it with those values as its only parameters.
+   */
+  readonly fileQuery?: { readonly intentParam: string; readonly valuesParam: string };
   /** The names of list parameters whose elements are `{ entityType, stableId }` references: for an entity type whose references are keyed the gate reads the token in each element's stable ID before the parameters are checked. */
   readonly referenceLists?: readonly string[];
   /**
@@ -311,8 +317,21 @@ export interface GateLogger {
 
 export type Clock = () => number;
 
+/** One run of a file query: the intent's name and the entities' values, for a source and a person; the limit is the gate's (the source's `max_page`). */
+export interface FileQueryRequest {
+  readonly traceId: string;
+  readonly principal: Principal;
+  readonly sourceId: string;
+  readonly intent: string;
+  readonly values: Readonly<Record<string, string>>;
+  readonly mask?: boolean;
+  readonly signal?: AbortSignal;
+}
+
 export interface Gate {
   run(request: GateRequest): Promise<GatePage>;
+  /** Runs the file query of an intent of the source's Ask folder, with the source's `max_page` as its row cap. */
+  fileQuery(request: FileQueryRequest): Promise<GatePage>;
   /**
    * Reads several pages of one request, one after another under one read lease, all for the same source, person and masking, and answers every page or the failure of any, with nothing partial.
    * Every request is validated (a cursor included) before the first read, one deadline covers them all, and one audit event is written.

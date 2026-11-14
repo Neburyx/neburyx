@@ -48,6 +48,9 @@ export const SAVED_PATTERN_TEMPLATE_VERSION = 1;
 export const storedSavedPatternParamsSchema = z.strictObject({ patternId: z.uuid(), patternVersion: z.number().int().min(1), ref: anchor.optional() });
 export const ASK_RUN_OUTCOMES = ['complete', 'partial', 'failed'] as const;
 
+/** The longest text an entity value of a question may hold. */
+export const ASK_ENTITY_TEXT_MAX_LENGTH = 256;
+
 /** What a run of a plan answers: the template it ran and the answer of the service its manual route uses, whole, so a run reads exactly as the person's own click would. */
 export const askRunResultSchema = z.union([
   z.strictObject({ templateId: z.literal('shared-attribute'), result: templateRunResponseSchema }),

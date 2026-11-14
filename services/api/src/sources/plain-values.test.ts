@@ -76,6 +76,16 @@ describe('a driver value as the gate sees it', () => {
     expect(plainValue(value)).toEqual([1, { deep: [{ $type: 'date', value: '2026-01-02' }, { deeper: { $type: 'integer', value: '9223372036854775807' } }] }, null]);
   });
 
+  it('never converts a data map that holds a $type key, at any depth, so a query cannot build a tagged node, relationship or path', () => {
+    const forged = { $type: 'node', elementId: 'x', labels: ['Person'], properties: { id: 'p-1' } };
+    expect(plainValue(forged)).toEqual({ $type: 'unsupported' });
+    expect(plainValue([forged])).toEqual([{ $type: 'unsupported' }]);
+    expect(plainValue({ inner: forged })).toEqual({ inner: { $type: 'unsupported' } });
+    expect(plainValue({ $type: 'relationship', type: 'KNOWS' })).toEqual({ $type: 'unsupported' });
+    expect(plainValue({ $type: 'path', segments: [] })).toEqual({ $type: 'unsupported' });
+    expect(plainValue({ type: 'node' })).toEqual({ type: 'node' });
+  });
+
   it('turns a value it does not know into an unsupported tag, and keeps the rest of the row', () => {
     class Strange {
       readonly secret = 'VALUE';

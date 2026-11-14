@@ -16461,6 +16461,282 @@
                 "properties": {
                   "code": {
                     "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "This query is not allowed to run."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "file-query-text"
+                      },
+                      "maxEntities": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxRelationships": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxAggregates": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "exceeded": {
+                        "type": "string",
+                        "enum": [
+                          "entities",
+                          "relationships",
+                          "aggregates"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "maxEntities",
+                      "maxRelationships",
+                      "maxAggregates",
+                      "exceeded"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "This question has no query for this source."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "file-query-intent"
+                      },
+                      "maxEntities": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxRelationships": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxAggregates": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "exceeded": {
+                        "type": "string",
+                        "enum": [
+                          "entities",
+                          "relationships",
+                          "aggregates"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "maxEntities",
+                      "maxRelationships",
+                      "maxAggregates",
+                      "exceeded"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "The values of this question do not match its query."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "file-query-values"
+                      },
+                      "maxEntities": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxRelationships": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxAggregates": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "exceeded": {
+                        "type": "string",
+                        "enum": [
+                          "entities",
+                          "relationships",
+                          "aggregates"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "maxEntities",
+                      "maxRelationships",
+                      "maxAggregates",
+                      "exceeded"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "This query returned something that cannot be drawn on the graph."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "file-query-result"
+                      },
+                      "maxEntities": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxRelationships": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "maxAggregates": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "exceeded": {
+                        "type": "string",
+                        "enum": [
+                          "entities",
+                          "relationships",
+                          "aggregates"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "reason",
+                      "maxEntities",
+                      "maxRelationships",
+                      "maxAggregates",
+                      "exceeded"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
                     "const": "ASK_UNSUPPORTED"
                   },
                   "message": {

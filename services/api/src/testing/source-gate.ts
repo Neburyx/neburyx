@@ -17,6 +17,7 @@ export function testSourceGate(mapping: MappingModel, overrides: Partial<Omit<As
     ...(overrides.catalog === undefined ? {} : { catalog: overrides.catalog }),
     ...(overrides.redact === undefined ? {} : { redact: overrides.redact }),
     ...(overrides.referenceKeys === undefined ? {} : { referenceKeys: overrides.referenceKeys }),
+    ...(overrides.fileQueries === undefined ? {} : { fileQueries: overrides.fileQueries }),
   });
   return { ...parts, executor, logs };
 }

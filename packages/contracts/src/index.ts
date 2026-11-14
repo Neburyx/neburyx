@@ -168,10 +168,12 @@ export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTER
 export type { ChangePatternRequest, DeletePatternResponse, ListedPattern, PatternAvailability, PatternListResponse, SavedPattern, SavePatternRequest } from './saved-pattern.js';
 export { patternUnavailableSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema } from './saved-pattern-run.js';
 export type { PatternUnavailable, SavedPatternRunRequest, SavedPatternRunResponse } from './saved-pattern-run.js';
-export { ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_PLAN_PARAMS, ASK_PLAN_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_QUESTION_MAX_CODE_POINTS, ASK_RUN_OUTCOMES, askRunResultSchema, isHeavyResult } from './ask.js';
+export { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_PLAN_PARAMS, ASK_PLAN_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_QUESTION_MAX_CODE_POINTS, ASK_RUN_OUTCOMES, askRunResultSchema, isHeavyResult } from './ask.js';
 export type { AskAvailability, AskPatternCatalog, AskPatternEntry, AskPatternListing, AskPatternOffer, AskPatternProjection, AskPatternStep, AskClassifier, AskClassifyInput, AskClassification, AskEntities, AskRefusalCause, AskRunResult, AskSummary, AskSummaryCitation } from './ask.js';
 export { checkIntentQuery } from './query-check.js';
-export { ASK_FOLDER_LIMITS, ASK_SAVED_PATTERN_INTENT, hasDuplicateKeys, isParameterName, parseIntentsFile } from './ask-folder.js';
+export { ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, hasDuplicateKeys, isParameterName, parseIntentsFile } from './ask-folder.js';
 export { ASK_REFUSAL_SENTENCES, readClassification } from './ask-classify.js';
 export type { ReadClassification } from './ask-classify.js';
 export type { AskFolder, AskIntent, AskSourceFolder, ParsedAskIntent, ParsedIntents } from './ask-folder.js';
+export { fileQueryResultSchema } from './file-query.js';
+export type { FileQueryResult } from './file-query.js';

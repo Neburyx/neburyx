@@ -135,3 +135,21 @@ describe('the audit detail of a saved pattern', () => {
     expect(() => parseAiAuditDetail({ ...base, patternCatalog: { count: 1, sha256: 'b'.repeat(64), text: 'x' } })).toThrow();
   });
 });
+
+describe('the detail of a file-query run', () => {
+  it('holds the intent and the hash of its query, and for a cancelled or timed-out read the reason', () => {
+    expect(parseAuditDetail({ fileQuery: { intent: 'who-knows', queryHash: SHA.replace(/a/g, 'b') } })).toEqual({ fileQuery: { intent: 'who-knows', queryHash: SHA.replace(/a/g, 'b') } });
+    expect(parseAuditDetail({ fileQuery: { intent: 'who-knows', queryHash: SHA.replace(/a/g, 'b') }, reason: 'timeout' }).reason).toBe('timeout');
+    expect(parseAuditDetail({ fileQuery: {} })).toEqual({ fileQuery: {} });
+  });
+
+  it.each([
+    ['another field in it', { fileQuery: { intent: 'x', value: 'Pat' } }],
+    ['a field beside it', { fileQuery: { intent: 'x' }, counts: { nodes: 1, edges: 0, missing: 0 } }],
+    ['an intent that is not a name', { fileQuery: { intent: 'MATCH (n) RETURN n' } }],
+    ['a hash that is not a SHA-256', { fileQuery: { queryHash: 'abc' } }],
+    ['a reason that is not one of the two', { fileQuery: { intent: 'x' }, reason: 'failed' }],
+  ])('refuses %s', (_name, detail) => {
+    expect(auditDetailSchema.safeParse(detail).success).toBe(false);
+  });
+});

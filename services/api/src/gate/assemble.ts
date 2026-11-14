@@ -7,6 +7,7 @@ import { DEFAULT_BUDGETS } from './budgets.js';
 import { defaultCatalog } from './default-catalog.js';
 import type { ReadExecutor } from './executor.js';
 import { createGates } from './gate.js';
+import type { FileQueryDeps } from './file-query.js';
 import { redactItems } from './redact/index.js';
 import { createCursorCodec, type CursorCodec } from './cursor/codec.js';
 import { deriveReferenceKeys, type ReferenceKeys } from '../reference/keys.js';
@@ -28,6 +29,8 @@ export interface AssembleOptions {
   readonly referenceKeys?: ReferenceKeys;
   /** The version of the policy a cursor is bound to; Community has none. */
   readonly policyVersion?: (sourceId: string) => string;
+  /** Where file queries get their text and how it is checked again; absent, every file query is refused. */
+  readonly fileQueries?: FileQueryDeps;
 }
 
 export { defaultCatalog, defaultCatalogTemplates } from './default-catalog.js';
@@ -77,6 +80,7 @@ export function assembleGate(options: AssembleOptions): { readonly gate: Gate; r
     clock: options.clock ?? Date.now,
     logger: options.logger,
     observer: options.observer,
+    fileQueries: options.fileQueries,
   });
   return { ...gates, catalog };
 }

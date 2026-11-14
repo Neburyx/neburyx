@@ -11,6 +11,7 @@ import { summarizeTemplateRun, templateRunListed } from './template-run.js';
 export { SummaryBuilder, citedKeysExist, listOf } from './core.js';
 export type { Listed, ListedElements } from './core.js';
 export { countWords } from './counts.js';
+export { fileQueryListed, summarizeFileQuery, summarizeFileQueryResult } from './file-query.js';
 
 export interface SummaryContext {
   /** The anchor of the plan, when it has one: a run of a template names it in its zero-match sentence. */

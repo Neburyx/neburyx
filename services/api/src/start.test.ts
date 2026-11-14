@@ -16,7 +16,7 @@ import { communitySeams } from './seams/community-seams.js';
 import { createNeo4jExecutor } from './sources/executor.js';
 import { fakeDrivers } from './testing/fake-source-driver.js';
 import { mappingOf, sourceWith } from './testing/gate-fixtures.js';
-import { TestExecutor } from './testing/gate.js';
+import { LOCAL_PRINCIPAL, TestExecutor } from './testing/gate.js';
 import { fileOf } from './testing/mapping.js';
 import { fittingSchemaAnswer, SERVER_ROW, serverExecutor } from './testing/source-tester.js';
 import { testSourceGate } from './testing/source-gate.js';
@@ -31,7 +31,8 @@ import { start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
 import { clearRegisteredExtension, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOAD_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
-import type { ExtensionRoute, ProfileExtension } from '@neburyx/contracts';
+import type { AskFolder, AskIntent, ExtensionRoute, ProfileExtension } from '@neburyx/contracts';
+import { createHash } from 'node:crypto';
 import { LOCAL_IDENTITY, memoryAppStore, memoryStoreWith } from './testing/app-store.js';
 import { makeWebRoot } from './testing/web-root.js';
 import { makeExportDirectory } from './testing/export-directory.js';
@@ -175,6 +176,37 @@ describe('the enterprise extension at start', () => {
     const logger = pino({ level: 'info' }, { write: (line: string) => void lines.push(line) });
     return { ...io({ portOverride: 0, logger, extensionLoader: loader }), lines, calls };
   }
+
+  it('hands the gate the Ask folder of the extension, read at each run, so a file query reaches the executor with the folder text; an extension with no folder gives none', async () => {
+    const text = 'MATCH (p:Person {id: $id}) RETURN p';
+    const intent: AskIntent = { name: 'who', parameters: ['id'], kind: 'query', query: { text, sha256: createHash('sha256').update(text, 'utf8').digest('hex') } };
+    const folder: AskFolder = { sourceIds: ['alpha'], source: () => undefined, intent: (sourceId, name) => (sourceId === 'alpha' && name === 'who' ? intent : undefined) };
+    for (const withFolder of [true, false]) {
+      const opened: SourceGateOptions[] = [];
+      const extension: ProfileExtension = { ...extensionWith(route()), ...(withFolder ? { askFolder: () => folder } : {}) };
+      const rig = run(() => Promise.resolve(extension));
+      const executor = new TestExecutor(() => Promise.resolve({ status: 'rows', rows: [] }));
+      const openSourceGate = (options: SourceGateOptions): SourceGate => {
+        opened.push(options);
+        const parts = assembleGate({ mapping: mappingOf(sourceWith('alpha')), seams: communitySeams(), executor, logger: { warn: () => undefined }, ...(options.fileQueries === undefined ? {} : { fileQueries: options.fileQueries }) });
+        return { ...parts, close: () => Promise.resolve() };
+      };
+      const result = await start(ON, { ...rig.io, openSourceGate });
+      expect(result.exitCode).toBe(0);
+      if (result.exitCode !== 0) return;
+      const [gateOptions] = opened;
+      expect(gateOptions?.fileQueries === undefined).toBe(!withFolder);
+      const parts = openSourceGate(gateOptions ?? ({} as SourceGateOptions));
+      const outcome = await parts.gate.fileQuery({ traceId: 'tr-start', principal: LOCAL_PRINCIPAL, sourceId: 'alpha', intent: 'who', values: { id: 'x' } }).then(() => 'ran', (error: { details?: { reason?: string } }) => error.details?.reason);
+      if (withFolder) {
+        expect(outcome).toBe('ran');
+        expect(executor.calls.at(-1)?.cypher).toBe(text);
+      } else {
+        expect(outcome).toBe('file-query-intent');
+      }
+      await result.app.close();
+    }
+  });
 
   it('hands the extension a signature made with the key derived from the cursor key that signs cursors', async () => {
     const material = Buffer.alloc(32, 7);
@@ -579,7 +611,7 @@ describe('the source gate at start-up', () => {
     const opened: SourceGateOptions[] = [];
     const openSourceGate = (options: SourceGateOptions): SourceGate => {
       opened.push(options);
-      return { gate: { run: unusedRunner.run, runMany: () => Promise.reject(new Error('not used')) }, system: unusedRunner, indexes: { read: () => Promise.reject(new Error('not used')) }, catalog: defaultCatalog(), close: () => (order.push('gate closed'), Promise.resolve()) };
+      return { gate: { run: unusedRunner.run, runMany: () => Promise.reject(new Error('not used')), fileQuery: () => Promise.reject(new Error('not used')) }, system: unusedRunner, indexes: { read: () => Promise.reject(new Error('not used')) }, catalog: defaultCatalog(), close: () => (order.push('gate closed'), Promise.resolve()) };
     };
     const openStore = (): AppStore => {
       const store = memoryAppStore();

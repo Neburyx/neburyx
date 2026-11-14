@@ -2,8 +2,8 @@ import neo4j from 'neo4j-driver';
 import type { Row } from '../gate/types.js';
 
 /**
- * A value the adapter hands to the gate: JSON-safe, and lossless where JSON has no type. Anything JSON cannot hold carries a `$type` tag; the templates are fixed and a Neo4j
- * property value is never a map, so a data map with that key cannot reach the gate.
+ * A value the adapter hands to the gate: JSON-safe, and lossless where JSON has no type. Anything JSON cannot hold carries a `$type` tag; a Neo4j property value is never a map, and a data map
+ * a query builds that holds a `$type` key is converted to `unsupported`, so a map with that key cannot reach the gate.
  */
 export type PlainValue = null | boolean | number | string | readonly PlainValue[] | { readonly [key: string]: PlainValue };
 
@@ -58,7 +58,8 @@ export function plainValue(value: unknown): PlainValue {
   if (neo4j.isRelationship(value)) return relationship(value);
   if (neo4j.isPath(value)) return path(value);
   if (Array.isArray(value)) return value.map(plainValue);
-  if (isPlainObject(value)) return convertProperties(value);
+  // a data map that holds a `$type` key could pass for a node, a relationship or a path (a query of the operator's own folder can build one), so it is never converted
+  if (isPlainObject(value)) return Object.hasOwn(value, '$type') ? UNSUPPORTED : convertProperties(value);
   return UNSUPPORTED;
 }
 

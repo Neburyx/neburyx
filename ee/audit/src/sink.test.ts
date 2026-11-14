@@ -95,6 +95,14 @@ describe('recording an event', () => {
     await expect(mounted.sink.record({ ...EVENT, detail: { ai: withoutHash } as never })).rejects.toMatchObject({ code: 'AUDIT_DETAIL_REFUSED' });
   });
 
+  it('stores the detail of a file-query run as written, and refuses one that adds a field', async () => {
+    const { mounted, calls } = rig();
+    const detail = { fileQuery: { intent: 'who-knows', queryHash: SHA }, reason: 'timeout' } as const;
+    await mounted.sink.record({ ...EVENT, action: 'ask.file_query', detail });
+    expect(JSON.parse(String(calls[0]?.values[10]))).toEqual(detail);
+    await expect(mounted.sink.record({ ...EVENT, action: 'ask.file_query', detail: { fileQuery: { intent: 'who-knows', value: 'Pat' } } as never })).rejects.toMatchObject({ code: 'AUDIT_DETAIL_REFUSED' });
+  });
+
   it('refuses an AI detail that carries the removed members instructionsSha256 or piiPropertiesSent', async () => {
     const { mounted } = rig();
     const ai = { modelRef: 'model-a', promptId: 'p', promptVersion: '1', promptSha256: SHA, tokensIn: tokenCount(1), tokensOut: 'unknown' } as const;

@@ -50,8 +50,8 @@ export const ACCESS_DENIED_REASONS = ['access-changed', 'export-source-changed',
 
 export type AccessDeniedReason = (typeof ACCESS_DENIED_REASONS)[number];
 
-/** Why an `INVALID_REQUEST` is more than a malformed body: an export names more elements than one export holds. */
-export const INVALID_REQUEST_REASONS = ['export-too-large', 'pattern-limit', 'pattern-personal-condition'] as const;
+/** Why an `INVALID_REQUEST` is more than a malformed body: an export names more elements than one export holds, or a file query is refused (its text, its intent, its values or its result). */
+export const INVALID_REQUEST_REASONS = ['export-too-large', 'pattern-limit', 'pattern-personal-condition', 'file-query-text', 'file-query-intent', 'file-query-values', 'file-query-result'] as const;
 
 /** The three limits of one export: entities, stored relationships, and aggregated or derived relationships. */
 const EXPORT_LIMIT_NAMES = ['entities', 'relationships', 'aggregates'] as const;

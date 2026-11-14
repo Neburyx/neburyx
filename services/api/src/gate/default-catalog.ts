@@ -29,9 +29,10 @@ import { privilegesTemplate } from './templates/privileges.js';
 import { schemaIndexesTemplate } from './templates/schema-indexes.js';
 import { schemaTokensTemplate } from './templates/schema-tokens.js';
 import { stableIdDuplicatesTemplate } from './templates/stable-id-duplicates.js';
+import { fileQueryTemplate } from './templates/file-query.js';
 
 export function defaultCatalogTemplates(): readonly TemplateDefinition[] {
-  return [connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, sharedAttributeCountTemplate, linkedEntitiesTemplate, linkedEntitiesCountTemplate, patternCountTemplate, patternTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
+  return [fileQueryTemplate, connectivityTemplate, capabilitiesTemplate, privilegesTemplate, schemaTokensTemplate, schemaIndexesTemplate, stableIdDuplicatesTemplate, degreeProbeTemplate, degreePreviewBoundedTemplate, degreePreviewCheapTemplate, entityLoadTemplate, entityLoadManyTemplate, edgeLoadTemplate, edgeLoadManyTemplate, expandNeighborsTemplate, expandCountTemplate, searchExactTemplate, searchRelatedTemplate, searchEvidenceTemplate, searchFacetsTemplate, searchPrefixTemplate, relatedContextTemplate, derivedRuleRunTemplate, sharedAttributeTemplate, sharedAttributeCountTemplate, linkedEntitiesTemplate, linkedEntitiesCountTemplate, patternCountTemplate, patternTemplate, derivedEdgeSupportTemplate, aggregateSampleTemplate, aggregateSummaryTemplate];
 }
 
 export function defaultCatalog(): TemplateCatalog {

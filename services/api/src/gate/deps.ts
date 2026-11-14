@@ -3,6 +3,7 @@ import type { ReferenceKeys } from '../reference/keys.js';
 import type { ReadExecutor } from './executor.js';
 import type { CursorCodec } from './cursor/codec.js';
 import type { NormalizeModel } from './normalize/model.js';
+import type { FileQueryDeps } from './file-query.js';
 import type { Budgets, Clock, GateContext, GateLogger, GateObserver, Item, SourceAllowlist, TemplateCatalog } from './types.js';
 
 export interface GateDeps {
@@ -20,4 +21,6 @@ export interface GateDeps {
   readonly clock: Clock;
   readonly logger: GateLogger;
   readonly observer?: GateObserver | undefined;
+  /** Where a file query's text comes from, and how it is checked again; absent, every file query is refused. */
+  readonly fileQueries?: FileQueryDeps | undefined;
 }

@@ -280,6 +280,10 @@ export function checkIntentQuery(input: { readonly intent: string; readonly quer
   for (const name of declared) if (!used.has(name)) say(`the parameter $${name} is declared but not used in the query`);
   for (const name of used) if (!declared.has(name)) say(`the query uses the parameter $${name} that is not declared`);
 
+  // a name or a map key that starts with $ is not a parameter reference: the gate's adapter tags a node, a relationship or a path by a `$type` key, and a query may not build one
+  if (tokens.some((token) => token.kind === 'word' && token.quoted && token.text.startsWith('$'))) say('a name that starts with $ is not allowed (a parameter is written $name)');
+  if (tokens.some((token, index) => token.kind === 'param' && symOf(tokens[index + 1]) === ':' && ['{', ','].includes(symOf(tokens[index - 1])))) say('a map key that starts with $ is not allowed (a parameter is written $name)');
+
   if (tokens.some((token) => symOf(token) === ';')) say('the character ; is not allowed, it would start a second statement');
 
   tokens.forEach((token, index) => {

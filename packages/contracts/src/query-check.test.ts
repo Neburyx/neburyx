@@ -57,6 +57,24 @@ const REFUSED_WORDS = [
   'NEXT', 'OFFSET', 'CYPHER', 'SHOW', 'TERMINATE', 'ALTER', 'DROP', 'GRANT', 'DENY', 'REVOKE', 'START', 'STOP', 'ENABLE',
 ];
 
+describe('a name or a map key that starts with $', () => {
+  it.each([
+    ['a backticked map key', 'MATCH (n:Person) RETURN {`$type`: \'node\', elementId: \'1\', labels: [\'Person\'], properties: {}} AS forged'],
+    ['a backticked variable', 'MATCH (`$n`:Person) RETURN `$n`'],
+    ['a backticked property', 'MATCH (n:Person) RETURN n.`$type`'],
+    ['a parameter written as a map key', 'MATCH (n:Person) WHERE n.id = $id RETURN {$id: 1} AS m'],
+    ['a parameter after a comma as a map key', 'MATCH (n:Person) WHERE n.id = $id RETURN {a: 1, $id: 2} AS m'],
+  ])('refuses %s', (_name, query) => {
+    const problems = check(query, ['id'].filter(() => query.includes('$id')));
+    expect(problems.some((problem) => problem.includes('starts with $'))).toBe(true);
+  });
+
+  it('still passes a parameter used as a value and a backticked name that does not start with $', () => {
+    expect(check('MATCH (n:Person {id: $id}) RETURN {`type`: n.id} AS m', ['id'])).toEqual([]);
+    expect(check('MATCH (n:Person) WHERE n.id = $id RETURN n', ['id'])).toEqual([]);
+  });
+});
+
 describe('clauses that are refused', () => {
   it.each(REFUSED_WORDS)('refuses %s at the start of the query', (word) => {
     const problems = check(`${word} (n) RETURN n`);

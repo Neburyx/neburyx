@@ -233,6 +233,7 @@ describe('a relationship context read that fails', () => {
     const gate: Gate = {
       run: (request) => (request.templateId === RELATED_CONTEXT_ID ? Promise.reject(new RequestCancelled()) : Promise.resolve(page(request.templateId === 'entity-search' ? 'X-1' : 'W-1'))),
       runMany: () => Promise.reject(new Error('not used')),
+    fileQuery: () => Promise.reject(new Error('not used')),
     };
     const access = { require: () => Promise.resolve(), admit: () => undefined, readable: (call: { readonly sourceIds: readonly string[] }) => Promise.resolve([...call.sourceIds]) };
     const service = createSearchService({ gate, mapping, access });

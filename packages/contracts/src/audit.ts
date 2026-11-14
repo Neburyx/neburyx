@@ -1,5 +1,6 @@
 import type { Socket } from 'node:net';
 import { z } from 'zod';
+import { ASK_INTENT_NAME } from './ask-folder.js';
 import { roleSchema } from './me.js';
 
 /** The id the system principal and the system actor of an event are stored under. */
@@ -79,13 +80,14 @@ export const auditDetailSchema = z.union([
     }),
   }),
   z.strictObject({ ai: aiAuditDetailSchema }),
+  z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
 ]);
 
 export type AuditDetail =
-  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never }
-  | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never }
+  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never }
+  | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never }
   /** How many items a read by references returned and could not find: counts only, never a value or an ID. */
-  | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never }
+  | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never }
   /** What an export or a download of one was: the format, and for an export how many items it holds and how many fields were masked; never a value, an ID or a file name; a refused download adds which of the two refusals it was. */
   | {
       readonly export: { readonly format: 'json' | 'csv'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly refusal?: 'access-changed' | 'export-source-changed' };
@@ -95,8 +97,11 @@ export type AuditDetail =
       readonly type?: never;
       readonly ai?: never;
       readonly askRun?: never;
+      readonly fileQuery?: never;
     }
-  | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never }
+  | { readonly ai: AiAuditDetail; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
+  /** A run of a file query of the Ask folder: the intent's name and the SHA-256 of its query (each present only when the folder holds the intent) and, for a read that was cancelled or timed out, the reason; never an entity value, a query text or a row. */
+  | { readonly fileQuery: { readonly intent?: string; readonly queryHash?: string }; readonly reason?: 'cancelled' | 'timeout'; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly target?: never; readonly type?: never }
 
 export function parseAuditDetail(value: unknown): AuditDetail {
   return auditDetailSchema.parse(value);

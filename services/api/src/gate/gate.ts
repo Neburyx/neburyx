@@ -2,6 +2,7 @@ import { AppError, RequestCancelled } from '../errors.js';
 import { makeToken } from '../reference/token.js';
 import { mapPositionReferences } from './cursor/references.js';
 import { AdapterError } from '../sources/errors.js';
+import type { AuditDetail } from '@neburyx/contracts';
 import type { AuditEvent, ReadRole } from '../seams/seams.js';
 import { auditResultFor, FALLBACK_AUDIT_ACTION } from './audit.js';
 import { authorizeRequest } from './authorize.js';
@@ -10,12 +11,15 @@ import { gapOf, readIndexSnapshot, worstGapOf, type IndexGap } from './index-gua
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
 import { SYSTEM_PRINCIPAL } from './system-principal.js';
-import type { Gate, GateContext, IndexReader, GatePage, GateRequest, GateStage, Params, SystemRunner, Template } from './types.js';
+import { FILE_QUERY_ID, fileQueryAuditDetail, type FileQueryAuditDetail } from './file-query.js';
+import type { FileQueryRequest, Gate, GateContext, IndexReader, GatePage, GateRequest, GateStage, Params, SystemRunner, Template } from './types.js';
 import { findTemplate, HELD_FIELD, validateRequest, type Validated } from './validate.js';
 
 interface Progress {
   stage: GateStage;
   action: string;
+  /** What the event adds to its detail besides the reason of a cancelled or timed-out read; set by a template that has something to say of its run (the file query), and by no other. */
+  detail?: FileQueryAuditDetail;
 }
 
 async function inStage<T>(deps: GateDeps, progress: Progress, stage: GateStage, work: () => T | Promise<T>): Promise<T> {
@@ -93,7 +97,8 @@ async function runStages(deps: GateDeps, request: GateRequest, system: boolean, 
   const validated = await inStage(deps, progress, 'validate', () => {
     const found = findTemplate(deps.catalog, request);
     progress.action = found.auditAction;
-    return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
+    if (found.fileQuery !== undefined) progress.detail = fileQueryAuditDetail(deps.fileQueries, request.sourceId, request.params);
+    return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references, deps.fileQueries);
   });
   const { template, params, rendered } = validated;
   await inStage(deps, progress, 'authorize', () => authorizeRequest(deps.seams.policy, context, template));
@@ -117,7 +122,9 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
     requests.map((request) => {
       const found = findTemplate(deps.catalog, request);
       progress.action = found.auditAction;
-      return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references);
+      // a file query is run by `fileQuery` alone: its audit event holds the intent and the hash, which a run of several pages would not give
+      if (found.fileQuery !== undefined) throw new AppError('INVALID_REQUEST');
+      return validateRequest(deps.catalog, found, request, context, deps.cursors, deps.references, deps.fileQueries);
     }),
   );
   const [lead] = validated;
@@ -162,6 +169,13 @@ async function runManyStages(deps: GateDeps, requests: readonly GateRequest[], p
   return pages;
 }
 
+/** The detail of the event: the reason of a read that was cancelled or timed out, and what the template added (a run of a file query: its intent and the hash of its query). */
+function detailOf(progress: Progress, failure: AppError | RequestCancelled | undefined): { readonly detail?: AuditDetail } {
+  const reason = failure instanceof RequestCancelled ? ('cancelled' as const) : failure?.code === 'QUERY_TIMEOUT' ? ('timeout' as const) : undefined;
+  if (progress.detail === undefined) return reason === undefined ? {} : { detail: { reason } };
+  return { detail: { ...progress.detail, ...(reason === undefined ? {} : { reason }) } };
+}
+
 async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progress, failure: AppError | RequestCancelled | undefined): Promise<void> {
   const event: AuditEvent = {
     actorId: request.principal.id,
@@ -170,7 +184,7 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
     result: auditResultFor(failure),
     sourceId: request.sourceId,
     traceId: request.traceId,
-    ...(failure instanceof RequestCancelled ? { detail: { reason: 'cancelled' as const } } : failure?.code === 'QUERY_TIMEOUT' ? { detail: { reason: 'timeout' as const } } : {}),
+    ...detailOf(progress, failure),
   };
   try {
     await deps.seams.audit.record(event);
@@ -232,9 +246,27 @@ async function runManyGate(deps: GateDeps, requests: readonly GateRequest[]): Pr
   }
 }
 
+/** The request of the file-query template for a run: the intent and the values as its parameters, and the source's `max_page` as its limit. */
+function fileQueryRequestOf(deps: GateDeps, request: FileQueryRequest): GateRequest {
+  return {
+    traceId: request.traceId,
+    principal: request.principal,
+    sourceId: request.sourceId,
+    templateId: FILE_QUERY_ID,
+    params: { intent: request.intent, values: request.values },
+    limit: deps.budgetsFor(request.sourceId).maxPage,
+    ...(request.mask === undefined ? {} : { mask: request.mask }),
+    ...(request.signal === undefined ? {} : { signal: request.signal }),
+  };
+}
+
 export function createGates(deps: GateDeps): { readonly gate: Gate; readonly system: SystemRunner; readonly indexes: IndexReader } {
   return {
-    gate: { run: (request) => runGate(deps, request, false, 'data'), runMany: (requests) => runManyGate(deps, requests) },
+    gate: {
+      run: (request) => runGate(deps, request, false, 'data'),
+      runMany: (requests) => runManyGate(deps, requests),
+      fileQuery: async (request) => runGate(deps, fileQueryRequestOf(deps, request), false, 'data'),
+    },
     indexes: {
       async read(request) {
         const decision = await deps.seams.policy.authorizeSource({ principal: request.principal, sourceId: request.sourceId });

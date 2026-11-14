@@ -189,6 +189,7 @@ describe('the templates of the shipped catalog', () => {
     const cutOf = (cut: string | undefined): string => (cut === 'duplicate' ? 'cut means a duplicate' : cut === 'lowerBound' ? 'cut means a lower bound' : 'undeclared');
     const declared = Object.fromEntries(templates.map((template) => [template.id, template.paged ? 'paged' : template.rows === 'one' ? 'one row' : template.rows === 'bounded' ? 'bounded by its input' : cutOf(template.cutMeans)]));
     expect(declared).toEqual({
+      'file-query': 'cut means a lower bound',
       connectivity: 'one row',
       capabilities: 'one row',
       privileges: 'paged',

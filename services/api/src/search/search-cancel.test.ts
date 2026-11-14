@@ -17,6 +17,7 @@ function service(run: (request: GateRequest) => Promise<GatePage>, indexes?: { r
   const gate: Gate = {
     run: (request) => (requests.push(request), run(request)),
     runMany: () => Promise.reject(new Error('not used')),
+    fileQuery: () => Promise.reject(new Error('not used')),
   };
   return { requests, search: createSearchService({ gate, mapping, access, ...(indexes === undefined ? {} : { indexes: { read: (request) => indexes.read(request) } }) }) };
 }

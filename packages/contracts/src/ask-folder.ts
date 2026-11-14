@@ -13,7 +13,10 @@ export const ASK_FOLDER_LIMITS = {
 /** The name of the saved-pattern intent, which the product itself provides; a file may not use it. */
 export const ASK_SAVED_PATTERN_INTENT = 'saved-pattern';
 
-const INTENT_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+/** The name of an intent: a letter, then letters, digits, `_` and `-`, at most 64 characters. */
+export const ASK_INTENT_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+const INTENT_NAME = ASK_INTENT_NAME;
+
 const PARAMETER_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 const TEMPLATE_IDS: readonly string[] = ASK_PLAN_TEMPLATE_IDS;
 

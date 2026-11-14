@@ -87,7 +87,7 @@ describe('createSourceGate', () => {
     expect(Object.keys(parts).sort()).toEqual(['catalog', 'close', 'gate', 'indexes', 'system']);
     expect(Object.keys(parts.indexes)).toEqual(['read']);
     expect(parts.catalog.find('shared-attribute')).toBeDefined();
-    expect(Object.keys(parts.gate).sort()).toEqual(['run', 'runMany']);
+    expect(Object.keys(parts.gate).sort()).toEqual(['fileQuery', 'run', 'runMany']);
     expect(Object.keys(parts.system)).toEqual(['run']);
     await parts.close();
   });
