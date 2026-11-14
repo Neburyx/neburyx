@@ -33,7 +33,7 @@ const holding: typeof resolveMentions = async ({ message }) => {
 async function rig(first: string, repair: string) {
   const built = await buildPromptRegistry({});
   if (!built.ok) throw new Error(built.problems.join('; '));
-  const provider = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', 6)]: { kind: 'ok', text: first }, [replyKey('ask.plan.repair', 4)]: { kind: 'ok', text: repair } } });
+  const provider = createFixtureProvider({ registry: built.registry, replies: { [replyKey('ask.plan', 7)]: { kind: 'ok', text: first }, [replyKey('ask.plan.repair', 5)]: { kind: 'ok', text: repair } } });
   const model = createAuditedModelCall({ provider, configuration: { registry: built.registry, model: 'm' }, sink: { record: async () => undefined } });
   const { rules } = buildPropertyRules({}, undefined);
   if (rules === undefined) throw new Error('rules');

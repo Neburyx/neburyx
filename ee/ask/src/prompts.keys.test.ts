@@ -81,3 +81,13 @@ describe('the check itself', () => {
     expect(missingKeys('the kind plan, the template identifier and a reason', ['kind', 'reason'])).toEqual(['kind', 'reason']);
   });
 });
+
+describe('what the built-in prompts say of the version and of the answer', () => {
+  it.each(PROMPTS)('%s says that the version is a number written without quotes', (id) => {
+    expect(BUILT_IN_PROMPTS[id].instructions).toContain('"templateVersion" (the version the catalog shows after the word version, written as a number without quotes)');
+  });
+
+  it('asks the repair to answer with the object alone, with no sentence before or after it', () => {
+    expect(BUILT_IN_PROMPTS['ask.plan.repair'].instructions).toContain('the JSON object alone, with no sentence before or after it');
+  });
+});
