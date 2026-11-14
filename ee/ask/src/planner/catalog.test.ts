@@ -1,5 +1,8 @@
 import { ASK_PLAN_TEMPLATE_IDS } from '@neburyx/contracts';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { COMMON_WORDS } from '../allowlist/common-words.js';
 import { CATALOG, catalogText, catalogWords } from './catalog.js';
 import { vocabularyText } from './vocabulary-text.js';
 
@@ -60,4 +63,27 @@ describe('the vocabulary of the prompt', () => {
     expect(vocabularyText(undefined)).toBe('Entity types: none\nRelationship types:\nnone\nDerived rules:\nnone');
     expect(vocabularyText({ types: [{ name: 'node_a', kind: 'entity', properties: [] }] })).toContain('Relationship types:\nnone');
   });
+
+  it('says that a question that asks only for related entities and names no link is answered by no template, in a condition that names no pack word', () => {
+    const text = CATALOG.find((entry) => entry.id === 'expand')?.description ?? '';
+    expect(text).toContain('asks only for entities related or connected to the anchor, and names no relationship type, derived rule or attribute type, is answered by no template: refuse it');
+    expect(text).toContain('Use it when the question asks which entities are directly connected to the anchor.');
+  });
+
+  // a weak check on its own: the re-recording of the demo set is the real check that questions naming a link keep their plans
+  it('does not catch a question that names a link: the sentence is tied to a question that names none', () => {
+    const text = CATALOG.find((entry) => entry.id === 'expand')?.description ?? '';
+    expect(text).not.toMatch(/related to .* by /);
+    expect(text).toContain('names no relationship type');
+  });
+
+  it('adds to the words a question may use only words that are not surnames of the public list, and the surnames it already holds are named', () => {
+    const names = new Set(readFileSync(fileURLToPath(new URL('../testing/names/census-2010-surnames.txt', import.meta.url)), 'utf8').split(/\r?\n/).map((line) => line.trim().toLowerCase()));
+    const surnameParts = [...new Set(catalogWords().flatMap((word) => word.toLowerCase().split('-')).filter((part) => names.has(part) && !COMMON_WORDS.includes(part)))].sort();
+    expect(surnameParts).toEqual(SURNAME_PARTS);
+    for (const word of ['answered', 'related', 'refuse']) expect(surnameParts).not.toContain(word);
+  });
 });
+
+/** The parts of catalog words that are also surnames of the public list: they are ordinary words of the descriptions, and a question may use them. A new word of a description that is one fails the test until it is named here. */
+const SURNAME_PARTS = ["anchor","counts","goes","hold","joins","link","list","names","neighbor","neighbors","path","plain","reading","record","records","rule","run","set","share","state","use","way","window"];
