@@ -15,6 +15,7 @@ export const WIDTH_DEPENDENT: readonly string[] = [
   'inspector.spec.ts',
   'layouts.spec.ts',
   'page-shell.spec.ts',
+  'paths.spec.ts',
   'pattern-builder.spec.ts',
   'pattern-run.spec.ts',
   'pattern-run-long.spec.ts',
