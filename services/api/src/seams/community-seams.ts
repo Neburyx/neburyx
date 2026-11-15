@@ -1,6 +1,6 @@
 import { withBreaker } from './breaker.js';
 import { createReadSlots } from './read-slots.js';
-import type { AskClassifier, AuditSink, PolicyProvider, Seams } from './seams.js';
+import type { AskClassifier, AuditSink, CaseSummarizer, PolicyProvider, Seams } from './seams.js';
 
 export const communityPolicy: PolicyProvider = {
   authorizeSource: () => Promise.resolve({ allowed: true }),
@@ -15,6 +15,12 @@ export const communityAskClassifier: AskClassifier = {
   classify: () => Promise.resolve({ ok: false, cause: 'unavailable' }),
 };
 
+export const communityCaseSummarizer: CaseSummarizer = {
+  maxElements: 0,
+  availability: () => ({ available: false, reason: 'not_in_this_edition' }),
+  summarize: () => Promise.reject(new Error('the case summary is not available in this edition')),
+};
+
 /** The Community seams; each call has read slots of its own, so one process builds them once. */
 export function communitySeams(): Seams {
   return {
@@ -22,5 +28,6 @@ export function communitySeams(): Seams {
     audit: communityAudit,
     coordinator: withBreaker(createReadSlots()),
     askClassifier: communityAskClassifier,
+    caseSummarizer: communityCaseSummarizer,
   };
 }

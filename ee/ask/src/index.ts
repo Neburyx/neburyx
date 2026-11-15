@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AskClassifier, type AskFolder, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { aiStatusResponseSchema, type AskClassifier, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
@@ -9,6 +9,11 @@ import { createFailureReporter } from './failure-line.js';
 import { createAskContinueRoute, createAskQuestionRoute } from './questions/question-routes.js';
 import { createPgRunStore } from './questions/pg-run-store.js';
 import type { RunStore } from './questions/run-store.js';
+import { createCaseSummarizer } from './case-summary/summarizer.js';
+import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
+import { readTokenKeys } from './case-summary/token-keys.js';
+import type { TokenKeys } from './case-summary/token-keys.js';
+import { createSummaryRoute } from './case-summary/summary-route.js';
 import { loadSummaryInstructions } from './case-summary/load-instructions.js';
 import type { SummaryInstructions } from './case-summary/instructions.js';
 import { readSummarySettings, summaryAvailability, type SummaryAvailability, type SummarySettings } from './case-summary/settings.js';
@@ -21,8 +26,20 @@ export { AuditUnavailableError, createAuditedModelCall } from './audited.js';
 export type { AuditedCallContext } from './audited.js';
 /** @public Used by the Neo4j demo-chain test of `services/api`, which checks the citations of the answers of the real application with the product's own check. */
 export { citedKeysExist, listedElements } from './summary/index.js';
+/** @public Used by the fuzz rig of `services/api`, which mounts the summary route beside the other routes of the application. */
+export { createSummaryRoute } from './case-summary/summary-route.js';
 /** @public Used by the preview-guard test of `services/api`, which mounts the guard on the real application beside the other route groups. */
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
+/** @public Used by the completed-route test of `services/api`, which builds the case summarizer of the extension over a stub provider and the real application. */
+export { createCaseSummarizer } from './case-summary/summarizer.js';
+/** @public The instructions of that test. */
+export { buildSummaryInstructions } from './case-summary/instructions.js';
+/** @public Opens a summary token for the copy to notes and the export that follow, and for the tests of the token. */
+export { openToken } from './case-summary/token.js';
+/** @public The prompt record of a request, which a stub provider of the completed-route test stamps on its answers. */
+export { promptRecordOf } from './provider.js';
+/** @public The types of a stub provider. */
+export type { ModelAnswer, ModelProvider } from './provider.js';
 /** @public The type of a request to the model: the audited-call integration test of `services/api` builds one, and the application of `services/api` is what gives it a real audit sink. */
 export type { ModelRequest } from './provider.js';
 
@@ -52,6 +69,8 @@ export interface EnterpriseExtension extends ProfileExtension {
 interface EnterpriseExtensionOptions {
   /** Only a test sets this, to a stub on the loopback address; the model client otherwise calls the service. */
   readonly modelBaseUrl?: string;
+  /** Only a test sets this: the clock of the summary's time limit. */
+  readonly now?: () => number;
   /** Only a test sets this, to a folder that stands in for the summary files shipped with the product. */
   readonly shippedSummaryDirectory?: string;
   /** Only a test sets this, to a store that opens no connection; the run store otherwise writes `ask_runs` on a pool of its own. */
@@ -66,8 +85,16 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let folder: AskFolder | undefined;
   let instructions: SummaryInstructions | undefined;
   let summarySettings: SummarySettings | undefined;
+  let tokenKeys: TokenKeys | undefined;
   let runs: RunStore | undefined;
   const reportFailure = createFailureReporter(() => logger);
+  const summaryModelOf = (): AuditedModelCall | undefined => {
+    if (configuration === undefined || mounted === undefined || summarySettings === undefined) return undefined;
+    const own = summaryProviderConfiguration(configuration, summarySettings);
+    return createAuditedModelCall({ provider: createAnthropicProvider({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }) }), configuration: own, sink: mounted.sink });
+  };
+  const caseSummarizer = (): CaseSummarizer | undefined =>
+    summarySettings === undefined || instructions === undefined ? undefined : createCaseSummarizer({ settings: summarySettings, instructions, model: summaryModelOf, audit: () => mounted?.sink, tokenKeys: () => tokenKeys, availability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }), ...(options.now === undefined ? {} : { now: options.now }) });
   const askClassifier = (): AskClassifier | undefined => {
     const model = modelOf();
     return model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
@@ -83,8 +110,9 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     askFolder: () => folder,
     summaryInstructions: () => instructions,
     summarySettings: () => summarySettings,
-    summaryAvailability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings }),
+    summaryAvailability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }),
     askClassifier,
+    caseSummarizer,
     async configure(_settings, env, context) {
       const configured = await configureAsk(env);
       configuration = configured.configuration;
@@ -100,6 +128,11 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         configuration = undefined;
         return { ok: false, problems: settings.problems };
       }
+      const keys = await readTokenKeys(env);
+      if (!keys.ok) {
+        configuration = undefined;
+        return { ok: false, problems: keys.problems };
+      }
       const summary = await loadSummaryInstructions({ env, ...(options.shippedSummaryDirectory === undefined ? {} : { shippedDirectory: options.shippedSummaryDirectory }) });
       if (!summary.ok) {
         configuration = undefined;
@@ -108,6 +141,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       folder = loaded.folder;
       instructions = summary.instructions;
       summarySettings = settings.settings;
+      tokenKeys = keys.keys;
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,
@@ -140,6 +174,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
           },
           createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }),
           createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger }),
+          createSummaryRoute(),
         ],
       }),
     ],

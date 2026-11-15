@@ -1,4 +1,5 @@
 import { ExtensionRefusal, aiStatusResponseSchema, parseExtensionRefusal, type AuditEvent, type ExtensionRequest, type ExtensionRouteGroup } from '@neburyx/contracts';
+import { UNAVAILABLE_SUMMARIZER } from './testing/case-summarizer.js';
 import { describe, expect, it } from 'vitest';
 import { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 import { replyKey, createFixtureProvider } from './testing/fixture.js';
@@ -14,7 +15,7 @@ async function fixture() {
 function requestOf(options: { readonly previewOn: boolean; readonly record?: (event: AuditEvent) => Promise<void> }): { readonly request: ExtensionRequest; readonly events: AuditEvent[] } {
   const events: AuditEvent[] = [];
   const record = options.record ?? (async (event: AuditEvent) => void events.push(event));
-  return { events, request: { principalId: 'principal-1', principalRole: 'investigator', previewOn: options.previewOn, traceId: 'tr-1', audit: { record }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false, cause: 'unavailable' }) }, signal: new AbortController().signal } };
+  return { events, request: { principalId: 'principal-1', principalRole: 'investigator', previewOn: options.previewOn, traceId: 'tr-1', audit: { record }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false, cause: 'unavailable' }) }, caseSummarizer: UNAVAILABLE_SUMMARIZER, signal: new AbortController().signal } };
 }
 
 async function groupOf() {

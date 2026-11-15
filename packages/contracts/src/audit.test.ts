@@ -153,3 +153,22 @@ describe('the detail of a file-query run', () => {
     expect(auditDetailSchema.safeParse(detail).success).toBe(false);
   });
 });
+
+describe('the case summary audit detail', () => {
+  const detail = { elements: 12, elementsSha256: SHA, calls: 2, modelRef: 'claude-sonnet-5-5', promptId: 'case-summary', promptVersion: '1', instructionsSha256: SHA, outcome: 'ok' };
+
+  it('accepts counts, hashes, the model and prompt and an outcome', () => {
+    expect(parseAuditDetail({ summary: detail })).toEqual({ summary: detail });
+    expect(auditDetailSchema.safeParse({ summary: { elements: 0, elementsSha256: SHA, calls: 0, outcome: 'unavailable' } }).success).toBe(true);
+  });
+
+  it.each([
+    ['a field of text', { ...detail, text: 'a sentence' }],
+    ['an outcome that is not one', { ...detail, outcome: 'guilty' }],
+    ['a hash that is not a hash', { ...detail, elementsSha256: 'not-a-hash' }],
+    ['a count that is not a count', { ...detail, calls: -1 }],
+    ['a model reference with a space', { ...detail, modelRef: 'a model name' }],
+  ])('refuses %s', (_name, value) => {
+    expect(auditDetailSchema.safeParse({ summary: value }).success).toBe(false);
+  });
+});

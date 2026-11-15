@@ -7,7 +7,7 @@ import { buildApp } from '../app.js';
 import { AppError } from '../errors.js';
 import { mountExtensionRoutes } from './mount.js';
 import { createLogger } from '../logger.js';
-import { communityAskClassifier, communitySeams } from '../seams/community-seams.js';
+import { communityAskClassifier, communityCaseSummarizer, communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -324,6 +324,7 @@ describe('the check of the source that an extension is given', () => {
       previewOn: true,
       audit: { record: async () => undefined },
       askClassifier: communityAskClassifier,
+      caseSummarizer: communityCaseSummarizer,
       ...(askSourceReadableFor === undefined ? {} : { askSourceReadableFor }),
     });
     await app.inject({ url: URL_OF_ROUTE });

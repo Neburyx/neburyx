@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AI_LIMITS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configureAsk } from '../configure.js';
@@ -62,21 +65,33 @@ describe('the availability of the summary', () => {
   const settings = { model: 'm', timeoutMs: 1, totalTimeoutMs: 2, maxCalls: 1, maxElements: 1, retentionDays: 1 };
 
   it('is available with Ask configured and a size guard set', () => {
-    expect(summaryAvailability({ askConfigured: true, settings: { ...settings, maxInputTokens: 1000 } })).toEqual({ available: true });
+    expect(summaryAvailability({ askConfigured: true, settings: { ...settings, maxInputTokens: 1000 }, tokenKeyConfigured: true })).toEqual({ available: true });
   });
 
   it('names the size guard when it is not set', () => {
-    expect(summaryAvailability({ askConfigured: true, settings })).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' });
+    expect(summaryAvailability({ askConfigured: true, settings, tokenKeyConfigured: true })).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' });
+  });
+
+  it('names the token key file when it is not set', () => {
+    expect(summaryAvailability({ askConfigured: true, settings: { ...settings, maxInputTokens: 1000 }, tokenKeyConfigured: false })).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_TOKEN_KEY_FILE is not set' });
   });
 
   it('is unavailable when Ask is not configured or no settings were read', () => {
-    expect(summaryAvailability({ askConfigured: false, settings: { ...settings, maxInputTokens: 1 } }).available).toBe(false);
-    expect(summaryAvailability({ askConfigured: true, settings: undefined }).available).toBe(false);
+    expect(summaryAvailability({ askConfigured: false, settings: { ...settings, maxInputTokens: 1 }, tokenKeyConfigured: true }).available).toBe(false);
+    expect(summaryAvailability({ askConfigured: true, settings: undefined, tokenKeyConfigured: true }).available).toBe(false);
   });
 });
 
 const askEnv = (folder: string, extra: Record<string, string | undefined> = {}) => ({ NEBURYX_ASK_API_KEY: 'SENTINEL-KEY-VALUE', NEBURYX_ASK_MAPPING_FOLDER: folder, ...extra });
 const CONTEXT = { sourceIds: ['s1'] };
+
+const keyDirectory = mkdtempSync(join(tmpdir(), 'case-summary-settings-key-'));
+afterAll(() => rmSync(keyDirectory, { recursive: true, force: true }));
+function keyFile(): string {
+  const path = join(keyDirectory, 'key');
+  writeFileSync(path, 'ab'.repeat(32), { mode: 0o600 });
+  return path;
+}
 
 describe('the summary settings in the extension', () => {
   it('are held, with the summary unavailable until a size guard is set', async () => {
@@ -89,7 +104,7 @@ describe('the summary settings in the extension', () => {
 
   it('make the summary available when the size guard is set', async () => {
     const extension = createEnterpriseExtension();
-    await extension.configure?.({}, askEnv(makeAskFolder(['s1']), { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '50000' }), CONTEXT);
+    await extension.configure?.({}, askEnv(makeAskFolder(['s1']), { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '50000', NEBURYX_SUMMARY_TOKEN_KEY_FILE: keyFile() }), CONTEXT);
     expect(extension.summaryAvailability()).toEqual({ available: true });
   });
 

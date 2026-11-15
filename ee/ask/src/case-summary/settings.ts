@@ -1,5 +1,6 @@
 import { AI_LIMITS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { given, integerChoice, type Env } from '../configure.js';
+import { TOKEN_KEY_VARIABLES } from './token-keys.js';
 
 export const SUMMARY_VARIABLES = {
   model: 'NEBURYX_SUMMARY_MODEL',
@@ -52,8 +53,9 @@ export function readSummarySettings(env: Env): SummarySettingsRead {
 export type SummaryAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
 /** The summary is available when Ask is configured, its settings are read and the size guard is set. */
-export function summaryAvailability(state: { readonly askConfigured: boolean; readonly settings: SummarySettings | undefined }): SummaryAvailability {
+export function summaryAvailability(state: { readonly askConfigured: boolean; readonly settings: SummarySettings | undefined; readonly tokenKeyConfigured: boolean }): SummaryAvailability {
   if (!state.askConfigured || state.settings === undefined) return { available: false, reason: 'the AI preview is not configured' };
   if (state.settings.maxInputTokens === undefined) return { available: false, reason: `${SUMMARY_VARIABLES.maxInputTokens} is not set` };
+  if (!state.tokenKeyConfigured) return { available: false, reason: `${TOKEN_KEY_VARIABLES.current} is not set` };
   return { available: true };
 }

@@ -365,8 +365,13 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
     await get(`/v1/entities/${FUZZ_SOURCE}/${entityType}/${stableId}` );
     keep();
   }
-  await post('/v1/investigations', { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } });
+  const opened = await post('/v1/investigations', { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } });
   keep();
+  const investigationId = (JSON.parse(opened.body) as { investigation: { id: string } }).investigation.id;
+  for (const mask of [undefined, true, false]) {
+    await post('/v1/summary', { investigationId, sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }], ...(mask === undefined ? {} : { mask }) });
+    keep();
+  }
   for (const mask of [undefined, 'true', 'false']) {
     await get(`/v1/edges/${edgeRefSegmentOf({ sourceId: FUZZ_SOURCE, type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: 'L-1' })}${mask === undefined ? '' : `?mask=${mask}`}` );
     keep();

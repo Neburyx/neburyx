@@ -41,6 +41,7 @@ import { asksForJsonOnly, REFUSAL_PAGE_CSP, refusalPage } from './source-links/r
 import { createSourceLinkService } from './source-links/source-link-service.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
+import { createElementsReader, createInvestigationCheck } from './graph/elements-reader.js';
 import { createCursorCodec, type CursorCodec } from './gate/cursor/codec.js';
 import { createViewService } from './investigations/view-service.js';
 import { createOwnedViewService } from './investigations/owned-view-service.js';
@@ -56,7 +57,7 @@ import { matchesEntityTag } from './registry/etag.js';
 import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
 import { readinessResponse } from './health/readiness.js';
-import { communityAskClassifier, communitySeams } from './seams/community-seams.js';
+import { communityAskClassifier, communityCaseSummarizer, communitySeams } from './seams/community-seams.js';
 import { searchExactTemplate } from './gate/templates/search-exact.js';
 import { createAskPatternFinder, createAskPatternLister } from './ask/patterns-lister.js';
 import { createFileQueryRunner } from './ask/file-query-run.js';
@@ -370,16 +371,27 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const askSourceChecks: { current?: NonNullable<ExtensionMount['askSourceReadableFor']> } = {};
   const askPatternLists: { current?: NonNullable<ExtensionMount['askPatternsFor']> } = {};
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
+  const elementReaders: { current?: NonNullable<ExtensionMount['readElementsFor']> } = {};
+  const investigationChecks: { current?: NonNullable<ExtensionMount['investigationReadableFor']> } = {};
   if (options.extension !== undefined) {
     mountExtensionRoutes(app, options.extension, options.store, {
       previewOn: options.previewOn === true,
       audit: (options.seams ?? communitySeams()).audit,
       askClassifier: (options.seams ?? communitySeams()).askClassifier ?? communityAskClassifier,
+      caseSummarizer: (options.seams ?? communitySeams()).caseSummarizer ?? communityCaseSummarizer,
+      idempotency: {
+        store: options.store,
+        policy: (options.seams ?? communitySeams()).policy,
+        policyVersion: options.policyVersion ?? (() => 'none'),
+        stillReadable: (sourceId) => Promise.resolve(mapping.sources.some((source) => source.id === sourceId)),
+      },
       signText: createSigner(options.signingKey ?? deriveSigningKey(fallbackKeyMaterial)),
       askRunnerFor: (context) => askRunners.current?.(context),
       askSourceReadableFor: (context) => askSourceChecks.current?.(context),
       askPatternsFor: (context) => askPatternLists.current?.(context),
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
+      readElementsFor: (context) => elementReaders.current?.(context),
+      investigationReadableFor: (context) => investigationChecks.current?.(context),
       signalOf,
     });
   }
@@ -677,6 +689,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });
     const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
+    elementReaders.current = (context) => createElementsReader({ readRefs, investigations, ...context });
+    investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');

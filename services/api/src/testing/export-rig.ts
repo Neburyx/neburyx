@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openInvestigationResponseSchema } from '@neburyx/contracts';
+import { openInvestigationResponseSchema, type CaseSummarizer, type ProfileExtension } from '@neburyx/contracts';
 import { stringify } from 'yaml';
 import { buildApp } from '../app.js';
 import { createExportFileStore } from '../exports/store.js';
@@ -54,6 +54,12 @@ export interface ExportRigOptions {
   readonly unexportableNode?: string;
   readonly failAudit?: (action: string) => boolean;
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | undefined;
+  /** The extension and the switch of the application under test, and the summarizer its seams hold. */
+  readonly extension?: ProfileExtension;
+  readonly previewOn?: boolean;
+  readonly caseSummarizer?: CaseSummarizer;
+  /** The person the application answers for; a role or an id other than the local one. */
+  readonly principal?: () => { readonly role?: 'administrator' | 'investigator' | 'viewer'; readonly id?: string };
 }
 
 /** The stable IDs a batched read was given, in order; the scripted source answers a row for each one it holds, with the position of the ID in the list. */
@@ -118,15 +124,24 @@ export async function startExportRig(options: ExportRigOptions = {}) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const files = createExportFileStore(directory);
   const store = memoryAppStore();
+  if (options.principal !== undefined) {
+    const original = store.current.bind(store);
+    store.current = async () => {
+      const identity = await original();
+      const { role, id } = options.principal?.() ?? {};
+      return { ...identity, principal: { ...identity.principal, ...(role === undefined ? {} : { role }), ...(id === undefined ? {} : { id }) } };
+    };
+  }
   const app = await buildApp({
     webRoot: exportWebRoot,
     logger: createLogger({ write: () => undefined }),
     store,
     mapping,
     gate: parts.gate,
-    seams: { ...defaults, ...seams },
+    seams: { ...defaults, ...seams, ...(options.caseSummarizer === undefined ? {} : { caseSummarizer: options.caseSummarizer }) },
     referenceKeys: TEST_REFERENCE_KEYS,
     exportFiles: files,
+    ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }),
     ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }),
   });
   await store.syncSources(mapping.sources);

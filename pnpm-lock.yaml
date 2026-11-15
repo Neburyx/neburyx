@@ -467,6 +467,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/contracts
     devDependencies:
+      '@neburyx/ee-ask':
+        specifier: workspace:*
+        version: link:../../ee/ask
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2

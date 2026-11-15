@@ -90,6 +90,26 @@ export const askRunAuditDetailSchema = z.strictObject({
 
 export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;
 
+/** How a click of the case summary ended, as the closing audit event records it. */
+export const CASE_SUMMARY_OUTCOMES = ['ok', 'tooLarge', 'timeLimit', 'unavailable', 'format', 'timeout', 'unreachable', 'rate-limited', 'refused', 'truncated', 'rejected', 'provider-error', 'bad-reply', 'read-failed', 'error', 'cancelled'] as const;
+
+/**
+ * What a click of the case summary leaves in its closing audit event: how many elements the request named, the SHA-256 of their references (so one request is told from another without holding a reference), the
+ * calls made, the model and prompt that were used, and how it ended; never an instruction, the text sent, a reply or an element.
+ */
+export const caseSummaryAuditDetailSchema = z.strictObject({
+  elements: wholeCount,
+  elementsSha256: sha256Hex,
+  calls: wholeCount,
+  modelRef: label.optional(),
+  promptId: label.optional(),
+  promptVersion: label.optional(),
+  instructionsSha256: sha256Hex.optional(),
+  outcome: z.enum(CASE_SUMMARY_OUTCOMES),
+});
+
+export type CaseSummaryAuditDetail = z.infer<typeof caseSummaryAuditDetailSchema>;
+
 /** The per-action fields of an audit event, one shape at a time: every shape holds counts and codes only. */
 export const auditDetailSchema = z.union([
   z.strictObject({ reason: z.enum(['cancelled', 'timeout']) }),
@@ -106,6 +126,7 @@ export const auditDetailSchema = z.union([
   }),
   z.strictObject({ ai: aiAuditDetailSchema }),
   z.strictObject({ askRun: askRunAuditDetailSchema }),
+  z.strictObject({ summary: caseSummaryAuditDetailSchema }),
   z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
 ]);
 
@@ -130,6 +151,9 @@ export type AuditDetail =
   | { readonly fileQuery: { readonly intent?: string; readonly queryHash?: string }; readonly reason?: 'cancelled' | 'timeout'; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly target?: never; readonly type?: never; readonly askRun?: never }
   /** What a question of Ask was: the intent, the outcome or cause, and hashes and counts only. */
   | { readonly askRun: AskRunAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
+
+  /** What a click of the case summary was: counts, hashes, the model and prompt used and the outcome. */
+  | { readonly summary: CaseSummaryAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
 
 export function parseAuditDetail(value: unknown): AuditDetail {
   return auditDetailSchema.parse(value);

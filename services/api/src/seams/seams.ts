@@ -1,4 +1,4 @@
-import type { AskClassifier, AuditSink, MeResponse } from '@neburyx/contracts';
+import type { AskClassifier, AuditSink, CaseSummarizer, MeResponse } from '@neburyx/contracts';
 
 export type Principal = MeResponse['principal'];
 
@@ -67,7 +67,7 @@ export interface Coordinator {
   acquireRead(request: ReadAccessRequest): Promise<ReadAdmission>;
 }
 
-export type { AskClassifier } from '@neburyx/contracts';
+export type { AskClassifier, CaseSummarizer } from '@neburyx/contracts';
 
 export interface Seams {
   readonly policy: PolicyProvider;
@@ -75,4 +75,6 @@ export interface Seams {
   readonly coordinator: Coordinator;
   /** Where Ask classifies a question; absent, the application uses the Community default, which says Ask is unavailable. */
   readonly askClassifier?: AskClassifier;
+  /** Where the case summary is drafted; absent, the application uses the Community default, which says the summary is unavailable. */
+  readonly caseSummarizer?: CaseSummarizer;
 }

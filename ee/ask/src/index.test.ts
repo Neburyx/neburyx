@@ -1,4 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { UNAVAILABLE_SUMMARIZER } from './testing/case-summarizer.js';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { aiStatusResponseSchema } from '@neburyx/contracts';
@@ -8,14 +9,14 @@ import { createEnterpriseExtension } from './index.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 describe('the enterprise extension', () => {
-  it('has one route group of the status route, which answers its declared schema, and the two routes of a question', async () => {
+  it('has one route group of the status route, which answers its declared schema, and the routes of a question and of a summary', async () => {
     const extension = createEnterpriseExtension();
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
     const [route, ...more] = group?.routes ?? [];
-    expect(more.map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal']]);
+    expect(more.map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal']]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', '/v1/ai/status', 'principal']);
-    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, signal: new AbortController().signal });
+    const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, caseSummarizer: UNAVAILABLE_SUMMARIZER, signal: new AbortController().signal });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);
     expect(route?.responseSchema).toBe(aiStatusResponseSchema);
   });
@@ -23,7 +24,7 @@ describe('the enterprise extension', () => {
   it('refuses the status route when the request reports the preview off, and records the refusal', async () => {
     const [group] = createEnterpriseExtension().routeGroups;
     const events: unknown[] = [];
-    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, signal: new AbortController().signal };
+    const request = { principalId: 'p', principalRole: 'investigator' as const, previewOn: false, traceId: 'tr-1', audit: { record: async (event: unknown) => void events.push(event) }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, caseSummarizer: UNAVAILABLE_SUMMARIZER, signal: new AbortController().signal };
     await expect(group?.routes[0]?.handler(request) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
     expect(events).toHaveLength(1);
   });

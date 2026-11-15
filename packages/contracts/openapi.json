@@ -347,6 +347,146 @@
         }
       }
     },
+    "/v1/summary": {
+      "post": {
+        "operationId": "summarizeView",
+        "summary": "Draft a cited summary of the view on screen",
+        "description": "Present only when the deployment has switched the AI preview on; otherwise this path answers 404. Takes the references of the elements in view, never their content, checks that the investigation is the caller's and for the source, reads the elements again through the gate for the signed-in person, and drafts a short neutral summary in which every sentence cites the elements it rests on. Administrators and investigators only. Requires an Idempotency-Key: a repeat with the same key, person and request answers the first answer again with the header Idempotent-Replay: true, after the person's access has been checked again; a provider failure or a time limit is not kept, so a retry runs again. The request takes no query string. The draft is not stored or exported unless the person copies it to notes or includes it in an export.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{16,64}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SummaryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The draft (status ok, with the sentences, the text sent, the model, the calls made and a sealed summaryToken), a view over the element cap or the size guard (tooLarge), the time limit reached (timeLimit), or a failure to draft with a fixed kind (failed). With the header Idempotent-Replay: true when it is the first answer again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SummaryResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid, the request has a query string, or the idempotency key is missing or malformed: INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The route group was called while the preview is not switched on (ACCESS_DENIED with the reason ai-preview-off), the person is a viewer, or a replay is no longer authorized (ACCESS_DENIED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The source or the investigation is not configured or not the caller's: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The idempotency key was used with another request, the first call is still running, or the policy changed since the first call (CONFLICT); or the source was re-pointed or removed since the investigation was made (CONFLICT with the reason source-changed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON: UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The summary is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), or the re-read of the elements went over a budget of the source (QUERY_BUDGET_EXCEEDED)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The person has asked too often: RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The audit could not be written (AUDIT_UNAVAILABLE), or the source is not available or is busy (SOURCE_UNAVAILABLE or SOURCE_BUSY)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The re-read of the elements timed out: QUERY_TIMEOUT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/{id}/profile": {
       "get": {
         "operationId": "getSourceProfile",
@@ -5566,6 +5706,428 @@
             },
             "required": [
               "refused"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "SummaryRequest": {
+        "type": "object",
+        "properties": {
+          "investigationId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sourceId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mask": {
+            "type": "boolean"
+          },
+          "entities": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "entityType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "stableId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "sourceId",
+                "entityType",
+                "stableId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "edges": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "from": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "to": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "stableId": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "sourceId",
+                "type",
+                "from",
+                "to",
+                "stableId"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "aggregates": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "aggregate": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "sourceId",
+                "aggregate"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "derived": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "sourceId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "derived": {
+                  "type": "object",
+                  "properties": {
+                    "ruleId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "from": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "to": {
+                      "type": "object",
+                      "properties": {
+                        "sourceId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "entityType": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "stableId": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "sourceId",
+                        "entityType",
+                        "stableId"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ruleId",
+                    "from",
+                    "to"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "sourceId",
+                "derived"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "investigationId",
+          "sourceId",
+          "entities",
+          "edges",
+          "aggregates",
+          "derived"
+        ],
+        "additionalProperties": false
+      },
+      "SummaryResponse": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "ok"
+              },
+              "sentences": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "cites": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "cites"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "sent": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string",
+                "minLength": 1
+              },
+              "calls": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "summaryToken": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "sentences",
+              "sent",
+              "model",
+              "calls",
+              "summaryToken"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "tooLarge"
+              },
+              "limit": {
+                "type": "string",
+                "const": "elements"
+              },
+              "elements": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cap": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "status",
+              "limit",
+              "elements",
+              "cap"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "tooLarge"
+              },
+              "limit": {
+                "type": "string",
+                "const": "text"
+              },
+              "estimatedTokens": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "cap": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "status",
+              "limit",
+              "estimatedTokens",
+              "cap"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "timeLimit"
+              },
+              "calls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "status",
+              "calls"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "failed"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "format",
+                  "timeout",
+                  "unreachable",
+                  "rate-limited",
+                  "refused",
+                  "truncated",
+                  "rejected",
+                  "provider-error",
+                  "bad-reply"
+                ]
+              },
+              "calls": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "status",
+              "kind",
+              "calls"
             ],
             "additionalProperties": false
           }

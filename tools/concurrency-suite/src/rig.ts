@@ -3,11 +3,12 @@ import { expect } from 'vitest';
 import { Agent, request as httpRequest } from 'node:http';
 import { buildApp, registeredRoutesOf } from '../../../services/api/src/app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
-import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
+import { edgeRefSegmentOf, sourceLinkSegmentOf, type CaseSummarizer, type ProfileExtension } from '@neburyx/contracts';
 import { DERIVED_EDGE_SUPPORT_ID } from '../../../services/api/src/gate/templates/derived-edge-support.js';
 import { DERIVED_RULE_RUN_ID } from '../../../services/api/src/gate/templates/derived-rule-run.js';
 import { EDGE_LOAD_ID } from '../../../services/api/src/gate/templates/edge-load.js';
 import { ENTITY_LOAD_ID } from '../../../services/api/src/gate/templates/entity-load.js';
+import { ENTITY_LOAD_MANY_ID } from '../../../services/api/src/gate/templates/entity-load-many.js';
 import type { Gate } from '../../../services/api/src/gate/types.js';
 import { createLogger } from '../../../services/api/src/logger.js';
 import { parseMapping } from '../../../services/api/src/mapping/load.js';
@@ -87,6 +88,10 @@ export interface Rig {
 export interface RigOptions {
   readonly budgets?: Record<string, number>;
   readonly otherBudgets?: Record<string, number>;
+  /** An extension to mount and the summarizer its seams hold; with `summary` the rig opens the investigation that `http(…, 'summary')` names, before the case starts. */
+  readonly extension?: ProfileExtension;
+  readonly caseSummarizer?: CaseSummarizer;
+  readonly summary?: boolean;
   /** Wraps the coordinator, for a read that never releases. */
   readonly wrap?: (inner: Coordinator) => Coordinator;
 }
@@ -102,12 +107,14 @@ const CHAIN_ROWS: ExecuteOutcome = {
   status: 'rows',
   rows: [{ p: { $type: 'path', start: NODE, segments: [{ relationship: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }, '4:fixture:r1'), end: NODE_B }, { relationship: plainRelationship('LINKS', NODE_2, NODE_B, { relId: 'L-2' }, '4:fixture:r2'), end: NODE_2 }] } }],
 };
+/** A batched read answers a row for the one reference of a summary request, with its position in the list. */
+const MANY_ROWS: ExecuteOutcome = { status: 'rows', rows: [{ i: 0, dup: false, n: NODE }] };
 const EDGE_ROWS: ExecuteOutcome = { status: 'rows', rows: [{ r: plainRelationship('LINKS', NODE, NODE_B, { relId: 'L-1' }), a: NODE, b: NODE_B }] };
 
-const READS = [ENTITY_LOAD_ID, EDGE_LOAD_ID, DERIVED_EDGE_SUPPORT_ID, DERIVED_RULE_RUN_ID];
+const READS = [ENTITY_LOAD_ID, ENTITY_LOAD_MANY_ID, EDGE_LOAD_ID, DERIVED_EDGE_SUPPORT_ID, DERIVED_RULE_RUN_ID];
 
 /** Which read route `http` calls: the entity read, the stored edge read, or the source link of the entity. */
-export type Route = 'entity' | 'edge' | 'link' | 'derived-edge' | 'derived-neighbors';
+export type Route = 'entity' | 'edge' | 'link' | 'derived-edge' | 'derived-neighbors' | 'summary';
 
 /** Fake timers: set at a time of the shared clock, fired in order of time and then of setting. */
 function timers(clock: { now: number }) {
@@ -162,7 +169,7 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
     data.inFlight += 1;
     data.peak = Math.max(data.peak, data.inFlight);
     startedBySource.set(call.sourceId, (startedBySource.get(call.sourceId) ?? 0) + 1);
-    const answered = call.templateId === EDGE_LOAD_ID ? EDGE_ROWS : call.templateId === DERIVED_EDGE_SUPPORT_ID || call.templateId === DERIVED_RULE_RUN_ID ? CHAIN_ROWS : entityRows(NODE);
+    const answered = call.templateId === ENTITY_LOAD_MANY_ID ? MANY_ROWS : call.templateId === EDGE_LOAD_ID ? EDGE_ROWS : call.templateId === DERIVED_EDGE_SUPPORT_ID || call.templateId === DERIVED_RULE_RUN_ID ? CHAIN_ROWS : entityRows(NODE);
     const done = (outcome: ExecuteOutcome): ExecuteOutcome => (data.inFlight -= 1, outcome);
     if (rig.mode === 'answer') return Promise.resolve(done(answered));
     if (rig.mode === 'timeout') return Promise.resolve(done({ status: 'timeout' }));
@@ -180,12 +187,25 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
   const executor = new TestExecutor((call) => withSchema(() => schemaAnswer(onlineIndexesOf(schemaOf(call.sourceId))), respond)(call));
   const parts = testSourceGate(mapping, { executor, seams, clock: () => clock.now });
   const webRoot = makeWebRoot();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, limiter, sourceTester: { run: () => Promise.resolve({ sourceId: SOURCE } as never) } });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams: options.caseSummarizer === undefined ? seams : { ...seams, caseSummarizer: options.caseSummarizer }, limiter, ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: true }), sourceTester: { run: () => Promise.resolve({ sourceId: SOURCE } as never) } });
   await app.listen({ port: 0, host: '127.0.0.1' });
   const base = `http://127.0.0.1:${portOf(app)}`;
   /** A burst of simultaneous connections can overrun a loopback listener's backlog, so the client holds at most 64 sockets open and the rest of a burst queues behind them. */
   const sockets = new Agent({ keepAlive: true, maxSockets: 64 });
 
+  let summaryInvestigation = '';
+  if (options.summary === true) {
+    rig.mode = 'answer';
+    const opened = await app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: SOURCE, entity: { sourceId: SOURCE, entityType: 'node_a', stableId: 'H-1' } } });
+    summaryInvestigation = (opened.json() as { investigation: { id: string } }).investigation.id;
+    rig.mode = 'hold';
+    data.started = 0;
+    data.inFlight = 0;
+    data.peak = 0;
+    startedBySource.clear();
+    roles.length = 0;
+  }
+  let keys = 0;
   let closed = false;
   const api: Rig = {
     now: () => clock.now,
@@ -207,9 +227,14 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
     http: (sourceId = SOURCE, route = 'entity') =>
       new Promise<HttpAnswer>((resolve, reject) => {
         const path =
-          route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : route === 'derived-edge' ? derivedEdgePathOf(sourceId) : route === 'derived-neighbors' ? DERIVED_NEIGHBORS_PATH : `/v1/entities/${sourceId}/node_a/H-1`;
-        const body = route === 'derived-neighbors' ? JSON.stringify({ sourceId, ref: { entityType: 'node_a', stableId: 'H-1' } }) : undefined;
-        const call = httpRequest(`${base}${path}`, { agent: sockets, method: body === undefined ? 'GET' : 'POST', ...(body === undefined ? {} : { headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }) }, (response) => {
+          route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : route === 'derived-edge' ? derivedEdgePathOf(sourceId) : route === 'derived-neighbors' ? DERIVED_NEIGHBORS_PATH : route === 'summary' ? '/v1/summary' : `/v1/entities/${sourceId}/node_a/H-1`;
+        const body =
+          route === 'derived-neighbors'
+            ? JSON.stringify({ sourceId, ref: { entityType: 'node_a', stableId: 'H-1' } })
+            : route === 'summary'
+              ? JSON.stringify({ investigationId: summaryInvestigation, sourceId, entities: [{ sourceId, entityType: 'node_a', stableId: 'H-1' }] })
+              : undefined;
+        const call = httpRequest(`${base}${path}`, { agent: sockets, method: body === undefined ? 'GET' : 'POST', ...(body === undefined ? {} : { headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(route === 'summary' ? { 'idempotency-key': `concurrency-key-${String((keys += 1)).padStart(8, '0')}` } : {}) } }) }, (response) => {
           const chunks: Buffer[] = [];
           response.on('data', (chunk: Buffer) => chunks.push(chunk));
           response.on('end', () => {

@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
-import { edgeRefSegmentOf, sourceLinkSegmentOf } from '@neburyx/contracts';
+import { edgeRefSegmentOf, sourceLinkSegmentOf, type CaseSummarizer, type ProfileExtension } from '@neburyx/contracts';
+import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -44,6 +45,13 @@ const ref = { entityType: 'hub', stableId: 'H-1' };
 const STORED = { sourceId: 'demo', type: 'LINKED', from: 'hub', to: 'leaf', stableId: 'L-1' };
 const DERIVED = { sourceId: 'demo', derived: { ruleId: 'shared-leaf', from: { sourceId: 'demo', ...ref }, to: { sourceId: 'demo', entityType: 'hub', stableId: 'H-2' } } };
 
+const SUMMARIZER: CaseSummarizer = {
+  maxElements: 300,
+  availability: () => ({ available: true }),
+  summarize: async () => ({ status: 'ok', sentences: [], sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }),
+};
+const SUMMARY_EXTENSION: ProfileExtension = { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] };
+
 /** `route` is the registered route a case sends to; the list below is compared with the routes that read the source. */
 const ROUTES: readonly { readonly name: string; readonly route: string; readonly method: 'GET' | 'POST'; readonly path: string; readonly body?: unknown; readonly headers?: Readonly<Record<string, string>> }[] = [
   { name: 'entity load', route: 'GET /v1/entities/:sourceId/:entityType/:stableId', method: 'GET', path: '/v1/entities/demo/hub/H-1' },
@@ -81,7 +89,7 @@ async function listening() {
   const seams = { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: (event: AuditEvent) => (events.push(event), Promise.resolve()) } };
   const parts = testSourceGate(mapping, { executor, seams });
   const lines: string[] = [];
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store: memoryAppStore(), mapping, gate: parts.gate, seams });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store: memoryAppStore(), mapping, gate: parts.gate, seams: { ...seams, caseSummarizer: SUMMARIZER }, extension: SUMMARY_EXTENSION, previewOn: true });
   await app.listen({ port: 0, host: '127.0.0.1' });
   return { app, executor, events, lines, mode };
 }
@@ -136,6 +144,34 @@ describe('a request that reads the source, when the client closes the connection
     expect(lines.join('\n')).not.toContain('request.failed');
     expect(lines.join('\n')).not.toContain('gate.internal_error');
     // nothing further is read once the request is cancelled
+    const readsAtCancel = executor.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(executor.calls).toHaveLength(readsAtCancel);
+    await app.close();
+  });
+});
+
+describe('a summary request, when the client closes the connection', () => {
+  it('stops the re-read of its elements, calls no summarizer and records one closing event as cancelled', async () => {
+    const { app, executor, events, mode } = await listening();
+    const base = `http://127.0.0.1:${portOf(app)}`;
+    mode.answering = true;
+    const opened = await fetch(`${base}/v1/investigations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'demo', ...ref } }) });
+    const { investigation } = (await opened.json()) as { investigation: { id: string } };
+    mode.answering = false;
+    const before = executor.calls.length;
+    const text = JSON.stringify({ investigationId: investigation.id, sourceId: 'demo', entities: [{ sourceId: 'demo', ...ref }] });
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path: '/v1/summary', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text), 'idempotency-key': 'a-key-of-sixteen-chars' } });
+    request.on('error', () => undefined);
+    request.end(text);
+    const isData = (call: ExecuteCall): boolean => call.templateId !== 'schema-indexes';
+    await until(() => executor.calls.slice(before).some(isData));
+    const reading = executor.calls.slice(before).filter(isData);
+    request.destroy();
+    await until(() => reading.every((call) => call.signal?.aborted === true));
+    await until(() => events.some((event) => event.action === 'ai.case-summary.closed'));
+    expect(events.filter((event) => event.action === 'ai.case-summary.closed')).toHaveLength(1);
+    expect(events.find((event) => event.action === 'ai.case-summary.closed')?.detail).toMatchObject({ summary: { outcome: 'cancelled', calls: 0 } });
     const readsAtCancel = executor.calls.length;
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(executor.calls).toHaveLength(readsAtCancel);
@@ -254,7 +290,7 @@ describe('every route that reads the source has a cancellation case', () => {
   it('names each registered route in the cases or in the list of routes with a reason, so a new route cannot be left out', async () => {
     const { app } = await listening();
     const registered = registeredRoutesOf(app);
-    const cases = ROUTES.map((route) => route.route);
+    const cases = [...ROUTES.map((route) => route.route), 'POST /v1/summary'];
     expect(uncancelledRoutes(registered, cases)).toEqual([]);
     expect(uncancelledRoutes(registered, cases.filter((key) => key !== 'GET /v1/edges/:ref'))).toEqual(['GET /v1/edges/:ref']);
     expect(uncancelledRoutes([...registered, { method: 'GET', url: '/v1/new-read/:id' }], cases)).toEqual(['GET /v1/new-read/:id']);

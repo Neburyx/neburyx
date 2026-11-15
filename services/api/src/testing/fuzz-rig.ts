@@ -1,5 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { appendFileSync, rmSync } from 'node:fs';
+import type { CaseSummarizer, ProfileExtension } from '@neburyx/contracts';
+import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
 import { afterAll, expect } from 'vitest';
 import { buildApp } from '../app.js';
 import { assembleGate } from '../gate/assemble.js';
@@ -15,6 +17,13 @@ import { baseSource, fileOf } from './mapping.js';
 import { plainNode, plainRelationship } from './normalize-fixtures.js';
 import { searchModelOf, withOnlineIndexes, type StoredNode } from './search-fixtures.js';
 import { makeWebRoot } from './web-root.js';
+
+/** The summarizer of the fuzz rig: it drafts one fixed sentence, so a summary request exercises the re-read of its elements through the gate. */
+const FUZZ_SUMMARIZER: CaseSummarizer = {
+  maxElements: 300,
+  availability: () => ({ available: true }),
+  summarize: async () => ({ status: 'ok', sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }], sent: 'sent', model: 'fuzz', calls: 1, summaryToken: 'v1.fuzz' }),
+};
 
 /** The source every fuzz request names. */
 export const FUZZ_SOURCE = 'demo';
@@ -264,7 +273,8 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
   const cursors = createCursorCodec({ key: TEST_CURSOR_KEY, clock: clock.now });
   const parts = assembleGate({ mapping: FUZZ_MAPPING, seams, executor, logger: { warn: () => undefined }, clock: clock.now, cursors, referenceKeys: TEST_REFERENCE_KEYS, policyVersion: () => policy.version });
   const webRoot = makeWebRoot();
-  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: FUZZ_MAPPING, seams: { ...defaults, ...seams }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, limiter: neverRefuses, templateRunClock: () => new Date(clock.now()) });
+  const summaryExtension: ProfileExtension = { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] };
+  const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: FUZZ_MAPPING, extension: summaryExtension, previewOn: true, seams: { ...defaults, ...seams, caseSummarizer: FUZZ_SUMMARIZER }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, limiter: neverRefuses, templateRunClock: () => new Date(clock.now()) });
   const tally = { answers: new Map<string, number>(), statements: 0, distinct: new Set<string>() };
   const fold = (): void => {
     for (const call of executor.calls) {
@@ -285,7 +295,7 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
   let keys = 0;
   const post = async (url: string, payload: unknown) => {
     last.url = url;
-    const headers = url.startsWith('/v1/templates/') || url === '/v1/patterns/run' || /^\/v1\/patterns\/[^/]+\/run$/.test(url) ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
+    const headers = url.startsWith('/v1/templates/') || url === '/v1/patterns/run' || url === '/v1/summary' || /^\/v1\/patterns\/[^/]+\/run$/.test(url) ? { 'content-type': 'application/json', 'idempotency-key': `fuzz-key-of-sixteen-${(keys += 1)}` } : { 'content-type': 'application/json' };
     const response = await app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers });
     let code = String(response.statusCode);
     try {

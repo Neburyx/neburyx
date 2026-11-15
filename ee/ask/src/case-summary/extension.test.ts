@@ -125,3 +125,51 @@ describe('every bad summary file stops start-up through the real configure, with
     }
   });
 });
+
+describe('the token key files at start-up through the real configure', () => {
+  const SENTINEL = 'SENTINEL-KEY-CONTENT';
+  const HEX = 'ab'.repeat(32);
+
+  async function configuredWith(env: Record<string, string>) {
+    const extension = createEnterpriseExtension();
+    const outcome = await extension.configure?.({}, { NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['s1']), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '50000', ...env }, CONTEXT);
+    return { extension, outcome };
+  }
+
+  it('leaves the summary unavailable, naming the setting, until a key file is set, and available once it is', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'case-summary-token-'));
+    try {
+      const without = await configuredWith({});
+      expect(without.outcome).toEqual({ ok: true });
+      expect(without.extension.summaryAvailability()).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_TOKEN_KEY_FILE is not set' });
+      const path = join(directory, 'key');
+      writeFileSync(path, HEX, { mode: 0o600 });
+      const withKey = await configuredWith({ NEBURYX_SUMMARY_TOKEN_KEY_FILE: path });
+      expect(withKey.extension.summaryAvailability()).toEqual({ available: true });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ['a group-readable file', 0o640, HEX, 'owner-only'],
+    ['a file that is not a 256-bit key', 0o600, `${SENTINEL}`, '256-bit key'],
+  ])('refuses %s, naming the setting and printing neither path nor content', async (_name, mode, content, expected) => {
+    const directory = mkdtempSync(join(tmpdir(), 'case-summary-token-'));
+    try {
+      const path = join(directory, 'key');
+      writeFileSync(path, content);
+      chmodSync(path, mode);
+      const { extension, outcome } = await configuredWith({ NEBURYX_SUMMARY_TOKEN_KEY_FILE: path });
+      expect(outcome?.ok).toBe(false);
+      const message = outcome !== undefined && !outcome.ok ? outcome.problems.join('\n') : '';
+      expect(message).toContain('NEBURYX_SUMMARY_TOKEN_KEY_FILE');
+      expect(message).toContain(expected);
+      expect(message).not.toContain(path);
+      expect(message).not.toContain(SENTINEL);
+      expect(extension.summaryAvailability().available).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});

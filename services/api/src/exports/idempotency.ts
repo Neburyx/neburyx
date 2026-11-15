@@ -22,6 +22,8 @@ export interface Answer {
   readonly statusCode: number;
   readonly body: unknown;
   readonly replayed: boolean;
+  /** Set by the work of a call whose answer must not be kept for replay: a retry with the key runs again. */
+  readonly forget?: boolean;
 }
 
 interface Deps {
@@ -51,7 +53,8 @@ export async function runOnce(
   }
   try {
     const answer = await work();
-    await deps.store.finishIdempotent(call.principal.id, call.key, answer.statusCode, answer.body);
+    if (answer.forget === true) await deps.store.forgetIdempotent(call.principal.id, call.key).catch(() => undefined);
+    else await deps.store.finishIdempotent(call.principal.id, call.key, answer.statusCode, answer.body);
     return answer;
   } catch (error) {
     const failure = describeFailure(error);

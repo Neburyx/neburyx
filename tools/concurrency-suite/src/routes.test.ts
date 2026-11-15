@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { CaseSummarizer } from '@neburyx/contracts';
+import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
 import { startRig, type Rig } from './rig.js';
+
+const SUMMARIZER: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'ok', sentences: [], sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }) };
+const SUMMARY = { extension: { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] }, caseSummarizer: SUMMARIZER } as const;
 
 let rig: Rig;
 afterEach(() => rig.close());
@@ -10,6 +15,7 @@ const IN_THE_RIG: readonly string[] = [
   'GET /v1/edges/:ref',
   'GET /v1/source-links/:ref',
   'POST /v1/graph/derived-neighbors',
+  'POST /v1/summary',
 ];
 
 /** Every other route under /v1, with where it is covered or why it needs no case: each read takes its slot in the gate and its count in the request limiter, whatever the route. */
@@ -58,7 +64,7 @@ export const unlisted = (routes: readonly string[], inRig: readonly string[] = I
 
 describe('every route under /v1 has a place in this suite', () => {
   it('is driven by the rig or listed with a reason, so a new route cannot be left out', async () => {
-    rig = await startRig();
+    rig = await startRig(SUMMARY);
     expect(rig.routes.length).toBeGreaterThan(10);
     expect(unlisted(rig.routes)).toEqual([]);
     for (const key of IN_THE_RIG) expect(rig.routes, key).toContain(key);
@@ -66,7 +72,7 @@ describe('every route under /v1 has a place in this suite', () => {
   });
 
   it('fails when a route the rig drives is taken out of its list, and for a new route', async () => {
-    rig = await startRig();
+    rig = await startRig(SUMMARY);
     expect(unlisted(rig.routes, IN_THE_RIG.filter((key) => key !== 'POST /v1/graph/derived-neighbors'))).toEqual(['POST /v1/graph/derived-neighbors']);
     expect(unlisted([...rig.routes, 'GET /v1/new-read/:id'])).toEqual(['GET /v1/new-read/:id']);
   });

@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { UNAVAILABLE_SUMMARIZER } from '../testing/case-summarizer.js';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ExtensionRefusal, type AskClassification, type AskPatternOffer, type AskFolder, type AskRun, type AskRunResult, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
@@ -63,7 +64,7 @@ async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: u
         return options.classify === undefined ? { ok: true, intent: 'shared', entities: { id: 'A-1' } } : options.classify();
       },
     },
-    signal: new AbortController().signal,
+    caseSummarizer: UNAVAILABLE_SUMMARIZER, signal: new AbortController().signal,
     signText: sign,
     askSourceReadable: async () => {
       if (options.readable === false) throw new ExtensionRefusal({ code: 'NOT_FOUND' });
@@ -229,7 +230,7 @@ describe('what comes before a question is classified', () => {
   it('hands the abort signal of the request to the classifier', async () => {
     const { route, request, signals } = await rig();
     const controller = new AbortController();
-    await route.handler(request(ASK, { signal: controller.signal }));
+    await route.handler(request(ASK, { caseSummarizer: UNAVAILABLE_SUMMARIZER, signal: controller.signal }));
     expect(signals).toEqual([controller.signal]);
   });
 });

@@ -11,8 +11,8 @@ export type { ExtensionRefusalFields } from './extension.js';
 export type { ConfigureContext, ConfigureSourceBudgets, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskRun, AskRunner, AskRunInput, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, SUMMARY_DEFAULTS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiCacheTtl, AiEffort, AiSettings, AiStatusResponse } from './ai.js';
-export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
-export type { AiAuditDetail, AskRunAuditDetail, AuditDetail, AuditEvent, AuditResult, AuditSink, AuditSinkContext, MountedAuditSink, TokenCount } from './audit.js';
+export { AUDIT_RESULTS, CASE_SUMMARY_OUTCOMES, SYSTEM_ACTOR_ID, aiAuditDetailSchema, caseSummaryAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
+export type { AiAuditDetail, AskRunAuditDetail, CaseSummaryAuditDetail, AuditDetail, AuditEvent, AuditResult, AuditSink, AuditSinkContext, MountedAuditSink, TokenCount } from './audit.js';
 export { editionSchema, identityModeSchema, meResponseSchema, permittedSourceSchema, roleSchema } from './me.js';
 export type { MeResponse } from './me.js';
 export { healthResponseSchema } from './health.js';
@@ -183,3 +183,7 @@ export { bindQueryIntent, bindTemplateIntent, checkTemplateSettings, placeholder
 export type { AskTemplateId, BindResult } from './ask-bind.js';
 export { ASK_CONTINUE_LABEL, ASK_CONTINUE_LIFETIME_MS, ASK_CONTINUE_TOKEN_PATTERN, ASK_RUN_PARAMS_LABEL, askAnswerSchema, askContinueRequestSchema, askEntitiesSchema, askQuestionRequestSchema } from './ask-question.js';
 export type { AskAnswer, AskContinueRequest, AskQuestionRequest } from './ask-question.js';
+
+export { SUMMARY_FAILURE_KINDS, summaryRequestSchema, summaryResponseSchema, summarySentenceSchema } from './summary.js';
+export type { ElementRefs, ElementsScope } from './extension.js';
+export type { CaseSummarizer, CaseSummaryAvailability, CaseSummaryInput, CaseSummaryOutcome, SummaryFailureKind, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';

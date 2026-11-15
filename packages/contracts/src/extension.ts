@@ -1,6 +1,8 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
 import type { AskFolder } from './ask-folder.js';
+import type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';
+import type { CaseSummarizer } from './summary.js';
 import type { ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskClassifier, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
@@ -19,6 +21,10 @@ export interface ExtensionRequest {
   readonly body?: unknown;
   /** The application's `AskClassifier`: the Community default unless the application was given another. */
   readonly askClassifier: AskClassifier;
+  /** The application's `CaseSummarizer`: the Community default unless the application was given another. */
+  readonly caseSummarizer: CaseSummarizer;
+  /** The caller's policy version for a source, as the application holds it; absent, a route that binds a record to it refuses. */
+  readonly policyVersion?: (sourceId: string) => string;
   /** Aborted when the client gives up the request. */
   readonly signal: AbortSignal;
   /** Signs a text: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
@@ -30,11 +36,28 @@ export interface ExtensionRequest {
   readonly askRunner?: (scope: AskRunScope) => AskRunner;
   /** Resolves when the caller may read the source and rejects with the `NOT_FOUND` refusal when the source is not configured or not the caller's; asked before anything is signed or sent. */
   readonly askSourceReadable?: (sourceId: string) => Promise<void>;
+  /**
+   * The elements of a view read again through the gate, for the caller and this request: the investigation must be the caller's and for the source, or the read is `NOT_FOUND`, as is a source the caller may not read. The references are
+   * read in as many calls as their number needs, the mask is the request's, and what no longer resolves is listed as missing without a cause.
+   */
+  readonly readElements?: (scope: ElementsScope, refs: ElementRefs) => Promise<ReadRefsResponse>;
+  /** Resolves when the investigation is the caller's and is for the source, and the source is as the investigation left it; rejects with `NOT_FOUND`, or the source-changed refusal, otherwise. */
+  readonly investigationReadable?: (investigationId: string, sourceId: string) => Promise<void>;
   /** The caller's own saved patterns on a source (never the shared ones of other people), available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
   readonly askPatterns?: (sourceId: string) => Promise<AskPatternListing>;
   /** One of the caller's own saved patterns on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller owns and may run now. */
   readonly askPatternFind?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
 }
+
+/** The investigation and source a view belongs to and whether the personal data of its nodes is masked. */
+export interface ElementsScope {
+  readonly investigationId: string;
+  readonly sourceId: string;
+  readonly mask: boolean;
+}
+
+/** The references of the elements of a view, of the four kinds a read by references takes, in any number. */
+export type ElementRefs = Pick<ReadRefsRequest, 'entities' | 'edges' | 'aggregates' | 'derived'>;
 
 /** The source a run is made on and whether the personal data of the nodes of its result is masked. */
 export interface AskRunScope {
@@ -64,6 +87,14 @@ export interface ExtensionRoute {
   /** Required for a `POST` route and refused on a `GET` route: the strict schema of the body. */
   readonly requestSchema?: ZodType;
   readonly responseSchema: ZodType;
+  /** A route a retry could repeat: the application requires an `Idempotency-Key`, runs the handler once per person and key, and replays its answer; `sourceOf` names the source the request is about. */
+  readonly idempotent?: {
+    readonly sourceOf: (body: unknown) => string;
+    /** Asked before a stored answer is replayed, with the request as it is now: false refuses the replay as a lost access, so a replay is authorized like a new call. */
+    readonly recheck?: (request: ExtensionRequest) => Promise<boolean>;
+    /** True for an answer that must not be kept, such as the failure of a provider: a retry with the key runs again. */
+    readonly retryable?: (answer: unknown) => boolean;
+  };
   readonly handler: (request: ExtensionRequest) => Promise<unknown>;
 }
 
@@ -106,6 +137,8 @@ export interface ProfileExtension {
   readonly attachLogger?: (logger: ExtensionLogger) => void;
   /** The classifier of the extension, once it can classify (the model is configured, the audit sink is mounted and the folder is loaded); a classifier given to the application through its seams wins over it, and the Community default is used when there is none. */
   readonly askClassifier?: () => AskClassifier | undefined;
+  /** The summarizer of the extension, once it can draft; a summarizer given to the application through its seams wins over it, and the Community default is used when there is none. */
+  readonly caseSummarizer?: () => CaseSummarizer | undefined;
   /** The Ask folder as it was read at start-up: undefined before `configure` has run or when it refused. */
   readonly askFolder?: () => AskFolder | undefined;
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, context: ConfigureContext) => Promise<ConfigureOutcome>;
