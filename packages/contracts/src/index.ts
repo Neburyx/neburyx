@@ -9,7 +9,7 @@ export type { OpenApiDocument } from './openapi.js';
 export { ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
 export type { ExtensionRefusalFields } from './extension.js';
 export type { ConfigureContext, ConfigureSourceBudgets, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskRun, AskRunner, AskRunInput, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
-export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
+export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, SUMMARY_DEFAULTS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiCacheTtl, AiEffort, AiSettings, AiStatusResponse } from './ai.js';
 export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
 export type { AiAuditDetail, AskRunAuditDetail, AuditDetail, AuditEvent, AuditResult, AuditSink, AuditSinkContext, MountedAuditSink, TokenCount } from './audit.js';

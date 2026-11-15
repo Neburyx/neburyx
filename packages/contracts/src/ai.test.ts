@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AI_MOVED_KEYS, aiSettingsSchema } from './ai.js';
+import { AI_LIMITS, AI_MOVED_KEYS, SUMMARY_DEFAULTS, aiSettingsSchema } from './ai.js';
 
 const messageOf = (value: unknown): string => {
   const result = aiSettingsSchema.safeParse(value);
@@ -25,5 +25,13 @@ describe('the ai settings of the mapping file', () => {
 
   it('never repeat a value of a refused key', () => {
     expect(messageOf({ key: { env: 'SECRET-VALUE-123' } })).not.toContain('SECRET-VALUE-123');
+  });
+});
+
+describe('the case summary defaults', () => {
+  it('are the agreed ones, inside the range Ask uses for a timeout', () => {
+    expect(SUMMARY_DEFAULTS).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, retentionDays: 30 });
+    expect(SUMMARY_DEFAULTS.timeoutMs).toBeGreaterThanOrEqual(AI_LIMITS.timeoutMs.min);
+    expect(SUMMARY_DEFAULTS.totalTimeoutMs).toBeLessThanOrEqual(AI_LIMITS.timeoutMs.max);
   });
 });

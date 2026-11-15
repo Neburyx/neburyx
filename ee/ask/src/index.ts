@@ -9,6 +9,9 @@ import { createFailureReporter } from './failure-line.js';
 import { createAskContinueRoute, createAskQuestionRoute } from './questions/question-routes.js';
 import { createPgRunStore } from './questions/pg-run-store.js';
 import type { RunStore } from './questions/run-store.js';
+import { loadSummaryInstructions } from './case-summary/load-instructions.js';
+import type { SummaryInstructions } from './case-summary/instructions.js';
+import { readSummarySettings, summaryAvailability, type SummaryAvailability, type SummarySettings } from './case-summary/settings.js';
 import { loadAskFolder } from './folder/load.js';
 import { guardAiRouteGroup } from './route-guard.js';
 
@@ -31,6 +34,12 @@ const MIGRATIONS_DIRECTORY = fileURLToPath(new URL('../../migrations', import.me
 export interface EnterpriseExtension extends ProfileExtension {
   /** The Ask folder read at start-up; undefined before `configure` accepted it. */
   readonly askFolder: () => AskFolder | undefined;
+  /** The instructions of a summary call, built at start-up; undefined before `configure` accepted them. */
+  readonly summaryInstructions: () => SummaryInstructions | undefined;
+  /** The summary settings read at start-up; undefined before `configure` accepted them. */
+  readonly summarySettings: () => SummarySettings | undefined;
+  /** Whether a summary can be drafted now: Ask is configured and the settings, with a size guard, are in. */
+  readonly summaryAvailability: () => SummaryAvailability;
   readonly configuration: () => AskConfiguration | undefined;
   /** The classifier of Ask, once the model is configured, the audit sink is mounted and the folder is loaded; undefined before. */
   readonly askClassifier: () => AskClassifier | undefined;
@@ -43,6 +52,8 @@ export interface EnterpriseExtension extends ProfileExtension {
 interface EnterpriseExtensionOptions {
   /** Only a test sets this, to a stub on the loopback address; the model client otherwise calls the service. */
   readonly modelBaseUrl?: string;
+  /** Only a test sets this, to a folder that stands in for the summary files shipped with the product. */
+  readonly shippedSummaryDirectory?: string;
   /** Only a test sets this, to a store that opens no connection; the run store otherwise writes `ask_runs` on a pool of its own. */
   readonly runStore?: (context: AuditSinkContext) => RunStore & { close(): Promise<void> };
 }
@@ -53,6 +64,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let mounted: MountedAuditSink | undefined;
   let logger: ExtensionLogger | undefined;
   let folder: AskFolder | undefined;
+  let instructions: SummaryInstructions | undefined;
+  let summarySettings: SummarySettings | undefined;
   let runs: RunStore | undefined;
   const reportFailure = createFailureReporter(() => logger);
   const askClassifier = (): AskClassifier | undefined => {
@@ -68,6 +81,9 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     },
     configuration: () => configuration,
     askFolder: () => folder,
+    summaryInstructions: () => instructions,
+    summarySettings: () => summarySettings,
+    summaryAvailability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings }),
     askClassifier,
     async configure(_settings, env, context) {
       const configured = await configureAsk(env);
@@ -79,7 +95,19 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         configuration = undefined;
         return { ok: false, problems: loaded.problems };
       }
+      const settings = readSummarySettings(env);
+      if (!settings.ok) {
+        configuration = undefined;
+        return { ok: false, problems: settings.problems };
+      }
+      const summary = await loadSummaryInstructions({ env, ...(options.shippedSummaryDirectory === undefined ? {} : { shippedDirectory: options.shippedSummaryDirectory }) });
+      if (!summary.ok) {
+        configuration = undefined;
+        return { ok: false, problems: summary.problems };
+      }
       folder = loaded.folder;
+      instructions = summary.instructions;
+      summarySettings = settings.settings;
       return configured.outcome;
     },
     auditSink: () => mounted?.sink,

@@ -205,8 +205,8 @@ describe('the enterprise code in the one image', () => {
     return { name, url };
   }
 
-  it('holds the extension, its migrations folder, its licence and the entry script', async () => {
-    const found = await insideImage('ls /app/ee/ask/dist/index.js /app/ee/migrations/README.md /app/ee/LICENSE /app/entrypoint.mjs');
+  it('holds the extension, its migrations folder, its summary files, its licence and the entry script', async () => {
+    const found = await insideImage('ls /app/ee/ask/dist/index.js /app/ee/ask/prompts/summary-prompt.md /app/ee/ask/prompts/aml-typologies.md /app/ee/migrations/README.md /app/ee/LICENSE /app/entrypoint.mjs');
     expect(found.code).toBe(0);
     expect(JSON.parse(await dockerOk(['inspect', '--format', '{{json .Config.Entrypoint}}', TAG]))).toEqual(['node', 'entrypoint.mjs']);
   });

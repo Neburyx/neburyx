@@ -16,7 +16,7 @@ export interface AskConfiguration {
 
 const GROUP_AND_OTHER_BITS = 0o077;
 
-type Env = Readonly<Record<string, string | undefined>>;
+export type Env = Readonly<Record<string, string | undefined>>;
 
 const ASK_VARIABLES = {
   provider: 'NEBURYX_ASK_PROVIDER',
@@ -34,7 +34,7 @@ const ASK_VARIABLES = {
 export const DEFAULT_ASK_MODEL = 'claude-haiku-5-5';
 
 /** An empty value counts as not set, as for the cache variables. */
-const given = (env: Env, name: string): string | undefined => {
+export const given = (env: Env, name: string): string | undefined => {
   const value = env[name];
   return value === undefined || value === '' ? undefined : value;
 };
@@ -72,7 +72,7 @@ async function keyChoice(env: Env): Promise<{ readonly key?: KeyReference; reado
   return problems.length > 0 ? { problems } : { key: { kind: 'file', path: file }, problems: [] };
 }
 
-function integerChoice(env: Env, name: string, limits: { readonly min: number; readonly max: number }, fallback: number, problems: string[]): number {
+export function integerChoice(env: Env, name: string, limits: { readonly min: number; readonly max: number }, fallback: number, problems: string[]): number {
   const value = given(env, name);
   if (value === undefined) return fallback;
   const parsed = /^\d+$/.test(value) ? Number(value) : Number.NaN;

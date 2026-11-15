@@ -21,6 +21,7 @@ COPY --from=builder /repo/apps/web/dist ./web
 COPY --from=builder /out/ee-ask/package.json ./ee/ask/package.json
 COPY --from=builder /out/ee-ask/node_modules ./ee/ask/node_modules
 COPY --from=builder /out/ee-ask/dist ./ee/ask/dist
+COPY --from=builder /out/ee-ask/prompts ./ee/ask/prompts
 COPY --from=builder /repo/ee/migrations ./ee/migrations
 COPY --from=builder /repo/ee/LICENSE ./ee/LICENSE
 COPY --from=builder /repo/deploy/docker/entrypoint.mjs ./entrypoint.mjs

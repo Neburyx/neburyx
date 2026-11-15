@@ -23,6 +23,16 @@ export const AI_DEFAULTS = {
   cache: { enabled: true, ttl: '5m' satisfies AiCacheTtl },
 } as const;
 
+/** What the case summary uses when its settings do not say; the size guard has no default until a measured run sets one. */
+export const SUMMARY_DEFAULTS = {
+  model: 'claude-sonnet-5-5',
+  timeoutMs: AI_DEFAULTS.timeoutMs,
+  totalTimeoutMs: 180_000,
+  maxCalls: 5,
+  maxElements: 300,
+  retentionDays: 30,
+} as const;
+
 export const AI_LIMITS = {
   timeoutMs: { min: 1_000, max: 600_000 },
   maxRetries: { min: 0, max: 5 },

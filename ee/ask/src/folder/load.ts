@@ -30,10 +30,10 @@ const printable = (name: string): string => (/^[A-Za-z0-9_.-]{1,100}$/.test(name
  * Reads one file of at most `limit` bytes, as UTF-8 text with the hash of its bytes. The file is opened without following a link and checked through the handle (a regular file, within the limit) before
  * more than `limit` bytes are read; a problem never holds the file's text.
  */
-async function readText(path: string, label: string, limit: number): Promise<{ readonly text: string; readonly sha256: string } | string> {
+export async function readText(path: string, label: string, limit: number): Promise<{ readonly text: string; readonly sha256: string } | string> {
   let bytes: Buffer;
   try {
-    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
       const found = await handle.stat();
       if (!found.isFile()) return `${label}: must be a regular file`;
