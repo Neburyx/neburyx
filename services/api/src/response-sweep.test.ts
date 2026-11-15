@@ -101,6 +101,7 @@ const SCENARIOS: readonly Scenario[] = [
 
 /** Routes no scenario asks, each with the reason: the next page of the search (its own describe below) and the routes that carry no element of the source. */
 const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
+  'POST /v1/summary': 'swept in its own describe below: the investigation it names must exist before it is asked',
   'POST /v1/search/entities/more': 'the next pages of the search are swept in the describe of the evidence group below',
   'GET /v1/me': 'answers the person, not an element of the source',
   'GET /v1/sources': 'answers the registry of sources, not an element of one',
@@ -202,6 +203,21 @@ describe('the run of a saved pattern holds no element ID of the source', () => {
     expect(sweepFindings('saved run refused', { body: refused.body, headers: refused.headers }, issued)).toEqual([]);
     const missing = await run('0192f000-0000-7000-8000-0000000000ff', { anchor: { entityType: 'widget', stableId: 'W-1' } }, 'sweep-saved-missing-key');
     expect(sweepFindings('saved run not found', { body: missing.body, headers: missing.headers }, issued)).toEqual([]);
+  });
+});
+
+describe('the summary of a view', () => {
+  it('answers without the element ID of the source, in its sentences, text sent, citations and token', async () => {
+    const opened = await rig.app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } } });
+    const investigationId = (opened.json() as { investigation: { id: string } }).investigation.id;
+    const answer = await rig.app.inject({
+      method: 'POST',
+      url: '/v1/summary',
+      payload: { investigationId, sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }], edges: [stored] },
+      headers: { 'idempotency-key': 'sweep-summary-ok-key-1' },
+    });
+    expect(answer.statusCode).toBe(200);
+    expect(sweepFindings('summary', { body: answer.body, headers: answer.headers }, issued)).toEqual([]);
   });
 });
 
