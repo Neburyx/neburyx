@@ -19,6 +19,7 @@ export interface PathsForm {
 
 const DEFAULT_MAX_HOPS = 3;
 export const DEFAULT_LIMIT = 5;
+export const LIMIT_CHOICES: readonly number[] = [5, 10, 15, 25];
 
 export const choiceOf = (node: GraphNode): EndChoice => ({ ref: node.ref, title: node.display.title });
 

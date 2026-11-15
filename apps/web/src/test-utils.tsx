@@ -120,6 +120,7 @@ export interface StubRenderer extends CanvasRenderer {
   fits: number;
   /** How many of the fits left the aggregate nodes out. */
   entityFits: number;
+  readonly fitArounds: { readonly keys: string[]; readonly clearOfX: number }[];
   disposed: number;
 }
 
@@ -149,6 +150,7 @@ function stubRenderer(options: StubOptions = {}): StubRenderer {
     lives: [],
     liveEnds: 0,
     entityFits: 0,
+    fitArounds: [],
     disposed: 0,
     mount(container, events, viewport) {
       if (options.failOn === 'mount') throw new Error('no drawing surface');
@@ -172,6 +174,9 @@ function stubRenderer(options: StubOptions = {}): StubRenderer {
       if (options.failCommands === true) throw new Error('cannot fit');
       stub.fits += 1;
       if (entitiesOnly === true) stub.entityFits += 1;
+    },
+    fitAround(keys, clearOfX) {
+      stub.fitArounds.push({ keys: [...keys], clearOfX });
     },
     placeLive(positions) {
       if (stub.failLive === true) throw new Error('cannot place');

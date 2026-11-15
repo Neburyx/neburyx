@@ -10,12 +10,14 @@ export const PATHS_COPY = {
   close: 'Close Paths',
   from: 'From',
   to: 'To',
-  choose: 'Choose an entity',
   maxHops: 'Max hops',
   direction: 'Direction',
   limit: 'Result cap',
   relationships: 'Allowed relationships',
   find: 'Find paths',
+  addToGraph: 'Add to graph',
+  onCanvas: 'On canvas',
+  noTypes: 'None',
   cancel: 'Cancel',
   results: 'Paths found',
   steps: 'Steps',
@@ -50,8 +52,8 @@ export const pathTitle = (position: number, hops: number): string => `Path ${pos
 export const noPathText = (maxHops: number): string => `No path found within ${maxHops} ${maxHops === 1 ? 'hop' : 'hops'}.`;
 
 export const SELECTED_LABEL = 'Selected';
-export const evidenceLabel = (reference: string): string => `Evidence · ${reference} ↗`;
-export const EVIDENCE_NONE = 'Evidence not available';
+/** A step's evidence line; the arrow marks a reference that opens the evidence, which only the chosen path's drawn relationships do. */
+export const evidenceLabel = (reference: string, opens: boolean): string => `Evidence · ${reference}${opens ? ' ↗' : ''}`;
 
 /** The entities of a chosen path that stay hidden by a filter; the frames give no text for it. */
 export const hiddenByFiltersText = (count: number): string => `${count} ${count === 1 ? 'entity of this path is' : 'entities of this path are'} hidden by filters.`;

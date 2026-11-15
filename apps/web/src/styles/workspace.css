@@ -888,6 +888,10 @@
   --icon: url('../assets/lucide/shapes.svg');
 }
 
+.icon-paths {
+  --icon: url('../assets/lucide/route.svg');
+}
+
 .icon-plus {
   --icon: url('../assets/lucide/plus.svg');
 }

@@ -193,6 +193,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         if (asked !== undefined && asked !== requestServed.current) {
           requestServed.current = asked;
           if (asked.show === 'fit') renderer.fit(true);
+          else if ('around' in asked.show) renderer.fitAround(asked.show.around, asked.show.clearOfX);
           else if (asked.show.viewport === undefined) renderer.fit();
           else renderer.show(asked.show.viewport);
         }

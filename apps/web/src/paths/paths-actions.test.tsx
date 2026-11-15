@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 const select = (kit: PathsKit, ...ids: string[]): void => act(() => kit.state.presentation.select(ids.map((id) => elementKey(nodeRef(id, id.startsWith('dev') ? 'kind-b' : 'kind-a')))));
-const field = (label: 'From' | 'To'): string => (screen.getByLabelText(label) as HTMLSelectElement).value;
+const field = (label: 'From' | 'To'): string => (screen.getByLabelText(label) as HTMLInputElement).value;
 const key = (id: string): string => elementKey(nodeRef(id, id.startsWith('dev') ? 'kind-b' : 'kind-a'));
 
 function itemOf(kit: PathsKit, kind: 'node' | 'relationship', id: string): MenuItem {
@@ -29,8 +29,8 @@ describe('Paths between on the selection bar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Paths between' }));
     await settle();
     expect(screen.getByRole('heading', { name: 'Bounded path search' })).toBeTruthy();
-    expect(field('From')).toBe(key('dev-1'));
-    expect(field('To')).toBe(key('acc-2'));
+    expect(field('From')).toBe('dev-1');
+    expect(field('To')).toBe('acc-2');
     expect(kit.sent).toEqual([]);
   });
 
@@ -55,11 +55,11 @@ describe('the menus and the key', () => {
     const kit = await pathsWorkspace();
     act(() => itemOf(kit, 'node', 'paths-from-here').run?.(contextOf(kit, 'node', key('acc-1'))));
     await settle();
-    expect(field('From')).toBe(key('acc-1'));
+    expect(field('From')).toBe('acc-1');
     expect(field('To')).toBe('');
     act(() => itemOf(kit, 'node', 'paths-to-here').run?.(contextOf(kit, 'node', key('acc-2'))));
     await settle();
-    expect(field('To')).toBe(key('acc-2'));
+    expect(field('To')).toBe('acc-2');
     expect(field('From')).toBe('');
     expect(kit.sent).toEqual([]);
   });
@@ -71,8 +71,8 @@ describe('the menus and the key', () => {
     if (edge === undefined) throw new Error('no edge loaded');
     act(() => itemOf(kit, 'relationship', 'paths-between-endpoints').run?.(contextOf(kit, 'relationship', edgeKey(edge.ref))));
     await settle();
-    expect(field('From')).toBe(key('acc-1'));
-    expect(field('To')).toBe(key('acc-2'));
+    expect(field('From')).toBe('acc-1');
+    expect(field('To')).toBe('acc-2');
   });
 
   it('opens the panel from ⇧P for the one selected entity, and does nothing for none or for several', async () => {
@@ -87,7 +87,7 @@ describe('the menus and the key', () => {
     select(kit, 'acc-2');
     fireEvent.keyDown(document.body, { key: 'P', code: 'KeyP', shiftKey: true });
     await settle();
-    expect(field('From')).toBe(key('acc-2'));
+    expect(field('From')).toBe('acc-2');
   });
 
   it('lists Find paths in the shortcut registry, and leaves no stand-in of the same place beside the real items', async () => {

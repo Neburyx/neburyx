@@ -799,6 +799,17 @@ describe('zoom and fit in the Cytoscape renderer', () => {
     expect(zoom).toBeGreaterThan(spreadOut.inspect().viewport.zoom);
   });
 
+  it('fits the named items alone, as large as they fit, and does nothing for names that are not drawn', () => {
+    const renderer = sized();
+    renderer.draw(scene([['a', { x: 0, y: 0 }], ['b', { x: 6000, y: 0 }]]));
+    const all = renderer.inspect().viewport;
+    renderer.fitAround(['b'], 0);
+    expect(renderer.inspect().viewport.zoom).toBe(FIT_ZOOM_MAX);
+    renderer.fit();
+    renderer.fitAround(['missing'], 0);
+    expect(renderer.inspect().viewport).toEqual(all);
+  });
+
   it('fits a lone entity at 100%, lets the hand zoom go on to the maximum, and brings the view back to 100% on the fit command', () => {
     const renderer = sized();
     renderer.draw(scene([['a', { x: 0, y: 0 }]]));

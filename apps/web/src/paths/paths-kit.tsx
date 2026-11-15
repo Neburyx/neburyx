@@ -1,4 +1,4 @@
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import type { ElementRef, GraphEdge, GraphNode, PathsOk, PathsRequest, PathsResponse, SearchRequest, SearchResult } from '@neburyx/contracts';
 import { searchOf } from '../patterns/search-kit.js';
 import { fakeClient } from '../api/fake-client.js';
@@ -135,9 +135,21 @@ export const openPaths = async (): Promise<void> => {
   await settle();
 };
 
-/** Chooses the entity of an end by its title. */
+/** Chooses the entity of an end by its title: types it into the field and picks the option that carries it. */
 export const chooseEnd = (label: 'From' | 'To', title: string): void => {
-  fireEvent.change(screen.getByLabelText(label), { target: { value: elementKey(nodeRefFor(title)) } });
+  const input = screen.getByLabelText(label);
+  fireEvent.focus(input);
+  fireEvent.change(input, { target: { value: title } });
+  const option = within(screen.getByRole('listbox', { name: `${label} results` })).getAllByRole('option').find((candidate) => candidate.textContent === title || candidate.textContent?.startsWith(`${title} (`) === true);
+  if (option === undefined) throw new Error(`no option for ${title}`);
+  fireEvent.click(option);
+};
+
+/** The group of relationship-type checkboxes, opened first when the control is collapsed. */
+export const typesGroup = (): HTMLElement => {
+  const toggle = screen.getByRole('button', { name: /^Allowed relationships/ });
+  if (toggle.getAttribute('aria-expanded') !== 'true') fireEvent.click(toggle);
+  return screen.getByRole('group', { name: 'Allowed relationships' });
 };
 
 const nodeRefFor = (title: string) => nodeRef(title, title.startsWith('dev') ? 'kind-b' : 'kind-a');

@@ -301,11 +301,10 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
     await page.getByRole('button', { name: 'Paths', exact: true }).click();
     const panel = page.getByRole('complementary', { name: 'Bounded path search' });
-    await panel.getByLabel('From', { exact: true }).selectOption({ label: `account ${entity}` });
-    await panel.getByLabel('Search the source: To').fill('QX-2');
-    const option = panel.getByLabel('To', { exact: true }).getByRole('option', { name: /QX-2/ });
-    await expect(option).toHaveCount(1);
-    await panel.getByLabel('To', { exact: true }).selectOption((await option.getAttribute('value')) ?? '');
+    for (const [label, id] of [['From', entity], ['To', 'QX-2']] as const) {
+      await panel.getByLabel(label, { exact: true }).fill(id);
+      await panel.getByRole('listbox', { name: `${label} results` }).getByRole('option', { name: new RegExp(id) }).first().click();
+    }
     await panel.getByRole('button', { name: 'Find paths' }).click();
     await expect(panel.getByText('1 path · 0.42 s · cap not reached')).toBeVisible();
   },

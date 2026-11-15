@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import { chooseEnd, okPaths, openPaths, pathsWorkspace, settle } from './paths-kit.js';
+import { chooseEnd, okPaths, openPaths, pathsWorkspace, settle, typesGroup } from './paths-kit.js';
 import { elementKey } from '../state/keys.js';
 import { nodeRef } from './paths-kit.js';
 import { searchOf } from '../patterns/search-kit.js';
@@ -32,10 +32,12 @@ describe('the Paths tool and its panel', () => {
   it('shows the fields with their defaults, the relationship types all allowed, and the timeout of the source', async () => {
     await pathsWorkspace({ timeoutMs: 5000 });
     await openPaths();
-    expect((screen.getByLabelText('Max hops') as HTMLInputElement).value).toBe('3');
+    expect((screen.getByLabelText('Max hops') as HTMLSelectElement).value).toBe('3');
     expect((screen.getByLabelText('Direction') as HTMLSelectElement).selectedOptions[0]?.textContent).toBe('Either');
-    expect((screen.getByLabelText('Result cap') as HTMLInputElement).value).toBe('5');
-    const types = within(screen.getByRole('group', { name: 'Allowed relationships' }));
+    expect((screen.getByLabelText('Result cap') as HTMLSelectElement).value).toBe('5');
+    expect(screen.getByRole('button', { name: /^Allowed relationships/ }).textContent).toBe('link-a · link-b');
+    expect(screen.queryByRole('group', { name: 'Allowed relationships' })).toBeNull();
+    const types = within(typesGroup());
     expect((types.getByRole('checkbox', { name: 'link-a' }) as HTMLInputElement).checked).toBe(true);
     expect((types.getByRole('checkbox', { name: 'link-b' }) as HTMLInputElement).checked).toBe(true);
     expect(screen.getByText('5 s timeout')).toBeTruthy();
@@ -45,15 +47,16 @@ describe('the Paths tool and its panel', () => {
     await pathsWorkspace({ maxHops: 2 });
     await openPaths();
     await settle();
-    expect((screen.getByLabelText('Max hops') as HTMLInputElement).value).toBe('2');
+    expect((screen.getByLabelText('Max hops') as HTMLSelectElement).value).toBe('2');
   });
 
   it('offers the selected entities first among the loaded ones', async () => {
     const kit = await pathsWorkspace();
     act(() => kit.state.presentation.select([elementKey(nodeRef('acc-2'))]));
     await openPaths();
-    const options = within(screen.getByLabelText('From')).getAllByRole('option').map((option) => option.textContent);
-    expect(options).toEqual(['Choose an entity', 'acc-2', 'acc-1', 'dev-1']);
+    fireEvent.focus(screen.getByLabelText('From'));
+    const options = within(screen.getByRole('listbox', { name: 'From results' })).getAllByRole('option').map((option) => option.textContent);
+    expect(options).toEqual(['acc-2', 'acc-1', 'dev-1']);
   });
 
   it('sends one search with the values of the fields, and lists the paths under the summary', async () => {
@@ -62,7 +65,7 @@ describe('the Paths tool and its panel', () => {
     chooseEnd('From', 'acc-1');
     chooseEnd('To', 'acc-2');
     fireEvent.change(screen.getByLabelText('Direction'), { target: { value: 'out' } });
-    await userEvent.click(within(screen.getByRole('group', { name: 'Allowed relationships' })).getByRole('checkbox', { name: 'link-b' }));
+    await userEvent.click(within(typesGroup()).getByRole('checkbox', { name: 'link-b' }));
     await userEvent.click(find());
     await settle();
     expect(kit.sent.map((entry) => entry.request)).toEqual([{ sourceId: 'a', from: { entityType: 'kind-a', stableId: 'acc-1' }, to: { entityType: 'kind-a', stableId: 'acc-2' }, relTypes: ['link-a'], maxHops: 3, limit: 5, direction: 'out' }]);
@@ -95,7 +98,7 @@ describe('the Paths tool and its panel', () => {
     chooseEnd('To', 'acc-1');
     expect(screen.getByText('Choose two different entities.')).toBeTruthy();
     chooseEnd('To', 'acc-2');
-    const types = within(screen.getByRole('group', { name: 'Allowed relationships' }));
+    const types = within(typesGroup());
     await userEvent.click(types.getByRole('checkbox', { name: 'link-a' }));
     await userEvent.click(types.getByRole('checkbox', { name: 'link-b' }));
     expect(screen.getByText('Choose at least one relationship type.')).toBeTruthy();
@@ -127,7 +130,7 @@ describe('the Paths tool and its panel', () => {
     await settle();
     expect(screen.getByRole('alert').textContent).toContain('The search could not be completed.');
     expect(screen.getByRole('list', { name: 'Paths found' })).toBeTruthy();
-    expect((screen.getByLabelText('From') as HTMLSelectElement).value).toBe(elementKey(nodeRef('acc-1')));
+    expect((screen.getByLabelText('From') as HTMLInputElement).value).toBe('acc-1');
     expect(kit.state.loadedGraph().nodes).toHaveLength(loaded);
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await settle();
@@ -142,15 +145,16 @@ describe('the Paths tool and its panel', () => {
     const user = userEvent.setup();
     chooseEnd('From', 'acc-1');
     chooseEnd('To', 'acc-2');
-    const order = ['From', 'Search the source: From', 'To', 'Search the source: To', 'Max hops', 'Direction', 'Result cap'];
+    const order = ['From', 'To', 'Max hops', 'Direction', 'Result cap'];
     screen.getByLabelText('From').focus();
     for (const label of order.slice(1)) {
       await user.tab();
       expect(document.activeElement).toBe(screen.getByLabelText(label));
     }
     await user.tab();
-    expect(document.activeElement).toBe(screen.getByRole('checkbox', { name: 'link-a' }));
-    find().focus();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: /^Allowed relationships/ }));
+    await user.tab();
+    expect(document.activeElement).toBe(find());
     await user.keyboard('{Enter}');
     await settle();
     expect(kit.sent).toHaveLength(1);
@@ -168,12 +172,11 @@ describe('searching the source for an end', () => {
     act(() => kit.state.setMask(true));
     const before = kit.state.loadedGraph().nodes.length;
     await openPaths();
-    fireEvent.change(screen.getByLabelText('Search the source: From'), { target: { value: 'far' } });
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: 'far' } });
     await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 300))));
     await settle();
     expect(kit.searches).toEqual([{ sourceId: 'a', text: 'far', mask: true }]);
-    expect(within(screen.getByLabelText('From')).getByRole('option', { name: 'far-1 (kind-c)' })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: elementKey(hit.ref) } });
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'From results' })).getByRole('option', { name: 'far-1 (kind-c)' }));
     chooseEnd('To', 'acc-2');
     await userEvent.click(find());
     await settle();
@@ -181,27 +184,33 @@ describe('searching the source for an end', () => {
     expect(kit.state.loadedGraph().nodes).toHaveLength(before);
   });
 
-  it('keeps the chosen entity when the text is cleared, and shows only the answer to the newest text', async () => {
+  it('keeps the chosen entity until the field is emptied and left, and shows only the answer to the newest text', async () => {
     const hit = typedNode('far-1', 'kind-c');
     let release: (() => void) | undefined;
     const kit = await pathsWorkspace({
       search: (request) => (request.text === 'f' ? new Promise((resolve) => (release = () => resolve(searchOf([typedNode('old-1', 'kind-c')])))) : searchOf([hit])),
     });
     await openPaths();
-    fireEvent.change(screen.getByLabelText('Search the source: From'), { target: { value: 'f' } });
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: 'f' } });
     await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 300))));
-    fireEvent.change(screen.getByLabelText('Search the source: From'), { target: { value: 'far' } });
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: 'far' } });
     await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 300))));
     await settle();
     release?.();
     await settle();
-    const options = within(screen.getByLabelText('From')).getAllByRole('option').map((option) => option.textContent);
+    const options = within(screen.getByRole('listbox', { name: 'From results' })).getAllByRole('option').map((option) => option.textContent);
     expect(options).toContain('far-1 (kind-c)');
     expect(options.some((text) => text?.startsWith('old-1'))).toBe(false);
-    fireEvent.change(screen.getByLabelText('From'), { target: { value: elementKey(hit.ref) } });
-    fireEvent.change(screen.getByLabelText('Search the source: From'), { target: { value: '' } });
+    fireEvent.click(within(screen.getByRole('listbox', { name: 'From results' })).getByRole('option', { name: 'far-1 (kind-c)' }));
+    const from = screen.getByLabelText('From') as HTMLInputElement;
+    expect(from.value).toBe('far-1');
+    fireEvent.change(from, { target: { value: 'ac' } });
+    fireEvent.blur(from);
+    expect(from.value).toBe('far-1');
+    fireEvent.change(from, { target: { value: '' } });
+    fireEvent.blur(from);
     await settle();
-    expect((screen.getByLabelText('From') as HTMLSelectElement).value).toBe(elementKey(hit.ref));
+    expect(from.value).toBe('');
     expect(kit.searches.length).toBe(2);
   });
 
@@ -209,10 +218,10 @@ describe('searching the source for an end', () => {
     await pathsWorkspace({ search: async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) });
     await openPaths();
     chooseEnd('To', 'acc-2');
-    fireEvent.change(screen.getByLabelText('Search the source: From'), { target: { value: 'far' } });
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: 'far' } });
     await act(async () => void (await new Promise((resolve) => setTimeout(resolve, 300))));
     await settle();
     expect(screen.getByRole('alert').textContent).toBe('The search could not be completed.');
-    expect((screen.getByLabelText('To') as HTMLSelectElement).value).toBe(elementKey(nodeRef('acc-2')));
+    expect((screen.getByLabelText('To') as HTMLInputElement).value).toBe('acc-2');
   });
 });

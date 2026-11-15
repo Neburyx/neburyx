@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { canvasOf, openOneEntity } from './support/workspace.ts';
+import { canvasOf, openOneEntity, screenOf } from './support/workspace.ts';
 
 const SOURCE = 'banking-demo';
 const TYPE = 'account';
@@ -34,14 +34,16 @@ async function openPanel(page: Page): Promise<void> {
   await expect(panelOf(page).getByRole('heading', { name: 'Bounded path search' })).toBeVisible();
 }
 
-/** From is the loaded entity; To is found by typing its ID, as the search of the source answers a typed ID with that entity. */
-async function chooseEnds(page: Page): Promise<void> {
+/** Each end is one search field: the typed ID is found among the loaded entities or, for one that is not loaded, by the search of the source. */
+async function chooseEnd(page: Page, label: 'From' | 'To', id: string): Promise<void> {
   const panel = panelOf(page);
-  await panel.getByLabel('From', { exact: true }).selectOption({ label: 'account AC-1' });
-  await panel.getByLabel('Search the source: To').fill('AC-2');
-  const option = panel.getByLabel('To', { exact: true }).getByRole('option', { name: /AC-2/ });
-  await expect(option).toHaveCount(1);
-  await panel.getByLabel('To', { exact: true }).selectOption((await option.getAttribute('value')) ?? '');
+  await panel.getByLabel(label, { exact: true }).fill(id);
+  await panel.getByRole('listbox', { name: `${label} results` }).getByRole('option', { name: new RegExp(id) }).first().click();
+}
+
+async function chooseEnds(page: Page): Promise<void> {
+  await chooseEnd(page, 'From', 'AC-1');
+  await chooseEnd(page, 'To', 'AC-2');
 }
 
 async function answerWith(page: Page, answer: unknown | (() => Promise<unknown>)): Promise<void> {
@@ -58,16 +60,33 @@ test.describe('the Paths tool', () => {
     await expect(panelOf(page).getByRole('heading', { name: 'Path 2 · 2 hops' })).toBeVisible();
   });
 
-  test('adds a chosen path to the canvas and offers the evidence of its steps only then', async ({ page }) => {
+  test('highlights a chosen path without adding it, adds it on Add to graph, and offers the evidence of its steps only then', async ({ page }) => {
     await answerWith(page, pathsAnswer([['AC-1', 'AC-9', 'AC-2']]));
     await openPanel(page);
     await chooseEnds(page);
     await panelOf(page).getByRole('button', { name: 'Find paths' }).click();
-    await expect(panelOf(page).getByText('Evidence · AUTH-77102 ↗').first()).toBeVisible();
-    await expect(panelOf(page).getByRole('button', { name: 'Evidence · AUTH-77102 ↗' })).toHaveCount(0);
+    await expect(panelOf(page).getByText('Evidence · AUTH-77102').first()).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: /^Evidence/ })).toHaveCount(0);
     await panelOf(page).getByRole('button', { name: /^Path 1/ }).click();
+    await expect(panelOf(page).getByText(/Selected/)).toBeVisible();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
+    await panelOf(page).getByRole('button', { name: 'Add to graph' }).click();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
+    await expect(panelOf(page).getByRole('button', { name: 'On canvas' })).toBeDisabled();
     await expect(panelOf(page).getByRole('button', { name: 'Evidence · AUTH-77102 ↗' }).first()).toBeVisible();
+  });
+
+  test('fits the chosen path in the part of the canvas the panel does not cover', async ({ page }) => {
+    await answerWith(page, pathsAnswer([['AC-1', 'AC-9', 'AC-2']]));
+    await openPanel(page);
+    await chooseEnds(page);
+    await panelOf(page).getByRole('button', { name: 'Find paths' }).click();
+    await panelOf(page).getByRole('button', { name: /^Path 1/ }).click();
+    await panelOf(page).getByRole('button', { name: 'Add to graph' }).click();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
+    const box = await panelOf(page).boundingBox();
+    const right = (box?.x ?? 0) + (box?.width ?? 0);
+    for (const id of ['AC-1', 'AC-9', 'AC-2']) expect((await screenOf(page, id)).x).toBeGreaterThan(right);
   });
 
   test('starts a search from the selection bar with the first two selected entities', async ({ page }) => {
@@ -76,6 +95,7 @@ test.describe('the Paths tool', () => {
     await chooseEnds(page);
     await panelOf(page).getByRole('button', { name: 'Find paths' }).click();
     await panelOf(page).getByRole('button', { name: /^Path 1/ }).click();
+    await panelOf(page).getByRole('button', { name: 'Add to graph' }).click();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
     await page.getByRole('button', { name: 'Close Paths' }).click();
     await page.getByRole('button', { name: 'Paths between' }).click();

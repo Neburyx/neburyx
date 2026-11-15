@@ -138,7 +138,7 @@ export interface PresentationState {
 }
 
 interface ViewChange {
-  readonly show: 'fit' | { readonly viewport: Viewport | undefined };
+  readonly show: 'fit' | { readonly viewport: Viewport | undefined } | { readonly around: readonly string[]; readonly clearOfX: number };
 }
 
 const sameRows = (a: readonly DatedRow[] = [], b: readonly DatedRow[] = []): boolean => a.length === b.length && a.every((row, at) => row.type === b[at]?.type && row.from === b[at]?.from && row.to === b[at]?.to);
@@ -263,6 +263,8 @@ export interface PresentationActions {
   setPanelCollapsed(panel: string, registration: number, collapsed: boolean): void;
   /** Lets go of a panel's collapsed state when that registration is taken out; the state of a newer registration of the same ID stays. */
   clearPanelCollapsed(panel: string, registration: number): void;
+  /** Asks the canvas to show the named items as large as they fit, right of the client x `clearOfX`, so that a panel over the canvas does not cover them. */
+  fitAround(keys: readonly string[], clearOfX: number): void;
   setViewport(viewport: Viewport): void;
 }
 
@@ -576,6 +578,9 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     setSupernodePanel(open) {
       if (open !== undefined) requireKnown([open.key], known.isNode);
       store.setState({ ...store.getState(), supernodePanel: open });
+    },
+    fitAround(keys, clearOfX) {
+      store.setState({ ...store.getState(), viewChange: { show: { around: keys, clearOfX } } });
     },
     setViewport(viewport) {
       if (![viewport.zoom, viewport.x, viewport.y].every(Number.isFinite)) throw new StateError('INVALID_VIEWPORT');

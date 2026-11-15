@@ -24,28 +24,51 @@ async function search(kit: PathsKit): Promise<void> {
 const loadedKeys = (kit: PathsKit): string[] => kit.state.loadedGraph().nodes.map((node) => elementKey(node.ref));
 const selected = (kit: PathsKit): string[] => [...kit.state.presentation.view.getState().selection].sort();
 
+const addButton = (): HTMLElement => screen.getByRole('button', { name: /^(Add to graph|On canvas)$/ });
+
 describe('choosing a path', () => {
-  it('adds what of the path is not loaded, once, selects the path and reads Selected; the arrow keys choose nothing', async () => {
+  it('highlights the loaded part of the path and fits the view clear of the panel without adding anything; the arrow keys choose nothing', async () => {
     const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'far-1', 'acc-2'], ['acc-1', 'acc-2']]) }) });
     await search(kit);
     const before = loadedKeys(kit).length;
     await userEvent.keyboard('{ArrowDown}{ArrowUp}');
-    expect(loadedKeys(kit)).toHaveLength(before);
     expect(screen.queryByText(/Selected/)).toBeNull();
     await userEvent.click(choosePathButton(/Path 1 · 2 hops/));
     await settle();
-    expect(loadedKeys(kit)).toContain(elementKey(nodeRef('far-1')));
+    expect(loadedKeys(kit)).toHaveLength(before);
+    expect(loadedKeys(kit)).not.toContain(elementKey(nodeRef('far-1')));
+    expect(kit.state.loadedGraph().edges).toHaveLength(0);
+    expect(selected(kit)).toEqual([elementKey(nodeRef('acc-1')), elementKey(nodeRef('acc-2'))].sort());
+    expect(kit.state.presentation.view.getState().viewChange).toMatchObject({ show: { around: [elementKey(nodeRef('acc-1')), elementKey(nodeRef('acc-2'))] } });
+    expect(screen.getByText(/Selected/)).toBeTruthy();
+    expect(choosePathButton(/Path 1/).getAttribute('aria-pressed')).toBe('true');
+    expect((addButton() as HTMLButtonElement).disabled).toBe(false);
+    expect(addButton().textContent).toBe('Add to graph');
+  });
+
+  it('adds what of the chosen path is not loaded only on Add to graph, once, selects the path and then reads On canvas', async () => {
+    const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'far-1', 'acc-2']]) }) });
+    await search(kit);
+    const before = loadedKeys(kit).length;
+    await userEvent.click(choosePathButton(/Path 1/));
+    await settle();
+    await userEvent.click(addButton());
+    await settle();
     expect(loadedKeys(kit)).toHaveLength(before + 1);
     expect(kit.state.loadedGraph().edges.length).toBe(2);
     expect(selected(kit)).toEqual([elementKey(nodeRef('acc-1')), elementKey(nodeRef('acc-2')), elementKey(nodeRef('far-1')), ...kit.state.loadedGraph().edges.map((edge) => edgeKey(edge.ref))].sort());
-    expect(screen.getByText(/Selected/)).toBeTruthy();
-    expect(choosePathButton(/Path 1/).getAttribute('aria-pressed')).toBe('true');
+    expect(addButton().textContent).toBe('On canvas');
+    expect((addButton() as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(choosePathButton(/Path 1/));
+    await settle();
+    expect(loadedKeys(kit)).toHaveLength(before + 1);
   });
 
-  it('chooses with Enter on the row too, and adds nothing for a path that is loaded already, selecting it', async () => {
+  it('chooses with Enter on the card title too, and reads On canvas for a path that is loaded already', async () => {
     const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'acc-2']]) }) });
     await search(kit);
     await userEvent.click(choosePathButton(/Path 1/));
+    await userEvent.click(addButton());
     await settle();
     const loaded = loadedKeys(kit).length;
     const edges = kit.state.loadedGraph().edges.length;
@@ -56,19 +79,22 @@ describe('choosing a path', () => {
     expect(loadedKeys(kit)).toHaveLength(loaded);
     expect(kit.state.loadedGraph().edges).toHaveLength(edges);
     expect(selected(kit).length).toBe(2 + edges);
+    expect(addButton().textContent).toBe('On canvas');
   });
 
-  it('makes the selection the second path, and keeps what the first path added', async () => {
-    const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'far-1', 'acc-2'], ['acc-1', 'far-2', 'acc-2']]) }) });
+  it('makes the selection the second path, and adds nothing', async () => {
+    const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'acc-2'], ['acc-1', 'far-1']]) }) });
     await search(kit);
+    const before = loadedKeys(kit).length;
     await userEvent.click(choosePathButton(/Path 1/));
     await settle();
+    expect(selected(kit)).toContain(elementKey(nodeRef('acc-2')));
     await userEvent.click(choosePathButton(/Path 2/));
     await settle();
-    expect(loadedKeys(kit)).toEqual(expect.arrayContaining([elementKey(nodeRef('far-1')), elementKey(nodeRef('far-2'))]));
-    expect(selected(kit)).toContain(elementKey(nodeRef('far-2')));
-    expect(selected(kit)).not.toContain(elementKey(nodeRef('far-1')));
+    expect(loadedKeys(kit)).toHaveLength(before);
+    expect(selected(kit)).toEqual([elementKey(nodeRef('acc-1'))]);
     expect(choosePathButton(/Path 1/).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getAllByRole('button', { name: 'Add to graph' })).toHaveLength(1);
   });
 
   it('leaves the filters alone, keeps a loaded entity hidden by them hidden, and says how many of the path are hidden by filters', async () => {
@@ -87,6 +113,7 @@ describe('choosing a path', () => {
     const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'far-1', 'acc-2']]) }) });
     await search(kit);
     await userEvent.click(choosePathButton(/Path 1/));
+    await userEvent.click(addButton());
     await settle();
     expect(screen.getAllByText(/4 entities/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/2 relationships/).length).toBeGreaterThan(0);
@@ -104,13 +131,16 @@ describe('choosing a path', () => {
 });
 
 describe('the evidence of a step', () => {
-  it('offers each reference of a step as a control only once the path is chosen, and opens the evidence of that relationship', async () => {
+  it('offers each reference of a step as a control only once its relationship is on the canvas, and opens the evidence of that relationship', async () => {
     const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'acc-2']], {}, ['REC-1', 'REC-2']) }) });
     const open = vi.spyOn(kit.evidence, 'open');
     await search(kit);
-    expect(screen.queryByRole('button', { name: 'Evidence · REC-1 ↗' })).toBeNull();
-    expect(screen.getByText('Evidence · REC-1 ↗')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Evidence/ })).toBeNull();
+    expect(screen.getByText('Evidence · REC-1')).toBeTruthy();
     await userEvent.click(choosePathButton(/Path 1/));
+    await settle();
+    expect(screen.queryByRole('button', { name: /^Evidence/ })).toBeNull();
+    await userEvent.click(addButton());
     await settle();
     await userEvent.click(screen.getByRole('button', { name: 'Evidence · REC-2 ↗' }));
     expect(open).toHaveBeenCalledTimes(1);
@@ -118,14 +148,13 @@ describe('the evidence of a step', () => {
     expect(screen.getByRole('button', { name: 'Evidence · REC-1 ↗' })).toBeTruthy();
   });
 
-  it('says evidence is not available for a step with no reference and offers nothing to open', async () => {
+  it('shows no evidence line for a step with no reference', async () => {
     const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'acc-2']]) }) });
     await search(kit);
     await userEvent.click(choosePathButton(/Path 1/));
     await settle();
     const list = within(screen.getByRole('list', { name: 'Paths found' }));
-    expect(list.getByText('Evidence not available')).toBeTruthy();
-    expect(list.queryByRole('button', { name: /Evidence/ })).toBeNull();
+    expect(list.queryByText(/Evidence/)).toBeNull();
     void fireEvent;
   });
 });

@@ -721,6 +721,16 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       if (cy.nodes().empty()) return;
       fitEntities(cy, entitiesOnly === true);
     },
+    fitAround(keys, clearOfX) {
+      const cy = requireCore();
+      const wanted = new Set(keys);
+      const items = cy.elements().filter((item) => wanted.has(item.id()));
+      if (items.empty()) return;
+      const size = sizeOf(cy);
+      const left = surface === undefined ? 0 : Math.min(Math.max(0, clearOfX - surface.getBoundingClientRect().left), size.width / 2);
+      const viewport = fitViewport(items.boundingBox({}), { width: size.width - left, height: size.height }, FIT_PADDING);
+      if (viewport !== undefined) showViewport(cy, { ...viewport, x: viewport.x + left });
+    },
     anchorOf(key) {
       const cy = requireCore();
       if (surface === undefined) return undefined;

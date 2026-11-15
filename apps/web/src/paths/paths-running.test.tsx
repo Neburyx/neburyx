@@ -90,12 +90,12 @@ describe('a refused or failed search', () => {
     await openPaths();
     chooseEnd('From', 'acc-1');
     chooseEnd('To', 'acc-2');
-    fireEvent.change(screen.getByLabelText('Max hops'), { target: { value: '9' } });
+    fireEvent.change(screen.getByLabelText('Max hops'), { target: { value: '4' } });
     await userEvent.click(find());
     await settle();
     expect(screen.getByRole('alert').textContent).toBe(text);
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
-    expect((screen.getByLabelText('Max hops') as HTMLInputElement).value).toBe('9');
+    expect((screen.getByLabelText('Max hops') as HTMLSelectElement).value).toBe('4');
   });
 
   it.each(['QUERY_TIMEOUT', 'SOURCE_UNAVAILABLE', 'SOURCE_BUSY', 'RATE_LIMITED'] as const)('puts %s on the app banner with its recovery action, and keeps the fields and the previous list', async (code) => {

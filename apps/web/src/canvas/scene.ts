@@ -106,6 +106,8 @@ export interface CanvasRenderer {
   show(viewport: Viewport): void;
   /** Shows every drawn entity; does nothing when none is drawn. With `entitiesOnly`, the aggregate nodes (what is not loaded) do not count, so the view closes in on the entities. */
   fit(entitiesOnly?: boolean): void;
+  /** Shows the named drawn items, as large as they fit, in the part of the canvas that lies right of the client x `clearOfX` (the right edge of a panel over the canvas); does nothing when none of them is drawn. */
+  fitAround(keys: readonly string[], clearOfX: number): void;
   /** Multiplies the zoom around the centre of the canvas, within the zoom limits. */
   zoomBy(factor: number): void;
   /** Pans so the item is at the centre of the canvas, with the zoom and every position as they are; does nothing for a key that is not drawn. */
