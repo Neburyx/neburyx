@@ -1,5 +1,5 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import { ASK_SAVED_PATTERN_INTENT, type AskSummary, AskSummaryCitation, Count } from '@neburyx/contracts';
+import { ASK_SAVED_PATTERN_INTENT, isPathSentence, pathSentenceStart, type AskSummary, AskSummaryCitation, Count } from '@neburyx/contracts';
 import { heldKeysOf } from '../api/merge-into-loaded.js';
 import type { AddedOutcome } from '../patterns/add-to-graph.js';
 import { addedText } from '../patterns/copy.js';
@@ -68,7 +68,18 @@ function Understood({ answer }: { readonly answer: Answered }) {
 
 type SourceState = { readonly kind: 'selected' } | { readonly kind: 'select' } | { readonly kind: 'blocked'; readonly text: string };
 
-function Answer({ summary, answer, added, onNote }: { readonly summary: AskSummary; readonly answer: Answered; readonly added: boolean; readonly onNote: (text: string) => void }) {
+interface Citations {
+  readonly summary: AskSummary | undefined;
+  stateOf(citation: AskSummaryCitation): SourceState;
+  press(citation: AskSummaryCitation): void;
+  markerLabel(citation: AskSummaryCitation): string;
+  /** The marker button of a key, or nothing for a key the summary holds no citation for. */
+  marker(key: string): ReactNode;
+  sentence(text: string, cites: readonly string[]): ReactNode;
+}
+
+/** What a citation does when it is used, and how a marker reads: shared by the answer and by the cards that carry their own markers. */
+function useCitations(summary: AskSummary | undefined, answer: Answered, added: boolean, onNote: (text: string) => void): Citations {
   const state = useClientState();
   const graph = useVisibleGraph();
   const selection = useStoreSelector(state.presentation.view, (view) => view.selection);
@@ -81,7 +92,7 @@ function Answer({ summary, answer, added, onNote }: { readonly summary: AskSumma
     const outcome = pressOutcome({ key, held: new Set([...held.nodes, ...held.edges]), drawn, addable, added });
     return { kind: 'blocked', text: outcome.kind === 'note' ? outcome.text : '' };
   };
-  const byKey = new Map(summary.citations.map((citation) => [citation.key, citation]));
+  const byKey = new Map((summary?.citations ?? []).map((citation) => [citation.key, citation]));
   const press = (citation: AskSummaryCitation): void => {
     const outcome = stateOf(citation);
     if (outcome.kind === 'blocked') {
@@ -96,25 +107,35 @@ function Answer({ summary, answer, added, onNote }: { readonly summary: AskSumma
     const tail = outcome.kind === 'selected' ? SUMMARY_COPY.selected : outcome.kind === 'select' ? SUMMARY_COPY.select : outcome.text;
     return `Source ${markerNumber(citation.key)}, ${citation.title}, ${tail.toLowerCase()}`;
   };
+  const marker = (key: string): ReactNode => {
+    const citation = byKey.get(key);
+    return citation === undefined ? null : (
+      <button key={key} type="button" className="ask-marker" aria-label={markerLabel(citation)} onClick={() => press(citation)}>
+        [{markerNumber(key)}]
+      </button>
+    );
+  };
   const sentence = (text: string, cites: readonly string[]): ReactNode => (
     <>
-      {text}{' '}
-      {cites.map((key) => {
-        const citation = byKey.get(key);
-        return citation === undefined ? null : (
-          <button key={key} type="button" className="ask-marker" aria-label={markerLabel(citation)} onClick={() => press(citation)}>
-            [{markerNumber(key)}]
-          </button>
-        );
-      })}
+      {text} {cites.map(marker)}
     </>
   );
+  return { summary, stateOf, press, markerLabel, marker, sentence };
+}
+
+/** The sentences the Answer shows: all of them, but for a path answer only the heading, because each path's card carries the citations of its own path. */
+function shownSentences(summary: AskSummary, answer: Answered): AskSummary['sentences'] {
+  return answer.result.templateId === 'shortest-paths' ? summary.sentences.filter((sentence) => !isPathSentence(sentence.text)) : summary.sentences;
+}
+
+function Answer({ summary, answer, cites }: { readonly summary: AskSummary; readonly answer: Answered; readonly cites: Citations }) {
+  const { stateOf, press, markerLabel, sentence } = cites;
   return (
     <>
       <section className="ask-section" aria-label={ASK_COPY.answer}>
         <h4 className="ask-section-title">{ASK_COPY.answer}</h4>
         <p className="ask-answer-text">
-          {summary.sentences.map((entry, index) => (
+          {shownSentences(summary, answer).map((entry, index) => (
             <Fragment key={index}>{sentence(entry.text, entry.cites)} </Fragment>
           ))}
         </p>
@@ -161,6 +182,12 @@ function buttonLabel(view: ReturnType<typeof resultView>): string {
   return addFirstLabel(formatNumber(listed), rows ? 'rows' : '');
 }
 
+/** The markers of one path: the citations of the sentence of the summary that begins with the path's own words, none for a path the summary left out. */
+function pathMarkers(summary: AskSummary | undefined, position: number, cites: Citations): ReactNode {
+  const entry = summary?.sentences.find((sentence) => sentence.text.startsWith(pathSentenceStart(position)));
+  return entry === undefined ? null : [...entry.cites].sort((left, right) => Number(markerNumber(left)) - Number(markerNumber(right))).map(cites.marker);
+}
+
 export interface AnswerCardProps {
   readonly answer: Answered;
   readonly added: AddedOutcome | undefined;
@@ -172,6 +199,7 @@ export interface AnswerCardProps {
 export function AnswerCard({ answer, added, canAdd, onAdd }: AnswerCardProps) {
   const [note, setNote] = useState('');
   const view = resultView(answer.result);
+  const cites = useCitations(answer.summary, answer, added !== undefined, setNote);
   return (
     <section className="ask-card" aria-labelledby="ask-answer-title">
       <h3 id="ask-answer-title" className="visually-hidden" tabIndex={-1} data-ask-focus="title">
@@ -190,7 +218,24 @@ export function AnswerCard({ answer, added, canAdd, onAdd }: AnswerCardProps) {
       ) : (
         <CountStrip fact={view.count} />
       )}
-      {answer.outcome === 'partial' ? <p className="ask-notice">{ASK_COPY.partial}</p> : null}
+      {answer.outcome === 'partial' ? <p className="ask-notice">{view.cutText ?? ASK_COPY.partial}</p> : null}
+      {view.paths === undefined || view.paths.length === 0 ? null : (
+        <ol className="ask-paths" aria-label={ASK_COPY.paths}>
+          {view.paths.map((path) => (
+            <li key={path.position} className="ask-path">
+              <div className="ask-path-head">
+                <h4 className="ask-path-title">{path.title}</h4>
+                <span className="ask-path-cites">{pathMarkers(answer.summary, path.position, cites)}</span>
+              </div>
+              <ol className="ask-path-steps">
+                {path.steps.map((step, index) => (
+                  <li key={index}>{step}</li>
+                ))}
+              </ol>
+            </li>
+          ))}
+        </ol>
+      )}
       {view.notices.map((notice) => (
         <p key={notice} className="ask-notice">
           {notice}
@@ -208,7 +253,7 @@ export function AnswerCard({ answer, added, canAdd, onAdd }: AnswerCardProps) {
           </ul>
         </section>
       )}
-      {answer.summary === undefined ? null : <Answer summary={answer.summary} answer={answer} added={added !== undefined} onNote={setNote} />}
+      {answer.summary === undefined ? null : <Answer summary={answer.summary} answer={answer} cites={cites} />}
       <p className="ask-note" role="status">
         {note}
       </p>

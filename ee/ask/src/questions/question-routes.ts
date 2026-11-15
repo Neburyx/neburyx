@@ -243,6 +243,11 @@ async function execute(run: Execution): Promise<AskAnswer> {
     await writeEvent(request, run.action, 'refused', sourceId, { ...base, ...(templateId === undefined ? {} : { templateId }), paramsHash, outcome: 'refused', cause: 'nothing-found', rowCount: 0 });
     return refusal('nothing-found', { intent: name });
   }
+  // a path search that found no path between two entities that exist has nothing to cite: it answers as a query that returns nothing does
+  if (result.templateId === 'shortest-paths' && result.result.status === 'ok' && result.result.paths.length === 0) {
+    await writeEvent(request, run.action, 'refused', sourceId, { ...base, ...(templateId === undefined ? {} : { templateId }), paramsHash, outcome: 'refused', cause: 'nothing-found', rowCount: 0 });
+    return refusal('nothing-found', { intent: name });
+  }
   const heavy = isHeavyResult(result);
   const { rowCount, partial } = summarizeRun(result);
   const answerOutcome = heavy || partial ? 'partial' : 'complete';

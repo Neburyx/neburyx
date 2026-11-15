@@ -31,13 +31,13 @@ Choose the intent whose meaning fits the whole question, including any period, c
 - `devices-used-in-the-last-7-days` (inputs: account): Lists the devices the named account used in the last 7 days. Only for a question that states 7 days.
 - `shared-device-chain` (inputs: account): Lists the accounts linked to the named account by a shared device, with the chain that shows the link.
 - `why-two-accounts-are-linked` (inputs: first, second): Shows why two named accounts are linked through a shared device. Two inputs: the first and the second account, in the order the question names them.
+- `shortest-path-between-accounts` (inputs: first, second): Lists the shortest transfer paths between two named accounts, following transfers in either direction, at most 3 steps. Only for a question that asks for the shortest path or the route between two accounts. Two inputs: the first and the second account, in the order the question names them.
 - `transactions-with-a-payment-reference` (inputs: reference): Finds the transactions that have the named payment reference.
 - `customers-by-name` (inputs: name): Finds the customer or customers with the named full name. Only for a question that names a person by name, not by identifier.
 - `saved-pattern` (inputs: pattern, anchor): Runs one of the person's own saved patterns. Only when a list of saved patterns is sent after the question, and only for a question that names one of them. "pattern" is the key of that pattern in the list; "anchor" is the identifier of its starting entity, copied exactly as the question gives it, and only for a pattern that starts from an entity the question gives.
 
 ## Answer null for
 
-- the shortest path or the route between two accounts
 - accounts that are only "related" to an account, with no kind of link named
 - accounts that share both a device and an address (or any combination of kinds of link)
 - accounts selected by a property or a date, such as the accounts opened last month

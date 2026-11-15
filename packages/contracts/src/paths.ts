@@ -3,6 +3,10 @@ import { referenceTextSchema } from './entities.js';
 import { countSchema, edgeSchema, elementRefSchema, nodeSchema } from './graph.js';
 import { HEAVY_CONTINUE_LIMIT } from './template-run.js';
 
+/** The most hops and the most paths a search can ask for, whatever a source allows: the ceilings of the source budgets `max_hops` and `path_results_cap`. */
+export const PATHS_HOPS_MAX = 4;
+export const PATHS_RESULTS_MAX = 25;
+
 const text = z.string().min(1);
 
 const endSchema = z.strictObject({ entityType: text, stableId: referenceTextSchema });
@@ -23,6 +27,9 @@ export const pathsRequestSchema = z.strictObject({
   continue: z.boolean().optional(),
   mask: z.boolean().optional(),
 });
+
+/** What an Ask intent may choose of a paths search: the two ends in order, the relationship types, the hop count, the result size and the direction; the source, the mask and the continue flag are the application's. */
+export const pathsParamsSchema = z.strictObject({ ends: z.tuple([endSchema, endSchema]), relTypes: z.array(text).min(1), maxHops: z.number().int().min(1).max(PATHS_HOPS_MAX), limit: z.number().int().min(1).max(PATHS_RESULTS_MAX), direction: z.enum(['out', 'in', 'both']).optional() });
 
 /** One step of a path: the relationship's type, the entities it joins in the order the path is walked (the stored direction is the `from` and `to` of the matching edge), and the evidence references of the relationship. */
 export const pathStepSchema = z.strictObject({ from: elementRefSchema, to: elementRefSchema, relationshipType: text, evidenceRefs: z.array(z.string()) });

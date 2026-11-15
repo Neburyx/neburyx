@@ -132,3 +132,52 @@ describe('the Ask folder', () => {
     expect(problems.join(' ')).not.toContain('SENTINEL_TEXT');
   });
 });
+
+describe('the path intents of the Ask folder', () => {
+  const pathIntent = (settings: Record<string, unknown>) =>
+    JSON.stringify({ between: { parameters: ['a', 'b'], template: 'shortest-paths', settings: { ends: [{ entityType: 'widget', stableId: '$a' }, { entityType: 'widget', stableId: '$b' }], relTypes: ['LINKS'], maxHops: 3, limit: 5, ...settings } } });
+  const folderOf = (settings: Record<string, unknown>): string => folderWith({ demo: { 'classification.md': 'Choose an intent.', 'intents.json': pathIntent(settings) } });
+  const BUDGETS = { demo: { maxHops: 4, pathResultsCap: 25, maxPage: 50 } };
+  const problemsWith = async (settings: Record<string, unknown>, budgets: Parameters<typeof loadAskFolder>[0]['budgets'] = BUDGETS): Promise<readonly string[]> => {
+    const loaded = await loadAskFolder({ folder: folderOf(settings), sourceIds: ['demo'], ...(budgets === undefined ? {} : { budgets }) });
+    return loaded.ok ? [] : loaded.problems;
+  };
+
+  it.each([[{ maxHops: 5 }, 'maxHops'], [{ limit: 26 }, 'limit']])('refuses an intent above the ceilings of the product (%j), naming the intent and the setting', async (settings, name) => {
+    const problems = await problemsWith(settings);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('intent "between"');
+    expect(problems[0]).toContain(name);
+  });
+
+  it.each([[{ maxHops: 4, limit: 25 }], [{ maxHops: 1, limit: 1 }]])('starts with an intent at the edge of the ceilings (%j)', async (settings) => {
+    expect(await problemsWith(settings)).toEqual([]);
+  });
+
+  it('refuses a number given as a placeholder', async () => {
+    const problems = await problemsWith({ maxHops: '$hops' });
+    expect(problems.length).toBeGreaterThan(0);
+    expect(problems.every((problem) => problem.includes('intent "between"'))).toBe(true);
+  });
+
+  it('refuses an intent above its own source’s max_hops, path_results_cap or max_page, naming the intent and the limit', async () => {
+    expect((await problemsWith({ maxHops: 3 }, { demo: { maxHops: 2, pathResultsCap: 25, maxPage: 50 } }))[0]).toContain('max_hops (2)');
+    expect((await problemsWith({ limit: 20 }, { demo: { maxHops: 4, pathResultsCap: 10, maxPage: 50 } }))[0]).toContain('(10)');
+    expect((await problemsWith({ limit: 20 }, { demo: { maxHops: 4, pathResultsCap: 25, maxPage: 10 } }))[0]).toContain('(10)');
+  });
+
+  it('starts with an intent within its source’s limits, and checks nothing of the source when it is given no budgets (scoring)', async () => {
+    expect(await problemsWith({ maxHops: 3, limit: 10 }, { demo: { maxHops: 3, pathResultsCap: 10, maxPage: 10 } })).toEqual([]);
+    expect(await problemsWith({ maxHops: 3, limit: 20 }, undefined)).toEqual([]);
+  });
+
+  it('checks an intent against the budgets of its own source only', async () => {
+    const loaded = await loadAskFolder({ folder: folderOf({ maxHops: 3 }), sourceIds: ['demo'], budgets: { other: { maxHops: 1, pathResultsCap: 1, maxPage: 1 } } });
+    expect(loaded.ok).toBe(true);
+  });
+
+  it('holds no value of a file in the problem it reports', async () => {
+    const problems = await problemsWith({ maxHops: 3, relTypes: ['SECRET_TYPE'], limit: 20 }, { demo: { maxHops: 4, pathResultsCap: 10, maxPage: 50 } });
+    expect(JSON.stringify(problems)).not.toContain('SECRET_TYPE');
+  });
+});

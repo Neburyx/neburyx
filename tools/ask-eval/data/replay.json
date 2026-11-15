@@ -1,7 +1,7 @@
 {
   "model": "claude-haiku-5-5",
   "folders": {
-    "banking-demo": "fd7b1c81263c4a262990854a4dd513de8b0fdd0f3acfb4189b1c8249ed3fb5c9",
+    "banking-demo": "208abb46e1d8ef91cabc6a009a1869336bf95e6998d5d2793b3de763842d8ac4",
     "insurance-demo": "c97f04c42023ce6d270a0091337b8b4ab00311354d4e82748e8ea2c16dea6315"
   },
   "answers": {
@@ -62,8 +62,8 @@
     "Which transactions have the payment reference PR-00000010?": {
       "reply": "{\"intent\": \"transactions-with-a-payment-reference\", \"entities\": {\"reference\": \"PR-00000010\"}}"
     },
-    "What is the shortest path between AC-0002000 and AC-0002003?": {
-      "reply": "{\"intent\": null, \"entities\": {}}"
+    "What is the shortest path between AC-0002000 and AC-0002001?": {
+      "reply": "{\"intent\": \"shortest-path-between-accounts\", \"entities\": {\"first\": \"AC-0002000\", \"second\": \"AC-0002001\"}}"
     },
     "Which accounts are related to AC-0002000?": {
       "reply": "{\"intent\": null, \"entities\": {}}"

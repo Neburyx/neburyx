@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
+import type { ConfigureSourceBudgets, MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
 import { ConfigError, parseConfig } from './config.js';
@@ -96,6 +96,11 @@ function describeStartFailure(error: unknown): string {
   }
 }
 
+/** The budgets of each source that an extension's files are checked against at start-up. */
+export function configureBudgets(sources: readonly { readonly id: string; readonly budgets: { readonly maxHops: number; readonly pathResultsCap: number; readonly maxPage: number } }[]): Record<string, ConfigureSourceBudgets> {
+  return Object.fromEntries(sources.map((source) => [source.id, { maxHops: source.budgets.maxHops, pathResultsCap: source.budgets.pathResultsCap, maxPage: source.budgets.maxPage }]));
+}
+
 export async function start(env: Readonly<Record<string, string | undefined>>, io: StartIo): Promise<StartResult> {
   let config;
   try {
@@ -161,7 +166,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     if (extension.configure !== undefined) {
       let outcome;
       try {
-        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id) });
+        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id), budgets: configureBudgets(mapping.sources) });
       } catch (error) {
         io.logger.error({ event: 'profile.extension_configure_failed', cause: causeOf(error) }, 'enterprise extension could not be configured');
         io.stderr.write(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);

@@ -26,6 +26,7 @@ function rig(overrides: Partial<Record<keyof Omit<AskRunnerServices, 'mapping'>,
     derivedNeighbors: { derive: overrides.derivedNeighbors ?? answering('derivedNeighbors', { ref: { sourceId: SOURCE, ...REF }, results: [{ ruleId: 'rule_one', ruleVersion: 3, count: { quality: 'exact', value: 1, scope: 'derived:neighbors' }, nodes: [], edges: [], warnings: [] }, { ruleId: 'rule_two', ruleVersion: 1, count: { quality: 'exact', value: 5, scope: 'derived:neighbors' }, nodes: [], edges: [], warnings: [] }] }) },
     edges: { read: overrides.edges ?? answering('edges', { semantics: 'derived' }) },
     searching: { search: overrides.searching ?? answering('searching', { sourceId: SOURCE }) },
+    paths: { find: overrides.paths ?? answering('paths', { status: 'ok', paths: [], nodes: [], edges: [], capReached: false, partial: false, elapsedMs: 1, warnings: [] }) },
     fileQueries: { run: overrides.fileQueries ?? answering('fileQueries', { status: 'ok', intent: 'byName', count: { quality: 'exact', value: 0, scope: 'rows' }, nodes: [], edges: [], notices: [], warnings: [] }) },
     mapping,
   } as unknown as AskRunnerServices;
@@ -100,6 +101,7 @@ describe('a run that the gate or the services refuse', () => {
     ['derived-rule-run', { ref: REF }],
     ['derived-edge-support', { ruleId: 'rule_one', ends: [REF] }],
     ['search', { entityTypes: ['node_a'] }],
+    ['shortest-paths', { ends: [REF, REF], relTypes: [], maxHops: 3, limit: 5 }],
   ] as const)('refuses the parameters of a run of %s that are not the template’s as invalid parameters, and reads nothing', async (templateId, params) => {
     const { runnerFor, calls } = rig();
     expect(await refusedWith(runnerFor().run({ templateId, params }))).toEqual({ code: 'ASK_INTENT_INVALID' });
@@ -122,6 +124,7 @@ describe('what a run is bound to', () => {
     ['derived-rule-run', { ref: REF, ruleId: 'rule_one' }, 'derivedNeighbors'],
     ['derived-edge-support', { ruleId: 'rule_one', ends: [REF, { entityType: 'node_a', stableId: 'a-2' }] }, 'edges'],
     ['search', { entityTypes: ['node_a'], text: 'ref 77' }, 'searching'],
+    ['shortest-paths', { ends: [REF, { entityType: 'node_a', stableId: 'a-2' }], relTypes: ['link_a'], maxHops: 3, limit: 5 }, 'paths'],
   ] as const)('reads a run of %s as the caller, on the source of the scope, with the trace, the mask and the abort signal of the request', async (templateId, params, service) => {
     const { runnerFor, calls } = rig();
     await runnerFor({ sourceId: SOURCE, mask: false }).run({ templateId, params });
@@ -198,5 +201,55 @@ describe('the run of each template', () => {
     const { runnerFor, calls } = rig();
     await runnerFor().run({ templateId: 'search', params: { entityTypes: ['node_a', 'node_b'], text: 'ref 77' } });
     expect(calls[0]?.request).toMatchObject({ text: 'ref 77', entityTypes: ['node_a', 'node_b'] });
+  });
+});
+
+describe('the run of shortest-paths', () => {
+  const ENDS = [REF, { entityType: 'node_a', stableId: 'a-2' }];
+  const PARAMS = { ends: ENDS, relTypes: ['link_a', 'link_b'], maxHops: 3, limit: 5, direction: 'out' };
+
+  it('reads the ends as the two ends of the paths service, with the types, hops, cap and direction of the intent, the mask, the trace and the abort signal, and answers the result whole', async () => {
+    const { runnerFor, calls } = rig();
+    const answer = await runnerFor({ sourceId: SOURCE, mask: false }).run({ templateId: 'shortest-paths', params: PARAMS });
+    expect(calls).toEqual([{ service: 'paths', request: { traceId: 'tr-1', principal: principalFixture, sourceId: SOURCE, mask: false, signal, from: ENDS[0], to: ENDS[1], relTypes: ['link_a', 'link_b'], maxHops: 3, limit: 5, direction: 'out', continue: false } }]);
+    expect(answer).toMatchObject({ status: 'ok', result: { templateId: 'shortest-paths', result: { status: 'ok', paths: [] } } });
+  });
+
+  it('leaves the direction out when the intent names none, and sets the continue flag only when the call says so', async () => {
+    const { runnerFor, calls } = rig();
+    const { direction: _direction, ...withoutDirection } = PARAMS;
+    await runnerFor().run({ templateId: 'shortest-paths', params: withoutDirection });
+    await runnerFor().run({ templateId: 'shortest-paths', params: withoutDirection }, { continue: true });
+    expect(calls[0]?.request).not.toHaveProperty('direction');
+    expect(calls.map((call) => call.request['continue'])).toEqual([false, true]);
+  });
+
+  it('answers the heavy stop of the service as the heavy result of the template', async () => {
+    const heavy = { status: 'heavy', estimate: { quality: 'lowerBound', value: 500, scope: 'paths:estimate' }, threshold: 500, continueLimit: 25, warnings: [] };
+    const { runnerFor } = rig({ paths: vi.fn(async () => heavy) });
+    expect(await runnerFor().run({ templateId: 'shortest-paths', params: PARAMS })).toEqual({ status: 'ok', result: { templateId: 'shortest-paths', result: heavy } });
+  });
+
+  it.each([
+    ['an end that is not in the source', new AppError('NOT_FOUND'), { code: 'NOT_FOUND' }],
+    ['the two ends being one entity', new AppError('INVALID_REQUEST'), { code: 'ASK_INTENT_INVALID' }],
+    ['hops above the source’s maximum', new AppError('QUERY_BUDGET_EXCEEDED', { maxHops: 3 }), { code: 'QUERY_BUDGET_EXCEEDED', maxHops: 3 }],
+    ['a cap above the source’s path cap, with its figure', new AppError('QUERY_BUDGET_EXCEEDED', { pathResultsCap: 25 }), { code: 'QUERY_BUDGET_EXCEEDED', pathResultsCap: 25 }],
+    ['a search that ran out of time with no path', new AppError('QUERY_TIMEOUT', { timeoutMs: 5000 }), { code: 'QUERY_TIMEOUT', timeoutMs: 5000 }],
+  ])('comes back as the refusal of %s, with no result', async (_name, error, refusal) => {
+    const { runnerFor } = rig({ paths: vi.fn(async () => Promise.reject(error)) });
+    expect(await refusedWith(runnerFor().run({ templateId: 'shortest-paths', params: PARAMS }))).toEqual(refusal);
+  });
+
+  it('throws a cancelled request as it is, with no answer', async () => {
+    const cancelled = new RequestCancelled();
+    const { runnerFor } = rig({ paths: vi.fn(async () => Promise.reject(cancelled)) });
+    await expect(runnerFor().run({ templateId: 'shortest-paths', params: PARAMS })).rejects.toBe(cancelled);
+  });
+
+  it('passes the abort signal of the request to the service', async () => {
+    const { runnerFor, calls } = rig();
+    await runnerFor().run({ templateId: 'shortest-paths', params: PARAMS });
+    expect(calls[0]?.request['signal']).toBe(signal);
   });
 });

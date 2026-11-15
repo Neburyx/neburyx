@@ -29,6 +29,18 @@ describe('what a result adds to the graph', () => {
   });
 });
 
+describe('a path result', () => {
+  it('offers the entities and relationships of the paths to add, and nothing for the heavy stop', () => {
+    expect(addableOf(run('shortest-paths', { status: 'ok', paths: [], nodes: [node('a'), node('b')], edges: [] }))?.nodes).toHaveLength(2);
+    expect(addableOf(run('shortest-paths', { status: 'heavy', estimate: count('lowerBound', 500), threshold: 500, continueLimit: 25, warnings: [] }))).toBeUndefined();
+  });
+
+  it('says how many paths were found, and gives the heavy stop its lower bound', () => {
+    expect(resultView(run('shortest-paths', { status: 'ok', paths: [{ hops: 1, steps: [] }, { hops: 1, steps: [] }], nodes: [], edges: [] })).lines).toEqual([{ label: 'Paths', text: '2 found' }]);
+    expect(resultView(run('shortest-paths', { status: 'heavy', estimate: count('lowerBound', 500), threshold: 500, continueLimit: 25, warnings: [] })).count).toEqual({ count: count('lowerBound', 500), noun: 'match' });
+  });
+});
+
 describe('a result in words', () => {
   it.each([['exact'], ['estimated'], ['lowerBound']])('gives a count that is %s with its quality, to be drawn as a figure', (quality) => {
     expect(resultView(run('shared-attribute', { status: 'ok', nodes: [], edges: [], count: count(quality, 1), notices: [] })).count).toEqual({ count: count(quality, 1), noun: 'match' });

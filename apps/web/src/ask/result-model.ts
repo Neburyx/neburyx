@@ -1,5 +1,6 @@
 import type { AskRunResult, Count, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { noticeText } from '../patterns/copy.js';
+import { pathCapText, pathCutText, pathTitle } from './copy.js';
 import { degreeCountText } from '../workspace/degree-text.js';
 
 /** What a result gives the graph: its nodes and edges and the template it came from, for `addResultToGraph`; nothing for a result that lists no node to draw. */
@@ -30,12 +31,27 @@ export interface ResultView {
   readonly rows: readonly string[];
   readonly notices: readonly string[];
   readonly addable: Addable | undefined;
+  /** The paths of a path answer, each with its steps as `from → to`. */
+  readonly paths?: readonly PathView[];
+  /** What a path answer says of being cut, in place of the generic words of a partial result. */
+  readonly cutText?: string | undefined;
+}
+
+interface PathView {
+  readonly position: number;
+  readonly title: string;
+  readonly steps: readonly string[];
 }
 
 const titleOf = (nodes: readonly GraphNode[], ref: { readonly stableId: string; readonly entityType: string }): string => {
   const node = nodes.find((entry) => entry.ref.stableId === ref.stableId && entry.ref.entityType === ref.entityType);
   return node === undefined || node.display.title === '' ? ref.stableId : node.display.title;
 };
+
+/** The paths of a path answer: "Path N · k hops" with each step as the titles of its two ends. */
+function pathsOf(answer: Extract<Extract<AskRunResult, { templateId: 'shortest-paths' }>['result'], { status: 'ok' }>): readonly PathView[] {
+  return answer.paths.map((path, index) => ({ position: index + 1, title: pathTitle(index + 1, path.hops), steps: path.steps.map((step) => `${titleOf(answer.nodes, step.from)} → ${titleOf(answer.nodes, step.to)}`) }));
+}
 
 /** The rows of a file query: each relationship as `from → type → to`, and each entity no relationship names on a line of its own. */
 function rowsOf(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): readonly string[] {
@@ -66,6 +82,8 @@ export function addableOf(result: AskRunResult): Addable | undefined {
       return { nodes: result.result.nodes, edges: result.result.edges, templateId: result.templateId };
     case 'derived-rule-run':
       return { nodes: result.result.results.flatMap((entry) => entry.nodes), edges: result.result.results.flatMap((entry) => entry.edges), templateId: result.templateId };
+    case 'shortest-paths':
+      return result.result.status === 'ok' ? { nodes: result.result.nodes, edges: result.result.edges, templateId: result.templateId } : undefined;
     case 'search':
       return { nodes: result.result.exact, edges: [], templateId: result.templateId };
     case 'degree-preview':
@@ -107,6 +125,10 @@ export function resultView(result: AskRunResult): ResultView {
       return { lines: result.result.results.map((entry) => countLine(entry.ruleId, entry.count)), count: undefined, listed: undefined, rows: [], notices: [], addable };
     case 'derived-edge-support':
       return { lines: [countLine('Supports', result.result.supports.count)], count: undefined, listed: undefined, rows: [], notices: [], addable };
+    case 'shortest-paths':
+      return result.result.status === 'ok'
+        ? { lines: [{ label: 'Paths', text: `${result.result.paths.length} found` }], count: undefined, listed: undefined, rows: [], notices: [], addable, paths: pathsOf(result.result), cutText: result.result.partial ? pathCutText(result.result.retained ?? result.result.paths.length, result.result.requested ?? result.result.paths.length) : result.result.capReached ? pathCapText(result.result.paths.length) : undefined }
+        : { lines: [], count: { count: result.result.estimate, noun: 'match' }, listed: undefined, rows: [], notices: [], addable };
     case 'search':
       return {
         lines: [countLine('Exact matches', result.result.counts.exact), countLine('Related records', result.result.related.count), countLine('Supporting relationships', result.result.evidence.count)],

@@ -13,6 +13,7 @@ import { AskPanel } from './ask-panel.js';
 import { ASK_COPY } from './copy.js';
 import { causeTag } from './text.js';
 import { AskSessionProvider, createAskSession } from './ask-session.js';
+import { typedNode } from '../workspace/filters-kit.js';
 
 afterEach(cleanup);
 
@@ -453,5 +454,126 @@ describe('the Ask panel: the answer card', () => {
     expect(screen.getByText('Lower bound')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
     expect(screen.getByText(ASK_COPY.heavyNote)).toBeTruthy();
+  });
+});
+
+const pathStep = (from: string, to: string) => ({ from: typedNode(from, 'kind-a').ref, to: typedNode(to, 'kind-a').ref, relationshipType: 'link-a', evidenceRefs: [] });
+const pathAnswer = (over: Record<string, unknown> = {}, outcome: 'complete' | 'partial' = 'complete'): AskAnswer => ({
+  answered: {
+    intent: 'paths-between',
+    entities: { first: 'a', second: 'z' },
+    outcome,
+    result: { templateId: 'shortest-paths', result: { status: 'ok', paths: [{ hops: 2, steps: [pathStep('a', 'm'), pathStep('m', 'z')] }, { hops: 2, steps: [pathStep('a', 'n'), pathStep('n', 'z')] }], nodes: ['a', 'm', 'n', 'z'].map((id) => typedNode(id, 'kind-a')), edges: [], capReached: false, partial: false, elapsedMs: 5, warnings: [], ...over } as never },
+  },
+});
+
+const pathAnswerWithSummary = (): AskAnswer => {
+  const base = pathAnswer();
+  if (!('answered' in base)) throw new Error('an answer');
+  const ref = (id: string) => typedNode(id, 'kind-a').ref;
+  const citation = (key: string, id: string) => ({ key, element: ref(id), type: 'kind-a', title: id });
+  return {
+    answered: {
+      ...base.answered,
+      summary: {
+        sentences: [
+          { text: 'Found 2 shortest paths of 2 hops between a and z.', cites: ['n1', 'n2'] },
+          { text: 'Path 1, 2 hops.', cites: ['n1', 'n3', 'n2'] },
+          { text: 'Path 2, 2 hops.', cites: ['n1', 'n4', 'n2'] },
+        ],
+        citations: [citation('n1', 'a'), citation('n2', 'z'), citation('n3', 'm'), citation('n4', 'n')],
+      },
+    },
+  };
+};
+
+describe('the Ask panel: a path answer', () => {
+  it('holds only the heading sentence in the Answer, carries each path’s citations on its own card, and lists every cited element once under Sources', async () => {
+    const h = harness(async () => ({ ok: true, value: pathAnswerWithSummary() }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    const answer = (await screen.findByRole('region', { name: ASK_COPY.answer })) as HTMLElement;
+    expect(answer.textContent).toContain('Found 2 shortest paths of 2 hops between a and z.');
+    expect(answer.textContent).not.toContain('Path 1, 2 hops.');
+    expect(answer.querySelectorAll('.ask-marker')).toHaveLength(2);
+    const cards = screen.getByRole('list', { name: ASK_COPY.paths }).querySelectorAll('.ask-path');
+    expect([...cards].map((card) => [...card.querySelectorAll('.ask-marker')].map((marker) => marker.textContent))).toEqual([['[1]', '[2]', '[3]'], ['[1]', '[2]', '[4]']]);
+    expect(screen.getByRole('region', { name: ASK_COPY.sources }).querySelectorAll('li')).toHaveLength(4);
+    expect(screen.getAllByRole('heading', { name: /^Path \d · 2 hops$/ })).toHaveLength(2);
+  });
+
+  it('shows no marker on the card of a path the summary left out', async () => {
+    const summarized = pathAnswerWithSummary();
+    if (!('answered' in summarized) || summarized.answered.summary === undefined) throw new Error('a summary');
+    const { summary } = summarized.answered;
+    const trimmed: AskAnswer = { answered: { ...summarized.answered, summary: { ...summary, sentences: summary.sentences.slice(0, 2) } } };
+    const h = harness(async () => ({ ok: true, value: trimmed }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    const cards = (await screen.findByRole('list', { name: ASK_COPY.paths })).querySelectorAll('.ask-path');
+    expect(cards[0]?.querySelectorAll('.ask-marker')).toHaveLength(3);
+    expect(cards[1]?.querySelectorAll('.ask-marker')).toHaveLength(0);
+  });
+
+  it('lists each path as "Path N · k hops" with its steps as the titles of their ends, and offers Add to graph', async () => {
+    const h = harness(async () => ({ ok: true, value: pathAnswer() }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    const list = await screen.findByRole('list', { name: ASK_COPY.paths });
+    expect(list.textContent).toContain('Path 1 · 2 hops');
+    expect(list.textContent).toContain('a → m');
+    expect(list.textContent).toContain('m → z');
+    expect(list.textContent).toContain('Path 2 · 2 hops');
+    expect(screen.getByRole('button', { name: /Add .*to graph/ })).toBeTruthy();
+  });
+
+  it('says how many paths were retained when the search timed out, and that more exist when the cap was reached, and never the generic words', async () => {
+    const cut = harness(async () => ({ ok: true, value: pathAnswer({ partial: true, retained: 2, requested: 5 }, 'partial') }));
+    render(cut.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByText('2 of 5 requested paths retained. The search timed out, so it is not exhaustive.')).toBeTruthy();
+    expect(screen.queryByText(ASK_COPY.partial)).toBeNull();
+    cleanup();
+    const capped = harness(async () => ({ ok: true, value: pathAnswer({ capReached: true }, 'partial') }));
+    render(capped.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByText('The limit of 2 paths was reached; more paths of this length exist.')).toBeTruthy();
+  });
+
+  it('stops a heavy path answer with the lower bound and Continue, and continues with the kept entities and token', async () => {
+    const heavy: AskAnswer = { answered: { intent: 'paths-between', entities: { first: 'a', second: 'z' }, outcome: 'partial', continueToken: TOKEN, result: { templateId: 'shortest-paths', result: { status: 'heavy', estimate: { quality: 'lowerBound', value: 500, scope: 'paths:estimate' }, threshold: 500, continueLimit: 25, warnings: [] } } } };
+    const h = harness(async () => ({ ok: true, value: heavy }), async () => ({ ok: true, value: pathAnswer() }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByText('≥ 500 matches')).toBeTruthy();
+    expect(screen.getByText('Lower bound')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('list', { name: ASK_COPY.paths })).toBeTruthy();
+    expect(h.continued).toEqual([{ sourceId: 'a', intent: 'paths-between', entities: { first: 'a', second: 'z' }, continueToken: TOKEN }]);
+  });
+
+  it('shows the failure card with Try again when the continue fails, and Try again repeats the continue with the same token', async () => {
+    const heavy: AskAnswer = { answered: { intent: 'paths-between', entities: { first: 'a', second: 'z' }, outcome: 'partial', continueToken: TOKEN, result: { templateId: 'shortest-paths', result: { status: 'heavy', estimate: { quality: 'lowerBound', value: 500, scope: 'paths:estimate' }, threshold: 500, continueLimit: 25, warnings: [] } } } };
+    let calls = 0;
+    const h = harness(async () => ({ ok: true, value: heavy }), async () => (++calls === 1 ? { ok: false, failure: failure('NETWORK_UNAVAILABLE') } : { ok: true, value: pathAnswer() }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('list', { name: ASK_COPY.paths })).toBeTruthy();
+    expect(h.continued.map((request) => request.continueToken)).toEqual([TOKEN, TOKEN]);
+  });
+
+  it('reads a run refused for the hops or the cap of its source in the words of the Paths panel', async () => {
+    const hops = harness(async () => ({ ok: false, failure: failure('QUERY_BUDGET_EXCEEDED', { maxHops: 2 }) }));
+    render(hops.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByText("This is above the source's limit: at most 2 hops.")).toBeTruthy();
+    cleanup();
+    const cap = harness(async () => ({ ok: false, failure: failure('QUERY_BUDGET_EXCEEDED', { pathResultsCap: 10 }) }));
+    render(cap.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByText("This is above the source's limit: at most 10 paths.")).toBeTruthy();
   });
 });

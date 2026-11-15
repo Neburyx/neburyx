@@ -93,6 +93,6 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
 /** The details a refusal names: only the reason and the figures it holds, which `errorResponse` then cuts to what the error model allows for its code. */
 function detailsOfRefusal(refusal: ExtensionRefusalFields): Record<string, unknown> | undefined {
   const details: Record<string, unknown> = {};
-  for (const key of ['reason', 'timeoutMs', 'retryAfterMs', 'maxPage', 'maxHops'] as const) if (key in refusal) details[key] = (refusal as Record<string, unknown>)[key];
+  for (const key of ['reason', 'timeoutMs', 'retryAfterMs', 'maxPage', 'maxHops', 'pathResultsCap'] as const) if (key in refusal) details[key] = (refusal as Record<string, unknown>)[key];
   return Object.keys(details).length === 0 ? undefined : details;
 }

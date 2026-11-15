@@ -574,3 +574,102 @@ describe('a question that names a saved pattern', () => {
     });
   });
 });
+
+describe('a question of a path intent', () => {
+  const INTENTS = { between: { parameters: ['first', 'second'], template: 'shortest-paths', settings: { ends: [{ entityType: 'widget', stableId: '$first' }, { entityType: 'widget', stableId: '$second' }], relTypes: ['link_a'], maxHops: 3, limit: 5 } } };
+  const ENTITIES = { first: 'A-1', second: 'A-2' };
+  const ASKED = { intents: INTENTS, classify: async (): Promise<AskClassification> => ({ ok: true, intent: 'between', entities: ENTITIES }) };
+  const step = { from: node('A-1').ref, to: node('A-2').ref, relationshipType: 'link_a', evidenceRefs: [] };
+  const found = (over: Record<string, unknown> = {}): AskRunResult => ({ templateId: 'shortest-paths', result: { status: 'ok', paths: [{ hops: 1, steps: [step] }], nodes: [node('A-1'), node('A-2')], edges: [], capReached: false, partial: false, elapsedMs: 1, warnings: [], ...over } as Extract<AskRunResult, { templateId: 'shortest-paths' }>['result'] });
+  const heavy = (): AskRunResult => ({ templateId: 'shortest-paths', result: { status: 'heavy', estimate: { quality: 'lowerBound', value: 500, scope: 'paths:estimate' }, threshold: 500, continueLimit: 5, warnings: [] } });
+  const continueBody = (token: string, over: Record<string, unknown> = {}) => ({ sourceId: SOURCE, intent: 'between', entities: ENTITIES, continueToken: token, ...over });
+
+  it('runs the template with the two ends bound as text and the types, hops and cap of the intent, and writes an event and a row with the number of entities', async () => {
+    const { route, request, runs, events, rows } = await rig({ ...ASKED, run: () => ({ status: 'ok', result: found() }) });
+    const answer = (await route.handler(request(ASK))) as { answered: Record<string, unknown> };
+    expect(runs[0]?.asked).toEqual({ templateId: 'shortest-paths', params: { ends: [{ entityType: 'widget', stableId: 'A-1' }, { entityType: 'widget', stableId: 'A-2' }], relTypes: ['link_a'], maxHops: 3, limit: 5 } });
+    expect(answer.answered).toMatchObject({ intent: 'between', outcome: 'complete', result: { templateId: 'shortest-paths' } });
+    expect(detailOf(events[0])).toMatchObject({ templateId: 'shortest-paths', outcome: 'complete', rowCount: 2 });
+    expect(rows).toEqual([{ actorId: 'p-1', intent: 'between', outcome: 'complete', rowCount: 2, elapsedMs: 0 }]);
+  });
+
+  it('answers nothing-found for two entities with no path between them, with an event of the cause and a row count of 0, and no row of a run', async () => {
+    const { route, request, events, rows } = await rig({ ...ASKED, run: () => ({ status: 'ok', result: found({ paths: [], nodes: [] }) }) });
+    expect(await route.handler(request(ASK))).toMatchObject({ refused: { cause: 'nothing-found', intent: 'between' } });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ action: 'ask.question', result: 'refused' });
+    expect(detailOf(events[0])).toMatchObject({ outcome: 'refused', cause: 'nothing-found', rowCount: 0, templateId: 'shortest-paths' });
+    expect(rows).toEqual([]);
+  });
+
+  it('stops as heavy with a token, partial and no summary, and writes an event but no row', async () => {
+    const { route, request, events, rows } = await rig({ ...ASKED, run: () => ({ status: 'ok', result: heavy() }) });
+    const answer = (await route.handler(request(ASK))) as { answered: { outcome: string; continueToken?: string; summary?: unknown; result: { result: { status: string; continueLimit: number } } } };
+    expect(answer.answered).toMatchObject({ outcome: 'partial', result: { templateId: 'shortest-paths', result: { status: 'heavy', continueLimit: 5 } } });
+    expect(answer.answered.continueToken).toMatch(/^[0-9]{13}\.[0-9a-f]{64}$/);
+    expect(answer.answered.summary).toBeUndefined();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ result: 'partial' });
+    expect(detailOf(events[0])).toMatchObject({ rowCount: 0, templateId: 'shortest-paths' });
+    expect(rows).toEqual([]);
+  });
+
+  it('is continued by the token with no model call, as a continue of the runner, with its own event and row', async () => {
+    const rigged = await rig({ ...ASKED, run: (continuing) => ({ status: 'ok', result: continuing ? found() : heavy() }) });
+    const first = (await rigged.route.handler(rigged.request(ASK))) as { answered: { continueToken: string } };
+    const classifiedBefore = rigged.classified.length;
+    const answer = (await rigged.continueRoute.handler(rigged.request(continueBody(first.answered.continueToken)))) as { answered: { outcome: string; result: { templateId: string } } };
+    expect(answer.answered).toMatchObject({ outcome: 'complete', result: { templateId: 'shortest-paths' } });
+    expect(rigged.classified.length).toBe(classifiedBefore);
+    expect(rigged.runs.map((run) => run.options)).toEqual([undefined, { continue: true }]);
+    expect(rigged.events.map((event) => event.action)).toEqual(['ask.question', 'ask.continue']);
+    expect(detailOf(rigged.events[1])).toMatchObject({ templateId: 'shortest-paths', rowCount: 2 });
+    expect(rigged.rows).toHaveLength(1);
+  });
+
+  it.each([
+    ['other entities', { entities: { first: 'A-1', second: 'A-3' } }],
+    ['another intent', { intent: 'gone' }],
+    ['another source', { sourceId: 'other' }],
+    ['the other mask', { mask: true }],
+  ])('refuses the token used with %s, runs nothing and writes an event with the refusal', async (_name, over) => {
+    const rigged = await rig({ ...ASKED, run: () => ({ status: 'ok', result: heavy() }) });
+    const first = (await rigged.route.handler(rigged.request(ASK))) as { answered: { continueToken: string } };
+    const runsBefore = rigged.runs.length;
+    expect(await refusalOf(rigged.continueRoute.handler(rigged.request(continueBody(first.answered.continueToken, over))))).toMatchObject({ code: 'INVALID_REQUEST', reason: 'continue-invalid' });
+    expect(rigged.runs.length).toBe(runsBefore);
+    expect(rigged.events.at(-1)).toMatchObject({ action: 'ask.continue', result: 'refused' });
+  });
+
+  it('refuses the token after the cap or the hops of the path intent changed', async () => {
+    const rigged = await rig({ ...ASKED, run: () => ({ status: 'ok', result: heavy() }) });
+    const first = (await rigged.route.handler(rigged.request(ASK))) as { answered: { continueToken: string } };
+    const changed = makeAskFolder([SOURCE], { between: { ...INTENTS.between, settings: { ...INTENTS.between.settings, limit: 25 } } });
+    const reloaded = await loadAskFolder({ folder: changed, sourceIds: [SOURCE] }).then((loaded) => (loaded.ok ? loaded.folder : undefined));
+    expect(reloaded?.intent(SOURCE, 'between')).toBeDefined();
+    const other = createAskContinueRoute({ folder: () => reloaded, runs: () => undefined, logger: () => undefined, now: () => NOW });
+    expect(await refusalOf(other.handler(rigged.request(continueBody(first.answered.continueToken))))).toMatchObject({ reason: 'continue-invalid' });
+    expect(rigged.events.at(-1)).toMatchObject({ action: 'ask.continue', result: 'refused' });
+  });
+
+  it.each([
+    ['a search that timed out and kept paths', { partial: true, retained: 1, requested: 5 }],
+    ['an answer that reached the cap', { capReached: true }],
+  ])('answers %s as partial, with the paths listed and a row of the run', async (_name, over) => {
+    const { route, request, events, rows } = await rig({ ...ASKED, run: () => ({ status: 'ok', result: found(over) }) });
+    const answer = (await route.handler(request(ASK))) as { answered: { outcome: string; result: { result: { paths: unknown[] } } } };
+    expect(answer.answered.outcome).toBe('partial');
+    expect(answer.answered.result.result.paths).toHaveLength(1);
+    expect(events[0]).toMatchObject({ result: 'partial' });
+    expect(rows).toEqual([{ actorId: 'p-1', intent: 'between', outcome: 'partial', rowCount: 2, elapsedMs: 0 }]);
+  });
+
+  it('fails a search that timed out with no path as QUERY_TIMEOUT: a failed event and a failed row, and nothing listed', async () => {
+    const { route, request, events, rows } = await rig({ ...ASKED, run: () => ({ status: 'refused', refusal: { code: 'QUERY_TIMEOUT', timeoutMs: 5000 } }) });
+    expect(await refusalOf(route.handler(request(ASK)))).toMatchObject({ code: 'QUERY_TIMEOUT', timeoutMs: 5000 });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ result: 'failed' });
+    expect(detailOf(events[0])).toMatchObject({ outcome: 'failed', cause: 'query-timeout' });
+    expect(rows).toEqual([{ actorId: 'p-1', intent: 'between', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
+  });
+});

@@ -11,6 +11,7 @@ import { derivedNeighborsResponseSchema } from './derived-neighbors.js';
 import { derivedEdgeDetailSchema } from './edge-detail.js';
 import { expandResponseSchema } from './expand.js';
 import { fileQueryResultSchema } from './file-query.js';
+import { pathsParamsSchema, pathsResponseSchema } from './paths.js';
 import { linkedEntitiesParamsSchema, sharedAttributeParamsSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
 
 const name = z.string().min(1);
@@ -37,6 +38,7 @@ export const ASK_TEMPLATE_PARAMS = {
   'derived-rule-run': z.strictObject({ ref: anchor, ruleId: name }),
   'derived-edge-support': z.strictObject({ ruleId: name, ends: z.tuple([anchor, anchor]) }),
   search: z.strictObject({ entityTypes: z.array(name).min(1), text: searchTextSchema }),
+  'shortest-paths': pathsParamsSchema,
 } as const;
 
 export const ASK_TEMPLATE_IDS = Object.keys(ASK_TEMPLATE_PARAMS) as (keyof typeof ASK_TEMPLATE_PARAMS)[];
@@ -65,6 +67,7 @@ export const askRunResultSchema = z.union([
   z.strictObject({ templateId: z.literal('derived-rule-run'), result: derivedNeighborsResponseSchema }),
   z.strictObject({ templateId: z.literal('derived-edge-support'), result: derivedEdgeDetailSchema }),
   z.strictObject({ templateId: z.literal('search'), result: searchResultSchema }),
+  z.strictObject({ templateId: z.literal('shortest-paths'), result: pathsResponseSchema }),
   /** A run of a file query of the Ask folder: the typed answer of the gate, nodes and relationships of the source's mapping. */
   z.strictObject({ templateId: z.literal(FILE_QUERY_RESULT_ID), result: fileQueryResultSchema }),
   /** A run of a saved pattern is the saved run's own answer for its kind: a pattern answer with `matches`, or a template answer for a saved run of a preset; a pattern that cannot run is a refusal. */
@@ -73,8 +76,14 @@ export const askRunResultSchema = z.union([
 
 /** Whether a result is the stop of a run that would read more than the source allows without being asked again: the run was given back, so the answer carries the token to continue it. */
 export function isHeavyResult(run: AskRunResult): boolean {
-  return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities' || run.templateId === SAVED_PATTERN_TEMPLATE_ID) && run.result.status === 'heavy';
+  return (run.templateId === 'shared-attribute' || run.templateId === 'linked-entities' || run.templateId === 'shortest-paths' || run.templateId === SAVED_PATTERN_TEMPLATE_ID) && run.result.status === 'heavy';
 }
+
+/** How the sentence of one path of a path answer begins (`Path 2, 3 hops.`): the server writes it and a card finds the markers of its own path by it. The comma keeps `Path 1,` from matching `Path 11,`. */
+export const pathSentenceStart = (position: number): string => `Path ${position},`;
+
+/** Whether a sentence of a summary is the sentence of one path (it carries that path's citations and is shown on its card, not in the answer). */
+export const isPathSentence = (text: string): boolean => /^Path \d+,/.test(text);
 
 /** The limits of a summary, in sentences, characters of a sentence and citations. Working limits, not taken from a source. */
 export const ASK_SUMMARY_MAX_SENTENCES = 12;

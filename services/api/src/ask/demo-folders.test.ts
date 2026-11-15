@@ -91,10 +91,11 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))('the Ask folder o
 });
 
 describe('the questions of the packs together', () => {
-  it('hold the 33 questions of the old set and the two name questions, 35 in all, 8 of them to refuse', () => {
+  it('hold 35 questions in all, 7 of them to refuse and 28 that name an intent (the shortest-path question is one of the plans)', () => {
     const all = packs.flatMap((pack) => pack.questions);
     expect(all).toHaveLength(35);
-    expect(all.filter((question) => question.expect === 'refuse')).toHaveLength(8);
+    expect(all.filter((question) => question.expect === 'refuse')).toHaveLength(7);
+    expect(all.filter((question) => question.expect !== 'refuse')).toHaveLength(28);
     expect(new Set(all.map((question) => question.wording)).size).toBe(35);
   });
 });

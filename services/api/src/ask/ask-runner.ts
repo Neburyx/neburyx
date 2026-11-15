@@ -5,6 +5,7 @@ import { AppError, detailsOf, errorResponse } from '../errors.js';
 import type { DegreePreviewService } from '../graph/degree-preview-service.js';
 import type { DerivedNeighborsService } from '../graph/derived-neighbors-service.js';
 import type { ExpandService } from '../graph/expand-service.js';
+import type { PathsService } from '../graph/paths-service.js';
 import type { TemplateRunService } from '../graph/template-run-service.js';
 import type { MappingModel } from '../mapping/model.js';
 import type { SavedPatternRunService } from '../patterns/saved-run-service.js';
@@ -21,6 +22,7 @@ export interface AskRunnerServices {
   readonly derivedNeighbors: Pick<DerivedNeighborsService, 'derive'>;
   readonly edges: Pick<EdgeReader, 'read'>;
   readonly searching: Pick<SearchService, 'search'>;
+  readonly paths: Pick<PathsService, 'find'>;
   readonly savedRuns: Pick<SavedPatternRunService, 'find' | 'run'>;
   /** The file queries of the operator's Ask folder, through the gate. */
   readonly fileQueries: { run(request: FileQueryRequest): Promise<FileQueryResult> };
@@ -148,6 +150,12 @@ async function runOf(services: AskRunnerServices, base: Base, asked: AskRunInput
       const parsed = ASK_TEMPLATE_PARAMS.search.safeParse(asked.params);
       if (!parsed.success) return undefined;
       return { templateId: 'search', result: await services.searching.search({ ...base, text: parsed.data.text, entityTypes: parsed.data.entityTypes }) };
+    }
+    case 'shortest-paths': {
+      const parsed = ASK_TEMPLATE_PARAMS['shortest-paths'].safeParse(asked.params);
+      if (!parsed.success) return undefined;
+      const { ends: [from, to], relTypes, maxHops, limit, direction } = parsed.data;
+      return { templateId: 'shortest-paths', result: await services.paths.find({ ...base, from, to, relTypes, maxHops, limit, ...(direction === undefined ? {} : { direction }), continue: continuing }) };
     }
     default: {
       const unreachable: never = asked.templateId;

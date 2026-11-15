@@ -8,7 +8,7 @@ export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
 export { ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
 export type { ExtensionRefusalFields } from './extension.js';
-export type { ConfigureContext, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskRun, AskRunner, AskRunInput, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
+export type { ConfigureContext, ConfigureSourceBudgets, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskRun, AskRunner, AskRunInput, AskRunScope, ExtensionRequest, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension } from './extension.js';
 export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';
 export type { AiCacheTtl, AiEffort, AiSettings, AiStatusResponse } from './ai.js';
 export { AUDIT_RESULTS, SYSTEM_ACTOR_ID, aiAuditDetailSchema, askRunAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount } from './audit.js';
@@ -162,7 +162,7 @@ export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning }
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
 export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEMPOTENCY_KEY_PATTERN, exportFileSchema, exportHeaderSchema, exportMaskingSchema, exportRequestSchema, exportSchema, createExportResponseSchema, pngExportSchema } from './exports.js';
 export type { CreateExportResponse, ExportFile, ExportFormat, ExportHeader, ExportRecord, ExportRequest, PngExport } from './exports.js';
-export { pathSchema, pathStepSchema, pathsHeavySchema, pathsOkSchema, pathsRequestSchema, pathsResponseSchema } from './paths.js';
+export { PATHS_HOPS_MAX, PATHS_RESULTS_MAX, pathSchema, pathStepSchema, pathsHeavySchema, pathsOkSchema, pathsParamsSchema, pathsRequestSchema, pathsResponseSchema } from './paths.js';
 export type { PathStep, PathsHeavy, PathsOk, PathsRequest, PathsResponse } from './paths.js';
 export { MAX_READ_REFS, readRefsRequestSchema, readRefsResponseSchema } from './read-refs.js';
 export type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';
@@ -170,7 +170,7 @@ export { changePatternRequestSchema, deletePatternResponseSchema, DEFAULT_PATTER
 export type { ChangePatternRequest, DeletePatternResponse, ListedPattern, PatternAvailability, PatternListResponse, SavedPattern, SavePatternRequest } from './saved-pattern.js';
 export { patternUnavailableSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema } from './saved-pattern-run.js';
 export type { PatternUnavailable, SavedPatternRunRequest, SavedPatternRunResponse } from './saved-pattern-run.js';
-export { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_TEMPLATE_PARAMS, ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_QUESTION_MAX_CODE_POINTS, ASK_RUN_OUTCOMES, FILE_QUERY_RESULT_ID, askRunResultSchema, isHeavyResult } from './ask.js';
+export { ASK_ENTITY_TEXT_MAX_LENGTH, isPathSentence, pathSentenceStart, ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_KEY_LENGTH, ASK_SUMMARY_MAX_SENTENCES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askSummaryCitationSchema, askSummarySchema, askSummarySentenceSchema, storedSavedPatternParamsSchema, SAVED_PATTERN_TEMPLATE_ID, SAVED_PATTERN_TEMPLATE_VERSION, ASK_TEMPLATE_PARAMS, ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_QUESTION_MAX_CODE_POINTS, ASK_RUN_OUTCOMES, FILE_QUERY_RESULT_ID, askRunResultSchema, isHeavyResult } from './ask.js';
 export type { AskAvailability, AskPatternCatalog, AskPatternEntry, AskPatternListing, AskPatternOffer, AskPatternProjection, AskPatternStep, AskClassifier, AskClassifyInput, AskClassification, AskEntities, AskRefusalCause, AskRunResult, AskSummary, AskSummaryCitation } from './ask.js';
 export { checkIntentQuery } from './query-check.js';
 export { ASK_FOLDER_LIMITS, ASK_INTENT_NAME, ASK_SAVED_PATTERN_INTENT, hasDuplicateKeys, isParameterName, parseIntentsFile } from './ask-folder.js';

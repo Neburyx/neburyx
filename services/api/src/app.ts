@@ -672,7 +672,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     askPatternLists.current = createAskPatternLister({ store: options.store, mapping, access });
     askPatternFinders.current = createAskPatternFinder({ store: options.store, mapping, access });
     const fileQueries = createFileQueryRunner({ gate: options.gate });
-    askRunners.current = (context) => createAskRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, savedRuns, fileQueries, mapping })(context);
+    askRunners.current = (context) => createAskRunnerFactory({ templateRuns, entities, degrees, expansions, derivedNeighbors, edges, searching, paths, savedRuns, fileQueries, mapping })(context);
 
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });

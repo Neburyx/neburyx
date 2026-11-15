@@ -1,11 +1,16 @@
 import { ASK_REFUSAL_SENTENCES } from '@neburyx/contracts';
 import type { ApiFailure } from '../api/client.js';
 import { failureWords, type FailureWords } from '../patterns/failure-words.js';
-import { ASK_COPY } from './copy.js';
+import { ASK_COPY, limitHopsText, limitPathsText } from './copy.js';
 
 const UNAVAILABLE = 'Ask is not available right now.';
 
 const reasonOf = (failure: ApiFailure): unknown => ('details' in failure && failure.details !== undefined ? Object.getOwnPropertyDescriptor(failure.details, 'reason')?.value : undefined);
+
+const numberDetail = (failure: ApiFailure, name: string): number | undefined => {
+  const value: unknown = 'details' in failure && failure.details !== undefined ? Object.getOwnPropertyDescriptor(failure.details, name)?.value : undefined;
+  return typeof value === 'number' ? value : undefined;
+};
 
 const FILE_QUERY_WORDS: Readonly<Record<string, string>> = {
   'file-query-text': 'The query behind this question is not allowed to run.',
@@ -34,5 +39,12 @@ export function askFailureWords(failure: ApiFailure, source: string): FailureWor
   if (failure.code === 'ASK_INTENT_INVALID' || failure.code === 'SOURCE_MISMATCH') return { text: 'The values of this question do not fit what it asks for. Ask it again.' };
   // the record of the run could not be kept, so the answer is withheld; the question may have run
   if (failure.code === 'AUDIT_UNAVAILABLE') return { text: 'The record of this could not be kept, so the answer is withheld. The question may have run. Try again later.', action: 'try-again' };
+  if (failure.code === 'QUERY_BUDGET_EXCEEDED') {
+    // the figure the refusal carries says which limit it is: only a path run carries `pathResultsCap`, and a result size (`maxPage`) keeps the shared words
+    const cap = numberDetail(failure, 'pathResultsCap');
+    if (cap !== undefined) return { text: limitPathsText(cap) };
+    const hops = numberDetail(failure, 'maxHops');
+    if (hops !== undefined) return { text: limitHopsText(hops) };
+  }
   return failureWords(failure, source);
 }

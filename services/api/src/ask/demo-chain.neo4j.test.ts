@@ -210,6 +210,27 @@ describe.each(packs.map((pack) => [pack.pack, pack] as const))(`every demo quest
     }
   }, 600_000);
 
+  it('answers a path question with the paths, nodes and relationships that POST /v1/graph/paths gives for the same pair, types, hops and cap', async () => {
+    const question = pack.questions.find((candidate) => candidate.expect !== 'refuse' && pack.intents[candidate.expect.intent]?.template === 'shortest-paths');
+    if (question === undefined || question.expect === 'refuse') return;
+    const settings = pack.intents[question.expect.intent]?.settings as { ends: { entityType: string }[]; relTypes: string[]; maxHops: number; limit: number; direction?: string };
+    const [first, second] = Object.values(question.expect.entities);
+    const rig = await started(pack);
+    try {
+      const asked = readAnswer((await post(rig.app, '/v1/ask', { sourceId: rig.sourceId, question: question.wording })).json());
+      const result = asked.answered?.result;
+      if (result?.templateId !== 'shortest-paths') throw new Error(`the path question was answered by ${result?.templateId ?? 'nothing'}`);
+      const manual = await post(rig.app, '/v1/graph/paths', { sourceId: rig.sourceId, from: { entityType: settings.ends[0]?.entityType, stableId: first }, to: { entityType: settings.ends[1]?.entityType, stableId: second }, relTypes: settings.relTypes, maxHops: settings.maxHops, limit: settings.limit, ...(settings.direction === undefined ? {} : { direction: settings.direction }) });
+      expect(manual.statusCode, manual.body.slice(0, 300)).toBe(200);
+      const strip = (value: unknown): unknown => (typeof value === 'object' && value !== null ? Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'elapsedMs')) : value);
+      expect(strip(result.result)).toEqual(strip(manual.json()));
+      expect(result.result.status).toBe('ok');
+      if (result.result.status === 'ok') expect(result.result.paths.length).toBeGreaterThan(0);
+    } finally {
+      await rig.app.close();
+    }
+  }, 300_000);
+
   it('returns the people of a name with an exact count when the matches fit the page, nothing-found for a name that is not there, and no name when the caller is masked', async () => {
     const question = pack.questions.find((candidate) => isNameQuestion(pack, candidate));
     if (question === undefined || question.expect === 'refuse') throw new Error('the pack has no name question');

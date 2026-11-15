@@ -333,3 +333,73 @@ describe('the sentences never say more than the result lists', () => {
     expect(text.length).toBeLessThanOrEqual(300);
   });
 });
+
+describe('the summary of a path answer', () => {
+  const pathsOk = (chains: readonly (readonly string[])[], over: Record<string, unknown> = {}, titles: Record<string, string> = {}, withEdges = true): AskRunResult => {
+    const ids = [...new Set(chains.flat())];
+    const steps = chains.map((chain) => chain.slice(1).map((id, index) => ({ from: ref(chain[index] ?? id), to: ref(id), relationshipType: 'LINKS', evidenceRefs: [] })));
+    const edges = withEdges ? [...new Map(chains.flatMap((chain) => chain.slice(1).map((id, index) => [`${chain[index]}>${id}`, edge(chain[index] ?? id, id, { evidenceRefs: [] })] as const))).values()] : [];
+    return { templateId: 'shortest-paths', result: { status: 'ok', paths: steps.map((chain) => ({ hops: chain.length, steps: chain })), nodes: ids.map((id) => node(id, titles[id] ?? id)), edges, capReached: false, partial: false, elapsedMs: 1, warnings: [], ...over } as Extract<AskRunResult, { templateId: 'shortest-paths' }>['result'] };
+  };
+  const texts = (run: AskRunResult): string[] => checked(run).sentences.map((sentence) => sentence.text);
+
+  it('has a heading with the number of paths and hops and the two ends, and a short sentence for each path that carries its citations', () => {
+    const run = pathsOk([['a', 'm', 'z'], ['a', 'n', 'z']], {}, { a: 'Ada', z: 'Zed' });
+    expect(texts(run)).toEqual(['Found 2 shortest paths of 2 hops between Ada and Zed.', 'Path 1, 2 hops.', 'Path 2, 2 hops.']);
+    expect(texts(pathsOk([['a', 'z']], {}, { a: 'Ada', z: 'Zed' }))[0]).toBe('Found 1 shortest path of 1 hop between Ada and Zed.');
+  });
+
+  it('cites the entities and the relationships of each path, and the heading cites the two ends', () => {
+    const summary = checked(pathsOk([['a', 'm', 'z']]));
+    expect(summary.sentences[0]?.cites).toHaveLength(2);
+    const path = summary.sentences[1];
+    const cited = summary.citations.filter((citation) => path?.cites.includes(citation.key));
+    expect(cited.map((citation) => citation.title).sort()).toEqual(['LINKS: a → m', 'LINKS: m → z', 'a', 'm', 'z']);
+  });
+
+  it('says the cap was reached and that more paths of this length exist, and that a timed-out answer is not exhaustive', () => {
+    expect(texts(pathsOk([['a', 'z'], ['a', 'm', 'z']].slice(0, 1), { capReached: true }))[0]).toBe('Found 1 shortest path of 1 hop between a and z. The limit of 1 path was reached; more paths of this length exist.');
+    expect(texts(pathsOk([['a', 'z']], { partial: true, retained: 1, requested: 5 }))[0]).toBe('Found 1 of 5 requested paths between a and z before the search timed out; not exhaustive.');
+    for (const run of [pathsOk([['a', 'z']], { capReached: true }), pathsOk([['a', 'z']], { partial: true, retained: 1, requested: 1 })]) expect(textOf(run)).not.toMatch(/all paths/i);
+  });
+
+  it('has no summary for the heavy stop, and lists nothing', () => {
+    const heavy = { templateId: 'shortest-paths', result: { status: 'heavy', estimate: { quality: 'lowerBound', value: 500, scope: 'paths:estimate' }, threshold: 500, continueLimit: 25, warnings: [] } } as AskRunResult;
+    expect(buildSummary(heavy)).toBeUndefined();
+    expect(listedElements(heavy)).toBeUndefined();
+  });
+
+  it('describes at most eleven paths with the heading, leaves the rest in the result and says how many are not described', () => {
+    const chains = Array.from({ length: 15 }, (_, index) => ['a', `m${index}`, 'z']);
+    const summary = checked(pathsOk(chains, {}));
+    expect(summary.sentences.length).toBeLessThanOrEqual(12);
+    expect(summary.citations.length).toBeLessThanOrEqual(40);
+    expect(summary.omissions).toBe('4 paths have no source numbers; they are in the result.');
+  });
+
+  it('never cites more than 40 elements: a path whose citations would pass the limit is left out and counted', () => {
+    const chains = Array.from({ length: 6 }, (_, index) => ['a', ...Array.from({ length: 4 }, (_, hop) => `p${index}-${hop}`), 'z']);
+    const summary = checked(pathsOk(chains));
+    expect(summary.citations.length).toBeLessThanOrEqual(40);
+    expect(summary.omissions).toBe('2 paths have no source numbers; they are in the result.');
+  });
+
+  it('says it for one path beyond the eleventh, and counts a path the limits refuse once, in the same line', () => {
+    const twelve = checked(pathsOk(Array.from({ length: 12 }, (_, index) => ['a', `m${index}`, 'z'])));
+    expect(twelve.omissions).toBe('1 path has no source numbers; it is in the result.');
+    expect(texts(pathsOk([['a', 'z'], ['a', 'z']], { capReached: true }))[0]).toContain('The limit of 2 paths was reached');
+  });
+
+  it('names no title in a path sentence, and cuts a very long title of the heading, every sentence within 300 characters', () => {
+    const long = 'L'.repeat(400);
+    const summary = checked(pathsOk([['a', 'm', 'z']], {}, { a: long, z: long }));
+    for (const sentence of summary.sentences) expect([...sentence.text].length).toBeLessThanOrEqual(300);
+    expect(summary.sentences[0]?.text).toContain('…');
+  });
+
+  it('cites only what the answer lists when a step’s relationship is not among its edges, and repeats no property value', () => {
+    const summary = checked(pathsOk([['a', 'm', 'z']], {}, {}, false));
+    expect(summary.sentences[1]?.cites).toHaveLength(3);
+    expect(JSON.stringify(summary)).not.toContain('MASKED-SECRET-VALUE');
+  });
+});

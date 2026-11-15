@@ -71,9 +71,17 @@ export interface ExtensionRouteGroup {
   readonly routes: readonly ExtensionRoute[];
 }
 
-/** What the application tells the extension when it configures it: the ids of the sources of the mapping file. */
+/** The budgets of a source that a file of the extension can be checked against at start-up. */
+export interface ConfigureSourceBudgets {
+  readonly maxHops: number;
+  readonly pathResultsCap: number;
+  readonly maxPage: number;
+}
+
+/** What the application tells the extension when it configures it: the ids of the sources of the mapping file and, for each, the budgets its files are checked against. */
 export interface ConfigureContext {
   readonly sourceIds: readonly string[];
+  readonly budgets?: Readonly<Record<string, ConfigureSourceBudgets>>;
 }
 
 export interface ConfigureWarning {
@@ -123,7 +131,7 @@ const accessDeniedRefusalSchema = z.object({ name: named, code: z.literal('ACCES
 const sourceMismatchRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_MISMATCH'), reason: none });
 const sourceBusyRefusalSchema = z.object({ name: named, code: z.literal('SOURCE_BUSY'), reason: none });
 const askIntentInvalidRefusalSchema = z.object({ name: named, code: z.literal('ASK_INTENT_INVALID'), reason: none });
-const budgetRefusalSchema = z.object({ name: named, code: z.literal('QUERY_BUDGET_EXCEEDED'), reason: none, maxPage: z.number().int().positive().optional(), maxHops: z.number().int().positive().optional() });
+const budgetRefusalSchema = z.object({ name: named, code: z.literal('QUERY_BUDGET_EXCEEDED'), reason: none, maxPage: z.number().int().positive().optional(), maxHops: z.number().int().positive().optional(), pathResultsCap: z.number().int().positive().optional() });
 const rateLimitedRefusalSchema = z.object({ name: named, code: z.literal('RATE_LIMITED'), reason: none, retryAfterMs: z.number().int().nonnegative().optional() });
 const sourceUnavailableRefusalSchema = z
   .object({ name: named, code: z.literal('SOURCE_UNAVAILABLE'), reason: z.enum(SOURCE_UNAVAILABLE_REASONS), retryAfterMs: z.number().int().nonnegative().optional() })
@@ -170,11 +178,12 @@ export class ExtensionRefusal extends Error {
   readonly retryAfterMs: number | undefined;
   readonly maxPage: number | undefined;
   readonly maxHops: number | undefined;
+  readonly pathResultsCap: number | undefined;
 
   constructor(fields: ExtensionRefusalFields) {
     super();
     this.name = EXTENSION_REFUSAL_NAME;
-    const held: { code: string; reason?: string; audited?: boolean; timeoutMs?: number; retryAfterMs?: number; maxPage?: number; maxHops?: number } = fields;
+    const held: { code: string; reason?: string; audited?: boolean; timeoutMs?: number; retryAfterMs?: number; maxPage?: number; maxHops?: number; pathResultsCap?: number } = fields;
     this.code = fields.code;
     this.reason = held.reason;
     this.audited = held.audited;
@@ -182,6 +191,7 @@ export class ExtensionRefusal extends Error {
     this.retryAfterMs = held.retryAfterMs;
     this.maxPage = held.maxPage;
     this.maxHops = held.maxHops;
+    this.pathResultsCap = held.pathResultsCap;
   }
 }
 

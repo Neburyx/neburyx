@@ -34,6 +34,9 @@ const CEILINGS = {
 /** The most hops the budget `max_hops` may name. */
 export const MAX_HOPS_CEILING = CEILINGS.maxHops;
 
+/** The most paths the budget `path_results_cap` may name. */
+export const PATH_RESULTS_CEILING = CEILINGS.pathResultsCap;
+
 function bounded(minimum: number, maximum: number): z.ZodNumber {
   return z.number().int().min(minimum).max(maximum);
 }

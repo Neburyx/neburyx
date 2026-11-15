@@ -42,7 +42,7 @@ describe('the demo set on the committed replay', () => {
     const baseline = JSON.parse(readFileSync(BASELINE, 'utf8')) as { replay?: { refusals: number; plans: number } };
     const replay = JSON.parse(readFileSync(REPLAY, 'utf8')) as { note?: string };
     if (replay.note === 'scripted') expect(baseline.replay).toBeUndefined();
-    else expect(baseline.replay).toMatchObject({ model: 'claude-haiku-5-5', refusals: 8, plans: 27 });
+    else expect(baseline.replay).toMatchObject({ model: 'claude-haiku-5-5', refusals: 7, plans: 28 });
   });
 });
 

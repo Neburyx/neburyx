@@ -60,6 +60,18 @@ describe('the row count and the cut of the other templates', () => {
     expect(summarizeRun(run('derived-edge-support', { supports: { count: count('lowerBound') } }))).toEqual({ rowCount: 1, partial: true });
   });
 
+  it('counts the entities of a path answer, and is partial when it timed out or reached its cap', () => {
+    const paths = (over: object) => run('shortest-paths', { status: 'ok', nodes: [node, node, node], partial: false, capReached: false, ...over });
+    expect(summarizeRun(paths({}))).toEqual({ rowCount: 3, partial: false });
+    expect(summarizeRun(paths({ partial: true }))).toEqual({ rowCount: 3, partial: true });
+    expect(summarizeRun(paths({ capReached: true }))).toEqual({ rowCount: 3, partial: true });
+    expect(summarizeRun(paths({ nodes: [] }))).toEqual({ rowCount: 0, partial: false });
+  });
+
+  it('counts none for a path search that stopped as heavy, and is partial', () => {
+    expect(summarizeRun(run('shortest-paths', { status: 'heavy' }))).toEqual({ rowCount: 0, partial: true });
+  });
+
   it('counts the hits of every group of a search, and is partial for a next page or a lower bound in any of them', () => {
     const search = (over: object) => run('search', { exact: [node], related: { hits: [{}, {}], count: count('exact') }, evidence: { hits: [{}], count: count('exact') }, counts: { exact: count('exact') }, ...over });
     expect(summarizeRun(search({}))).toEqual({ rowCount: 4, partial: false });

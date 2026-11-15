@@ -5123,6 +5123,23 @@
                         "properties": {
                           "templateId": {
                             "type": "string",
+                            "const": "shortest-paths"
+                          },
+                          "result": {
+                            "$ref": "#/components/schemas/PathsResponse"
+                          }
+                        },
+                        "required": [
+                          "templateId",
+                          "result"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "templateId": {
+                            "type": "string",
                             "const": "file-query"
                           },
                           "result": {

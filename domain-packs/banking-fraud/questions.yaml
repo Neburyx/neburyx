@@ -58,8 +58,8 @@ questions:
     wording: "Which transactions have the payment reference PR-00000010?"
     expect: { intent: transactions-with-a-payment-reference, entities: {"reference": "PR-00000010"} }
   - id: shortest-path-between-accounts
-    wording: "What is the shortest path between AC-0002000 and AC-0002003?"
-    expect: refuse
+    wording: "What is the shortest path between AC-0002000 and AC-0002001?"
+    expect: { intent: shortest-path-between-accounts, entities: {"first": "AC-0002000", "second": "AC-0002001"} }
   - id: accounts-related-to-an-account
     wording: "Which accounts are related to AC-0002000?"
     expect: refuse

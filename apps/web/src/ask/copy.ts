@@ -42,6 +42,7 @@ export const ASK_COPY = {
   heavyNote: 'Continue reads a first page only. Or reword the question to narrow it.',
   continue: 'Continue',
   continueInvalid: 'This stop has expired, or the graph or your access changed. Ask the question again.',
+  paths: 'Paths found',
   partial: 'This result is partial: the source was read only up to its limit.',
   rows: 'Rows',
   ready: 'Answer ready',
@@ -69,3 +70,16 @@ export const FAILURE_TITLES = {
 } as const;
 
 export const CANCELLED_TEXT = 'Cancelled. No answer is shown. Your question is still in the field.';
+
+/** "Path 1 · 2 hops", as the Paths panel writes it. */
+export const pathTitle = (position: number, hops: number): string => `Path ${position} · ${hops} ${hops === 1 ? 'hop' : 'hops'}`;
+
+/** A path answer that timed out after finding some paths: how many were kept of how many were asked for. */
+export const pathCutText = (retained: number, requested: number): string => `${retained} of ${requested} requested paths retained. The search timed out, so it is not exhaustive.`;
+
+/** A path answer that read the number of paths it was asked for while more exist. */
+export const pathCapText = (limit: number): string => `The limit of ${limit} ${limit === 1 ? 'path' : 'paths'} was reached; more paths of this length exist.`;
+
+/** A run refused for a limit of the source, in the words of the Paths panel. */
+export const limitHopsText = (hops: number): string => `This is above the source's limit: at most ${hops} ${hops === 1 ? 'hop' : 'hops'}.`;
+export const limitPathsText = (paths: number): string => `This is above the source's limit: at most ${paths} ${paths === 1 ? 'path' : 'paths'}.`;

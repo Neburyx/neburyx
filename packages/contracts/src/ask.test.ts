@@ -28,16 +28,31 @@ const PARAMS: Readonly<Record<string, Record<string, unknown>>> = {
   'derived-rule-run': { ref: ANCHOR, ruleId: 'rule_a' },
   'derived-edge-support': { ruleId: 'rule_a', ends: [ANCHOR, { entityType: 'node_a', stableId: 'A-2' }] },
   search: { entityTypes: ['node_b'], text: 'PAY-77' },
+  'shortest-paths': { ends: [ANCHOR, { entityType: 'node_a', stableId: 'A-2' }], relTypes: ['link_a'], maxHops: 3, limit: 5, direction: 'out' },
 };
 const paramsOf = (templateId: string) => ASK_TEMPLATE_PARAMS[templateId as keyof typeof ASK_TEMPLATE_PARAMS];
+
+describe('the result of a path run', () => {
+  const answer = { status: 'ok', paths: [], nodes: [], edges: [], capReached: false, partial: false, elapsedMs: 1, warnings: [] };
+  const heavy = { status: 'heavy', estimate: { quality: 'lowerBound', value: 500, scope: 'paths:estimate' }, threshold: 500, continueLimit: 25, warnings: [] };
+
+  it('carries the ok or the heavy answer of the paths contract, and only the heavy one is a heavy result', () => {
+    expect(isHeavyResult(askRunResultSchema.parse({ templateId: 'shortest-paths', result: answer }))).toBe(false);
+    expect(isHeavyResult(askRunResultSchema.parse({ templateId: 'shortest-paths', result: heavy }))).toBe(true);
+  });
+
+  it('refuses another template’s result under its id', () => {
+    expect(askRunResultSchema.safeParse({ templateId: 'shortest-paths', result: { status: 'unavailable' } }).success).toBe(false);
+  });
+});
 
 describe('the parameters of the templates an intent can name', () => {
   it.each(Object.entries(PARAMS))('accepts the parameters of a %s intent', (templateId, params) => {
     expect(paramsOf(templateId).safeParse(params).success).toBe(true);
   });
 
-  it('holds the eight templates, and in no template a source, a mask, a cursor, a continue flag, a filter or a rank', () => {
-    expect([...ASK_TEMPLATE_IDS].sort()).toEqual(['degree-preview', 'derived-edge-support', 'derived-rule-run', 'entity', 'expand', 'linked-entities', 'search', 'shared-attribute']);
+  it('holds the nine templates, and in no template a source, a mask, a cursor, a continue flag, a filter or a rank', () => {
+    expect([...ASK_TEMPLATE_IDS].sort()).toEqual(['degree-preview', 'derived-edge-support', 'derived-rule-run', 'entity', 'expand', 'linked-entities', 'search', 'shared-attribute', 'shortest-paths']);
     const names = new Set(Object.values(ASK_TEMPLATE_PARAMS).flatMap((schema) => Object.keys(schema.shape)));
     for (const excluded of ['sourceId', 'mask', 'cursors', 'continue', 'filters', 'rank', 'typeahead']) expect(names.has(excluded)).toBe(false);
   });
@@ -54,6 +69,13 @@ describe('the parameters of the templates an intent can name', () => {
     ['three ends on an edge support', 'derived-edge-support', { ruleId: 'r', ends: [ANCHOR, ANCHOR, ANCHOR] }],
     ['no neighbor types on an expand', 'expand', { ref: ANCHOR }],
     ['parameters of another template', 'linked-entities', PARAMS['shared-attribute']],
+    ['one end on a path search', 'shortest-paths', { ...PARAMS['shortest-paths'], ends: [ANCHOR] }],
+    ['no relationship type on a path search', 'shortest-paths', { ...PARAMS['shortest-paths'], relTypes: [] }],
+    ['no hop count on a path search', 'shortest-paths', { ends: [ANCHOR, ANCHOR], relTypes: ['link_a'], limit: 5 }],
+    ['a continue flag on a path search', 'shortest-paths', { ...PARAMS['shortest-paths'], continue: true }],
+    ['hops above the ceiling on a path search', 'shortest-paths', { ...PARAMS['shortest-paths'], maxHops: 5 }],
+    ['a cap above the ceiling on a path search', 'shortest-paths', { ...PARAMS['shortest-paths'], limit: 26 }],
+    ['a source on a path search', 'shortest-paths', { ...PARAMS['shortest-paths'], sourceId: 'demo' }],
   ])('rejects %s', (_name, templateId, params) => {
     expect(paramsOf(templateId).safeParse(params).success).toBe(false);
   });

@@ -4,6 +4,7 @@ import { degreeListed, summarizeDegree } from './degree.js';
 import { derivedEdgeListed, derivedRuleListed, summarizeDerivedEdge, summarizeDerivedRule } from './derived.js';
 import { entityListed, summarizeEntity } from './entity.js';
 import { expandListed, summarizeExpand } from './expand.js';
+import { pathsListed, summarizePaths } from './paths.js';
 import { savedPatternListed, summarizeSavedPattern } from './saved-pattern.js';
 import { searchListed, summarizeSearch } from './search.js';
 import { summarizeTemplateRun, templateRunListed } from './template-run.js';
@@ -35,6 +36,8 @@ export function listedElements(run: AskRunResult): ListedElements | undefined {
       return derivedEdgeListed(run.result);
     case 'search':
       return searchListed(run.result);
+    case 'shortest-paths':
+      return run.result.status === 'ok' ? pathsListed(run.result) : undefined;
     case 'saved-pattern':
       return savedPatternListed(run.result);
     case 'file-query':
@@ -63,6 +66,8 @@ function build(run: AskRunResult, context: SummaryContext): AskSummary | undefin
       return summarizeDerivedEdge(run.result);
     case 'search':
       return summarizeSearch(run.result);
+    case 'shortest-paths':
+      return run.result.status === 'ok' ? summarizePaths(run.result) : undefined;
     case 'saved-pattern':
       return summarizeSavedPattern(run.result, context.anchor);
     case 'file-query':

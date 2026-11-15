@@ -27,7 +27,7 @@ import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
 import { createSigner, deriveSigningKey } from './ask/signing-key.js';
-import { start, type StartIo } from './start.js';
+import { configureBudgets, start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
 import { clearRegisteredExtension, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOAD_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
@@ -97,6 +97,13 @@ describe('the maintenance tasks at start', () => {
     const result = await start(DATABASE_ENV, run.io);
     expect(seen).toEqual([{ tasks: [{ name: 'mine' }] }]);
     if ('app' in result) await result.app.close();
+  });
+});
+
+describe('the budgets an extension is configured with', () => {
+  it('are the maximum hops, path results and page of each source of the mapping, by its id', () => {
+    const mapping = mappingOf(sourceWith('alpha'), sourceWith('beta', { budgets: { max_hops: 2, path_results_cap: 10, max_page: 20 } }));
+    expect(configureBudgets(mapping.sources)).toEqual({ alpha: { maxHops: 4, pathResultsCap: 25, maxPage: 50 }, beta: { maxHops: 2, pathResultsCap: 10, maxPage: 20 } });
   });
 });
 
@@ -382,7 +389,7 @@ describe('the enterprise extension at start', () => {
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['configure', 'open-store']);
-      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [] } }]);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [], budgets: {} } }]);
       if (result.exitCode === 0) await result.app.close();
     });
 

@@ -27,6 +27,15 @@ describe('the failures of an Ask call, in words', () => {
     expect(askFailureWords(failure('RATE_LIMITED', { retryAfterMs: 4000 }), 'a').waitMs).toBe(4000);
   });
 
+  it('reads a refused limit in the words of the Paths panel by the figure it carries, and never says paths for a result size', () => {
+    expect(askFailureWords(failure('QUERY_BUDGET_EXCEEDED', { pathResultsCap: 25 }), 'a')).toEqual({ text: "This is above the source's limit: at most 25 paths." });
+    expect(askFailureWords(failure('QUERY_BUDGET_EXCEEDED', { maxHops: 3 }), 'a')).toEqual({ text: "This is above the source's limit: at most 3 hops." });
+    expect(askFailureWords(failure('QUERY_BUDGET_EXCEEDED', { maxHops: 1 }), 'a').text).toBe("This is above the source's limit: at most 1 hop.");
+    const page = askFailureWords(failure('QUERY_BUDGET_EXCEEDED', { maxPage: 50 }), 'a');
+    expect(page.text).not.toMatch(/paths?\b/i);
+    expect(page.text).toContain('50');
+  });
+
   it('names the edition and the continue by their reasons, and nothing else', () => {
     expect(isNotInThisEdition(failure('ASK_UNSUPPORTED', { reason: 'not-in-this-edition' }))).toBe(true);
     expect(isNotInThisEdition(failure('ASK_UNSUPPORTED'))).toBe(false);

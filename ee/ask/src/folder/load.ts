@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, open, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ASK_FOLDER_LIMITS, parseIntentsFile, type AskFolder, type AskIntent, type AskSourceFolder } from '@neburyx/contracts';
+import { ASK_FOLDER_LIMITS, parseIntentsFile, type AskFolder, type AskIntent, type AskSourceFolder, type ConfigureSourceBudgets } from '@neburyx/contracts';
 
 const CLASSIFICATION_FILE = 'classification.md';
 const INTENTS_FILE = 'intents.json';
@@ -60,7 +60,20 @@ async function readText(path: string, label: string, limit: number): Promise<{ r
   }
 }
 
-async function loadSource(folder: string, sourceId: string, problems: string[]): Promise<AskSourceFolder | undefined> {
+/** An intent of a path search that asks for more than its source allows: the problem names the intent and the setting, with the limit and never a value of a question. */
+function pathLimitProblems(file: string, intents: readonly { readonly name: string; readonly kind: string; readonly template?: string; readonly settings?: Readonly<Record<string, unknown>> }[], budgets: ConfigureSourceBudgets): string[] {
+  const problems: string[] = [];
+  for (const intent of intents) {
+    if (intent.kind !== 'template' || intent.template !== 'shortest-paths') continue;
+    const hops = intent.settings?.['maxHops'];
+    const limit = intent.settings?.['limit'];
+    if (typeof hops === 'number' && hops > budgets.maxHops) problems.push(`${file}: intent "${intent.name}": maxHops is above the source's max_hops (${budgets.maxHops})`);
+    if (typeof limit === 'number' && limit > Math.min(budgets.pathResultsCap, budgets.maxPage)) problems.push(`${file}: intent "${intent.name}": limit is above the source's path_results_cap or max_page (${Math.min(budgets.pathResultsCap, budgets.maxPage)})`);
+  }
+  return problems;
+}
+
+async function loadSource(folder: string, sourceId: string, problems: string[], budgets?: ConfigureSourceBudgets): Promise<AskSourceFolder | undefined> {
   const where = join(folder, sourceId);
   const entries = await entriesOf(where);
   if (entries === undefined) {
@@ -98,6 +111,13 @@ async function loadSource(folder: string, sourceId: string, problems: string[]):
     problems.push(...parsed.problems.map((problem) => `${SETTING}/${sourceId}/${INTENTS_FILE}: ${problem}`));
     return undefined;
   }
+  if (budgets !== undefined) {
+    const found = pathLimitProblems(`${SETTING}/${sourceId}/${INTENTS_FILE}`, parsed.intents, budgets);
+    if (found.length > 0) {
+      problems.push(...found);
+      return undefined;
+    }
+  }
   const intents: AskIntent[] = parsed.intents.map((intent) => (intent.kind === 'query' ? { name: intent.name, parameters: intent.parameters, kind: 'query', query: Object.freeze({ text: intent.query, sha256: sha256Of(Buffer.from(intent.query, 'utf8')) }) } : intent));
   return Object.freeze({ classification: Object.freeze({ text: classification.text, sha256: classification.sha256 }), intents: Object.freeze(intents.map((intent) => Object.freeze(intent))) });
 }
@@ -106,7 +126,7 @@ async function loadSource(folder: string, sourceId: string, problems: string[]):
  * Reads the Ask folder once: `<folder>/<sourceId>/classification.md` and `<folder>/<sourceId>/intents.json` for each configured source that has a subfolder. A source with no subfolder has no entry; a subfolder that is not a source,
  * a link, any other file and a folder with no subfolder for any source (when sources are configured) are problems. Every problem names the setting and the file or intent, never the text of a file.
  */
-export async function loadAskFolder(input: { readonly folder: string; readonly sourceIds: readonly string[] }): Promise<FolderLoad> {
+export async function loadAskFolder(input: { readonly folder: string; readonly sourceIds: readonly string[]; readonly budgets?: Readonly<Record<string, ConfigureSourceBudgets>> }): Promise<FolderLoad> {
   const problems: string[] = [];
   let top;
   try {
@@ -132,7 +152,7 @@ export async function loadAskFolder(input: { readonly folder: string; readonly s
   if (present.size === 0 && input.sourceIds.length > 0 && problems.length === 0) problems.push(`${SETTING}: the folder has no subfolder for any configured source`);
   for (const sourceId of input.sourceIds) {
     if (!present.has(sourceId)) continue;
-    const loaded = await loadSource(input.folder, sourceId, problems);
+    const loaded = await loadSource(input.folder, sourceId, problems, input.budgets?.[sourceId]);
     if (loaded !== undefined) sources.set(sourceId, loaded);
   }
   if (problems.length > 0) return { ok: false, problems };

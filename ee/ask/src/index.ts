@@ -74,7 +74,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       configuration = configured.configuration;
       environment = env;
       if (!configured.outcome.ok || configured.configuration === undefined) return configured.outcome;
-      const loaded = await loadAskFolder({ folder: configured.configuration.mappingFolder, sourceIds: context.sourceIds });
+      const loaded = await loadAskFolder({ folder: configured.configuration.mappingFolder, sourceIds: context.sourceIds, ...(context.budgets === undefined ? {} : { budgets: context.budgets }) });
       if (!loaded.ok) {
         configuration = undefined;
         return { ok: false, problems: loaded.problems };

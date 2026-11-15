@@ -324,5 +324,30 @@
       "name"
     ],
     "query": "MATCH (c:Customer) WHERE c.fullName = $name RETURN c ORDER BY c.customerId"
+  },
+  "shortest-path-between-accounts": {
+    "parameters": [
+      "first",
+      "second"
+    ],
+    "template": "shortest-paths",
+    "settings": {
+      "ends": [
+        {
+          "entityType": "account",
+          "stableId": "$first"
+        },
+        {
+          "entityType": "account",
+          "stableId": "$second"
+        }
+      ],
+      "relTypes": [
+        "TRANSFERRED_TO"
+      ],
+      "maxHops": 3,
+      "limit": 5,
+      "direction": "both"
+    }
   }
 }

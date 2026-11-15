@@ -39,6 +39,11 @@ export function summarizeRun(run: AskRunResult): RunSummary {
       return { rowCount: run.result.results.reduce((sum, entry) => sum + entry.nodes.length, 0), partial: run.result.results.some((entry) => lowerBound(entry.count)) };
     case 'derived-edge-support':
       return { rowCount: 1, partial: lowerBound(run.result.supports.count) };
+    case 'shortest-paths': {
+      const answer = run.result;
+      if (answer.status === 'heavy') return { rowCount: 0, partial: true };
+      return { rowCount: answer.nodes.length, partial: answer.partial || answer.capReached };
+    }
     case 'search': {
       const { exact, related, evidence, exactNextCursor, counts } = run.result;
       return {

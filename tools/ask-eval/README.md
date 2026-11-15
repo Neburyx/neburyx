@@ -21,7 +21,7 @@ The report holds counts, ids and causes. It never holds a question, an entity va
 
 A replay is one file: `{ model, folders, answers }`. `model` is the model that gave the answers (a recording has one; a scripted replay has none); a replay that is not scripted and names no model is refused, and the report prints the model. `folders` holds the SHA-256 of the `classification.md` of each source the answers were recorded for; `answers` maps a question's text to `{ reply }` (the model's text), `{ declined: true }` (the model refused) or `{ failure: <code> }` (a failed call). A replay recorded for another `classification.md` is refused: a change to a classification text needs a new recording.
 
-The committed replay, `tools/ask-eval/data/replay.json`, is the recording of one measured run of `claude-haiku-5-5` (35 calls, one for each demo question), and `baseline.json` holds its counts (8 refusals refused, 27 plans right).
+The committed replay, `tools/ask-eval/data/replay.json`, is the recording of one measured run of `claude-haiku-5-5` (35 calls, one for each demo question), and `baseline.json` holds its counts (7 refusals refused, 28 plans right: the banking pack's path question is a plan since the path intent was added, and the replay was recorded again for the changed `classification.md`).
 
 `--write-replay <file>` writes the **scripted** replay, in which every question gets the reply its own expectation describes and `note: scripted`. It proves the mechanism and keeps the nightly job green until a measured recording exists; the report says so, and no baseline is written from it.
 
