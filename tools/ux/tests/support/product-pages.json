@@ -33,6 +33,8 @@
     { "name": "Explore with the Search panel open", "route": "explore/:investigationId" },
     { "name": "Explore with the Expand relationships panel open", "route": "explore/:investigationId" },
     { "name": "Explore with the inspector open", "route": "explore/:investigationId" },
+    { "name": "Explore with the Paths panel open", "route": "explore/:investigationId" },
+    { "name": "Explore with a path search's result", "route": "explore/:investigationId" },
     { "name": "Explore with the Patterns panel open", "route": "explore/:investigationId" },
     { "name": "Explore with the Patterns panel's preset form", "route": "explore/:investigationId" },
     { "name": "Explore with the Patterns panel's Heavy operation state", "route": "explore/:investigationId" },

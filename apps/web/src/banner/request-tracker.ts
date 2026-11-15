@@ -1,7 +1,7 @@
 import type { ElementRef } from '@neburyx/contracts';
 import type { BannerController } from './banner-controller.js';
 import type { BannerState } from './banner-state.js';
-import { cancelledHeadline, CANCELLED_CHIP, CANCELLED_SIDE_LABEL, CANCELLED_TEXT, PREVIEW_CANCELLED_HEADLINE, PREVIEW_CANCELLED_SIDE_LABEL, RUN_AGAIN, RUNNING_CHIP, RUNNING_TEXT, runningHeadline, runningSideLabel, type RequestKind } from './copy.js';
+import { cancelledHeadline, CANCELLED_CHIP, PATHS_CANCELLED_HEADLINE, PATHS_CANCELLED_SIDE_LABEL, CANCELLED_SIDE_LABEL, CANCELLED_TEXT, PREVIEW_CANCELLED_HEADLINE, PREVIEW_CANCELLED_SIDE_LABEL, RUN_AGAIN, RUNNING_CHIP, RUNNING_TEXT, runningHeadline, runningSideLabel, type RequestKind } from './copy.js';
 
 const RUNNING_BANNER_ID = 'running';
 const CANCELLED_BANNER_ID = 'cancelled';
@@ -18,11 +18,15 @@ interface TrackedCall {
   readonly cancel: () => void;
   /** Sends the same request again. */
   readonly again: () => void;
+  /** The text of its Running state, when it has a line of its own. */
+  readonly runningText?: string;
 }
 
 interface TrackedHandle {
   /** True once the person cancelled it; the request's caller then drops any answer and leaves what it had. */
   readonly cancelled: boolean;
+  /** Cancels the request as the person's Cancel does: its Running state goes and the Cancelled state is shown. */
+  cancel(): void;
   /** The request ended (answered, failed, or was superseded): its Running state goes, without a Cancelled state. */
   finish(): void;
 }
@@ -79,7 +83,7 @@ export function createRequestTracker(banner: BannerController, deps: RequestTrac
       tone: 'neutral',
       chip: RUNNING_CHIP,
       headline: runningHeadline(entry.call.kind, title, elapsedMs, limitMs),
-      text: RUNNING_TEXT,
+      text: entry.call.runningText ?? RUNNING_TEXT,
       ...(limitMs === undefined ? {} : { sideLabel: runningSideLabel(limitMs) }),
       actions: [{ id: 'cancel', label: 'Cancel', run: () => cancelByPerson(entry) }],
       dismissible: false,
@@ -117,13 +121,14 @@ export function createRequestTracker(banner: BannerController, deps: RequestTrac
     leave(entry);
     entry.call.cancel();
     const preview = entry.call.kind === 'preview';
+    const paths = entry.call.kind === 'paths';
     banner.show({
       id: CANCELLED_BANNER_ID,
       tone: 'neutral',
       chip: CANCELLED_CHIP,
-      headline: preview ? PREVIEW_CANCELLED_HEADLINE : cancelledHeadline(),
+      headline: preview ? PREVIEW_CANCELLED_HEADLINE : paths ? PATHS_CANCELLED_HEADLINE : cancelledHeadline(),
       text: CANCELLED_TEXT,
-      sideLabel: preview ? PREVIEW_CANCELLED_SIDE_LABEL : CANCELLED_SIDE_LABEL,
+      sideLabel: preview ? PREVIEW_CANCELLED_SIDE_LABEL : paths ? PATHS_CANCELLED_SIDE_LABEL : CANCELLED_SIDE_LABEL,
       actions: [
         {
           id: 'run-again',
@@ -150,6 +155,9 @@ export function createRequestTracker(banner: BannerController, deps: RequestTrac
       return {
         get cancelled() {
           return entry.cancelled;
+        },
+        cancel() {
+          cancelByPerson(entry);
         },
         finish() {
           if (!entry.open) return;

@@ -25,6 +25,7 @@ import { createEdgeReadStore, dropReadsOnNewEpoch, EdgeReadProvider } from './ev
 import { createEntityReadStore, EntityReadProvider } from './inspector/entity-read.js';
 import { DerivedProvider } from './workspace/derived-context.js';
 import { PreviewProvider } from './workspace/preview-context.js';
+import { PathsProvider } from './paths/paths-context.js';
 import { ExpandProvider } from './workspace/expand-context.js';
 import { createHeavyGuard } from './api/heavy-guard.js';
 import { createExpandStore } from './api/expand-store.js';
@@ -133,6 +134,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                 <EdgeReadProvider store={edgeReads}>
                 <CoverageProvider store={coverage}>
                 <ExpandProvider store={expansions}>
+                <PathsProvider environment={{ ...(report === undefined ? {} : { report }), ...(tracker === undefined ? {} : { tracker }) }}>
                 <TestRunsProvider runs={testRuns}>
                   <ExcerptsProvider excerpts={excerpts}>
                     <SearchShortcut />
@@ -143,6 +145,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                     </RecentProvider>
                   </ExcerptsProvider>
                 </TestRunsProvider>
+                </PathsProvider>
                 </ExpandProvider>
                 </CoverageProvider>
                 </EdgeReadProvider>

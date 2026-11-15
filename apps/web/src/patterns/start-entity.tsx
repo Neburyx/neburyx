@@ -34,8 +34,8 @@ export interface EntitySearch {
   readonly asked: boolean;
 }
 
-/** The search of the source for the text typed, narrowed to one entity type, after a pause; typed text only ever reaches the search route. An answer to older text is never shown. */
-export function useEntitySearch(client: ApiClient, sourceId: string, mask: boolean, entityType: string, text: string): EntitySearch {
+/** The search of the source for the text typed, narrowed to one entity type when one is given and over every type when not, after a pause; typed text only ever reaches the search route. An answer to older text is never shown. */
+export function useEntitySearch(client: ApiClient, sourceId: string, mask: boolean, entityType: string | undefined, text: string): EntitySearch {
   const [found, setFound] = useState<Found>({ kind: 'none' });
   const [asked, setAsked] = useState(false);
 
@@ -51,7 +51,7 @@ export function useEntitySearch(client: ApiClient, sourceId: string, mask: boole
       const send = async (): Promise<void> => {
         let result: Awaited<ReturnType<ApiClient['searchEntities']>>;
         try {
-          result = await client.searchEntities({ sourceId, text: trimmed, entityTypes: [entityType], ...(mask ? { mask: true } : {}) }, controller.signal);
+          result = await client.searchEntities({ sourceId, text: trimmed, ...(entityType === undefined ? {} : { entityTypes: [entityType] }), ...(mask ? { mask: true } : {}) }, controller.signal);
         } catch {
           result = UNEXPECTED;
         }

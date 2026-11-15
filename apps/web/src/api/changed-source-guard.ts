@@ -2,7 +2,7 @@ import type { ClientState } from '../state/client-state.js';
 import { isSourceChanged } from '../state/investigation-state.js';
 import type { ApiClient, ApiResult } from './client.js';
 
-type GuardedRead = 'getEntity' | 'getEdge' | 'lookupEntity' | 'searchEntities' | 'searchMore' | 'previewExpansion' | 'expandNeighbors' | 'derivedNeighbors' | 'graphCoverage' | 'readRefs' | 'createExport' | 'runTemplate' | 'runPattern' | 'runSavedPattern' | 'ask' | 'askContinue';
+type GuardedRead = 'getEntity' | 'getEdge' | 'lookupEntity' | 'searchEntities' | 'searchMore' | 'previewExpansion' | 'expandNeighbors' | 'derivedNeighbors' | 'graphCoverage' | 'readRefs' | 'createExport' | 'runTemplate' | 'findPaths' | 'runPattern' | 'runSavedPattern' | 'ask' | 'askContinue';
 
 /** Nothing was sent: the answer says only that the request ended, which no store shows as a failure. */
 const NOT_SENT: ApiResult<never> = { ok: false, failure: { code: 'ABORTED' } };
@@ -29,6 +29,7 @@ export function withoutReadsWhileSourceChanged(client: ApiClient, state: ClientS
     readRefs: guard('readRefs'),
     createExport: guard('createExport'),
     runTemplate: guard('runTemplate'),
+    findPaths: guard('findPaths'),
     runPattern: guard('runPattern'),
     runSavedPattern: guard('runSavedPattern'),
     ask: guard('ask'),

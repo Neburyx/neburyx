@@ -1,0 +1,48 @@
+.paths-types {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.paths-type {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.paths-list,
+.paths-steps {
+  margin: 0;
+  padding-left: var(--space-16);
+}
+
+.paths-item {
+  margin-bottom: var(--space-8);
+}
+
+.paths-item-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-medium);
+}
+
+.paths-choose,
+.paths-evidence-open {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.paths-choose[aria-pressed='true'] {
+  font-weight: var(--font-weight-medium);
+}
+
+.paths-selected {
+  color: var(--color-accent);
+}

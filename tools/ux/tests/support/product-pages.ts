@@ -284,6 +284,31 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await page.getByRole('menuitem', { name: 'Expand by type', exact: true }).first().click();
     await expect(page.getByRole('complementary', { name: 'Expand relationships' })).toBeVisible();
   },
+  'Explore with the Paths panel open': async (page) => {
+    await openEntity(page, 'banking-demo', `PA-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Paths', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: 'Bounded path search' }).getByRole('heading', { name: 'Bounded path search' })).toBeVisible();
+  },
+  "Explore with a path search's result": async (page) => {
+    const entity = `PR-${unique()}`;
+    const ref = (stableId: string) => ({ sourceId: 'banking-demo', entityType: 'account', stableId });
+    const node = (stableId: string) => ({ ref: ref(stableId), display: { title: stableId, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+    await page.route((url) => url.pathname === '/v1/graph/paths', (route) =>
+      route.fulfill({ json: { status: 'ok', paths: [{ hops: 1, steps: [{ from: ref(entity), to: ref('QX-2'), relationshipType: 'TRANSFERRED_TO', evidenceRefs: [] }] }], nodes: [node(entity), node('QX-2')], edges: [], capReached: false, partial: false, elapsedMs: 420, warnings: [] } }),
+    );
+    await openEntity(page, 'banking-demo', entity);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await page.getByRole('button', { name: 'Paths', exact: true }).click();
+    const panel = page.getByRole('complementary', { name: 'Bounded path search' });
+    await panel.getByLabel('From', { exact: true }).selectOption({ label: `account ${entity}` });
+    await panel.getByLabel('Search the source: To').fill('QX-2');
+    const option = panel.getByLabel('To', { exact: true }).getByRole('option', { name: /QX-2/ });
+    await expect(option).toHaveCount(1);
+    await panel.getByLabel('To', { exact: true }).selectOption((await option.getAttribute('value')) ?? '');
+    await panel.getByRole('button', { name: 'Find paths' }).click();
+    await expect(panel.getByText('1 path · 0.42 s · cap not reached')).toBeVisible();
+  },
   'Explore with the Patterns panel open': async (page) => {
     await openEntity(page, 'banking-demo', `PP-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();

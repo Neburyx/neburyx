@@ -278,6 +278,7 @@ export async function startOn(backing: Backing, options: { readonly delayMs?: nu
         get cancelled() {
           return tracked.cancelled;
         },
+        cancel: () => tracked.cancel(),
         finish: () => (order.push('finish'), tracked.finish()),
       };
     },

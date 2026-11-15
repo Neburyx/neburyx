@@ -1,4 +1,4 @@
-import type { Window } from '@neburyx/contracts';
+import type { ElementRef, Window } from '@neburyx/contracts';
 import { DEFAULT_DIRECTION, DEFAULT_LAYOUT, type LayoutDirection, type LayoutId } from './layout-choice.js';
 import { StateError } from './errors.js';
 import { nodeRefOfKey } from './keys.js';
@@ -59,6 +59,19 @@ export interface MappedTypes {
   readonly datedRelationships?: readonly DatedRow[] | undefined;
 }
 
+/** Where the Paths panel is to put the focus when it next shows (the first field, or the first path of its list); `serial` tells one request from the next. */
+interface PathsFocus {
+  readonly target: 'from' | 'list';
+  readonly serial: number;
+}
+
+/** The ends handed to the Paths panel; `serial` tells one hand-over from the next. */
+interface PathsHandover {
+  readonly from?: ElementRef;
+  readonly to?: ElementRef;
+  readonly serial: number;
+}
+
 export interface PresentationState {
   readonly tool: PointerTool;
   /** How the loaded graph is arranged when a person lays it out, and which way a hierarchical layout runs. Part of the view that is saved. */
@@ -85,6 +98,12 @@ export interface PresentationState {
   readonly filtersOpen: boolean;
   /** The Patterns panel is open; it, the Filters panel and the Search panel are never open together. Not saved with a view, and kept when another source is bound. */
   readonly patternsOpen: boolean;
+  /** The Paths panel is open; like Patterns it is never open together with the Filters, Search and Patterns panels. Not saved with a view, and kept when another source is bound. */
+  readonly pathsOpen: boolean;
+  /** The ends the Paths panel is to take when it next shows its form: handed over by the way into the panel (the selection bar, a menu, a key), read once and cleared by the panel. An end left out is empty. Not saved with a view, and not kept when another source is bound. */
+  readonly pathsHandover: PathsHandover | undefined;
+  /** A request to put the focus in the Paths panel, made by a banner action outside the panel; read once and cleared by the panel. Not saved with a view. */
+  readonly pathsFocus: PathsFocus | undefined;
   /** Whether the Ask panel is open: it is a panel of its own and does not close or open the others. */
   readonly askOpen: boolean;
   /** The preset the Patterns panel selects when it next shows its list: handed over by the way into the panel from Home, read once and cleared by the panel, and cleared when the panel closes. Not saved with a view, and not kept when another source is bound. */
@@ -149,6 +168,9 @@ export const INITIAL_PRESENTATION: PresentationState = {
   mappedTypes: undefined,
   filtersOpen: false,
   patternsOpen: false,
+  pathsOpen: false,
+  pathsHandover: undefined,
+  pathsFocus: undefined,
   askOpen: false,
   patternsPreset: undefined,
   panelSizes: new Map(),
@@ -209,6 +231,13 @@ export interface PresentationActions {
   setTimeWindow(window: Window | undefined, leaving?: readonly string[]): void;
   setFiltersOpen(open: boolean): void;
   setPatternsOpen(open: boolean): void;
+  setPathsOpen(open: boolean): void;
+  /** Opens the Paths panel with the given ends: the panel takes them once. The ends are references of loaded entities. */
+  requestPaths(ends: { readonly from?: ElementRef; readonly to?: ElementRef }): void;
+  clearPathsHandover(): void;
+  /** Opens the Paths panel and asks it to put the focus on a field or on its list. */
+  requestPathsFocus(target: 'from' | 'list'): void;
+  clearPathsFocus(): void;
   setAskOpen(open: boolean): void;
   setPatternsPreset(preset: string | undefined): void;
   setPanelSize(panel: string, size: number): void;
@@ -440,11 +469,31 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setFiltersOpen(filtersOpen) {
       if (store.getState().filtersOpen === filtersOpen) return;
-      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false } : {}) });
+      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false, pathsOpen: false } : {}) });
     },
     setPatternsOpen(patternsOpen) {
       if (store.getState().patternsOpen === patternsOpen) return;
-      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false } : { patternsPreset: undefined }) });
+      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false, pathsOpen: false } : { patternsPreset: undefined }) });
+    },
+    setPathsOpen(pathsOpen) {
+      if (store.getState().pathsOpen === pathsOpen) return;
+      store.setState({ ...store.getState(), pathsOpen, ...(pathsOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false } : {}) });
+    },
+    requestPaths(ends) {
+      const current = store.getState();
+      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, pathsHandover: { ...ends, serial: (current.pathsHandover?.serial ?? 0) + 1 } });
+    },
+    requestPathsFocus(target) {
+      const current = store.getState();
+      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, pathsFocus: { target, serial: (current.pathsFocus?.serial ?? 0) + 1 } });
+    },
+    clearPathsFocus() {
+      if (store.getState().pathsFocus === undefined) return;
+      store.setState({ ...store.getState(), pathsFocus: undefined });
+    },
+    clearPathsHandover() {
+      if (store.getState().pathsHandover === undefined) return;
+      store.setState({ ...store.getState(), pathsHandover: undefined });
     },
     setAskOpen(askOpen) {
       if (store.getState().askOpen === askOpen) return;
@@ -468,7 +517,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setSearchOpen(searchOpen) {
       if (store.getState().searchOpen === searchOpen) return;
-      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false } : {}) });
+      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false, pathsOpen: false } : {}) });
     },
     setSearchTab(searchTab) {
       if (store.getState().searchTab === searchTab) return;
@@ -476,7 +525,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     requestSearch() {
       const current = store.getState();
-      store.setState({ ...current, searchOpen: true, filtersOpen: false, patternsOpen: false, searchFocus: current.searchFocus + 1 });
+      store.setState({ ...current, searchOpen: true, filtersOpen: false, patternsOpen: false, pathsOpen: false, searchFocus: current.searchFocus + 1 });
     },
     setSheetOpen(sheetOpen) {
       if (store.getState().sheetOpen === sheetOpen) return;
@@ -561,8 +610,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, askOpen, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, askOpen, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, mappedTypes });
     },
   };
 }

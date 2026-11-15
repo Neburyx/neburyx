@@ -31,6 +31,7 @@ import { bindSupernodePanel } from './workspace/supernode-panel-binder.js';
 import { bindSearchPanel } from './search/search-panel-binder.js';
 import { bindFiltersPanel } from './workspace/filters-binder.js';
 import type { Evidence } from './evidence/evidence.js';
+import { bindPathsPanel } from './paths/paths-binder.js';
 import { bindPatternsPanel } from './patterns/patterns-binder.js';
 import { createPanelRegistryFor, PanelsProvider, type PanelRegistry } from './workspace/panel-registry.js';
 import { createSlotRegistry, SlotsProvider, type SlotRegistry } from './workspace/slots.js';
@@ -259,6 +260,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
   const unbindSearch = bindSearchPanel(state, panels);
   const unbindFilters = bindFiltersPanel(state, panels);
   const unbindPatterns = bindPatternsPanel(state, panels, evidence);
+  const unbindPaths = bindPathsPanel(state, panels, evidence);
   const unbindSupernode = bindSupernodePanel(state, panels);
   const unbindBanner = bindBannerToInvestigation(state, banner);
   return {
@@ -275,6 +277,7 @@ export function renderApp(path: string | { readonly pathname: string; readonly s
       unbindSearch();
       unbindFilters();
       unbindPatterns();
+      unbindPaths();
       unbindSupernode();
       unbindBanner();
       view.unmount();

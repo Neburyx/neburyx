@@ -18,6 +18,7 @@ import {
   errorResponseSchema,
   derivedNeighborsResponseSchema,
   expandResponseSchema,
+  pathsResponseSchema,
   investigationListResponseSchema,
   ownedViewListResponseSchema,
   investigationResponseSchema,
@@ -84,6 +85,8 @@ import {
   type ElementRef,
   type ErrorResponse,
   type ExpandRequest,
+  type PathsRequest,
+  type PathsResponse,
   type DerivedNeighborsRequest,
   type DerivedNeighborsResponse,
   type ExpandResponse,
@@ -233,6 +236,8 @@ export interface ApiClient {
   expandNeighbors(request: ExpandRequest, signal?: AbortSignal): Promise<ApiResult<ExpandResponse>>;
   /** The rule-derived neighbors of a node, one result for each rule of the source whose first type is the node's; the answer names the node and the source asked for and holds nothing of another source, or it is refused. */
   derivedNeighbors(request: DerivedNeighborsRequest, signal?: AbortSignal): Promise<ApiResult<DerivedNeighborsResponse>>;
+  /** The shortest paths between two entities of a source, or the stop of a search that would expand more than the source's threshold (`status: 'heavy'`, a typed answer); the answer holds nothing of another source, or it is a `SCHEMA_MISMATCH`. */
+  findPaths(request: PathsRequest, signal?: AbortSignal): Promise<ApiResult<PathsResponse>>;
 }
 
 /** Whether the reference an answer carries is the one that was asked for: the same text in the path segment, whichever form. */
@@ -411,6 +416,13 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       const asked = expansion.neighborTypes;
       const sameTypes = answer.pages.length === asked.length && answer.pages.every((page, index) => page.neighborType === asked[index]);
       return !sameRef(answer.ref, { sourceId: expansion.sourceId, ...expansion.ref }) || named.some((sourceId) => sourceId !== expansion.sourceId) || !sameTypes ? failed('SCHEMA_MISMATCH') : result;
+    },
+    findPaths: async (search, signal) => {
+      const result = await request(fetcher, '/v1/graph/paths', pathsResponseSchema, signal, 'POST', search);
+      if (!result.ok || result.value.status === 'heavy') return result;
+      const answer = result.value;
+      const named = [...answer.nodes.map((node) => node.ref.sourceId), ...answer.edges.flatMap((edge) => sourcesOfEdge(edge)), ...answer.paths.flatMap((path) => path.steps.flatMap((step) => [step.from.sourceId, step.to.sourceId]))];
+      return named.some((sourceId) => sourceId !== search.sourceId) ? failed('SCHEMA_MISMATCH') : result;
     },
     derivedNeighbors: async (derived, signal) => {
       const result = await request(fetcher, '/v1/graph/derived-neighbors', derivedNeighborsResponseSchema, signal, 'POST', derived);

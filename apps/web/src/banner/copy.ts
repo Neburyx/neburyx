@@ -29,7 +29,12 @@ export const PREVIEW_CANCELLED_HEADLINE = 'Cancelled. Nothing was added to the g
 export const RUN_AGAIN = 'Run again';
 export const cancelledHeadline = (): string => 'Cancelled. No new relationships added.';
 
-export type RequestKind = 'expand' | 'more' | 'start-over' | 'preview';
+export type RequestKind = 'expand' | 'more' | 'start-over' | 'preview' | 'paths';
+
+/** Frame 15: the Running and Cancelled states of a path search. */
+export const PATHS_CANCELLED_HEADLINE = 'Cancelled. No new paths added.';
+export const PATHS_CANCELLED_SIDE_LABEL = '0 new paths added';
+export const pathsRunningText = (maxHops: number): string => `Maximum ${maxHops} ${maxHops === 1 ? 'hop' : 'hops'}; loaded graph and filters preserved.`;
 
 const elapsedSeconds = (ms: number): string => (Math.round(ms / 100) / 10).toFixed(1);
 const limitSeconds = (ms: number): string => String(Math.round(ms / 100) / 10);
@@ -46,6 +51,8 @@ const whatRuns = (kind: RequestKind, title: string | undefined): string => {
       return `Starting over${of === '' ? ' an expansion' : of}`;
     case 'preview':
       return `Counting relationships${title === undefined ? '' : ` of ${title}`}`;
+    case 'paths':
+      return 'Finding shortest paths';
     default:
       return 'Running';
   }
