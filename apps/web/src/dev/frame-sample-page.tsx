@@ -18,7 +18,8 @@ import { bindBuiltInCompare } from '../compare/built-in.js';
 import { createEdgeReadStore, EdgeReadProvider } from '../evidence/edge-read.js';
 import { bindBuiltInInspector } from '../inspector/built-in-tabs.js';
 import { createShellData, ShellDataProvider } from '../shell/shell-data.js';
-import { sampleClient } from './sample-client.js';
+import { sampleClient, sampleExportClient } from './sample-client.js';
+import { registerExport } from '../exports/register-export.js';
 import { bindLegend } from '../workspace/legend-binder.js';
 import { bindSupernodePanel } from '../workspace/supernode-panel-binder.js';
 import { createPanelRegistryFor, PanelsProvider } from '../workspace/panel-registry.js';
@@ -59,6 +60,7 @@ function knownProfile(): ProfileStore {
 /** The sample, with the investigation's title taken from the address (`?title=...`) to try a long one in the header. */
 export function titledSample(search: string): ClientState {
   const state = createFrameSampleState();
+  if (exportOn(search)) giveId(state);
   const title = new URLSearchParams(search).get('title');
   if (title !== null && title !== '') state.describeInvestigation({ ...FIXTURE_RECORD, title });
   return state;
@@ -81,6 +83,23 @@ function compareOn(search: string): boolean {
   return new URLSearchParams(search).get('compare') === 'on';
 }
 
+const EXPORT_SAMPLE_ID = '0192f000-0000-7000-8000-0000000000ee';
+
+/** The sample holds no investigation id, which the Export button needs; this gives it one and leaves the places and pins as they were. */
+function giveId(state: ClientState): void {
+  const { positions, pins } = state.presentation.view.getState();
+  const { sourceId, record, resultKeys, nodeRefs, edgeRefs } = state.investigation.getState();
+  if (sourceId === null || record === null) return;
+  state.show({ id: EXPORT_SAMPLE_ID, sourceId, record, resultKeys, nodeRefs, edgeRefs }, []);
+  state.presentation.setPositions(positions);
+  state.replacePins([...pins]);
+}
+
+/** `?export=on` puts the real Export button in the header instead of the stand-in, answered by the sample's own client. */
+function exportOn(search: string): boolean {
+  return new URLSearchParams(search).get('export') === 'on';
+}
+
 /** The workspace with the Explore design's graph, drawn at the design's own positions, for putting the canvas beside the design. */
 export function FrameSamplePage() {
   const [state] = useState(() => titledSample(window.location.search));
@@ -91,6 +110,7 @@ export function FrameSamplePage() {
   const [slots] = useState(() => {
     const registry = createSlotRegistry();
     registerBuiltInSlots(registry);
+    if (exportOn(window.location.search)) registerExport(registry, sampleExportClient());
     registerStandIns(registry);
     return registry;
   });

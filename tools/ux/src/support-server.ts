@@ -312,7 +312,7 @@ function countsOf(stored: StoredInvestigation): { nodeCount: number; edgeCount: 
 function createInvestigations(options: SupportServerOptions) {
   const held = new Map<string, StoredInvestigation>();
   const exports = new Map<string, { readonly format: 'json' | 'csv'; readonly filename: string }>();
-  let exportMode: 'ok' | 'refused' | 'source-changed' | 'failed' | 'large' = 'ok';
+  let exportMode: 'ok' | 'refused' | 'source-changed' | 'failed' | 'large' | 'not-found' = 'ok';
   /** The investigation as the routes that are not restore see it: a deleted one is not there. */
   const live = (id: string): StoredInvestigation | undefined => {
     const stored = held.get(id);
@@ -494,7 +494,7 @@ function createInvestigations(options: SupportServerOptions) {
     setExportMode(body: unknown, response: ServerResponse): void {
       const given = typeof body === 'object' && body !== null && !Array.isArray(body) ? Object.fromEntries(Object.entries(body)) : {};
       const mode = given['mode'];
-      if (mode !== 'ok' && mode !== 'refused' && mode !== 'source-changed' && mode !== 'failed' && mode !== 'large') return json(response, 400, INVALID);
+      if (mode !== 'ok' && mode !== 'refused' && mode !== 'source-changed' && mode !== 'failed' && mode !== 'large' && mode !== 'not-found') return json(response, 400, INVALID);
       exportMode = mode;
       json(response, 200, {});
     },
@@ -505,8 +505,14 @@ function createInvestigations(options: SupportServerOptions) {
       if (found === undefined) return json(response, 404, NOT_FOUND);
       const changed = sourceStateOf(found, false);
       if (changed !== 'available') return json(response, 409, { error: { code: 'CONFLICT', message: 'This source now points to a different database or is no longer configured. This investigation is read-only.', retryable: false, traceId: 'tr-support', details: { reason: 'source-changed', sourceState: changed } } });
+      if (exportMode === 'not-found') return json(response, 404, NOT_FOUND);
       if (exportMode === 'large') return json(response, 400, { error: { code: 'INVALID_REQUEST', message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false, traceId: 'support', details: { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'aggregates' } } });
       if (exportMode === 'failed') return json(response, 500, { error: { code: 'EXPORT_FAILED', message: 'The export could not be created.', retryable: true, traceId: 'support' } });
+      if (parsed.data.format === 'png') {
+        const shown = parsed.data.entities.length;
+        const header = { source: found.sourceId, exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown, notRetrieved: { value: 38, quality: 'estimated', scope: 'not yet retrieved' }, uncounted: 0 }, masking: 'off', lines: ['source: ' + found.sourceId, 'exported: 2026-11-10T10:15:00.000Z', 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, 'masking: off'] };
+        return json(response, 201, { format: 'png', filename: 'neburyx-export-20261110T101500Z.png', header });
+      }
       const exportId = randomUUID();
       const filename = parsed.data.format === 'json' ? 'neburyx-export-20261110T101500Z.json' : 'neburyx-export-20261110T101500Z.zip';
       exports.set(exportId, { format: parsed.data.format, filename });

@@ -40,6 +40,28 @@ function aggregateDetailOf(ref: AggregateEdgeRef): AggregateEdgeDetail {
   };
 }
 
+const PICTURE_TIME = '2026-11-10T10:15:00.000Z';
+
+/** The window property that holds the export requests the sample was sent, for a browser test to read. */
+const SAMPLE_EXPORT_REQUESTS = 'sampleExportRequests';
+
+/** The sample with the Export button's answers: a picture is answered with a header counting the references it was sent, any other format is refused. Each request is added to `window[SAMPLE_EXPORT_REQUESTS]`. */
+export function sampleExportClient(): ApiClient {
+  const sent: unknown[] = [];
+  Reflect.set(window, SAMPLE_EXPORT_REQUESTS, sent);
+  return {
+    ...sampleClient(),
+    createExport: (_id, request) => {
+      sent.push(request);
+      if (request.format !== 'png') return Promise.resolve({ ok: false, failure: { code: 'EXPORT_FAILED', message: 'Only a picture can be made here.', retryable: false, traceId: 'tr-sample' } });
+      const shown = request.entities.length;
+      const lines = [`source: ${FRAME_SAMPLE_SOURCE}`, `exported: ${PICTURE_TIME}`, 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, 'masking: off'];
+      const header = { source: FRAME_SAMPLE_SOURCE, exported: PICTURE_TIME, scope: 'current view (partial)' as const, coverage: { shown, notRetrieved: { value: 38, quality: 'estimated' as const, scope: 'not yet retrieved' }, uncounted: 0 }, masking: 'off' as const, lines };
+      return Promise.resolve({ ok: true, value: { format: 'png', filename: 'neburyx-export-20261110T101500Z.png', header } });
+    },
+  };
+}
+
 /** A client whose only read is the stored relationship's, answered from the sample; every other read is unreachable. */
 export function sampleClient(linkable = false): ApiClient {
   const asked = new Set<string>();

@@ -12,7 +12,7 @@ async function openInvestigation(page: Page): Promise<void> {
 const exportButton = (page: Page) => page.getByRole('button', { name: 'Export', exact: true });
 const dialog = (page: Page) => page.getByRole('dialog', { name: 'Export current view' });
 const banner = (page: Page) => page.getByRole('region', { name: 'Request status' });
-const mode = (page: Page, value: 'ok' | 'refused' | 'source-changed' | 'failed' | 'large') => page.request.post('/__support/export-mode', { data: { mode: value } });
+const mode = (page: Page, value: 'ok' | 'refused' | 'source-changed' | 'failed' | 'large' | 'not-found') => page.request.post('/__support/export-mode', { data: { mode: value } });
 
 test.afterEach(async ({ page }) => {
   await mode(page, 'ok');
@@ -30,7 +30,7 @@ test.describe('exporting the current view', () => {
     await expect(dialog(page).getByText(/^coverage: 1 shown · /)).toBeVisible();
     await expect(dialog(page).getByText('masking: off')).toBeVisible();
     await expect(dialog(page).getByText('Exports are partial views, not signed evidence.')).toBeVisible();
-    await expect(dialog(page)).not.toContainText(/mask critical|PNG|configured store/i);
+    await expect(dialog(page)).not.toContainText(/mask critical|configured store/i);
     await page.keyboard.press('Escape');
     await expect(dialog(page)).toHaveCount(0);
     await expect(exportButton(page)).toBeFocused();
