@@ -1,3 +1,4 @@
+import { SnapshotUnavailable } from './canvas/snapshot.js';
 import { WALK_SENTENCE } from './canvas/graph-canvas.js';
 import { render } from '@testing-library/react';
 import { useMemo } from 'react';
@@ -193,6 +194,7 @@ function stubRenderer(options: StubOptions = {}): StubRenderer {
       if (entity !== undefined) return { x: entity.position.x + 10, y: entity.position.y + 20 };
       return drawn.relationships.some((candidate) => candidate.id === key) ? { x: 300, y: 350 } : undefined;
     },
+    snapshot: () => (drawn === undefined || drawn.entities.length === 0 ? Promise.reject(new SnapshotUnavailable('empty')) : Promise.resolve(new Blob(['png'], { type: 'image/png' }))),
     describe: () => ({ entities: drawn?.entities.filter((entity) => entity.remainder !== true).length ?? 0, relationships: drawn?.relationships.filter((relationship) => relationship.remainder !== true).length ?? 0 }),
     viewport: () => ({ zoom: 1, x: 0, y: 0 }),
     positions: () => new Map((drawn?.entities ?? []).map((entity) => [entity.id, entity.position])),

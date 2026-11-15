@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 import type { Viewport } from '../state/presentation-state.js';
 import type { CanvasRenderer } from './scene.js';
+import type { SnapshotBounds } from './snapshot.js';
 
 /** What the controls around the canvas can ask of it; absent while no renderer is running. */
 export interface CanvasCommands {
@@ -14,6 +15,8 @@ export interface CanvasCommands {
   readonly centerOn: (key: string) => void;
   /** Where an item is on the page; see `CanvasRenderer.anchorOf`. */
   readonly anchorOf: (key: string | undefined) => { readonly x: number; readonly y: number } | undefined;
+  /** The drawn view as a PNG; see `CanvasRenderer.snapshot`. A failure rejects, and is the caller's to report, not the canvas's. */
+  readonly snapshot: (bounds: SnapshotBounds) => Promise<Blob>;
 }
 
 export interface CanvasCommandsHandle {
@@ -35,7 +38,7 @@ function createCanvasCommandsHandle(): CanvasCommandsHandle {
           onFailure();
         }
       };
-      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), centerOn: (key) => guarded(() => renderer.centerOn(key)), viewport: () => renderer.viewport(), anchorOf: (key) => renderer.anchorOf(key) };
+      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), centerOn: (key) => guarded(() => renderer.centerOn(key)), viewport: () => renderer.viewport(), anchorOf: (key) => renderer.anchorOf(key), snapshot: (bounds) => renderer.snapshot(bounds) };
       store.setState(commands);
       return () => {
         if (store.getState() === commands) store.setState(undefined);

@@ -1,3 +1,4 @@
+import type { SnapshotBounds } from './snapshot.js';
 import type { SourceProfile } from '@neburyx/contracts';
 import type { PointerTool, Position, Viewport } from '../state/presentation-state.js';
 import type { EntityLook } from './entity-look.js';
@@ -115,6 +116,8 @@ export interface CanvasRenderer {
   placeLive(positions: ReadonlyMap<string, Position>): void;
   /** Lets a drawing put every entity where its scene says again. */
   endLive(): void;
+  /** The drawn view as one PNG, every entity and relationship at its place with every caption and label, none of the person's marks, fitted whole within the bounds whatever the pan and zoom; the view on screen is as it was. Rejects with `SnapshotUnavailable` when nothing is drawn or nothing is mounted. */
+  snapshot(bounds: SnapshotBounds): Promise<Blob>;
   describe(): DrawnCounts;
   positions(): ReadonlyMap<string, Position>;
   viewport(): Viewport;

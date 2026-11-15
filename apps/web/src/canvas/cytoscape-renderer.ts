@@ -17,11 +17,15 @@ import { detectPlatform, type Platform } from '../workspace/key-spec.js';
 import { modifierOf } from './selection-gestures.js';
 import { ZOOM_MAX, ZOOM_MIN } from './zoom.js';
 import type { CanvasRenderer, DrawnCounts, Inspection, Scene } from './scene.js';
+import { snapshotScale, SnapshotUnavailable, type SnapshotBounds } from './snapshot.js';
 
 // Entities are not selected by the library: clicks and boxes are reported and decided by the caller. An entity is grabbed only while the scene says it may be dragged.
 const POINTER = { userPanningEnabled: true, userZoomingEnabled: true, boxSelectionEnabled: false, autoungrabify: false, autounselectify: true };
 
 const CAPTION_BUDGET_MS = 4;
+const SNAPSHOT_SETTLE_FRAMES = 2;
+// the data flags that draw a selection, a focus or the walk's ring; a picture shows none of them
+const MARKS = ['selected', 'focused', 'touched', 'ringed'] as const;
 /** Setting the class is cheap, but drawing an entity again after its style changed costs about half a millisecond, so hiding the captions of a few hundred entities in one frame would be a long frame (233 ms at 4x for 120 entities); it is done this many entities at a time over the next frames. */
 const FAR_ENTITIES_PER_FRAME = 10;
 
@@ -197,8 +201,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       }
     });
   };
+  let snapshotting = false;
+  let deferredDraw: { readonly scene: Scene; readonly restore: Viewport | undefined } | undefined;
   const runFarQueue = (): void => {
     farScheduled = false;
+    if (snapshotting) return;
     if (core === undefined) {
       farQueue = [];
       return;
@@ -252,7 +259,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   // A caption is painted and encoded on a canvas of its own, which costs a millisecond or more, so an entity is drawn at once with its glyph and the captions follow in the next frames, a few at a time; the frame that adds many entities then stays short.
   let captionQueue: CaptionJob[] = [];
   let captionsScheduled = false;
-  const paintQueuedCaptions = (): void => {
+  const paintQueuedCaptions = (budget = CAPTION_BUDGET_MS): void => {
     captionsScheduled = false;
     const cy = core;
     if (cy === undefined) {
@@ -261,7 +268,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     }
     const started = performance.now();
     try {
-      while (captionQueue.length > 0 && performance.now() - started < CAPTION_BUDGET_MS) {
+      while (captionQueue.length > 0 && performance.now() - started < budget) {
         const job = captionQueue.shift();
         const node = job === undefined ? undefined : cy.getElementById(job.id);
         if (job === undefined || node === undefined || node.empty() || node.data('lookKey') !== job.key) continue;
@@ -277,7 +284,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   const scheduleCaptions = (): void => {
     if (captionsScheduled) return;
     captionsScheduled = true;
-    nextFrame(paintQueuedCaptions);
+    nextFrame(() => paintQueuedCaptions());
   };
 
   // Where the positions come from while the live layout runs: the entities in it are not moved to the scene's positions by a drawing.
@@ -326,7 +333,49 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     if (viewport !== undefined) showViewport(cy, viewport);
   };
 
-  return {
+  const settle = async (): Promise<void> => {
+    for (let frame = 0; frame < SNAPSHOT_SETTLE_FRAMES; frame += 1) await new Promise<void>((resolve) => nextFrame(resolve));
+  };
+
+  // The picture shows every caption and label whatever the zoom, and no mark of the person's own work (selection, focus ring); both are put back as they were.
+  const takePicture = async (cy: Core, bounds: SnapshotBounds): Promise<Blob> => {
+    if (snapshotting) throw new Error('a picture is already being made');
+    snapshotting = true;
+    const farElements = cy.elements('.far');
+    const marked = MARKS.map((mark) => ({ mark, elements: cy.elements().filter((element) => element.data(mark) === true) }));
+    try {
+      cy.batch(() => {
+        farElements.removeClass('far');
+        for (const { mark, elements } of marked) elements.data(mark, false);
+      });
+      paintQueuedCaptions(Infinity);
+      await settle();
+      // the library sizes the picture from the box of all elements, rounded up, and multiplies by the screen's pixel ratio unless a largest size is given, so the sizes it must not pass are given
+      const box = cy.elements().boundingBox();
+      const width = Math.ceil(box.w);
+      const height = Math.ceil(box.h);
+      const scale = snapshotScale({ width, height }, bounds);
+      return await cy.png({ output: 'blob-promise', full: true, bg: CAPTION_KNOCKOUT, maxWidth: Math.max(1, Math.floor(width * scale)), maxHeight: Math.max(1, Math.floor(height * scale)) });
+    } finally {
+      cy.batch(() => {
+        for (const { mark, elements } of marked) elements.data(mark, true);
+        if (far) farElements.addClass('far');
+      });
+      snapshotting = false;
+      if (farQueue.length > 0) scheduleFar();
+      const later = deferredDraw;
+      deferredDraw = undefined;
+      if (later !== undefined) renderer.draw(later.scene, later.restore);
+    }
+  };
+
+  const renderer: CanvasRenderer = {
+    snapshot(bounds) {
+      const cy = core;
+      if (cy === undefined) return Promise.reject(new SnapshotUnavailable('not-mounted'));
+      if (cy.nodes().empty()) return Promise.reject(new SnapshotUnavailable('empty'));
+      return takePicture(cy, bounds);
+    },
     mount(container, events, viewport) {
       if (core !== undefined) throw new Error('the renderer is already mounted');
       onDragging = events.dragging;
@@ -571,6 +620,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       surfaced = container !== undefined;
     },
     draw(scene: Scene, restore?: Viewport) {
+      if (snapshotting) {
+        deferredDraw = { scene, restore };
+        return;
+      }
       const cy = requireCore();
       tool = scene.tool;
       let anotherSource = false;
@@ -758,4 +811,5 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       core = undefined;
     },
   };
+  return renderer;
 }
