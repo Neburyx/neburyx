@@ -3,19 +3,22 @@ import type { ExportFormat } from '@neburyx/contracts';
 export const EXPORT_BUTTON = 'Export';
 export const EXPORT_TITLE = 'Export current view';
 export const FORMAT_LABEL = 'Format';
-export const FORMAT_NAMES: Readonly<Record<ExportFormat, string>> = { json: 'JSON', csv: 'CSV' };
+export type PictureFormat = ExportFormat | 'png';
+export const FORMAT_NAMES: Readonly<Record<PictureFormat, string>> = { json: 'JSON', csv: 'CSV', png: 'PNG' };
 export const PREVIEW_HEADING = 'Every export starts with';
+export const PICTURE_MASKED_LINE = 'masking: on · the picture states how many fields are masked';
 export const FOOTNOTE = 'Exports are partial views, not signed evidence.';
 export const CANCEL = 'Cancel';
 export const TRY_AGAIN = 'Try again';
 export const PREPARING = 'Preparing…';
 export const DONE_ANNOUNCEMENT = 'Export downloaded.';
+export const PICTURE_FAILURE = 'The export could not be made. Try again.';
 export const NETWORK_FAILURE = 'The export could not be made. Try again.';
 export const SCHEMA_FAILURE = 'The answer could not be read. Try again.';
 export const EXPORT_BUSY = 'This export is already being made. Try again in a moment.';
 export const EXPORT_DISABLED_SOURCE = 'Not available while the source has changed.';
 
-export const downloadLabel = (format: ExportFormat): string => `Download ${FORMAT_NAMES[format]}`;
+export const downloadLabel = (format: PictureFormat): string => `Download ${FORMAT_NAMES[format]}`;
 
 export interface ExportLimits {
   readonly maxEntities: number;

@@ -4,12 +4,13 @@ import type { ApiFailure } from '../api/client.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 
 /** The references of what the canvas shows: the server reads each through the gate, so no value from the browser's copy goes in a file. */
-export function exportRequestOf(graph: LoadedGraph, format: ExportFormat): ExportRequest {
+export function exportRequestOf(graph: LoadedGraph, format: ExportFormat | 'png', mask: boolean): ExportRequest {
   const edges: StoredEdgeRef[] = [];
   const aggregates: AggregateEdgeRef[] = [];
   const derived: DerivedEdgeRef[] = [];
   for (const edge of graph.edges) sort(edge, edges, aggregates, derived);
-  return { kind: 'view', format, entities: graph.nodes.map((node) => node.ref), edges, aggregates, derived };
+  const refs = { kind: 'view' as const, entities: graph.nodes.map((node) => node.ref), edges, aggregates, derived };
+  return format === 'png' ? { ...refs, format, mask } : { ...refs, format };
 }
 
 function sort(edge: GraphEdge, edges: StoredEdgeRef[], aggregates: AggregateEdgeRef[], derived: DerivedEdgeRef[]): void {

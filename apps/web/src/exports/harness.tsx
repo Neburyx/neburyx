@@ -1,6 +1,11 @@
 import { render } from '@testing-library/react';
+import { useEffect } from 'react';
 import { MemoryRouter } from 'react-router';
 import type { ApiClient } from '../api/client.js';
+import { CanvasCommandsProvider, useCanvasCommandsHandle } from '../canvas/canvas-commands.js';
+import type { CanvasRenderer } from '../canvas/scene.js';
+import type { SnapshotBounds } from '../canvas/snapshot.js';
+import { stubFactory } from '../test-utils.js';
 import { fakeClient } from '../api/fake-client.js';
 import { BannerProvider } from '../banner/banner-context.js';
 import { createBannerController } from '../banner/banner-controller.js';
@@ -13,8 +18,22 @@ import { registerExport } from './register-export.js';
 
 export { shownState };
 
-/** The header with its Export slot and the banner, over a fake client. */
-export function renderExport(state: ClientState, overrides: Partial<ApiClient> = {}) {
+export type Snapshot = (bounds: SnapshotBounds) => Promise<Blob>;
+
+/** Makes the canvas commands of a renderer that takes the given picture, as the workspace does. */
+function AttachCanvas({ snapshot }: { readonly snapshot: Snapshot }) {
+  const handle = useCanvasCommandsHandle();
+  useEffect(() => {
+    const renderer: CanvasRenderer = Object.assign(stubFactory().create(), { snapshot });
+    return handle.attach(renderer, () => undefined, () => undefined);
+  }, [handle, snapshot]);
+  return null;
+}
+
+const PICTURE = (): Promise<Blob> => Promise.resolve(new Blob(['drawing'], { type: 'image/png' }));
+
+/** The header with its Export slot and the banner, over a fake client; the canvas takes `snapshot` as its picture. */
+export function renderExport(state: ClientState, overrides: Partial<ApiClient> = {}, snapshot: Snapshot = PICTURE) {
   const banner = createBannerController();
   const slots = createSlotRegistry();
   const client = fakeClient(overrides);
@@ -23,10 +42,13 @@ export function renderExport(state: ClientState, overrides: Partial<ApiClient> =
     <MemoryRouter>
       <ClientStateProvider state={state}>
         <BannerProvider controller={banner}>
+          <CanvasCommandsProvider>
+          <AttachCanvas snapshot={snapshot} />
           <SlotsProvider registry={slots}>
             <Slot name="export" />
             <StatusBanner />
           </SlotsProvider>
+          </CanvasCommandsProvider>
         </BannerProvider>
       </ClientStateProvider>
     </MemoryRouter>,

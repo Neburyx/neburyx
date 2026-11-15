@@ -30,13 +30,14 @@ export async function reopened(running: Running): Promise<{ readonly tab: Tab; r
 export async function made(tab: Tab, id: string, format: ExportFormat, over: Partial<ExportRequest> = {}) {
   const created = await tab.client.createExport(id, request(format, over), newKey());
   if (!created.ok) throw new Error(`the export was refused: ${created.failure.code}`);
+  if (!('id' in created.value)) throw new Error('the export has no file');
   const file = await tab.client.downloadExport(created.value.id);
   if (!file.ok) throw new Error(`the download was refused: ${file.failure.code}`);
   return { record: created.value, file: file.value };
 }
 
 /** The request the dialog of the web builds from what the canvas of the tab shows. */
-export const viewRequest = (tab: Tab, format: ExportFormat): ExportRequest => exportRequestOf(tab.state.visibleGraph(), format);
+export const viewRequest = (tab: Tab, format: ExportFormat): ExportRequest => exportRequestOf(tab.state.visibleGraph(), format, false);
 
 /** The bytes of an export's file as the tab downloads them. */
 export async function downloaded(tab: Tab, id: string): Promise<Buffer> {

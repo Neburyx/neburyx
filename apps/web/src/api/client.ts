@@ -64,8 +64,8 @@ import {
   patternValidateResponseSchema,
   type DraftWriteRequest,
   type DraftWriteResponse,
-  exportSchema,
-  type ExportRecord,
+  createExportResponseSchema,
+  type CreateExportResponse,
   type ExportRequest,
   type ReadRefsRequest,
   type RenameResponse,
@@ -196,7 +196,7 @@ export interface ApiClient {
   /** Stores a new title for the caller's investigation when `expectedVersion` is its version; the answer names the investigation asked for. */
   renameInvestigation(id: string, title: string, expectedVersion: number, signal?: AbortSignal): Promise<ApiResult<RenameResponse>>;
   /** Asks the server to build an export of the references given; `key` is the idempotency key, the same text for a retry of the same attempt. */
-  createExport(investigationId: string, request: ExportRequest, key: string, signal?: AbortSignal): Promise<ApiResult<ExportRecord>>;
+  createExport(investigationId: string, request: ExportRequest, key: string, signal?: AbortSignal): Promise<ApiResult<CreateExportResponse>>;
   /** The file of an export, with the name the server gave it. A refusal is the server's own failure. */
   downloadExport(id: string, signal?: AbortSignal): Promise<ApiResult<DownloadedFile>>;
   /** Deletes the caller's investigation when `version` is its version; the answer names the investigation asked for and the date until which it can be restored. */
@@ -448,8 +448,8 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
       return result.ok && result.value.investigation.id !== id ? failed('SCHEMA_MISMATCH') : result;
     },
     createExport: async (investigationId, body, key, signal) => {
-      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/exports`, exportSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } });
-      return result.ok && result.value.status !== 'ready' ? failed('SCHEMA_MISMATCH') : result;
+      const result = await request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/exports`, createExportResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } });
+      return result.ok && 'status' in result.value && result.value.status !== 'ready' ? failed('SCHEMA_MISMATCH') : result;
     },
     downloadExport: (id, signal) => download(fetcher, `/v1/exports/${encodeURIComponent(id)}/download`, signal),
     deleteInvestigation: async (id, version, signal) => {

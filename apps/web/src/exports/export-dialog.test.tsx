@@ -42,10 +42,10 @@ describe('the Export dialog', () => {
     expect(box.getByRole('button', { name: 'Download CSV' })).toBeTruthy();
   });
 
-  it('shows no mask button, no PNG and no send-to-store option', async () => {
+  it('shows no mask button and no send-to-store option', async () => {
     await opened();
     const text = dialog().textContent ?? '';
-    expect(text).not.toMatch(/mask critical|PNG|configured store/i);
+    expect(text).not.toMatch(/mask critical|configured store/i);
   });
 
   it('closes on Escape and gives the focus back to the Export button', async () => {

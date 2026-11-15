@@ -1,4 +1,4 @@
-import { EXPORT_SCOPE, type ExportFormat } from '@neburyx/contracts';
+import { EXPORT_SCOPE } from '@neburyx/contracts';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { ApiClient, ApiFailure } from '../api/client.js';
@@ -8,14 +8,16 @@ import { useStoreSelector } from '../state/store.js';
 import { useNotRetrieved } from '../workspace/graph-scope.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { remainderLine } from '../workspace/scope-text.js';
-import { CANCEL, EXPORT_BUSY, EXPORT_TITLE, FOOTNOTE, FORMAT_LABEL, FORMAT_NAMES, NETWORK_FAILURE, PREPARING, PREVIEW_HEADING, SCHEMA_FAILURE, TRY_AGAIN, downloadLabel, tooLargeText } from './copy.js';
+import { useCanvasCommands } from '../canvas/canvas-commands.js';
+import { CANCEL, EXPORT_BUSY, EXPORT_TITLE, FOOTNOTE, FORMAT_LABEL, FORMAT_NAMES, NETWORK_FAILURE, PICTURE_FAILURE, PICTURE_MASKED_LINE, PREPARING, PREVIEW_HEADING, SCHEMA_FAILURE, TRY_AGAIN, downloadLabel, tooLargeText, type PictureFormat } from './copy.js';
 import { exportRequestOf, keyAfter, newExportKey } from './export-attempt.js';
+import { composePicture, drawingBoundsFor } from './picture.js';
 import { saveFile } from './save-file.js';
 
 const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select, textarea, [tabindex]:not([tabindex="-1"])';
-const FORMATS: readonly ExportFormat[] = ['json', 'csv'];
+const FORMATS: readonly PictureFormat[] = ['json', 'csv', 'png'];
 
-type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly failure: ApiFailure };
+type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly failure: ApiFailure } | { readonly kind: 'picture-failed' };
 
 function failureText(failure: ApiFailure): string {
   if (!('message' in failure)) return failure.code === 'SCHEMA_MISMATCH' ? SCHEMA_FAILURE : NETWORK_FAILURE;
@@ -55,7 +57,9 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   const opened = useMemo(() => now().toISOString(), [now]);
   const shown = useMemo(() => state.visibleGraph().nodes.length, [state]);
   const sourceId = useStoreSelector(state.investigation, (held) => held.sourceId) ?? '';
-  const [format, setFormat] = useState<ExportFormat>('json');
+  const [format, setFormat] = useState<PictureFormat>('json');
+  const commands = useCanvasCommands();
+  const mask = useStoreSelector(state.mask, (held) => held);
   const [sending, setSending] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'none' });
   const key = useRef(newExportKey());
@@ -73,17 +77,59 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
     };
   }, []);
 
+  const stopSending = (next: Outcome): void => {
+    sendingNow.current = false;
+    setSending(false);
+    setOutcome(next);
+  };
+
+  const sendPicture = async (refs: ReturnType<typeof exportRequestOf>, id: string): Promise<void> => {
+    let drawing: Blob;
+    try {
+      if (commands === undefined) throw new Error('nothing is drawn');
+      drawing = await commands.snapshot(drawingBoundsFor());
+    } catch {
+      stopSending({ kind: 'picture-failed' });
+      return;
+    }
+    const created = await client.createExport(id, refs, key.current);
+    if (!created.ok) {
+      key.current = keyAfter(created.failure, key.current);
+      stopSending({ kind: 'failed', failure: created.failure });
+      return;
+    }
+    try {
+      if (!('header' in created.value)) throw new Error('not a picture');
+      const picture = await composePicture(drawing, created.value.header.lines);
+      save({ blob: picture, filename: created.value.filename });
+    } catch {
+      key.current = newExportKey();
+      stopSending({ kind: 'picture-failed' });
+      return;
+    }
+    stopSending({ kind: 'none' });
+    onDone?.();
+    onClose();
+  };
+
   const send = async (): Promise<void> => {
     if (sendingNow.current || investigationId === null) return;
     sendingNow.current = true;
     setSending(true);
     setOutcome({ kind: 'none' });
-    const created = await client.createExport(investigationId, exportRequestOf(state.visibleGraph(), format), key.current);
+    const refs = exportRequestOf(state.visibleGraph(), format, mask);
+    if (format === 'png') {
+      await sendPicture(refs, investigationId);
+      return;
+    }
+    const created = await client.createExport(investigationId, refs, key.current);
     if (!created.ok) {
       key.current = keyAfter(created.failure, key.current);
-      sendingNow.current = false;
-      setSending(false);
-      setOutcome({ kind: 'failed', failure: created.failure });
+      stopSending({ kind: 'failed', failure: created.failure });
+      return;
+    }
+    if (!('id' in created.value)) {
+      stopSending({ kind: 'picture-failed' });
       return;
     }
     const downloaded = await client.downloadExport(created.value.id);
@@ -131,7 +177,9 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   };
 
   const failure = outcome.kind === 'failed' ? outcome.failure : undefined;
-  const lines = [`source: ${sourceId}`, `exported: ${opened}`, `scope: ${EXPORT_SCOPE}`, `coverage: ${remainderLine(shown, notRetrieved)}`, 'masking: off'];
+  const problem = outcome.kind === 'picture-failed' ? PICTURE_FAILURE : failure === undefined ? '' : failureText(failure);
+  const failed = outcome.kind !== 'none';
+  const lines = [`source: ${sourceId}`, `exported: ${opened}`, `scope: ${EXPORT_SCOPE}`, `coverage: ${remainderLine(shown, notRetrieved)}`, format === 'png' && mask ? PICTURE_MASKED_LINE : 'masking: off'];
 
   return createPortal(
     <div className="sheet-scrim export-scrim">
@@ -163,14 +211,14 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
         </div>
         <p className="export-footnote">{FOOTNOTE}</p>
         <p role="status" className="export-problem">
-          {failure === undefined ? '' : failureText(failure)}
+          {problem}
         </p>
         <div className="export-actions">
           <button type="button" className="secondary" onClick={onClose} disabled={sending}>
             {CANCEL}
           </button>
           <button type="button" className="primary" disabled={sending || investigationId === null} aria-busy={sending} onClick={() => void send()}>
-            {sending ? PREPARING : failure === undefined ? downloadLabel(format) : TRY_AGAIN}
+            {sending ? PREPARING : failed ? TRY_AGAIN : downloadLabel(format)}
           </button>
         </div>
       </div>
