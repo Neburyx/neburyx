@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import { patternStatementOf } from '../gate/templates/pattern-statement.js';
 import { GRAMMAR_ALLOWLIST, learnedCountGrammar, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
@@ -28,9 +28,20 @@ describe('the grammar of the count statement of a run', () => {
   const countProblems = (statement: string): string[] => grammarProblems(statement, learnedCountGrammar(), allowlist);
   const COUNT = countStatementOfShape({ steps: [0, 1].map((index) => ({ direction: 'out' as const, typeClass: index, conditions: [], windowed: false })), stopRules: 1 });
 
-  it('accepts the count statement of every enumerated shape, of shapes drawn from seeds the corpus does not use, and of the paths', () => {
+  // Learning the grammar compiles the whole corpus (memoised, most of this describe's time), so it has its own budget and each check is a test of its own: a shared CI runner can be ten times slower than a laptop.
+  beforeAll(() => {
+    learnedCountGrammar();
+  }, 180_000);
+
+  it('accepts the count statement of every enumerated shape', () => {
     for (const shape of enumerateShapes()) expect(countProblems(countStatementOfShape(shape)), JSON.stringify(shape)).toEqual([]);
+  });
+
+  it('accepts the count statement of shapes drawn from seeds the corpus does not use', () => {
     for (const seed of [7777, 31337, 424242]) for (const shape of randomShapes(seed, 200)) expect(countProblems(countStatementOfShape(shape)), `${seed} ${JSON.stringify(shape)}`).toEqual([]);
+  });
+
+  it('accepts the count statement of the paths', () => {
     for (const statement of pathCountStatements()) expect(countProblems(statement), statement).toEqual([]);
   });
 
