@@ -104,16 +104,18 @@ describe('a match', () => {
     expect(second).toEqual(['an entity without an ID', '→ a relationship →', 'an entity without an ID', '→ r-3 →', 'acc-3']);
   });
 
-  it('shows a type with no key properties by the first three properties the answer carries, as label and value without the entity name, and the value of a personal-data property only while masking is off', async () => {
-    const kit = await runWorkspace({ runDefinition: async () => ok(twoHops()) });
+  // A mount takes about 0.9 s, so each mount is a test of its own: two in one test came near the 5 s default on a shared CI runner.
+  it('shows a type with no key properties by the first three properties the answer carries, as label and value without the entity name, and the value of a personal-data property while masking is off', async () => {
+    await runWorkspace({ runDefinition: async () => ok(twoHops()) });
     await ran();
     const card = within(matchCard(1));
     const rows = card.getAllByRole('term').map((term) => [term.textContent, term.nextElementSibling?.textContent]);
     expect(rows).toEqual([['p-1', 'v-1'], ['p-2', 'secret@example.test'], ['p-4', '12']]);
     expect(card.queryByText(/acc-2:/)).toBeNull();
     expect(card.queryByText(/hidden/)).toBeNull();
-    cleanup();
-    document.body.replaceChildren();
+  });
+
+  it('leaves out the value of a personal-data property of a type with no key properties while masking is on', async () => {
     const masked = await runWorkspace({ runDefinition: async () => ok(twoHops()) });
     act(() => masked.state.setMask(true));
     await settle();
@@ -122,7 +124,6 @@ describe('a match', () => {
     await ran();
     expect(within(matchCard(1)).getByText('v-1')).toBeTruthy();
     expect(within(matchCard(1)).queryByText(/secret@example\.test/)).toBeNull();
-    expect(kit).toBeTruthy();
   });
 
   it('shows only the key properties the mapping names for the type, at most three and in its order, and folds the rest and the properties of the relationships behind "Show all properties (n)"', async () => {
@@ -211,6 +212,28 @@ describe('a match', () => {
 });
 
 describe('masking and the personal-data list of the mapping', () => {
+  it('shows a property the mapping lists as personal data while masking is off', async () => {
+    const answer = definitionOk(['acc-2']);
+    if (answer.status !== 'ok') throw new Error('ok');
+    const properties: GraphNode['properties'] = [
+      { key: 'p-date', value: '1990-01-01', dataClass: 'date', masked: false },
+      { key: 'p-plain', value: 'v', dataClass: 'text', masked: false },
+    ];
+    const listedAnswer: PatternRunResponse = {
+      ...answer,
+      matches: answer.matches.map((entry) => ({ ...entry, match: ref('a', 'n-a', 'acc-2') })),
+      nodes: [typedNode('acc-1', 'kind-a'), { ...typedNode('acc-2', 'n-a'), properties }],
+    };
+    const profile = async () => {
+      const { builderProfile } = await import('./run-kit.js');
+      const base = builderProfile();
+      return { ok: true as const, value: { ...base, entityTypes: base.entityTypes.map((type) => (type.type === 'n-a' ? { ...type, pii: ['p-date'] } : type)) } };
+    };
+    await runWorkspace({ profile, runDefinition: async () => ok(listedAnswer) });
+    await ran();
+    expect(within(matchCard(1)).getByText('1990-01-01')).toBeTruthy();
+  });
+
   it('leaves out every property the mapping lists as personal data while masking is on, whatever its class', async () => {
     const answer = definitionOk(['acc-2']);
     if (answer.status !== 'ok') throw new Error('ok');
@@ -228,11 +251,6 @@ describe('masking and the personal-data list of the mapping', () => {
       const base = builderProfile();
       return { ok: true as const, value: { ...base, entityTypes: base.entityTypes.map((type) => (type.type === 'n-a' ? { ...type, pii: ['p-date'] } : type)) } };
     };
-    const kit = await runWorkspace({ profile, runDefinition: async () => ok(listedAnswer) });
-    await ran();
-    expect(within(matchCard(1)).getByText('1990-01-01')).toBeTruthy();
-    cleanup();
-    document.body.replaceChildren();
     const masked = await runWorkspace({ profile, runDefinition: async () => ok(listedAnswer) });
     act(() => masked.state.setMask(true));
     await settle();
@@ -241,7 +259,6 @@ describe('masking and the personal-data list of the mapping', () => {
     await ran();
     expect(within(matchCard(1)).queryByText(/p-date/)).toBeNull();
     expect(within(matchCard(1)).getByText('p-plain')).toBeTruthy();
-    expect(kit).toBeTruthy();
   });
 });
 
