@@ -26,6 +26,10 @@ const VERDICT = /\b(?:guilt\w*|fraud\w*|launder\w*|crim\w*|offen[cs]e\w*|offende
 export interface Judged {
   readonly kept: readonly SummarySentence[];
   readonly removed: number;
+  /** How many kept sentences had a key written in parentheses or brackets taken out of their text. */
+  readonly keysStripped: number;
+  /** How many sentences were removed because a key stood in their text outside parentheses. */
+  readonly keysRemoved: number;
   /** True when a sentence was removed for its wording: the reply is asked for again while calls remain. */
   readonly verdictFound: boolean;
 }
@@ -80,17 +84,54 @@ function namesHold(sentence: SummarySentence, assembled: AssembledText): boolean
   return true;
 }
 
-/** Keeps the sentences that cite real elements, hold only the numbers of the elements they cite and the ids, quoted texts and capitalised words the text sent holds, and state no verdict; counts each removed sentence once. */
+const KEY = '[ne]\\d+';
+const KEY_GROUP = new RegExp(`\\s*[(\\[]\\s*${KEY}(?:\\s*(?:,|;|and|&)\\s*${KEY})*\\s*[)\\]]`, 'gu');
+const KEY_WORD = new RegExp(`(?<![\\p{L}\\p{N}_-])${KEY}(?![\\p{L}\\p{N}_-])`, 'u');
+
+/**
+ * The text of a sentence without the keys of the elements sent. A key in parentheses or brackets, alone or in a list (`(n1)`, `(n1, e2)`), is taken out with the space before it: the sentence reads the same without it.
+ * A key anywhere else stands in the grammar for a name (`n1 sent money to n3`), so taking it out would leave a gap and the sentence is removed. A key that was not sent is not this check's: the name check removes it.
+ */
+function withoutKeys(text: string, assembled: AssembledText): { readonly text: string; readonly stripped: boolean } | undefined {
+  const sentKey = (token: string): boolean => assembled.keys.has(token);
+  let stripped = false;
+  const cleaned = text.replace(KEY_GROUP, (group) => {
+    const inside = group.match(new RegExp(KEY, 'gu')) ?? [];
+    if (!inside.every(sentKey)) return group;
+    stripped = true;
+    return '';
+  });
+  // a group that holds a key that was not sent stays in the text, for the name check; the keys outside every group are the ones that stand for a name
+  for (const word of text.replace(KEY_GROUP, ' ').match(new RegExp(KEY_WORD.source, 'gu')) ?? []) if (sentKey(word)) return undefined;
+  const tidy = cleaned.trim();
+  return tidy === '' || !/\p{L}/u.test(tidy) ? undefined : { text: stripped ? tidy : text, stripped };
+}
+
+/** Keeps the sentences that cite real elements, hold only the numbers of the elements they cite and the ids, quoted texts and capitalised words the text sent holds, and state no verdict, with the keys of the elements taken out of their text; counts each removed sentence once. */
 export function judgeSentences(sentences: readonly SummarySentence[], assembled: AssembledText): Judged {
   const kept: SummarySentence[] = [];
   let removed = 0;
   let verdictFound = false;
-  for (const sentence of sentences) {
-    if (VERDICT.test(sentence.text)) {
+  let keysStripped = 0;
+  let keysRemoved = 0;
+  for (const original of sentences) {
+    if (VERDICT.test(original.text)) {
       verdictFound = true;
       removed += 1;
-    } else if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !namesHold(sentence, assembled)) removed += 1;
-    else kept.push(sentence);
+      continue;
+    }
+    const clean = withoutKeys(original.text, assembled);
+    if (clean === undefined) {
+      removed += 1;
+      keysRemoved += 1;
+      continue;
+    }
+    const sentence = clean.stripped ? { ...original, text: clean.text } : original;
+    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !namesHold(sentence, assembled)) removed += 1;
+    else {
+      kept.push(sentence);
+      if (clean.stripped) keysStripped += 1;
+    }
   }
-  return { kept, removed, verdictFound };
+  return { kept, removed, verdictFound, keysStripped, keysRemoved };
 }

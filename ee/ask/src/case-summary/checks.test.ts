@@ -40,7 +40,7 @@ describe('the citation check', () => {
   });
 
   it('keeps nothing of an empty list', () => {
-    expect(judgeSentences([], base)).toEqual({ kept: [], removed: 0, verdictFound: false });
+    expect(judgeSentences([], base)).toEqual({ kept: [], removed: 0, verdictFound: false, keysStripped: 0, keysRemoved: 0 });
   });
 });
 
@@ -99,9 +99,8 @@ describe('the name check', () => {
   it.each([
     ['a title that was sent, quoted', 'The widget is called "Ana Silva".'],
     ['a name that was sent, unquoted', 'Ana Silva has a tier of gold.'],
-    ['the key of an element', 'n1 and n2 are widgets.'],
     ['a shape word and an ordinary capital', 'Several elements have the shape of a fan-in and a rapid pass-through.'],
-    ['an entity type that was sent, capitalised', 'Widget n1 is listed.'],
+    ['an entity type that was sent, capitalised', 'Widget Ana Silva is listed.'],
   ])('keeps a sentence with %s', (_name, text) => {
     expect(kept([sentence(text, 'n1', 'n2')])).toEqual([text]);
   });
@@ -207,5 +206,68 @@ describe('the forms of the verdict words', () => {
 
   it.each(['inconclusive', 'improve', 'reprove', 'misconstrue', 'responsibly', 'prefraud'])('does not find the word %s', (word) => {
     expect(judgeSentences([sentence(`This is ${word} here.`, 'n1')], base).verdictFound).toBe(false);
+  });
+});
+
+describe('the keys in the text of a sentence', () => {
+  const judged = (text: string, ...cites: string[]) => judgeSentences([sentence(text, ...cites)], base);
+
+  it.each([
+    ['Ana Silva and Bo Chen are listed (n1, n2).', 'Ana Silva and Bo Chen are listed.'],
+    ['Ana Silva is listed (n1).', 'Ana Silva is listed.'],
+    ['Ana Silva is listed [n1].', 'Ana Silva is listed.'],
+    ['Ana Silva and Bo Chen (n1 and n2) are listed.', 'Ana Silva and Bo Chen are listed.'],
+    ['Ana Silva ( n1 ; n2 ) is listed.', 'Ana Silva is listed.'],
+  ])('takes a key in parentheses out of %s, keeps the rest as it was and counts it', (text, expected) => {
+    const result = judged(text, 'n1', 'n2');
+    expect(result.kept.map((entry) => entry.text)).toEqual([expected]);
+    expect(result.kept[0]?.cites).toEqual(['n1', 'n2']);
+    expect(result).toMatchObject({ removed: 0, keysStripped: 1, keysRemoved: 0 });
+  });
+
+  it.each(['n1 and n2 are listed together.', 'The widget n1 is listed.', 'Ana Silva is listed with n2.', 'Ana Silva is listed (see n1).', 'Ana Silva is listed (n1 and the widget n2).'])('removes %s: a key outside parentheses stands for a name', (text) => {
+    const result = judged(text, 'n1', 'n2');
+    expect(result).toMatchObject({ kept: [], removed: 1, keysRemoved: 1, keysStripped: 0 });
+  });
+
+  it('removes a sentence that holds nothing but a key', () => {
+    expect(judged('(n1)', 'n1')).toMatchObject({ kept: [], removed: 1 });
+  });
+
+  it('leaves a sentence with no key as it was, counting nothing', () => {
+    expect(judged('Ana Silva is listed.', 'n1')).toMatchObject({ removed: 0, keysStripped: 0, keysRemoved: 0 });
+  });
+
+  it('is not this check that removes a key that was not sent: the name check does, and nothing is counted as a key removal', () => {
+    expect(judged('Ana Silva is listed (n99).', 'n1')).toMatchObject({ kept: [], removed: 1, keysRemoved: 0, keysStripped: 0 });
+  });
+
+  it('judges the stripped text with the other checks: the number check still applies', () => {
+    expect(judged('Ana Silva has 5 devices (n1).', 'n1')).toMatchObject({ kept: [], removed: 1 });
+  });
+
+  it('keeps a word that only looks like a key: an upper-case N1, an id or a longer token are not keys', () => {
+    const lone = assembleText(reading([node('N1', 'Nina')]));
+    expect(judgeSentences([sentence('Nina N1 is listed.', 'n1')], lone)).toMatchObject({ kept: [{ text: 'Nina N1 is listed.' }], keysRemoved: 0 });
+    expect(judged('Ana Silva is listed (n1x).', 'n1').kept).toEqual([]);
+  });
+
+  it('still re-asks for a sentence that states a verdict and holds a bare key: the verdict is found first', () => {
+    expect(judged('n1 laundered money via n2.', 'n1', 'n2')).toMatchObject({ kept: [], removed: 1, verdictFound: true, keysRemoved: 0 });
+  });
+
+  it('leaves a group that holds a key that was not sent to the name check, and counts no key removal', () => {
+    expect(judged('Ana Silva is listed (n1, n99).', 'n1')).toMatchObject({ kept: [], removed: 1, keysRemoved: 0, keysStripped: 0 });
+  });
+
+  it('changes only the place a key was taken out of: a quoted text with a double space beside a stripped key is still not found', () => {
+    expect(judged('Ana Silva is called "Ana  Silva" (n1).', 'n1')).toMatchObject({ kept: [], removed: 1 });
+    expect(judged('Ana Silva  is listed (n1) .', 'n1').kept.map((entry) => entry.text)).toEqual(['Ana Silva  is listed .']);
+  });
+
+  it('takes a relationship key out as well', () => {
+    const withEdge = assembleText(reading([ana, bo], [aggregate('x', ana.ref, bo.ref, { quality: 'exact', value: 2, scope: 's' })]));
+    const result = judgeSentences([sentence('Ana Silva uses Bo Chen (e1).', 'n1', 'e1')], withEdge);
+    expect(result.kept.map((entry) => entry.text)).toEqual(['Ana Silva uses Bo Chen.']);
   });
 });
