@@ -25,7 +25,9 @@ async function textOf(env: LoadOptions['env'], setting: string, shippedPath: str
   const replacement = env?.[setting];
   if (replacement === undefined || replacement === '') return readText(shippedPath, shippedLabel, ASK_FOLDER_LIMITS.classificationBytes);
   if (!replacement.startsWith('/')) return `${setting} must be an absolute path`;
-  return readText(replacement, setting, ASK_FOLDER_LIMITS.classificationBytes);
+  const read = await readText(replacement, setting, ASK_FOLDER_LIMITS.classificationBytes);
+  if (setting === PROMPT_SETTING && typeof read !== 'string' && read.text.trim() === '') return `${setting}: the file is empty; the prompt carries the rules the model must follow`;
+  return read;
 }
 
 /**

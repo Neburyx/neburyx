@@ -70,6 +70,7 @@ describe('every bad summary file stops start-up through the real configure, with
     ['NEBURYX_SUMMARY_PROMPT_FILE', 'not-utf8'],
     ['NEBURYX_SUMMARY_TYPOLOGY_FILE', 'unreadable'],
     ['NEBURYX_SUMMARY_PROMPT_FILE', 'directory'],
+    ['NEBURYX_SUMMARY_PROMPT_FILE', 'empty'],
   ])('refuses %s set to a %s file', async (setting, kind) => {
     const directory = mkdtempSync(join(tmpdir(), 'case-summary-bad-'));
     try {
@@ -80,7 +81,9 @@ describe('every bad summary file stops start-up through the real configure, with
         'not-utf8': join(directory, 'bad.md'),
         unreadable: join(directory, 'closed.md'),
         directory: join(directory, 'a-directory'),
+        empty: join(directory, 'empty.md'),
       };
+      writeFileSync(paths['empty'] ?? '', '');
       mkdirSync(paths['directory'] ?? '');
       writeFileSync(paths['oversized'] ?? '', `${SENTINEL}${'x'.repeat(70_000)}`);
       writeFileSync(paths['not-utf8'] ?? '', Buffer.from([0xff, 0xfe, 0xfd]));

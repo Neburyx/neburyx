@@ -41,9 +41,16 @@ describe('replacing the prompt and typology files', () => {
     expect(loaded.ok && loaded.instructions.text).toContain('Fan-in');
   });
 
-  it('accepts an empty file and a file of exactly the size limit', async () => {
-    const empty = await loadSummaryInstructions({ env: { NEBURYX_SUMMARY_PROMPT_FILE: file('empty.md', '') } });
-    expect(empty.ok).toBe(true);
+  it('refuses an empty or blank prompt file naming the setting, and accepts an empty typology file', async () => {
+    for (const content of ['', '  \n\t\n']) {
+      const refused = await loadSummaryInstructions({ env: { NEBURYX_SUMMARY_PROMPT_FILE: file('empty-prompt.md', content) } });
+      expect(refused).toEqual({ ok: false, problems: ['NEBURYX_SUMMARY_PROMPT_FILE: the file is empty; the prompt carries the rules the model must follow'] });
+    }
+    const typology = await loadSummaryInstructions({ env: { NEBURYX_SUMMARY_TYPOLOGY_FILE: file('empty-typology.md', '') } });
+    expect(typology.ok).toBe(true);
+  });
+
+  it('accepts a file of exactly the size limit', async () => {
     const full = await loadSummaryInstructions({ env: { NEBURYX_SUMMARY_PROMPT_FILE: file('full.md', 'x'.repeat(ASK_FOLDER_LIMITS.classificationBytes)) } });
     expect(full.ok).toBe(true);
   });
