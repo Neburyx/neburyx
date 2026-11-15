@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, webEnvironment } from './environments.js';
+import { apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
 
 const developer = { PATH: '/bin', HOME: '/home/dev', TMPDIR: '/tmp', NODE_ENV: 'development', LANG: 'C', AWS_SECRET_ACCESS_KEY: 'a developer secret', DATABASE_URL: 'postgres://elsewhere', NEBURYX_DB_ADMIN_PASSWORD: 'inherited' };
 const cursorKey = Buffer.alloc(32, 3).toString('base64');
@@ -57,6 +57,12 @@ describe('the environments of the children', () => {
     const given = { NEBURYX_ASK_PROVIDER: 'anthropic', NEBURYX_ASK_API_KEY_FILE: '/keys/ask', NEBURYX_ASK_MAPPING_FOLDER: '/ask', NEBURYX_ASK_MAX_TOKENS: '' };
     expect(askEnvironment({ ...developer, ...given, NEBURYX_PORT: '1', ANTHROPIC_API_KEY: 'not passed' })).toEqual(given);
     expect(askEnvironment(developer)).toEqual({});
+  });
+
+  it('pick the settings of the case summary as they are given, an empty value included, and nothing else', () => {
+    const given = { NEBURYX_SUMMARY_MODEL: 'a-model', NEBURYX_SUMMARY_TOKEN_KEY_FILE: '/keys/summary', NEBURYX_SUMMARY_MAX_CALLS: '2', NEBURYX_SUMMARY_PROMPT_FILE: '' };
+    expect(summaryEnvironment({ ...developer, ...given, NEBURYX_PORT: '1', NEBURYX_ASK_PROVIDER: 'not passed' })).toEqual(given);
+    expect(summaryEnvironment(developer)).toEqual({});
   });
 
   it('pick the two prompt cache settings as they are given, an empty value included, and nothing else', () => {

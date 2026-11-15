@@ -23,6 +23,20 @@ const ASK_VARIABLES = [
   'NEBURYX_ASK_MAX_TOKENS',
 ] as const;
 
+const SUMMARY_VARIABLES = [
+  'NEBURYX_SUMMARY_MODEL',
+  'NEBURYX_SUMMARY_TOKEN_KEY_FILE',
+  'NEBURYX_SUMMARY_TOKEN_KEY_PREVIOUS_FILE',
+  'NEBURYX_SUMMARY_PROMPT_FILE',
+  'NEBURYX_SUMMARY_TYPOLOGY_FILE',
+  'NEBURYX_SUMMARY_MAX_ELEMENTS',
+  'NEBURYX_SUMMARY_MAX_INPUT_TOKENS',
+  'NEBURYX_SUMMARY_MAX_CALLS',
+  'NEBURYX_SUMMARY_TIMEOUT_MS',
+  'NEBURYX_SUMMARY_TOTAL_TIMEOUT_MS',
+  'NEBURYX_SUMMARY_RUN_RETENTION_DAYS',
+] as const;
+
 type Source = Readonly<Record<string, string | undefined>>;
 export type Environment = Readonly<Record<string, string>>;
 
@@ -52,6 +66,11 @@ export function cacheEnvironment(source: Source): Environment {
 /** The settings of Ask the developer may set in the shell; only the API reads them, so the migrate step and the web server are not given them, and the mapping's env file never carries them. */
 export function askEnvironment(source: Source): Environment {
   return pick(source, ASK_VARIABLES);
+}
+
+/** The settings of the case summary the developer may set in the shell; only the API reads them, so the migrate step and the web server are not given them. */
+export function summaryEnvironment(source: Source): Environment {
+  return pick(source, SUMMARY_VARIABLES);
 }
 
 /** The connect limit the children will use, for the wait that must outlast it; a value they would refuse counts as the default, since they stop on it themselves. */
