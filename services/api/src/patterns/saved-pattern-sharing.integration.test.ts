@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAppStore, type AppStore } from '../app-store.js';
 import type { NewPattern, PatternRow } from '../db/patterns-repository.js';
 import type { Principal } from '../seams/seams.js';
-import { rows } from '../testing/database.js';
+import { rows, testPool } from '../testing/database.js';
 import { seededDatabase, type SeededDatabase } from '../testing/pattern-events-rig.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
 import { readPatternEvents } from './pattern-events.js';
@@ -34,7 +34,7 @@ async function started() {
   const store = createAppStore(seeded.database.appUrl, () => undefined, { migrationsDirectory: SHIPPED });
   stores.push(store);
   await store.initialize();
-  const pool = new pg.Pool({ connectionString: seeded.database.appUrl });
+  const pool = testPool(seeded.database.appUrl);
   pools.push(pool);
   const { principal: a } = await store.current();
   const bId = randomUUID();

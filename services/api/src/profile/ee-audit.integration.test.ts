@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { readIdentity, seedFirstStart } from '../db/identity-repository.js';
 import { uuidv7 } from '../identity/uuid.js';
 import { clearRegisteredExtension, type ExtensionLoader } from './extension.js';
-import { fixtureFolder, removeFixtureFolders, rows, runInProcess } from '../testing/database.js';
+import { fixtureFolder, removeFixtureFolders, rows, runInProcess, testPool } from '../testing/database.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
 
 const SHA = 'a'.repeat(64);
@@ -106,7 +106,7 @@ describe('the audit sink over the preview tables', () => {
 
   it('stores an event for the seeded local user under that user\'s id, and adds no user', async () => {
     const database = await migrated();
-    const pool = new pg.Pool({ connectionString: database.appUrl });
+    const pool = testPool(database.appUrl);
     try {
       await seedFirstStart(pool);
       const identity = await readIdentity(pool);

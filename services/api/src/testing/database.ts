@@ -23,6 +23,19 @@ export function removeFixtureFolders(): void {
   for (const folder of folders) rmSync(folder, { recursive: true, force: true });
 }
 
+/**
+ * A pool for a test to read the database with. `pool.end()` resolves before its clients' sockets close, and an idle client still passes a server error (such as the shutdown notice of a Postgres
+ * that stops right after) to the pool; with no listener that is an uncaught exception that fails the run. Only an error after `end()` is let go: one before it still throws.
+ * The product's own pools have listeners (`createPool`).
+ */
+export function testPool(url: string): pg.Pool {
+  const pool = new pg.Pool({ connectionString: url });
+  pool.on('error', (error) => {
+    if (!pool.ending) throw error;
+  });
+  return pool;
+}
+
 export async function rows(url: string, query: string, parameters: readonly unknown[] = []): Promise<readonly Record<string, unknown>[]> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();

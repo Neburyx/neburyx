@@ -3,7 +3,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AuditEvent, AuditSink } from '@neburyx/contracts';
 import { AppError, errorResponse, errorStatus } from '../errors.js';
-import { rows } from '../testing/database.js';
+import { rows, testPool } from '../testing/database.js';
 import { seededDatabase, type SeededDatabase } from '../testing/pattern-events-rig.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
 import { communityAudit } from '../seams/community-seams.js';
@@ -23,7 +23,7 @@ afterAll(async () => {
 });
 
 function poolOn(seeded: SeededDatabase): pg.Pool {
-  const pool = new pg.Pool({ connectionString: seeded.database.appUrl });
+  const pool = testPool(seeded.database.appUrl);
   pools.push(pool);
   return pool;
 }
