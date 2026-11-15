@@ -970,6 +970,8 @@ Evidence packs are **[Later]**: the first Enterprise item after the [W2] items.
 | Mutability | The draft autosaves; a named view is immutable (rename and delete only) | Point-in-time file; every download re-checks current policy | Immutable; a new capture is a new pack |
 | Freshness | Reloads current data, disclosing changes | As captured | As captured, plus capture window |
 
+A **picture** (PNG) is the one plain export the browser builds. `POST /v1/investigations/{id}/exports` with `format: "png"` runs the same checks as a file export (ownership, source unchanged, authorization, the three size limits, the read through the gate, masking when the request carries the session's `mask`), records one audit event, and answers `201 { format: "png", filename, header }`; it stores no file and no `exports` row, so there is no download and no later policy re-check. The browser draws the view under the header lines it is given. A view in which the read leaves out an item (it no longer resolves, or the person may not read or export it) is refused as `INVALID_REQUEST` with the reason `export-view-changed`, so the picture never shows more than a file would.
+
 ### 11.1 Evidence pack format
 
 The pack is a zip:
