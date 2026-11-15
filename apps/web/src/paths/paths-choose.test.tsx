@@ -1,7 +1,8 @@
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { edgeKey, elementKey } from '../state/keys.js';
+import { mergeIntoLoaded } from '../api/merge-into-loaded.js';
+import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey } from '../state/keys.js';
 import { chooseEnd, nodeRef, okPaths, openPaths, pathsWorkspace, settle, type PathsKit } from './paths-kit.js';
 
 afterEach(() => {
@@ -62,6 +63,24 @@ describe('choosing a path', () => {
     await userEvent.click(choosePathButton(/Path 1/));
     await settle();
     expect(loadedKeys(kit)).toHaveLength(before + 1);
+  });
+
+  it('keeps Add to graph true to the loaded graph: On canvas when the path is loaded another way, and Add to graph again when it is taken away', async () => {
+    const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'acc-2']]) }) });
+    await search(kit);
+    await userEvent.click(choosePathButton(/Path 1/));
+    await settle();
+    expect(addButton().textContent).toBe('Add to graph');
+    const answer = okPaths([['acc-1', 'acc-2']]);
+    if (answer.status !== 'ok') throw new Error('an answer with paths');
+    const before = kit.state.investigation.getState();
+    act(() => void mergeIntoLoaded(kit.state, { sourceId: 'a', nodes: answer.nodes, edges: answer.edges, queryKey: () => ({ sourceId: 'a', principalId: 'p', policyVersion: DEFAULT_POLICY_VERSION, filterHash: DEFAULT_FILTER_HASH, params: 'elsewhere', mask: false }) }));
+    await settle();
+    expect(addButton().textContent).toBe('On canvas');
+    expect((addButton() as HTMLButtonElement).disabled).toBe(true);
+    act(() => kit.state.setLoaded(before.resultKeys, before.nodeRefs, before.edgeRefs));
+    await settle();
+    expect(addButton().textContent).toBe('Add to graph');
   });
 
   it('chooses with Enter on the card title too, and reads On canvas for a path that is loaded already', async () => {

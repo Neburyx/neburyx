@@ -165,6 +165,40 @@ describe('the Paths tool and its panel', () => {
   });
 });
 
+describe('Esc and the open lists', () => {
+  it('closes the options list of an end first, and the panel only when no list is open', async () => {
+    await pathsWorkspace();
+    await openPaths();
+    const from = screen.getByLabelText('From');
+    fireEvent.focus(from);
+    expect(screen.getByRole('listbox', { name: 'From results' })).toBeTruthy();
+    fireEvent.keyDown(from, { key: 'Escape' });
+    await settle();
+    expect(screen.queryByRole('listbox', { name: 'From results' })).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Bounded path search' })).toBeTruthy();
+    fireEvent.keyDown(from, { key: 'Escape' });
+    await settle();
+    expect(screen.queryByRole('heading', { name: 'Bounded path search' })).toBeNull();
+  });
+
+  it('closes the relationship menu first, giving the focus back to its toggle, and the panel only when it is closed', async () => {
+    await pathsWorkspace();
+    await openPaths();
+    typesGroup();
+    const toggle = screen.getByRole('button', { name: /^Allowed relationships/ });
+    const box = within(screen.getByRole('group', { name: 'Allowed relationships' })).getByRole('checkbox', { name: 'link-a' });
+    box.focus();
+    fireEvent.keyDown(box, { key: 'Escape' });
+    await settle();
+    expect(screen.queryByRole('group', { name: 'Allowed relationships' })).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.getByRole('heading', { name: 'Bounded path search' })).toBeTruthy();
+    fireEvent.keyDown(toggle, { key: 'Escape' });
+    await settle();
+    expect(screen.queryByRole('heading', { name: 'Bounded path search' })).toBeNull();
+  });
+});
+
 describe('searching the source for an end', () => {
   it('searches over every entity type after the pause, with the mask of the session, offers the hits with their type, and chooses one without adding it to the graph', async () => {
     const hit = typedNode('far-1', 'kind-c');

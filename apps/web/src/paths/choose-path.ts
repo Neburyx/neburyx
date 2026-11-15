@@ -1,12 +1,12 @@
+import type { GraphEdge, GraphNode } from '@neburyx/contracts';
 import { mergeIntoLoaded } from '../api/merge-into-loaded.js';
 import type { ClientState } from '../state/client-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey } from '../state/keys.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import type { PathElements } from './path-elements.js';
 
-/** What a path asks of the canvas: how many of its entities and relationships are not loaded, and how many of its entities are loaded but hidden by the filters. */
+/** What a path asks of the canvas: how many of its entities are loaded but hidden by the filters. */
 export interface ChosenOutcome {
-  readonly missing: number;
   readonly hiddenEntities: number;
 }
 
@@ -18,6 +18,12 @@ const keysOf = (elements: PathElements): { readonly nodes: readonly string[]; re
   return { nodes, all: [...nodes, ...elements.edges.map((edge) => edgeKey(edge.ref))] };
 };
 
+/** How many entities and relationships of a path are not in the loaded graph now. */
+export function missingOf(graph: { readonly nodes: readonly { readonly ref: GraphNode['ref'] }[]; readonly edges: readonly { readonly ref: GraphEdge['ref'] }[] }, elements: PathElements): number {
+  const loaded = new Set([...graph.nodes.map((node) => elementKey(node.ref)), ...graph.edges.map((edge) => edgeKey(edge.ref))]);
+  return keysOf(elements).all.filter((key) => !loaded.has(key)).length;
+}
+
 function show(state: ClientState, elements: PathElements, clearOfX: number): ChosenOutcome {
   const loaded = new Set([...state.loadedGraph().nodes.map((node) => elementKey(node.ref)), ...state.loadedGraph().edges.map((edge) => edgeKey(edge.ref))]);
   const drawn = drawnKeys(state.visibleGraph());
@@ -25,7 +31,7 @@ function show(state: ClientState, elements: PathElements, clearOfX: number): Cho
   const shown = all.filter((key) => drawn.has(key));
   state.presentation.select(shown);
   if (shown.length > 0) state.presentation.fitAround(shown, clearOfX);
-  return { missing: all.filter((key) => !loaded.has(key)).length, hiddenEntities: nodes.filter((key) => loaded.has(key) && !drawn.has(key)).length };
+  return { hiddenEntities: nodes.filter((key) => loaded.has(key) && !drawn.has(key)).length };
 }
 
 /**

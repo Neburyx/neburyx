@@ -12,7 +12,7 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { useStoreSelector } from '../state/store.js';
 import { DIRECTION_LABELS, failureText, evidenceLabel, FAILED_TEXT, hiddenByFiltersText, SELECTED_LABEL, NO_SOURCE_TEXT, noPathText, PATHS_COPY, pathTitle, PROBLEM_TEXT, RETRY_LABEL, summaryText, timeoutLabel } from './copy.js';
 import { useEvidenceHandle } from '../patterns/evidence-handle.js';
-import { addPath, highlightPath, type ChosenOutcome } from './choose-path.js';
+import { addPath, highlightPath, missingOf, type ChosenOutcome } from './choose-path.js';
 import { edgeOfStep, elementsOf } from './path-elements.js';
 import { useBanner } from '../banner/banner-context.js';
 import { usePathsEnvironment } from './paths-context.js';
@@ -89,7 +89,9 @@ function EndField({ client, sourceId, mask, id, label, candidates, chosen, onCho
             setOpen(true);
           }}
           onKeyDown={(event) => {
-            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            if (event.key === 'Escape') {
+              if (open) setOpen(false);
+            } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
               event.preventDefault();
               setOpen(true);
               setActive((current) => Math.min(Math.max(current + (event.key === 'ArrowDown' ? 1 : -1), 0), Math.max(options.length - 1, 0)));
@@ -127,14 +129,15 @@ function titlesOf(result: PathsOk): ReadonlyMap<string, string> {
 interface PathListProps {
   readonly result: PathsOk;
   readonly chosen: number | undefined;
-  readonly outcome: ChosenOutcome | undefined;
+  /** How many entities and relationships of the chosen path are not loaded now. */
+  readonly missing: number | undefined;
   readonly onChoose: (position: number) => void;
   readonly onAdd: () => void;
   /** The opener of the evidence of a step's relationship, when it is on the canvas and a kind of evidence offers it. */
   readonly evidenceOf: (step: PathsOk['paths'][number]['steps'][number], reference: string) => (() => void) | undefined;
 }
 
-function PathList({ result, chosen, outcome, onChoose, onAdd, evidenceOf }: PathListProps) {
+function PathList({ result, chosen, missing, onChoose, onAdd, evidenceOf }: PathListProps) {
   const titles = titlesOf(result);
   const titleOf = (ref: PathsOk['paths'][number]['steps'][number]['from']): string => titles.get(elementKey(ref)) ?? ref.stableId;
   return (
@@ -168,9 +171,9 @@ function PathList({ result, chosen, outcome, onChoose, onAdd, evidenceOf }: Path
               </li>
             ))}
           </ol>
-          {chosen === position && outcome !== undefined ? (
-            <button type="button" className="secondary paths-add" disabled={outcome.missing === 0} onClick={onAdd}>
-              {outcome.missing === 0 ? PATHS_COPY.onCanvas : PATHS_COPY.addToGraph}
+          {chosen === position && missing !== undefined ? (
+            <button type="button" className="secondary paths-add" disabled={missing === 0} onClick={onAdd}>
+              {missing === 0 ? PATHS_COPY.onCanvas : PATHS_COPY.addToGraph}
             </button>
           ) : null}
         </li>
@@ -212,6 +215,7 @@ export function PathsPanel() {
   const listRef = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const fromField = useRef<HTMLInputElement>(null);
+  const typesToggle = useRef<HTMLButtonElement>(null);
   const escape = useRef<() => void>(() => undefined);
 
   const hopChoices = Array.from({ length: Math.max(sourceMaxHops ?? MAX_HOPS_CEILING, maxHops) }, (_, index) => index + 1);
@@ -232,6 +236,7 @@ export function PathsPanel() {
     if (frame === null || frame === undefined) return undefined;
     const onKey = (event: Event): void => {
       if (!(event instanceof KeyboardEvent) || event.key !== 'Escape') return;
+      if (frame.querySelector('.paths-options, .paths-types-menu') !== null) return;
       event.preventDefault();
       event.stopPropagation();
       escape.current();
@@ -332,16 +337,28 @@ export function PathsPanel() {
               </select>
             </div>
           </div>
-          <div className="patterns-field paths-types">
+          <div
+            className="patterns-field paths-types"
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape' || !typesOpen) return;
+              setTypesOpen(false);
+              typesToggle.current?.focus();
+            }}
+          >
             <span id="paths-types-label">{PATHS_COPY.relationships}</span>
-            <button type="button" className="paths-types-toggle" aria-labelledby="paths-types-label paths-types-value" aria-expanded={typesOpen} aria-controls="paths-types-menu" onClick={() => setTypesOpen((current) => !current)}>
+            <button type="button" ref={typesToggle} className="paths-types-toggle" aria-labelledby="paths-types-label paths-types-value" aria-expanded={typesOpen} aria-controls="paths-types-menu" onClick={() => setTypesOpen((current) => !current)}>
               <span id="paths-types-value" className="paths-types-value">
                 {form.relTypes.size === 0 ? PATHS_COPY.noTypes : types.filter((type) => form.relTypes.has(type)).join(' · ')}
               </span>
               <span className="icon paths-types-chevron" aria-hidden="true" />
             </button>
             {typesOpen ? (
-              <div id="paths-types-menu" role="group" aria-labelledby="paths-types-label" className="paths-types-menu">
+              <div
+                id="paths-types-menu"
+                role="group"
+                aria-labelledby="paths-types-label"
+                className="paths-types-menu"
+              >
                 {types.map((type) => (
                   <label key={type} className="paths-type">
                     <input
@@ -393,7 +410,7 @@ export function PathsPanel() {
               <p className="search-panel-note" role="status">
                 {summaryText(run.result.paths.length, run.result.elapsedMs, run.result.capReached, run.result.partial)}
               </p>
-              {run.result.paths.length === 0 ? <p className="search-panel-note">{noPathText(run.ask?.maxHops ?? maxHops)}</p> : <PathList result={run.result} chosen={shownChoice?.position} outcome={shownChoice?.outcome} onAdd={add} onChoose={(position) => (run.result === undefined ? undefined : choose(run.result, position))} evidenceOf={evidenceOf} />}
+              {run.result.paths.length === 0 ? <p className="search-panel-note">{noPathText(run.ask?.maxHops ?? maxHops)}</p> : <PathList result={run.result} chosen={shownChoice?.position} missing={shownChoice === undefined ? undefined : missingOf(loaded, elementsOf(shownChoice.result, shownChoice.position))} onAdd={add} onChoose={(position) => (run.result === undefined ? undefined : choose(run.result, position))} evidenceOf={evidenceOf} />}
               {shownChoice === undefined || shownChoice.outcome.hiddenEntities === 0 ? null : <p className="search-panel-note">{hiddenByFiltersText(shownChoice.outcome.hiddenEntities)}</p>}
             </div>
           )}
