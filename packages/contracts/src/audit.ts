@@ -33,6 +33,8 @@ export interface AiAuditDetail {
   readonly promptVersion: string;
   /** The SHA-256, as 64 lower-case hexadecimal digits, of the fixed instructions of the prompt (of nothing when it has none), never of the values that follow them: a hash of text that holds a value could be confirmed by guessing the value. */
   readonly promptSha256: string;
+  /** The record of the case summary this call belongs to; absent for Ask. */
+  readonly runId?: string;
   /** The input tokens after the last cache breakpoint, as the provider states them; with caching, the total input is this plus the two cache counts. */
   readonly tokensIn: TokenCount | 'unknown';
   readonly tokensOut: TokenCount | 'unknown';
@@ -53,6 +55,8 @@ export const aiAuditDetailSchema = z.strictObject({
   promptId: label,
   promptVersion: label,
   promptSha256: sha256Hex,
+  /** The record of the case summary this call belongs to; absent for Ask. */
+  runId: z.uuid().optional(),
   /** The saved patterns the call offered: how many, and the SHA-256 of the text that was sent, which holds structure and keys only. Absent when no pattern was offered. */
   patternCatalog: z.strictObject({ count: z.number().int().min(1), sha256: sha256Hex }).optional(),
   tokensIn: tokensSchema,
@@ -105,6 +109,8 @@ export const caseSummaryAuditDetailSchema = z.strictObject({
   promptId: label.optional(),
   promptVersion: label.optional(),
   instructionsSha256: sha256Hex.optional(),
+  /** The record of the click's calls; absent when the click ended before it was written. */
+  runId: z.uuid().optional(),
   outcome: z.enum(CASE_SUMMARY_OUTCOMES),
   /** The sentences the checks kept and removed in the last reply they checked; absent when none was checked. */
   sentencesKept: wholeCount.optional(),

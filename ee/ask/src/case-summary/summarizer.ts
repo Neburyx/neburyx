@@ -7,6 +7,7 @@ import { judgeSentences } from './checks.js';
 import { draftSummary, type Checked } from './draft.js';
 import type { SummaryInstructions } from './instructions.js';
 import { prepareSummary } from './prepare.js';
+import { SummaryRunStoreError, type SummaryRunStore } from './run-store.js';
 import type { SummaryAvailability, SummarySettings } from './settings.js';
 import { sealToken } from './token.js';
 import type { TokenKeys } from './token-keys.js';
@@ -25,6 +26,8 @@ interface SummarizerOptions {
   readonly model: () => AuditedModelCall | undefined;
   readonly audit: () => AuditSink | undefined;
   readonly tokenKeys: () => TokenKeys | undefined;
+  /** The store of the record of each click; absent, no click can be made, since nothing sent to the model may go unrecorded. */
+  readonly runs: () => SummaryRunStore | undefined;
   readonly availability: () => SummaryAvailability;
   readonly now?: () => number;
 }
@@ -53,34 +56,78 @@ const resultOf = (outcome: CaseSummaryOutcome): AuditResult => (outcome.status =
 /** Drafts the summary of a read view: measures the text against the size guard, then calls the model within the operator's limits. */
 export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer {
   const { settings, instructions } = options;
+  type Who = { readonly actorId: string; readonly actorRole: CaseSummaryInput['actorRole']; readonly traceId: string; readonly request: CaseSummaryInput['request'] };
+  /** Writes the run row of a click and answers what ends it: the run row first, then the closing event; every failure of either is `AuditUnavailableError`. */
+  async function openRun(input: Who) {
+    const runs = options.runs();
+    if (runs === undefined) throw new AuditUnavailableError();
+    const stored = async <T>(work: () => Promise<T>): Promise<T> => {
+      try {
+        return await work();
+      } catch (error) {
+        if (error instanceof SummaryRunStoreError) throw new AuditUnavailableError();
+        throw error;
+      }
+    };
+    const runId = await stored(() =>
+      runs.begin({
+        actorId: input.actorId,
+        ...auditInvestigationOf(input.request.investigationId),
+        sourceId: input.request.sourceId,
+        traceId: input.traceId,
+        startedAt: new Date((options.now ?? Date.now)()),
+        settings: { model: settings.model, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, maxCalls: settings.maxCalls, maxElements: settings.maxElements, ...(settings.maxInputTokens === undefined ? {} : { maxInputTokens: settings.maxInputTokens }) },
+      }),
+    );
+    const publish = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked): Promise<void> => {
+      const sink = options.audit();
+      if (sink === undefined) throw new AuditUnavailableError();
+      const detail: CaseSummaryAuditDetail = {
+        elements: elementCountOf(input.request),
+        elementsSha256: elementsHashOf(input.request),
+        calls,
+        modelRef: settings.model,
+        promptId: PROMPT_ID,
+        promptVersion: PROMPT_VERSION,
+        instructionsSha256: instructions.sha256,
+        runId,
+        outcome,
+        ...(checked === undefined ? {} : { sentencesKept: checked.kept, sentencesRemoved: checked.removed }),
+      };
+      try {
+        await sink.record({ actorId: input.actorId, actorRole: input.actorRole, action: SUMMARY_CLOSING_ACTION, result, sourceId: input.request.sourceId, ...auditInvestigationOf(input.request.investigationId), traceId: input.traceId, detail: { summary: detail } });
+      } catch {
+        throw new AuditUnavailableError();
+      }
+    };
+    /** The run row ends with the outcome before the closing event says it; if the event then cannot be written the row says so, and the click fails closed. */
+    const finalize = (calls: number, outcome: string): Promise<void> => stored(() => runs.finish(runId, outcome, calls, new Date((options.now ?? Date.now)())));
+    const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked): Promise<void> => {
+      await finalize(calls, outcome);
+      try {
+        await publish(calls, outcome, result, checked);
+      } catch (error) {
+        await finalize(calls, 'auditFailed').catch(() => undefined);
+        throw error;
+      }
+    };
+    return { runId, runs, stored, finalize, publish, write };
+  }
+
   return {
     maxElements: settings.maxElements,
     availability: options.availability,
+    async recordEarlyEnd(end) {
+      const { write } = await openRun(end);
+      await write(0, end.outcome, end.outcome === 'tooLarge' ? 'refused' : 'failed');
+    },
     async summarize(input: CaseSummaryInput, signal: AbortSignal): Promise<CaseSummaryOutcome> {
       const call = options.model();
       const guard = settings.maxInputTokens;
       if (call === undefined || guard === undefined || options.tokenKeys() === undefined) throw new Error('the case summarizer was asked while it is not available');
+      const run = await openRun(input);
+      const { runId, runs, stored, finalize, publish, write } = run;
       const prepared = prepareSummary(input.reading, instructions.text, guard);
-      const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked): Promise<void> => {
-        const sink = options.audit();
-        if (sink === undefined) throw new AuditUnavailableError();
-        const detail: CaseSummaryAuditDetail = {
-          elements: elementCountOf(input.request),
-          elementsSha256: elementsHashOf(input.request),
-          calls,
-          modelRef: settings.model,
-          promptId: PROMPT_ID,
-          promptVersion: PROMPT_VERSION,
-          instructionsSha256: instructions.sha256,
-          outcome,
-          ...(checked === undefined ? {} : { sentencesKept: checked.kept, sentencesRemoved: checked.removed }),
-        };
-        try {
-          await sink.record({ actorId: input.actorId, actorRole: input.actorRole, action: SUMMARY_CLOSING_ACTION, result, sourceId: input.request.sourceId, ...auditInvestigationOf(input.request.investigationId), traceId: input.traceId, detail: { summary: detail } });
-        } catch {
-          throw new AuditUnavailableError();
-        }
-      };
       const record = async (outcome: CaseSummaryOutcome, checked?: Checked): Promise<CaseSummaryOutcome> => {
         await write(outcome.status === 'tooLarge' ? 0 : outcome.calls, outcome.status === 'failed' ? outcome.kind : outcome.status, resultOf(outcome), checked);
         return outcome;
@@ -91,9 +138,13 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
       try {
         const drafted = await draftSummary({
           call,
-          context: { action: SUMMARY_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.request.investigationId), sourceId: input.request.sourceId },
+          context: { runId, action: SUMMARY_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.request.investigationId), sourceId: input.request.sourceId },
           instructions: instructions.text,
           values: prepared.assembled.text,
+          record: {
+            beforeCall: (call) => stored(() => runs.beginCall({ runId, number: call.number, startedAt: call.startedAt, instructionsSha256: instructions.sha256, instructionsText: call.instructions, valuesText: call.values })),
+            afterCall: (end) => stored(() => runs.endCall({ runId, ...end })),
+          },
         judge: (sentences) => {
             const judged = judgeSentences(sentences, prepared.assembled);
             lastChecked = { kept: judged.kept.length, removed: judged.removed };
@@ -129,8 +180,15 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         );
         return record({ status: drafted.removed === 0 ? 'ok' : 'partial', sentences: [...drafted.sentences], citations: citationsOf(drafted.sentences, prepared.assembled), coverage, removedCount: drafted.removed, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken }, checked);
       } catch (error) {
-        if (error instanceof AuditUnavailableError) throw error;
-        await write(callsMade, signal.aborted ? 'cancelled' : 'error', 'failed', lastChecked).catch(() => undefined);
+        if (error instanceof AuditUnavailableError) {
+          // the click ends as unavailable: the run row says how far it got, if it can
+          await finalize(callsMade, 'auditFailed').catch(() => undefined);
+          throw error;
+        }
+        const ended = signal.aborted ? 'cancelled' : 'error';
+        // the record of the run must end, whatever the audit does; a failure of the event alone leaves the failure the click had
+        await finalize(callsMade, ended);
+        await publish(callsMade, ended, 'failed', lastChecked).catch(() => undefined);
         throw new SummaryHandled(error);
       }
     },

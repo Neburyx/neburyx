@@ -29,10 +29,14 @@ export const FAILURE_CODES = ['timeout', 'unreachable', 'rejected', 'rate-limite
 /** `rejected` is a credential the service refused (401, 403) or one that could not be read; `provider-error` is a 5xx or any other failure of the service; `truncated` is a reply cut off at the token limit. */
 export type FailureCode = (typeof FAILURE_CODES)[number];
 
+/**
+ * `received` is the text a reply held when the provider turned it into a refusal or a failure, for the record of the calls; it is never part of a response, a log line or an event, and a caller that does not
+ * keep such a record ignores it.
+ */
 export type ModelAnswer =
   | { readonly status: 'ok'; readonly text: string; readonly usage: TokenUsage; readonly model: string; readonly prompt: PromptRecord }
-  | { readonly status: 'refused'; readonly usage: TokenUsage; readonly prompt: PromptRecord }
-  | { readonly status: 'failed'; readonly code: FailureCode; readonly usage?: TokenUsage; readonly prompt: PromptRecord };
+  | { readonly status: 'refused'; readonly usage: TokenUsage; readonly prompt: PromptRecord; readonly received?: string }
+  | { readonly status: 'failed'; readonly code: FailureCode; readonly usage?: TokenUsage; readonly prompt: PromptRecord; readonly received?: string };
 
 export interface ModelProvider {
   readonly complete: (request: ModelRequest, signal: AbortSignal) => Promise<ModelAnswer>;

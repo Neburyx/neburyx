@@ -1,6 +1,7 @@
 import { type SummaryFailureKind, type SummarySentence } from '@neburyx/contracts';
 import type { AuditedCallContext, AuditedModelCall } from '../audited.js';
-import type { FailureCode } from '../provider.js';
+import type { FailureCode, ModelAnswer } from '../provider.js';
+import type { SummaryCallEnd } from './run-store.js';
 import { MAX_SUMMARY_SENTENCES } from './instructions.js';
 
 /** The output limit of a summary call, in tokens. */
@@ -8,6 +9,15 @@ export const SUMMARY_MAX_OUTPUT_TOKENS = 2000;
 
 const SUMMARY_PROMPT_ID = 'case-summary';
 const SUMMARY_PROMPT_VERSION = 1;
+
+function endOf(number: number, answer: ModelAnswer, durationMs: number, cancelled: 'client' | 'limit' | undefined): Omit<SummaryCallEnd, 'runId'> {
+  const tokens = 'usage' in answer && answer.usage?.kind === 'known' ? { tokensIn: answer.usage.inputTokens, tokensOut: answer.usage.outputTokens } : {};
+  const cancel = cancelled === undefined ? {} : { status: 'cancelled' as const, failureKind: cancelled === 'limit' ? 'timeLimit' : 'cancelled' };
+  if (answer.status === 'ok') return { number, status: 'answered', replyText: answer.text, durationMs, ...tokens, ...cancel };
+  const received = answer.received === undefined ? {} : { replyText: answer.received };
+  if (answer.status === 'refused') return { number, status: 'refused', ...received, durationMs, ...tokens, ...cancel };
+  return { number, status: 'failed', failureKind: FAILURE_KINDS[answer.code], ...received, durationMs, ...tokens, ...cancel };
+}
 
 const FORMAT_NOTE = 'Your last reply did not fit the reply format. Reply again, in the reply format only.';
 const VERDICT_NOTE = 'Your last reply stated a conclusion. Describe only what the elements show.';
@@ -47,6 +57,11 @@ export interface DraftOptions {
   readonly now?: () => number;
   /** Told the number of calls made so far each time one is about to be made, so a failure that follows can say how many there were. */
   readonly onCall?: (calls: number) => void;
+  /** Keeps the record of each request: written before the request is made, finished when it ends. A write that fails ends the click. */
+  readonly record?: {
+    beforeCall(call: { readonly number: number; readonly instructions: string; readonly values: string; readonly startedAt: Date }): Promise<void>;
+    afterCall(end: Omit<SummaryCallEnd, 'runId'>): Promise<void>;
+  };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -90,11 +105,26 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
     calls += 1;
     options.onCall?.(calls);
     try {
-      const answer = await options.call.call(
-        { promptId: SUMMARY_PROMPT_ID, version: SUMMARY_PROMPT_VERSION, instructions: options.instructions, values },
-        options.context,
-        AbortSignal.any([options.signal, limit.signal]),
-      );
+      const sentAt = now();
+      await options.record?.beforeCall({ number: calls, instructions: options.instructions, values, startedAt: new Date(sentAt) });
+      let answer: ModelAnswer;
+      let received: ModelAnswer | undefined;
+      try {
+        answer = await options.call.call(
+          { promptId: SUMMARY_PROMPT_ID, version: SUMMARY_PROMPT_VERSION, instructions: options.instructions, values },
+          { ...options.context, onProviderAnswer: (returned) => void (received = returned) },
+          AbortSignal.any([options.signal, limit.signal]),
+        );
+      } catch (error) {
+        // a failure to record the audit event, after the provider answered, still leaves the record of the call with what the provider returned
+        const end = received === undefined
+          ? { number: calls, status: options.signal.aborted ? ('cancelled' as const) : ('failed' as const), failureKind: options.signal.aborted ? 'cancelled' : 'error', durationMs: now() - sentAt }
+          : endOf(calls, received, now() - sentAt, options.signal.aborted ? 'client' : limit.signal.aborted ? 'limit' : undefined);
+        // a record that cannot be written ends the click as unavailable, whatever the failure was
+        await options.record?.afterCall(end);
+        throw error;
+      }
+      await options.record?.afterCall(endOf(calls, answer, now() - sentAt, options.signal.aborted ? 'client' : limit.signal.aborted ? 'limit' : undefined));
       if (options.signal.aborted) throw new Error('the request was cancelled');
       if (limit.signal.aborted) return { status: 'timeLimit', calls, ...so() };
       if (answer.status === 'refused') return { status: 'failed', kind: 'refused', calls, ...so() };

@@ -11,6 +11,10 @@ export interface AuditedCallContext {
   readonly traceId: string;
   readonly investigationId?: string;
   readonly sourceId?: string;
+  /** The record of the click this call belongs to, named in the call's event; Ask has none. */
+  readonly runId?: string;
+  /** Called with the provider's answer the moment it returns, before the audit event is written, so a record of the call can hold the answer even when the event cannot be written. Never part of an event. */
+  readonly onProviderAnswer?: (answer: ModelAnswer) => void;
   /** The saved patterns the request offered: their number and the SHA-256 of the text sent, never a pattern. */
   readonly patternCatalog?: { readonly count: number; readonly sha256: string };
 }
@@ -78,6 +82,7 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
       promptId: prompt.id,
       promptVersion: String(prompt.version),
       promptSha256: prompt.sha256,
+      ...(context.runId === undefined ? {} : { runId: context.runId }),
       ...(context.patternCatalog === undefined ? {} : { patternCatalog: context.patternCatalog }),
       ...counts,
     });
@@ -110,6 +115,7 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     let answer: ModelAnswer;
     try {
       answer = await provider.complete(request, signal);
+      context.onProviderAnswer?.(answer);
     } catch (error) {
       await record(context, sent, failed);
       throw error;

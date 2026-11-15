@@ -70,15 +70,22 @@ function usageOf(value: unknown): TokenUsage {
 }
 
 /** Maps the body of a reply to an answer; whatever it does not recognize is a bad reply, never text. */
+function textBlocksOf(content: unknown): string {
+  if (!Array.isArray(content)) return '';
+  return (content as readonly unknown[]).flatMap((block) => (isRecord(block) && block.type === 'text' && typeof block.text === 'string' ? [block.text] : [])).join('');
+}
+
 function answerOf(body: unknown, prompt: PromptRecord, model: string): ModelAnswer {
   if (!isRecord(body)) return { status: 'failed', code: 'bad-reply', usage: UNKNOWN_USAGE, prompt };
   const usage = usageOf(body.usage);
-  const bad: ModelAnswer = { status: 'failed', code: 'bad-reply', usage, prompt };
+  const held = textBlocksOf(body.content);
+  const received = held === '' ? {} : { received: held };
+  const bad: ModelAnswer = { status: 'failed', code: 'bad-reply', usage, prompt, ...received };
   const stop = body.stop_reason;
-  // A refusal is a refusal whatever the content holds, and it never carries text.
-  if (stop === 'refusal') return { status: 'refused', usage, prompt };
+  // A refusal is a refusal whatever the content holds: its text is never an answer, and it is handed on only for the record of the call.
+  if (stop === 'refusal') return { status: 'refused', usage, prompt, ...received };
   if (!Array.isArray(body.content)) return bad;
-  if (stop === 'max_tokens' || stop === 'model_context_window_exceeded') return { status: 'failed', code: 'truncated', usage, prompt };
+  if (stop === 'max_tokens' || stop === 'model_context_window_exceeded') return { status: 'failed', code: 'truncated', usage, prompt, ...received };
   if (stop !== 'end_turn' && stop !== 'stop_sequence') return bad;
   const texts: string[] = [];
   for (const block of body.content as readonly unknown[]) {

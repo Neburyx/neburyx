@@ -281,16 +281,25 @@ describe('the answers', () => {
     expect(await answerTo(reply(200, message({ stop_reason: 'refusal', content: undefined })))).toMatchObject({ status: 'refused' });
   });
 
-  it('is refused, with usage and no text, when the model refuses', async () => {
+  it('is refused, with usage and no text, when the model refuses, and holds what it sent only as the text received', async () => {
     const answer = await answerTo(reply(200, message({ stop_reason: 'refusal', content: [{ type: 'text', text: 'I cannot help' }] })));
-    expect(answer).toMatchObject({ status: 'refused', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 } });
-    expect(JSON.stringify(answer)).not.toContain('I cannot help');
+    expect(answer).toMatchObject({ status: 'refused', usage: { kind: 'known', inputTokens: 12, outputTokens: 5 }, received: 'I cannot help' });
+    expect(answer).not.toHaveProperty('text');
+  });
+
+  it('joins the text blocks of a reply the checks cannot use as the text received', async () => {
+    const answer = await answerTo(reply(200, message({ stop_reason: 'refusal', content: [{ type: 'text', text: 'one ' }, { type: 'thinking', thinking: 't', signature: 's' }, { type: 'text', text: 'two' }] })));
+    expect(answer).toMatchObject({ status: 'refused', received: 'one two' });
+  });
+
+  it('has no text received for a refusal with no text block', async () => {
+    expect(await answerTo(reply(200, message({ stop_reason: 'refusal', content: undefined })))).not.toHaveProperty('received');
   });
 
   it.each(['max_tokens', 'model_context_window_exceeded'])('is truncated at %s and carries no text', async (stop) => {
     const answer = await answerTo(reply(200, message({ stop_reason: stop })));
-    expect(answer).toMatchObject({ status: 'failed', code: 'truncated' });
-    expect(JSON.stringify(answer)).not.toContain('A synthetic answer');
+    expect(answer).toMatchObject({ status: 'failed', code: 'truncated', received: 'A synthetic answer.' });
+    expect(answer).not.toHaveProperty('text');
   });
 
   it.each([
@@ -310,6 +319,11 @@ describe('the answers', () => {
     const answer = await answerTo(reply(200, body));
     expect(answer).toMatchObject({ status: 'failed', code: 'bad-reply' });
     expect(answer).not.toHaveProperty('text');
+  });
+
+  it('holds the text blocks of a bad reply as the text received, and nothing where there is none', async () => {
+    expect(await answerTo(reply(200, message({ stop_reason: 'pause_turn' })))).toMatchObject({ code: 'bad-reply', received: 'A synthetic answer.' });
+    expect(await answerTo(reply(200, message({ content: [] })))).not.toHaveProperty('received');
   });
 
   it.each([

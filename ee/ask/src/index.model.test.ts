@@ -3,6 +3,7 @@ import type { AddressInfo } from 'node:net';
 import type { AuditEvent, AuditSink, ExtensionLogger } from '@neburyx/contracts';
 import type { ModelRequest } from './provider.js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createMemorySummaryRunStore } from './case-summary/run-store.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 const events: AuditEvent[] = [];
@@ -53,7 +54,7 @@ afterAll(async () => {
 
 describe('the model of the extension', () => {
   it('is the audited provider: one call reaches the stub with the key from the environment given at start-up, and one event is recorded', async () => {
-    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, summaryRunStore: () => createMemorySummaryRunStore() });
     expect((await extension.configure?.(SETTINGS, askEnv('key-from-the-start-environment'), CONTEXT))?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
     const model = extension.model();
@@ -70,7 +71,7 @@ describe('the classifier of the extension', () => {
   const asked = { sourceId: 'source-a', question: 'Which accounts share a thing with SENTINEL-QUESTION?', actorId: '01939999-0000-7000-8000-0000000000aa', actorRole: 'investigator' as const, traceId: 'tr-9' };
 
   it('is none before the folder is loaded and the audit is mounted, and the stub answers it afterwards with the hash of classification.md in the one event', async () => {
-    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+    const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, summaryRunStore: () => createMemorySummaryRunStore() });
     expect(extension.askClassifier()).toBeUndefined();
     expect((await extension.configure?.(SETTINGS, askEnv('key-for-the-classifier'), CONTEXT))?.ok).toBe(true);
     expect(extension.askClassifier()).toBeUndefined();
@@ -109,7 +110,7 @@ describe('the failure line of the extension', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(capture as typeof process.stdout.write);
     vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
     try {
-      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, summaryRunStore: () => createMemorySummaryRunStore() });
       extension.attachLogger?.(logger ?? { warn: (fields, message) => void logged.push({ fields, message }) });
       await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY', { NEBURYX_ASK_MAX_RETRIES: '0' }), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
@@ -152,7 +153,7 @@ describe('the failure line of the extension', () => {
     status = 200;
     failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'cut' }], stop_reason: 'max_tokens', usage: { input_tokens: 12, output_tokens: 256 } };
     try {
-      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, summaryRunStore: () => createMemorySummaryRunStore() });
       await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY', { NEBURYX_ASK_MAX_RETRIES: '0' }), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'a view' }, context, new AbortController().signal);
@@ -169,7 +170,7 @@ describe('the failure line of the extension', () => {
     status = 200;
     failureBody = { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: 'A synthetic answer.' }], stop_reason: 'end_turn', usage: { input_tokens: 12, output_tokens: 5, cache_read_input_tokens: 300, cache_creation_input_tokens: 40 } };
     try {
-      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, summaryRunStore: () => createMemorySummaryRunStore() });
       await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY'), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'a view' }, context, new AbortController().signal);
@@ -193,7 +194,7 @@ describe('the failure line of the extension', () => {
     vi.spyOn(process.stdout, 'write').mockImplementation(capture as typeof process.stdout.write);
     vi.spyOn(process.stderr, 'write').mockImplementation(capture as typeof process.stderr.write);
     try {
-      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl });
+      const extension = createEnterpriseExtension({ modelBaseUrl: baseUrl, summaryRunStore: () => createMemorySummaryRunStore() });
       await extension.configure?.(SETTINGS, askEnv('SENTINEL-KEY', { NEBURYX_ASK_MAX_RETRIES: '0' }), CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
       const answer = await extension.model()?.call({ promptId: 'test.prompt', version: 1, values: 'x' }, context, new AbortController().signal);

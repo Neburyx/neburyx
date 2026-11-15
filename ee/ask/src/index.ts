@@ -9,6 +9,7 @@ import { createFailureReporter } from './failure-line.js';
 import { createAskContinueRoute, createAskQuestionRoute } from './questions/question-routes.js';
 import { createPgRunStore } from './questions/pg-run-store.js';
 import type { RunStore } from './questions/run-store.js';
+import { createPgSummaryRunStore, type SummaryRunStore } from './case-summary/run-store.js';
 import { createCaseSummarizer } from './case-summary/summarizer.js';
 import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
 import { readTokenKeys } from './case-summary/token-keys.js';
@@ -32,6 +33,8 @@ export { createSummaryRoute } from './case-summary/summary-route.js';
 export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 /** @public Used by the completed-route test of `services/api`, which builds the case summarizer of the extension over a stub provider and the real application. */
 export { createCaseSummarizer } from './case-summary/summarizer.js';
+/** @public Test hooks: the services/api tests build a case summarizer with the in-memory store, and the integration test runs the real store on a Postgres. */
+export { createMemorySummaryRunStore, createPgSummaryRunStore } from './case-summary/run-store.js';
 /** @public The instructions of that test. */
 export { buildSummaryInstructions } from './case-summary/instructions.js';
 /** @public Opens a summary token for the copy to notes and the export that follow, and for the tests of the token. */
@@ -44,6 +47,9 @@ export type { ModelAnswer, ModelProvider } from './provider.js';
 export type { ModelRequest } from './provider.js';
 
 const AI_STATUS_URL = '/v1/ai/status';
+const MILLISECONDS_A_DAY = 24 * 60 * 60 * 1000;
+/** How often the removal of old case summary records runs (the retention is in days, so an hour is fine). */
+const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
 
 const MIGRATIONS_DIRECTORY = fileURLToPath(new URL('../../migrations', import.meta.url));
 
@@ -69,8 +75,12 @@ export interface EnterpriseExtension extends ProfileExtension {
 interface EnterpriseExtensionOptions {
   /** Only a test sets this, to a stub on the loopback address; the model client otherwise calls the service. */
   readonly modelBaseUrl?: string;
-  /** Only a test sets this: the clock of the summary's time limit. */
+  /** Only a test sets this: the clock of the summary's time limit and of its retention. */
   readonly now?: () => number;
+  /** Only a test sets this, to a store that opens no connection; the record of the case summary otherwise uses a pool of its own. */
+  readonly summaryRunStore?: (context: AuditSinkContext) => SummaryRunStore;
+  /** Only a test sets this: how often the removal of old records runs, in milliseconds. */
+  readonly retentionIntervalMs?: number;
   /** Only a test sets this, to a folder that stands in for the summary files shipped with the product. */
   readonly shippedSummaryDirectory?: string;
   /** Only a test sets this, to a store that opens no connection; the run store otherwise writes `ask_runs` on a pool of its own. */
@@ -86,6 +96,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let instructions: SummaryInstructions | undefined;
   let summarySettings: SummarySettings | undefined;
   let tokenKeys: TokenKeys | undefined;
+  let summaryRuns: SummaryRunStore | undefined;
+  let retentionTimer: ReturnType<typeof setInterval> | undefined;
   let runs: RunStore | undefined;
   const reportFailure = createFailureReporter(() => logger);
   const summaryModelOf = (): AuditedModelCall | undefined => {
@@ -94,7 +106,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     return createAuditedModelCall({ provider: createAnthropicProvider({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }) }), configuration: own, sink: mounted.sink });
   };
   const caseSummarizer = (): CaseSummarizer | undefined =>
-    summarySettings === undefined || instructions === undefined ? undefined : createCaseSummarizer({ settings: summarySettings, instructions, model: summaryModelOf, audit: () => mounted?.sink, tokenKeys: () => tokenKeys, availability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }), ...(options.now === undefined ? {} : { now: options.now }) });
+    summarySettings === undefined || instructions === undefined ? undefined : createCaseSummarizer({ settings: summarySettings, instructions, model: summaryModelOf, audit: () => mounted?.sink, tokenKeys: () => tokenKeys, runs: () => summaryRuns, availability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }), ...(options.now === undefined ? {} : { now: options.now }) });
   const askClassifier = (): AskClassifier | undefined => {
     const model = modelOf();
     return model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
@@ -151,15 +163,25 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       const store = (options.runStore ?? createPgRunStore)(context);
       mounted = audit;
       runs = store;
+      const summaryStore = (options.summaryRunStore ?? createPgSummaryRunStore)(context);
+      summaryRuns = summaryStore;
+      const removeOld = (): void => {
+        if (summarySettings === undefined) return;
+        const cutoff = new Date((options.now ?? Date.now)() - summarySettings.retentionDays * MILLISECONDS_A_DAY);
+        summaryStore.removeStartedBefore(cutoff).catch(() => logger?.warn({ event: 'summary-runs.removal_failed' }, 'the removal of old case summary records failed'));
+      };
+      removeOld();
+      retentionTimer = setInterval(removeOld, options.retentionIntervalMs ?? RETENTION_INTERVAL_MS);
+      retentionTimer.unref();
       // one close ends both pools, and a failure to end one does not leave the other open
       let closing: Promise<void> | undefined;
       return {
         sink: audit.sink,
         close: () =>
-          (closing ??= Promise.allSettled([audit.close(), store.close()]).then((results) => {
+          (closing ??= (retentionTimer === undefined ? undefined : clearInterval(retentionTimer), Promise.allSettled([audit.close(), store.close(), summaryStore.close()]).then((results) => {
             const failed = results.find((result) => result.status === 'rejected');
             if (failed?.status === 'rejected') throw failed.reason;
-          })),
+          }))),
       };
     },
     routeGroups: [

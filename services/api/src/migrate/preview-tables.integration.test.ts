@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { stringify } from 'yaml';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, createPgSummaryRunStore, promptRecordOf, type ModelProvider } from '@neburyx/ee-ask';
 import { clearRegisteredExtension, type ExtensionLoader } from '../profile/extension.js';
 import { attempt, fixtureFolder, removeFixtureFolders, rows, runInProcess } from '../testing/database.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
@@ -216,12 +217,126 @@ describe('the preview migrations that retired the stored plans', () => {
   });
 });
 
+describe('the summary_runs and summary_run_calls tables of the preview', () => {
+  const contextOf = (database: TestDatabase) => ({ databaseUrl: database.appUrl, poolSize: 2, connectionTimeoutMs: 5000, statementTimeoutMs: 5000, queryTimeoutMs: 5000, newId: () => randomUUID(), onConnectionError: () => undefined });
+  const BASE = { actorId: randomUUID(), sourceId: 'demo', traceId: 'tr-1', settings: { model: 'm' } };
+  const call = (runId: string, number: number) => ({ runId, number, startedAt: new Date(), instructionsSha256: 'a'.repeat(64), instructionsText: 'INSTRUCTIONS', valuesText: 'VALUES' });
+
+  it('has the columns of the data model, a cascade from the calls to the run, and no foreign key to the users table', async () => {
+    const database = await migratedWithPreview();
+    expect((await columnsOf(database, 'summary_runs')).map((column) => column['column_name'])).toEqual(['id', 'actor_id', 'investigation_id', 'source_id', 'trace_id', 'started_at', 'finished_at', 'outcome', 'calls', 'settings']);
+    expect((await columnsOf(database, 'summary_run_calls')).map((column) => column['column_name'])).toEqual(['run_id', 'call_number', 'started_at', 'duration_ms', 'instructions_sha256', 'instructions_text', 'values_text', 'reply_text', 'status', 'failure_kind', 'tokens_in', 'tokens_out']);
+    expect(await rows(database.ownerUrl, `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'summary_run_calls'::regclass AND contype = 'f'`)).toEqual([{ definition: 'FOREIGN KEY (run_id) REFERENCES summary_runs(id) ON DELETE CASCADE' }]);
+    expect(await rows(database.ownerUrl, `SELECT 1 FROM pg_constraint WHERE conrelid = 'summary_runs'::regclass AND contype = 'f'`)).toEqual([]);
+  });
+
+  it('is written, completed and removed by the real store through the application role, and a removal takes the calls with the run', async () => {
+    const database = await migratedWithPreview();
+    const store = createPgSummaryRunStore(contextOf(database));
+    try {
+      const startedAt = new Date('2026-10-01T00:00:00Z');
+      const id = await store.begin({ ...BASE, startedAt });
+      await store.beginCall(call(id, 1));
+      expect(await rows(database.ownerUrl, 'SELECT status, reply_text FROM summary_run_calls WHERE run_id = $1', [id])).toEqual([{ status: null, reply_text: null }]);
+      await store.endCall({ runId: id, number: 1, status: 'refused', replyText: 'REPLY', tokensIn: 5, tokensOut: 2, durationMs: 40 });
+      await store.finish(id, 'failed', 1, new Date());
+      expect(await rows(database.ownerUrl, 'SELECT outcome, calls FROM summary_runs WHERE id = $1', [id])).toEqual([{ outcome: 'failed', calls: 1 }]);
+      expect(await rows(database.ownerUrl, 'SELECT status, reply_text, tokens_in, duration_ms FROM summary_run_calls WHERE run_id = $1', [id])).toEqual([{ status: 'refused', reply_text: 'REPLY', tokens_in: 5, duration_ms: 40 }]);
+      expect(await store.removeStartedBefore(new Date(startedAt.getTime()))).toBe(0);
+      expect(await store.removeStartedBefore(new Date(startedAt.getTime() + 1))).toBe(1);
+      expect(await rows(database.ownerUrl, 'SELECT 1 FROM summary_run_calls')).toEqual([]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('holds the rows of a whole click through the real summarizer, store and audit sink, readable by the application role, with the run id and trace id linking them to the audit events', async () => {
+    const database = await migratedWithPreview();
+    const context = contextOf(database);
+    const extension = createEnterpriseExtension();
+    const mounted = extension.createAuditSink?.({ ...context, onConnectionError: () => undefined });
+    if (mounted === undefined) throw new Error('no audit sink');
+    const store = createPgSummaryRunStore(context);
+    try {
+      const provider: ModelProvider = { complete: async (request) => ({ status: 'ok', text: JSON.stringify({ sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }] }), usage: { kind: 'known', inputTokens: 5, outputTokens: 2 }, model: 'm', prompt: promptRecordOf(request) }) };
+      const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink: mounted.sink });
+      const summarizer = createCaseSummarizer({
+        settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+        instructions: buildSummaryInstructions('PROMPT', 'TYPOLOGY'),
+        model: () => model,
+        audit: () => mounted.sink,
+        tokenKeys: () => ({ current: { kid: 'abcd1234', bytes: Buffer.alloc(32, 7) } }),
+        runs: () => store,
+        availability: () => ({ available: true }),
+      });
+      const actor = randomUUID();
+      const investigationId = randomUUID();
+      const node = { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, display: { title: 'Ana Silva', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+      const answer = await summarizer.summarize(
+        {
+          actorId: actor,
+          actorRole: 'investigator',
+          traceId: 'trace-click-1',
+          policyVersion: 'p1',
+          request: { investigationId, sourceId: 'demo', entities: [], edges: [], aggregates: [], derived: [] },
+          reading: { nodes: [node], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 },
+        },
+        new AbortController().signal,
+      );
+      expect(answer.status).toBe('ok');
+      const runs = await rows(database.appUrl, 'SELECT id, actor_id, investigation_id, source_id, trace_id, outcome, calls, finished_at IS NOT NULL AS finished FROM summary_runs');
+      expect(runs).toEqual([{ id: expect.any(String), actor_id: actor, investigation_id: investigationId, source_id: 'demo', trace_id: 'trace-click-1', outcome: 'ok', calls: 1, finished: true }]);
+      const calls = await rows(database.appUrl, 'SELECT call_number, status, tokens_in, tokens_out, instructions_text, values_text, reply_text FROM summary_run_calls WHERE run_id = $1', [runs[0]?.['id']]);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toMatchObject({ call_number: 1, status: 'answered', tokens_in: 5, tokens_out: 2 });
+      expect(String(calls[0]?.['instructions_text'])).toContain('PROMPT');
+      expect(String(calls[0]?.['values_text'])).toContain('n1 |');
+      expect(String(calls[0]?.['reply_text'])).toContain('A fixed sentence.');
+      const events = await rows(database.appUrl, `SELECT action, detail FROM audit_events WHERE trace_id = 'trace-click-1' ORDER BY action`);
+      expect(events.map((event) => event['action'])).toEqual(['ai.case-summary', 'ai.case-summary.closed']);
+      const detail = (event: Record<string, unknown> | undefined) => event?.['detail'] as { ai?: { runId?: string }; summary?: { runId?: string } };
+      expect(detail(events[0]).ai?.runId).toBe(runs[0]?.['id']);
+      expect(detail(events[1]).summary?.runId).toBe(runs[0]?.['id']);
+      expect(JSON.stringify(events)).not.toMatch(/A fixed sentence|PROMPT|Ana Silva/);
+      expect(await attempt(database.appUrl, 'DELETE FROM summary_runs WHERE started_at < now() - interval \'1 day\'')).toBe('allowed');
+    } finally {
+      await store.close();
+      await mounted.close();
+    }
+  });
+
+  it('answers a fixed error when the write fails: a second call with the same number', async () => {
+    const database = await migratedWithPreview();
+    const store = createPgSummaryRunStore(contextOf(database));
+    try {
+      const id = await store.begin({ ...BASE, startedAt: new Date() });
+      await store.beginCall(call(id, 1));
+      await expect(store.beginCall(call(id, 1))).rejects.toMatchObject({ code: 'SUMMARY_RUN_WRITE_FAILED' });
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('is added to a database migrated to 0005 by the next start, without a change to the earlier tables', async () => {
+    const UNTIL_0005 = ['0001-audit-events.sql', '0002-ask-runs.sql', '0003-ask-plans.sql', '0004-drop-ask-plans.sql', '0005-ask-runs-intent.sql'];
+    const until0005: ExtensionLoader = {
+      load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: fixtureFolder(Object.fromEntries(UNTIL_0005.map((name) => [name, readFileSync(join(PREVIEW_MIGRATIONS, name), 'utf8')]))) }),
+    };
+    const database = await postgres.newDatabase();
+    expect((await runInProcess(previewOn(database), SHIPPED, { extensionLoader: until0005 })).code).toBe(0);
+    expect(await rows(database.ownerUrl, `SELECT to_regclass('public.summary_runs') IS NOT NULL AS runs`)).toEqual([{ runs: false }]);
+    const migrated = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
+    expect([migrated.code, migrated.stderr]).toEqual([0, '']);
+    expect(await rows(database.ownerUrl, `SELECT to_regclass('public.summary_runs') IS NOT NULL AS runs, to_regclass('public.summary_run_calls') IS NOT NULL AS calls`)).toEqual([{ runs: true, calls: true }]);
+  });
+});
+
 describe('a start of the Community product', () => {
   it('creates neither table, and loads no preview migration', async () => {
     const database = await postgres.newDatabase();
     const result = await runInProcess(environment(database), SHIPPED);
     expect(result.code).toBe(0);
-    const found = await rows(database.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS audit, to_regclass('public.ask_runs') IS NOT NULL AS runs`);
-    expect(found).toEqual([{ audit: false, runs: false }]);
+    const found = await rows(database.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS audit, to_regclass('public.ask_runs') IS NOT NULL AS runs, to_regclass('public.summary_runs') IS NOT NULL AS summaries`);
+    expect(found).toEqual([{ audit: false, runs: false, summaries: false }]);
   });
 });

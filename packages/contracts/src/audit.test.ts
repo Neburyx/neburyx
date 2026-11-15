@@ -24,6 +24,7 @@ describe('the AI fields of an audit event', () => {
       readonly promptId: string;
       readonly promptVersion: string;
       readonly promptSha256: string;
+      readonly runId?: string;
       readonly tokensIn: TokenCount | 'unknown';
       readonly tokensOut: TokenCount | 'unknown';
       readonly cacheReadTokens?: TokenCount | 'unknown';
@@ -61,6 +62,13 @@ describe('the AI fields of an audit event', () => {
 
   it.each([['a missing hash', { ...AI, promptSha256: undefined }], ['upper-case digits', { ...AI, promptSha256: 'A'.repeat(64) }], ['63 digits', { ...AI, promptSha256: 'a'.repeat(63) }], ['65 digits', { ...AI, promptSha256: 'a'.repeat(65) }], ['text that is not hexadecimal', { ...AI, promptSha256: 'g'.repeat(64) }]])('refuses %s as the prompt hash', (_name, value) => {
     expect(aiAuditDetailSchema.safeParse(value).success).toBe(false);
+  });
+
+  it('hold an optional run id that is a UUID, and refuse any other text as one', () => {
+    const runId = '0192f000-0000-7000-8000-000000000042';
+    expect(parseAiAuditDetail({ ...AI, runId }).runId).toBe(runId);
+    expect(parseAiAuditDetail(AI)).not.toHaveProperty('runId');
+    for (const bad of ['not-a-uuid', '', 'x'.repeat(200), 42]) expect(aiAuditDetailSchema.safeParse({ ...AI, runId: bad }).success).toBe(false);
   });
 
   it('are parsed strictly: an unknown key, a text count, a decimal and a negative number are refused', () => {

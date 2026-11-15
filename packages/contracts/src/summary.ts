@@ -82,4 +82,17 @@ export interface CaseSummarizer {
   readonly maxElements: number;
   availability(): CaseSummaryAvailability;
   summarize(input: CaseSummaryInput, signal: AbortSignal): Promise<CaseSummaryOutcome>;
+  /**
+   * Records a click that ended in the route before any call (too many elements, a failed read, a client that gave up): its run row and its closing event, named to each other. Rejects when the record cannot be written;
+   * a summarizer that keeps no record has none.
+   */
+  recordEarlyEnd?(end: CaseSummaryEarlyEnd): Promise<void>;
+}
+
+export interface CaseSummaryEarlyEnd {
+  readonly actorId: string;
+  readonly actorRole: z.infer<typeof roleSchema>;
+  readonly traceId: string;
+  readonly request: SummaryRequest;
+  readonly outcome: 'tooLarge' | 'read-failed' | 'cancelled' | 'error' | 'unavailable';
 }

@@ -186,4 +186,4 @@ export type { AskAnswer, AskContinueRequest, AskQuestionRequest } from './ask-qu
 
 export { SUMMARY_FAILURE_KINDS, summaryReadingSchema, summaryRequestSchema, summaryResponseSchema, summarySentenceSchema } from './summary.js';
 export type { ElementRefs, ElementsScope } from './extension.js';
-export type { CaseSummarizer, CaseSummaryAvailability, CaseSummaryInput, CaseSummaryOutcome, SummaryFailureKind, SummaryReading, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';
+export type { CaseSummarizer, CaseSummaryAvailability, CaseSummaryEarlyEnd, CaseSummaryInput, CaseSummaryOutcome, SummaryFailureKind, SummaryReading, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';

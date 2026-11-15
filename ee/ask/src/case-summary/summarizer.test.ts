@@ -4,6 +4,7 @@ import { AuditUnavailableError, createAuditedModelCall } from '../audited.js';
 import { promptRecordOf, type ModelProvider, type ModelRequest } from '../provider.js';
 import { buildSummaryInstructions } from './instructions.js';
 import { openToken } from './token.js';
+import { createMemorySummaryRunStore } from './run-store.js';
 import { createCaseSummarizer, SummaryHandled } from './summarizer.js';
 import type { SummarySettings } from './settings.js';
 
@@ -34,7 +35,7 @@ function summarizerWith(replies: readonly string[], overrides: Partial<SummarySe
   };
   const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async (event) => void events.push(event) } });
   const used = { ...settings, ...overrides };
-  const summarizer = createCaseSummarizer({ settings: used, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, availability: () => ({ available: true }) });
+  const summarizer = createCaseSummarizer({ settings: used, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }) });
   return { summarizer, requests, events };
 }
 
@@ -78,13 +79,13 @@ describe('the case summarizer', () => {
   });
 
   it('is not asked while unavailable', async () => {
-    const summarizer = createCaseSummarizer({ settings, instructions, model: () => undefined, audit: () => undefined, tokenKeys: () => KEYS, availability: () => ({ available: false, reason: 'x' }) });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => undefined, audit: () => undefined, tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: false, reason: 'x' }) });
     await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toThrow('not available');
   });
 
   it('is unavailable without a size guard, naming the setting', async () => {
     const { maxInputTokens: _guard, ...withoutGuard } = settings;
-    const summarizer = createCaseSummarizer({ settings: withoutGuard, instructions, model: () => undefined, audit: () => undefined, tokenKeys: () => KEYS, availability: () => ({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' }) });
+    const summarizer = createCaseSummarizer({ settings: withoutGuard, instructions, model: () => undefined, audit: () => undefined, tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' }) });
     expect(summarizer.availability()).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' });
     await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toThrow();
   });
@@ -128,7 +129,7 @@ describe('the closing event of a click', () => {
   it('fails the click closed when the closing event cannot be written', async () => {
     const provider: ModelProvider = { complete: async (request) => ({ status: 'ok', text: GOOD, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
     const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
-    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => Promise.reject(new Error('down')) }), tokenKeys: () => KEYS, availability: () => ({ available: true }) });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => Promise.reject(new Error('down')) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }) });
     await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
   });
 });
@@ -146,7 +147,7 @@ describe('the closing event of a click that is interrupted', () => {
       },
     };
     const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async (event) => void events.push(event) } });
-    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, availability: () => ({ available: true }) });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }) });
     await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
     const closed = events.filter((event) => event.action === 'ai.case-summary.closed');
     expect(events.filter((event) => event.action === 'ai.case-summary')).toHaveLength(2);
@@ -210,7 +211,7 @@ describe('the checks in the click', () => {
       },
     };
     const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
-    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, availability: () => ({ available: true }) });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }) });
     expect(await summarizer.summarize(input(), new AbortController().signal)).toMatchObject({ status: 'failed', kind: 'unreachable', calls: 2 });
     expect(closed(events)[0]).toMatchObject({ detail: { summary: { outcome: 'unreachable', calls: 2, sentencesKept: 0, sentencesRemoved: 1 } } });
   });
@@ -242,7 +243,7 @@ describe('the closing event of a click that ends before or after the checks', ()
       },
     };
     const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
-    const summarizer = createCaseSummarizer({ settings: { ...settings, totalTimeoutMs: 1000 }, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, availability: () => ({ available: true }), now: () => clock });
+    const summarizer = createCaseSummarizer({ settings: { ...settings, totalTimeoutMs: 1000 }, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }), now: () => clock });
     expect(await summarizer.summarize(input(), new AbortController().signal)).toMatchObject({ status: 'timeLimit' });
     expect(closed(events)[0]).toMatchObject({ detail: { summary: { outcome: 'timeLimit', sentencesKept: 0, sentencesRemoved: 1 } } });
   });
@@ -261,8 +262,152 @@ describe('the closing event of a click that is cancelled after a checked reply',
       },
     };
     const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
-    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, availability: () => ({ available: true }) });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }) });
     await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
     expect(events.filter((event) => event.action === 'ai.case-summary.closed')[0]).toMatchObject({ result: 'failed', detail: { summary: { outcome: 'cancelled', calls: 2, sentencesKept: 0, sentencesRemoved: 2 } } });
+  });
+});
+
+describe('the record of a click', () => {
+  function recorded(replies: readonly string[], store = createMemorySummaryRunStore(), overrides: Partial<SummarySettings> = {}) {
+    const events: AuditEvent[] = [];
+    const requests: ModelRequest[] = [];
+    let index = 0;
+    const provider: ModelProvider = {
+      complete: async (request) => {
+        requests.push(request);
+        return { status: 'ok', text: replies[Math.min(index++, replies.length - 1)] ?? GOOD, usage: { kind: 'known', inputTokens: 9, outputTokens: 3 }, model: 'm', prompt: promptRecordOf(request) };
+      },
+    };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async (event) => void events.push(event) } });
+    const summarizer = createCaseSummarizer({ settings: { ...settings, ...overrides }, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    return { summarizer, store, events, requests };
+  }
+
+  it('writes the run, each call before it is made with the exact text sent, the reply text and the end of the run', async () => {
+    const { summarizer, store, requests } = recorded(['nope', GOOD]);
+    await summarizer.summarize(input(), new AbortController().signal);
+    const [run] = store.runs;
+    expect(store.runs).toHaveLength(1);
+    expect(run?.start).toMatchObject({ actorId: 'a', investigationId: '0192f000-0000-7000-8000-000000000042', sourceId: 'demo', traceId: 't', settings: { model: 'claude-sonnet-5-5', maxCalls: 5, maxElements: 300 } });
+    expect(run?.callStarts.map((call) => call.number)).toEqual([1, 2]);
+    expect(run?.callStarts[0]?.valuesText).toBe(requests[0]?.values);
+    expect(run?.callStarts[0]?.instructionsText).toBe(requests[0]?.instructions);
+    expect(run?.callEnds.map((call) => [call.number, call.status, call.replyText, call.tokensIn, call.tokensOut])).toEqual([[1, 'answered', 'nope', 9, 3], [2, 'answered', GOOD, 9, 3]]);
+    expect(run).toMatchObject({ outcome: 'ok', calls: 2 });
+  });
+
+  it('puts the run id in the per-call events and in the closing event', async () => {
+    const { summarizer, store, events } = recorded([GOOD]);
+    await summarizer.summarize(input(), new AbortController().signal);
+    const runId = store.runs[0]?.id;
+    expect(runId).toBeDefined();
+    for (const event of events) expect(JSON.stringify(event.detail)).toContain(runId as string);
+    expect(events.map((event) => event.action)).toEqual(['ai.case-summary', 'ai.case-summary.closed']);
+  });
+
+  it('keeps the text of a rejected reply out of the answer and every event, and in the record only', async () => {
+    const rejected = JSON.stringify({ sentences: [{ text: 'CANARY-REJECTED-SENTENCE about Zed.', cites: [] }] });
+    const { summarizer, store, events } = recorded([rejected, GOOD]);
+    const answer = await summarizer.summarize(input(), new AbortController().signal);
+    expect(JSON.stringify(answer)).not.toContain('CANARY-REJECTED-SENTENCE');
+    expect(JSON.stringify(events)).not.toContain('CANARY-REJECTED-SENTENCE');
+    expect(store.runs[0]?.callEnds[0]?.replyText).toContain('CANARY-REJECTED-SENTENCE');
+  });
+
+  it('records a run with no call when the input is too large, with its outcome', async () => {
+    const { summarizer, store } = recorded([GOOD], undefined, { maxInputTokens: 1 });
+    await summarizer.summarize(input(), new AbortController().signal);
+    expect(store.runs[0]).toMatchObject({ outcome: 'tooLarge', calls: 0, callStarts: [] });
+  });
+
+  it('records a cancelled call when the client gives up, and the run as cancelled', async () => {
+    const controller = new AbortController();
+    const store = createMemorySummaryRunStore();
+    const provider: ModelProvider = { complete: async () => (controller.abort(), Promise.reject(new Error('aborted'))) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => undefined }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
+    expect(store.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'cancelled' });
+    expect(store.runs[0]?.outcome).toBe('cancelled');
+  });
+
+  it.each(['begin', 'beginCall', 'endCall', 'finish'] as const)('fails the click closed when the record cannot be written at %s', async (step) => {
+    const { summarizer, requests } = recorded([GOOD], createMemorySummaryRunStore({ failOn: step }));
+    await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
+    if (step === 'begin' || step === 'beginCall') expect(requests).toHaveLength(0);
+  });
+
+  it('keeps the reply text and the real status of a call whose audit event could not be written, and fails the click closed', async () => {
+    const store = createMemorySummaryRunStore();
+    const provider: ModelProvider = { complete: async (request) => ({ status: 'ok', text: 'CANARY-REPLY', usage: { kind: 'known', inputTokens: 7, outputTokens: 2 }, model: 'm', prompt: promptRecordOf(request) }) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => Promise.reject(new Error('down')) } });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => undefined }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
+    expect(store.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'answered', replyText: 'CANARY-REPLY', tokensIn: 7, tokensOut: 2 });
+    expect(store.runs[0]?.outcome).toBe('auditFailed');
+  });
+
+  it('fails closed when the end of a call cannot be written after the provider failed or the client gave up, instead of answering with the failure', async () => {
+    for (const cancel of [false, true]) {
+      const controller = new AbortController();
+      const store = createMemorySummaryRunStore({ failOn: 'endCall' });
+      const provider: ModelProvider = { complete: async () => (cancel ? controller.abort() : undefined, Promise.reject(new Error('provider down'))) };
+      const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+      const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => undefined }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+      await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(AuditUnavailableError);
+    }
+  });
+
+  it('ends the run row before the closing event is written, and writes no success event when the row cannot end', async () => {
+    const order: string[] = [];
+    const store = createMemorySummaryRunStore();
+    const finish = store.finish.bind(store);
+    store.finish = async (...args) => (order.push(`finish:${args[1]}`), finish(...args));
+    const { summarizer, events } = recorded([GOOD], store);
+    const original = events.push.bind(events);
+    events.push = (...items) => (order.push(...items.map((event) => event.action)), original(...items));
+    await summarizer.summarize(input(), new AbortController().signal);
+    expect(order.indexOf('finish:ok')).toBeLessThan(order.indexOf('ai.case-summary.closed'));
+
+    const failing = recorded([GOOD], createMemorySummaryRunStore({ failOn: 'finish' }));
+    await expect(failing.summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
+    expect(failing.events.filter((event) => event.action === 'ai.case-summary.closed')).toHaveLength(0);
+  });
+
+  it('marks the run row auditFailed when the closing event cannot be written', async () => {
+    const store = createMemorySummaryRunStore();
+    const provider: ModelProvider = { complete: async (request) => ({ status: 'ok', text: GOOD, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => Promise.reject(new Error('down')) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
+    expect(store.runs[0]?.outcome).toBe('auditFailed');
+  });
+
+  it('ends the run row and fails closed on an unexpected failure when the row cannot end, and keeps the failure when only the event cannot be written', async () => {
+    const boom: ModelProvider = { complete: async () => Promise.reject(new Error('provider down')) };
+    const model = createAuditedModelCall({ provider: boom, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+    const make = (store: ReturnType<typeof createMemorySummaryRunStore>, audit: () => { record: () => Promise<void> }) => createCaseSummarizer({ settings, instructions, model: () => model, audit, tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    await expect(make(createMemorySummaryRunStore({ failOn: 'finish' }), () => ({ record: async () => undefined })).summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
+    await expect(make(createMemorySummaryRunStore(), () => ({ record: async () => Promise.reject(new Error('down')) })).summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(SummaryHandled);
+  });
+
+  it('records an early end with a run row and a closing event that name each other, and fails closed when either cannot be written', async () => {
+    const events: AuditEvent[] = [];
+    const store = createMemorySummaryRunStore();
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => undefined, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    const end = { actorId: 'a', actorRole: 'investigator' as const, traceId: 't', request: input().request, outcome: 'tooLarge' as const };
+    await summarizer.recordEarlyEnd?.(end);
+    expect(store.runs[0]).toMatchObject({ outcome: 'tooLarge', calls: 0 });
+    expect(events[0]).toMatchObject({ action: 'ai.case-summary.closed', result: 'refused', detail: { summary: { outcome: 'tooLarge', calls: 0, runId: store.runs[0]?.id } } });
+    const failing = createCaseSummarizer({ settings, instructions, model: () => undefined, audit: () => ({ record: async () => undefined }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore({ failOn: 'begin' }), availability: () => ({ available: true }) });
+    await expect(failing.recordEarlyEnd?.(end)).rejects.toBeInstanceOf(AuditUnavailableError);
+  });
+
+  it('is unavailable (fails closed) when there is no store', async () => {
+    const provider: ModelProvider = { complete: async (request) => ({ status: 'ok', text: GOOD, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async () => undefined }), tokenKeys: () => KEYS, runs: () => undefined, availability: () => ({ available: true }) });
+    await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
   });
 });

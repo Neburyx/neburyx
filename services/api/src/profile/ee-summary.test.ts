@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { summaryResponseSchema, type CaseSummarizer, type CaseSummaryInput, type CaseSummaryOutcome } from '@neburyx/contracts';
-import { buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, openToken, promptRecordOf, type ModelProvider, type ModelRequest } from '@neburyx/ee-ask';
+import { buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, createMemorySummaryRunStore, openToken, promptRecordOf, type ModelProvider, type ModelRequest } from '@neburyx/ee-ask';
 import { afterAll, describe, expect, it } from 'vitest';
 import { LOCAL_IDENTITY } from '../testing/app-store.js';
 import { el, exportWebRoot, linkRef, startExportRig, type ExportRigOptions } from '../testing/export-rig.js';
@@ -362,6 +362,7 @@ describe('POST /v1/summary completed, with the real application, the real gate a
       model: () => model,
       audit: () => ({ record: async () => undefined }),
       tokenKeys: () => keys,
+      runs: () => createMemorySummaryRunStore(),
       availability: () => ({ available: true }),
     });
   }
@@ -493,6 +494,33 @@ describe('POST /v1/summary and a source that changed', () => {
 describe('POST /v1/summary and the closing event of a click that fails', () => {
   const closing = (rig: Rig) => rig.events.filter((event) => event.action === 'ai.case-summary.closed');
 
+  it('records a failed read through the summarizer, and fails closed with AUDIT_UNAVAILABLE instead of the gate error when that record cannot be written', async () => {
+    const down = (call: { templateId: string }) => (call.templateId === 'entity-load-many' ? ({ status: 'unavailable', reason: 'unreachable' } as const) : undefined);
+    const ended: string[] = [];
+    const recording: CaseSummarizer = { ...stubSummarizer(undefined, []), recordEarlyEnd: async (end) => void ended.push(end.outcome) };
+    const ok = await appOf({ summarizer: recording, answer: down });
+    expect((await post(ok)).statusCode).toBe(503);
+    expect(ended).toEqual(['read-failed']);
+    await ok.rig.stop();
+    const failing: CaseSummarizer = { ...stubSummarizer(undefined, []), recordEarlyEnd: async () => Promise.reject(new Error('down')) };
+    const refused = await appOf({ summarizer: failing, answer: down });
+    const answer = await post(refused);
+    expect(answer.statusCode).toBe(503);
+    expect(answer.json().error).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    await refused.rig.stop();
+  });
+
+  it('records a click on a summarizer that is not available when it keeps a record, and still answers that the feature is not here', async () => {
+    const ended: string[] = [];
+    const summarizer: CaseSummarizer = { ...stubSummarizer(undefined, [], false), recordEarlyEnd: async (end) => void ended.push(end.outcome) };
+    const rig = await appOf({ summarizer });
+    const answer = await post(rig);
+    expect(answer.statusCode).toBeGreaterThanOrEqual(400);
+    expect(ended).toEqual(['unavailable']);
+    expect(rig.events.filter((event) => event.action === 'ai.case-summary.closed')).toHaveLength(0);
+    await rig.rig.stop();
+  });
+
   it('records one closing event for a source that is down and keeps the gate error', async () => {
     const rig = await appOf({ summarizer: stubSummarizer(undefined, []), answer: (call) => (call.templateId === 'entity-load-many' ? { status: 'unavailable', reason: 'unreachable' } : undefined) });
     const answer = await post(rig);
@@ -545,9 +573,66 @@ describe('POST /v1/summary and its coverage line, through the shown reader of th
       model: () => model,
       audit: () => ({ record: async () => undefined }),
       tokenKeys: () => keys,
+      runs: () => createMemorySummaryRunStore(),
       availability: () => ({ available: true }),
     });
   }
+
+  it('keeps the rejected reply and the instructions out of the response, headers, logs, errors, events and an export, and holds them in the record of the click; the values are in the response only as the sent text', async () => {
+    const store = createMemorySummaryRunStore();
+    const events: { readonly detail?: unknown }[] = [];
+    const logLines: string[] = [];
+    const replies = [JSON.stringify({ sentences: [{ text: 'CANARY-REJECTED-REPLY about nothing cited.', cites: [] }] }), JSON.stringify({ sentences: [{ text: 'Two widgets are listed.', cites: ['n1', 'n2'] }] })];
+    let index = 0;
+    let broken = false;
+    const provider: ModelProvider = { complete: async (request) => (broken ? Promise.reject(new Error('CANARY-PROVIDER-ERROR')) : { status: 'ok', text: replies[Math.min(index++, 1)] ?? '', usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
+    const sink = { record: async (event: { readonly detail?: unknown }) => void events.push(event) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink });
+    const summarizer = createCaseSummarizer({
+      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+      instructions: buildSummaryInstructions('CANARY-INSTRUCTIONS-PROMPT', 'CANARY-INSTRUCTIONS-TYPOLOGY'),
+      model: () => model,
+      audit: () => sink,
+      tokenKeys: () => keys,
+      runs: () => store,
+      availability: () => ({ available: true }),
+    });
+    const rig = await appOf({ summarizer, widgets: ['W-1', 'W-2'], logLines });
+    const answer = await post(rig, { ...rig.body, mask: false });
+    expect(answer.statusCode).toBe(200);
+    broken = true;
+    const failed = await post(rig, { ...rig.body, mask: false }, 'a-second-key');
+    const exported = await rig.rig.create(rig.body.investigationId, { kind: 'view', format: 'json', entities: rig.body.entities });
+    const file = await rig.rig.download((exported.json() as { id: string }).id);
+    const visible = JSON.stringify({ body: answer.json(), headers: answer.headers, failed: failed.json(), failedHeaders: failed.headers, events, routeEvents: rig.events, logLines, file: file.body });
+    for (const canary of ['CANARY-REJECTED-REPLY', 'CANARY-INSTRUCTIONS-PROMPT', 'CANARY-INSTRUCTIONS-TYPOLOGY', 'CANARY-PROVIDER-ERROR']) expect(visible).not.toContain(canary);
+    const sent = (answer.json() as { sent: string }).sent;
+    expect(sent).toContain('Ana Silva');
+    expect(JSON.stringify({ headers: answer.headers, failed: failed.json(), events, routeEvents: rig.events, logLines })).not.toContain('Ana Silva');
+    const [run] = store.runs;
+    expect(run?.callEnds[0]?.replyText).toContain('CANARY-REJECTED-REPLY');
+    expect(run?.callStarts[0]?.instructionsText).toContain('CANARY-INSTRUCTIONS-PROMPT');
+    expect(run?.callStarts[0]?.valuesText).toBe(sent);
+    await rig.rig.stop();
+  });
+
+  it('records a click that ends in the route before any call through the summarizer, and fails closed when that record cannot be written', async () => {
+    const ended: string[] = [];
+    const base = stubSummarizer(undefined, [], true, 1);
+    const summarizer: CaseSummarizer = { ...base, recordEarlyEnd: async (end) => void ended.push(end.outcome) };
+    const rig = await appOf({ summarizer });
+    const answer = await post(rig);
+    expect(answer.json()).toMatchObject({ status: 'tooLarge', limit: 'elements' });
+    expect(ended).toEqual(['tooLarge']);
+    expect(rig.events.filter((event) => event.action === 'ai.case-summary.closed')).toHaveLength(0);
+    await rig.rig.stop();
+    const failing: CaseSummarizer = { ...base, recordEarlyEnd: async () => Promise.reject(new Error('down')) };
+    const refused = await appOf({ summarizer: failing });
+    const closed = await post(refused);
+    expect(closed.statusCode).toBe(503);
+    expect(closed.json().error).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    await refused.rig.stop();
+  });
 
   it('writes the retrieval part as the header of an export of the same view writes it', async () => {
     const rig = await appOf({ summarizer: realSummarizer() });

@@ -4,13 +4,23 @@ import { SUMMARY_CLOSING_ACTION, SummaryHandled, auditInvestigationOf, elementCo
 
 const SUMMARY_URL = '/v1/summary';
 
-type EarlyOutcome = CaseSummaryAuditDetail['outcome'];
+type EarlyOutcome = 'tooLarge' | 'read-failed' | 'cancelled' | 'error' | 'unavailable';
 
 /**
  * Records the closing event of a click that ended in the route, before or around the summarizer. A refusal the route is about to give fails the click closed when the event cannot be written; a failure the route
  * is passing on keeps its own answer, whatever the sink does.
  */
 async function closeEarly(request: ExtensionRequest, role: 'administrator' | 'investigator', body: SummaryRequest, outcome: EarlyOutcome, failClosed: boolean): Promise<void> {
+  const summarizer = request.caseSummarizer;
+  if (summarizer.recordEarlyEnd !== undefined) {
+    // a summarizer that keeps a record of each click fails the click closed when it cannot be written, whatever ended it
+    try {
+      await summarizer.recordEarlyEnd({ actorId: request.principalId, actorRole: role, traceId: request.traceId, request: body, outcome });
+    } catch {
+      throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+    }
+    return;
+  }
   const detail: CaseSummaryAuditDetail = { elements: elementCountOf(body), elementsSha256: elementsHashOf(body), calls: 0, outcome };
   try {
     await request.audit.record({ actorId: request.principalId, actorRole: role, action: SUMMARY_CLOSING_ACTION, result: outcome === 'tooLarge' ? 'refused' : 'failed', sourceId: body.sourceId, ...auditInvestigationOf(body.investigationId), traceId: request.traceId, detail: { summary: detail } });

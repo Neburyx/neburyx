@@ -43,6 +43,8 @@ describe('the enterprise extension', () => {
     expect(statements).toContain('CREATE TABLE ask_runs');
     expect(statements).toContain('DROP TABLE ask_plans');
     expect(statements).toContain('ALTER TABLE ask_runs ADD COLUMN intent');
+    expect(statements).toContain('CREATE TABLE summary_runs');
+    expect(statements).toContain('CREATE TABLE summary_run_calls');
   });
 
   it('hands the sink it mounted to the audited call, which has none before the application built it, and returns the mounted sink unchanged', async () => {

@@ -48,6 +48,8 @@ export interface ExportRigOptions {
   readonly requestsPerMinute?: number;
   readonly retention?: { readonly exports_days: number };
   readonly deny?: () => boolean;
+  /** Receives every log line of the application under test. */
+  readonly logLines?: string[];
   readonly policyVersion?: () => string;
   readonly hideNode?: string;
   /** The stable ID of an entity the person may read but not export. */
@@ -134,7 +136,7 @@ export async function startExportRig(options: ExportRigOptions = {}) {
   }
   const app = await buildApp({
     webRoot: exportWebRoot,
-    logger: createLogger({ write: () => undefined }),
+    logger: createLogger({ write: (line) => void options.logLines?.push(line) }),
     store,
     mapping,
     gate: parts.gate,

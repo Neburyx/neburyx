@@ -53,6 +53,14 @@ describe('an answered model call', () => {
     ]);
   });
 
+  it('adds the run id of the context to the ai detail, and none where the context has none', async () => {
+    const { audited, events } = rig();
+    await audited.call(REQUEST, { ...CONTEXT, runId: '0192f000-0000-7000-8000-000000000042' }, SIGNAL);
+    await audited.call(REQUEST, CONTEXT, SIGNAL);
+    expect(events[0]?.detail).toMatchObject({ ai: { runId: '0192f000-0000-7000-8000-000000000042' } });
+    expect(events[1]?.detail && 'ai' in events[1].detail ? events[1].detail.ai : {}).not.toHaveProperty('runId');
+  });
+
   it('takes the action from the context of each call', async () => {
     const { audited, events } = rig();
     await audited.call(REQUEST, { ...CONTEXT, action: 'ai.first' }, SIGNAL);
