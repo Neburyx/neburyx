@@ -4528,6 +4528,25 @@
               }
             }
           },
+          "429": {
+            "description": "Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait",
+            "headers": {
+              "Retry-After": {
+                "description": "Whole seconds to wait",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "The read could not be completed",
             "content": {

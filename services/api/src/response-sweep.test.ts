@@ -1,6 +1,7 @@
 import {
   coverageResponseSchema,
   patternPreviewResponseSchema, patternRunResponseSchema, savedPatternRunResponseSchema, patternValidateResponseSchema,
+  pathsResponseSchema,
   readRefsResponseSchema,
   degreePreviewSchema,
   derivedNeighborsResponseSchema,
@@ -82,6 +83,7 @@ const SCENARIOS: readonly Scenario[] = [
   { name: 'source link of an entity', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'entity', ref: entity })}` },
   { name: 'source link of a record', route: 'GET /v1/source-links/:ref', method: 'GET', url: `/v1/source-links/${sourceLinkSegmentOf({ form: 'stored', ref: stored })}?record=R-1` },
   { name: 'read by references', route: 'POST /v1/graph/read-refs', method: 'POST', url: '/v1/graph/read-refs', payload: { sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }], edges: [stored] }, schema: readRefsResponseSchema },
+  { name: 'shortest paths', route: 'POST /v1/graph/paths', method: 'POST', url: '/v1/graph/paths', payload: { sourceId: FUZZ_SOURCE, from: { entityType: 'widget', stableId: 'W-1' }, to: { entityType: 'gadget', stableId: 'GD-P' }, relTypes: ['MADE_FROM'], maxHops: 2, limit: 5 }, schema: pathsResponseSchema },
   { name: 'derived neighbors', route: 'POST /v1/graph/derived-neighbors', method: 'POST', url: '/v1/graph/derived-neighbors', payload: { sourceId: FUZZ_SOURCE, ref: { entityType: 'widget', stableId: 'W-1' } }, schema: derivedNeighborsResponseSchema },
   { name: 'template list', route: 'GET /v1/templates', method: 'GET', url: `/v1/templates?sourceId=${FUZZ_SOURCE}`, schema: templateListResponseSchema },
   { name: 'template run', route: 'POST /v1/templates/:id/run', method: 'POST', url: '/v1/templates/shared-gadgets/run', payload: { sourceId: FUZZ_SOURCE, params: { ref: { entityType: 'widget', stableId: 'W-1' } } }, headers: { 'idempotency-key': 'a-key-of-sixteen-characters' }, schema: templateRunResponseSchema },

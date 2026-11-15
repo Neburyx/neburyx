@@ -519,6 +519,7 @@ describe('the request rate in the committed openapi.json', () => {
     '/v1/graph/preview-expansion',
     '/v1/graph/coverage',
     '/v1/graph/expand',
+    '/v1/graph/paths',
     '/v1/investigations',
     '/v1/sources/{id}/test',
   ];

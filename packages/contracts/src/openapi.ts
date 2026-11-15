@@ -957,6 +957,7 @@ export function buildOpenApiDocument(
             '400': { description: 'The body is not valid, or names a relationship type or entity type the mapping does not have', content: jsonBody('ErrorResponse') },
             '404': { description: 'An end is not in the source, or the source is not configured or may not be read (one answer for all)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON', content: jsonBody('ErrorResponse') },
+            '429': { description: 'Too many requests from this person to this source in the last minute: nothing was read; details.retryAfterMs and the Retry-After header (whole seconds) say how long to wait', headers: RETRY_AFTER_HEADER, content: jsonBody('ErrorResponse') },
             '422': { description: 'The hop count or the limit is above what the source allows (QUERY_BUDGET_EXCEEDED)', content: jsonBody('ErrorResponse') },
             '500': { description: 'The read could not be completed', content: jsonBody('ErrorResponse') },
             '503': { description: 'The source is not available, or is busy', content: jsonBody('ErrorResponse') },

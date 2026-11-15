@@ -18,6 +18,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'POST /v1/search/entities': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/search/entities/more': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/graph/preview-expansion': 'counted in rate-routes.test.ts; the slot is the gate\'s',
+  'POST /v1/graph/paths': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/graph/expand': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/investigations': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/templates/:id/run': 'counted in rate-routes.test.ts; the slot is the gate\'s',

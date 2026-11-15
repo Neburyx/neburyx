@@ -43,7 +43,7 @@ interface Call {
   readonly headers?: () => Readonly<Record<string, string>>;
 }
 
-/** The ten routes that count, with a request each that passes the route's schema; what the source answers does not matter here. */
+/** The routes that count, with a request each that passes the route's schema; what the source answers does not matter here. */
 const COUNTED: Readonly<Record<string, Call>> = {
   'entity open': { method: 'GET', url: (s) => `/v1/entities/${s}/node_a/H-1` },
   'edge read': { method: 'GET', url: (s) => `/v1/edges/${edgeRefSegmentOf({ sourceId: s, type: 'LINKS', from: 'node_a', to: 'node_b', stableId: 'L-1' })}` },
@@ -62,6 +62,7 @@ const COUNTED: Readonly<Record<string, Call>> = {
   coverage: { method: 'POST', url: () => '/v1/graph/coverage', payload: (s) => ({ sourceId: s, entities: [{ ref: element(s), loadedRelationships: 0, loadedQuality: 'exact' }] }) },
   expand: { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'] }) },
   'expand with a window': { method: 'POST', url: () => '/v1/graph/expand', payload: (s) => ({ sourceId: s, ref, neighborTypes: ['node_b'], window: { days: 7 } }) },
+  'shortest paths': { method: 'POST', url: () => '/v1/graph/paths', payload: (s) => ({ sourceId: s, from: ref, to: { entityType: 'node_a', stableId: 'H-2' }, relTypes: ['LINKS'], maxHops: 2, limit: 5 }) },
   'read by references': { method: 'POST', url: () => '/v1/graph/read-refs', payload: (s) => ({ sourceId: s, entities: [element(s)] }) },
   'open investigation': { method: 'POST', url: () => '/v1/investigations', payload: (s) => ({ sourceId: s, entity: element(s) }) },
   'source test': { method: 'POST', url: (s) => `/v1/sources/${s}/test` },
@@ -249,6 +250,7 @@ const COUNTED_ROUTES = [
   'POST /v1/search/entities/more',
   'POST /v1/graph/preview-expansion',
   'POST /v1/graph/derived-neighbors',
+  'POST /v1/graph/paths',
   'POST /v1/templates/:id/run',
   'POST /v1/graph/coverage',
   'POST /v1/patterns/run',
