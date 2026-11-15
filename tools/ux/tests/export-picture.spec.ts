@@ -21,6 +21,8 @@ async function openInvestigation(page: Page): Promise<void> {
   await form.getByLabel('Stable ID').fill('AC-1');
   await form.getByRole('button', { name: 'Open' }).click();
   await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
+  // the renderer writes the count when it has drawn: until then the attribute is absent, and a read of it is not a count of zero
+  await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
 }
 
 async function chosenPng(page: Page): Promise<void> {
