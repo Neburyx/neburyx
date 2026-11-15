@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { framesOver, LAYOUT_FRAME_LIMIT_MS, PHYSICS_DRAG_THRESHOLD, shortfalls } from './rates.ts';
+import { framesOver, LAYOUT_FRAME_LIMIT_MS, MEASURED_RUNNER_DRAGS, PHYSICS_DRAG_THRESHOLD, shortfalls } from './rates.ts';
 
 const FLOOR = { medianFps: 55, p5Fps: 30 };
 
@@ -29,15 +29,22 @@ describe('the longest frame accepted while a layout runs', () => {
 });
 
 describe('the frame rates accepted while dragging with Physics on', () => {
-  it('are the renderer decision\'s on a laptop, and just under the CI figure (15 and 12) on the runner', () => {
+  it('are the renderer decision\'s on a laptop, and one refresh under the lowest figures measured on the runner (12 and 8.57)', () => {
     expect(PHYSICS_DRAG_THRESHOLD.laptop).toEqual({ medianFps: 55, p5Fps: 30 });
-    expect(PHYSICS_DRAG_THRESHOLD.runner).toEqual({ medianFps: 12, p5Fps: 10 });
-    expect(shortfalls([{ medianFps: 15, p5Fps: 12 }], PHYSICS_DRAG_THRESHOLD.runner)).toEqual([]);
+    expect(PHYSICS_DRAG_THRESHOLD.runner).toEqual({ medianFps: 10, p5Fps: 7.5 });
+    expect(MEASURED_RUNNER_DRAGS.reduce((total, row) => total + row.runs, 0)).toBe(47);
+    expect(Math.min(...MEASURED_RUNNER_DRAGS.map((row) => row.medianFps))).toBe(12);
+    expect(Math.min(...MEASURED_RUNNER_DRAGS.map((row) => row.p5Fps))).toBeCloseTo(8.57, 2);
   });
 
-  it('still fail a run below them, on either profile', () => {
-    expect(shortfalls([{ medianFps: 11, p5Fps: 12 }], PHYSICS_DRAG_THRESHOLD.runner)).toHaveLength(1);
-    expect(shortfalls([{ medianFps: 15, p5Fps: 9 }], PHYSICS_DRAG_THRESHOLD.runner)).toHaveLength(1);
+  it('pass every run measured on the runner, the slowest one included', () => {
+    for (const row of MEASURED_RUNNER_DRAGS) expect(shortfalls([row], PHYSICS_DRAG_THRESHOLD.runner), JSON.stringify(row)).toEqual([]);
+  });
+
+  it('pass a run exactly at the runner limits and fail one refresh slower than them, and fail a run below the laptop limits', () => {
+    expect(shortfalls([{ medianFps: 10, p5Fps: 7.5 }], PHYSICS_DRAG_THRESHOLD.runner)).toEqual([]);
+    expect(shortfalls([{ medianFps: 60 / 7, p5Fps: 12 }], PHYSICS_DRAG_THRESHOLD.runner)).toHaveLength(1);
+    expect(shortfalls([{ medianFps: 15, p5Fps: 60 / 9 }], PHYSICS_DRAG_THRESHOLD.runner)).toHaveLength(1);
     expect(shortfalls([{ medianFps: 20, p5Fps: 15 }], PHYSICS_DRAG_THRESHOLD.laptop)).toHaveLength(2);
     expect(shortfalls([{ medianFps: 60, p5Fps: 30 }], PHYSICS_DRAG_THRESHOLD.laptop)).toEqual([]);
   });

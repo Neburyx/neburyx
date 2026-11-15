@@ -57,6 +57,16 @@ const MUTATIONS: readonly Mutation[] = [
     assertion: /toEqual\(expected\)/,
   },
   {
+    // the drag of an entity with Physics on given a 150 ms stall at every drag step, against the runner's threshold
+    name: 'physics',
+    source: WEB('canvas/cytoscape-renderer.ts'),
+    binding: "created.on('drag', () => {\n        if (dragging?.cancelled === true)",
+    broken: `created.on('drag', () => {\n        ${stall(150)}\n        if (dragging?.cancelled === true)`,
+    what: 'with a 150 ms stall at every step of a drag, held to the runner threshold',
+    test: { file: 'tests/benchmark-layouts.spec.ts', title: 'dragging with Physics on holds the frame rate threshold', project: 'benchmark', env: { NEBURYX_UX_PROFILE: 'runner' }, extraArgs: ['--no-deps'] },
+    assertion: /fell below/,
+  },
+  {
     // the source record IDs of a stored relationship's evidence left out of the panel: the scripted case that reads what the panel shows has to notice
     name: 'evidence',
     source: WEB('evidence/stored-evidence.tsx'),

@@ -1,3 +1,4 @@
+import { cpus } from 'node:os';
 import { expect, test, type Page } from '@playwright/test';
 import { profileFrom } from '../src/profile.ts';
 import { framesOver, LAYOUT_FRAME_LIMIT_MS, PHYSICS_DRAG_THRESHOLD, shortfalls } from '../src/rates.ts';
@@ -60,6 +61,6 @@ test('every layout runs on the 300-element canvas with no frame over 100 ms, and
   const at50 = refreshes[Math.floor(0.5 * (refreshes.length - 1))] ?? 60;
   const at95 = refreshes[Math.floor(0.95 * (refreshes.length - 1))] ?? 60;
   const run = { frames: frames.length, medianFps: 60 / at50, p5Fps: 60 / at95 };
-  process.stdout.write(`benchmark physics ${JSON.stringify({ ...run, threshold: THRESHOLD })}\n`);
+  process.stdout.write(`benchmark physics ${JSON.stringify({ ...run, cpu: cpus()[0]?.model ?? 'unknown', threshold: THRESHOLD })}\n`);
   expect(shortfalls([run], THRESHOLD), `the drag with Physics on fell below ${JSON.stringify(THRESHOLD)}: ${JSON.stringify(run)}`).toEqual([]);
 });
