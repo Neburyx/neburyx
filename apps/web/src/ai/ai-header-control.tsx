@@ -23,13 +23,13 @@ function Sparkle() {
   );
 }
 
-/** Whether the panel of the action is open: only Ask has one, and a page without client state has none. */
+/** Whether the panel of the action is open; a page without client state has none. */
 function usePanelOpen(action: AiActionName): boolean {
   const state = useClientStateWhenProvided();
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    if (state === undefined || action !== 'ask') return undefined;
-    const read = (): void => setOpen(state.presentation.view.getState().askOpen);
+    if (state === undefined) return undefined;
+    const read = (): void => setOpen(action === 'ask' ? state.presentation.view.getState().askOpen : state.presentation.view.getState().summaryOpen);
     read();
     return state.presentation.view.subscribe(read);
   }, [state, action]);
@@ -79,7 +79,7 @@ export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
   };
   return (
     <span className="header-ai-wrap" onBlur={() => setNote(undefined)} onKeyDown={(event) => (event.key === 'Escape' ? setNote(undefined) : undefined)}>
-      <button type="button" className={panelOpen ? 'header-ai header-ai-unlocked header-ai-active' : 'header-ai header-ai-unlocked'} aria-expanded={action === 'ask' ? panelOpen : undefined} onClick={run}>
+      <button type="button" className={panelOpen ? 'header-ai header-ai-unlocked header-ai-active' : 'header-ai header-ai-unlocked'} aria-expanded={panelOpen} onClick={run}>
         <Sparkle />
         {label}
       </button>

@@ -5,13 +5,15 @@ import type { Inspector } from './inspector.js';
 import { INSPECTOR_PANEL_ID, INSPECTOR_PANEL_TOP, INSPECTOR_PANEL_WIDTH } from './inspector-layout.js';
 import { inspectedKey } from './inspected.js';
 import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/panel-layout.js';
+import { SUMMARY_PANEL_ID, SUMMARY_PANEL_WIDTH } from '../summary/panel-layout.js';
 import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-limits.js';
 
-/** While the Ask panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is the Ask panel's width between two gaps. Nothing opens the panel until the rebuilt Ask panel lands, so until then the inset is the gap alone. */
+/** While the Ask panel or the summary panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is that panel's width between two gaps. With neither open the inset is the gap alone. */
 function insetOf(state: ClientState): number {
   const view = state.presentation.view.getState();
   // held to the limits the panel is drawn with, so a stored width below the least is not trusted
-  return view.askOpen ? PANEL_GAP + Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, view.panelSizes.get(ASK_PANEL_ID) ?? ASK_PANEL_WIDTH)) + PANEL_GAP : PANEL_GAP;
+  const beside = view.askOpen ? { id: ASK_PANEL_ID, width: ASK_PANEL_WIDTH } : view.summaryOpen ? { id: SUMMARY_PANEL_ID, width: SUMMARY_PANEL_WIDTH } : undefined;
+  return beside === undefined ? PANEL_GAP : PANEL_GAP + Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, view.panelSizes.get(beside.id) ?? beside.width)) + PANEL_GAP;
 }
 
 const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);

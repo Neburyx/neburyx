@@ -54,6 +54,9 @@ import {
   type AskContinueRequest,
   type AskQuestionRequest,
   askAnswerSchema,
+  type SummaryRequest,
+  type SummaryResponse,
+  summaryResponseSchema,
   type SavedPatternRunResponse,
   type SavePatternRequest,
   type DeletePatternResponse,
@@ -182,6 +185,8 @@ export interface ApiClient {
   ask(request: AskQuestionRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   /** Reads the next page of an answer that stopped as heavy, with the token that answer carried; the model is not called. */
   askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
+  /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
+  summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -354,6 +359,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
     ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
+    summarize: (body, key, signal) => request(fetcher, '/v1/summary', summaryResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     runSavedPattern: (id, body, key, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/run`, savedPatternRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     testSource: async (sourceId, signal) => {

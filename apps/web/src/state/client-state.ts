@@ -86,11 +86,11 @@ export function createClientState(): ClientState {
     isNode: (key) => nodeKeys().has(key),
     isElement: (key) => nodeKeys().has(key) || edgeKeys().has(key),
   });
-  const { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPathsOpen, fitAround, requestPaths, clearPathsHandover, requestPathsFocus, clearPathsFocus, setAskOpen, setPatternsPreset } = presentation;
+  const { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPathsOpen, fitAround, requestPaths, clearPathsHandover, requestPathsFocus, clearPathsFocus, setAskOpen, setSummaryOpen, setPatternsPreset } = presentation;
   return {
     server: { ...server.view, get: server.get },
     investigation: investigation.view,
-    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPathsOpen, fitAround, requestPaths, clearPathsHandover, requestPathsFocus, clearPathsFocus, setAskOpen, setPatternsPreset },
+    presentation: { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPathsOpen, fitAround, requestPaths, clearPathsHandover, requestPathsFocus, clearPathsFocus, setAskOpen, setSummaryOpen, setPatternsPreset },
     jobs: createJobStore(),
     mask: readable(mask),
     setMask: (next) => mask.setState(next),
@@ -114,6 +114,7 @@ export function createClientState(): ClientState {
       presentation.setPatternsOpen(false);
       presentation.setPathsOpen(false);
       presentation.setAskOpen(false);
+      presentation.setSummaryOpen(false);
       investigation.restore({ id: null, sourceId: null, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
     },
     holds(id, mask) {

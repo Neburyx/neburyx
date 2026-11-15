@@ -104,8 +104,10 @@ export interface PresentationState {
   readonly pathsHandover: PathsHandover | undefined;
   /** A request to put the focus in the Paths panel, made by a banner action outside the panel; read once and cleared by the panel. Not saved with a view. */
   readonly pathsFocus: PathsFocus | undefined;
-  /** Whether the Ask panel is open: it is a panel of its own and does not close or open the others. */
+  /** Whether the Ask panel is open: it is a panel of its own, and opening it closes the summary panel. */
   readonly askOpen: boolean;
+  /** Whether the AI case summary panel is open: a panel of its own, and opening it closes the Ask panel. */
+  readonly summaryOpen: boolean;
   /** The preset the Patterns panel selects when it next shows its list: handed over by the way into the panel from Home, read once and cleared by the panel, and cleared when the panel closes. Not saved with a view, and not kept when another source is bound. */
   readonly patternsPreset: string | undefined;
   readonly panelSizes: ReadonlyMap<string, number>;
@@ -172,6 +174,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   pathsHandover: undefined,
   pathsFocus: undefined,
   askOpen: false,
+  summaryOpen: false,
   patternsPreset: undefined,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
@@ -239,6 +242,7 @@ export interface PresentationActions {
   requestPathsFocus(target: 'from' | 'list'): void;
   clearPathsFocus(): void;
   setAskOpen(open: boolean): void;
+  setSummaryOpen(open: boolean): void;
   setPatternsPreset(preset: string | undefined): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
@@ -497,6 +501,10 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       if (store.getState().pathsHandover === undefined) return;
       store.setState({ ...store.getState(), pathsHandover: undefined });
     },
+    setSummaryOpen(summaryOpen) {
+      if (store.getState().summaryOpen === summaryOpen) return;
+      store.setState({ ...store.getState(), summaryOpen });
+    },
     setAskOpen(askOpen) {
       if (store.getState().askOpen === askOpen) return;
       store.setState({ ...store.getState(), askOpen });
@@ -615,8 +623,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, mappedTypes });
     },
   };
 }

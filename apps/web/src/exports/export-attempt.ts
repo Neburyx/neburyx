@@ -1,15 +1,19 @@
-import type { AggregateEdgeRef, DerivedEdgeRef, ExportFormat, ExportRequest, GraphEdge, StoredEdgeRef } from '@neburyx/contracts';
+import type { AggregateEdgeRef, DerivedEdgeRef, ElementRef, ExportFormat, ExportRequest, GraphEdge, StoredEdgeRef } from '@neburyx/contracts';
 import { ERROR_TABLE } from '@neburyx/contracts';
 import type { ApiFailure } from '../api/client.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 
-/** The references of what the canvas shows: the server reads each through the gate, so no value from the browser's copy goes in a file. */
-export function exportRequestOf(graph: LoadedGraph, format: ExportFormat | 'png', mask: boolean): ExportRequest {
+/** The references of what the canvas shows, sorted by kind of relationship: the server reads each through the gate, so no value from the browser's copy goes in a file. */
+export function viewRefsOf(graph: LoadedGraph): { readonly entities: ElementRef[]; readonly edges: StoredEdgeRef[]; readonly aggregates: AggregateEdgeRef[]; readonly derived: DerivedEdgeRef[] } {
   const edges: StoredEdgeRef[] = [];
   const aggregates: AggregateEdgeRef[] = [];
   const derived: DerivedEdgeRef[] = [];
   for (const edge of graph.edges) sort(edge, edges, aggregates, derived);
-  const refs = { kind: 'view' as const, entities: graph.nodes.map((node) => node.ref), edges, aggregates, derived };
+  return { entities: graph.nodes.map((node) => node.ref), edges, aggregates, derived };
+}
+
+export function exportRequestOf(graph: LoadedGraph, format: ExportFormat | 'png', mask: boolean): ExportRequest {
+  const refs = { kind: 'view' as const, ...viewRefsOf(graph) };
   return format === 'png' ? { ...refs, format, mask } : { ...refs, format };
 }
 

@@ -107,7 +107,7 @@ describe('Ask and Summarize in the header', () => {
 });
 
 describe('the Ask control while its panel is open', () => {
-  it('is drawn active and says it is expanded, and goes back when the panel closes; Summarize says nothing of it', async () => {
+  it('is drawn active and says it is expanded, and goes back when the panel closes; Summarize follows its own panel', async () => {
     const state = createClientState();
     render(
       <ClientStateProvider state={state}>
@@ -124,8 +124,13 @@ describe('the Ask control while its panel is open', () => {
     act(() => state.presentation.setAskOpen(true));
     expect(ask.getAttribute('aria-expanded')).toBe('true');
     expect(ask.className).toContain('header-ai-active');
-    expect(screen.getByRole('button', { name: 'Summarize' }).getAttribute('aria-expanded')).toBeNull();
+    const summarize = screen.getByRole('button', { name: 'Summarize' });
+    expect(summarize.getAttribute('aria-expanded')).toBe('false');
     act(() => state.presentation.setAskOpen(false));
     expect(ask.className).not.toContain('header-ai-active');
+    act(() => state.presentation.setSummaryOpen(true));
+    expect(summarize.getAttribute('aria-expanded')).toBe('true');
+    expect(summarize.className).toContain('header-ai-active');
+    expect(ask.getAttribute('aria-expanded')).toBe('false');
   });
 });

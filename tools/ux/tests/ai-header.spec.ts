@@ -76,19 +76,28 @@ test.describe('Ask and Summarize in the workspace header', () => {
     }
   });
 
-  test('send no request to an AI path when Summarize is activated by click, Enter or Space, locked or unlocked with nothing registered', async ({ page }) => {
+  test('send no request to an AI path when Summarize is activated by click, Enter or Space while locked', async ({ page }) => {
     const seen = countAiRequests(page);
-    for (const enterprise of [false, true]) {
-      if (enterprise) await answerAsEnterprise(page);
-      await openWorkspace(page);
-      await control(page, 'Summarize').click({ force: true });
-      await control(page, 'Summarize').focus();
-      await page.keyboard.press('Enter');
-      await page.keyboard.press('Space');
-      await expect(control(page, 'Summarize')).toBeFocused();
-      if (enterprise) await expect(header(page).getByText('Summarize is not available in this release yet.')).toBeVisible();
-      else await expect(header(page).getByText('is not available in this release yet.')).toHaveCount(0);
-    }
+    await openWorkspace(page);
+    await control(page, 'Summarize').click({ force: true });
+    await control(page, 'Summarize').focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await expect(control(page, 'Summarize')).toBeFocused();
+    await expect(header(page).getByText('is not available in this release yet.')).toHaveCount(0);
+    await expect(page.locator('.summary-panel')).toHaveCount(0);
     expect(seen).toEqual([]);
+  });
+
+  test('open the summary panel when Summarize is activated in an enterprise build, and close it with a second activation', async ({ page }) => {
+    await answerAsEnterprise(page);
+    await page.route((url) => url.pathname === '/v1/summary', (route) => route.fulfill({ status: 422, json: { error: { code: 'ASK_UNSUPPORTED', message: 'Ask is not available in this edition.', retryable: false, traceId: 'trace-1', details: { reason: 'not-in-this-edition' } } } }));
+    await openWorkspace(page);
+    await control(page, 'Summarize').click();
+    await expect(page.locator('.summary-panel')).toBeVisible();
+    await expect(control(page, 'Summarize')).toHaveAttribute('aria-expanded', 'true');
+    await control(page, 'Summarize').click();
+    await expect(page.locator('.summary-panel')).toHaveCount(0);
+    await expect(control(page, 'Summarize')).toHaveAttribute('aria-expanded', 'false');
   });
 });

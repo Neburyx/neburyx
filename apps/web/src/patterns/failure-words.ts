@@ -31,7 +31,7 @@ export const retryAfterMsOf = (failure: ApiFailure): number | undefined => numbe
 const timeoutMsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'timeoutMs');
 export const maxHopsOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'maxHops');
 export const maxPageOf = (failure: ApiFailure): number | undefined => numberDetail(failure, 'maxPage');
-const reasonOf = (failure: ApiFailure): string | undefined => {
+export const reasonOf = (failure: ApiFailure): string | undefined => {
   const reason = detailOf(failure, 'reason');
   return typeof reason === 'string' ? reason : undefined;
 };

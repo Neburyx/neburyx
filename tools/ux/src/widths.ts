@@ -23,6 +23,7 @@ export const WIDTH_DEPENDENT: readonly string[] = [
   'patterns-panel.spec.ts',
   'saved-patterns.spec.ts',
   'starting-hint.spec.ts',
+  'summary-panel.spec.ts',
   'workspace-shell.spec.ts',
   'zoomed-out.spec.ts',
 ];

@@ -23,7 +23,10 @@ export function bindAskPanel(state: ClientState, panels: PanelRegistry): () => v
     }
   };
   const unsubscribe = state.presentation.view.subscribe(sync);
-  const unregister = registerAiAction('ask', () => state.presentation.setAskOpen(!state.presentation.view.getState().askOpen));
+  const unregister = registerAiAction('ask', () => {
+    state.presentation.setSummaryOpen(false);
+    state.presentation.setAskOpen(!state.presentation.view.getState().askOpen);
+  });
   sync();
   return () => {
     unsubscribe();
