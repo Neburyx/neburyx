@@ -1,5 +1,5 @@
 import { canonicalText } from '../questions/canonical.js';
-import type { Count, ElementRef, GraphEdge, GraphNode, GraphProperty, ReadRefsResponse } from '@neburyx/contracts';
+import type { Count, ElementRef, GraphEdge, GraphNode, GraphProperty, SummaryReading } from '@neburyx/contracts';
 
 /**
  * Bytes of UTF-8 text to a token. English text runs near four, so three over-counts and errs toward refusing a view, never toward sending too much; the measured run of the summary's evaluation
@@ -14,9 +14,20 @@ export function estimateTokens(...parts: readonly string[]): number {
 
 type ElementKey = { readonly kind: 'entity'; readonly ref: ElementRef } | { readonly kind: 'relationship'; readonly ref: GraphEdge['ref'] };
 
+/** A count of an element that is not exact, as the text writes it: the sentence that states its number must copy the phrase. */
+interface InexactCount {
+  readonly phrase: string;
+  readonly value: string;
+}
+
 export interface AssembledText {
   readonly text: string;
   readonly keys: ReadonlyMap<string, ElementKey>;
+  /** The line of each element, by key. */
+  readonly lines: ReadonlyMap<string, string>;
+  readonly inexactCounts: readonly InexactCount[];
+  /** The keys of the elements whose count the text gives as not known. */
+  readonly unknownCountKeys: ReadonlySet<string>;
   /** Whether any line carries the value of a property of an element, masked or not, as opposed to its name, type and structure. */
   readonly carriesPropertyValues: boolean;
 }
@@ -56,23 +67,28 @@ const times = (edge: GraphEdge): string[] => {
  * The one text a summary call is given, built from what the gate returned: entities keyed `n1`…, relationships keyed `e1`…, in the order of their references so the same input gives the same text.
  * Strings are quoted, so what an element says stays a value on its own line. An end of a relationship that was not read has no key and cannot be cited.
  */
-export function assembleText(reading: ReadRefsResponse): AssembledText {
+export function assembleText(reading: SummaryReading): AssembledText {
   const keys = new Map<string, ElementKey>();
+  const lines = new Map<string, string>();
+  const inexactCounts: InexactCount[] = [];
+  const unknownCountKeys = new Set<string>();
   let carriesPropertyValues = false;
   const nodes = [...reading.nodes].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const edges = [...reading.edges].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const nodeKeys = new Map<string, string>();
-  const lines: string[] = ['Entities:'];
+  const out: string[] = ['Entities:'];
   nodes.forEach((node: GraphNode, index) => {
     const key = `n${index + 1}`;
     keys.set(key, { kind: 'entity', ref: node.ref });
     nodeKeys.set(canonicalText(node.ref), key);
     const properties = propertiesOf(node.properties);
     carriesPropertyValues ||= properties.carriesValue;
-    lines.push(`${key} | ${JSON.stringify(node.display.type)} | title: ${JSON.stringify(node.display.title)} | id: ${JSON.stringify(node.ref.stableId)}${properties.text === '' ? '' : ` | ${properties.text}`}`);
+    const line = `${key} | ${JSON.stringify(node.display.type)} | title: ${JSON.stringify(node.display.title)} | id: ${JSON.stringify(node.ref.stableId)}${properties.text === '' ? '' : ` | ${properties.text}`}`;
+    lines.set(key, line);
+    out.push(line);
   });
-  if (nodes.length === 0) lines.push('(none)');
-  lines.push('Relationships:');
+  if (nodes.length === 0) out.push('(none)');
+  out.push('Relationships:');
   const endOf = (ref: ElementRef): string => nodeKeys.get(canonicalText(ref)) ?? `an end that was not read (${JSON.stringify(ref.entityType)} ${JSON.stringify(ref.stableId)})`;
   edges.forEach((edge, index) => {
     const key = `e${index + 1}`;
@@ -81,12 +97,18 @@ export function assembleText(reading: ReadRefsResponse): AssembledText {
     carriesPropertyValues ||= properties.carriesValue;
     const parts = [`${key}`, JSON.stringify(edge.type), `${endOf(edge.from)} -> ${endOf(edge.to)}`, edge.semantics, ...times(edge)];
     if (edge.derivation !== undefined) parts.push(`derived by rule ${JSON.stringify(edge.derivation.ruleId)} version ${edge.derivation.ruleVersion}`);
-    if (edge.memberCount !== undefined) parts.push(`members: ${countPhrase(edge.memberCount)}`);
+    if (edge.memberCount !== undefined) {
+      const phrase = countPhrase(edge.memberCount);
+      parts.push(`members: ${phrase}`);
+      if (edge.memberCount.quality === 'unknown' || edge.memberCount.value === undefined) unknownCountKeys.add(key);
+      else if (edge.memberCount.quality !== 'exact') inexactCounts.push({ phrase, value: String(edge.memberCount.value) });
+    }
     if (properties.text !== '') parts.push(properties.text);
-    lines.push(parts.join(' | '));
+    const line = parts.join(' | ');
+    lines.set(key, line);
+    out.push(line);
   });
-  if (edges.length === 0) lines.push('(none)');
-  const missing = reading.missing.entities.length + reading.missing.edges.length;
-  if (missing > 0) lines.push(`${missing} references could not be read.`);
-  return { text: lines.join('\n'), keys, carriesPropertyValues };
+  if (edges.length === 0) out.push('(none)');
+  if (reading.unresolved > 0) out.push(`${reading.unresolved} references could not be read.`);
+  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues };
 }

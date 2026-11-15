@@ -48,7 +48,7 @@ const DERIVED = { sourceId: 'demo', derived: { ruleId: 'shared-leaf', from: { so
 const SUMMARIZER: CaseSummarizer = {
   maxElements: 300,
   availability: () => ({ available: true }),
-  summarize: async () => ({ status: 'ok', sentences: [], sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }),
+  summarize: async () => ({ status: 'ok', sentences: [], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }),
 };
 const SUMMARY_EXTENSION: ProfileExtension = { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] };
 

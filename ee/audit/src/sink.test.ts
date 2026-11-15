@@ -61,11 +61,18 @@ describe('the connection stream of the audit sink', () => {
 
 describe('recording the closing event of a case summary', () => {
   const summary = { elements: 3, elementsSha256: SHA, calls: 1, outcome: 'ok' } as const;
+  const checked = { ...summary, outcome: 'partial', sentencesKept: 2, sentencesRemoved: 1 } as const;
 
   it('stores the summary detail as JSON', async () => {
     const { mounted, calls } = rig();
     await mounted.sink.record({ ...EVENT, action: 'ai.case-summary.closed', detail: { summary } });
     expect(calls[0]?.values[10]).toBe(JSON.stringify({ summary }));
+  });
+
+  it('stores the counts of the sentences kept and removed with the outcome partial', async () => {
+    const { mounted, calls } = rig();
+    await mounted.sink.record({ ...EVENT, action: 'ai.case-summary.closed', detail: { summary: checked } });
+    expect(calls[0]?.values[10]).toBe(JSON.stringify({ summary: checked }));
   });
 
   it('refuses a summary detail that carries any other field, and writes nothing', async () => {

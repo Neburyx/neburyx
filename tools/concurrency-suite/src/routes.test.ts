@@ -3,7 +3,7 @@ import type { CaseSummarizer } from '@neburyx/contracts';
 import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
 import { startRig, type Rig } from './rig.js';
 
-const SUMMARIZER: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'ok', sentences: [], sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }) };
+const SUMMARIZER: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'ok', sentences: [], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }) };
 const SUMMARY = { extension: { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] }, caseSummarizer: SUMMARIZER } as const;
 
 let rig: Rig;

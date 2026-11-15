@@ -184,6 +184,6 @@ export type { AskTemplateId, BindResult } from './ask-bind.js';
 export { ASK_CONTINUE_LABEL, ASK_CONTINUE_LIFETIME_MS, ASK_CONTINUE_TOKEN_PATTERN, ASK_RUN_PARAMS_LABEL, askAnswerSchema, askContinueRequestSchema, askEntitiesSchema, askQuestionRequestSchema } from './ask-question.js';
 export type { AskAnswer, AskContinueRequest, AskQuestionRequest } from './ask-question.js';
 
-export { SUMMARY_FAILURE_KINDS, summaryRequestSchema, summaryResponseSchema, summarySentenceSchema } from './summary.js';
+export { SUMMARY_FAILURE_KINDS, summaryReadingSchema, summaryRequestSchema, summaryResponseSchema, summarySentenceSchema } from './summary.js';
 export type { ElementRefs, ElementsScope } from './extension.js';
-export type { CaseSummarizer, CaseSummaryAvailability, CaseSummaryInput, CaseSummaryOutcome, SummaryFailureKind, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';
+export type { CaseSummarizer, CaseSummaryAvailability, CaseSummaryInput, CaseSummaryOutcome, SummaryFailureKind, SummaryReading, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';

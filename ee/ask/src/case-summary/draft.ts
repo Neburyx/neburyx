@@ -10,6 +10,8 @@ const SUMMARY_PROMPT_ID = 'case-summary';
 const SUMMARY_PROMPT_VERSION = 1;
 
 const FORMAT_NOTE = 'Your last reply did not fit the reply format. Reply again, in the reply format only.';
+const VERDICT_NOTE = 'Your last reply stated a conclusion. Describe only what the elements show.';
+const NOTHING_LEFT_NOTE = 'No sentence of your last reply passed the checks. Reply again, with sentences that cite the elements given.';
 
 const FAILURE_KINDS: Readonly<Record<FailureCode, SummaryFailureKind>> = {
   timeout: 'timeout',
@@ -21,16 +23,24 @@ const FAILURE_KINDS: Readonly<Record<FailureCode, SummaryFailureKind>> = {
   truncated: 'truncated',
 };
 
+/** What the checks left of the last reply that was checked. */
+export interface Checked {
+  readonly kept: number;
+  readonly removed: number;
+}
+
 export type Drafted =
-  | { readonly status: 'drafted'; readonly sentences: readonly SummarySentence[]; readonly calls: number }
-  | { readonly status: 'timeLimit'; readonly calls: number }
-  | { readonly status: 'failed'; readonly kind: SummaryFailureKind; readonly calls: number };
+  | { readonly status: 'drafted'; readonly sentences: readonly SummarySentence[]; readonly removed: number; readonly calls: number }
+  | { readonly status: 'timeLimit'; readonly calls: number; readonly checked?: Checked }
+  | { readonly status: 'failed'; readonly kind: SummaryFailureKind; readonly calls: number; readonly checked?: Checked };
 
 export interface DraftOptions {
   readonly call: AuditedModelCall;
   readonly context: AuditedCallContext;
   readonly instructions: string;
   readonly values: string;
+  /** The checks of a reply that fits the format: what is kept, how many were removed, and whether a sentence was removed for its wording. */
+  readonly judge: (sentences: readonly SummarySentence[]) => { readonly kept: readonly SummarySentence[]; readonly removed: number; readonly verdictFound: boolean };
   readonly maxCalls: number;
   readonly totalTimeoutMs: number;
   readonly signal: AbortSignal;
@@ -69,10 +79,12 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
   const started = now();
   let calls = 0;
   let values = options.values;
+  let checked: Checked | undefined;
+  const so = (): { readonly checked?: Checked } => (checked === undefined ? {} : { checked });
   while (calls < options.maxCalls) {
     if (options.signal.aborted) throw new Error('the request was cancelled');
     const remaining = options.totalTimeoutMs - (now() - started);
-    if (remaining <= 0) return { status: 'timeLimit', calls };
+    if (remaining <= 0) return { status: 'timeLimit', calls, ...so() };
     const limit = new AbortController();
     const timer = setTimeout(() => limit.abort(), remaining);
     calls += 1;
@@ -84,15 +96,24 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
         AbortSignal.any([options.signal, limit.signal]),
       );
       if (options.signal.aborted) throw new Error('the request was cancelled');
-      if (limit.signal.aborted) return { status: 'timeLimit', calls };
-      if (answer.status === 'refused') return { status: 'failed', kind: 'refused', calls };
-      if (answer.status === 'failed') return { status: 'failed', kind: FAILURE_KINDS[answer.code], calls };
+      if (limit.signal.aborted) return { status: 'timeLimit', calls, ...so() };
+      if (answer.status === 'refused') return { status: 'failed', kind: 'refused', calls, ...so() };
+      if (answer.status === 'failed') return { status: 'failed', kind: FAILURE_KINDS[answer.code], calls, ...so() };
       const sentences = parseReply(answer.text);
-      if (sentences !== undefined) return { status: 'drafted', sentences, calls };
-      values = `${options.values}\n\n${FORMAT_NOTE}`;
+      if (sentences === undefined) {
+        values = `${options.values}\n\n${FORMAT_NOTE}`;
+        continue;
+      }
+      const judged = options.judge(sentences);
+      checked = { kept: judged.kept.length, removed: judged.removed };
+      if ((judged.verdictFound || judged.kept.length === 0) && calls < options.maxCalls) {
+        values = `${options.values}\n\n${judged.verdictFound ? VERDICT_NOTE : NOTHING_LEFT_NOTE}`;
+        continue;
+      }
+      return { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls };
     } finally {
       clearTimeout(timer);
     }
   }
-  return { status: 'failed', kind: 'format', calls };
+  return { status: 'failed', kind: 'format', calls, ...so() };
 }

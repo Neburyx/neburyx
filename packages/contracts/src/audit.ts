@@ -91,7 +91,7 @@ export const askRunAuditDetailSchema = z.strictObject({
 export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;
 
 /** How a click of the case summary ended, as the closing audit event records it. */
-export const CASE_SUMMARY_OUTCOMES = ['ok', 'tooLarge', 'timeLimit', 'unavailable', 'format', 'timeout', 'unreachable', 'rate-limited', 'refused', 'truncated', 'rejected', 'provider-error', 'bad-reply', 'read-failed', 'error', 'cancelled'] as const;
+export const CASE_SUMMARY_OUTCOMES = ['ok', 'tooLarge', 'timeLimit', 'unavailable', 'format', 'timeout', 'unreachable', 'rate-limited', 'refused', 'truncated', 'rejected', 'provider-error', 'bad-reply', 'read-failed', 'error', 'cancelled', 'partial', 'unsupported'] as const;
 
 /**
  * What a click of the case summary leaves in its closing audit event: how many elements the request named, the SHA-256 of their references (so one request is told from another without holding a reference), the
@@ -106,6 +106,9 @@ export const caseSummaryAuditDetailSchema = z.strictObject({
   promptVersion: label.optional(),
   instructionsSha256: sha256Hex.optional(),
   outcome: z.enum(CASE_SUMMARY_OUTCOMES),
+  /** The sentences the checks kept and removed in the last reply they checked; absent when none was checked. */
+  sentencesKept: wholeCount.optional(),
+  sentencesRemoved: wholeCount.optional(),
 });
 
 export type CaseSummaryAuditDetail = z.infer<typeof caseSummaryAuditDetailSchema>;

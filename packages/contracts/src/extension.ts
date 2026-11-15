@@ -1,8 +1,8 @@
 import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
 import type { AskFolder } from './ask-folder.js';
-import type { ReadRefsRequest, ReadRefsResponse } from './read-refs.js';
-import type { CaseSummarizer } from './summary.js';
+import type { ReadRefsRequest } from './read-refs.js';
+import type { CaseSummarizer, SummaryReading } from './summary.js';
 import type { ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskClassifier, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
 import type { AuditEvent, AuditSink, AuditSinkContext, MountedAuditSink } from './audit.js';
@@ -38,9 +38,9 @@ export interface ExtensionRequest {
   readonly askSourceReadable?: (sourceId: string) => Promise<void>;
   /**
    * The elements of a view read again through the gate, for the caller and this request: the investigation must be the caller's and for the source, or the read is `NOT_FOUND`, as is a source the caller may not read. The references are
-   * read in as many calls as their number needs, the mask is the request's, and what no longer resolves is listed as missing without a cause.
+   * read through the reader the exports use, with the mask of the request: what the person may not export is left out, and the answer says how many references did not resolve, whether anything was left out and how many relationships are not yet retrieved.
    */
-  readonly readElements?: (scope: ElementsScope, refs: ElementRefs) => Promise<ReadRefsResponse>;
+  readonly readElements?: (scope: ElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
   /** Resolves when the investigation is the caller's and is for the source, and the source is as the investigation left it; rejects with `NOT_FOUND`, or the source-changed refusal, otherwise. */
   readonly investigationReadable?: (investigationId: string, sourceId: string) => Promise<void>;
   /** The caller's own saved patterns on a source (never the shared ones of other people), available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */

@@ -7,7 +7,7 @@ import { el, exportWebRoot, linkRef, startExportRig, type ExportRigOptions } fro
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
 
-const OK: CaseSummaryOutcome = { status: 'ok', sentences: [{ text: 'Two accounts share a device.', cites: ['n1', 'n2'] }], sent: 'the text sent', model: 'stub-model', calls: 1, summaryToken: 'v1.token' };
+const OK: CaseSummaryOutcome = { status: 'ok', sentences: [{ text: 'Two accounts share a device.', cites: ['n1', 'n2'] }], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: 'the text sent', model: 'stub-model', calls: 1, summaryToken: 'v1.token' };
 
 function stubSummarizer(outcome: CaseSummaryOutcome | undefined, calls: CaseSummaryInput[], available = true, maxElements = 300): CaseSummarizer {
   return {
@@ -247,7 +247,7 @@ describe('POST /v1/summary and the re-read of the view', () => {
     const [input] = calls;
     expect(input?.reading.nodes.map((node) => node.ref.stableId).sort()).toEqual(['W-1', 'W-2']);
     expect(input?.reading.edges).toHaveLength(1);
-    expect(input?.reading.missing).toEqual({ entities: [], edges: [] });
+    expect(input?.reading.unresolved).toBe(0);
     expect(loadCalls(rig).length).toBeGreaterThan(0);
     await rig.rig.stop();
   });
@@ -267,7 +267,7 @@ describe('POST /v1/summary and the re-read of the view', () => {
     const calls: CaseSummaryInput[] = [];
     const rig = await appOf({ summarizer: stubSummarizer(undefined, calls), widgets: ['W-1'] });
     await post(rig, { ...rig.body, entities: [el('widget', 'W-1'), el('widget', 'W-9')] });
-    expect(calls[0]?.reading.missing.entities.map((ref) => ref.stableId)).toEqual(['W-9']);
+    expect(calls[0]?.reading.unresolved).toBe(1);
     await rig.rig.stop();
   });
 
@@ -529,5 +529,66 @@ describe('POST /v1/summary and the closing event of a click that fails', () => {
     expect(closing(real)[0]?.investigationId).toBe(real.body.investigationId);
     await rig.rig.stop();
     await real.rig.stop();
+  });
+});
+
+describe('POST /v1/summary and its coverage line, through the shown reader of the exports', () => {
+  const keys = { current: { kid: 'abcd1234', bytes: Buffer.alloc(32, 9) } };
+  const reply = JSON.stringify({ sentences: [{ text: 'Two widgets are listed.', cites: ['n1', 'n2'] }] });
+
+  function realSummarizer(received: ModelRequest[] = []) {
+    const provider: ModelProvider = { complete: async (request) => (received.push(request), { status: 'ok', text: reply, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink: { record: async () => undefined } });
+    return createCaseSummarizer({
+      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+      instructions: buildSummaryInstructions('PROMPT', 'TYPOLOGY'),
+      model: () => model,
+      audit: () => ({ record: async () => undefined }),
+      tokenKeys: () => keys,
+      availability: () => ({ available: true }),
+    });
+  }
+
+  it('writes the retrieval part as the header of an export of the same view writes it', async () => {
+    const rig = await appOf({ summarizer: realSummarizer() });
+    const exported = await rig.rig.create(rig.body.investigationId, { kind: 'view', format: 'json', entities: rig.body.entities });
+    expect(exported.statusCode).toBe(201);
+    const file = await rig.rig.download((exported.json() as { id: string }).id);
+    const header = (JSON.parse(file.body) as { header: { lines: string[] } }).header.lines.find((line) => line.startsWith('coverage: '));
+    const answer = summaryResponseSchema.parse((await post(rig)).json());
+    expect(answer.status === 'ok' && answer.coverage.retrieval).toBe(header?.slice('coverage: '.length));
+    expect(answer.status === 'ok' && answer.coverage.summary).toBe('The draft cites 2 of the 2 shown elements.');
+    await rig.rig.stop();
+  });
+
+  it('leaves out an element the person may not export, says so, and sends nothing of it', async () => {
+    const received: ModelRequest[] = [];
+    const rig = await appOf({ summarizer: realSummarizer(received), unexportableNode: 'W-2' });
+    const answer = summaryResponseSchema.parse((await post(rig)).json());
+    expect('coverage' in answer ? answer.coverage.retrieval : '').toContain('Some items may be hidden by your access.');
+    expect(received[0]?.values).toContain('"W-1"');
+    expect(received[0]?.values).not.toContain('W-2');
+    await rig.rig.stop();
+  });
+
+  it('counts the distinct references that could not be read, not the ones left out for the export right or asked twice', async () => {
+    const received: ModelRequest[] = [];
+    const rig = await appOf({ summarizer: realSummarizer(received), widgets: ['W-1', 'W-2'], unexportableNode: 'W-2' });
+    await post(rig, { ...rig.body, entities: [el('widget', 'W-1'), el('widget', 'W-1'), el('widget', 'W-2'), el('widget', 'W-9')] });
+    expect(received[0]?.values).toContain('1 references could not be read.');
+    await rig.rig.stop();
+  });
+});
+
+describe('POST /v1/summary and the rate of the person', () => {
+  it('counts one request for a view that is read in several chunks, and refuses the one over the rate', async () => {
+    const rig = await appOf({ summarizer: stubSummarizer(undefined, []), widgets: () => true, requestsPerMinute: 3 });
+    const entities = Array.from({ length: 250 }, (_unused, index) => el('widget', `W-${index}`));
+    const first = await post(rig, { ...rig.body, entities });
+    const second = await post(rig, { ...rig.body, entities });
+    expect([first.statusCode, second.statusCode]).toEqual([200, 200]);
+    const third = await post(rig, { ...rig.body, entities });
+    expect([third.statusCode, third.json().error?.code]).toEqual([429, 'RATE_LIMITED']);
+    await rig.rig.stop();
   });
 });

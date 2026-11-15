@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto';
 import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall } from '../audited.js';
 import { canonicalText } from '../questions/canonical.js';
-import { draftSummary } from './draft.js';
+import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
+import { judgeSentences } from './checks.js';
+import { draftSummary, type Checked } from './draft.js';
 import type { SummaryInstructions } from './instructions.js';
 import { prepareSummary } from './prepare.js';
 import type { SummaryAvailability, SummarySettings } from './settings.js';
@@ -46,7 +48,7 @@ export const elementsHashOf = (refs: { readonly entities: readonly unknown[]; re
 export const elementCountOf = (refs: { readonly entities: readonly unknown[]; readonly edges: readonly unknown[]; readonly aggregates: readonly unknown[]; readonly derived: readonly unknown[] }): number =>
   refs.entities.length + refs.edges.length + refs.aggregates.length + refs.derived.length;
 
-const resultOf = (outcome: CaseSummaryOutcome): AuditResult => (outcome.status === 'ok' ? 'success' : outcome.status === 'tooLarge' ? 'refused' : 'failed');
+const resultOf = (outcome: CaseSummaryOutcome): AuditResult => (outcome.status === 'ok' ? 'success' : outcome.status === 'partial' ? 'partial' : outcome.status === 'tooLarge' ? 'refused' : 'failed');
 
 /** Drafts the summary of a read view: measures the text against the size guard, then calls the model within the operator's limits. */
 export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer {
@@ -59,7 +61,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
       const guard = settings.maxInputTokens;
       if (call === undefined || guard === undefined || options.tokenKeys() === undefined) throw new Error('the case summarizer was asked while it is not available');
       const prepared = prepareSummary(input.reading, instructions.text, guard);
-      const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult): Promise<void> => {
+      const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked): Promise<void> => {
         const sink = options.audit();
         if (sink === undefined) throw new AuditUnavailableError();
         const detail: CaseSummaryAuditDetail = {
@@ -71,6 +73,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
           promptVersion: PROMPT_VERSION,
           instructionsSha256: instructions.sha256,
           outcome,
+          ...(checked === undefined ? {} : { sentencesKept: checked.kept, sentencesRemoved: checked.removed }),
         };
         try {
           await sink.record({ actorId: input.actorId, actorRole: input.actorRole, action: SUMMARY_CLOSING_ACTION, result, sourceId: input.request.sourceId, ...auditInvestigationOf(input.request.investigationId), traceId: input.traceId, detail: { summary: detail } });
@@ -78,26 +81,35 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
           throw new AuditUnavailableError();
         }
       };
-      const record = async (outcome: CaseSummaryOutcome): Promise<CaseSummaryOutcome> => {
-        await write(outcome.status === 'tooLarge' ? 0 : outcome.calls, outcome.status === 'failed' ? outcome.kind : outcome.status, resultOf(outcome));
+      const record = async (outcome: CaseSummaryOutcome, checked?: Checked): Promise<CaseSummaryOutcome> => {
+        await write(outcome.status === 'tooLarge' ? 0 : outcome.calls, outcome.status === 'failed' ? outcome.kind : outcome.status, resultOf(outcome), checked);
         return outcome;
       };
       if (!prepared.ready) return record(prepared.refusal);
       let callsMade = 0;
+      let lastChecked: Checked | undefined;
       try {
         const drafted = await draftSummary({
           call,
           context: { action: SUMMARY_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.request.investigationId), sourceId: input.request.sourceId },
           instructions: instructions.text,
           values: prepared.assembled.text,
+        judge: (sentences) => {
+            const judged = judgeSentences(sentences, prepared.assembled);
+            lastChecked = { kept: judged.kept.length, removed: judged.removed };
+            return judged;
+          },
           maxCalls: settings.maxCalls,
           totalTimeoutMs: settings.totalTimeoutMs,
           signal,
           onCall: (calls) => void (callsMade = calls),
           ...(options.now === undefined ? {} : { now: options.now }),
         });
-        if (drafted.status === 'timeLimit') return record({ status: 'timeLimit', calls: drafted.calls });
-        if (drafted.status === 'failed') return record({ status: 'failed', kind: drafted.kind, calls: drafted.calls });
+        if (drafted.status === 'timeLimit') return record({ status: 'timeLimit', calls: drafted.calls }, drafted.checked);
+        if (drafted.status === 'failed') return record({ status: 'failed', kind: drafted.kind, calls: drafted.calls }, drafted.checked);
+        const coverage = { retrieval: retrievalLine(input.reading), summary: summaryLine(drafted.sentences, input.reading) };
+        const checked = { kept: drafted.sentences.length, removed: drafted.removed };
+        if (drafted.sentences.length === 0) return record({ status: 'unsupported', removedCount: drafted.removed, coverage, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls }, checked);
         const keys = options.tokenKeys();
         if (keys === undefined) throw new Error('the case summarizer was asked without a sealing key');
         const summaryToken = sealToken(
@@ -115,10 +127,10 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
           },
           (options.now ?? Date.now)(),
         );
-        return record({ status: 'ok', sentences: [...drafted.sentences], sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken });
+        return record({ status: drafted.removed === 0 ? 'ok' : 'partial', sentences: [...drafted.sentences], citations: citationsOf(drafted.sentences, prepared.assembled), coverage, removedCount: drafted.removed, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken }, checked);
       } catch (error) {
         if (error instanceof AuditUnavailableError) throw error;
-        await write(callsMade, signal.aborted ? 'cancelled' : 'error', 'failed').catch(() => undefined);
+        await write(callsMade, signal.aborted ? 'cancelled' : 'error', 'failed', lastChecked).catch(() => undefined);
         throw new SummaryHandled(error);
       }
     },

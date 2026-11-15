@@ -29,6 +29,8 @@ interface ShownRead {
   readonly omitted: boolean;
   /** True when a reference asked for came back with no item (it no longer resolves, or the read left it out). */
   readonly unresolved: boolean;
+  /** How many distinct references asked for came back with no item, counted before the export right leaves anything out. */
+  readonly unresolvedCount: number;
   /** How many distinct fields in the read items are masked. */
   readonly maskedFields: number;
   readonly notRetrieved: Count;
@@ -165,6 +167,7 @@ export function createShownReader(deps: Deps): ShownReader {
       const omitted = exportable.length !== nodes.length || relationships.length !== items.length;
 
       const unresolved = nodes.length < entities.length || items.length < edges.length + aggregates.length + derived.length;
+      const unresolvedCount = Math.max(0, entities.length - nodes.length) + Math.max(0, edges.length + aggregates.length + derived.length - items.length);
 
       let notRetrieved = EMPTY_COUNT;
       let uncounted = 0;
@@ -179,7 +182,7 @@ export function createShownReader(deps: Deps): ShownReader {
         notRetrieved = combineCoverage(answers);
       }
 
-      return { nodes: exportable, edges: relationships, omitted, unresolved, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved, uncounted };
+      return { nodes: exportable, edges: relationships, omitted, unresolved, unresolvedCount, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved, uncounted };
     },
   };
 }

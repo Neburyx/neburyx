@@ -22,7 +22,7 @@ import { makeWebRoot } from './web-root.js';
 const FUZZ_SUMMARIZER: CaseSummarizer = {
   maxElements: 300,
   availability: () => ({ available: true }),
-  summarize: async () => ({ status: 'ok', sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }], sent: 'sent', model: 'fuzz', calls: 1, summaryToken: 'v1.fuzz' }),
+  summarize: async () => ({ status: 'ok', sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: 'sent', model: 'fuzz', calls: 1, summaryToken: 'v1.fuzz' }),
 };
 
 /** The source every fuzz request names. */

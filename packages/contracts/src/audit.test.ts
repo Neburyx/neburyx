@@ -162,6 +162,12 @@ describe('the case summary audit detail', () => {
     expect(auditDetailSchema.safeParse({ summary: { elements: 0, elementsSha256: SHA, calls: 0, outcome: 'unavailable' } }).success).toBe(true);
   });
 
+  it('accepts the counts of the sentences kept and removed, and the outcomes partial and unsupported', () => {
+    expect(auditDetailSchema.safeParse({ summary: { ...detail, outcome: 'partial', sentencesKept: 2, sentencesRemoved: 1 } }).success).toBe(true);
+    expect(auditDetailSchema.safeParse({ summary: { ...detail, outcome: 'unsupported', sentencesKept: 0, sentencesRemoved: 0 } }).success).toBe(true);
+    expect(auditDetailSchema.safeParse({ summary: { ...detail, sentencesKept: -1 } }).success).toBe(false);
+  });
+
   it.each([
     ['a field of text', { ...detail, text: 'a sentence' }],
     ['an outcome that is not one', { ...detail, outcome: 'guilty' }],

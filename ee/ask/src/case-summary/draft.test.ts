@@ -27,12 +27,12 @@ function scripted(answers: readonly (ModelAnswer | ((request: ModelRequest, sign
 }
 
 const run = (call: ReturnType<typeof scripted>['call'], extra: Partial<Parameters<typeof draftSummary>[0]> = {}) =>
-  draftSummary({ call, context: CONTEXT, instructions: 'INSTRUCTIONS', values: 'VALUES', maxCalls: 5, totalTimeoutMs: 180_000, signal: new AbortController().signal, ...extra });
+  draftSummary({ call, context: CONTEXT, instructions: 'INSTRUCTIONS', values: 'VALUES', judge: (sentences) => ({ kept: sentences, removed: 0, verdictFound: false }), maxCalls: 5, totalTimeoutMs: 180_000, signal: new AbortController().signal, ...extra });
 
 describe('the drafting loop', () => {
   it('returns the sentences of a reply that fits, in one call', async () => {
     const { call, requests } = scripted([ok(GOOD)]);
-    expect(await run(call)).toEqual({ status: 'drafted', sentences: [{ text: 'Two accounts share a device.', cites: ['n1', 'n2'] }], calls: 1 });
+    expect(await run(call)).toEqual({ status: 'drafted', sentences: [{ text: 'Two accounts share a device.', cites: ['n1', 'n2'] }], removed: 0, calls: 1 });
     expect(requests).toEqual([{ promptId: 'case-summary', version: 1, instructions: 'INSTRUCTIONS', values: 'VALUES' }]);
   });
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { aggregateEdgeRefSchema, derivedEdgeRefSchema } from './edge-detail.js';
-import { elementRefSchema, storedEdgeRefSchema } from './graph.js';
-import type { ReadRefsResponse } from './read-refs.js';
+import { storedEdgeRefSchema } from './graph.js';
+import { countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema } from './graph.js';
 import type { roleSchema } from './me.js';
 
 const text = z.string().min(1);
@@ -24,14 +24,35 @@ export const SUMMARY_FAILURE_KINDS = ['format', 'timeout', 'unreachable', 'rate-
 
 export type SummaryFailureKind = (typeof SUMMARY_FAILURE_KINDS)[number];
 
+/** What the re-read of a view gave: the elements the person may export, how many references did not resolve, whether elements were left out for the export right, and how many relationships are not yet retrieved. */
+export const summaryReadingSchema = z.strictObject({
+  nodes: z.array(nodeSchema),
+  edges: z.array(edgeSchema),
+  unresolved: z.number().int().nonnegative(),
+  omitted: z.boolean(),
+  notRetrieved: countSchema,
+  uncounted: z.number().int().nonnegative(),
+});
+
+export type SummaryReading = z.infer<typeof summaryReadingSchema>;
+
 export const summarySentenceSchema = z.strictObject({ text: text, cites: z.array(text) });
 
 export type SummarySentence = z.infer<typeof summarySentenceSchema>;
 
 const callCount = z.number().int().nonnegative();
 
+const citationSchema = z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) });
+
+/** What the server says the draft does not cover, in two parts: what the re-read left out (written as the export header writes it) and how much of what is shown the draft cites. */
+const coverageSchema = z.strictObject({ retrieval: text, summary: text });
+
+const draftFields = { sentences: z.array(summarySentenceSchema), citations: z.array(citationSchema), coverage: coverageSchema, removedCount: callCount, sent: z.string(), model: text, calls: callCount.min(1), summaryToken: text };
+
 export const summaryResponseSchema = z.union([
-  z.strictObject({ status: z.literal('ok'), sentences: z.array(summarySentenceSchema), sent: z.string(), model: text, calls: callCount.min(1), summaryToken: text }),
+  z.strictObject({ status: z.literal('ok'), ...draftFields }),
+  z.strictObject({ status: z.literal('partial'), ...draftFields }),
+  z.strictObject({ status: z.literal('unsupported'), removedCount: callCount, coverage: coverageSchema, sent: z.string(), model: text, calls: callCount.min(1) }),
   z.strictObject({ status: z.literal('tooLarge'), limit: z.literal('elements'), elements: z.number().int().nonnegative(), cap: z.number().int().nonnegative() }),
   z.strictObject({ status: z.literal('tooLarge'), limit: z.literal('text'), estimatedTokens: z.number().int().nonnegative(), cap: z.number().int().positive() }),
   z.strictObject({ status: z.literal('timeLimit'), calls: callCount }),
@@ -50,7 +71,7 @@ export interface CaseSummaryInput {
   readonly policyVersion: string;
   readonly request: SummaryRequest;
   /** What the gate returned for the references of the request, read again for this person. */
-  readonly reading: ReadRefsResponse;
+  readonly reading: SummaryReading;
 }
 
 export type CaseSummaryOutcome = SummaryResponse;

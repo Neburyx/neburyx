@@ -19,7 +19,7 @@ import { createCoverageService } from './graph/coverage-service.js';
 import { createReadRefsService } from './graph/read-refs-service.js';
 import { createExportService } from './exports/export-service.js';
 import { fingerprintOf, IDEMPOTENT_REPLAY_HEADER, idempotencyKeyOf, runOnce } from './exports/idempotency.js';
-import { createShownReader } from './exports/shown-reader.js';
+import { DEFAULT_SHOWN_LIMITS, createShownReader } from './exports/shown-reader.js';
 import type { ExportFileStore } from './exports/store.js';
 import { createDegreePreviewService } from './graph/degree-preview-service.js';
 import { createDerivedNeighborsService } from './graph/derived-neighbors-service.js';
@@ -587,6 +587,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     });
 
     const coverage = createCoverageService({ mapping, access, verdicts: options.degreeVerdicts ?? NO_DEGREE_VERDICTS, audit: auditSink, logger: options.logger, ...(degreeCache === undefined ? {} : { cache: degreeCache }) });
+    const summaryShownReader = createShownReader({ readRefs, coverage, limits: { ...DEFAULT_SHOWN_LIMITS, maxEntities: Number.MAX_SAFE_INTEGER, maxRelationships: Number.MAX_SAFE_INTEGER, maxAggregates: Number.MAX_SAFE_INTEGER } });
     app.post('/v1/graph/coverage', { config: { permission: 'principal' } }, async (request) => {
       const body = coverageRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
@@ -689,7 +690,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });
     const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
-    elementReaders.current = (context) => createElementsReader({ readRefs, investigations, ...context });
+    elementReaders.current = (context) => createElementsReader({ shownReader: summaryShownReader, investigations, access, ...context });
     investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);

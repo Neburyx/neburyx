@@ -1,4 +1,4 @@
-import type { Count, GraphEdge, GraphNode, ReadRefsResponse } from '@neburyx/contracts';
+import type { Count, GraphEdge, GraphNode, SummaryReading } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { assembleText, BYTES_PER_TOKEN_ESTIMATE, countPhrase, estimateTokens } from './assemble.js';
 import { prepareSummary } from './prepare.js';
@@ -24,7 +24,7 @@ const edge = (stableId: string, from: GraphNode['ref'], to: GraphNode['ref'], ex
   qualityFlags: [],
   ...extra,
 });
-const reading = (nodes: GraphNode[], edges: GraphEdge[] = [], missing: ReadRefsResponse['missing'] = { entities: [], edges: [] }): ReadRefsResponse => ({ nodes, edges, missing });
+const reading = (nodes: GraphNode[], edges: GraphEdge[] = [], unresolved = 0): SummaryReading => ({ nodes, edges, unresolved, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 });
 const prop = (key: string, value: unknown, masked = false): GraphNode['properties'][number] => ({ key, value, dataClass: 'text', masked });
 
 describe('the text sent to the model', () => {
@@ -87,7 +87,7 @@ describe('the text sent to the model', () => {
   });
 
   it('says how many references could not be read, with no cause', () => {
-    const built = assembleText(reading([], [], { entities: [ref('widget', 'W-9')], edges: [] }));
+    const built = assembleText(reading([], [], 1));
     expect(built.text).toContain('1 references could not be read.');
   });
 
