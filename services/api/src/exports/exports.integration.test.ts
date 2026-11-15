@@ -76,6 +76,23 @@ describe('the exports table', () => {
 });
 
 describe('exports against Postgres', () => {
+  it('answers a picture with the header, keeps no row and no file, and remembers the answer under its key', async () => {
+    const { rig, files, create } = await running();
+    const url = rig.database.ownerUrl;
+    const opened = await rig.open();
+    const key = `key-${randomUUID()}`;
+    const response = await create(opened.investigation.id, key, { kind: 'view', format: 'png', mask: false, entities: [entity] });
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toMatchObject({ format: 'png', header: { source: 'demo' } });
+    expect(response.json()).not.toHaveProperty('id');
+    expect(await rows(url, 'SELECT 1 FROM exports')).toEqual([]);
+    expect(await files.list()).toEqual([]);
+    expect(await rows(url, 'SELECT 1 FROM export_idempotency')).toHaveLength(1);
+    const replay = await create(opened.investigation.id, key, { kind: 'view', format: 'png', mask: false, entities: [entity] });
+    expect(replay.json()).toEqual(response.json());
+    expect(replay.headers['idempotent-replay']).toBe('true');
+  });
+
   it('builds a file, serves it to the requester, and expires it by the database\'s clock', async () => {
     const { rig, files, create, maintenance } = await running();
     const opened = await rig.open();

@@ -70,7 +70,7 @@ describe('POST /v1/investigations/{id}/exports', () => {
     ['an unknown field', { ...two, extra: 1 }],
     ['a mask field', { ...two, mask: true }],
     ['another kind', { ...two, kind: 'table-csv' }],
-    ['another format', { ...two, format: 'png' }],
+    ['another format', { ...two, format: 'gif' }],
   ])('refuses %s with INVALID_REQUEST and builds nothing', async (_name, body) => {
     const rig = await startExportRig();
     const { response } = await made(rig, body);

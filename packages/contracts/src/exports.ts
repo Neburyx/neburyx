@@ -3,6 +3,8 @@ import { aggregateEdgeRefSchema, derivedEdgeRefSchema } from './edge-detail.js';
 import { countSchema, edgeSchema, elementRefSchema, nodeSchema, storedEdgeRefSchema } from './graph.js';
 
 export const EXPORT_FORMATS = ['json', 'csv'] as const;
+/** What a request may ask for: the two files the server stores, and the picture the browser draws. */
+const EXPORT_REQUEST_FORMATS = [...EXPORT_FORMATS, 'png'] as const;
 export const EXPORT_STATUSES = ['pending', 'ready', 'failed', 'expired'] as const;
 
 /** The key a client sends in `Idempotency-Key`: 16 to 64 letters, digits, `_` and `-` (`docs/api-conventions.md`). */
@@ -20,12 +22,14 @@ export const EXPORT_HIDDEN_NOTE = 'Some items may be hidden by your access.';
  */
 export const exportRequestSchema = z.strictObject({
   kind: z.literal('view'),
-  format: z.enum(EXPORT_FORMATS),
+  format: z.enum(EXPORT_REQUEST_FORMATS),
   entities: z.array(elementRefSchema).default([]),
   edges: z.array(storedEdgeRefSchema).default([]),
   aggregates: z.array(aggregateEdgeRefSchema).default([]),
   derived: z.array(derivedEdgeRefSchema).default([]),
-});
+  /** The session's masking state; only a picture takes it, since the files have no mask button yet. */
+  mask: z.boolean().optional(),
+}).refine((request) => request.mask === undefined || request.format === 'png', { message: 'mask is only for a png', path: ['mask'] });
 
 /** An export as a client sees it: never its storage key or hash. */
 export const exportSchema = z.strictObject({
@@ -51,6 +55,16 @@ export const exportHeaderSchema = z.strictObject({
   lines: z.array(z.string().min(1)).min(5),
 });
 
+/** The answer for a picture: the server reads and audits, the browser draws, so there is no stored file and no id. */
+export const pngExportSchema = z.strictObject({
+  format: z.literal('png'),
+  filename: z.string().min(1),
+  header: exportHeaderSchema,
+});
+
+/** The answer of `POST /v1/investigations/{id}/exports`: a stored file's record, or a picture's header. */
+export const createExportResponseSchema = z.union([exportSchema, pngExportSchema]);
+
 /** The JSON file: the header first, then what was read. */
 export const exportFileSchema = z.strictObject({
   header: exportHeaderSchema,
@@ -60,6 +74,8 @@ export const exportFileSchema = z.strictObject({
 
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 export type ExportRequest = z.infer<typeof exportRequestSchema>;
+export type PngExport = z.infer<typeof pngExportSchema>;
+export type CreateExportResponse = z.infer<typeof createExportResponseSchema>;
 export type ExportRecord = z.infer<typeof exportSchema>;
 export type ExportHeader = z.infer<typeof exportHeaderSchema>;
 export type ExportFile = z.infer<typeof exportFileSchema>;

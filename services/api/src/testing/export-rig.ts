@@ -50,6 +50,8 @@ export interface ExportRigOptions {
   readonly deny?: () => boolean;
   readonly policyVersion?: () => string;
   readonly hideNode?: string;
+  /** The stable ID of an entity the person may read but not export. */
+  readonly unexportableNode?: string;
   readonly failAudit?: (action: string) => boolean;
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | undefined;
 }
@@ -102,7 +104,15 @@ export async function startExportRig(options: ExportRigOptions = {}) {
       },
     },
   };
-  const redact = options.hideNode === undefined ? undefined : hidingRedact(options.hideNode, redactItems);
+  const forbidExport = (items: readonly Record<string, unknown>[], context: Parameters<typeof redactItems>[1]) =>
+    redactItems(
+      items.map((item) => {
+        const nodes = item['nodes'];
+        return Array.isArray(nodes) ? { ...item, nodes: nodes.map((node: { ref: { stableId: string }; authorization: object }) => (node.ref.stableId === options.unexportableNode ? { ...node, authorization: { ...node.authorization, canExport: false } } : node)) } : item;
+      }),
+      context,
+    );
+  const redact = options.hideNode !== undefined ? hidingRedact(options.hideNode, redactItems) : options.unexportableNode !== undefined ? forbidExport : undefined;
   const parts = testSourceGate(mapping, { executor, seams, referenceKeys: TEST_REFERENCE_KEYS, ...(redact === undefined ? {} : { redact }) });
   const directory = join(mkdtempSync(join(tmpdir(), 'nbx-export-rig-')), 'exports');
   mkdirSync(directory, { recursive: true, mode: 0o700 });

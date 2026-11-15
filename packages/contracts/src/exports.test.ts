@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exportFileSchema, exportRequestSchema, exportSchema, IDEMPOTENCY_KEY_PATTERN } from './exports.js';
+import { createExportResponseSchema, exportFileSchema, exportRequestSchema, exportSchema, IDEMPOTENCY_KEY_PATTERN, pngExportSchema } from './exports.js';
 import { errorBodySchema } from './error-codes.js';
 
 const ref = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
@@ -8,7 +8,21 @@ describe('the export contract', () => {
   it('takes references only, with every list optional, and refuses a field it does not know', () => {
     expect(exportRequestSchema.parse({ kind: 'view', format: 'json' })).toEqual({ kind: 'view', format: 'json', entities: [], edges: [], aggregates: [], derived: [] });
     expect(exportRequestSchema.safeParse({ kind: 'view', format: 'csv', entities: [ref] }).success).toBe(true);
-    for (const bad of [{ kind: 'view', format: 'png' }, { kind: 'table-csv', format: 'json' }, { kind: 'view', format: 'json', mask: true }, { format: 'json' }]) expect(exportRequestSchema.safeParse(bad).success).toBe(false);
+    for (const bad of [{ kind: 'view', format: 'gif' }, { kind: 'table-csv', format: 'json' }, { kind: 'view', format: 'json', mask: true }, { format: 'json' }]) expect(exportRequestSchema.safeParse(bad).success).toBe(false);
+  });
+
+  it('takes png, and the session\'s mask only with it', () => {
+    expect(exportRequestSchema.parse({ kind: 'view', format: 'png', mask: true })).toMatchObject({ format: 'png', mask: true });
+    expect(exportRequestSchema.safeParse({ kind: 'view', format: 'png' }).success).toBe(true);
+    for (const format of ['json', 'csv']) expect(exportRequestSchema.safeParse({ kind: 'view', format, mask: false }).success).toBe(false);
+  });
+
+  it('answers a picture with its file name and header, and never an id or a path', () => {
+    const header = { source: 'demo', exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown: 0, notRetrieved: { value: 0, quality: 'exact', scope: 'not yet retrieved' }, uncounted: 0 }, masking: 'off', lines: ['a', 'b', 'c', 'd', 'e'] };
+    const picture = { format: 'png', filename: 'neburyx-export-20261110T101500Z.png', header };
+    expect(createExportResponseSchema.parse(picture)).toEqual(picture);
+    expect(pngExportSchema.safeParse({ ...picture, id: '0192f000-0000-7000-8000-000000000001' }).success).toBe(false);
+    expect(pngExportSchema.safeParse({ ...picture, format: 'json' }).success).toBe(false);
   });
 
   it('accepts 16 to 64 letters, digits, underscore and hyphen as a key', () => {

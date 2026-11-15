@@ -44,6 +44,7 @@ export const ASK_UNSUPPORTED_ENTRIES: Readonly<Record<AskUnsupportedReason, Omit
 /** The sentence of each reason of `INVALID_REQUEST`; the limit itself is in the details. */
 export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit<ErrorEntry, 'status'>>> = {
   'export-too-large': { message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false },
+  'export-view-changed': { message: 'Some items in this view are no longer available to you. Reload the view and try again.', retryable: false },
   'pattern-limit': { message: 'You have saved as many patterns on this source as are allowed. Delete one, then save again.', retryable: false },
   'continue-invalid': { message: 'This continue is no longer valid. Ask the question again.', retryable: false },
   'pattern-personal-condition': { message: 'A saved pattern cannot hold a condition on personal data. Remove it, then save again.', retryable: false },

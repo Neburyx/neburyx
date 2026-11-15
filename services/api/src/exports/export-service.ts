@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { type ExportFormat, type ExportRecord, type ExportRequest, type GraphEdge, type GraphNode } from '@neburyx/contracts';
+import { type CreateExportResponse, type ExportFormat, type ExportRecord, type ExportRequest, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import type { ExportRow, ExportStore } from '../db/exports-repository.js';
 import type { InvestigationStore } from '../db/investigations-repository.js';
 import { AppError } from '../errors.js';
@@ -51,7 +51,7 @@ interface ExportDownload {
 }
 
 export interface ExportService {
-  create(call: CreateExportCall): Promise<ExportRecord>;
+  create(call: CreateExportCall): Promise<CreateExportResponse>;
   get(call: { readonly principal: Principal; readonly id: string }): Promise<ExportRecord>;
   download(call: { readonly traceId: string; readonly principal: Principal; readonly id: string }): Promise<ExportDownload>;
 }
@@ -74,7 +74,7 @@ export function createExportService(deps: Deps): ExportService {
   const now = deps.clock ?? (() => new Date());
 
   /** A failing audit sink fails the call closed: nothing is kept or handed out that the audit does not know of. */
-  async function record(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly action: string; readonly detail: { readonly format: 'json' | 'csv'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number } }): Promise<void> {
+  async function record(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly action: string; readonly detail: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number } }): Promise<void> {
     try {
       await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: call.action, result: 'success', sourceId: call.sourceId, traceId: call.traceId, detail: { export: call.detail } });
     } catch {
@@ -107,20 +107,28 @@ export function createExportService(deps: Deps): ExportService {
       const sourceId = stored.investigation.sourceId;
       await deps.access.require({ traceId: call.traceId, principal: call.principal, sourceId, auditAction: EXPORT_CREATE_AUDIT_ACTION, rate: 'count' });
 
-      const read = await deps.reader.read({ traceId: call.traceId, principal: call.principal, sourceId, entities: call.request.entities, edges: call.request.edges, aggregates: call.request.aggregates, derived: call.request.derived, ...(call.signal === undefined ? {} : { signal: call.signal }) });
+      const { format } = call.request;
+      const read = await deps.reader.read({ traceId: call.traceId, principal: call.principal, sourceId, ...(call.request.mask === undefined ? {} : { mask: call.request.mask }), entities: call.request.entities, edges: call.request.edges, aggregates: call.request.aggregates, derived: call.request.derived, ...(call.signal === undefined ? {} : { signal: call.signal }) });
 
       const exportedAt = now();
-      const bytes = exportBytesOf(call.request.format, sourceId, exportedAt, read);
+      if (format === 'png') {
+        // the browser draws from its own view, so a view in which the read left something out would show more than a file would
+        if (read.omitted || read.unresolved) throw new AppError('INVALID_REQUEST', { reason: 'export-view-changed' });
+        const header = exportHeaderOf({ source: sourceId, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, omitted: false });
+        await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields } });
+        return { format, filename: exportFilename(format, exportedAt), header };
+      }
+      const bytes = exportBytesOf(format, sourceId, exportedAt, read);
       const id = randomUUID();
-      const row = await deps.store.insertExport({ id, investigationId: call.investigationId, requestedBy: call.principal.id, policyVersion: deps.policyVersion(sourceId), sourceIdentityHash: stored.investigation.sourceIdentityHash, format: call.request.format, retentionDays: retentionOf(deps.mapping).exportsDays });
+      const row = await deps.store.insertExport({ id, investigationId: call.investigationId, requestedBy: call.principal.id, policyVersion: deps.policyVersion(sourceId), sourceIdentityHash: stored.investigation.sourceIdentityHash, format, retentionDays: retentionOf(deps.mapping).exportsDays });
 
       let storageKey: string | null = null;
       try {
         if (call.signal?.aborted === true) throw new Error('cancelled');
         const written = await deps.files.write(id, bytes);
         storageKey = written.storageKey;
-        await deps.store.completeExport(id, { filename: exportFilename(call.request.format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: read.maskedFields > 0, maskedFieldCount: read.maskedFields });
-        await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format: call.request.format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields } });
+        await deps.store.completeExport(id, { filename: exportFilename(format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: read.maskedFields > 0, maskedFieldCount: read.maskedFields });
+        await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields } });
       } catch (error) {
         await discard(id, storageKey, 'EXPORT_FAILED');
         if (error instanceof AppError) throw error;

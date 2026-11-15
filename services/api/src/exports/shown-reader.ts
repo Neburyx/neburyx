@@ -18,6 +18,7 @@ interface ShownReadCall extends ShownReference {
   readonly traceId: string;
   readonly principal: Principal;
   readonly sourceId: string;
+  readonly mask?: boolean;
   readonly signal?: AbortSignal;
 }
 
@@ -26,6 +27,8 @@ interface ShownRead {
   readonly edges: readonly GraphEdge[];
   /** True when something was left out because the person may not export it; nothing says what or how many. */
   readonly omitted: boolean;
+  /** True when a reference asked for came back with no item (it no longer resolves, or the read left it out). */
+  readonly unresolved: boolean;
   /** How many distinct fields in the read items are masked. */
   readonly maskedFields: number;
   readonly notRetrieved: Count;
@@ -149,7 +152,7 @@ export function createShownReader(deps: Deps): ShownReader {
             principal: call.principal,
             signal,
             countRate: false,
-            request: { sourceId: call.sourceId, entities: parts.entities[index] ?? [], edges: parts.edges[index] ?? [], aggregates: parts.aggregates[index] ?? [], derived: parts.derived[index] ?? [] },
+            request: { sourceId: call.sourceId, ...(call.mask === undefined ? {} : { mask: call.mask }), entities: parts.entities[index] ?? [], edges: parts.edges[index] ?? [], aggregates: parts.aggregates[index] ?? [], derived: parts.derived[index] ?? [] },
           }),
         );
         nodes.push(...answer.nodes);
@@ -160,6 +163,8 @@ export function createShownReader(deps: Deps): ShownReader {
       const refused = new Set(nodes.filter((node) => !node.authorization.canExport).map((node) => entityKey(node.ref)));
       const relationships = items.filter((edge) => !refused.has(entityKey(edge.from)) && !refused.has(entityKey(edge.to)));
       const omitted = exportable.length !== nodes.length || relationships.length !== items.length;
+
+      const unresolved = nodes.length < entities.length || items.length < edges.length + aggregates.length + derived.length;
 
       let notRetrieved = EMPTY_COUNT;
       let uncounted = 0;
@@ -174,7 +179,7 @@ export function createShownReader(deps: Deps): ShownReader {
         notRetrieved = combineCoverage(answers);
       }
 
-      return { nodes: exportable, edges: relationships, omitted, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved, uncounted };
+      return { nodes: exportable, edges: relationships, omitted, unresolved, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved, uncounted };
     },
   };
 }
