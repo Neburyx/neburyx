@@ -50,7 +50,7 @@ async function answerWith(mutation: Mutation | undefined, sentence: SummarySente
   const { createCaseSummarizer } = await import('../../../ee/ask/src/case-summary/summarizer.js');
   const rig = startRig({ replies: [replyOf(sentence)], settings: { maxCalls: 1 }, factory: createCaseSummarizer });
   const outcome = await rig.summarize(evidence.view);
-  return { kept: outcome.status === 'ok' || outcome.status === 'partial' ? outcome.sentences : [], sent: defined(rig.requests[0], 'the request').values };
+  return { kept: outcome.status === 'ok' || outcome.status === 'partial' ? outcome.sentences.map(({ text, cites }) => ({ text, cites })) : [], sent: defined(rig.requests[0], 'the request').values };
 }
 
 describe('a test taken out of the product\'s own checks leaves a sentence that the suite fails on', () => {
