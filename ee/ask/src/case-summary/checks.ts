@@ -13,9 +13,37 @@ const SHAPE_WORDS: ReadonlySet<string> = new Set(['fan-in', 'fan-out', 'pass-thr
 /** The ordinary words a sentence may start with or hold in a capital without naming anything: articles, determiners, small number words, prepositions, conjunctions and the five shapes. A fixed list of the code, never taken from a file. */
 const STRUCTURAL_VOCABULARY: ReadonlySet<string> = new Set([
   'the', 'a', 'an', 'this', 'that', 'these', 'those', 'both', 'each', 'every', 'all', 'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'several', 'some', 'many', 'few',
-  'another', 'other', 'it', 'they', 'there', 'here', 'at', 'in', 'on', 'of', 'by', 'for', 'from', 'with', 'to', 'and', 'or', 'but', 'as', 'is', 'are', 'was', 'were', 'also', 'both', 'between', 'within',
+  'another', 'other', 'it', 'they', 'there', 'here', 'at', 'in', 'on', 'of', 'by', 'for', 'from', 'with', 'to', 'and', 'or', 'but', 'as', 'is', 'are', 'was', 'were', 'also', 'between', 'within',
   'fan', 'cycle', 'rapid', 'pass', 'through', 'shared', 'shape', 'shapes',
 ]);
+
+/**
+ * Linking and summing words that open a sentence and are written with a capital by grammar alone. A fixed list of the code, never taken from a file. A capitalised first word that is none of these, and whose
+ * lower-case, singular or stem form is not an ordinary word of the text sent (a word that is not part of a title or an id), is still taken for a name that was not sent.
+ */
+const SENTENCE_OPENERS: ReadonlySet<string> = new Set([
+  'taken', 'together', 'overall', 'altogether', 'collectively', 'combined', 'additionally', 'furthermore', 'moreover', 'however', 'therefore', 'thus', 'across', 'among', 'alongside', 'beyond', 'according',
+  'based', 'given', 'where', 'while', 'when', 'since', 'because', 'although', 'none', 'neither', 'either', 'only', 'per', 'without', 'nothing', 'which', 'whose', 'such', 'most', 'more',
+]);
+
+/** Whether a capitalised first word of a sentence is an ordinary word of the text sent: itself, its singular (a plural s or es off), or a stem of five letters or more that a word of the text begins with. Only ordinary words count: the words of a title or an id are names, and a made-up name that is a variant or a prefix of one must not pass. */
+function ordinaryOpener(lower: string, ordinary: ReadonlySet<string>): boolean {
+  if (SENTENCE_OPENERS.has(lower)) return true;
+  const forms = [lower, lower.replace(/s$/u, ''), lower.replace(/es$/u, '')];
+  return forms.some((form) => {
+    if (ordinary.has(form)) return true;
+    if (form.length < 5) return false;
+    for (const word of ordinary) if (word.startsWith(form)) return true;
+    return false;
+  });
+}
+
+/** The words of the text sent that are not part of a title or an id of an element: the ordinary words of its lines, its types and its relationship types. */
+function ordinaryWords(assembled: AssembledText): Set<string> {
+  const names = new Set<string>();
+  for (const line of assembled.lines.values()) for (const name of titleAndIdOf(line.normalize('NFC'))) for (const word of words(name)) names.add(word);
+  return new Set([...words(assembled.text.normalize('NFC'))].filter((word) => !names.has(word)));
+}
 
 /**
  * The words of the verdict check: a sentence that states or implies guilt, fraud, an offence, suspicion, intent or a conclusion. Whole words and their endings, case-insensitive; a word that only holds a stem
@@ -48,7 +76,8 @@ const numbersIn = (text: string, leaveQuotedOut = false): string[] => {
 /** Whether a text occurs in another as a whole: not in the middle of a longer word or identifier. */
 const occursWhole = (text: string, inside: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}_-])${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'u').test(inside);
 
-const words = (text: string): Set<string> => new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []);
+/** The words of a text, lower case; a word joined with underscores (`transferred_to`) is held whole and in its parts, so that the capitals of `TRANSFERRED_TO` are found in the text sent. */
+const words = (text: string): Set<string> => new Set((text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? []).flatMap((word) => (word.includes('_') ? [word, ...word.split('_').filter((part) => part !== '')] : [word])));
 
 const identifierTokens = (text: string): Set<string> => new Set(text.match(IDENTIFIER_LIKE) ?? []);
 
@@ -94,19 +123,27 @@ function numbersHold(sentence: SummarySentence, assembled: AssembledText): boole
 }
 
 function namesHold(sentence: SummarySentence, assembled: AssembledText): boolean {
-  const sent = assembled.text;
+  const sent = assembled.text.normalize('NFC');
   const known = words(sent);
+  const ordinary = ordinaryWords(assembled);
   const sentTokens = identifierTokens(sent);
-  for (const quoted of sentence.text.matchAll(QUOTED)) if (!occursWhole(quoted[1] ?? '', sent)) return false;
-  const unquoted = sentence.text.replace(QUOTED, ' ');
+  const text = sentence.text.normalize('NFC');
+  for (const quoted of text.matchAll(QUOTED)) if (!occursWhole(quoted[1] ?? '', sent)) return false;
+  // a decimal point between digits is not the end of a sentence: it is taken out so that what follows is not read as the start of one
+  const unquoted = text.replace(QUOTED, ' ').replace(/(\d)\.(\d)/gu, '$1 $2');
   for (const token of unquoted.match(IDENTIFIER_LIKE) ?? []) {
+    // a word joined with underscores between letters or digits is one name (a relationship type): it is found whole in the text sent, never as a mix of the parts of others; Markdown emphasis around a word is not one
+    if (!sentTokens.has(token) && token.split('-').some((part) => /[\p{L}\p{N}]_[\p{L}\p{N}]/u.test(part) && !known.has(part.replace(/^_+|_+$/gu, '').toLowerCase()))) return false;
     if (SHAPE_WORDS.has(token.toLowerCase()) || !/\d/.test(token) || !/[\p{L}_-]/u.test(token)) continue;
     if (!sentTokens.has(token)) return false;
   }
-  const withoutIdentifiers = unquoted.replace(IDENTIFIER_LIKE, (token) => (/\d/.test(token) ? ' ' : token));
-  for (const word of withoutIdentifiers.match(CAPITALISED) ?? []) {
-    const lower = word.toLowerCase();
-    if (!STRUCTURAL_VOCABULARY.has(lower) && !known.has(lower)) return false;
+  const withoutIdentifiers = unquoted.replace(IDENTIFIER_LIKE, (token) => (/\d/.test(token) ? ' '.repeat(token.length) : token));
+  for (const found of withoutIdentifiers.matchAll(CAPITALISED)) {
+    const lower = found[0].toLowerCase();
+    if (STRUCTURAL_VOCABULARY.has(lower) || known.has(lower)) continue;
+    const opensSentence = /(^\s*|[.!?]\s+)$/u.test(withoutIdentifiers.slice(0, found.index));
+    if (opensSentence && ordinaryOpener(lower, ordinary)) continue;
+    return false;
   }
   return true;
 }

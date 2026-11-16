@@ -110,6 +110,103 @@ describe('the name check', () => {
   });
 });
 
+describe('the name check and ordinary capitals', () => {
+  const link = (type: string): GraphEdge => ({
+    ref: { sourceId: 'demo', type, from: 'widget', to: 'widget', stableId: 'L-1' },
+    from: ana.ref,
+    to: bo.ref,
+    type,
+    direction: 'from-to',
+    semantics: 'stored',
+    properties: [],
+    evidenceRefs: [],
+    qualityFlags: [],
+  });
+  const linked = assembleText(reading([ana, bo], [link('LINKED_TO'), link('HELD_BY')]));
+  const keptIn = (assembled: typeof linked, text: string, ...cites: string[]): string[] => judgeSentences([sentence(text, ...cites)], assembled).kept.map((entry) => entry.text);
+
+  it.each([
+    'A stored LINKED_TO relationship links W-1 to W-2.',
+    'The HELD_BY link was observed.',
+    'A stored linked_to relationship links W-1 to W-2.',
+  ])('keeps a relationship type written as the elements give it, in capitals with an underscore: %s', (text) => {
+    expect(keptIn(linked, text, 'n1', 'n2', 'e1')).toEqual([text]);
+  });
+
+  it('still removes a type in capitals that the text sent does not hold, an underscore word included', () => {
+    expect(keptIn(linked, 'A stored OTHER_KIND relationship links W-1 to W-2.', 'n1', 'n2', 'e1')).toEqual([]);
+    expect(keptIn(linked, 'A stored LINKED_FROM relationship links W-1 to W-2.', 'n1', 'n2', 'e1')).toEqual([]);
+  });
+
+  it.each([
+    'Widgets W-1 and W-2 are listed.',
+    'Taken together, the widgets are listed.',
+    'Together, the widgets are listed.',
+    'Linked W-1 and W-2 are listed.',
+    'Overall, W-1 and W-2 are listed.',
+  ])('keeps an ordinary word that opens the sentence with a capital: %s', (text) => {
+    expect(keptIn(linked, text, 'n1', 'n2', 'e1')).toEqual([text]);
+  });
+
+  it.each([
+    ['an invented name at the start', 'Mallory owns the widget W-1.'],
+    ['an invented name at the start with a plural s', 'Mallorys widget W-1 is listed.'],
+    ['an invented name at the start with an ordinary word after it', 'Mallory Stone has the widget W-1.'],
+    ['an invented name after a full stop', 'The widget W-1 is listed. Mallory owns it.'],
+    ['an invented name that is only a short prefix of a word of the text', 'Wid owns the widget W-1.'],
+    ['an invented name in the middle of the sentence', 'The widget W-1 is owned by Mallory.'],
+    ['an opener word in the middle of the sentence', 'The widget W-1 is owned by Overall.'],
+    ['an opener word after a semicolon', 'W-1 is listed; Together owns it.'],
+    ['an ordinary word of the text after a colon', 'W-1 is listed: Widgets own it.'],
+    ['an invented stem of five letters that no word of the text starts with', 'Malle owns the widget W-1.'],
+  ])('still removes %s', (_name, text) => {
+    expect(keptIn(linked, text, 'n1', 'n2', 'e1')).toEqual([]);
+  });
+});
+
+describe('the name check, the ids with underscores and hyphens, the decimals and the names of the text sent', () => {
+  const idd = node('AC_7001-B', 'Mariana Lopez');
+  const other = node('W-3', 'Christopher Banks');
+  const named = assembleText(reading([idd, other]));
+  const keptNamed = (text: string, ...cites: string[]): string[] => judgeSentences([sentence(text, ...cites)], named).kept.map((entry) => entry.text);
+
+  it('keeps an id with an underscore and a hyphen that was sent, and removes one that was not', () => {
+    expect(keptNamed('AC_7001-B is listed.', 'n1')).toEqual(['AC_7001-B is listed.']);
+    expect(keptNamed('AC_7002-B is listed.', 'n1')).toEqual([]);
+  });
+
+  it('keeps a word in Markdown emphasis that an underscore wraps, as it kept it before', () => {
+    expect(keptNamed('The _shared_ widget is listed.', 'n1')).toEqual(['The _shared_ widget is listed.']);
+  });
+
+  it('removes a made-up name at the start that is a variant, a prefix or a plural of a name that was sent: a name of the text sent is not an ordinary word', () => {
+    for (const text of ['Maria owns W-3.', 'Marian owns W-3.', 'Chris owns W-3.', 'Chris Banks owns W-3.', 'Lopezs owns W-3.']) expect(keptNamed(text, 'n1', 'n2'), text).toEqual([]);
+  });
+
+  it('keeps a name that was sent, whole, at the start', () => {
+    expect(keptNamed('Mariana Lopez owns W-3.', 'n1', 'n2')).toEqual(['Mariana Lopez owns W-3.']);
+  });
+
+  it('does not read what follows a decimal as the start of a sentence, and reads the start of the next sentence as one, also after an id with digits', () => {
+    const rated = assembleText(reading([{ ...idd, properties: [{ key: 'rate', value: '3.5', dataClass: 'number', masked: false }] }]));
+    const keptRated = (text: string): string[] => judgeSentences([sentence(text, 'n1')], rated).kept.map((entry) => entry.text);
+    expect(keptRated('A sum of 3.5 Overall is listed.')).toEqual([]);
+    expect(keptRated('The figure 3.5 is listed. Overall, AC_7001-B is listed.')).toEqual(['The figure 3.5 is listed. Overall, AC_7001-B is listed.']);
+    expect(keptRated('The rate of AC_7001-B is 3.5. Overall, it is listed.')).toEqual(['The rate of AC_7001-B is 3.5. Overall, it is listed.']);
+  });
+
+  it('reads a sentence with leading whitespace, and a text in a decomposed form, as the same sentence', () => {
+    expect(keptNamed('  Overall, AC_7001-B is listed.', 'n1')).toEqual(['  Overall, AC_7001-B is listed.']);
+    const accented = assembleText(reading([node('W-5', 'Zoë Kim', 'élément')]));
+    expect(judgeSentences([sentence('Éléments Zoë Kim is listed.'.normalize('NFD'), 'n1')], accented).kept).toHaveLength(1);
+  });
+
+  it('gives a capitalised word after an id with digits at the start of a sentence the rules of a start, which an invented name does not pass', () => {
+    expect(keptNamed('W-3 Overall is listed.', 'n1', 'n2')).toEqual(['W-3 Overall is listed.']);
+    expect(keptNamed('W-3 Mallory is listed.', 'n1', 'n2')).toEqual([]);
+  });
+});
+
 describe('the verdict check', () => {
   it.each(['The account is guilty.', 'It was done intentionally.', 'This looks fraudulent.', 'Money laundering is shown.', 'Suspicious activity.', 'They are responsible for it.', 'A crime is shown.', 'The offence is clear.', 'It proves the link.', 'We conclude that it is so.'])('finds %j', (text) => {
     const result = judgeSentences([sentence(text, 'n1')], base);
