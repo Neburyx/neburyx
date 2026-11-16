@@ -1,3 +1,4 @@
+import { renderForExport } from './export-render.js';
 import { createHash } from 'node:crypto';
 import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall } from '../audited.js';
@@ -148,6 +149,11 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
   return {
     maxElements: settings.maxElements,
     availability: options.availability,
+    renderForExport(input) {
+      const keys = options.tokenKeys();
+      if (keys === undefined || !options.availability().available) return { status: 'refused' };
+      return renderForExport(keys, input, (options.now ?? Date.now)());
+    },
     async recordEarlyEnd(end) {
       const { write } = await openRun(end);
       await write(0, end.outcome, end.outcome === 'tooLarge' ? 'refused' : 'failed');

@@ -41,6 +41,8 @@ export { createMemorySummaryRunStore, createPgSummaryRunStore } from './case-sum
 export { buildSummaryInstructions } from './case-summary/instructions.js';
 /** @public Opens a summary token for the copy to notes and the export that follow, and for the tests of the token. */
 export { openToken, sealToken } from './case-summary/token.js';
+/** @public The summary section of an export for a token, for the tests of `services/api` that give an export the real renderer with a sealing key of their own. */
+export { renderForExport } from './case-summary/export-render.js';
 /** @public The routes of the AI notes, for the tests that mount them with a sealing key of their own. */
 export { createCopyToNotesRoute } from './case-summary/copy-route.js';
 /** @public */

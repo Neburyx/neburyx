@@ -103,7 +103,7 @@ export function useSummary(onClose: () => void): SummaryModel {
       controller.current = undefined;
       const settled = settledOf(result);
       if ('draft' in settled) {
-        session.setState({ ...session.getState(), draft: { response: settled.draft, entries: citationEntries(settled.draft, state.loadedGraph()), edits: new Map(), viewLine: loadedLine(state.visibleGraph()) }, attempt: { kind: 'idle' }, copy: { kind: 'idle' } });
+        session.setState({ ...session.getState(), draft: { response: settled.draft, entries: citationEntries(settled.draft, state.loadedGraph()), edits: new Map(), viewLine: loadedLine(state.visibleGraph()), arrivedAt: Date.now() }, attempt: { kind: 'idle' }, copy: { kind: 'idle' } });
         setFocus('draft');
         return;
       }

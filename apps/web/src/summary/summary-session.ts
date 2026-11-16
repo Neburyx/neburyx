@@ -11,6 +11,8 @@ export interface SummaryDraft {
   readonly edits: ReadonlyMap<number, string>;
   /** The scope line of the view as it was when the draft arrived. */
   readonly viewLine: string;
+  /** When the draft arrived, in milliseconds: the token it carries is good for `SUMMARY_TOKEN_LIFETIME_MS` from then. */
+  readonly arrivedAt: number;
 }
 
 /** What Copy to notes has come to for the draft on screen. */
@@ -51,3 +53,15 @@ export function useSummarySession(): SummarySession {
   if (session === undefined) throw new Error('the summary panel needs its session');
   return session;
 }
+
+const sessions = new WeakMap<object, SummarySession>();
+
+/** The session of the summary panel bound to a client state, for the parts of the page outside the panel that offer the draft (the export dialog). */
+export const registerSummarySession = (owner: object, session: SummarySession): (() => void) => {
+  sessions.set(owner, session);
+  return () => {
+    if (sessions.get(owner) === session) sessions.delete(owner);
+  };
+};
+
+export const summarySessionOf = (owner: object): SummarySession | undefined => sessions.get(owner);

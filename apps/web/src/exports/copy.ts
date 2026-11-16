@@ -18,6 +18,13 @@ export const SCHEMA_FAILURE = 'The answer could not be read. Try again.';
 export const EXPORT_BUSY = 'This export is already being made. Try again in a moment.';
 export const EXPORT_DISABLED_SOURCE = 'Not available while the source has changed.';
 
+export const INCLUDE_SUMMARY = 'Include AI case summary';
+export const SUMMARY_NO_DRAFT = 'Draft a summary first';
+export const SUMMARY_EXPIRED = 'The draft has expired';
+export const SUMMARY_EDITED = "Edited text can't be exported with the summary";
+export const SUMMARY_NOT_FOR_PICTURE = 'Not for a picture';
+export const SUMMARY_REFUSED = 'The summary could not be included, so nothing was exported. You can export without it.';
+
 export const downloadLabel = (format: PictureFormat): string => `Download ${FORMAT_NAMES[format]}`;
 
 export interface ExportLimits {

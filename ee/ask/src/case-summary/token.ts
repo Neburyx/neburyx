@@ -1,10 +1,10 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
-import type { SummarySentence } from '@neburyx/contracts';
+import { SUMMARY_TOKEN_LIFETIME_MS, type SummarySentence } from '@neburyx/contracts';
 import type { NotesTemplate } from './notes-convert.js';
 import type { TokenKey, TokenKeys } from './token-keys.js';
 
 /** How long a token is valid after it was drafted, in milliseconds. */
-export const TOKEN_LIFETIME_MS = 30 * 60 * 1000;
+export const TOKEN_LIFETIME_MS = SUMMARY_TOKEN_LIFETIME_MS;
 
 const VERSION = 'v1';
 const IV_BYTES = 12;

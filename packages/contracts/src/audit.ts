@@ -135,7 +135,9 @@ export const auditDetailSchema = z.union([
       entities: wholeCount.optional(),
       relationships: wholeCount.optional(),
       maskedFields: wholeCount.optional(),
-      refusal: z.enum(['access-changed', 'export-source-changed']).optional(),
+      refusal: z.enum(['access-changed', 'export-source-changed', 'summary-refused']).optional(),
+      /** That the AI case summary was included: the run it came from and how many sentences were kept and dropped; never a sentence. */
+      summary: z.strictObject({ runId: z.string().min(1), kept: wholeCount, dropped: wholeCount }).optional(),
     }),
   }),
   z.strictObject({ ai: aiAuditDetailSchema }),
@@ -152,7 +154,7 @@ export type AuditDetail =
   | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What an export or a download of one was: the format, and for an export how many items it holds and how many fields were masked; never a value, an ID or a file name; a refused download adds which of the two refusals it was. */
   | {
-      readonly export: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly refusal?: 'access-changed' | 'export-source-changed' };
+      readonly export: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly refusal?: 'access-changed' | 'export-source-changed' | 'summary-refused'; readonly summary?: { readonly runId: string; readonly kept: number; readonly dropped: number } };
       readonly counts?: never;
       readonly reason?: never;
       readonly target?: never;

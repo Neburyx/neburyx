@@ -6,11 +6,12 @@ import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { SUMMARY_COPY } from './copy.js';
 import { SUMMARY_PANEL_ID, SUMMARY_PANEL_WIDTH } from './panel-layout.js';
 import { SummaryPanel } from './summary-panel.js';
-import { SummarySessionProvider, createSummarySession } from './summary-session.js';
+import { SummarySessionProvider, createSummarySession, registerSummarySession } from './summary-session.js';
 
 /** Lives outside React: the panel is registered while the summary is open, and the draft outlives the panel. */
 export function bindSummaryPanel(state: ClientState, panels: PanelRegistry): () => void {
   const session = createSummarySession();
+  const unregisterSession = registerSummarySession(state, session);
   const close = (): void => state.presentation.setSummaryOpen(false);
   const returnToGraph = (): void => {
     close();
@@ -40,6 +41,7 @@ export function bindSummaryPanel(state: ClientState, panels: PanelRegistry): () 
     unsubscribe();
     unregister();
     unregisterNotes();
+    unregisterSession();
     remove?.();
     remove = undefined;
   };

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { type CreateExportResponse, type ExportFormat, type ExportRecord, type ExportRequest, type GraphEdge, type GraphNode } from '@neburyx/contracts';
+import { type CaseSummarizer, type CreateExportResponse, type ExportFormat, type ExportRecord, type ExportRequest, type ExportSummary, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import type { ExportRow, ExportStore } from '../db/exports-repository.js';
 import type { InvestigationStore } from '../db/investigations-repository.js';
 import { AppError } from '../errors.js';
@@ -10,7 +10,7 @@ import type { MappingModel } from '../mapping/model.js';
 import { retentionOf } from '../mapping/retention.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import type { AuditSink, PolicyProvider, Principal } from '../seams/seams.js';
-import { entitiesCsvOf, relationshipsCsvOf } from './csv.js';
+import { entitiesCsvOf, relationshipsCsvOf, summaryCsvOf } from './csv.js';
 import { exportFilename, contentTypeOf } from './filename.js';
 import { exportHeaderOf } from './header.js';
 import { exportJsonOf } from './json-file.js';
@@ -22,6 +22,7 @@ const EXPORT_CREATE_AUDIT_ACTION = 'export.create';
 const EXPORT_DOWNLOAD_AUDIT_ACTION = 'export.download';
 const ENTITIES_FILE = 'entities.csv';
 const RELATIONSHIPS_FILE = 'relationships.csv';
+const SUMMARY_FILE = 'summary.csv';
 
 interface Deps {
   readonly store: ExportStore & Pick<InvestigationStore, 'readInvestigation'>;
@@ -33,6 +34,10 @@ interface Deps {
   readonly policyVersion: (sourceId: string) => string;
   readonly audit: AuditSink;
   readonly logger: { warn(fields: object, message: string): void };
+  /** The installed case summarizer, as the extension routes get it; read when a request carries a token. */
+  readonly summarizer?: () => CaseSummarizer;
+  /** Whether the AI preview is on: with it off a token is refused as when none is available. */
+  readonly previewOn?: boolean;
   readonly clock?: () => Date;
 }
 
@@ -61,20 +66,23 @@ function exportRecordOf(row: ExportRow): ExportRecord {
   return { id: row.id, status: row.status, format: row.format, filename: row.filename, sizeBytes: row.sizeBytes, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
-function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }): Buffer {
+function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }, summary?: ExportSummary): Buffer {
   const header = exportHeaderOf({ source, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, omitted: read.omitted });
-  if (format === 'json') return exportJsonOf(header, read.nodes, read.edges);
+  if (format === 'json') return exportJsonOf(header, read.nodes, read.edges, summary);
   return zipOf([
     { name: ENTITIES_FILE, bytes: entitiesCsvOf(header, read.nodes) },
     { name: RELATIONSHIPS_FILE, bytes: relationshipsCsvOf(header, read.edges) },
+    ...(summary === undefined ? [] : [{ name: SUMMARY_FILE, bytes: summaryCsvOf(header, summary, read.edges) }]),
   ]);
 }
+
+type ExportRead = Parameters<typeof exportBytesOf>[3] & { readonly unresolvedCount: number };
 
 export function createExportService(deps: Deps): ExportService {
   const now = deps.clock ?? (() => new Date());
 
   /** A failing audit sink fails the call closed: nothing is kept or handed out that the audit does not know of. */
-  async function record(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly action: string; readonly detail: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number } }): Promise<void> {
+  async function record(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly action: string; readonly detail: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly summary?: { readonly runId: string; readonly kept: number; readonly dropped: number } } }): Promise<void> {
     try {
       await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: call.action, result: 'success', sourceId: call.sourceId, traceId: call.traceId, detail: { export: call.detail } });
     } catch {
@@ -98,6 +106,16 @@ export function createExportService(deps: Deps): ExportService {
     await deps.store.failExport(id, errorCode).catch(() => undefined);
   }
 
+  /** The summary section for the token of the request, from the export's own reading; every way it cannot be given is the one refusal, before any row or file exists. */
+  function renderSummary(call: CreateExportCall, sourceId: string, read: ExportRead): { readonly section: ExportSummary; readonly runId: string; readonly kept: number; readonly dropped: number } {
+    const summarizer = deps.summarizer?.();
+    const token = call.request.summaryToken;
+    if (token === undefined || deps.previewOn !== true || summarizer === undefined || summarizer.renderForExport === undefined || !summarizer.availability().available) throw new AppError('ACCESS_DENIED', { reason: 'summary-refused' });
+    const outcome = summarizer.renderForExport({ token, investigationId: call.investigationId, actorId: call.principal.id, policyVersion: deps.policyVersion(sourceId), reading: { nodes: [...read.nodes], edges: [...read.edges], unresolved: read.unresolvedCount, omitted: read.omitted, notRetrieved: read.notRetrieved, uncounted: read.uncounted } });
+    if (outcome.status !== 'ok') throw new AppError('ACCESS_DENIED', { reason: 'summary-refused' });
+    return outcome;
+  }
+
   return {
     async create(call) {
       const stored = await deps.store.readInvestigation(call.investigationId, call.principal.id);
@@ -118,7 +136,19 @@ export function createExportService(deps: Deps): ExportService {
         await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields } });
         return { format, filename: exportFilename(format, exportedAt), header };
       }
-      const bytes = exportBytesOf(format, sourceId, exportedAt, read);
+      let included: ReturnType<typeof renderSummary> | undefined;
+      if (call.request.summaryToken !== undefined) {
+        try {
+          included = renderSummary(call, sourceId, read);
+        } catch (error) {
+          // the refusal stands whether or not the audit write succeeds, and says nothing of which check failed
+          await deps.audit
+            .record({ actorId: call.principal.id, actorRole: call.principal.role, action: EXPORT_CREATE_AUDIT_ACTION, result: 'refused', sourceId, traceId: call.traceId, detail: { export: { format, refusal: 'summary-refused' } } })
+            .catch(() => deps.logger.warn({ event: 'export.audit_failed', action: EXPORT_CREATE_AUDIT_ACTION }, 'export audit write failed'));
+          throw error;
+        }
+      }
+      const bytes = exportBytesOf(format, sourceId, exportedAt, read, included?.section);
       const id = randomUUID();
       const row = await deps.store.insertExport({ id, investigationId: call.investigationId, requestedBy: call.principal.id, policyVersion: deps.policyVersion(sourceId), sourceIdentityHash: stored.investigation.sourceIdentityHash, format, retentionDays: retentionOf(deps.mapping).exportsDays });
 
@@ -128,7 +158,7 @@ export function createExportService(deps: Deps): ExportService {
         const written = await deps.files.write(id, bytes);
         storageKey = written.storageKey;
         await deps.store.completeExport(id, { filename: exportFilename(format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: read.maskedFields > 0, maskedFieldCount: read.maskedFields });
-        await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields } });
+        await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields, ...(included === undefined ? {} : { summary: { runId: included.runId, kept: included.kept, dropped: included.dropped } }) } });
       } catch (error) {
         await discard(id, storageKey, 'EXPORT_FAILED');
         if (error instanceof AppError) throw error;

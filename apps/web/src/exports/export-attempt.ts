@@ -12,9 +12,9 @@ export function viewRefsOf(graph: LoadedGraph): { readonly entities: ElementRef[
   return { entities: graph.nodes.map((node) => node.ref), edges, aggregates, derived };
 }
 
-export function exportRequestOf(graph: LoadedGraph, format: ExportFormat | 'png', mask: boolean): ExportRequest {
+export function exportRequestOf(graph: LoadedGraph, format: ExportFormat | 'png', mask: boolean, summaryToken?: string): ExportRequest {
   const refs = { kind: 'view' as const, ...viewRefsOf(graph) };
-  return format === 'png' ? { ...refs, format, mask } : { ...refs, format };
+  return format === 'png' ? { ...refs, format, mask } : { ...refs, format, ...(summaryToken === undefined ? {} : { summaryToken }) };
 }
 
 function sort(edge: GraphEdge, edges: StoredEdgeRef[], aggregates: AggregateEdgeRef[], derived: DerivedEdgeRef[]): void {

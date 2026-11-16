@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { exportSchema } from '@neburyx/contracts';
+import { exportFileSchema, exportSchema, type CaseSummarizer } from '@neburyx/contracts';
+import { renderForExport, sealToken } from '@neburyx/ee-ask';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { expireExports, purgeDeletedInvestigations } from '../jobs/maintenance.js';
 import { createLogger } from '../logger.js';
@@ -11,6 +12,7 @@ import { rows } from '../testing/database.js';
 import { rigStores, startRig } from '../testing/investigation-rig.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { startPostgres, type TestPostgres } from '../testing/postgres.js';
+import { communitySeams } from '../seams/community-seams.js';
 import { webRoot } from '../testing/start-api.js';
 import { createExportFileStore } from './store.js';
 
@@ -32,12 +34,12 @@ afterAll(async () => {
   for (const directory of directories) rmSync(directory, { recursive: true, force: true });
 });
 
-async function running() {
+async function running(extra: Parameters<typeof startRig>[2] = {}) {
   const directory = join(mkdtempSync(join(tmpdir(), 'nbx-exports-it-')), 'exports');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   directories.push(directory);
   const files = createExportFileStore(directory);
-  const rig = await startRig(postgres, mapping, { exportFiles: files });
+  const rig = await startRig(postgres, mapping, { exportFiles: files, ...extra });
   const principal = (await rig.store.current()).principal.id;
   const create = (id: string, key = `key-${randomUUID()}`, body: object = { kind: 'view', format: 'json', entities: [entity] }) =>
     rig.app.inject({ method: 'POST', url: `/v1/investigations/${id}/exports`, headers: { 'content-type': 'application/json', 'idempotency-key': key }, payload: body });
@@ -106,6 +108,23 @@ describe('exports against Postgres', () => {
     expect(await files.list()).toEqual([]);
     expect((await rows(rig.database.ownerUrl, `SELECT status, storage_key FROM exports WHERE id = $1`, [record.id]))[0]).toEqual({ status: 'expired', storage_key: null });
     expect((await expireExports(maintenance)).expired).toBe(0);
+  });
+
+  it('stores a file with the summary for a valid token, and leaves no row and no file for a token that is refused', async () => {
+    const keys = { current: { kid: 'abcd1234', bytes: Buffer.alloc(32, 9) } };
+    const summarizer: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'timeLimit', calls: 1 }), renderForExport: (input) => renderForExport(keys, input, Date.now()) };
+    const { rig, files, principal, create } = await running({ previewOn: true, seams: { ...communitySeams(), caseSummarizer: summarizer } });
+    const opened = await rig.open();
+    const id = opened.investigation.id;
+    const tokenOf = (generatedBy: string) => sealToken(keys, { investigationId: id, generatedBy, policyVersion: 'none', modelRef: 'claude-sonnet-5-5', promptId: 'case-summary', promptVersion: '1', sentences: [{ text: 'The record is listed.', cites: ['n1'] }], inputRefs: [{ key: 'n1', kind: 'entity', ref: entity }], propertyValuesSent: false, runId: '0192f000-0000-7000-8000-0000000000aa', mask: false, wordListVersion: 1, templates: [{ storable: false, reason: 'unlisted-word' }] }, Date.now());
+    const refused = await create(id, undefined, { kind: 'view', format: 'json', entities: [entity], summaryToken: tokenOf('someone-else') });
+    expect(refused.statusCode).toBe(403);
+    expect(await files.list()).toEqual([]);
+    expect(await rows(rig.database.ownerUrl, `SELECT id FROM exports WHERE investigation_id = $1`, [id])).toEqual([]);
+    const made = await create(id, undefined, { kind: 'view', format: 'json', entities: [entity], summaryToken: tokenOf(principal) });
+    expect(made.statusCode).toBe(201);
+    const download = await rig.app.inject({ method: 'GET', url: `/v1/exports/${exportSchema.parse(made.json()).id}/download` });
+    expect(exportFileSchema.parse(JSON.parse(download.body)).summary).toMatchObject({ label: 'AI-drafted', model: 'claude-sonnet-5-5' });
   });
 
   it('expires every export past its expiry in one run of the task, and leaves the rest', async () => {

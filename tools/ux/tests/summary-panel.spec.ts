@@ -115,6 +115,31 @@ test.describe('the AI case summary panel', () => {
     await expect(panel(page).getByRole('button', { name: 'Summarize' })).toBeFocused();
   });
 
+  test('the Export dialog offers Include AI case summary while there is a draft, and sends its token when it is ticked', async ({ page }) => {
+    await openWorkspace(page);
+    await answerWith(page, (sourceId) => draftFor(sourceId));
+    const exported: string[] = [];
+    await page.route((url) => /\/exports$/.test(url.pathname), async (route) => {
+      exported.push(route.request().postData() ?? '');
+      await route.continue();
+    });
+    await header(page).getByRole('button', { name: 'Export' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Export current view' });
+    await expect(dialog.getByRole('checkbox', { name: 'Include AI case summary' })).toBeDisabled();
+    await expect(dialog.getByText('Draft a summary first')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await summarize(page).click();
+    await expect(panel(page).getByRole('button', { name: 'Copy to notes' })).toBeVisible();
+    await header(page).getByRole('button', { name: 'Export' }).click();
+    const option = dialog.getByRole('checkbox', { name: 'Include AI case summary' });
+    await expect(option).toBeEnabled();
+    await option.check();
+    const download = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Download JSON' }).click();
+    await download;
+    expect(JSON.parse(exported[0] ?? '{}')).toMatchObject({ format: 'json', summaryToken: 'tok' });
+  });
+
   test('Copy to notes sends the token and the draft version, says what was copied, and the AI notes section shows the stored entry', async ({ page }) => {
     await openWorkspace(page);
     await answerWith(page, (sourceId) => draftFor(sourceId));

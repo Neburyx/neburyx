@@ -9,15 +9,16 @@ import { useNotRetrieved } from '../workspace/graph-scope.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { remainderLine } from '../workspace/scope-text.js';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
-import { CANCEL, EXPORT_BUSY, EXPORT_TITLE, FOOTNOTE, FORMAT_LABEL, FORMAT_NAMES, NETWORK_FAILURE, PICTURE_FAILURE, PICTURE_MASKED_LINE, PREPARING, PREVIEW_HEADING, SCHEMA_FAILURE, TRY_AGAIN, downloadLabel, tooLargeText, type PictureFormat } from './copy.js';
+import { CANCEL, EXPORT_BUSY, INCLUDE_SUMMARY, SUMMARY_REFUSED, EXPORT_TITLE, FOOTNOTE, FORMAT_LABEL, FORMAT_NAMES, NETWORK_FAILURE, PICTURE_FAILURE, PICTURE_MASKED_LINE, PREPARING, PREVIEW_HEADING, SCHEMA_FAILURE, TRY_AGAIN, downloadLabel, tooLargeText, type PictureFormat } from './copy.js';
 import { exportRequestOf, keyAfter, newExportKey } from './export-attempt.js';
+import { useSummaryOption } from './summary-option.js';
 import { composePicture, drawingBoundsFor } from './picture.js';
 import { saveFile } from './save-file.js';
 
 const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select, textarea, [tabindex]:not([tabindex="-1"])';
 const FORMATS: readonly PictureFormat[] = ['json', 'csv', 'png'];
 
-type Outcome = { readonly kind: 'none' } | { readonly kind: 'failed'; readonly failure: ApiFailure } | { readonly kind: 'picture-failed' };
+type Outcome = { readonly kind: 'none' } | { readonly kind: 'summary-refused' } | { readonly kind: 'failed'; readonly failure: ApiFailure } | { readonly kind: 'picture-failed' };
 
 function failureText(failure: ApiFailure): string {
   if (!('message' in failure)) return failure.code === 'SCHEMA_MISMATCH' ? SCHEMA_FAILURE : NETWORK_FAILURE;
@@ -67,6 +68,10 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   const headingId = useId();
   const previewId = useId();
   const sendingNow = useRef(false);
+  const summaryId = useId();
+  const option = useSummaryOption(format, now === undefined ? undefined : () => now().getTime());
+  const [include, setInclude] = useState(false);
+  const summaryToken = option.kind === 'offered' && include ? option.token : undefined;
 
   useEffect(() => {
     const behind = document.querySelectorAll(`[${KEY_SCOPE_ATTRIBUTE}="workspace"], [${DIALOG_BEHIND_ATTRIBUTE}]`);
@@ -117,7 +122,7 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
     sendingNow.current = true;
     setSending(true);
     setOutcome({ kind: 'none' });
-    const refs = exportRequestOf(state.visibleGraph(), format, mask);
+    const refs = exportRequestOf(state.visibleGraph(), format, mask, summaryToken);
     if (format === 'png') {
       await sendPicture(refs, investigationId);
       return;
@@ -125,7 +130,10 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
     const created = await client.createExport(investigationId, refs, key.current);
     if (!created.ok) {
       key.current = keyAfter(created.failure, key.current);
-      stopSending({ kind: 'failed', failure: created.failure });
+      // a token that is refused is refused as one answer: the dialog says the summary could not be included and the next try goes without it
+      const refusedSummary = created.failure.code === 'ACCESS_DENIED' && 'details' in created.failure && created.failure.details?.reason === 'summary-refused';
+      if (refusedSummary) setInclude(false);
+      stopSending(refusedSummary ? { kind: 'summary-refused' } : { kind: 'failed', failure: created.failure });
       return;
     }
     if (!('id' in created.value)) {
@@ -177,7 +185,7 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   };
 
   const failure = outcome.kind === 'failed' ? outcome.failure : undefined;
-  const problem = outcome.kind === 'picture-failed' ? PICTURE_FAILURE : failure === undefined ? '' : failureText(failure);
+  const problem = outcome.kind === 'picture-failed' ? PICTURE_FAILURE : outcome.kind === 'summary-refused' ? SUMMARY_REFUSED : failure === undefined ? '' : failureText(failure);
   const failed = outcome.kind !== 'none';
   const lines = [`source: ${sourceId}`, `exported: ${opened}`, `scope: ${EXPORT_SCOPE}`, `coverage: ${remainderLine(shown, notRetrieved)}`, format === 'png' && mask ? PICTURE_MASKED_LINE : 'masking: off'];
 
@@ -201,6 +209,19 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
             </label>
           ))}
         </fieldset>
+        {option.kind === 'hidden' ? null : (
+          <div className="export-summary">
+            <label className="export-summary-option">
+              <input type="checkbox" checked={option.kind === 'offered' && include} disabled={option.kind !== 'offered' || sending} aria-describedby={option.kind === 'disabled' ? summaryId : undefined} onChange={(event) => setInclude(event.target.checked)} />
+              {INCLUDE_SUMMARY}
+            </label>
+            {option.kind === 'disabled' ? (
+              <p id={summaryId} className="export-summary-reason">
+                {option.reason}
+              </p>
+            ) : null}
+          </div>
+        )}
         <div id={previewId} className="export-preview">
           <p className="export-preview-heading">{PREVIEW_HEADING}</p>
           <ul className="export-preview-lines">

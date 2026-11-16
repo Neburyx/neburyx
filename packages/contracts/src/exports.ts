@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { aggregateEdgeRefSchema, derivedEdgeRefSchema } from './edge-detail.js';
+import { exportSummarySchema } from './summary.js';
 import { countSchema, edgeSchema, elementRefSchema, nodeSchema, storedEdgeRefSchema } from './graph.js';
 
 export const EXPORT_FORMATS = ['json', 'csv'] as const;
@@ -12,6 +13,9 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
 /** The one scope every export states about itself. */
 export const EXPORT_SCOPE = 'current view (partial)';
+
+/** The longest sealed summary token an export request may carry. */
+const SUMMARY_TOKEN_MAX_LENGTH = 32_768;
 
 /** The sentence a file carries when it leaves out something the person may not export; it never says how many or which. */
 export const EXPORT_HIDDEN_NOTE = 'Some items may be hidden by your access.';
@@ -29,7 +33,11 @@ export const exportRequestSchema = z.strictObject({
   derived: z.array(derivedEdgeRefSchema).default([]),
   /** The session's masking state; only a picture takes it, since the files have no mask button yet. */
   mask: z.boolean().optional(),
-}).refine((request) => request.mask === undefined || request.format === 'png', { message: 'mask is only for a png', path: ['mask'] });
+  /** The sealed token of the person's AI case summary, to include it in a JSON or a CSV file; a picture takes none. Without it no export carries any summary. */
+  summaryToken: z.string().min(1).max(SUMMARY_TOKEN_MAX_LENGTH).optional(),
+})
+  .refine((request) => request.mask === undefined || request.format === 'png', { message: 'mask is only for a png', path: ['mask'] })
+  .refine((request) => request.summaryToken === undefined || request.format !== 'png', { message: 'a picture takes no summary', path: ['summaryToken'] });
 
 /** An export as a client sees it: never its storage key or hash. */
 export const exportSchema = z.strictObject({
@@ -70,6 +78,8 @@ export const exportFileSchema = z.strictObject({
   header: exportHeaderSchema,
   entities: z.array(nodeSchema),
   relationships: z.array(edgeSchema),
+  /** Present only when the person included their AI case summary. */
+  summary: exportSummarySchema.optional(),
 });
 
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];

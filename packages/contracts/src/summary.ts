@@ -80,6 +80,34 @@ export const copyToNotesResponseSchema = z.strictObject({ copied: callCount, not
 
 export type CopyToNotesResponse = z.infer<typeof copyToNotesResponseSchema>;
 
+/** How long a summary token can be used, from the moment its draft was made: the server seals it for this long, and the client offers the export option for as long. */
+export const SUMMARY_TOKEN_LIFETIME_MS = 30 * 60 * 1000;
+
+const EXPORT_SUMMARY_MAX_SENTENCES = 12;
+
+/** The summary section of an export file: the label, the model, when it was drafted, the two parts of its coverage and the sentences that still hold, each with the elements it cites as they are in the same file. */
+export const exportSummarySchema = z.strictObject({
+  label: z.literal('AI-drafted'),
+  model: text,
+  generatedAt: z.iso.datetime(),
+  coverage: z.strictObject({ retrieval: text, summary: text }),
+  sentences: z.array(z.strictObject({ text, cites: z.array(z.discriminatedUnion('kind', [z.strictObject({ kind: z.literal('entity'), ref: elementRefSchema }), z.strictObject({ kind: z.literal('relationship'), ref: edgeRefSchema })])).min(1) })).max(EXPORT_SUMMARY_MAX_SENTENCES),
+});
+
+export type ExportSummary = z.infer<typeof exportSummarySchema>;
+
+/** What an export hands the summarizer: the token the person sent, the person and the policy version it must open under, and what the export's own read of the elements returned. */
+export interface CaseSummaryExportInput {
+  readonly token: string;
+  readonly investigationId: string;
+  readonly actorId: string;
+  readonly policyVersion: string;
+  readonly reading: SummaryReading;
+}
+
+/** The section to write, with the id of the run and how many sentences were kept and dropped; or the one refusal, which says nothing of why. */
+export type CaseSummaryExportOutcome = { readonly status: 'ok'; readonly section: ExportSummary; readonly runId: string; readonly kept: number; readonly dropped: number } | { readonly status: 'refused' };
+
 export type CaseSummaryAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
 export interface CaseSummaryInput {
@@ -106,6 +134,8 @@ export interface CaseSummarizer {
    * a summarizer that keeps no record has none.
    */
   recordEarlyEnd?(end: CaseSummaryEarlyEnd): Promise<void>;
+  /** The summary section of an export for a token; absent in a summarizer that does not take part in exports, which an export treats as not available. Reads nothing: the export's own reading is passed in. */
+  renderForExport?(input: CaseSummaryExportInput): CaseSummaryExportOutcome;
 }
 
 export interface CaseSummaryEarlyEnd {

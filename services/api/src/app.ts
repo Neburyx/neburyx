@@ -632,6 +632,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         policyVersion,
         audit: auditSink,
         logger: options.logger,
+        // the installed summarizer as the extension routes get it: the seams' own first, then the extension's, then the Community one
+        summarizer: () => (seams.caseSummarizer !== undefined && seams.caseSummarizer !== communityCaseSummarizer ? seams.caseSummarizer : (options.extension?.caseSummarizer?.() ?? communityCaseSummarizer)),
+        previewOn: options.previewOn === true,
       });
       app.post('/v1/investigations/:id/exports', { bodyLimit: EXPORT_BODY_LIMIT, config: { permission: 'principal' } }, async (request, reply) => {
         const params = profileParamsSchema.safeParse(request.params);
