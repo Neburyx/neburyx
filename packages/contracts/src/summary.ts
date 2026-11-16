@@ -43,8 +43,11 @@ export type SummarySentence = z.infer<typeof summarySentenceSchema>;
 
 const callCount = z.number().int().nonnegative();
 
-/** A sentence of a draft as the answer carries it: `storable` says whether Copy to notes will keep it, by the rule the copy itself applies. */
-export const summaryResponseSentenceSchema = z.strictObject({ text: text, cites: z.array(text), storable: z.boolean() });
+/** Why a sentence cannot be stored as AI notes, in three groups: a number or a date that no element of the sentence's citations gives; a name or a value that is not of an element the sentence cites; a word outside the fixed list. */
+export const NOT_STORABLE_REASONS = ['number', 'value', 'word'] as const;
+
+/** A sentence of a draft as the answer carries it: `storable` says whether Copy to notes will keep it, by the rule the copy itself applies, and `notStorable` says why not, for the panel to say. */
+export const summaryResponseSentenceSchema = z.strictObject({ text: text, cites: z.array(text), storable: z.boolean(), notStorable: z.enum(NOT_STORABLE_REASONS).optional() });
 
 const citationSchema = z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) });
 

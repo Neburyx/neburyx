@@ -31,7 +31,7 @@ export function fuzzToken(investigationId: string): string {
       propertyValuesSent: false,
       runId: '0192f000-0000-7000-8000-0000000000aa',
       mask: false,
-      wordListVersion: 1,
+      wordListVersion: 2,
       templates: [{ storable: true, text: 'The record is linked.', placeholders: [] }],
     },
     Date.now(),

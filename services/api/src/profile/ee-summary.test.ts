@@ -380,7 +380,7 @@ describe('POST /v1/summary completed, with the real application, the real gate a
     expect(body.sent).toContain('n1 | "widget"');
     expect(body.sent).not.toContain('Ana Silva');
     expect(received[0]?.instructions).toContain('# Reply format');
-    expect(body.sentences).toEqual([{ text: 'Two widgets are listed.', cites: ['n1', 'n2'], storable: false }]);
+    expect(body.sentences).toEqual([{ text: 'Two widgets are listed.', cites: ['n1', 'n2'], storable: true }]);
     const opened = openToken(keys, body.summaryToken, { investigationId: rig.body.investigationId, actorId: LOCAL_IDENTITY.principal.id, policyVersion: 'none', now: Date.now() });
     expect(opened.ok && opened.payload.inputRefs.map((entry) => entry.key)).toEqual(['n1', 'n2']);
     await rig.rig.stop();

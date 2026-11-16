@@ -33,7 +33,7 @@ function input(over: Partial<SealInput> = {}): SealInput {
     propertyValuesSent: false,
     runId: RUN,
     mask: false,
-    wordListVersion: 1,
+    wordListVersion: 2,
     templates: [plain('The record is linked to the same source.'), refused()],
     ...over,
   };
@@ -98,7 +98,7 @@ describe('copy to notes', () => {
     expect(answer).toEqual({ copied: 1, notCopied: 1, alreadyCopied: false, version: 2, save: SAVE });
     const [only] = h.appended;
     expect(only).toMatchObject({ investigationId: INVESTIGATION, expectedVersion: 1, maxRefs: 300 });
-    expect(only?.entry).toMatchObject({ generatedBy: ME, modelRef: 'claude-sonnet-5-5', promptId: 'case-summary', promptVersion: '1', wordListVersion: 1, label: 'AI-drafted', sentences: [{ text: 'The record is linked to the same source.', placeholders: [], cites: [{ key: 'n1', kind: 'entity' }] }] });
+    expect(only?.entry).toMatchObject({ generatedBy: ME, modelRef: 'claude-sonnet-5-5', promptId: 'case-summary', promptVersion: '1', wordListVersion: 2, label: 'AI-drafted', sentences: [{ text: 'The record is linked to the same source.', placeholders: [], cites: [{ key: 'n1', kind: 'entity' }] }] });
     expect(only?.entry.inputRefs).toHaveLength(1);
     expect(JSON.stringify(only?.entry)).not.toContain('Weldinum');
   });
@@ -146,7 +146,7 @@ describe('copy to notes', () => {
     ['another person\'s', () => sealed({ generatedBy: 'someone-else' })],
     ['for another investigation', () => sealed({ investigationId: '0192f000-0000-7000-8000-0000000000c2' })],
     ['from another policy version', () => sealed({ policyVersion: 'p0' })],
-    ['under another word list version', () => sealed({ wordListVersion: 2 })],
+    ['under another word list version', () => sealed({ wordListVersion: 1 })],
     ['altered', () => `${sealed().slice(0, -3)}AAA`],
     ['not a token', () => 'nonsense'],
   ])('refuses a token that is %s with ACCESS_DENIED and stores nothing', async (_name, make) => {

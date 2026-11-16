@@ -6,7 +6,7 @@ import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
 import { judgeSentences } from './checks.js';
 import { draftSummary, type Checked } from './draft.js';
 import type { SummaryInstructions } from './instructions.js';
-import { templatesOf } from './notes-convert.js';
+import { storableMarkOf, templatesOf } from './notes-convert.js';
 import { NOTES_WORD_LIST_VERSION } from './notes-words.js';
 import { prepareSummary } from './prepare.js';
 import { SummaryRunStoreError, type SummaryRunStore } from './run-store.js';
@@ -215,7 +215,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
           },
           (options.now ?? Date.now)(),
         );
-        return record({ status: drafted.removed === 0 ? 'ok' : 'partial', sentences: drafted.sentences.map((sentence, index) => ({ ...sentence, storable: templates[index]?.storable === true })), citations: citationsOf(drafted.sentences, prepared.assembled), coverage, removedCount: drafted.removed, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken }, checked);
+        return record({ status: drafted.removed === 0 ? 'ok' : 'partial', sentences: drafted.sentences.map((sentence, index) => storableMarkOf(sentence, templates[index])), citations: citationsOf(drafted.sentences, prepared.assembled), coverage, removedCount: drafted.removed, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken }, checked);
       } catch (error) {
         if (error instanceof AuditUnavailableError) {
           // the click ends as unavailable: the run row says how far it got, if it can

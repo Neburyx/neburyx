@@ -15,7 +15,7 @@ const stored = (tokenId: string, sentences: unknown[] = [{ text: '‹widget#1›
   promptId: 'case-summary',
   promptVersion: '1',
   generatedAt: '2026-11-15T10:00:00.000Z',
-  wordListVersion: 1,
+  wordListVersion: 2,
   label: 'AI-drafted',
   sentences,
   inputRefs: [{ key: 'n1', kind: 'entity', ref: W1 }, { key: 'n2', kind: 'entity', ref: W2 }],

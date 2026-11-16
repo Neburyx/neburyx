@@ -103,7 +103,7 @@ export function templatesOf(sentences: readonly SummarySentence[], assembled: As
   return sentences.map((sentence): NotesTemplate => {
     if (/[‹›]/u.test(sentence.text)) return { storable: false, reason: 'unlisted-word' };
     const cited = new Set(sentence.cites);
-    if (cited.size > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'name' };
+    if (cited.size > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'bound' };
     const slots: { readonly placeholder: Placeholder }[] = [];
     let text = sentence.text;
     const citedEdges = [...cited].flatMap((key) => relationships.get(key) ?? []);
@@ -190,7 +190,8 @@ export function templatesOf(sentences: readonly SummarySentence[], assembled: As
       if (!wholeToken(value).test(text)) continue;
       const groups = [...byKey];
       const [group] = groups;
-      if (nonScalar || groups.length !== 1 || group === undefined || group[1].length > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'property-value' };
+      if (nonScalar || groups.length !== 1 || group === undefined) return { storable: false, reason: 'property-value' };
+      if (group[1].length > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'bound' };
       const [property, owners] = group;
       text = text.replace(wholeToken(value, 'giu'), markOf(slots.length));
       slots.push({ placeholder: { name: nameOf(`value:${property}:${owners.map((owner) => canonicalText(owner.ref)).join(',')}`, 'value'), descriptor: { kind: 'value', of: owners, key: property } } });
@@ -206,7 +207,15 @@ export function templatesOf(sentences: readonly SummarySentence[], assembled: As
       return slot.placeholder.name;
     });
     const checked = checkStorable(stored, new Set(used.map((placeholder) => placeholder.name)));
-    if (used.length > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'name' };
+    if (used.length > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'bound' };
     return checked.storable ? { storable: true, text: stored, placeholders: used } : { storable: false, reason: checked.reason };
   });
+}
+
+/** The sentence with whether it can be stored as AI notes and, when not, which of the three groups of reason says why. */
+export function storableMarkOf(sentence: SummarySentence, template: NotesTemplate | undefined): SummarySentence & { readonly storable: boolean; readonly notStorable?: 'number' | 'value' | 'word' } {
+  if (template?.storable === true) return { ...sentence, storable: true };
+  const reason = template?.reason;
+  if (reason === 'bound' || reason === undefined) return { ...sentence, storable: false };
+  return { ...sentence, storable: false, notStorable: reason === 'number-or-date' ? 'number' : reason === 'name' || reason === 'property-value' ? 'value' : 'word' };
 }

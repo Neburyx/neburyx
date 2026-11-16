@@ -1,7 +1,7 @@
 import type { Count, GraphEdge, GraphNode, SummaryReading, SummarySentence } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { assembleText } from './assemble.js';
-import { templatesOf, type NotesTemplate } from './notes-convert.js';
+import { storableMarkOf, templatesOf, type NotesTemplate } from './notes-convert.js';
 
 const ref = (entityType: string, stableId: string) => ({ sourceId: 'demo', entityType, stableId });
 const node = (stableId: string, title: string, entityType = 'widget', value = 'gold'): GraphNode => ({ ref: ref(entityType, stableId), display: { title, type: entityType }, properties: [{ key: 'tier', value, dataClass: 'text', masked: false }], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
@@ -164,7 +164,7 @@ describe('the bound of a stored sentence', () => {
     const keys = [...assembleText(reading(nodes)).keys.keys()];
     const many = (count: number) => convert([sentence('NameAa Silva', ...keys.slice(0, count))], nodes)[0];
     expect(many(50)?.storable).toBe(true);
-    expect(reasonOf(many(51))).toBe('name');
+    expect(reasonOf(many(51))).toBe('bound');
   });
 });
 
@@ -227,5 +227,57 @@ describe('tally slots', () => {
   it('does not store a number that is not the count of cited entities of that type', () => {
     expect(reasonOf(convert([sentence('Ana Silva owns four gizmos.', 'n1', 'n2', 'n3', 'n4')], [node('W-1', 'Ana Silva'), ...accounts])[0])).toBe('number-or-date');
     expect(reasonOf(convert([sentence('Ana Silva owns two gizmos.', 'n1', 'n2', 'n3', 'n4')], [node('W-1', 'Ana Silva'), ...accounts])[0])).toBe('number-or-date');
+  });
+});
+
+describe('the reason a sentence is not stored, in three groups', () => {
+  const markOf = (text: string, ...cites: string[]) => {
+    const sentences = [sentence(text, ...cites)];
+    return storableMarkOf(sentences[0] ?? sentence(text), convert(sentences, [node('W-1', 'Ana Silva', 'widget', 'gold'), node('W-2', 'Bo Chen', 'widget', 'silver')])[0]);
+  };
+
+  it('says a number or a date that no cited element gives is a number', () => {
+    expect(markOf('Ana Silva has 7 links.', 'n1')).toMatchObject({ storable: false, notStorable: 'number' });
+    expect(markOf('Ana Silva has seven links.', 'n1')).toMatchObject({ storable: false, notStorable: 'number' });
+  });
+
+  it('says a name or a value that is not of a cited element is a value', () => {
+    expect(markOf('Ana Silva is linked to Bo Chen.', 'n1')).toMatchObject({ storable: false, notStorable: 'value' });
+    expect(markOf('Ana Silva is silver.', 'n1')).toMatchObject({ storable: false, notStorable: 'value' });
+  });
+
+  it('says a word outside the list is a word, and marks a storable sentence with no reason', () => {
+    expect(markOf('Ana Silva is fabulous.', 'n1')).toMatchObject({ storable: false, notStorable: 'word' });
+    expect(markOf('Ana Silva is gold.', 'n1')).toEqual({ text: 'Ana Silva is gold.', cites: ['n1'], storable: true });
+  });
+});
+
+describe('the group of every reason, true of each sentence in it', () => {
+  const group = (text: string, cites: string[], nodes: GraphNode[], edges: GraphEdge[] = []) => {
+    const sentences = [sentence(text, ...cites)];
+    const mark = storableMarkOf(sentences[0] ?? sentence(text), convert(sentences, nodes, edges)[0]);
+    return 'notStorable' in mark ? mark.notStorable : 'none';
+  };
+  const two = [node('W-1', 'Ana Silva'), node('W-2', 'Bo Chen')];
+
+  it('puts a count that is not known, a count two cited relationships share and a modal that is also a month in the right group', () => {
+    expect(group('Ana Silva has a count that is not known.', ['n1'], two)).toBe('number');
+    const shared = [aggregate('USES', exact(5)), { ...aggregate('OWNS', exact(5)) }];
+    const [a, b] = shared;
+    const keys = [keyOf(shared, a ?? shared[0] as GraphEdge), keyOf(shared, b ?? shared[0] as GraphEdge)];
+    expect(group('Ana Silva has 5 (exact) members and 5 (exact) others.', keys, two, shared)).toBe('number');
+    expect(group('Ana Silva may be linked.', ['n1'], two)).toBe('word');
+  });
+
+  it('puts a title two cited elements share, and a value held under two properties of a cited element, in the group that says they cannot be tied to one', () => {
+    expect(group('Ana is linked.', ['n1', 'n2'], [node('W-1', 'Ana'), node('W-2', 'Ana')])).toBe('value');
+    const twice: GraphNode = { ...node('W-1', 'Ana Silva'), properties: [{ key: 'tier', value: 'gold', dataClass: 'text', masked: false }, { key: 'band', value: 'gold', dataClass: 'text', masked: false }] };
+    expect(group('Ana Silva is gold.', ['n1'], [twice])).toBe('value');
+  });
+
+  it('gives a sentence past the bounds no group, so the panel says only that it cannot be stored', () => {
+    const many = Array.from({ length: 51 }, (_, i) => node(`W-${i + 1}`, `Name${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(97 + Math.floor(i / 26))} Silva`));
+    const keys = [...assembleText(reading(many)).keys.keys()];
+    expect(group('NameAa Silva', keys, many)).toBe('none');
   });
 });

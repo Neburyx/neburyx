@@ -6223,6 +6223,14 @@
                     },
                     "storable": {
                       "type": "boolean"
+                    },
+                    "notStorable": {
+                      "type": "string",
+                      "enum": [
+                        "number",
+                        "value",
+                        "word"
+                      ]
                     }
                   },
                   "required": [
@@ -6550,6 +6558,14 @@
                     },
                     "storable": {
                       "type": "boolean"
+                    },
+                    "notStorable": {
+                      "type": "string",
+                      "enum": [
+                        "number",
+                        "value",
+                        "word"
+                      ]
                     }
                   },
                   "required": [

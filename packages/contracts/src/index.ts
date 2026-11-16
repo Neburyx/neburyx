@@ -184,7 +184,7 @@ export type { AskTemplateId, BindResult } from './ask-bind.js';
 export { ASK_CONTINUE_LABEL, ASK_CONTINUE_LIFETIME_MS, ASK_CONTINUE_TOKEN_PATTERN, ASK_RUN_PARAMS_LABEL, askAnswerSchema, askContinueRequestSchema, askEntitiesSchema, askQuestionRequestSchema } from './ask-question.js';
 export type { AskAnswer, AskContinueRequest, AskQuestionRequest } from './ask-question.js';
 
-export { SUMMARY_FAILURE_KINDS, copyToNotesParamsSchema, copyToNotesRequestSchema, copyToNotesResponseSchema, summaryReadingSchema, summaryRequestSchema, summaryResponseSchema, summaryResponseSentenceSchema, summarySentenceSchema } from './summary.js';
+export { NOT_STORABLE_REASONS, SUMMARY_FAILURE_KINDS, copyToNotesParamsSchema, copyToNotesRequestSchema, copyToNotesResponseSchema, summaryReadingSchema, summaryRequestSchema, summaryResponseSchema, summaryResponseSentenceSchema, summarySentenceSchema } from './summary.js';
 export type { ElementRefs, ElementsScope } from './extension.js';
 export type { CopyToNotesRequest, CopyToNotesResponse, CaseSummarizer, CaseSummaryAvailability, CaseSummaryEarlyEnd, CaseSummaryInput, CaseSummaryOutcome, SummaryFailureKind, SummaryReading, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';
 export { AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, AI_NOTES_MAX_SLOTS, AI_NOTES_TIME_FIELDS, aiNotesDescriptorSchema, aiNotesPlaceholderSchema, storedAiNotesEntrySchema, aiNotesEntryInputSchema, aiNotesQuerySchema, aiNotesResponseSchema, storedAiNotesSchema } from './ai-notes.js';

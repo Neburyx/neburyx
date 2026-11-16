@@ -10,8 +10,14 @@ const RELATIVE_TIME = 'yesterday today tomorrow tonight recently now ago earlier
 const QUANTITIES = 'dozen pair pairs paired couple several many few both all most some none any much more less fewer least multiple numerous single double triple half whole each every another other no one'.split(' ');
 
 describe('the fixed word list', () => {
+  it('stores the ordinary words that name nothing and carry no value, which the first version refused on real drafts', () => {
+    for (const text of ['The element is titled with an id.', 'The address has a city and a country.', 'People are given a code and a street.', 'Relationships are given, so links are shown.']) {
+      expect(checkStorable(text), text).toMatchObject({ storable: true, wordListVersion: 2 });
+    }
+  });
+
   it('is versioned', () => {
-    expect(NOTES_WORD_LIST_VERSION).toBe(1);
+    expect(NOTES_WORD_LIST_VERSION).toBe(2);
   });
 
   it.each([

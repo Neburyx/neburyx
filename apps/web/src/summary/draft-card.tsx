@@ -3,8 +3,8 @@ import { useClientState, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { drawnKeys } from '../state/loaded-graph.js';
 import { failureWords } from '../patterns/failure-words.js';
-import { callsText, copiedText, notCopiedText, removedText, SUMMARY_COPY } from './copy.js';
-import { editedOf, storableCountOf, type CitationEntry } from './summary-model.js';
+import { callsText, copiedText, noneStoredText, notCopiedText, notStoredReasons, removedText, SUMMARY_COPY } from './copy.js';
+import { editedOf, storableCountOf, type CitationEntry, type DraftResponse } from './summary-model.js';
 import type { CopyStage, SummaryDraft } from './summary-session.js';
 
 const labelOf = (entry: CitationEntry): string => entry.label ?? `${entry.kind === 'entity' ? SUMMARY_COPY.entity : SUMMARY_COPY.relationship} ${entry.key}`;
@@ -34,13 +34,14 @@ export function CoverageBox({ retrieval, summary }: { readonly retrieval: string
   );
 }
 
-function copyWords(copy: CopyStage, total: number, sourceId: string): string {
+function copyWords(copy: CopyStage, sentences: DraftResponse['sentences'], sourceId: string): string {
+  const total = sentences.length;
   switch (copy.kind) {
     case 'idle':
     case 'copying':
       return '';
     case 'copied':
-      return copy.alreadyCopied ? SUMMARY_COPY.alreadyCopied : copy.notCopied === 0 ? copiedText(copy.copied) : `${copiedText(copy.copied)} ${notCopiedText(copy.notCopied, total)}`;
+      return copy.alreadyCopied ? SUMMARY_COPY.alreadyCopied : copy.notCopied === 0 ? copiedText(copy.copied) : `${copiedText(copy.copied)} ${notCopiedText(copy.notCopied, total, notStoredReasons(sentences))}`;
     case 'refused':
       return SUMMARY_COPY.generateAgain;
     case 'full':
@@ -138,7 +139,7 @@ export function DraftCard({ draft, previous, busy, note, copy, sourceId, onCopy,
         </button>
       </div>
       <p className="summary-note" role="status">
-        {edited ? SUMMARY_COPY.editedNoCopy : storable === 0 ? SUMMARY_COPY.noneStorable : copyWords(copy, response.sentences.length, sourceId)}
+        {edited ? SUMMARY_COPY.editedNoCopy : storable === 0 ? noneStoredText(notStoredReasons(response.sentences)) : copyWords(copy, response.sentences, sourceId)}
       </p>
       {copy.kind === 'conflict' || (copy.kind === 'failed' && (copy.failure === undefined || failureWords(copy.failure, sourceId).action === 'try-again')) ? (
         <button type="button" className="summary-link" onClick={onCopy}>

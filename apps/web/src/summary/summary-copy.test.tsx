@@ -56,7 +56,7 @@ const ok = (value: SummaryResponse): ApiResult<SummaryResponse> => ({ ok: true, 
 
 type CopyAnswer = (request: CopyToNotesRequest, id: string) => Promise<ApiResult<CopyToNotesResponse>>;
 
-function copyRig(copy: CopyAnswer, response: SummaryResponse = draft({ sentences: [{ text: 'The record is linked.', cites: ['n1'], storable: true }, { text: 'A name is written.', cites: ['n2'], storable: false }] })) {
+function copyRig(copy: CopyAnswer, response: SummaryResponse = draft({ sentences: [{ text: 'The record is linked.', cites: ['n1'], storable: true }, { text: 'A name is written.', cites: ['n2'], storable: false, notStorable: 'number' }] })) {
   const state = createClientState();
   state.bindSource('a');
   show(state, 'inv-1');
@@ -107,7 +107,7 @@ describe('the summary panel: Copy to notes', () => {
     await screen.findByRole('heading', { name: 'Draft' });
     await userEvent.click(screen.getByRole('button', { name: 'Copy to notes' }));
     expect(h.copies).toEqual([{ id: 'inv-1', request: { summaryToken: 'tok', version: 1 } }]);
-    expect(await screen.findByText("1 sentence copied to notes. 1 of 2 sentences weren't copied: they state numbers or dates in words, which can't be stored.")).toBeTruthy();
+    expect(await screen.findByText("1 sentence copied to notes. 1 of 2 sentences weren't copied: 1 involves a number, a date or a count that can't be tied to exactly one element it cites.")).toBeTruthy();
     expect(document.querySelectorAll('.summary-block-skipped')).toHaveLength(1);
   });
 
@@ -123,11 +123,30 @@ describe('the summary panel: Copy to notes', () => {
   });
 
   it('is disabled with its message when no sentence is storable', async () => {
-    const h = copyRig(async () => copied(), draft({ sentences: [{ text: 'A name.', cites: ['n1'], storable: false }] }));
+    const h = copyRig(async () => copied(), draft({ sentences: [{ text: 'A name.', cites: ['n1'], storable: false, notStorable: 'value' }] }));
     render(h.tree(true));
     await screen.findByRole('heading', { name: 'Draft' });
     expect((screen.getByRole('button', { name: 'Copy to notes' }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText('None of these sentences can be stored as AI notes.')).toBeTruthy();
+    expect(screen.getByText("None of these sentences can be stored as AI notes: 1 involves a name or a value that can't be tied to exactly one element or property it cites.")).toBeTruthy();
+  });
+
+  it('says the real reason for each group of sentences that were not copied, in a fixed order, with the right number agreement', async () => {
+    const mixed = draft({
+      sentences: [
+        { text: 'One.', cites: ['n1'], storable: true },
+        { text: 'Two.', cites: ['n1'], storable: false, notStorable: 'word' },
+        { text: 'Three.', cites: ['n1'], storable: false, notStorable: 'word' },
+        { text: 'Four.', cites: ['n1'], storable: false, notStorable: 'value' },
+        { text: 'Five.', cites: ['n1'], storable: false, notStorable: 'number' },
+        { text: 'Seven.', cites: ['n1'], storable: false, notStorable: 'number' },
+        { text: 'Six.', cites: ['n1'], storable: false },
+      ],
+    });
+    const h = copyRig(async () => copied({ copied: 1, notCopied: 6, alreadyCopied: false }), mixed);
+    render(h.tree(true));
+    await screen.findByRole('heading', { name: 'Draft' });
+    await userEvent.click(screen.getByRole('button', { name: 'Copy to notes' }));
+    expect(await screen.findByText("1 sentence copied to notes. 6 of 7 sentences weren't copied: 2 involve a number, a date or a count that can't be tied to exactly one element they cite; 1 involves a name or a value that can't be tied to exactly one element or property it cites; 2 use words outside the fixed list that can be stored; 1 can't be stored.")).toBeTruthy();
   });
 
   it('says a token that was copied before was copied before', async () => {

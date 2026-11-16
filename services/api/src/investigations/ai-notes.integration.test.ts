@@ -174,7 +174,7 @@ describe('the AI notes routes against Postgres, for two people', () => {
   }
 
   const tokenOf = (investigationId: string, person: string) =>
-    sealToken(keys, { investigationId, generatedBy: person, policyVersion: 'none', modelRef: 'm', promptId: 'case-summary', promptVersion: '1', sentences: [{ text: 'The record is linked.', cites: ['n1'] }], inputRefs: [{ key: 'n1', kind: 'entity', ref: W1 }], propertyValuesSent: false, runId: '0192f000-0000-7000-8000-0000000000aa', mask: false, wordListVersion: 1, templates: [{ storable: true, text: 'The record is linked.', placeholders: [] }] }, Date.now());
+    sealToken(keys, { investigationId, generatedBy: person, policyVersion: 'none', modelRef: 'm', promptId: 'case-summary', promptVersion: '1', sentences: [{ text: 'The record is linked.', cites: ['n1'] }], inputRefs: [{ key: 'n1', kind: 'entity', ref: W1 }], propertyValuesSent: false, runId: '0192f000-0000-7000-8000-0000000000aa', mask: false, wordListVersion: 2, templates: [{ storable: true, text: 'The record is linked.', placeholders: [] }] }, Date.now());
 
   it('stores a copy for its owner on the real draft row, and keeps it from another person, for whom the read is not found and the copy is refused', async () => {
     const { database, app, post, store } = await running();

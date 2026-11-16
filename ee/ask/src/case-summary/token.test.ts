@@ -21,7 +21,7 @@ const INPUT: SealInput = {
   propertyValuesSent: true,
   runId: '0192f000-0000-7000-8000-0000000000aa',
   mask: false,
-  wordListVersion: 1,
+  wordListVersion: 2,
   templates: [{ storable: false, reason: 'unlisted-word' }],
 };
 const CONTEXT = { investigationId: 'inv-1', actorId: 'person-1', policyVersion: 'p1', now: 1_000 };
@@ -103,7 +103,7 @@ describe('the sealed templates of a token', () => {
   it('holds the run, the masking, the word list version and the stored form of each sentence, and opens with them', () => {
     const token = sealToken(KEYS, { ...INPUT, mask: true, templates: [{ storable: true, text: 'A listed sentence.', placeholders: [] }] }, NOW);
     const opened = openToken(KEYS, token, { ...CONTEXT, now: NOW + 1 });
-    expect(opened.ok && opened.payload).toMatchObject({ runId: INPUT.runId, mask: true, wordListVersion: 1, templates: [{ storable: true, text: 'A listed sentence.', placeholders: [] }] });
+    expect(opened.ok && opened.payload).toMatchObject({ runId: INPUT.runId, mask: true, wordListVersion: 2, templates: [{ storable: true, text: 'A listed sentence.', placeholders: [] }] });
   });
 
   it('refuses a token of the earlier form, which holds no templates, as it refuses any other token', () => {

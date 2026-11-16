@@ -1,12 +1,12 @@
 import { NOTES_WORD_LIST_VERSION, NOTES_WORDS } from './notes-words.js';
 
-export type NotStorableReason = 'unlisted-word' | 'number-or-date' | 'name' | 'property-value';
+export type NotStorableReason = 'unlisted-word' | 'number-or-date' | 'name' | 'property-value' | 'bound';
 
 export type StorableCheck = { readonly storable: true; readonly wordListVersion: number } | { readonly storable: false; readonly reason: NotStorableReason; readonly wordListVersion: number };
 
 /** Words of a number or a date, which get their own reason; the list holds none of them, so the rule would refuse them anyway. */
 const NUMBER_OR_DATE_WORDS: ReadonlySet<string> = new Set(
-  'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million billion first second third fourth fifth sixth seventh eighth ninth tenth january february march april may june july august september october november december monday tuesday wednesday thursday friday saturday sunday'.split(
+  'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eighty ninety hundred thousand million billion first second third fourth fifth sixth seventh eighth ninth tenth january february march april june july august september october november december monday tuesday wednesday thursday friday saturday sunday'.split(
     ' ',
   ),
 );

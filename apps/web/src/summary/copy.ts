@@ -1,4 +1,6 @@
-import type { SummaryFailureKind } from '@neburyx/contracts';
+import { NOT_STORABLE_REASONS, type SummaryFailureKind } from '@neburyx/contracts';
+
+type NotStorableReason = (typeof NOT_STORABLE_REASONS)[number];
 
 export const SUMMARY_COPY = {
   title: 'AI case summary',
@@ -38,7 +40,6 @@ export const SUMMARY_COPY = {
   copyToNotes: 'Copy to notes',
   copying: 'Copying…',
   editedNoCopy: "Edited text can't be stored as AI notes.",
-  noneStorable: "None of these sentences can be stored as AI notes.",
   notCopied: 'Not copied',
   alreadyCopied: 'These sentences were copied to notes before.',
   generateAgain: 'Generate the summary again',
@@ -77,7 +78,24 @@ export const sentencesText = (count: number): string => `${count} ${count === 1 
 
 export const copiedText = (copied: number): string => `${copied} ${copied === 1 ? 'sentence' : 'sentences'} copied to notes.`;
 
-export const notCopiedText = (notCopied: number, total: number): string => `${notCopied} of ${total} ${total === 1 ? 'sentence' : 'sentences'} weren't copied: they state numbers or dates in words, which can't be stored.`;
+/** What each group of reason says of the sentences it holds, written to be true of each sentence in the group (a number or a date, a count that is not known, or a name or a value that cannot be tied to exactly one element or property the sentence cites). */
+const NOT_STORED_BECAUSE: Readonly<Record<NotStorableReason | 'other', (count: number) => string>> = {
+  number: (count) => `${count} ${count === 1 ? 'involves a number, a date or a count that can\'t be tied to exactly one element it cites' : 'involve a number, a date or a count that can\'t be tied to exactly one element they cite'}`,
+  value: (count) => `${count} ${count === 1 ? 'involves a name or a value that can\'t be tied to exactly one element or property it cites' : 'involve a name or a value that can\'t be tied to exactly one element or property they cite'}`,
+  word: (count) => `${count} ${count === 1 ? 'uses a word' : 'use words'} outside the fixed list that can be stored`,
+  other: (count) => `${count} can't be stored`,
+};
+
+/** The sentences of a draft that cannot be stored, grouped by the reason the server gave, in a fixed order. */
+export function notStoredReasons(sentences: readonly { readonly storable: boolean; readonly notStorable?: NotStorableReason | undefined }[]): string {
+  const counts = new Map<NotStorableReason | 'other', number>();
+  for (const sentence of sentences) if (!sentence.storable) counts.set(sentence.notStorable ?? 'other', (counts.get(sentence.notStorable ?? 'other') ?? 0) + 1);
+  return [...NOT_STORABLE_REASONS, 'other' as const].flatMap((reason) => (counts.has(reason) ? NOT_STORED_BECAUSE[reason](counts.get(reason) ?? 0) : [])).join('; ');
+}
+
+export const notCopiedText = (notCopied: number, total: number, reasons: string): string => `${notCopied} of ${total} ${total === 1 ? 'sentence' : 'sentences'} weren't copied: ${reasons}.`;
+
+export const noneStoredText = (reasons: string): string => `None of these sentences can be stored as AI notes: ${reasons}.`;
 
 export const callsText = (calls: number): string => `${calls} ${calls === 1 ? 'call' : 'calls'} made`;
 

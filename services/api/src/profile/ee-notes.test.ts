@@ -37,7 +37,7 @@ function tokenOf(investigationId: string, personId: string, over: { readonly now
       propertyValuesSent: false,
       runId: '0192f000-0000-7000-8000-0000000000aa',
       mask: false,
-      wordListVersion: 1,
+      wordListVersion: 2,
       templates: [
         { storable: true, text: '‹widget#1› is linked to ‹widget#2›.', placeholders: placeholders([['‹widget#1›', W1], ['‹widget#2›', W2]]) },
         { storable: true, text: '‹widget#2› is listed.', placeholders: placeholders([['‹widget#2›', W2]]) },

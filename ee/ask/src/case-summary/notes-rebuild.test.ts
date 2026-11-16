@@ -18,7 +18,7 @@ const entry = (): StoredEntry => ({
   promptId: 'case-summary',
   promptVersion: '1',
   generatedAt: '2026-11-15T10:00:00.000Z',
-  wordListVersion: 1,
+  wordListVersion: 2,
   label: 'AI-drafted',
   inputRefs: [{ key: 'n1', kind: 'entity', ref: W1 }, { key: 'n2', kind: 'entity', ref: W2 }, { key: 'n3', kind: 'entity', ref: ref('widget', 'W-3') }, { key: 'e1', kind: 'relationship', ref: aggregateRef }],
   sentences: [
