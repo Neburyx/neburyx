@@ -11,12 +11,12 @@ type Render = typeof renderForExport;
 /** What a scenario answers, as the texts of the sentences an export carries (or `refused`), given the export function to use. */
 type Scenario = (render: Render) => Promise<readonly string[] | string>;
 
-const view = async (id: string) => drafted(defined(set.cases.find((each) => each.id === id), id));
+const view = async (id: string, masked?: boolean) => drafted(defined(set.cases.find((each) => each.id === id), id), masked);
 
 /** The sentences carried by an export, or the refusal; a thrown error is told apart as such, since the changed source may fail in a way the product does not. */
 const textsOf = (answer: ReturnType<Render>): readonly string[] | string => (answer.status === 'ok' ? answer.section.sentences.map((sentence) => sentence.text) : 'refused');
 
-const RULES: { readonly name: string; readonly mutation: Mutation; readonly scenario: Scenario; readonly whole: (texts: readonly string[]) => unknown; readonly weakened: (texts: readonly string[]) => unknown }[] = [
+const RULES: { readonly name: string; readonly mutation: Mutation; readonly scenario: Scenario; readonly whole: (texts: readonly string[]) => unknown; readonly weakened: (texts: readonly string[]) => unknown; readonly count: number }[] = [
   {
     name: 'a sentence with a cite that the export does not hold, after cites that it holds',
     mutation: { name: 'the unresolved cite', from: 'if (!whole) continue;', to: '' },
@@ -27,16 +27,29 @@ const RULES: { readonly name: string; readonly mutation: Mutation; readonly scen
     },
     whole: (texts) => [texts[0]],
     weakened: (texts) => texts,
+    count: 2,
   },
   {
     name: 'the judgement of a kept sentence against the export\'s own reading',
     mutation: { name: 'the judgement', from: 'const [judged] = judgeSentences([{ text: sentence.text, cites: current }], assembled).kept;', to: 'const judged = { text: sentence.text, cites: current };' },
     scenario: async (render) => {
-      const { evidence, render: renderFor } = await view('same-text-different-addresses');
+      const { evidence, render: renderFor } = await view('same-text-different-addresses', true);
       return textsOf(renderFor(withMaskedValues(evidence.view), { render }));
     },
     whole: (texts) => [texts[0]],
     weakened: (texts) => texts,
+    count: 2,
+  },
+  {
+    name: 'a draft written unmasked, for an export that masks a property',
+    mutation: { name: 'the masked property', from: 'for (const sentence of draftedBeforeMasking ? [] : payload.sentences) {', to: 'for (const sentence of payload.sentences) {' },
+    scenario: async (render) => {
+      const { evidence, render: renderFor } = await view('same-text-different-addresses');
+      return textsOf(renderFor(withMaskedValues(evidence.view), { render }));
+    },
+    whole: () => [],
+    weakened: (texts) => texts,
+    count: 1,
   },
 ];
 
@@ -45,10 +58,10 @@ describe('a rule of the export taken out of the product leaves a sentence carrie
     const mutant = await mutatedModule('export-render.ts', rule.mutation);
     const whole = await rule.scenario(renderForExport);
     const weakened = await rule.scenario(mutant['renderForExport'] as Render);
-    expect(whole).toHaveLength(1);
-    expect(weakened).toHaveLength(2);
-    expect(whole).toEqual(rule.whole(weakened as string[]));
+    expect(Array.isArray(weakened) && weakened.length, 'the sentences of the changed copy').toBe(rule.count);
     expect(weakened).toEqual(rule.weakened(weakened as string[]));
+    expect(whole).toEqual(rule.whole(weakened as string[]));
+    expect(whole).not.toEqual(weakened);
   });
 
   it('shows the removal of the refusal of an unusable token as an unhandled error, never as a token accepted, and passes it with the product as it is', async () => {

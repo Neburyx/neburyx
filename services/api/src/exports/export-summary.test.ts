@@ -247,13 +247,13 @@ describe('the summary of an export is never less masked than the file', () => {
     return { asked, bytes };
   }
 
-  it.each(['json', 'csv'] as const)('reads a %s export with no mask, and drops a sentence that states a value the policy masks, in the file and in its summary', async (format) => {
+  it.each(['json', 'csv'] as const)('reads a %s export with no mask, and keeps no sentence of a draft written unmasked when the file masks a value, in the file and in its summary', async (format) => {
     const masked = await exportWith(format, reading('g•••', true));
     expect(masked.asked).toHaveLength(1);
     expect(masked.asked[0]).not.toHaveProperty('mask');
     const text = format === 'json' ? masked.bytes.toString('utf8') : unzipped(masked.bytes).read('summary.csv');
     expect(text).not.toContain('gold');
-    expect(text).toContain('Ana Silva is listed.');
+    expect(text).not.toContain('Ana Silva is listed.');
     expect(text).not.toContain('has tier');
     const shown = await exportWith(format, reading('gold', false));
     const shownText = format === 'json' ? shown.bytes.toString('utf8') : unzipped(shown.bytes).read('summary.csv');

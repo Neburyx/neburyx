@@ -50,7 +50,8 @@ function requestOf(view: SummaryReading): CaseSummaryInput['request'] {
 export interface Rig {
   /** The summarizer itself, for a test that mounts it in the real application. */
   readonly summarizer: CaseSummarizer;
-  readonly summarize: (view: SummaryReading, signal?: AbortSignal) => Promise<CaseSummaryOutcome>;
+  /** `masked` makes the draft as a viewer who masks makes it. */
+  readonly summarize: (view: SummaryReading, signal?: AbortSignal, masked?: boolean) => Promise<CaseSummaryOutcome>;
   readonly requests: ModelRequest[];
   /** The text of every reply the model gave, in order. */
   readonly replies: string[];
@@ -104,7 +105,8 @@ export function startRig(options: RigOptions): Rig {
     reading: view,
     ...overrides,
   });
-  const summarize = (view: SummaryReading, signal: AbortSignal = new AbortController().signal): Promise<CaseSummaryOutcome> => summarizer.summarize(inputOf(view), signal);
+  const summarize = (view: SummaryReading, signal: AbortSignal = new AbortController().signal, masked?: boolean): Promise<CaseSummaryOutcome> =>
+    summarizer.summarize(inputOf(view, masked === undefined ? {} : { request: { ...requestOf(view), mask: masked } }), signal);
   return { summarizer, summarize, requests, replies, events, store, instructions, settings };
 }
 

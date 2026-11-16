@@ -82,6 +82,18 @@ describe('the summary section of an export', () => {
     expect(textsOf(render(token, reading([withTier('g•••', true)])))).toEqual([]);
   });
 
+  it('keeps no sentence of a draft written unmasked when the export masks a property, whatever form of the name the sentence takes or which element it cites, and keeps those of a draft written from the masked view', () => {
+    const maskedAna: GraphNode = { ...node(W1, 'A••• S•••'), properties: [{ key: 'name', value: 'A••• S•••', dataClass: 'text', masked: true }] };
+    const unmaskedDraft = sealed([{ text: 'ana silva is linked to Bo Chen.', cites: ['n1', 'n2'] }]);
+    expect(textsOf(render(unmaskedDraft, reading([ANA, BO])))).toEqual(['ana silva is linked to Bo Chen.']);
+    expect(textsOf(render(unmaskedDraft, reading([maskedAna, BO])))).toEqual([]);
+    const uncited = sealed([{ text: 'bo chen paid ana silva.', cites: ['n2'] }]);
+    expect(textsOf(render(uncited, reading([ANA, BO])))).toEqual(['bo chen paid ana silva.']);
+    expect(textsOf(render(uncited, reading([maskedAna, BO])))).toEqual([]);
+    const maskedDraft = sealed([{ text: 'A••• S••• is linked to Bo Chen.', cites: ['n1', 'n2'] }], { mask: true });
+    expect(textsOf(render(maskedDraft, reading([maskedAna, BO])))).toEqual(['A••• S••• is linked to Bo Chen.']);
+  });
+
   it('returns the section with no sentence and its coverage when every sentence is dropped', () => {
     const outcome = render(sealed([{ text: 'Ana Silva is listed.', cites: ['n1'] }]), reading([BO]));
     expect(outcome).toMatchObject({ status: 'ok', kept: 0, dropped: 1, section: { sentences: [], coverage: { summary: 'No sentence was kept.' } } });
