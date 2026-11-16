@@ -102,8 +102,16 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
     };
     /** The run row ends with the outcome before the closing event says it; if the event then cannot be written the row says so, and the click fails closed. */
     const finalize = (calls: number, outcome: string): Promise<void> => stored(() => runs.finish(runId, outcome, calls, new Date((options.now ?? Date.now)())));
-    const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked): Promise<void> => {
+    /** `cancelled` says whether the client has given up: a click it gave up ends `cancelled`, before or after its row is written, whatever the draft was. */
+    const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked, cancelled?: () => boolean): Promise<void> => {
+      const cancel = async (): Promise<never> => {
+        await finalize(calls, 'cancelled');
+        await publish(calls, 'cancelled', 'failed', checked).catch(() => undefined);
+        throw new SummaryHandled(new Error('the request was cancelled'));
+      };
+      if (cancelled?.() === true) return cancel();
       await finalize(calls, outcome);
+      if (cancelled?.() === true) return cancel();
       try {
         await publish(calls, outcome, result, checked);
       } catch (error) {
@@ -129,7 +137,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
       const { runId, runs, stored, finalize, publish, write } = run;
       const prepared = prepareSummary(input.reading, instructions.text, guard);
       const record = async (outcome: CaseSummaryOutcome, checked?: Checked): Promise<CaseSummaryOutcome> => {
-        await write(outcome.status === 'tooLarge' ? 0 : outcome.calls, outcome.status === 'failed' ? outcome.kind : outcome.status, resultOf(outcome), checked);
+        await write(outcome.status === 'tooLarge' ? 0 : outcome.calls, outcome.status === 'failed' ? outcome.kind : outcome.status, resultOf(outcome), checked, () => signal.aborted);
         return outcome;
       };
       if (!prepared.ready) return record(prepared.refusal);

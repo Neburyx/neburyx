@@ -86,7 +86,9 @@ test.describe('the AI case summary panel', () => {
     await summarize(page).click();
     await expect(panel(page).locator('.summary-generating-title')).toBeVisible();
     await panel(page).getByRole('button', { name: 'Cancel' }).click();
-    await expect(panel(page).getByRole('button', { name: 'Summarize' })).toBeFocused();
+    await expect(panel(page).getByRole('heading', { name: 'Cancelled' })).toBeFocused();
+    await expect(panel(page).getByText('No draft is shown.')).toBeVisible();
+    await expect(panel(page).getByRole('button', { name: 'Try again' })).toBeVisible();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
   });
 
@@ -96,7 +98,7 @@ test.describe('the AI case summary panel', () => {
     await summarize(page).click();
     await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
     await page.keyboard.press('Escape');
-    await expect(panel(page).getByRole('button', { name: 'Summarize' })).toBeVisible();
+    await expect(panel(page).getByRole('heading', { name: 'Cancelled' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panel(page)).toHaveCount(0);
     await expect(summarize(page)).toBeFocused();

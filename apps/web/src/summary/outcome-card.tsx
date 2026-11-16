@@ -30,6 +30,8 @@ function wordsOf(outcome: SummaryOutcome, sourceId: string): Words {
         : { title: SUMMARY_COPY.titleTooLarge, text: TOO_LARGE_TEXT, icon: 'frame', action: 'return' };
     case 'time-limit':
       return { title: SUMMARY_COPY.titleTimeLimit, text: SUMMARY_COPY.timeLimit, action: 'try-again' };
+    case 'cancelled':
+      return { title: SUMMARY_COPY.titleCancelled, text: SUMMARY_COPY.cancelled, action: 'try-again' };
     case 'failed':
       return { title: SUMMARY_COPY.titleFailed, text: FAILURE_KIND_TEXT[outcome.failureKind], action: 'try-again' };
     case 'request-failed': {

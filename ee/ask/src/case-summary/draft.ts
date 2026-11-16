@@ -102,11 +102,18 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
     if (remaining <= 0) return { status: 'timeLimit', calls, ...so() };
     const limit = new AbortController();
     const timer = setTimeout(() => limit.abort(), remaining);
-    calls += 1;
-    options.onCall?.(calls);
+    const number = calls + 1;
     try {
       const sentAt = now();
-      await options.record?.beforeCall({ number: calls, instructions: options.instructions, values, startedAt: new Date(sentAt) });
+      await options.record?.beforeCall({ number, instructions: options.instructions, values, startedAt: new Date(sentAt) });
+      if (options.signal.aborted) {
+        // the client gave up while the call was being recorded: the record ends as cancelled and the provider is never asked
+        await options.record?.afterCall({ number, status: 'cancelled', failureKind: 'cancelled', durationMs: now() - sentAt });
+        throw new Error('the request was cancelled');
+      }
+      // only a call that is sent is counted
+      calls = number;
+      options.onCall?.(calls);
       let answer: ModelAnswer;
       let received: ModelAnswer | undefined;
       try {
@@ -117,14 +124,21 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
         );
       } catch (error) {
         // a failure to record the audit event, after the provider answered, still leaves the record of the call with what the provider returned
-        const end = received === undefined
-          ? { number: calls, status: options.signal.aborted ? ('cancelled' as const) : ('failed' as const), failureKind: options.signal.aborted ? 'cancelled' : 'error', durationMs: now() - sentAt }
-          : endOf(calls, received, now() - sentAt, options.signal.aborted ? 'client' : limit.signal.aborted ? 'limit' : undefined);
+        const endNow = () =>
+          received === undefined
+            ? { number: calls, status: options.signal.aborted ? ('cancelled' as const) : ('failed' as const), failureKind: options.signal.aborted ? 'cancelled' : 'error', durationMs: now() - sentAt }
+            : endOf(calls, received, now() - sentAt, options.signal.aborted ? 'client' : limit.signal.aborted ? 'limit' : undefined);
+        const first = endNow();
         // a record that cannot be written ends the click as unavailable, whatever the failure was
-        await options.record?.afterCall(end);
+        await options.record?.afterCall(first);
+        // a cancel that arrived while the record was written still marks the call
+        if (first.status !== 'cancelled' && options.signal.aborted) await options.record?.afterCall(endNow());
         throw error;
       }
-      await options.record?.afterCall(endOf(calls, answer, now() - sentAt, options.signal.aborted ? 'client' : limit.signal.aborted ? 'limit' : undefined));
+      const clientGaveUp = options.signal.aborted;
+      await options.record?.afterCall(endOf(calls, answer, now() - sentAt, clientGaveUp ? 'client' : limit.signal.aborted ? 'limit' : undefined));
+      // a cancel that arrived while the record was written still marks the call
+      if (!clientGaveUp && options.signal.aborted) await options.record?.afterCall(endOf(calls, answer, now() - sentAt, 'client'));
       if (options.signal.aborted) throw new Error('the request was cancelled');
       if (limit.signal.aborted) return { status: 'timeLimit', calls, ...so() };
       if (answer.status === 'refused') return { status: 'failed', kind: 'refused', calls, ...so() };

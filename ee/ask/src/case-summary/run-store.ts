@@ -161,7 +161,10 @@ export function createMemorySummaryRunStore(options: { readonly failOn?: 'begin'
     },
     async endCall(call) {
       check('endCall');
-      find(call.runId).callEnds.push(call);
+      const ends = find(call.runId).callEnds;
+      const held = ends.findIndex((end) => end.number === call.number);
+      if (held < 0) ends.push(call);
+      else ends[held] = call;
     },
     async finish(runId, outcome, calls, finishedAt) {
       check('finish');

@@ -12,6 +12,7 @@ import { edge, key, node, ref } from '../state/test-data.js';
 import { elementKey } from '../state/keys.js';
 import { FAILURE_KIND_TEXT } from './copy.js';
 import { SummaryPanel } from './summary-panel.js';
+import { useSummary, type SummaryModel } from './use-summary.js';
 import { SummarySessionProvider, createSummarySession } from './summary-session.js';
 
 afterEach(cleanup);
@@ -227,7 +228,9 @@ describe('the summary panel: generating, Cancel, Regenerate and Discard', () => 
     const selection = h.state.presentation.view.getState().selection;
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(h.sent[0]?.signal?.aborted).toBe(true);
-    expect(screen.getByRole('button', { name: 'Summarize' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Cancelled' })).toBeTruthy();
+    expect(screen.getByText('No draft is shown.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(h.state.presentation.view.getState().selection).toBe(selection);
     expect(h.state.loadedGraph().nodes).toHaveLength(2);
   });
@@ -487,7 +490,41 @@ describe('the summary panel: keeping the person going and the focus', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await act(async () => finish(ok(draft())));
     expect(screen.queryByRole('heading', { name: 'Draft' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Summarize' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Cancelled' })).toBeTruthy();
+  });
+
+  it('asks again from the Cancelled state with Try again', async () => {
+    const h = harness(() => (h.sent.length === 1 ? new Promise(() => undefined) : Promise.resolve(ok(draft()))));
+    render(h.tree(true));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(h.sent).toHaveLength(2);
+    expect(await screen.findByRole('heading', { name: 'Draft' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Cancelled' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+  });
+
+  it('changes nothing when cancel() arrives after the draft is shown', async () => {
+    let model: SummaryModel | undefined;
+    const Probe = () => ((model = useSummary(() => undefined)), null);
+    const h = harness(async () => ok(draft()));
+    render(h.tree(true));
+    await screen.findByRole('heading', { name: 'Draft' });
+    render(
+      <ApiClientProvider client={fakeClient({})}>
+        <ClientStateProvider state={h.state}>
+          <SummarySessionProvider value={h.session}>
+            <Probe />
+          </SummarySessionProvider>
+        </ClientStateProvider>
+      </ApiClientProvider>,
+    );
+    const before = h.session.getState();
+    act(() => model?.cancel());
+    expect(h.session.getState()).toBe(before);
+    expect(screen.getByRole('heading', { name: 'Draft' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Cancelled' })).toBeNull();
+    expect(h.sent).toHaveLength(1);
   });
 
   it('shows nothing of an answer that arrives after Discard during a regeneration', async () => {

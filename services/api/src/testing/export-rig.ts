@@ -55,7 +55,7 @@ export interface ExportRigOptions {
   /** The stable ID of an entity the person may read but not export. */
   readonly unexportableNode?: string;
   readonly failAudit?: (action: string) => boolean;
-  readonly answer?: (call: ExecuteCall) => ExecuteOutcome | undefined;
+  readonly answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
   /** The extension and the switch of the application under test, and the summarizer its seams hold. */
   readonly extension?: ProfileExtension;
   readonly previewOn?: boolean;

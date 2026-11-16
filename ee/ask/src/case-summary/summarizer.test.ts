@@ -411,3 +411,97 @@ describe('the record of a click', () => {
     await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toBeInstanceOf(AuditUnavailableError);
   });
 });
+
+describe('a click the client cancels while the record of it is written', () => {
+  function cancelling(step: 'beginCall' | 'endCall' | 'finish', overrides: Partial<SummarySettings> = {}, rejecting = false) {
+    const controller = new AbortController();
+    const base = createMemorySummaryRunStore();
+    let done = false;
+    const store = {
+      ...base,
+      [step]: async (...args: never[]) => {
+        if (!done) (done = true), controller.abort();
+        return (base[step] as (...values: never[]) => Promise<void>)(...args);
+      },
+    };
+    const events: AuditEvent[] = [];
+    const requests: ModelRequest[] = [];
+    const provider: ModelProvider = { complete: async (request) => (requests.push(request), rejecting ? Promise.reject(new Error('down')) : { status: 'ok', text: GOOD, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async (event) => void events.push(event) } });
+    const summarizer = createCaseSummarizer({ settings: { ...settings, ...overrides }, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    return { summarizer, controller, base, events, requests };
+  }
+  const closing = (events: AuditEvent[]) => events.filter((event) => event.action === 'ai.case-summary.closed');
+
+  it('never asks the model when the cancel arrives while the call is recorded as begun, and ends that call as cancelled', async () => {
+    const { summarizer, controller, base, events, requests } = cancelling('beginCall');
+    await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
+    expect(requests).toEqual([]);
+    expect(base.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'cancelled' });
+    expect(base.runs[0]).toMatchObject({ outcome: 'cancelled', calls: 0 });
+    expect(closing(events)[0]).toMatchObject({ detail: { summary: { outcome: 'cancelled', calls: 0 } } });
+  });
+
+  it('marks a call whose provider failed cancelled when the cancel arrives while its end is recorded', async () => {
+    const { summarizer, controller, base } = cancelling('endCall', {}, true);
+    await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
+    expect(base.runs[0]?.callEnds).toHaveLength(1);
+    expect(base.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'cancelled' });
+    expect(base.runs[0]?.outcome).toBe('cancelled');
+  });
+
+  it('marks the call cancelled when the cancel arrives while its answer is recorded', async () => {
+    const { summarizer, controller, base, events } = cancelling('endCall');
+    await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
+    expect(base.runs[0]?.callEnds).toHaveLength(1);
+    expect(base.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'cancelled' });
+    expect(base.runs[0]?.outcome).toBe('cancelled');
+    expect(closing(events).map((event) => event.result)).toEqual(['failed']);
+  });
+
+  it('ends the run and the closing event as cancelled, not ok, when the cancel arrives while the run row is finished', async () => {
+    const { summarizer, controller, base, events } = cancelling('finish');
+    await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
+    expect(base.runs[0]?.outcome).toBe('cancelled');
+    // the call itself was answered before the cancel; only the click is cancelled
+    expect(base.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'answered' });
+    expect(closing(events)).toHaveLength(1);
+    expect(closing(events)[0]).toMatchObject({ result: 'failed', detail: { summary: { outcome: 'cancelled' } } });
+  });
+
+  it('changes nothing when the cancel arrives while the closing event is being written: the draft is returned, one event, the run and the call as they were', async () => {
+    const controller = new AbortController();
+    const base = createMemorySummaryRunStore();
+    const events: AuditEvent[] = [];
+    const requests: ModelRequest[] = [];
+    const provider: ModelProvider = { complete: async (request) => (requests.push(request), { status: 'ok', text: GOOD, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+    const sink = {
+      record: async (event: AuditEvent) => {
+        if (event.action === 'ai.case-summary.closed') {
+          controller.abort();
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+        events.push(event);
+      },
+    };
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => sink, tokenKeys: () => KEYS, runs: () => base, availability: () => ({ available: true }) });
+    const answer = await summarizer.summarize(input(), controller.signal);
+    expect(answer.status).toBe('ok');
+    expect(requests).toHaveLength(1);
+    expect(closing(events)).toHaveLength(1);
+    expect(closing(events)[0]).toMatchObject({ result: 'success', detail: { summary: { outcome: 'ok', calls: 1 } } });
+    expect(base.runs[0]).toMatchObject({ outcome: 'ok', calls: 1 });
+    expect(base.runs[0]?.callEnds[0]).toMatchObject({ number: 1, status: 'answered' });
+  });
+
+  it('ends a click that was cancelled before its text was measured as cancelled, not as too large', async () => {
+    const { summarizer, base, events, requests } = cancelling('finish', { maxInputTokens: 1 });
+    const controller = new AbortController();
+    controller.abort();
+    await expect(summarizer.summarize(input(), controller.signal)).rejects.toBeInstanceOf(SummaryHandled);
+    expect(requests).toEqual([]);
+    expect(base.runs[0]?.outcome).toBe('cancelled');
+    expect(closing(events)[0]).toMatchObject({ detail: { summary: { outcome: 'cancelled' } } });
+  });
+});

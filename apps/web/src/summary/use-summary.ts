@@ -106,8 +106,9 @@ export function useSummary(onClose: () => void): SummaryModel {
     controller.current = undefined;
     open?.abort();
     if (session.getState().attempt.kind === 'generating') {
-      patch({ attempt: { kind: 'idle' } });
-      setFocus(session.getState().draft === undefined ? 'start' : 'draft');
+      const kept = session.getState().draft !== undefined;
+      patch({ attempt: kept ? { kind: 'idle' } : { kind: 'outcome', outcome: { kind: 'cancelled' } } });
+      setFocus(kept ? 'draft' : 'title');
     }
   }, [patch, session, setFocus]);
 

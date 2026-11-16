@@ -63,6 +63,7 @@ export type SummaryOutcome =
   | { readonly kind: 'unsupported'; readonly response: UnsupportedResponse }
   | { readonly kind: 'too-large'; readonly response: TooLargeResponse }
   | { readonly kind: 'time-limit' }
+  | { readonly kind: 'cancelled' }
   | { readonly kind: 'failed'; readonly failureKind: SummaryFailureKind }
   | { readonly kind: 'request-failed'; readonly failure: ApiFailure }
   | { readonly kind: 'unavailable' }
