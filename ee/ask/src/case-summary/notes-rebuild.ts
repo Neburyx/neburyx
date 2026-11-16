@@ -21,6 +21,10 @@ const descriptorRefs = (descriptor: Descriptor): readonly (ElementRef | EdgeRef)
     case 'count':
     case 'time':
       return [descriptor.relationship];
+    case 'value':
+      return descriptor.of.map((owner) => owner.ref);
+    case 'tally':
+      return descriptor.of;
   }
 };
 
@@ -96,6 +100,18 @@ export function rebuildEntry(entry: StoredEntry, reading: SummaryReading): Rebui
       case 'count': {
         const count = edge(descriptor.relationship)?.memberCount;
         return count === undefined || count.value === undefined || count.quality === 'unknown' ? undefined : countPhrase(count);
+      }
+      case 'value': {
+        const shown = descriptor.of.map((owner) => (owner.kind === 'entity' ? node(owner.ref)?.properties : edge(owner.ref)?.properties)?.find((property) => property.key === descriptor.key));
+        const texts = shown.map((property) => (property === undefined || (typeof property.value !== 'string' && typeof property.value !== 'number') ? undefined : String(property.value)));
+        const [first] = texts;
+        return first === undefined || texts.some((text) => text !== first) ? undefined : first;
+      }
+      case 'tally': {
+        const found = descriptor.of.map((ref) => node(ref));
+        const [head] = found;
+        if (head === undefined || found.some((entity) => entity === undefined || entity.display.type !== head.display.type)) return undefined;
+        return `${found.length} ${head.display.type.toLowerCase()}${descriptor.suffix}`;
       }
       case 'time': {
         const value = edge(descriptor.relationship)?.[descriptor.field];

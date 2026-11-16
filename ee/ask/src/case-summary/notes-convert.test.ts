@@ -65,7 +65,6 @@ describe('entity and type placeholders', () => {
     ['a name with a look-alike character', 'Аna Silva is linked.', ['n1'], 'unlisted-word'],
     ['the name of an uncited element in another case', 'The bo chen is linked to Ana Silva.', ['n1'], 'name'],
     ['the title of an uncited element that is a listed word, in lower case', 'The open is linked.', ['n1'], 'name'],
-    ['a value of a property that was sent', 'Ana Silva is gold.', ['n1'], 'property-value'],
     ['a placeholder written by the model', 'The ‹widget#1› is linked.', ['n1'], 'unlisted-word'],
   ])('does not store a sentence with %s', (_name, text, cites, reason) => {
     const [only] = convert([sentence(text, ...cites)], [node('W-1', 'Ana Silva'), node('W-2', 'Bo Chen'), node('W-3', 'record'), node('W-4', 'Open')]);
@@ -93,7 +92,8 @@ describe('entity and type placeholders', () => {
   });
 
   it('does not store a property value in another case, or one inside a list', () => {
-    expect(reasonOf(convert([sentence('Ana Silva is Gold.', 'n1')])[0])).toBe('property-value');
+    const other = node('W-3', 'Cy Park', 'widget', 'silver');
+    expect(reasonOf(convert([sentence('Ana Silva is Silver.', 'n1')], [node('W-1', 'Ana Silva'), other])[0])).toBe('property-value');
     const listed: GraphNode = { ...node('W-1', 'Ana Silva'), properties: [{ key: 'tags', value: ['alpha', 'beta'], dataClass: 'list', masked: false }] };
     expect(reasonOf(convert([sentence('Ana Silva has beta.', 'n1')], [listed])[0])).toBe('property-value');
   });
@@ -165,5 +165,67 @@ describe('the bound of a stored sentence', () => {
     const many = (count: number) => convert([sentence('NameAa Silva', ...keys.slice(0, count))], nodes)[0];
     expect(many(50)?.storable).toBe(true);
     expect(reasonOf(many(51))).toBe('name');
+  });
+});
+
+describe('value slots', () => {
+  const two = [node('W-1', 'Ana Silva', 'widget', 'gold'), node('W-2', 'Bo Chen', 'widget', 'gold')];
+  const slotOf = (template: NotesTemplate | undefined) => (template?.storable === true ? template.placeholders.find((placeholder) => placeholder.descriptor.kind === 'value') : undefined);
+
+  it('stores a property value of a cited element as a value slot that names the element and the property, never the value', () => {
+    const [only] = convert([sentence('Ana Silva is Gold.', 'n1')], [node('W-1', 'Ana Silva', 'widget', 'gold'), node('W-2', 'Bo Chen', 'widget', 'silver')]);
+    expect(textOf(only)).toBe('‹widget#1› is ‹value#1›.');
+    expect(slotOf(only)?.descriptor).toMatchObject({ kind: 'value', key: 'tier', of: [{ kind: 'entity', ref: W1 }] });
+    expect(JSON.stringify(only)).not.toMatch(/gold/iu);
+  });
+
+  it('binds a value that every cited owner holds under one key to all of them', () => {
+    const [only] = convert([sentence('Ana Silva and Bo Chen are gold.', 'n1', 'n2')], two);
+    expect(textOf(only)).toBe('‹widget#1› and ‹widget#2› are ‹value#1›.');
+    expect(slotOf(only)?.descriptor).toMatchObject({ kind: 'value', key: 'tier', of: [{ ref: W1 }, { ref: W2 }] });
+  });
+
+  it('does not store a value held under two properties of the cited elements, or a value that only an uncited element holds', () => {
+    const twice: GraphNode = { ...node('W-1', 'Ana Silva'), properties: [{ key: 'tier', value: 'gold', dataClass: 'text', masked: false }, { key: 'band', value: 'gold', dataClass: 'text', masked: false }] };
+    expect(reasonOf(convert([sentence('Ana Silva is gold.', 'n1')], [twice, node('W-2', 'Bo Chen')])[0])).toBe('property-value');
+    expect(reasonOf(convert([sentence('Ana Silva is silver.', 'n1')], [node('W-1', 'Ana Silva'), node('W-2', 'Bo Chen', 'widget', 'silver')])[0])).toBe('property-value');
+  });
+
+  it('stores a number held by a property of a cited element as a value slot', () => {
+    const numeric: GraphNode = { ...node('W-1', 'Ana Silva'), properties: [{ key: 'limit', value: 5000, dataClass: 'number', masked: false }] };
+    expect(textOf(convert([sentence('Ana Silva has 5000.', 'n1')], [numeric])[0])).toBe('‹widget#1› has ‹value#1›.');
+  });
+
+  it('keeps a value inside a list or an object of a cited element unstorable, also when another cited element holds it as a scalar', () => {
+    const listed: GraphNode = { ...node('W-1', 'Ana Silva'), properties: [{ key: 'tags', value: ['alpha', 'beta'], dataClass: 'list', masked: false }] };
+    const object: GraphNode = { ...node('W-1', 'Ana Silva'), properties: [{ key: 'meta', value: { origin: 'north' }, dataClass: 'other', masked: false }] };
+    expect(reasonOf(convert([sentence('Ana Silva has beta.', 'n1')], [listed])[0])).toBe('property-value');
+    expect(reasonOf(convert([sentence('Ana Silva is north.', 'n1')], [object])[0])).toBe('property-value');
+    const alias: GraphNode = { ...node('W-2', 'Bo Chen'), properties: [{ key: 'aliases', value: ['gold'], dataClass: 'list', masked: true }] };
+    expect(reasonOf(convert([sentence('Bo Chen is known as gold.', 'n1', 'n2')], [node('W-1', 'Ana Silva', 'widget', 'gold'), alias])[0])).toBe('property-value');
+  });
+
+  it('merges values that differ only in case, so a masked property cannot be shown through another one', () => {
+    const band: GraphNode = { ...node('W-2', 'Bo Chen'), properties: [{ key: 'band', value: 'gold', dataClass: 'text', masked: true }] };
+    expect(reasonOf(convert([sentence('Bo Chen is gold.', 'n1', 'n2')], [node('W-1', 'Ana Silva', 'widget', 'Gold'), band])[0])).toBe('property-value');
+    const named = (id: string, title: string, value: string): GraphNode => ({ ...node(id, title), properties: [{ key: 'name', value, dataClass: 'text', masked: false }] });
+    const [both] = convert([sentence('Ana Silva and Bo Chen are Acme.', 'n1', 'n2')], [named('W-1', 'Ana Silva', 'ACME'), named('W-2', 'Bo Chen', 'Acme')]);
+    expect(slotOf(both)?.descriptor).toMatchObject({ kind: 'value', key: 'name', of: [{ ref: W1 }, { ref: W2 }] });
+  });
+});
+
+describe('tally slots', () => {
+  const accounts = [node('A-1', 'Gizmo One', 'gizmo', 'x1'), node('A-2', 'Gizmo Two', 'gizmo', 'x2'), node('A-3', 'Gizmo Three', 'gizmo', 'x3')];
+
+  it('stores a number word or digits that equal the count of cited entities of a type, with the type word, as a count slot', () => {
+    const [word] = convert([sentence('Ana Silva owns three gizmos.', 'n1', 'n2', 'n3', 'n4')], [node('W-1', 'Ana Silva'), ...accounts]);
+    expect(textOf(word)).toBe('‹widget#1› owns ‹count#1›.');
+    expect(word?.storable === true ? word.placeholders.find((placeholder) => placeholder.descriptor.kind === 'tally')?.descriptor : undefined).toMatchObject({ kind: 'tally', suffix: 's' });
+    expect(textOf(convert([sentence('Ana Silva owns 3 gizmos.', 'n1', 'n2', 'n3', 'n4')], [node('W-1', 'Ana Silva'), ...accounts])[0])).toBe('‹widget#1› owns ‹count#1›.');
+  });
+
+  it('does not store a number that is not the count of cited entities of that type', () => {
+    expect(reasonOf(convert([sentence('Ana Silva owns four gizmos.', 'n1', 'n2', 'n3', 'n4')], [node('W-1', 'Ana Silva'), ...accounts])[0])).toBe('number-or-date');
+    expect(reasonOf(convert([sentence('Ana Silva owns two gizmos.', 'n1', 'n2', 'n3', 'n4')], [node('W-1', 'Ana Silva'), ...accounts])[0])).toBe('number-or-date');
   });
 });

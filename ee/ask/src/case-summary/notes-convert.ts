@@ -40,6 +40,18 @@ function valuesOf(properties: readonly GraphProperty[]): string[] {
   return properties.flatMap((property) => textsOf(property.value));
 }
 
+type Owner = { readonly kind: 'entity'; readonly ref: ElementRef } | { readonly kind: 'relationship'; readonly ref: EdgeRef };
+
+const NUMBER_WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+
+/** The ways a count is written as one token: its digits and, up to twenty, its word. */
+const numberTokens = (count: number): string[] => [String(count), ...(NUMBER_WORDS[count] === undefined ? [] : [NUMBER_WORDS[count]])];
+
+/** The scalar property values of an element a sentence can state: a string of more than one character, or a number. A list, an object and a flag are left to the storage rule. */
+function scalarsOf(properties: readonly GraphProperty[]): { readonly key: string; readonly text: string }[] {
+  return properties.flatMap((property) => (typeof property.value === 'string' && property.value.length > 1 ? [{ key: property.key, text: property.value }] : typeof property.value === 'number' ? [{ key: property.key, text: String(property.value) }] : []));
+}
+
 const kindWord = (typeName: string): string => {
   const word = typeName.toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
   return /^[a-z]/u.test(word) ? word : 'entity';
@@ -117,6 +129,20 @@ export function templatesOf(sentences: readonly SummarySentence[], assembled: As
       text = text.split(value).join(markOf(slots.length));
       slots.push({ placeholder: { name: nameOf(`time:${canonicalText(only)}`, 'time'), descriptor: only } });
     }
+    const typed = new Map<string, ElementRef[]>();
+    for (const key of cited) {
+      const entity = entities.get(key);
+      if (entity !== undefined) typed.set(entity.node.display.type, [...(typed.get(entity.node.display.type) ?? []), entity.ref]);
+    }
+    for (const [typeName, refs] of typed) {
+      if (typeName === '' || refs.length > AI_NOTES_MAX_SLOTS) continue;
+      const pattern = new RegExp(`(?<![\\p{L}\\p{N}])(${numberTokens(refs.length).join('|')})\\s+${escapeRegExp(typeName)}(es|s)?(?![\\p{L}\\p{N}])`, 'iu');
+      for (let found = pattern.exec(text); found !== null; found = pattern.exec(text)) {
+        const suffix = (found[2] ?? '').toLowerCase() as '' | 's' | 'es';
+        text = text.replace(pattern, markOf(slots.length));
+        slots.push({ placeholder: { name: nameOf(`tally:${typeName}:${refs.map(canonicalText).join(',')}:${suffix}`, 'count'), descriptor: { kind: 'tally', of: refs, suffix } } });
+      }
+    }
     for (const needle of needles) {
       if (!wholeToken(needle.value).test(text)) continue;
       const [only, ...more] = needle.keys;
@@ -140,6 +166,34 @@ export function templatesOf(sentences: readonly SummarySentence[], assembled: As
       const placeholder: Placeholder = { name: nameOf(`type:${typeName}`, 'type'), descriptor: { kind: 'type', of } };
       text = text.replace(new RegExp(pattern.source, pattern.flags), markOf(slots.length));
       slots.push({ placeholder });
+    }
+    const holders = new Map<string, { readonly value: string; readonly byKey: Map<string, Owner[]>; nonScalar: boolean }>();
+    for (const key of cited) {
+      const owner = entities.get(key) ?? relationships.get(key);
+      if (owner === undefined) continue;
+      const element: Owner = 'node' in owner ? { kind: 'entity', ref: owner.ref } : { kind: 'relationship', ref: owner.ref };
+      for (const property of 'node' in owner ? owner.node.properties : owner.edge.properties) {
+        const scalar = scalarsOf([property]);
+        const texts = scalar.length > 0 ? scalar.map((one) => one.text) : textsOf(property.value);
+        for (const value of texts) {
+          const known = holders.get(value.toLowerCase()) ?? { value, byKey: new Map<string, Owner[]>(), nonScalar: false };
+          if (scalar.length > 0) known.byKey.set(property.key, [...(known.byKey.get(property.key) ?? []), element]);
+          else {
+            known.nonScalar = true;
+            known.byKey.set(property.key, known.byKey.get(property.key) ?? []);
+          }
+          holders.set(value.toLowerCase(), known);
+        }
+      }
+    }
+    for (const { value, byKey, nonScalar } of [...holders.values()].sort((a, b) => b.value.length - a.value.length)) {
+      if (!wholeToken(value).test(text)) continue;
+      const groups = [...byKey];
+      const [group] = groups;
+      if (nonScalar || groups.length !== 1 || group === undefined || group[1].length > AI_NOTES_MAX_SLOTS) return { storable: false, reason: 'property-value' };
+      const [property, owners] = group;
+      text = text.replace(wholeToken(value, 'giu'), markOf(slots.length));
+      slots.push({ placeholder: { name: nameOf(`value:${property}:${owners.map((owner) => canonicalText(owner.ref)).join(',')}`, 'value'), descriptor: { kind: 'value', of: owners, key: property } } });
     }
     for (const value of propertyValues) {
       if (wholeToken(value).test(text)) return { storable: false, reason: 'property-value' };

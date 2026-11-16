@@ -91,3 +91,39 @@ describe('the references of the notes and what is trusted of a stored value', ()
     expect(parseStoredEntry({ ...entry(), sentences: 'no' })).toBeUndefined();
   });
 });
+
+describe('value and tally slots for a viewer', () => {
+  const withTier = (r: ReturnType<typeof ref>, title: string, value: unknown, masked = false): GraphNode => ({ ...node(r, title), properties: [{ key: 'tier', value, dataClass: 'text', masked }] });
+  const valueEntry = (): StoredEntry => ({
+    ...entry(),
+    sentences: [{ text: '‹widget#1› is ‹value#1›.', placeholders: [{ name: '‹widget#1›', descriptor: { kind: 'entity', ref: W1 } }, { name: '‹value#1›', descriptor: { kind: 'value', of: [{ kind: 'entity', ref: W1 }, { kind: 'entity', ref: W2 }], key: 'tier' } }], cites: [{ key: 'n1', kind: 'entity', ref: W1 }] }],
+  });
+  const tallyEntry = (): StoredEntry => ({
+    ...entry(),
+    sentences: [{ text: 'Ana Silva owns ‹count#1›.', placeholders: [{ name: '‹count#1›', descriptor: { kind: 'tally', of: [W1, W2], suffix: 's' } }], cites: [{ key: 'n1', kind: 'entity', ref: W1 }] }],
+  });
+
+  it('rebuilds a value from the viewer\'s own reading, showing the masked value they are given and never a stored one', () => {
+    expect(texts(rebuildEntry(valueEntry(), reading([withTier(W1, 'Ana Silva', 'gold'), withTier(W2, 'Bo Chen', 'gold')], [])))).toEqual(['Ana Silva is gold.']);
+    expect(texts(rebuildEntry(valueEntry(), reading([withTier(W1, 'Ana Silva', 'g•••', true), withTier(W2, 'Bo Chen', 'g•••', true)], [])))).toEqual(['Ana Silva is g•••.']);
+    expect(JSON.stringify(valueEntry())).not.toContain('gold');
+  });
+
+  it('drops the sentence when an owner is hidden from the viewer, the property is absent, the owners now differ or the value is not a scalar', () => {
+    expect(texts(rebuildEntry(valueEntry(), reading([withTier(W1, 'Ana Silva', 'gold')], [])))).toEqual([]);
+    expect(texts(rebuildEntry(valueEntry(), reading([ANA, BO], [])))).toEqual([]);
+    expect(texts(rebuildEntry(valueEntry(), reading([withTier(W1, 'Ana Silva', 'gold'), withTier(W2, 'Bo Chen', 'silver')], [])))).toEqual([]);
+    expect(texts(rebuildEntry(valueEntry(), reading([withTier(W1, 'Ana Silva', ['gold']), withTier(W2, 'Bo Chen', ['gold'])], [])))).toEqual([]);
+  });
+
+  it('rebuilds a tally as the count of the elements shown with the type word and its ending, and drops it when one is hidden or the types differ', () => {
+    expect(texts(rebuildEntry(tallyEntry(), reading([ANA, BO], [])))).toEqual(['Ana Silva owns 2 widgets.']);
+    expect(texts(rebuildEntry(tallyEntry(), reading([ANA], [])))).toEqual([]);
+    expect(texts(rebuildEntry(tallyEntry(), reading([ANA, { ...BO, display: { title: 'Bo Chen', type: 'gadget' } }], [])))).toEqual([]);
+  });
+
+  it('asks for the elements of value and tally slots in the one batch', () => {
+    const refs = refsOf([valueEntry(), tallyEntry()]);
+    expect(refs.entities.map((r) => r.stableId).sort()).toEqual(['W-1', 'W-2', 'W-3']);
+  });
+});

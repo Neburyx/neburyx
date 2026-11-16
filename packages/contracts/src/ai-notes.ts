@@ -28,6 +28,10 @@ export const aiNotesDescriptorSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('type'), of: z.discriminatedUnion('kind', [entityDescriptor, z.strictObject({ kind: z.literal('relationship'), ref: edgeRefSchema })]) }),
   z.strictObject({ kind: z.literal('count'), relationship: edgeRefSchema, scope: z.literal('members') }),
   z.strictObject({ kind: z.literal('time'), relationship: edgeRefSchema, field: z.enum(AI_NOTES_TIME_FIELDS) }),
+  /** The value of one property of the cited elements that all hold it; the value itself is never stored. */
+  z.strictObject({ kind: z.literal('value'), of: z.array(z.discriminatedUnion('kind', [entityDescriptor, z.strictObject({ kind: z.literal('relationship'), ref: edgeRefSchema })])).min(1).max(AI_NOTES_MAX_SLOTS), key: z.string().min(1) }),
+  /** How many of the cited entities of one type the sentence counts, with the plural ending it wrote after the type name. */
+  z.strictObject({ kind: z.literal('tally'), of: z.array(elementRefSchema).min(1).max(AI_NOTES_MAX_SLOTS), suffix: z.enum(['', 's', 'es']) }),
 ]);
 
 export type AiNotesDescriptor = z.infer<typeof aiNotesDescriptorSchema>;

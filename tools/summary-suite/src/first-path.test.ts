@@ -33,4 +33,29 @@ describe('one whole click over a scripted model', () => {
     await rig.summarize(view);
     expectNoText(rig.events, ['Ana Silva', 'AC-1 uses the device']);
   });
+
+  it('marks a sentence storable when its value is a slot of a cited element, and seals no value of the view in the templates', async () => {
+    const rig = startRig({ replies: [replyOf({ text: 'AC-1 is open.', cites: ['n1'] }), ] });
+    const outcome = await rig.summarize(view);
+    expect(outcome.status).toBe('ok');
+    if (outcome.status !== 'ok') return;
+    expect(outcome.sentences[0]).toMatchObject({ storable: true });
+    const opened = openToken(KEYS, outcome.summaryToken, { investigationId: INVESTIGATION, actorId: 'analyst-1', policyVersion: 'policy-1', now: Date.now() });
+    expect(opened.ok).toBe(true);
+    const templates = JSON.stringify(opened.ok ? opened.payload.templates : undefined);
+    expect(templates).toContain('"kind":"value"');
+    expect(templates).not.toMatch(/open|Ana Silva/u);
+  });
+
+  it('marks a sentence storable when its number is the count of cited entities of a type, sealing a tally slot and no number word', async () => {
+    const rig = startRig({ replies: [replyOf({ text: 'AC-1 uses one device.', cites: ['n1', 'n2'] })] });
+    const outcome = await rig.summarize(view);
+    expect(outcome.status).toBe('ok');
+    if (outcome.status !== 'ok') return;
+    expect(outcome.sentences[0]).toMatchObject({ storable: true });
+    const opened = openToken(KEYS, outcome.summaryToken, { investigationId: INVESTIGATION, actorId: 'analyst-1', policyVersion: 'policy-1', now: Date.now() });
+    const templates = opened.ok ? opened.payload.templates : [];
+    expect(JSON.stringify(templates)).toContain('"kind":"tally"');
+    expect(templates[0]).toMatchObject({ storable: true, text: '‹account#1› uses ‹count#1›.' });
+  });
 });
