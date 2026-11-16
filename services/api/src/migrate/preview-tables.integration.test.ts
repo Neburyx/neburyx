@@ -261,7 +261,7 @@ describe('the summary_runs and summary_run_calls tables of the preview', () => {
       const provider: ModelProvider = { complete: async (request) => ({ status: 'ok', text: JSON.stringify({ sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }] }), usage: { kind: 'known', inputTokens: 5, outputTokens: 2 }, model: 'm', prompt: promptRecordOf(request) }) };
       const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink: mounted.sink });
       const summarizer = createCaseSummarizer({
-        settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+        settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 },
         instructions: buildSummaryInstructions('PROMPT', 'TYPOLOGY'),
         model: () => model,
         audit: () => mounted.sink,

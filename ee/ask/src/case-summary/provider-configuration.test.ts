@@ -40,21 +40,26 @@ async function configurations(askExtra: Record<string, string>, summaryExtra: Re
 }
 
 describe("the summary's own provider configuration", () => {
-  it("takes the summary's model, timeout, an output limit of 2,000 tokens and no retry, and leaves Ask's configuration alone", async () => {
+  it('takes the output limit from the summary setting, whatever Ask is set to', async () => {
+    const { own } = await configurations({ NEBURYX_ASK_MAX_TOKENS: '5000' }, { NEBURYX_SUMMARY_MAX_OUTPUT_TOKENS: '6000' });
+    expect(own.limits.maxTokens).toBe(6000);
+  });
+
+  it("takes the summary's model, timeout, an output limit of 4,000 tokens by default and no retry, and leaves Ask's configuration alone", async () => {
     const { ask, own } = await configurations({ NEBURYX_ASK_MAX_RETRIES: '3', NEBURYX_ASK_MAX_TOKENS: '5000', NEBURYX_ASK_TIMEOUT_MS: '5000' }, { NEBURYX_SUMMARY_MODEL: 'summary-model', NEBURYX_SUMMARY_TIMEOUT_MS: '70000' });
     expect(own.model).toBe('summary-model');
-    expect(own.limits).toMatchObject({ timeoutMs: 70_000, maxRetries: 0, maxTokens: 2000 });
+    expect(own.limits).toMatchObject({ timeoutMs: 70_000, maxRetries: 0, maxTokens: 4000 });
     expect(ask.limits).toMatchObject({ timeoutMs: 5000, maxRetries: 3, maxTokens: 5000 });
     expect(ask.model).not.toBe('summary-model');
   });
 
-  it('sends the summary model and an output limit of 2,000 tokens, and makes one request only on a server error even when Ask retries', async () => {
+  it('sends the summary model and an output limit of 4,000 tokens, and makes one request only on a server error even when Ask retries', async () => {
     const { own, env } = await configurations({ NEBURYX_ASK_MAX_RETRIES: '3' });
     bodies.length = 0;
     respondWith = 500;
     const answer = await createAnthropicProvider({ configuration: own, env, baseUrl }).complete({ promptId: 'case-summary', version: 1, instructions: 'i', values: 'v' }, new AbortController().signal);
     expect(answer.status).toBe('failed');
     expect(bodies).toHaveLength(1);
-    expect(bodies[0]).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 2000 });
+    expect(bodies[0]).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 4000 });
   });
 });

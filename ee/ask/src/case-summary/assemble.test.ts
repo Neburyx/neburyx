@@ -107,10 +107,11 @@ describe('the text sent to the model', () => {
 });
 
 describe('the size of the text', () => {
-  it('estimates the bytes of the instructions and the text divided by three, rounded up', () => {
-    expect(BYTES_PER_TOKEN_ESTIMATE).toBe(3);
-    expect(estimateTokens('abc', 'defg')).toBe(3);
-    expect(estimateTokens('é')).toBe(1);
+  it('estimates the bytes of the instructions and the text divided by the measured 1.8, rounded up', () => {
+    expect(BYTES_PER_TOKEN_ESTIMATE).toBe(1.8);
+    expect(estimateTokens('abc', 'defg')).toBe(4);
+    expect(estimateTokens('é')).toBe(2);
+    expect(estimateTokens('a'.repeat(18))).toBe(10);
     expect(estimateTokens('')).toBe(0);
   });
 

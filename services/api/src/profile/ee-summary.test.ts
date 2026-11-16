@@ -146,7 +146,7 @@ describe('POST /v1/summary and its Idempotency-Key', () => {
     const calls: CaseSummaryInput[] = [];
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
-    const slow: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async (input) => (calls.push(input), await held, OK) };
+    const slow: CaseSummarizer = { maxElements: 300, maxOutputTokens: 4000, availability: () => ({ available: true }), summarize: async (input) => (calls.push(input), await held, OK) };
     const rig = await appOf({ summarizer: slow });
     const key = freshKey();
     const first = post(rig, rig.body, key);
@@ -208,7 +208,7 @@ describe('POST /v1/summary and its Idempotency-Key', () => {
 
   it('runs again for a retry after a server error, and stores a refusal for replay', async () => {
     let attempts = 0;
-    const flaky: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => (++attempts === 1 ? Promise.reject(new Error('boom')) : OK) };
+    const flaky: CaseSummarizer = { maxElements: 300, maxOutputTokens: 4000, availability: () => ({ available: true }), summarize: async () => (++attempts === 1 ? Promise.reject(new Error('boom')) : OK) };
     const rig = await appOf({ summarizer: flaky });
     const key = freshKey();
     expect((await post(rig, rig.body, key)).statusCode).toBe(500);
@@ -357,7 +357,7 @@ describe('POST /v1/summary completed, with the real application, the real gate a
     };
     const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink: { record: async () => undefined } });
     return createCaseSummarizer({
-      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 },
       instructions: buildSummaryInstructions('PROMPT', 'TYPOLOGY'),
       model: () => model,
       audit: () => ({ record: async () => undefined }),
@@ -416,7 +416,7 @@ describe('POST /v1/summary: a replay is authorized like a new call, and a failur
 
   it('refuses a replay when the investigation is gone or the summary is no longer available', async () => {
     let available = true;
-    const summarizer: CaseSummarizer = { maxElements: 300, availability: () => (available ? { available: true } : { available: false, reason: 'x' }), summarize: async () => OK };
+    const summarizer: CaseSummarizer = { maxElements: 300, maxOutputTokens: 4000, availability: () => (available ? { available: true } : { available: false, reason: 'x' }), summarize: async () => OK };
     const rig = await appOf({ summarizer });
     const key = freshKey();
     await post(rig, rig.body, key);
@@ -436,7 +436,7 @@ describe('POST /v1/summary: a replay is authorized like a new call, and a failur
   ])('runs again for a retry with the same key after %s', async (_name, failure) => {
     let attempts = 0;
     const calls: CaseSummaryInput[] = [];
-    const flaky: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async (input) => (calls.push(input), ++attempts === 1 ? failure : OK) };
+    const flaky: CaseSummarizer = { maxElements: 300, maxOutputTokens: 4000, availability: () => ({ available: true }), summarize: async (input) => (calls.push(input), ++attempts === 1 ? failure : OK) };
     const rig = await appOf({ summarizer: flaky });
     const key = freshKey();
     expect((await post(rig, rig.body, key)).json()).toEqual(failure);
@@ -531,7 +531,7 @@ describe('POST /v1/summary and the closing event of a click that fails', () => {
   });
 
   it('records one closing event when the summarizer throws, and keeps the failure', async () => {
-    const boom: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => Promise.reject(new Error('boom')) };
+    const boom: CaseSummarizer = { maxElements: 300, maxOutputTokens: 4000, availability: () => ({ available: true }), summarize: async () => Promise.reject(new Error('boom')) };
     const rig = await appOf({ summarizer: boom });
     const answer = await post(rig);
     expect(answer.statusCode).toBe(500);
@@ -568,7 +568,7 @@ describe('POST /v1/summary and its coverage line, through the shown reader of th
     const provider: ModelProvider = { complete: async (request) => (received.push(request), { status: 'ok', text: reply, usage: { kind: 'unknown' }, model: 'm', prompt: promptRecordOf(request) }) };
     const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink: { record: async () => undefined } });
     return createCaseSummarizer({
-      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 },
       instructions: buildSummaryInstructions('PROMPT', 'TYPOLOGY'),
       model: () => model,
       audit: () => ({ record: async () => undefined }),
@@ -589,7 +589,7 @@ describe('POST /v1/summary and its coverage line, through the shown reader of th
     const sink = { record: async (event: { readonly detail?: unknown }) => void events.push(event) };
     const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink });
     const summarizer = createCaseSummarizer({
-      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 },
       instructions: buildSummaryInstructions('CANARY-INSTRUCTIONS-PROMPT', 'CANARY-INSTRUCTIONS-TYPOLOGY'),
       model: () => model,
       audit: () => sink,

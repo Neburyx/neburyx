@@ -154,11 +154,10 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
     },
     async summarize(input: CaseSummaryInput, signal: AbortSignal): Promise<CaseSummaryOutcome> {
       const call = options.model();
-      const guard = settings.maxInputTokens;
-      if (call === undefined || guard === undefined || options.tokenKeys() === undefined) throw new Error('the case summarizer was asked while it is not available');
+      if (call === undefined || options.tokenKeys() === undefined) throw new Error('the case summarizer was asked while it is not available');
       const run = await openRun(input);
       const { runId, runs, stored, finalize, publish, write } = run;
-      const prepared = prepareSummary(input.reading, instructions.text, guard);
+      const prepared = prepareSummary(input.reading, instructions.text, settings.maxInputTokens);
       const record = async (outcome: CaseSummaryOutcome, checked?: Checked): Promise<CaseSummaryOutcome> => {
         await write(outcome.status === 'tooLarge' ? 0 : outcome.calls, outcome.status === 'failed' ? outcome.kind : outcome.status, resultOf(outcome), checked, () => signal.aborted);
         return outcome;

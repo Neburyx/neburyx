@@ -8,9 +8,13 @@ export const SUMMARY_VARIABLES = {
   totalTimeoutMs: 'NEBURYX_SUMMARY_TOTAL_TIMEOUT_MS',
   maxCalls: 'NEBURYX_SUMMARY_MAX_CALLS',
   maxElements: 'NEBURYX_SUMMARY_MAX_ELEMENTS',
+  maxOutputTokens: 'NEBURYX_SUMMARY_MAX_OUTPUT_TOKENS',
   maxInputTokens: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS',
   retentionDays: 'NEBURYX_SUMMARY_RUN_RETENTION_DAYS',
 } as const;
+
+/** The output limit of a call: from enough for twelve sentences to the most a model call takes. */
+const OUTPUT_TOKEN_LIMITS = { min: 1000, max: 32_000 } as const;
 
 export interface SummarySettings {
   readonly model: string;
@@ -18,8 +22,10 @@ export interface SummarySettings {
   readonly totalTimeoutMs: number;
   readonly maxCalls: number;
   readonly maxElements: number;
-  /** Absent until an operator sets it: the summary is unavailable without a size guard. */
-  readonly maxInputTokens?: number;
+  /** The most output tokens of a call, the model's reasoning included. */
+  readonly maxOutputTokens: number;
+  /** The size guard on the text sent, in estimated tokens. */
+  readonly maxInputTokens: number;
   readonly retentionDays: number;
 }
 
@@ -44,10 +50,11 @@ export function readSummarySettings(env: Env): SummarySettingsRead {
   const totalTimeoutMs = integerChoice(env, SUMMARY_VARIABLES.totalTimeoutMs, AI_LIMITS.timeoutMs, SUMMARY_DEFAULTS.totalTimeoutMs, problems);
   const maxCalls = positiveWholeNumber(env, SUMMARY_VARIABLES.maxCalls, SUMMARY_DEFAULTS.maxCalls, problems) ?? SUMMARY_DEFAULTS.maxCalls;
   const maxElements = positiveWholeNumber(env, SUMMARY_VARIABLES.maxElements, SUMMARY_DEFAULTS.maxElements, problems) ?? SUMMARY_DEFAULTS.maxElements;
-  const maxInputTokens = positiveWholeNumber(env, SUMMARY_VARIABLES.maxInputTokens, undefined, problems);
+  const maxOutputTokens = integerChoice(env, SUMMARY_VARIABLES.maxOutputTokens, OUTPUT_TOKEN_LIMITS, SUMMARY_DEFAULTS.maxOutputTokens, problems);
+  const maxInputTokens = positiveWholeNumber(env, SUMMARY_VARIABLES.maxInputTokens, SUMMARY_DEFAULTS.maxInputTokens, problems) ?? SUMMARY_DEFAULTS.maxInputTokens;
   const retentionDays = positiveWholeNumber(env, SUMMARY_VARIABLES.retentionDays, SUMMARY_DEFAULTS.retentionDays, problems) ?? SUMMARY_DEFAULTS.retentionDays;
   if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, settings: { model, timeoutMs, totalTimeoutMs, maxCalls, maxElements, ...(maxInputTokens === undefined ? {} : { maxInputTokens }), retentionDays } };
+  return { ok: true, settings: { model, timeoutMs, totalTimeoutMs, maxCalls, maxElements, maxOutputTokens, maxInputTokens, retentionDays } };
 }
 
 export type SummaryAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
@@ -55,7 +62,6 @@ export type SummaryAvailability = { readonly available: true } | { readonly avai
 /** The summary is available when Ask is configured, its settings are read and the size guard is set. */
 export function summaryAvailability(state: { readonly askConfigured: boolean; readonly settings: SummarySettings | undefined; readonly tokenKeyConfigured: boolean }): SummaryAvailability {
   if (!state.askConfigured || state.settings === undefined) return { available: false, reason: 'the AI preview is not configured' };
-  if (state.settings.maxInputTokens === undefined) return { available: false, reason: `${SUMMARY_VARIABLES.maxInputTokens} is not set` };
   if (!state.tokenKeyConfigured) return { available: false, reason: `${TOKEN_KEY_VARIABLES.current} is not set` };
   return { available: true };
 }

@@ -57,7 +57,7 @@ describe('the budgeted provider', () => {
 });
 
 describe('the summarizer of the evaluation', () => {
-  const settings = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 };
+  const settings = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 };
 
   it('is the product\'s own summarizer over the provider it is given, reports the calls of a click and tells its observer what the checks did', async () => {
     const seen: ReplyObservation[] = [];
@@ -83,7 +83,7 @@ describe('the live provider of a summary run', () => {
   const made: string[] = [];
   afterAll(() => made.forEach((root) => rmSync(root, { recursive: true, force: true })));
   const folder = '/somewhere/absolute';
-  const settings = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 };
+  const settings = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 };
   const keyFile = (mode: number): string => {
     const root = mkdtempSync(join(tmpdir(), 'summary-eval-key-'));
     made.push(root);

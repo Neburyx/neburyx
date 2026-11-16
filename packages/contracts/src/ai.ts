@@ -30,6 +30,15 @@ export const SUMMARY_DEFAULTS = {
   totalTimeoutMs: 180_000,
   maxCalls: 5,
   maxElements: 300,
+  /** The most output tokens of a model call, the reasoning of the model included; 2,000 cut a 300-element view short on Opus in the first measured run. */
+  maxOutputTokens: 4000,
+  /**
+   * The size guard on the text sent to the model, in tokens, estimated with `BYTES_PER_TOKEN_ESTIMATE` of the summarizer. Set from the first measured runs (2026-11-15; Sonnet and Opus count the same): a view of 300
+   * elements (the element cap) of bare elements (type, title, id) is 11,961 tokens and one whose elements carry four short properties and a relationship property is 18,598 tokens, the larger times 1.2 and rounded up
+   * to the next 1,000 is 23,000. Elements with long text properties are larger (eight sentence-long properties on each of 300 elements is 84,606 tokens, a guard of 102,000, the documented upper bound): an operator
+   * whose data looks like that raises `NEBURYX_SUMMARY_MAX_INPUT_TOKENS`.
+   */
+  maxInputTokens: 23_000,
   retentionDays: 30,
 } as const;
 

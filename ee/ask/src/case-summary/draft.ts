@@ -4,9 +4,6 @@ import type { FailureCode, ModelAnswer } from '../provider.js';
 import type { SummaryCallEnd } from './run-store.js';
 import { MAX_SUMMARY_SENTENCES } from './instructions.js';
 
-/** The output limit of a summary call, in tokens. */
-export const SUMMARY_MAX_OUTPUT_TOKENS = 2000;
-
 const SUMMARY_PROMPT_ID = 'case-summary';
 const SUMMARY_PROMPT_VERSION = 1;
 

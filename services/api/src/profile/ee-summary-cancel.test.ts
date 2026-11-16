@@ -39,7 +39,7 @@ async function listening(provider: ModelProvider, rigOptions: Pick<ExportRigOpti
   const closing: { readonly action: string; readonly result?: string; readonly detail?: unknown }[] = [];
   const model = createAuditedModelCall({ provider, configuration: { model: 'claude-sonnet-5-5' }, sink: { record: async () => undefined } });
   const summarizer = createCaseSummarizer({
-    settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 },
+    settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 },
     instructions: buildSummaryInstructions('PROMPT', 'TYPOLOGY'),
     model: () => model,
     audit: () => ({ record: async (event) => void closing.push(event) }),

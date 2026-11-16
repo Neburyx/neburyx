@@ -10,7 +10,7 @@ import type { SummarySettings } from './settings.js';
 
 const instructions = buildSummaryInstructions('PROMPT', 'TYPOLOGY');
 const KEYS = { current: { kid: 'abcd1234', bytes: Buffer.alloc(32, 7) } };
-const settings: SummarySettings = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 };
+const settings: SummarySettings = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 };
 const GOOD = JSON.stringify({ sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }] });
 
 const node: GraphNode = { ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, display: { title: 'Ana Silva', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
@@ -83,12 +83,6 @@ describe('the case summarizer', () => {
     await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toThrow('not available');
   });
 
-  it('is unavailable without a size guard, naming the setting', async () => {
-    const { maxInputTokens: _guard, ...withoutGuard } = settings;
-    const summarizer = createCaseSummarizer({ settings: withoutGuard, instructions, model: () => undefined, audit: () => undefined, tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' }) });
-    expect(summarizer.availability()).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS is not set' });
-    await expect(summarizer.summarize(input(), new AbortController().signal)).rejects.toThrow();
-  });
 });
 
 describe('the closing event of a click', () => {
