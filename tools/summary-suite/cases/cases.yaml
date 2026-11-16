@@ -1,0 +1,441 @@
+# The labelled set of the AI case summary: 15 small synthetic views, each with the facts a summary must mention, the claims it must not make, and sentences a human labelled.
+# See the README of this package for the method. Every name is from `synthetic_names`; no real data.
+
+version: 1
+
+synthetic_names: ["Alder Quill", "Briar Vance", "Cedar Moss", "Dale Ferrin", "Edda Thorn", "Fern Aldous", "Gale Hartwell", "Hale Ingram", "Ines Pryor", "Jory Kell", "Kestrel Voss", "Lark Mendel", "Mira Holt", "Moss Teller", "Nell Ostrow", "Odo Marsh", "Orla Finch", "Pell Dray", "Pia Wren", "Quill Haverd", "Rhea Dunmore", "Sable Orrin", "Tarn Wick", "Tobin Rask", "Ulla Brandt", "Veda Crane", "Wynn Sorrel", "Xan Lorrimer", "Yara Fenwick"]
+cases:
+  - id: ring-on-one-device
+    pack: banking-fraud
+    source_case: ring-on-one-device
+    title: "Four accounts use one device and connect from one address"
+    entities:
+      - { key: "a1", type: "account", id: "AC-2000", name: "AC-2000" }
+      - { key: "a2", type: "account", id: "AC-2001", name: "AC-2001" }
+      - { key: "a3", type: "account", id: "AC-2002", name: "AC-2002" }
+      - { key: "a4", type: "account", id: "AC-2003", name: "AC-2003" }
+      - { key: "d1", type: "device", id: "DV-10", name: "DV-10" }
+      - { key: "i1", type: "ip_address", id: "ip-10", name: "ip-10" }
+    relationships:
+      - { key: "r1", type: "USES_DEVICE", from: "a1", to: "d1", observed_at: "2026-03-01" }
+      - { key: "r2", type: "USES_DEVICE", from: "a2", to: "d1", observed_at: "2026-03-02" }
+      - { key: "r3", type: "USES_DEVICE", from: "a3", to: "d1", observed_at: "2026-03-03" }
+      - { key: "r4", type: "USES_DEVICE", from: "a4", to: "d1", observed_at: "2026-03-04" }
+      - { key: "r5", type: "CONNECTS_FROM", from: "a1", to: "i1", observed_at: "2026-03-01" }
+      - { key: "r6", type: "CONNECTS_FROM", from: "a2", to: "i1", observed_at: "2026-03-02" }
+    facts:
+      - { id: "f1", says: "Four accounts use the device DV-10", phrases: ["four accounts", "4 accounts"], rests_on: ["a1", "a2", "a3", "a4", "d1", "r1", "r2", "r3", "r4"] }
+      - { id: "f2", says: "Two of them connect from the address ip-10", phrases: ["ip-10"], rests_on: ["a1", "a2", "i1", "r5", "r6"] }
+    claims:
+      - { id: "c1", says: "Says the accounts are one ring or one person", phrases: ["fraud ring", "one person", "same person", "operated by"], about: ["a1", "a2", "a3", "a4", "d1", "r1", "r2", "r3", "r4"] }
+      - { id: "c2", says: "States six accounts, as the pack holds, when four are shown", phrases: ["six accounts", "6 accounts"], about: ["a1", "a2", "a3", "a4", "d1", "r1", "r2", "r3", "r4"] }
+    invented_names: ["Mira Holt"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Four accounts, AC-2000, AC-2001, AC-2002 and AC-2003, use the device DV-10.", cites: ["a1", "a2", "a3", "a4", "d1", "r1", "r2", "r3", "r4"] }
+      - { id: "s2", label: "keep", text: "The accounts AC-2000 and AC-2001 connect from the address ip-10.", cites: ["a1", "a2", "i1", "r5", "r6"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-2000 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-2000.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Mira Holt is also connected to AC-2000.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-2000 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Four accounts, AC-2000, AC-2001, AC-2002 and AC-2003, use the device DV-10. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "a4", "d1", "r1", "r2", "r3", "r4"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "mira holt is also linked to AC-2000.", cites: ["a1"] }
+  - id: shared-device-on-the-stop-list
+    pack: banking-fraud
+    source_case: shared-device-on-the-stop-list
+    title: "Three accounts of a device that holds more than are retrieved"
+    not_retrieved: { value: 997, quality: "estimated" }
+    entities:
+      - { key: "a1", type: "account", id: "AC-0001", name: "AC-0001" }
+      - { key: "a2", type: "account", id: "AC-0002", name: "AC-0002" }
+      - { key: "a3", type: "account", id: "AC-0003", name: "AC-0003" }
+      - { key: "d1", type: "device", id: "DV-0", name: "DV-0", props: { isShared: "true" } }
+    relationships:
+      - { key: "r1", type: "USES_DEVICE", from: "a1", to: "d1" }
+      - { key: "r2", type: "USES_DEVICE", from: "a2", to: "d1" }
+      - { key: "r3", type: "USES_DEVICE", from: "a3", to: "d1" }
+    facts:
+      - { id: "f1", says: "Three accounts are shown on the device DV-0", phrases: ["three accounts", "3 accounts"], rests_on: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "f2", says: "The device is marked as shared", phrases: ["shared"], rests_on: ["d1"] }
+    claims:
+      - { id: "c1", says: "States how many accounts the device holds in all", phrases: ["1,000 accounts", "1000 accounts", "thousand accounts"], about: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says the shared device proves the accounts are linked people", phrases: ["linked people", "same people", "proves"], about: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+    invented_names: ["Orla Finch"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Three accounts, AC-0001, AC-0002 and AC-0003, use the device DV-0.", cites: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "s2", label: "keep", text: "The device DV-0 is marked as shared.", cites: ["d1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-0001 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-0001.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Orla Finch is also connected to AC-0001.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-0001 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Three accounts, AC-0001, AC-0002 and AC-0003, use the device DV-0. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "orla finch is also linked to AC-0001.", cites: ["a1"] }
+  - id: merchant-with-many-payments
+    pack: banking-fraud
+    source_case: merchant-with-100000-payments
+    title: "A merchant with a lower bound count of payments"
+    not_retrieved: { value: 99998, quality: "lowerBound" }
+    entities:
+      - { key: "m1", type: "merchant", id: "MR-0", name: "MR-0" }
+      - { key: "a1", type: "account", id: "AC-0100", name: "AC-0100" }
+      - { key: "a2", type: "account", id: "AC-0101", name: "AC-0101" }
+    relationships:
+      - { key: "r1", type: "PAID_TO", from: "a1", to: "m1", observed_at: "2026-04-01" }
+      - { key: "r2", type: "PAID_TO", from: "a2", to: "m1", observed_at: "2026-04-02" }
+    facts:
+      - { id: "f1", says: "Two payments to the merchant MR-0 are shown", phrases: ["two payments", "2 payments"], rests_on: ["a1", "a2", "m1", "r1", "r2"] }
+    claims:
+      - { id: "c1", says: "States the total number of payments as exact", phrases: ["100,000 payments", "100000 payments", "exactly"], about: ["a1", "a2", "m1", "r1", "r2"] }
+      - { id: "c2", says: "Says the merchant is a front or a sham", phrases: ["front", "sham", "shell"], about: ["a1", "a2", "m1", "r1", "r2"] }
+    invented_names: ["Tobin Rask"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The accounts AC-0100 and AC-0101 made two payments to the merchant MR-0.", cites: ["a1", "a2", "m1", "r1", "r2"] }
+      - { id: "s2", label: "remove", rule: "citation", text: "The element MR-0 is listed.", cites: [] }
+      - { id: "s3", label: "remove", rule: "number", text: "There are 987654 records for MR-0.", cites: ["m1"] }
+      - { id: "s4", label: "remove", rule: "name", text: "Tobin Rask is also connected to MR-0.", cites: ["m1"] }
+      - { id: "s5", label: "remove", rule: "verdict", text: "MR-0 is evidence of fraud by the holders.", cites: ["m1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "The accounts AC-0100 and AC-0101 made two payments to the merchant MR-0. It is evidence of fraud by the holders.", cites: ["a1", "a2", "m1", "r1", "r2"] }
+      - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "tobin rask is also linked to MR-0.", cites: ["m1"] }
+  - id: repeated-payments-between-two-accounts
+    pack: banking-fraud
+    source_case: repeated-payments-to-one-account
+    title: "Payments from one account to another, shown as one relationship"
+    entities:
+      - { key: "a1", type: "account", id: "AC-2000", name: "AC-2000" }
+      - { key: "a2", type: "account", id: "AC-2001", name: "AC-2001" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "a2", observed_at: "2026-05-01" }
+    facts:
+      - { id: "f1", says: "The account AC-2000 transferred to AC-2001", phrases: ["transferred", "transfer"], rests_on: ["a1", "a2", "r1"] }
+    claims:
+      - { id: "c1", says: "States the number of transfers, which the view does not give", phrases: ["seven transfers", "7 transfers", "seven payments"], about: ["a1", "a2", "r1"] }
+      - { id: "c2", says: "Says the transfers were meant to hide something", phrases: ["hide", "conceal", "disguise"], about: ["a1", "a2", "r1"] }
+    invented_names: ["Pell Dray"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The account AC-2000 transferred to the account AC-2001.", cites: ["a1", "a2", "r1"] }
+      - { id: "s2", label: "remove", rule: "citation", text: "The element AC-2000 is listed.", cites: [] }
+      - { id: "s3", label: "remove", rule: "number", text: "There are 987654 records for AC-2000.", cites: ["a1"] }
+      - { id: "s4", label: "remove", rule: "name", text: "Pell Dray is also connected to AC-2000.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "verdict", text: "AC-2000 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "The account AC-2000 transferred to the account AC-2001. It is evidence of fraud by the holders.", cites: ["a1", "a2", "r1"] }
+      - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "pell dray is also linked to AC-2000.", cites: ["a1"] }
+  - id: claimants-sharing-a-phone
+    pack: insurance-claims
+    source_case: claimants-sharing-a-phone
+    title: "Four claimants reached at one phone number"
+    entities:
+      - { key: "c1", type: "claimant", id: "CT-00100", name: "Alder Quill" }
+      - { key: "c2", type: "claimant", id: "CT-00101", name: "Briar Vance" }
+      - { key: "c3", type: "claimant", id: "CT-00102", name: "Cedar Moss" }
+      - { key: "c4", type: "claimant", id: "CT-00103", name: "Dale Ferrin" }
+      - { key: "p1", type: "phone", id: "+1-555-000010", name: "+1-555-000010" }
+    relationships:
+      - { key: "r1", type: "REACHED_AT", from: "c1", to: "p1" }
+      - { key: "r2", type: "REACHED_AT", from: "c2", to: "p1" }
+      - { key: "r3", type: "REACHED_AT", from: "c3", to: "p1" }
+      - { key: "r4", type: "REACHED_AT", from: "c4", to: "p1" }
+    facts:
+      - { id: "f1", says: "Four claimants are reached at the phone +1-555-000010", phrases: ["four claimants", "4 claimants"], rests_on: ["c1", "c2", "c3", "c4", "p1", "r1", "r2", "r3", "r4"] }
+    claims:
+      - { id: "c1", says: "Says the claimants are the same person or colluding", phrases: ["same person", "collud", "conspir"], about: ["c1", "c2", "c3", "c4", "p1", "r1", "r2", "r3", "r4"] }
+      - { id: "c2", says: "States thirty claimants, as the stop-list phone holds", phrases: ["thirty claimants", "30 claimants"], about: ["c1", "c2", "c3", "c4", "p1", "r1", "r2", "r3", "r4"] }
+    invented_names: ["Edda Thorn"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Four claimants, Alder Quill, Briar Vance, Cedar Moss and Dale Ferrin, are reached at the phone +1-555-000010.", cites: ["c1", "c2", "c3", "c4", "p1", "r1", "r2", "r3", "r4"] }
+      - { id: "s2", label: "remove", rule: "citation", text: "The element Alder Quill is listed.", cites: [] }
+      - { id: "s3", label: "remove", rule: "number", text: "There are 987654 records for Alder Quill.", cites: ["c1"] }
+      - { id: "s4", label: "remove", rule: "name", text: "Edda Thorn is also connected to Alder Quill.", cites: ["c1"] }
+      - { id: "s5", label: "remove", rule: "verdict", text: "Alder Quill is evidence of fraud by the holders.", cites: ["c1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "Four claimants, Alder Quill, Briar Vance, Cedar Moss and Dale Ferrin, are reached at the phone +1-555-000010. It is evidence of fraud by the holders.", cites: ["c1", "c2", "c3", "c4", "p1", "r1", "r2", "r3", "r4"] }
+      - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "edda thorn is also linked to Alder Quill.", cites: ["c1"] }
+  - id: claimants-sharing-an-address
+    pack: insurance-claims
+    source_case: claimants-sharing-an-address
+    title: "Three claimants live at one address"
+    entities:
+      - { key: "c1", type: "claimant", id: "CT-00200", name: "Fern Aldous" }
+      - { key: "c2", type: "claimant", id: "CT-00201", name: "Gale Hartwell" }
+      - { key: "c3", type: "claimant", id: "CT-00202", name: "Hale Ingram" }
+      - { key: "ad1", type: "address", id: "AD-00200", name: "AD-00200" }
+    relationships:
+      - { key: "r1", type: "LIVES_AT", from: "c1", to: "ad1" }
+      - { key: "r2", type: "LIVES_AT", from: "c2", to: "ad1" }
+      - { key: "r3", type: "LIVES_AT", from: "c3", to: "ad1" }
+    facts:
+      - { id: "f1", says: "Three claimants live at the address AD-00200", phrases: ["three claimants", "3 claimants"], rests_on: ["c1", "c2", "c3", "ad1", "r1", "r2", "r3"] }
+    claims:
+      - { id: "c1", says: "Says the claimants are a household or related", phrases: ["household", "family", "related", "relatives"], about: ["c1", "c2", "c3", "ad1", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says they live at the same place as if confirmed", phrases: ["confirmed"], about: ["c1", "c2", "c3", "ad1", "r1", "r2", "r3"] }
+    invented_names: ["Ines Pryor"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Three claimants, Fern Aldous, Gale Hartwell and Hale Ingram, live at the address AD-00200.", cites: ["c1", "c2", "c3", "ad1", "r1", "r2", "r3"] }
+      - { id: "s2", label: "remove", rule: "citation", text: "The element Fern Aldous is listed.", cites: [] }
+      - { id: "s3", label: "remove", rule: "number", text: "There are 987654 records for Fern Aldous.", cites: ["c1"] }
+      - { id: "s4", label: "remove", rule: "name", text: "Ines Pryor is also connected to Fern Aldous.", cites: ["c1"] }
+      - { id: "s5", label: "remove", rule: "verdict", text: "Fern Aldous is evidence of fraud by the holders.", cites: ["c1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "Three claimants, Fern Aldous, Gale Hartwell and Hale Ingram, live at the address AD-00200. It is evidence of fraud by the holders.", cites: ["c1", "c2", "c3", "ad1", "r1", "r2", "r3"] }
+      - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "ines pryor is also linked to Fern Aldous.", cites: ["c1"] }
+  - id: claims-filed-by-one-claimant
+    pack: insurance-claims
+    source_case: claims-filed-by-one-claimant
+    title: "One claimant filed three claims"
+    entities:
+      - { key: "c1", type: "claimant", id: "CT-00300", name: "Jory Kell" }
+      - { key: "k1", type: "claim", id: "CL-001007", name: "CL-001007" }
+      - { key: "k2", type: "claim", id: "CL-001504", name: "CL-001504" }
+      - { key: "k3", type: "claim", id: "CL-001968", name: "CL-001968" }
+    relationships:
+      - { key: "r1", type: "FILED_BY", from: "k1", to: "c1" }
+      - { key: "r2", type: "FILED_BY", from: "k2", to: "c1" }
+      - { key: "r3", type: "FILED_BY", from: "k3", to: "c1" }
+    facts:
+      - { id: "f1", says: "Three claims were filed by Jory Kell", phrases: ["three claims", "3 claims"], rests_on: ["c1", "k1", "k2", "k3", "r1", "r2", "r3"] }
+    claims:
+      - { id: "c1", says: "Says the claimant filed too many claims or abuses the system", phrases: ["too many", "abuse", "excessive"], about: ["c1", "k1", "k2", "k3", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says the claims are linked to each other by the same event", phrases: ["same event", "same incident"], about: ["c1", "k1", "k2", "k3", "r1", "r2", "r3"] }
+    invented_names: ["Kestrel Voss"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Jory Kell filed three claims, CL-001007, CL-001504 and CL-001968.", cites: ["c1", "k1", "k2", "k3", "r1", "r2", "r3"] }
+      - { id: "s2", label: "remove", rule: "citation", text: "The element Jory Kell is listed.", cites: [] }
+      - { id: "s3", label: "remove", rule: "number", text: "There are 987654 records for Jory Kell.", cites: ["c1"] }
+      - { id: "s4", label: "remove", rule: "name", text: "Kestrel Voss is also connected to Jory Kell.", cites: ["c1"] }
+      - { id: "s5", label: "remove", rule: "verdict", text: "Jory Kell is evidence of fraud by the holders.", cites: ["c1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "Jory Kell filed three claims, CL-001007, CL-001504 and CL-001968. It is evidence of fraud by the holders.", cites: ["c1", "k1", "k2", "k3", "r1", "r2", "r3"] }
+      - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "kestrel voss is also linked to Jory Kell.", cites: ["c1"] }
+  - id: same-text-different-addresses
+    pack: insurance-claims
+    source_case: same-text-different-addresses
+    title: "Two address nodes with the same street text and no claimant in common"
+    entities:
+      - { key: "c1", type: "claimant", id: "CT-00458", name: "Lark Mendel" }
+      - { key: "c2", type: "claimant", id: "CT-00485", name: "Moss Teller" }
+      - { key: "ad1", type: "address", id: "AD-00001", name: "AD-00001", props: { street: "Synthetic Row", city: "Testville" } }
+      - { key: "ad2", type: "address", id: "AD-00002", name: "AD-00002", props: { street: "Synthetic Row", city: "Testville" } }
+    relationships:
+      - { key: "r1", type: "LIVES_AT", from: "c1", to: "ad1" }
+      - { key: "r2", type: "LIVES_AT", from: "c2", to: "ad2" }
+    facts:
+      - { id: "f1", says: "Lark Mendel and Moss Teller live at different address nodes", phrases: ["different address", "two address", "AD-00001", "AD-00002"], rests_on: ["c1", "c2", "ad1", "ad2", "r1", "r2"] }
+    claims:
+      - { id: "c1", says: "Says the two claimants live at the same address", phrases: ["same address", "same place", "share an address"], about: ["c1", "c2", "ad1", "ad2", "r1", "r2"] }
+    invented_names: ["Nell Ostrow"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Lark Mendel lives at AD-00001 and Moss Teller lives at AD-00002.", cites: ["c1", "c2", "ad1", "ad2", "r1", "r2"] }
+      - { id: "s2", label: "keep", text: "The addresses AD-00001 and AD-00002 hold the same street and city text, Synthetic Row and Testville, and are different address nodes.", cites: ["ad1", "ad2"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element Lark Mendel is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for Lark Mendel.", cites: ["c1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Nell Ostrow is also connected to Lark Mendel.", cites: ["c1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "Lark Mendel is evidence of fraud by the holders.", cites: ["c1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Lark Mendel lives at AD-00001 and Moss Teller lives at AD-00002. It is evidence of fraud by the holders.", cites: ["c1", "c2", "ad1", "ad2", "r1", "r2"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "nell ostrow is also linked to Lark Mendel.", cites: ["c1"] }
+  - id: aml-fan-in
+    pack: banking-fraud
+    shape: "fan-in"
+    title: "Five accounts pay into one account (a fan-in shape)"
+    entities:
+      - { key: "a1", type: "account", id: "AC-5001", name: "AC-5001" }
+      - { key: "a2", type: "account", id: "AC-5002", name: "AC-5002" }
+      - { key: "a3", type: "account", id: "AC-5003", name: "AC-5003" }
+      - { key: "a4", type: "account", id: "AC-5004", name: "AC-5004" }
+      - { key: "a5", type: "account", id: "AC-5005", name: "AC-5005" }
+      - { key: "t1", type: "account", id: "AC-5100", name: "AC-5100" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "t1", observed_at: "2026-06-01" }
+      - { key: "r2", type: "TRANSFERRED_TO", from: "a2", to: "t1", observed_at: "2026-06-01" }
+      - { key: "r3", type: "TRANSFERRED_TO", from: "a3", to: "t1", observed_at: "2026-06-02" }
+      - { key: "r4", type: "TRANSFERRED_TO", from: "a4", to: "t1", observed_at: "2026-06-02" }
+      - { key: "r5", type: "TRANSFERRED_TO", from: "a5", to: "t1", observed_at: "2026-06-03" }
+    facts:
+      - { id: "f1", says: "Five accounts transferred to the account AC-5100", phrases: ["five accounts", "5 accounts"], rests_on: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "f2", says: "The arrangement has the shape of a fan-in", phrases: ["fan-in", "fan in"], rests_on: ["t1", "r1", "r2", "r3", "r4", "r5"] }
+    claims:
+      - { id: "c1", says: "Says the arrangement is laundering or structuring", phrases: ["laundering", "structuring", "smurfing"], about: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "c2", says: "Says AC-5100 is a collection account of criminals", phrases: ["collection account", "criminal"], about: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
+    invented_names: ["Odo Marsh"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Five accounts, AC-5001 to AC-5005, transferred to the account AC-5100, which has the shape of a fan-in.", cites: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "s2", label: "keep", text: "The account AC-5100 received transfers from AC-5001, AC-5002 and AC-5003.", cites: ["t1", "a1", "a2", "a3", "r1", "r2", "r3"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-5001 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-5001.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Odo Marsh is also connected to AC-5001.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-5001 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Five accounts, AC-5001 to AC-5005, transferred to the account AC-5100, which has the shape of a fan-in. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "odo marsh is also linked to AC-5001.", cites: ["a1"] }
+  - id: aml-fan-out
+    pack: banking-fraud
+    shape: "fan-out"
+    title: "One account pays out to five accounts (a fan-out shape)"
+    entities:
+      - { key: "s1", type: "account", id: "AC-6000", name: "AC-6000" }
+      - { key: "b1", type: "account", id: "AC-6001", name: "AC-6001" }
+      - { key: "b2", type: "account", id: "AC-6002", name: "AC-6002" }
+      - { key: "b3", type: "account", id: "AC-6003", name: "AC-6003" }
+      - { key: "b4", type: "account", id: "AC-6004", name: "AC-6004" }
+      - { key: "b5", type: "account", id: "AC-6005", name: "AC-6005" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "s1", to: "b1", observed_at: "2026-07-01" }
+      - { key: "r2", type: "TRANSFERRED_TO", from: "s1", to: "b2", observed_at: "2026-07-01" }
+      - { key: "r3", type: "TRANSFERRED_TO", from: "s1", to: "b3", observed_at: "2026-07-02" }
+      - { key: "r4", type: "TRANSFERRED_TO", from: "s1", to: "b4", observed_at: "2026-07-02" }
+      - { key: "r5", type: "TRANSFERRED_TO", from: "s1", to: "b5", observed_at: "2026-07-03" }
+    facts:
+      - { id: "f1", says: "The account AC-6000 transferred to five accounts", phrases: ["five accounts", "5 accounts"], rests_on: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "f2", says: "The arrangement has the shape of a fan-out", phrases: ["fan-out", "fan out"], rests_on: ["s1", "r1", "r2", "r3", "r4", "r5"] }
+    claims:
+      - { id: "c1", says: "Says the money was distributed to avoid detection", phrases: ["avoid detection", "evade", "dispers"], about: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "c2", says: "Says the recipients are mules", phrases: ["mule"], about: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
+    invented_names: ["Pia Wren"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The account AC-6000 transferred to five accounts, AC-6001 to AC-6005, which has the shape of a fan-out.", cites: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "s2", label: "keep", text: "The account AC-6000 also transferred to AC-6001.", cites: ["s1", "b1", "r1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-6000 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-6000.", cites: ["s1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Pia Wren is also connected to AC-6000.", cites: ["s1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-6000 is evidence of fraud by the holders.", cites: ["s1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "The account AC-6000 transferred to five accounts, AC-6001 to AC-6005, which has the shape of a fan-out. It is evidence of fraud by the holders.", cites: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "pia wren is also linked to AC-6000.", cites: ["s1"] }
+  - id: aml-cycle
+    pack: banking-fraud
+    shape: "cycle"
+    title: "Four accounts transfer in a cycle"
+    entities:
+      - { key: "a1", type: "account", id: "AC-7001", name: "AC-7001" }
+      - { key: "a2", type: "account", id: "AC-7002", name: "AC-7002" }
+      - { key: "a3", type: "account", id: "AC-7003", name: "AC-7003" }
+      - { key: "a4", type: "account", id: "AC-7004", name: "AC-7004" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "a2", observed_at: "2026-08-01" }
+      - { key: "r2", type: "TRANSFERRED_TO", from: "a2", to: "a3", observed_at: "2026-08-02" }
+      - { key: "r3", type: "TRANSFERRED_TO", from: "a3", to: "a4", observed_at: "2026-08-03" }
+      - { key: "r4", type: "TRANSFERRED_TO", from: "a4", to: "a1", observed_at: "2026-08-04" }
+    facts:
+      - { id: "f1", says: "Four accounts transfer in a closed cycle from AC-7001 back to AC-7001", phrases: ["cycle", "circle", "loop"], rests_on: ["a1", "a2", "a3", "a4", "r1", "r2", "r3", "r4"] }
+    claims:
+      - { id: "c1", says: "Says the cycle is round-tripping to inflate activity", phrases: ["round-trip", "inflate", "wash"], about: ["a1", "a2", "a3", "a4", "r1", "r2", "r3", "r4"] }
+      - { id: "c2", says: "Says all four accounts belong to one owner", phrases: ["one owner", "same owner"], about: ["a1", "a2", "a3", "a4", "r1", "r2", "r3", "r4"] }
+    invented_names: ["Quill Haverd"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The accounts AC-7001, AC-7002, AC-7003 and AC-7004 transfer in a cycle, ending back at AC-7001.", cites: ["a1", "a2", "a3", "a4", "r1", "r2", "r3", "r4"] }
+      - { id: "s2", label: "keep", text: "The account AC-7004 transferred to AC-7001.", cites: ["a4", "a1", "r4"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-7001 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-7001.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Quill Haverd is also connected to AC-7001.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-7001 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "The accounts AC-7001, AC-7002, AC-7003 and AC-7004 transfer in a cycle, ending back at AC-7001. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "a4", "r1", "r2", "r3", "r4"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "quill haverd is also linked to AC-7001.", cites: ["a1"] }
+  - id: aml-rapid-pass-through
+    pack: banking-fraud
+    shape: "rapid pass-through"
+    title: "An account that receives and sends on within one day (a rapid pass-through shape)"
+    entities:
+      - { key: "s1", type: "account", id: "AC-8001", name: "AC-8001" }
+      - { key: "m1", type: "account", id: "AC-8002", name: "AC-8002" }
+      - { key: "t1", type: "account", id: "AC-8003", name: "AC-8003" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "s1", to: "m1", observed_at: "2026-09-10" }
+      - { key: "r2", type: "TRANSFERRED_TO", from: "m1", to: "t1", observed_at: "2026-09-10" }
+    facts:
+      - { id: "f1", says: "The account AC-8002 received from AC-8001 and sent to AC-8003 on the same day", phrases: ["same day", "2026-09-10"], rests_on: ["m1", "s1", "t1", "r1", "r2"] }
+      - { id: "f2", says: "The arrangement has the shape of a rapid pass-through", phrases: ["pass-through", "pass through"], rests_on: ["m1", "r1", "r2"] }
+    claims:
+      - { id: "c1", says: "Says AC-8002 is a conduit for illicit funds", phrases: ["conduit", "illicit", "dirty"], about: ["m1", "s1", "t1", "r1", "r2"] }
+      - { id: "c2", says: "Says the amounts were identical", phrases: ["identical", "same amount"], about: ["m1", "s1", "t1", "r1", "r2"] }
+    invented_names: ["Rhea Dunmore"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The account AC-8002 received a transfer from AC-8001 and sent one to AC-8003, both observed at 2026-09-10, which has the shape of a rapid pass-through.", cites: ["m1", "s1", "t1", "r1", "r2"] }
+      - { id: "s2", label: "keep", text: "The account AC-8001 transferred to AC-8002.", cites: ["s1", "m1", "r1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-8001 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-8001.", cites: ["s1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Rhea Dunmore is also connected to AC-8001.", cites: ["s1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-8001 is evidence of fraud by the holders.", cites: ["s1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "The account AC-8002 received a transfer from AC-8001 and sent one to AC-8003, both observed at 2026-09-10, which has the shape of a rapid pass-through. It is evidence of fraud by the holders.", cites: ["m1", "s1", "t1", "r1", "r2"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "rhea dunmore is also linked to AC-8001.", cites: ["s1"] }
+  - id: aml-shared-device
+    pack: banking-fraud
+    shape: "shared device"
+    title: "Three accounts of different holders use one device"
+    entities:
+      - { key: "a1", type: "account", id: "AC-9001", name: "AC-9001" }
+      - { key: "a2", type: "account", id: "AC-9002", name: "AC-9002" }
+      - { key: "a3", type: "account", id: "AC-9003", name: "AC-9003" }
+      - { key: "d1", type: "device", id: "DV-9", name: "DV-9" }
+    relationships:
+      - { key: "r1", type: "USES_DEVICE", from: "a1", to: "d1", observed_at: "2026-10-01" }
+      - { key: "r2", type: "USES_DEVICE", from: "a2", to: "d1", observed_at: "2026-10-02" }
+      - { key: "r3", type: "USES_DEVICE", from: "a3", to: "d1", observed_at: "2026-10-03" }
+    facts:
+      - { id: "f1", says: "Three accounts use the device DV-9", phrases: ["three accounts", "3 accounts"], rests_on: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "f2", says: "The arrangement has the shape of a shared device", phrases: ["shared device"], rests_on: ["d1", "r1", "r2", "r3"] }
+    claims:
+      - { id: "c1", says: "Says the accounts are controlled by one person", phrases: ["controlled by", "one person", "same person"], about: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says the device is stolen or compromised", phrases: ["stolen", "compromised", "malware"], about: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+    invented_names: ["Sable Orrin"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Three accounts, AC-9001, AC-9002 and AC-9003, use the device DV-9, which has the shape of a shared device.", cites: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "s2", label: "keep", text: "The account AC-9001 uses the device DV-9, observed at 2026-10-01.", cites: ["a1", "d1", "r1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-9001 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-9001.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Sable Orrin is also connected to AC-9001.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-9001 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Three accounts, AC-9001, AC-9002 and AC-9003, use the device DV-9, which has the shape of a shared device. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "d1", "r1", "r2", "r3"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "sable orrin is also linked to AC-9001.", cites: ["a1"] }
+  - id: aml-shared-address
+    pack: insurance-claims
+    shape: "shared address"
+    title: "Four claimants at one address"
+    entities:
+      - { key: "c1", type: "claimant", id: "CT-01001", name: "Tarn Wick" }
+      - { key: "c2", type: "claimant", id: "CT-01002", name: "Ulla Brandt" }
+      - { key: "c3", type: "claimant", id: "CT-01003", name: "Veda Crane" }
+      - { key: "c4", type: "claimant", id: "CT-01004", name: "Wynn Sorrel" }
+      - { key: "ad1", type: "address", id: "AD-01000", name: "AD-01000" }
+    relationships:
+      - { key: "r1", type: "LIVES_AT", from: "c1", to: "ad1" }
+      - { key: "r2", type: "LIVES_AT", from: "c2", to: "ad1" }
+      - { key: "r3", type: "LIVES_AT", from: "c3", to: "ad1" }
+      - { key: "r4", type: "LIVES_AT", from: "c4", to: "ad1" }
+    facts:
+      - { id: "f1", says: "Four claimants live at the address AD-01000", phrases: ["four claimants", "4 claimants"], rests_on: ["c1", "c2", "c3", "c4", "ad1", "r1", "r2", "r3", "r4"] }
+      - { id: "f2", says: "The arrangement has the shape of a shared address", phrases: ["shared address"], rests_on: ["ad1", "r1", "r2", "r3", "r4"] }
+    claims:
+      - { id: "c1", says: "States how many claimants live at the address in all, which is not known", phrases: ["claimants in all", "in total", "altogether"], about: ["c1", "c2", "c3", "c4", "ad1", "r1", "r2", "r3", "r4"] }
+      - { id: "c2", says: "Says the claimants live together as a group", phrases: ["live together", "group of"], about: ["c1", "c2", "c3", "c4", "ad1", "r1", "r2", "r3", "r4"] }
+    invented_names: ["Xan Lorrimer"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Four claimants, Tarn Wick, Ulla Brandt, Veda Crane and Wynn Sorrel, live at the address AD-01000, which has the shape of a shared address.", cites: ["c1", "c2", "c3", "c4", "ad1", "r1", "r2", "r3", "r4"] }
+      - { id: "s2", label: "keep", text: "The claimant Tarn Wick lives at AD-01000.", cites: ["c1", "ad1", "r1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element Tarn Wick is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for Tarn Wick.", cites: ["c1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Xan Lorrimer is also connected to Tarn Wick.", cites: ["c1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "Tarn Wick is evidence of fraud by the holders.", cites: ["c1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Four claimants, Tarn Wick, Ulla Brandt, Veda Crane and Wynn Sorrel, live at the address AD-01000, which has the shape of a shared address. It is evidence of fraud by the holders.", cites: ["c1", "c2", "c3", "c4", "ad1", "r1", "r2", "r3", "r4"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "xan lorrimer is also linked to Tarn Wick.", cites: ["c1"] }
+  - id: aml-fan-in-count-not-known
+    pack: banking-fraud
+    shape: "fan-in"
+    title: "Three accounts pay into one account, and the count of further accounts is not known"
+    not_retrieved: { quality: "unknown" }
+    entities:
+      - { key: "a1", type: "account", id: "AC-4001", name: "AC-4001" }
+      - { key: "a2", type: "account", id: "AC-4002", name: "AC-4002" }
+      - { key: "a3", type: "account", id: "AC-4003", name: "AC-4003" }
+      - { key: "t1", type: "account", id: "AC-4100", name: "AC-4100" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "t1", observed_at: "2026-11-01" }
+      - { key: "r2", type: "TRANSFERRED_TO", from: "a2", to: "t1", observed_at: "2026-11-01" }
+      - { key: "r3", type: "TRANSFERRED_TO", from: "a3", to: "t1", observed_at: "2026-11-02" }
+    facts:
+      - { id: "f1", says: "Three accounts transferred to the account AC-4100", phrases: ["three accounts", "3 accounts"], rests_on: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+      - { id: "f2", says: "The number of further accounts is not known", phrases: ["not known", "unknown"], rests_on: ["t1"] }
+    claims:
+      - { id: "c1", says: "States a number of further accounts that paid into AC-4100", phrases: ["further accounts", "more accounts", "other accounts"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says the accounts were chosen to stay under a limit", phrases: ["under a limit", "below the threshold", "structur"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+    invented_names: ["Yara Fenwick"]
+    sentences:
+      - { id: "s1", label: "keep", text: "Three accounts, AC-4001, AC-4002 and AC-4003, transferred to the account AC-4100, and how many others paid in is not known.", cites: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+      - { id: "s2", label: "keep", text: "The account AC-4003 transferred to AC-4100.", cites: ["a3", "t1", "r3"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-4001 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-4001.", cites: ["a1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Yara Fenwick is also connected to AC-4001.", cites: ["a1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-4001 is evidence of fraud by the holders.", cites: ["a1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "Three accounts, AC-4001, AC-4002 and AC-4003, transferred to the account AC-4100, and how many others paid in is not known. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "yara fenwick is also linked to AC-4001.", cites: ["a1"] }

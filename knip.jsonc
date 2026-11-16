@@ -37,6 +37,10 @@
       // Mocked by name with vi.mock in each test file, which knip does not count as a use; the package is declared so that the mock resolves.
       "ignoreDependencies": ["@neburyx/ee-audit"]
     },
+    "tools/summary-suite": {
+      // Mocked by name with vi.mock in the typology test, which knip does not count as a use; the package is declared so that the mock resolves.
+      "ignoreDependencies": ["@neburyx/ee-audit"]
+    },
     "tools/ask-eval": {
       // The entry script loads the enterprise classifier by package name and hands it to the command in src/cli.ts.
       "entry": ["entry/*.mjs", "src/cli.ts"]
