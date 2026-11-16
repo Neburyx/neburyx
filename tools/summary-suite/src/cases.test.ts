@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { caseOf, keyMapOf, loadCases, parseCases, readingOf, sentenceInKeys, type LabelledCase, type LabelledSentence } from './cases.js';
 import { countRuleBroken, defined, holdsVerdict, keysOfSentText, numbersUnsupported, sentencesOf } from './checks.js';
-import { checkedReplyOf, replyOf, startRig } from './rig.js';
+import { checkedReplyOf, replyOf, startRig } from './testing/rig.js';
 import { scoreLabelled, scoreSummary } from './score.js';
 
 const here = dirname(fileURLToPath(import.meta.url));

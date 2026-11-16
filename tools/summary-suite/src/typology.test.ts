@@ -8,7 +8,7 @@ import { loadSummaryInstructions } from '../../../ee/ask/src/case-summary/load-i
 import { makeAskFolder, removeAskFolders } from '../../../ee/ask/src/testing/ask-folder.js';
 import { startModelStub, type ModelStub } from './model-stub.js';
 import { defined, expectNoVerdict, offenceWordsIn, sentencesOf } from './checks.js';
-import { replyOf, startRig } from './rig.js';
+import { replyOf, startRig } from './testing/rig.js';
 import { node, reading } from './view.js';
 
 const PROMPTS = resolve(import.meta.dirname, '../../../ee/ask/prompts');

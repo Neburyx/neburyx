@@ -4,7 +4,7 @@ import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import { afterAll, describe, expect, it } from 'vitest';
 import { el, exportWebRoot, startExportRig } from '../../../services/api/src/testing/export-rig.js';
 import { defined, expectCited, expectNoText, expectNoVerdict, keysOfSentText, sentencesOf, SuiteCheckFailed } from './checks.js';
-import { replyOf, startRig } from './rig.js';
+import { replyOf, startRig } from './testing/rig.js';
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
 import { edge, node, prop, reading } from './view.js';

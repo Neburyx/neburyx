@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { expectNoText } from './checks.js';
-import { failure, replyOf, startRig } from './rig.js';
+import { failure, replyOf, startRig } from './testing/rig.js';
 import { edge, node, reading } from './view.js';
 
 const eventSchema = z.object({ detail: z.object({ summary: z.record(z.string(), z.unknown()) }) });

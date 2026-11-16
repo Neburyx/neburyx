@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { caseOf, loadCases } from './cases.js';
 import { NUMBER_ON_THE_SECOND } from './evidence.js';
 import { defined, expectNoVerdict, expectNumbersCited, SuiteCheckFailed } from './checks.js';
-import { replyOf, startRig } from './rig.js';
+import { replyOf, startRig } from './testing/rig.js';
 import { expectClean, run, viewOf, type Evidence } from './rules.js';
 
 const set = loadCases();

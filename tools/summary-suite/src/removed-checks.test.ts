@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { caseOf, loadCases } from './cases.js';
 import { defined, SuiteCheckFailed } from './checks.js';
 import { mutatedChecks, type Mutation } from './mutants.js';
-import { replyOf, startRig } from './rig.js';
+import { replyOf, startRig } from './testing/rig.js';
 import { expectClean, viewOf, type Evidence } from './rules.js';
 
 const set = loadCases();

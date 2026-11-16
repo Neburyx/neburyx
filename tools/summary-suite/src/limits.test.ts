@@ -2,7 +2,7 @@ import { promptRecordOf, type ModelAnswer, type ModelRequest } from '@neburyx/ee
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defined, expectNoText, hashOfValue, sha256Of, SuiteCheckFailed } from './checks.js';
 import { loadCases, readingOf, type LabelledCase } from './cases.js';
-import { failure, replyOf, startRig } from './rig.js';
+import { failure, replyOf, startRig } from './testing/rig.js';
 
 const set = loadCases();
 const first = (labelled: LabelledCase): string => defined(labelled.entities[0], 'an entity').name;

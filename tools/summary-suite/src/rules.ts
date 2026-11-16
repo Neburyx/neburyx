@@ -2,7 +2,7 @@ import type { SummarySentence } from '@neburyx/contracts';
 import { keyMapOf, readingOf, type LabelledCase } from './cases.js';
 import { COUNT_TYPES, withEvidence } from './evidence.js';
 import { defined, expectCited, expectCountsLabelled, expectNoneOf, expectNoVerdict, expectNumbersCited, keyOfRelationship, keysOfSentText, sentencesOf } from './checks.js';
-import { replyOf, startRig } from './rig.js';
+import { replyOf, startRig } from './testing/rig.js';
 
 const one = { maxCalls: 1 };
 

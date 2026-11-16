@@ -8,7 +8,7 @@ Tests of the safety and quality claims of the AI case summary: the real enterpri
 
 ## How it is built
 
-- `src/rig.ts` starts the real `createCaseSummarizer` over a scripted provider (the replies a case gives, in order; a reply may be a function of the request and of the abort signal) and keeps what the provider received, the events of the audit sink and the rows of an in-memory run store.
+- `src/testing/rig.ts` (in the folder the open-core check exempts, because it imports the enterprise package) starts the real `createCaseSummarizer` over a scripted provider (the replies a case gives, in order; a reply may be a function of the request and of the abort signal) and keeps what the provider received, the events of the audit sink and the rows of an in-memory run store.
 - `src/view.ts` builds small synthetic views; `src/cases.ts` loads the labelled set and turns a case into the reading the summarizer takes, and finds the key each element received in the sent text.
 - `src/checks.ts` holds the suite's own statements of the rules (every sentence cited, every number a standalone number on a cited line, a count with its label, no verdict wording, no invented name, an expected text compared by hand, hashes worked out here). They are written apart from the product's checks, so that a product check that is removed leaves a sentence the helpers catch. Every helper has a canary: a test that gives it a deliberately bad output and expects it to fail.
 - `src/score.ts` is the pure scorer of the method below.

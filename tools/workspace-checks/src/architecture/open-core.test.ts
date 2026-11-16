@@ -58,6 +58,11 @@ describe('the open-core line', () => {
     expect(snippet('services/api/src/testing/a.ts', "import { x } from '../../../../ee/ask/dist/index.js';")).toEqual([]);
   });
 
+  it('exempts the testing folder of the summary suite, and still reports another file of the suite', () => {
+    expect(snippet('tools/summary-suite/src/testing/a.ts', "import { x } from '@neburyx/ee-ask';")).toEqual([]);
+    expect(snippet('tools/summary-suite/src/a.ts', "import { x } from '@neburyx/ee-ask';")).toMatchObject([{ rule: 'open-core', file: 'tools/summary-suite/src/a.ts' }]);
+  });
+
   it('exempts the testing folder of the evaluation tool, and still reports a production file of the tool', () => {
     expect(snippet('tools/ask-eval/src/testing/a.ts', "import { x } from '@neburyx/ee-ask/eval';")).toEqual([]);
     expect(snippet('tools/ask-eval/src/a.ts', "import { x } from '@neburyx/ee-ask/eval';").map((violation) => violation.file)).toEqual(['tools/ask-eval/src/a.ts']);

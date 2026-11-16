@@ -5,7 +5,7 @@ import { el, exportWebRoot, startExportRig } from '../../../services/api/src/tes
 import { rmSync } from 'node:fs';
 import { expectEachIdOnce, expectNoText, expectSameText, keysOfSentText, SuiteCheckFailed } from './checks.js';
 import { keyMapOf, loadCases, readingOf } from './cases.js';
-import { replyOf, startRig } from './rig.js';
+import { replyOf, startRig } from './testing/rig.js';
 import { edge, node, prop, reading } from './view.js';
 
 afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));

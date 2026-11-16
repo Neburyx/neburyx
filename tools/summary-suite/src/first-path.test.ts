@@ -2,7 +2,7 @@ import { openToken } from '@neburyx/ee-ask';
 import { describe, expect, it } from 'vitest';
 import { defined, expectCited, expectNoText, keysOfSentText, sentencesOf } from './checks.js';
 import { edge, node, prop, reading } from './view.js';
-import { INVESTIGATION, KEYS, replyOf, startRig } from './rig.js';
+import { INVESTIGATION, KEYS, replyOf, startRig } from './testing/rig.js';
 
 const account = node('account', 'AC-1', 'Ana Silva', [prop('status', 'open')]);
 const device = node('device', 'DV-1', 'Phone DV-1');

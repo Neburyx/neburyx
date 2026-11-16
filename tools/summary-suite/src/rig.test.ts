@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { promptRecordOf } from '@neburyx/ee-ask';
-import { checkedReplyOf, replyOf, startRig } from './rig.js';
+import { checkedReplyOf, replyOf, startRig } from './testing/rig.js';
 import { node, reading } from './view.js';
 
 const good = { text: 'AC-1 is listed.', cites: ['n1'] };

@@ -16,7 +16,7 @@ Every source read goes through the gate. Until the adapter exists, the check rea
 | a module under `services/api/src/sources/` | `services/api/src/gate/` and `services/api/src/sources/` |
 | the gate's executor modules: `gate/executor.ts`, `gate/execute.ts`, `gate/deps.ts`, and the two that take an executor to build a gate, `gate/gate.ts` and `gate/assemble.ts` | `services/api/src/gate/` and `services/api/src/sources/` |
 
-- Test files (`*.test.*` in any scanned extension), `services/api/src/testing/` and `packages/test-neo4j/` (the package the Neo4j tests use to reach their server) are exempt, because they fake or seed the
+- Test files (`*.test.*` in any scanned extension), `services/api/src/testing/`, the `testing/` folders of `tools/ask-eval/src` and `tools/summary-suite/src`, and `packages/test-neo4j/` (the package the Neo4j tests use to reach their server) are exempt, because they fake or seed the
   outside world. Production code may not import or re-export them.
 - A re-export of a restricted module is allowed only in a restricted module, so `gate/types.ts` cannot pass `executeRead`
   on. Re-exports read: `export … from`, `export *`, an import followed by `export { x }`, `export default x`, `export = x`, an
@@ -108,7 +108,7 @@ The checks read the code. The [input fuzz suite](fuzz-suite.md) tests the same r
 | `open-core` | A production file under `services/`, `packages/`, `apps/`, `tools/` or `deploy/` that imports a path inside `ee/`, or a package named `@neburyx/ee-*`, in any form: static, type-only, side-effect, `import()` or `require()` with a literal, `export … from`, `export *` |
 | the workspace check | A package outside `ee/` that lists an `@neburyx/ee-*` package in `dependencies`, `peerDependencies` or `optionalDependencies` |
 
-- Test files (`*.test.*`), `services/api/src/testing/` and `tools/ask-eval/src/testing/` are exempt, as in the other checks, and so is `devDependencies`: a test of the real extension in `services/api` uses `@neburyx/ee-ask` that way. A production file next to a test file is still reported.
+- Test files (`*.test.*`), `services/api/src/testing/`, `tools/ask-eval/src/testing/` and `tools/summary-suite/src/testing/` are exempt, as in the other checks, and so is `devDependencies`: a test of the real extension in `services/api` uses `@neburyx/ee-ask` that way. A production file next to a test file is still reported.
 - Three files may import `ee/`: `deploy/docker/entrypoint.mjs`, the entry script of the image, `tools/dev/entry/enterprise-entry.mjs`, the one `pnpm dev` starts the migrate step and the API through, and `tools/ask-eval/entry/ask-eval-entry.mjs`, which hands the classifier of the enterprise code to the evaluation tool. The first two register the loader of the enterprise code; the rest of `deploy/` and `tools/` is scanned like any other folder. The scripts are exempt by name, not by folder.
 - `ee/` code is scanned by the other checks that apply to it: the adapter and gate-capability checks read `ee/` (so it cannot import the Neo4j driver, `sources/`, the gate's executor or the system principal), the test container check reads it, and the domain-word check reads `ee/ask`. `ee/` code may import the types of Community packages.
 - The check reads literal specifiers. A specifier built at run time cannot be read, like the cases in [What the checks cannot see](#what-the-checks-cannot-see); review covers it.
