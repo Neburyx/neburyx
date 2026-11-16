@@ -16,8 +16,8 @@ const set = loadCases();
 const base = set.cases.find((each) => each.id === 'aml-fan-in');
 if (base === undefined) throw new Error('no aml-fan-in');
 
-const measurementSchema = z.object({ id: z.string(), kind: z.string(), elements: z.number(), measured: z.boolean(), missing: z.string().optional(), bytes: z.number().optional(), estimatedTokens: z.number().optional(), inputTokens: z.number().optional(), bytesPerToken: z.number().optional() });
-const reportSchema = z.object({ measurements: z.array(measurementSchema), proposal: z.object({ proposed: z.boolean(), bytesPerToken: z.number().optional(), maxInputTokens: z.number().optional(), missing: z.array(z.string()) }), usage: z.object({ calls: z.number() }) });
+const measurementSchema = z.object({ id: z.string(), kind: z.string(), properties: z.string().optional(), elements: z.number(), measured: z.boolean(), missing: z.string().optional(), bytes: z.number().optional(), estimatedTokens: z.number().optional(), inputTokens: z.number().optional(), bytesPerToken: z.number().optional() });
+const reportSchema = z.object({ measurements: z.array(measurementSchema), proposal: z.object({ proposed: z.boolean(), bytesPerToken: z.number().optional(), maxInputTokens: z.number().optional(), upperBoundMaxInputTokens: z.number().optional(), missing: z.array(z.string()) }), usage: z.object({ calls: z.number() }) });
 
 /** Hooks whose provider states the input tokens a rule gives for the elements of a request, with cache counts when a test asks. */
 function counting(tokensFor: (elements: number) => number, over: { cacheRead?: number; cacheWrite?: number; fail?: (elements: number) => boolean; unknown?: boolean } = {}): EvalHooks<ModelProvider> {
@@ -148,7 +148,7 @@ describe('what the measurements support', () => {
   const sample = (elements: number, bytes: number, tokens: number): Measurement => ({ ...view(`sample-${elements}`, bytes, tokens), kind: 'sample', elements });
   const aml = new Set(['aml-a']);
 
-  it('proposes the smallest bytes-per-token rounded down to one decimal and the guard from the most tokens at the cap times 1.2 rounded up to the next 1,000, worked out by hand', () => {
+  it('proposes the smallest bytes-per-token rounded down to one decimal and the guard from the largest estimate at the cap (bytes over the proposed ratio) times 1.2 rounded up to the next 1,000, worked out by hand', () => {
     const proposal = proposalOf([view('aml-a', 3140, 1000), view('x', 2960, 1000), sample(10, 3500, 1000), sample(300, 60_000, 18_001)], aml, 300);
     expect(proposal).toEqual({ proposed: true, bytesPerToken: 2.9, maxInputTokens: 25_000, missing: [] });
   });
@@ -187,6 +187,12 @@ describe('what the measurements support', () => {
     expect(refused.report.usage.calls).toBe(set.cases.length + 7 - refusedIds.length);
     const whole = await measure(counting((elements) => 100 + elements));
     expect(whole.report.proposal.proposed).toBe(true);
+    const byId = (id: string) => whole.report.measurements.find((each) => each.id === id);
+    expect(byId('sample-300')).toMatchObject({ properties: 'none' });
+    expect(byId('sample-300-realistic')).toMatchObject({ properties: 'realistic' });
+    expect(byId('sample-300-heavy')).toMatchObject({ properties: 'heavy' });
+    expect(whole.report.measurements.find((each) => each.kind === 'view')?.properties).toBeUndefined();
+    expect(whole.report.proposal.upperBoundMaxInputTokens).toBeGreaterThan(whole.report.proposal.maxInputTokens ?? Infinity);
   });
 
   it('with the default guard, refuses the samples of long properties, says so, and proposes nothing', async () => {

@@ -4,7 +4,7 @@ import { cli } from '../testing/harness.js';
 import { manifestOf, selectViews } from './manifest.js';
 
 const set = loadCases();
-const settings = { model: 'm', timeoutMs: 1, totalTimeoutMs: 1, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 23_000, retentionDays: 30 };
+const settings = { model: 'm', timeoutMs: 1, totalTimeoutMs: 1, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 25_000, retentionDays: 30 };
 
 describe('the manifest of a run', () => {
   it('is, for the scoring views, the views times the call limit at most and one call a view at least, worked out by hand', () => {

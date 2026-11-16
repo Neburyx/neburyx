@@ -33,7 +33,7 @@ export const SUMMARY_DEFAULTS = {
   /** The most output tokens of a model call, its reasoning included. */
   maxOutputTokens: 4000,
   /**
-   * The size guard on the text sent to the model, in tokens as the summarizer estimates them: measured on 300 elements, the larger of bare ones and ones with a few short properties (about 20,300 estimated),
+   * The size guard on the text sent to the model, in tokens as the summarizer estimates them: measured on 300 elements, the larger of bare ones and ones with a few short properties (about 20,200 estimated),
    * times 1.2, rounded up. Operators whose elements carry long text properties raise `NEBURYX_SUMMARY_MAX_INPUT_TOKENS` (136,000 admits the heavy sample of the evaluation); see `tools/summary-suite/README.md`.
    */
   maxInputTokens: 25_000,
