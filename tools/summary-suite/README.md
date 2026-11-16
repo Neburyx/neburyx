@@ -1,6 +1,6 @@
 # tools/summary-suite
 
-Tests of the safety and quality claims of the AI case summary: the real enterprise summarizer (its assembly of the text, size guard, drafting loop, checks, sealing, run record and audit events) over a scripted model that the test controls, on a labelled set of 15 small synthetic views. No server of its own, no network beyond the loopback and no model call; they run in `pnpm test`. The live scoring of real summaries against the labelled set is a separate, later command.
+Tests of the safety and quality claims of the AI case summary: the real enterprise summarizer (its assembly of the text, size guard, drafting loop, checks, sealing, run record and audit events) over a scripted model that the test controls, on a labelled set of 17 small synthetic views. No server of its own, no network beyond the loopback and no model call; they run in `pnpm test`. The same package holds the evaluation command, which scores real summaries against the labelled set by hand (below).
 
 | Command | Runs |
 |---|---|
@@ -15,9 +15,24 @@ Tests of the safety and quality claims of the AI case summary: the real enterpri
 
 A check removed from the product fails the suite, and `src/removed-checks.test.ts` shows it on every run: it takes one test out of the source text of the product's own checks (the citation, number, unknown-count, count-label, name or verdict test, one at a time), builds the summarizer from that changed source, and expects the suite's own helpers to fail on the sentence that is then kept, and to pass with the product as it is. If the product's source no longer holds the text a mutation removes, the test fails and says which mutation to update.
 
+## The evaluation command
+
+```bash
+pnpm summary-eval --stub                     # every view answered with its own labelled sentences: no key, no network, no model call
+pnpm summary-eval --dry-run --measure        # what a run can cost, without a call
+pnpm summary-eval --budget <n> --out <folder outside every git working tree> --folder <an Ask folder> [--views all|demo|aml|<ids>] [--measure | --measure-only]
+```
+
+It summarizes the labelled views through the product's own summarizer (assembly, size guard, drafting loop, checks), scores each view and prints a report. The key is read only from the file `NEBURYX_ASK_API_KEY_FILE` names, by the product's own reader; a live run also needs a finite `NEBURYX_SUMMARY_MAX_INPUT_TOKENS`, a `--budget`, and an `--out` folder outside every git working tree (written with mode 0600). The rule of use (not a property of the command, which only asks for a budget): the person who runs it agrees the model, the views and the number of calls before a live run is made.
+
+- **Budget.** Every request of either category (scoring and measuring) counts against one budget, and the provider's own retry is off. The nth request is made; a request that would be the (n+1)th is not made, the click in flight ends as a failure, the views left are reported `not run`, and the run exits 1. A run does not start with a budget below the least the dry run says. Exit codes: 0 for a run that finished within its budget, 1 for one that did not (or that ended a view in a failure or a cancel), 2 for a usage error.
+- **Report.** Ids, counts and causes only, never a sentence of the model or a value of an entity (`--json` for a machine form). For each view: the facts found and missed, the claims made, the invented names of the set that a kept sentence holds (synthetic names), the sentences the model wrote, kept and removed in the last reply the checks judged, `keysStripped` and `keysRemoved` summed over every reply they judged, the calls, tokens and time. The removals of the last checked reply are told apart as far as the command can tell by itself: `verdict word only in a title` (a verdict-list word that lies only inside the title of an element, such as a company called Crimson Lake Traders; the product's check ignores such a word inside the title or id of an element the sentence cites, so this is a removal for a title the sentence did not cite, or a regression) and `removed for a person to read` (a sentence that states a fact of the view and cites what the fact rests on, with no cause the command knows). A stub run also reports the labelled sentences that were removed wrongly or that slipped.
+- **Measurement.** `--measure` adds, and `--measure-only` runs alone, the measurement of the size of what the model is sent: the labelled views and samples of 10, 100 and the element cap built from a view (the elements repeated under new ids), one request each, through the product's own assembly and size guard (a sample over the guard makes no request and is reported unmeasured), with caching off so that the provider's input count holds the instructions and the values. For each: the UTF-8 bytes of the instructions plus the values, the product's own estimate of the tokens, the input tokens the provider counted (with cache read and write counts), the bytes to a token and the tokens to an element. A live run proposes the ratio that would replace the estimate of 3 (the smallest bytes-per-token measured, rounded down to one decimal) and a guard (the most input tokens measured for a view at the element cap, times 1.2, rounded up to the next 1,000); with any measurement missing, failed or without usage, or with no AML view or no sample at the cap, it proposes nothing and says what is missing. A stub run says `not measured`.
+- **Where the code lives.** The command is `src/eval/`; the enterprise code it needs (the live and scripted providers, the budgeted provider, the summarizer with its observer) is `ee/ask/src/eval/summary.ts`, reached only through `entry/summary-eval-entry.mjs`, which the open-core check lists.
+
 ## The labelled set and its method
 
-`cases/cases.yaml` holds 15 views: 8 demo views, each restating in small synthetic elements a case of the banking-fraud or insurance-claims pack's `cases.yaml` (named by `source_case`), and 7 AML views, each a synthetic arrangement of one shape of the typology (`shape`: fan-in, fan-out, cycle, rapid pass-through, shared device, shared address, and a fan-in whose count of further accounts is not known). Each case has:
+`cases/cases.yaml` holds 17 views: 10 demo views, each restating in small synthetic elements a case of the banking-fraud or insurance-claims pack's `cases.yaml` (named by `source_case`), and 7 AML views, each a synthetic arrangement of one shape of the typology (`shape`: fan-in, fan-out, cycle, rapid pass-through, shared device, shared address, and a fan-in whose count of further accounts is not known). Each case has:
 
 - `entities` (a local `key`, a type, an id, a name, properties) and `relationships` between them, which `readingOf` turns into what the gate would have returned;
 - `facts`: what a summary of the view must mention, each with the `phrases` that count as mentioning it and the elements it `rests_on`;
@@ -33,7 +48,7 @@ How a case is written and reviewed:
 
 How a summary is scored (`scoreSummary`, `scoreLabelled`): a fact is found when a kept sentence holds one of its phrases and cites a key it rests on; a claim is made when a kept sentence holds one of its phrases; an invented name is kept when a kept sentence holds it. Against the labelled sentences, a `keep` sentence that was not kept is a good sentence removed wrongly (a sentence whose key was taken out of its text counts as kept), and a `remove` sentence that was kept slipped through a check. Only the reply that was checked is compared with the sentences kept from it, so a reply that a further call replaced is never counted.
 
-Limits of the method: phrases are matched as lower-case text, so a paraphrase is a missed fact and a phrase that is not listed is not a made claim; the name check finds identifier-like, quoted and capitalised words only, so a lower-case name or an unquoted alphabetic id may slip through (accepted, and measured here: each case holds one such sentence, labelled a known slip, and the tests fail if the name check ever catches it, so that the label is updated); the verdict check is a fixed phrase list, so a scheme it does not name is not caught. A later live run scores real summaries through the same scorer.
+Limits of the method: phrases are matched as lower-case text, so a paraphrase is a missed fact and a phrase that is not listed is not a made claim; the name check finds identifier-like, quoted and capitalised words only, so a lower-case name or an unquoted alphabetic id may slip through (accepted, and measured here: each case holds one such sentence, labelled a known slip, and the tests fail if the name check ever catches it, so that the label is updated); the verdict check is a fixed phrase list, so a scheme it does not name is not caught; it ignores a word of the list inside the title or id of an element the sentence cites, so an element whose title is only such a word (a company called Fraud), cited by the sentence, hides that word wherever the sentence says it. A later live run scores real summaries through the same scorer.
 
 ## Named tests
 
@@ -45,7 +60,7 @@ Limits of the method: phrases are matched as lower-case text, so a paraphrase is
 | No event holds the text of the values or of the reply | `src/first-path.test.ts` | keeps no text of the values or of the reply in any event |
 | The citation helper fails on a sentence that cites nothing or a key not sent | `src/checks.test.ts` | canary: expectCited fails |
 | The text helper fails when a record holds a sentinel, also one with a line break, a quote or a control character | `src/checks.test.ts` | canary: expectNoText finds a sentinel with |
-| The set holds 15 views, 8 demo and 7 AML, every shape of the typology | `src/cases.test.ts` | holds 15 views |
+| The set holds 17 views, 10 demo and 7 AML, every shape of the typology | `src/cases.test.ts` | holds 17 views |
 | The set is synthetic | `src/cases.test.ts` | is synthetic: every name is from the list |
 | An invalid file fails with the case named, for each invariant of the set | `src/cases.test.ts` | names the case when the file is invalid |
 | The labels agree with the real checks and with the rule each names | `src/cases.test.ts` | has labels that agree with the real checks and with the rule each names |
@@ -115,6 +130,47 @@ Limits of the method: phrases are matched as lower-case text, so a paraphrase is
 | No event holds the instructions, and the check fails on one that does | `src/limits.test.ts` | holds no text of the instructions in any event |
 | The reply the checks judged last is the last that fits the reply format, and an object answer is captured | `src/rig.test.ts` | is the last reply that fits the reply format |
 | A scripted answer given as an object is captured | `src/rig.test.ts` | is captured for a scripted answer given as an object |
+| The verdict rule of the product reads the title or id of a cited element as a name, and the suite fails when that rule is taken out | `src/removed-checks.test.ts` | removes the labelled keep sentence that quotes a title |
+| The product's verdict check keeps a sentence that quotes the title of a cited element, and removes the same words anywhere else | `../../ee/ask/src/case-summary/checks.test.ts` | keeps a sentence that quotes the title of an element it cites |
 | The scanner for verdict wording finds each kind of wording | `src/checks-on-views.test.ts` | canary: the verdict scanner finds the wording of |
 | A provider failure ends the click at once, recorded | `src/limits.test.ts` | ends a click whose provider fails at once |
 | The record of a click on a real Postgres (existing) | `../../services/api/src/migrate/preview-tables.integration.test.ts` | a whole click |
+| The stub run summarizes every view and scores it | `src/eval/run.test.ts` | summarizes every view with the real summarizer |
+| A key variable is not read by a stub run | `src/eval/run.test.ts` | reads no key and uses no network |
+| The manifest of a run, worked out by hand, and the dry run | `src/eval/manifest.test.ts` | is, for the scoring views, the views times the call limit |
+| A run can use exactly its budget | `src/eval/budget.test.ts` | lets a run use exactly its budget |
+| The request that would pass the budget is refused and the views left are not run | `src/eval/budget.test.ts` | refuses the request that would pass the budget |
+| A budget below the least is refused before any call | `src/eval/budget.test.ts` | refuses a budget below the least the manifest says |
+| A click in a regeneration stops at the budget | `src/eval/budget.test.ts` | stops a click in a regeneration when the budget is reached |
+| A live run needs its guard, budget, output folder and Ask folder, and refuses a key in the environment and an output folder inside a working tree | `src/eval/live-guards.test.ts` | is refused, with exit 2 and before the provider is built |
+| The record of a live run is written with mode 0600 and holds figures only | `src/eval/live-guards.test.ts` | writes its record with mode 0600 |
+| The report of a view holds its figures and no text | `src/eval/report.test.ts` | holds the facts, claims, sentences, keys, calls, tokens and time of a click |
+| The keys the checks take out are summed over every reply, the diagnostics are of the last checked reply | `src/eval/report.test.ts` | sums the keys the checks take out over every reply they judged |
+| A verdict word in a title of an element the sentence does not cite, a removal for a person to read and another cause are told apart | `src/eval/report.test.ts` | separates a removal whose verdict word lies only in a title |
+| A replaced reply adds nothing; a failure and a cancel keep the last checked reply's figures; no checked reply reports none | `src/eval/report.test.ts` | counts only the last checked reply when a further call replaced the first |
+| Each count changes when a canary changes it | `src/eval/report.test.ts` | shows the change of each count when a canary changes it |
+| The samples are exact, deterministic and new-id copies | `src/eval/measure.test.ts` | are the labelled views and samples of exactly 10, 100 and 300 elements |
+| A live measuring run switches the cache off | `src/eval/measure.test.ts` | send their request through a provider with caching off |
+| A measurement holds bytes, the estimate and the provider's tokens with cache counts | `src/eval/measure.test.ts` | holds the UTF-8 bytes of the instructions plus the values |
+| The ratio and the guard rules, by hand | `src/eval/measure.test.ts` | proposes the smallest bytes-per-token rounded down to one decimal |
+| A missing, failed, unknown or refused measurement proposes nothing | `src/eval/measure.test.ts` | proposes nothing, and says what is missing |
+| A scripted provider says not measured | `src/eval/measure.test.ts` | says `not measured` and proposes nothing for the scripted provider |
+| The observer sees each judged reply and changes nothing (the product) | `../../ee/ask/src/case-summary/summarizer.test.ts` | changes nothing of the answer, the events or the record, whether it is absent, throws |
+| The observer is named by the summarizer and the evaluation module only | `../../ee/ask/src/case-summary/run-store-isolation.test.ts` | is named by the summarizer and the evaluation module and command only |
+| The budgeted provider makes the nth request and refuses the next | `../../ee/ask/src/eval/summary.test.ts` | makes the nth request and refuses the (n+1)th without making it |
+| The command reaches the enterprise code only through its entry script | `../workspace-checks/src/architecture/open-core.test.ts` | exempts the entry script of the summary evaluation command |
+| The verdict check takes a title out as a whole word only, longest first | `../../ee/ask/src/case-summary/checks.test.ts` | takes a title out only as a whole |
+| The stated limit of the title rule is pinned | `../../ee/ask/src/case-summary/checks.test.ts` | has a stated limit |
+| The suite's own verdict statement reads titles in any case, as whole words, and finds a verdict beside one | `src/checks-on-views.test.ts` | canary: the verdict statement reads a title of a cited element |
+| An asynchronous observer that rejects changes nothing (the product) | `../../ee/ask/src/case-summary/summarizer.test.ts` | changes nothing either when the observer is asynchronous and rejects |
+| The live provider of a summary run: key only from a file, retries 0, the cache switch carried (the product) | `../../ee/ask/src/eval/summary.test.ts` | reads the key from its file only, uses the summary |
+| A refused live run is exit 2, before the provider is built, and a second run over a record is refused before any call | `src/eval/live-guards.test.ts` | writes its record with mode 0600 in an owner-only folder |
+| A key in the environment is a usage error, not an exception | `src/eval/live-guards.test.ts` | refuses a key in the environment with exit 2 and no stack |
+| The budget is one for scoring and measuring | `src/eval/budget.test.ts` | is one budget for scoring and measuring |
+| A stub run opens no socket and reads no key file | `src/eval/run.test.ts` | opens no socket |
+| The manifest for measuring alone and for both | `src/eval/manifest.test.ts` | has, for measuring alone and for both, a category |
+| A reply that does not fit is still a measurement | `src/eval/measure.test.ts` | measure a view whose reply does not fit the reply format |
+| The labelled comparison and the keys in a list, through a regeneration | `src/eval/report.test.ts` | counts the keys the checks take out of a sentence written in a list |
+| A good sentence of the checked reply that the checks removed is counted | `src/eval/report.test.ts` | counts a good sentence of the checked reply that the checks removed |
+| The same title for an element the sentence does not cite is removed and reported | `src/eval/report.test.ts` | removes the same title for an element the sentence does not cite |
+| The entry script runs the built command | `src/eval/entry.test.ts` | runs the built command with the enterprise hooks |

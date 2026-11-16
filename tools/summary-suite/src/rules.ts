@@ -11,7 +11,7 @@ export function expectClean(sentences: readonly SummarySentence[], sent: string,
   expectCited(sentences, keysOfSentText(sent));
   expectNumbersCited(sentences, sent);
   expectCountsLabelled(sentences, sent);
-  expectNoVerdict(sentences);
+  expectNoVerdict(sentences, sent);
   expectNoneOf(sentences, invented);
 }
 

@@ -28,7 +28,8 @@
     "check:dco": "pnpm --fail-if-no-match --filter \"@neburyx/dco-check...\" build && node tools/dco-check/dist/main.js",
     "dev": "pnpm --fail-if-no-match --filter \"@neburyx/dev...\" build && node tools/dev/dist/main.js",
     "test:ux": "pnpm --fail-if-no-match --filter @neburyx/ux-tests test:ux",
-    "ask-eval": "pnpm --fail-if-no-match --filter \"@neburyx/ask-eval...\" build && node tools/ask-eval/entry/ask-eval-entry.mjs"
+    "ask-eval": "pnpm --fail-if-no-match --filter \"@neburyx/ask-eval...\" build && node tools/ask-eval/entry/ask-eval-entry.mjs",
+    "summary-eval": "pnpm --fail-if-no-match --filter \"@neburyx/summary-suite...\" build && node tools/summary-suite/entry/summary-eval-entry.mjs"
   },
   "devDependencies": {
     "eslint": "10.14.0",

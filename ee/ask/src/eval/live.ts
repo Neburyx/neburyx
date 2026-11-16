@@ -2,6 +2,8 @@ import { AI_DEFAULTS } from '@neburyx/contracts';
 import { createAnthropicProvider } from '../anthropic.js';
 import { configureAsk, DEFAULT_ASK_MODEL } from './../configure.js';
 import type { ModelProvider } from '../provider.js';
+import { summaryProviderConfiguration } from '../case-summary/provider-configuration.js';
+import type { SummarySettings } from '../case-summary/settings.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -18,12 +20,9 @@ export function runSettings(env: Env): { readonly model: string; readonly effort
   return { model: given('NEBURYX_ASK_CLASSIFICATION_MODEL') ?? DEFAULT_ASK_MODEL, effort: given('NEBURYX_ASK_EFFORT') ?? AI_DEFAULTS.effort };
 }
 
-/**
- * The provider of a recording run, built the way the product builds its own: through `configureAsk`, so a key file that others can read, an empty one or a missing one is refused before any call.
- * The key comes from `NEBURYX_ASK_API_KEY_FILE` only (a key in the environment is refused), retries are forced to 0, and the folder is the one given. A message holds no part of the key.
- */
-export async function liveProvider(env: Env, folder: string): Promise<{ readonly provider: ModelProvider; readonly model: string; readonly effort: string; readonly maxRetries: number }> {
-  if (env['NEBURYX_ASK_API_KEY'] !== undefined && env['NEBURYX_ASK_API_KEY'] !== '') throw new LiveProviderError('NEBURYX_ASK_API_KEY is not used by a recording run: give the key as NEBURYX_ASK_API_KEY_FILE');
+/** The configuration of Ask for a run, built the way the product builds its own: through `configureAsk`, with the key from `NEBURYX_ASK_API_KEY_FILE` only and no retry. */
+async function askConfigurationFor(env: Env, folder: string) {
+  if (env['NEBURYX_ASK_API_KEY'] !== undefined && env['NEBURYX_ASK_API_KEY'] !== '') throw new LiveProviderError('NEBURYX_ASK_API_KEY is not used by an evaluation run: give the key as NEBURYX_ASK_API_KEY_FILE');
   const given = env['NEBURYX_ASK_MAPPING_FOLDER'];
   if (given !== undefined && given !== '' && given !== folder) throw new LiveProviderError('NEBURYX_ASK_MAPPING_FOLDER names another folder than the one given');
   const kept: Record<string, string | undefined> = {};
@@ -31,7 +30,21 @@ export async function liveProvider(env: Env, folder: string): Promise<{ readonly
   const used = { ...kept, NEBURYX_ASK_MAPPING_FOLDER: folder, NEBURYX_ASK_MAX_RETRIES: '0' };
   const configured = await configureAsk(used);
   if (!configured.outcome.ok || configured.configuration === undefined) throw new LiveProviderError(configured.outcome.ok ? 'the settings of Ask could not be used' : configured.outcome.problems.join('; '));
-  const { configuration } = configured;
-  if (configuration.key.kind !== 'file') throw new LiveProviderError('the key must be given as NEBURYX_ASK_API_KEY_FILE');
+  if (configured.configuration.key.kind !== 'file') throw new LiveProviderError('the key must be given as NEBURYX_ASK_API_KEY_FILE');
+  return { configuration: configured.configuration, used };
+}
+
+/**
+ * The provider of a recording run: a key file that others can read, an empty one or a missing one is refused before any call, retries are forced to 0, and the folder is the one given. A message holds no part of the key.
+ */
+export async function liveProvider(env: Env, folder: string): Promise<{ readonly provider: ModelProvider; readonly model: string; readonly effort: string; readonly maxRetries: number }> {
+  const { configuration, used } = await askConfigurationFor(env, folder);
   return { provider: createAnthropicProvider({ configuration, env: used }), model: configuration.model, effort: configuration.limits.effort, maxRetries: configuration.limits.maxRetries };
+}
+
+/** The provider of a summary run: the provider of the summary's own configuration (its model, its timeout, its output limit, no retry), built the way `liveProvider` builds Ask's. */
+export async function liveSummaryProvider(env: Env, folder: string, settings: SummarySettings): Promise<{ readonly provider: ModelProvider; readonly model: string; readonly maxRetries: number; readonly cacheEnabled: boolean }> {
+  const { configuration, used } = await askConfigurationFor(env, folder);
+  const own = summaryProviderConfiguration(configuration, settings);
+  return { provider: createAnthropicProvider({ configuration: own, env: used }), model: own.model, maxRetries: own.limits.maxRetries, cacheEnabled: own.cache.enabled };
 }

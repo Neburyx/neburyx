@@ -58,6 +58,11 @@ describe('the open-core line', () => {
     expect(snippet('services/api/src/testing/a.ts', "import { x } from '../../../../ee/ask/dist/index.js';")).toEqual([]);
   });
 
+  it('exempts the entry script of the summary evaluation command, and still reports another file of the command', () => {
+    expect(snippet('tools/summary-suite/entry/summary-eval-entry.mjs', "import { x } from '@neburyx/ee-ask/eval';")).toEqual([]);
+    expect(snippet('tools/summary-suite/src/eval/run.ts', "import { x } from '@neburyx/ee-ask/eval';")).toMatchObject([{ rule: 'open-core', file: 'tools/summary-suite/src/eval/run.ts' }]);
+  });
+
   it('exempts the testing folder of the summary suite, and still reports another file of the suite', () => {
     expect(snippet('tools/summary-suite/src/testing/a.ts', "import { x } from '@neburyx/ee-ask';")).toEqual([]);
     expect(snippet('tools/summary-suite/src/a.ts', "import { x } from '@neburyx/ee-ask';")).toMatchObject([{ rule: 'open-core', file: 'tools/summary-suite/src/a.ts' }]);

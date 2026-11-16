@@ -152,6 +152,24 @@ describe('the helpers of the rules cannot be removed unseen (canaries)', () => {
     expect(() => expectNumbersCited(asked('The transfer was observed in 2025.', ['e1']), dated)).toThrow(SuiteCheckFailed);
   });
 
+  it('canary: the verdict statement reads a title of a cited element in any case and as whole words only, and still finds a verdict beside it, with a fragment of a title, or for an element that is not cited', () => {
+    const titled = 'Entities:\nn1 | "a" | title: "Crimson Lake Traders" | id: "AC-9"\nn2 | "a" | title: "Ra" | id: "AC-10"\nRelationships:\n(none)';
+    expect(() => expectNoVerdict(asked('crimson lake traders is listed.', ['n1']), titled)).not.toThrow();
+    expect(() => expectNoVerdict(asked('Crimson Lake Traders is listed.', ['n1']), titled)).not.toThrow();
+    expect(() => expectNoVerdict(asked('Crimson Lake Traders committed fraud.', ['n1']), titled)).toThrow(SuiteCheckFailed);
+    expect(() => expectNoVerdict(asked('AC-10 shows fraud.', ['n2']), titled)).toThrow(SuiteCheckFailed);
+    expect(() => expectNoVerdict(asked('Crimson Lake Traders is listed.', ['n2']), titled)).toThrow(SuiteCheckFailed);
+    expect(() => expectNoVerdict(asked('Crimson Lake Traders is listed.', ['n1']))).toThrow(SuiteCheckFailed);
+  });
+
+  it('canary: a title is not taken out of a hyphenated word, and an id with a hyphen is one word', () => {
+    const fraud = 'Entities:\nn1 | "a" | title: "Fraud" | id: "FRAUD-7"\nRelationships:\n(none)';
+    expect(() => expectNoVerdict(asked('Fraud-linked transfers are listed.', ['n1']), fraud)).toThrow(SuiteCheckFailed);
+    expect(() => expectNoVerdict(asked('The company FRAUD-7 is listed.', ['n1']), fraud)).not.toThrow();
+    const id = 'Entities:\nn1 | "a" | title: "Plain" | id: "FRAUD-7"\nRelationships:\n(none)';
+    expect(() => expectNoVerdict(asked('A fraud 7 is listed.', ['n1']), id)).toThrow(SuiteCheckFailed);
+  });
+
   it.each(['This proves a link.', 'That is proof of it.', 'We reach a conclusion here.', 'They concluded it.', 'The holder is responsible for it.', 'The holder is responsible\nfor it.', 'It shows guilt.', 'It is an offence.'])('canary: the verdict scanner finds the wording of: %s', (text) => {
     expect(() => expectNoVerdict(asked(text, ['n1']))).toThrow(SuiteCheckFailed);
   });

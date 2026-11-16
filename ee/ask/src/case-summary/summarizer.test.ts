@@ -5,7 +5,7 @@ import { promptRecordOf, type ModelProvider, type ModelRequest } from '../provid
 import { buildSummaryInstructions } from './instructions.js';
 import { openToken } from './token.js';
 import { createMemorySummaryRunStore } from './run-store.js';
-import { createCaseSummarizer, SummaryHandled } from './summarizer.js';
+import { createCaseSummarizer, SummaryHandled, type ReplyObservation } from './summarizer.js';
 import type { SummarySettings } from './settings.js';
 
 const instructions = buildSummaryInstructions('PROMPT', 'TYPOLOGY');
@@ -503,5 +503,61 @@ describe('a click the client cancels while the record of it is written', () => {
     expect(requests).toEqual([]);
     expect(base.runs[0]?.outcome).toBe('cancelled');
     expect(closing(events)[0]).toMatchObject({ detail: { summary: { outcome: 'cancelled' } } });
+  });
+});
+
+describe('the observer of the checks', () => {
+  const WRITTEN = [
+    { text: 'A fixed sentence.', cites: ['n1'] },
+    { text: 'The record is listed (n1).', cites: ['n1'] },
+    { text: 'No source here.', cites: [] },
+  ];
+  const build = (replies: readonly string[], observe?: Parameters<typeof createCaseSummarizer>[0]['observe']) => {
+    const events: AuditEvent[] = [];
+    const store = createMemorySummaryRunStore();
+    let index = 0;
+    const provider: ModelProvider = {
+      complete: async (request) => ({ status: 'ok', text: replies[Math.min(index++, replies.length - 1)] ?? GOOD, usage: { kind: 'known', inputTokens: 9, outputTokens: 3 }, model: 'm', prompt: promptRecordOf(request) }),
+    };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async (event) => void events.push(event) } });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }), ...(observe === undefined ? {} : { observe }) });
+    return { summarizer, events, store };
+  };
+  const run = async (replies: readonly string[], observe?: Parameters<typeof createCaseSummarizer>[0]['observe']) => {
+    const rig = build(replies, observe);
+    const outcome = await rig.summarizer.summarize(input(), new AbortController().signal);
+    return { ...rig, outcome };
+  };
+  const strip = (result: Awaited<ReturnType<typeof run>>) => JSON.stringify({ outcome: { ...result.outcome, summaryToken: 'x' }, events: result.events, runs: result.store.runs.map((entry) => ({ ...entry, id: 'x', start: { ...entry.start, startedAt: 0 }, callStarts: entry.callStarts.map((call) => ({ ...call, startedAt: 0 })), callEnds: entry.callEnds.map((call) => ({ ...call, durationMs: 0 })), finishedAt: 0 })) });
+
+  it('changes nothing either when the observer is asynchronous and rejects', async () => {
+    const replies = [JSON.stringify({ sentences: WRITTEN })];
+    const plain = strip(await run(replies));
+    const rejecting = strip(await run(replies, async () => { throw new Error('later'); }));
+    expect(rejecting).toBe(plain);
+  });
+
+  it('is told, for each reply the checks judge, the sentences written and kept and the counts, and a click with two replies gives two observations', async () => {
+    const seen: ReplyObservation[] = [];
+    const verdict = { text: 'This is evidence of fraud.', cites: ['n1'] };
+    await run([JSON.stringify({ sentences: [...WRITTEN, verdict] }), JSON.stringify({ sentences: WRITTEN.slice(0, 1) })], (observation) => void seen.push(observation));
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toMatchObject({ removed: 2, keysStripped: 1, keysRemoved: 0, verdictFound: true });
+    expect(seen[1]).toMatchObject({ removed: 0, verdictFound: false });
+    expect(seen[0]?.written).toEqual([...WRITTEN, verdict]);
+    expect(seen[0]?.kept.map((sentence) => sentence.text)).toEqual(['A fixed sentence.', 'The record is listed.']);
+  });
+
+  it('changes nothing of the answer, the events or the record, whether it is absent, throws, or changes what it was given', async () => {
+    const replies = [JSON.stringify({ sentences: WRITTEN })];
+    const plain = strip(await run(replies));
+    const throwing = strip(await run(replies, () => { throw new Error('boom'); }));
+    const mutating = strip(await run(replies, (observation) => {
+      // the observer is typed read-only: the test breaks that on purpose to prove that what it holds is a copy
+      (observation.written as { text: string; cites: string[] }[]).forEach((sentence) => { sentence.text = 'CHANGED'; sentence.cites.push('n99'); });
+      (observation.kept as unknown[]).length = 0;
+    }));
+    expect(throwing).toBe(plain);
+    expect(mutating).toBe(plain);
   });
 });

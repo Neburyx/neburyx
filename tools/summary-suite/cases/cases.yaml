@@ -1,9 +1,9 @@
-# The labelled set of the AI case summary: 15 small synthetic views, each with the facts a summary must mention, the claims it must not make, and sentences a human labelled.
+# The labelled set of the AI case summary: 17 small synthetic views, each with the facts a summary must mention, the claims it must not make, and sentences a human labelled.
 # See the README of this package for the method. Every name is from `synthetic_names`; no real data.
 
 version: 1
 
-synthetic_names: ["Alder Quill", "Briar Vance", "Cedar Moss", "Dale Ferrin", "Edda Thorn", "Fern Aldous", "Gale Hartwell", "Hale Ingram", "Ines Pryor", "Jory Kell", "Kestrel Voss", "Lark Mendel", "Mira Holt", "Moss Teller", "Nell Ostrow", "Odo Marsh", "Orla Finch", "Pell Dray", "Pia Wren", "Quill Haverd", "Rhea Dunmore", "Sable Orrin", "Tarn Wick", "Tobin Rask", "Ulla Brandt", "Veda Crane", "Wynn Sorrel", "Xan Lorrimer", "Yara Fenwick"]
+synthetic_names: ["Alder Quill", "Briar Vance", "Cedar Moss", "Crimson Lake Traders", "Dale Ferrin", "Edda Thorn", "Fern Aldous", "Gale Hartwell", "Hale Ingram", "Ines Pryor", "Intentia Freight", "Jory Kell", "Kestrel Voss", "Lark Mendel", "Mira Holt", "Moss Teller", "Nell Ostrow", "Odo Marsh", "Orla Finch", "Pell Dray", "Pell Marlow", "Pia Wren", "Quill Haverd", "Quin Hallow", "Rhea Dunmore", "Sable Orrin", "Tarn Wick", "Tobin Rask", "Ulla Brandt", "Veda Crane", "Wynn Sorrel", "Xan Lorrimer", "Yara Fenwick"]
 cases:
   - id: ring-on-one-device
     pack: banking-fraud
@@ -439,3 +439,55 @@ cases:
       - { id: "s6", label: "remove", rule: "verdict", text: "AC-4001 is evidence of fraud by the holders.", cites: ["a1"] }
       - { id: "s7", label: "remove", rule: "verdict", text: "Three accounts, AC-4001, AC-4002 and AC-4003, transferred to the account AC-4100, and how many others paid in is not known. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
       - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "yara fenwick is also linked to AC-4001.", cites: ["a1"] }
+  - id: gateway-address-with-a-business-title
+    pack: banking-fraud
+    source_case: gateway-address-on-the-stop-list
+    title: "Two accounts connect from one address, and one account holder is a business whose title holds a verdict-list word"
+    entities:
+      - { key: "i1", type: "ip_address", id: "ip-00000", name: "ip-00000", props: { isShared: "true" } }
+      - { key: "a1", type: "account", id: "AC-3001", name: "Crimson Lake Traders" }
+      - { key: "a2", type: "account", id: "AC-3002", name: "AC-3002" }
+    relationships:
+      - { key: "r1", type: "CONNECTS_FROM", from: "a1", to: "i1", observed_at: "2026-05-01" }
+      - { key: "r2", type: "CONNECTS_FROM", from: "a2", to: "i1", observed_at: "2026-05-02" }
+    facts:
+      - { id: "f1", says: "The accounts AC-3001 and AC-3002 connect from the address ip-00000", phrases: ["ip-00000"], rests_on: ["a1", "a2", "i1", "r1", "r2"] }
+      - { id: "f2", says: "Crimson Lake Traders is one of the accounts", phrases: ["crimson lake traders"], rests_on: ["a1"] }
+    claims:
+      - { id: "c1", says: "Says the business is a front or a shell", phrases: ["front", "shell company"], about: ["a1", "a2", "i1", "r1", "r2"] }
+    invented_names: ["Pell Marlow"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The accounts AC-3001 and AC-3002 connect from the address ip-00000.", cites: ["a1", "a2", "i1", "r1", "r2"] }
+      - { id: "s2", label: "keep", text: "Crimson Lake Traders connects from the address ip-00000.", cites: ["a1", "i1", "r1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element ip-00000 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for ip-00000.", cites: ["i1"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Pell Marlow is also connected to ip-00000.", cites: ["i1"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "ip-00000 is evidence of fraud by the holders.", cites: ["i1"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "The accounts AC-3001 and AC-3002 connect from the address ip-00000. It is evidence of fraud by the holders.", cites: ["a1", "a2", "i1", "r1", "r2"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "pell marlow is also linked to ip-00000.", cites: ["i1"] }
+  - id: transfers-from-a-business-account
+    pack: banking-fraud
+    source_case: transfers-from-one-account
+    title: "One account transfers to two others, and its holder is a business whose title holds a verdict-list word"
+    entities:
+      - { key: "a2", type: "account", id: "AC-3102", name: "AC-3102" }
+      - { key: "a1", type: "account", id: "AC-3101", name: "Intentia Freight" }
+      - { key: "a3", type: "account", id: "AC-3103", name: "AC-3103" }
+    relationships:
+      - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "a2", observed_at: "2026-06-01" }
+      - { key: "r2", type: "TRANSFERRED_TO", from: "a1", to: "a3", observed_at: "2026-06-02" }
+    facts:
+      - { id: "f1", says: "The account AC-3101 transferred to two accounts", phrases: ["two accounts", "2 accounts"], rests_on: ["a1", "a2", "a3", "r1", "r2"] }
+      - { id: "f2", says: "Intentia Freight is the account that transferred", phrases: ["intentia freight"], rests_on: ["a1"] }
+    claims:
+      - { id: "c1", says: "Says the business moved the funds on purpose", phrases: ["on purpose", "deliberately"], about: ["a1", "a2", "a3", "r1", "r2"] }
+    invented_names: ["Quin Hallow"]
+    sentences:
+      - { id: "s1", label: "keep", text: "The account AC-3101 transferred to two accounts, AC-3102 and AC-3103.", cites: ["a1", "a2", "a3", "r1", "r2"] }
+      - { id: "s2", label: "keep", text: "Intentia Freight transferred to AC-3102.", cites: ["a1", "a2", "r1"] }
+      - { id: "s3", label: "remove", rule: "citation", text: "The element AC-3102 is listed.", cites: [] }
+      - { id: "s4", label: "remove", rule: "number", text: "There are 987654 records for AC-3102.", cites: ["a2"] }
+      - { id: "s5", label: "remove", rule: "name", text: "Quin Hallow is also connected to AC-3102.", cites: ["a2"] }
+      - { id: "s6", label: "remove", rule: "verdict", text: "AC-3102 is evidence of fraud by the holders.", cites: ["a2"] }
+      - { id: "s7", label: "remove", rule: "verdict", text: "The account AC-3101 transferred to two accounts, AC-3102 and AC-3103. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "r1", "r2"] }
+      - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "quin hallow is also linked to AC-3102.", cites: ["a2"] }

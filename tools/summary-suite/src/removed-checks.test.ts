@@ -36,7 +36,7 @@ const CASES: readonly { readonly mutation: Mutation; readonly breaking: (e: Evid
     breaking: (e) => ({ text: `${defined(labelled.invented_names[0], 'an invented name')} is connected.`, cites: [e.first] }),
   },
   {
-    mutation: { name: 'verdict wording', from: 'if (VERDICT.test(original.text)) {', to: 'if (false) {' },
+    mutation: { name: 'verdict wording', from: 'if (holdsVerdict(original, assembled)) {', to: 'if (false) {' },
     breaking: (e) => ({ text: 'This is evidence of fraud.', cites: [e.first] }),
   },
 ];
@@ -66,4 +66,17 @@ describe('a test taken out of the product\'s own checks leaves a sentence that t
       expect(() => expectClean(weakened.kept, weakened.sent, labelled.invented_names)).toThrow(SuiteCheckFailed);
     });
   }
+});
+
+describe('the rule about the title of a cited element, taken out of the product, leaves a good sentence removed and the suite fails on it', () => {
+  it('removes the labelled keep sentence that quotes a title once the product reads the whole sentence for a verdict again, and keeps it with the product as it is', async () => {
+    const view = defined(set.cases.find((each) => each.id === 'gateway-address-with-a-business-title'), 'the view');
+    const quoted = defined(view.sentences.find((sentence) => sentence.label === 'keep' && sentence.text.startsWith('Crimson')), 'the sentence that quotes the title');
+    const evidence = await viewOf(view);
+    const asked = { text: quoted.text, cites: quoted.cites.map((key) => defined(evidence.keys.get(key), key)) };
+    const whole = await answerWith(undefined, asked, evidence);
+    expect(whole.kept).toEqual([asked]);
+    const mutated = await answerWith({ name: 'the title of a cited element', from: 'return VERDICT.test(left);', to: 'return VERDICT.test(sentence.text);' }, asked, evidence);
+    expect(mutated.kept).toEqual([]);
+  });
 });

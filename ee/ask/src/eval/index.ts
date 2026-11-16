@@ -6,3 +6,7 @@ export { liveProvider, runSettings } from './live.js';
 export { recordingProvider } from './recording.js';
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */
 export { replayProvider } from './replay.js';
+/** @public Imported by the entry script of the summary evaluation command through the package subpath `./eval`, which knip does not follow. */
+export { budgetedProvider, evalSummarizer, scriptedSummaryProvider, summaryRunSettings } from './summary.js';
+/** @public The same, for the live summary provider. */
+export { liveSummaryProvider } from './live.js';

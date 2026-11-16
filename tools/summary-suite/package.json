@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "pnpm build && vitest run --passWithNoTests",
+    "cli": "pnpm build && node entry/summary-eval-entry.mjs"
   },
   "dependencies": {
     "@neburyx/contracts": "workspace:*",

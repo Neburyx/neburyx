@@ -39,3 +39,19 @@ describe('the stored case summary records', () => {
     expect(sources).toContain('ee/ask/src/case-summary/run-store.ts');
   });
 });
+
+describe('the observer of the checks', () => {
+  const OBSERVER_USERS = new Set(['ee/ask/src/case-summary/summarizer.ts', 'ee/ask/src/eval/summary.ts', 'ee/ask/src/eval/index.ts', 'tools/summary-suite/src/eval/hooks.ts', 'tools/summary-suite/src/eval/run.ts']);
+  const sources = FOLDERS.flatMap((folder) => filesUnder(join(ROOT, folder)))
+    .map((path) => relative(ROOT, path))
+    .filter((path) => /\.(ts|tsx|mjs)$/.test(path) && !/\.test\.ts$/.test(path));
+  const namers = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => (/ReplyObservation/.test(file.text) || (/createCaseSummarizer/.test(file.text) && /\bobserve\b/.test(file.text))) && !OBSERVER_USERS.has(file.path)).map((file) => file.path);
+
+  it('is named by the summarizer and the evaluation module and command only: the extension, the routes, the events and the records do not build or pass it', () => {
+    expect(namers(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
+  });
+
+  it('canary: the same check fails a route that passes an observer', () => {
+    expect(namers([{ path: 'ee/ask/src/index.ts', text: 'createCaseSummarizer({ observe: (o) => log(o) })' }, { path: 'ee/ask/src/case-summary/summarizer.ts', text: 'readonly observe?: (observation: ReplyObservation) => void;' }])).toEqual(['ee/ask/src/index.ts']);
+  });
+});

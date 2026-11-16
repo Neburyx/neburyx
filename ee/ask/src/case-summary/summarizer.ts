@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome } from '@neburyx/contracts';
+import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall } from '../audited.js';
 import { canonicalText } from '../questions/canonical.js';
 import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
@@ -20,6 +20,16 @@ export const SUMMARY_CLOSING_ACTION = 'ai.case-summary.closed';
 const PROMPT_ID = 'case-summary';
 const PROMPT_VERSION = '1';
 
+/** What the checks did to one reply: the sentences the model wrote, the ones kept, and the counts. Handed to an observer as copies. */
+export interface ReplyObservation {
+  readonly written: readonly SummarySentence[];
+  readonly kept: readonly SummarySentence[];
+  readonly removed: number;
+  readonly keysStripped: number;
+  readonly keysRemoved: number;
+  readonly verdictFound: boolean;
+}
+
 interface SummarizerOptions {
   readonly settings: SummarySettings;
   readonly instructions: SummaryInstructions;
@@ -30,6 +40,8 @@ interface SummarizerOptions {
   readonly runs: () => SummaryRunStore | undefined;
   readonly availability: () => SummaryAvailability;
   readonly now?: () => number;
+  /** Only the evaluation command passes this: it is told, for each reply the checks judge, what they did. It gets copies, and what it does or throws never changes the click. */
+  readonly observe?: (observation: ReplyObservation) => void;
 }
 
 /** The investigation id as an audit event takes it: only a UUID, since the audit column is one; any other text is left out of the event, never refused. */
@@ -56,6 +68,15 @@ const resultOf = (outcome: CaseSummaryOutcome): AuditResult => (outcome.status =
 /** Drafts the summary of a read view: measures the text against the size guard, then calls the model within the operator's limits. */
 export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer {
   const { settings, instructions } = options;
+  const observeReply = (written: readonly SummarySentence[], judged: ReturnType<typeof judgeSentences>): void => {
+    if (options.observe === undefined) return;
+    try {
+      // a promise the observer returns is let go too: a rejection of it is not an unhandled one
+      void Promise.resolve(options.observe(structuredClone({ written, kept: judged.kept, removed: judged.removed, keysStripped: judged.keysStripped, keysRemoved: judged.keysRemoved, verdictFound: judged.verdictFound }))).catch(() => undefined);
+    } catch {
+      // an observer that fails changes nothing of the click
+    }
+  };
   type Who = { readonly actorId: string; readonly actorRole: CaseSummaryInput['actorRole']; readonly traceId: string; readonly request: CaseSummaryInput['request'] };
   /** Writes the run row of a click and answers what ends it: the run row first, then the closing event; every failure of either is `AuditUnavailableError`. */
   async function openRun(input: Who) {
@@ -156,6 +177,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         judge: (sentences) => {
             const judged = judgeSentences(sentences, prepared.assembled);
             lastChecked = { kept: judged.kept.length, removed: judged.removed };
+            observeReply(sentences, judged);
             return judged;
           },
           maxCalls: settings.maxCalls,

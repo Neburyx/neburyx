@@ -31,22 +31,22 @@ function brokenRules(labelled: LabelledCase, sentence: LabelledSentence, sent: s
   if (asked.cites.length === 0 || asked.cites.some((key) => !keysOfSentText(sent).has(key))) rules.push('citation');
   if (numbersUnsupported(asked, sent).length > 0 || countRuleBroken(asked, sent)) rules.push('number');
   if (labelled.invented_names.some((name) => asked.text.toLowerCase().includes(name.toLowerCase()))) rules.push('name');
-  if (holdsVerdict(asked)) rules.push('verdict');
+  if (holdsVerdict(asked, sent)) rules.push('verdict');
   return rules;
 }
 
 describe('the labelled set', () => {
-  it('holds 15 views: 8 demo views that restate a case of a demo pack and 7 AML views, one or more for each shape of the typology', () => {
-    expect(set.cases).toHaveLength(15);
+  it('holds 17 views: 10 demo views that restate a case of a demo pack and 7 AML views, one or more for each shape of the typology', () => {
+    expect(set.cases).toHaveLength(17);
     const demo = set.cases.filter((labelled) => labelled.source_case !== undefined);
     const aml = set.cases.filter((labelled) => labelled.shape !== undefined);
-    expect([demo.length, aml.length]).toEqual([8, 7]);
+    expect([demo.length, aml.length]).toEqual([10, 7]);
     for (const labelled of demo) {
       const pack = packSchema.parse(parse(readFileSync(resolve(here, '../../../domain-packs', labelled.pack, 'cases.yaml'), 'utf8')));
       expect(pack.cases.map((entry) => entry.id), labelled.id).toContain(labelled.source_case);
     }
     expect(new Set(aml.map((labelled) => labelled.shape))).toEqual(new Set(TYPOLOGY_SHAPES));
-    expect(new Set(set.cases.map((labelled) => labelled.id)).size).toBe(15);
+    expect(new Set(set.cases.map((labelled) => labelled.id)).size).toBe(17);
   });
 
   it('is synthetic: every name is from the list, and no value looks like a real e-mail address, phone number or account number', () => {

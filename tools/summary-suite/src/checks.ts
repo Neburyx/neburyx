@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
+import { z } from 'zod';
 
 export class SuiteCheckFailed extends Error {}
 
@@ -73,10 +74,47 @@ export function offenceWordsIn(text: string): string[] {
   return text.match(new RegExp(OFFENCE.source, 'giu')) ?? [];
 }
 
-export const holdsVerdict = (sentence: SummarySentence): boolean => OFFENCE.test(sentence.text);
+const TITLE_AND_ID = /\| title: ("(?:[^"\\]|\\.)*") \| id: ("(?:[^"\\]|\\.)*")/u;
 
-export function expectNoVerdict(sentences: readonly SummarySentence[]): void {
-  for (const sentence of sentences) if (holdsVerdict(sentence)) fail(`a sentence holds verdict wording: ${sentence.text}`);
+/** The title and the id of each element a sentence cites, as the sent text gives them. */
+function namesOfCited(sentence: SummarySentence, sent: string): string[] {
+  const lines = linesOfKeys(sent);
+  return sentence.cites.flatMap((key) => {
+    const found = TITLE_AND_ID.exec(lines.get(key) ?? '');
+    return found === null ? [] : [found[1], found[2]].flatMap((quoted) => z.string().min(1).array().parse([JSON.parse(quoted ?? '""')].filter((value) => value !== '')));
+  });
+}
+
+const WORD = /[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu;
+
+/** The words of a text, lower case, a hyphenated word being one word: a name is taken out of a sentence as a run of whole words, whatever the case, and never as part of a longer word. */
+const wordsOf = (text: string): string[] => text.toLowerCase().match(WORD) ?? [];
+
+function withoutRun(words: readonly string[], run: readonly string[]): string[] {
+  if (run.length === 0) return [...words];
+  const left: string[] = [];
+  for (let index = 0; index < words.length; ) {
+    if (run.every((word, offset) => words[index + offset] === word)) index += run.length;
+    else {
+      left.push(words[index] ?? '');
+      index += 1;
+    }
+  }
+  return left;
+}
+
+/**
+ * A sentence states a verdict when a word of the list lies outside the titles and ids of the elements it cites: a business called Crimson Trading is a name, "this is fraud" is a verdict. Without the text sent
+ * no title is known, and every word counts. The names are taken out as runs of whole words, in any case, longest first.
+ */
+export function holdsVerdict(sentence: SummarySentence, sent = ''): boolean {
+  const names = namesOfCited(sentence, sent).map(wordsOf).sort((left, right) => right.length - left.length);
+  const left = names.reduce((words, name) => withoutRun(words, name), wordsOf(sentence.text));
+  return OFFENCE.test(left.join(' '));
+}
+
+export function expectNoVerdict(sentences: readonly SummarySentence[], sent = ''): void {
+  for (const sentence of sentences) if (holdsVerdict(sentence, sent)) fail(`a sentence holds verdict wording: ${sentence.text}`);
 }
 
 const TOKEN = /[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu;
