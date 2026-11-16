@@ -65,7 +65,7 @@ export function createCopyToNotesRoute(options: { readonly tokenKeys: () => Toke
             generatedAt: new Date(payload.generatedAt).toISOString(),
             wordListVersion: payload.wordListVersion,
             label: LABEL,
-            sentences: kept.map(({ template, index }) => ({ text: template.text, placeholders: template.placeholders, cites: (payload.sentences[index]?.cites ?? []).flatMap((key) => refOf(key) ?? []) })),
+            sentences: kept.map(({ template, index }) => ({ text: template.text, placeholders: template.placeholders, cites: [...new Set(payload.sentences[index]?.cites ?? [])].flatMap((key) => refOf(key) ?? []) })),
             inputRefs: [...payload.inputRefs],
           };
           const stored = await aiNotes.append({ investigationId: investigation.id, expectedVersion: body.version, entry, maxRefs: request.caseSummarizer.maxElements });

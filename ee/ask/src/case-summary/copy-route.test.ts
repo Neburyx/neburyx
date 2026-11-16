@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ExtensionRefusal, type AiNotesCapability, type AuditEvent, type CopyToNotesResponse, type ExtensionRequest } from '@neburyx/contracts';
+import { ExtensionRefusal, storedAiNotesEntrySchema, type AiNotesCapability, type AuditEvent, type CopyToNotesResponse, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { createCopyToNotesRoute } from './copy-route.js';
 import type { NotesTemplate } from './notes-convert.js';
@@ -101,6 +101,15 @@ describe('copy to notes', () => {
     expect(only?.entry).toMatchObject({ generatedBy: ME, modelRef: 'claude-sonnet-5-5', promptId: 'case-summary', promptVersion: '1', wordListVersion: 1, label: 'AI-drafted', sentences: [{ text: 'The record is linked to the same source.', placeholders: [], cites: [{ key: 'n1', kind: 'entity' }] }] });
     expect(only?.entry.inputRefs).toHaveLength(1);
     expect(JSON.stringify(only?.entry)).not.toContain('Weldinum');
+  });
+
+  it('stores a sentence whose model repeated one cite 51 times with that cite once, so the entry reads back', async () => {
+    const h = rig();
+    const repeated = Array.from({ length: 51 }, () => 'n1');
+    await call(h.request(sealed({ sentences: [{ text: 'The record is linked to the same source.', cites: repeated }, { text: 'The record names Weldinum.', cites: ['n1'] }] })));
+    const [only] = h.appended;
+    const entry = storedAiNotesEntrySchema.parse(only?.entry);
+    expect(entry.sentences[0]?.cites).toHaveLength(1);
   });
 
   it('answers a second copy of the same token as already copied and stores nothing, with the current version and save state', async () => {
