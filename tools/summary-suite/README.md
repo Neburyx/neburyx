@@ -182,3 +182,22 @@ Limits of the method: phrases are matched as lower-case text, so a paraphrase is
 | The estimate is the measured 1.8 bytes a token (the product) | `../../ee/ask/src/case-summary/assemble.test.ts` | estimates the bytes of the instructions and the text divided by the measured 1.8 |
 | The guard is the larger of the plain and realistic samples, and the heavy ones are the upper bound | `src/eval/measure.test.ts` | takes the guard from the larger of the plain and the realistic samples |
 | The realistic samples are deterministic and between the plain and the heavy | `src/eval/measure.test.ts` | are the same view with 4 short properties on each entity |
+| Stored AI notes hold exactly the storable sentences of every labelled view | `src/notes-copy.test.ts` | copies exactly the sentences marked storable, for every labelled view |
+| Stored AI notes hold placeholders and references only, never a title, id, value or number | `src/notes-copy.test.ts` | stores placeholders and references only |
+| The scan for what stored notes must not hold can fail | `src/notes-copy.test.ts` | the leak scan finds a planted title, id, value and number |
+| The copy audit event holds no sentence, title or value | `src/notes-copy.test.ts` | records the copy in an audit event that holds no sentence |
+| A token of another person, investigation, policy version or age copies nothing | `src/notes-copy.test.ts` | refuses a token for another investigation, another person, an expired one and one made under another policy version |
+| A second copy stores nothing more; generation alone stores nothing | `src/notes-copy.test.ts` | a second copy is alreadyCopied |
+| A view converts the same way twice | `src/notes-copy.test.ts` | converts the same view the same way twice |
+| A viewer who sees all gets the sentences as drafted, with no placeholder left | `src/notes-read.test.ts` | rebuilds the stored sentences of every labelled view for a viewer who sees all |
+| A viewer who masks sees only masked titles | `src/notes-read.test.ts` | shows only masked titles to a viewer who asks for masking |
+| A sentence citing an element the viewer cannot see is omitted silently, with the viewer's own coverage | `src/notes-read.test.ts` | omits silently the sentences that cite a hidden element |
+| A count is relabelled and an unknown count dropped for the viewer | `src/notes-read.test.ts` | labels, then drops, a count that the reading of the viewer cannot state exactly |
+| Two viewers differ only by their own access | `src/notes-read.test.ts` | two viewers differ only by their own access |
+| The references of all entries are read in one batch | `src/notes-read.test.ts` | reads the references of all entries in one batch |
+| Each reason a sentence is not stored has its group, and nothing is copied | `src/notes-reasons.test.ts` | marks a sentence not storable with the reason group of each reason |
+| A sentence over the bound of slots is not stored and has no group | `src/notes-reasons.test.ts` | marks a sentence that needs more than the bound of slots as not storable |
+| A token of another word list version is refused | `src/notes-reasons.test.ts` | refuses a token of another word list version |
+| The kept sentences that are not stored are named, so a word list change shows | `src/notes-reasons.test.ts` | every kept sentence of the labelled set that is not storable is named here |
+| A storage rule taken out of the product is caught | `src/removed-notes-rules.test.ts` | fails the suite when the source of the product no longer tests |
+| The word list version check of the copy taken out is caught | `src/removed-notes-rules.test.ts` | fails the suite when the source of the copy no longer checks the word list version |

@@ -29,3 +29,23 @@ export async function mutatedChecks(mutation: Mutation): Promise<Record<string, 
     rmSync(directory, { recursive: true, force: true });
   }
 }
+
+const CASE_SUMMARY = resolve(import.meta.dirname, '../../../ee/ask/src/case-summary');
+
+/**
+ * Another module of the case summary with one piece of its source taken out. Its relative imports are rewritten to the product's own sources, which the runtime reads as they are (types stripped).
+ */
+export async function mutatedModule(file: string, mutation: Mutation): Promise<Record<string, unknown>> {
+  const source = readFileSync(join(CASE_SUMMARY, file), 'utf8');
+  if (!source.includes(mutation.from)) throw new Error(`the product's ${file} no longer holds the text of the mutation ${mutation.name}: update the mutation`);
+  const mutated = source.replace(mutation.from, mutation.to).replace(/from '(\.{1,2}\/[a-z/-]+)\.js'/gu, (_whole, name: string) => `from '${pathToFileURL(resolve(CASE_SUMMARY, `${name}.ts`)).href}'`);
+  const { outputText } = ts.transpileModule(mutated, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } });
+  const directory = mkdtempSync(join(tmpdir(), 'nbx-mutant-'));
+  try {
+    const target = join(directory, 'module.mjs');
+    writeFileSync(target, outputText);
+    return z.record(z.string(), z.unknown()).parse(await import(pathToFileURL(target).href));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
