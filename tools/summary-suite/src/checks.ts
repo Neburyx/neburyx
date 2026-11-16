@@ -16,7 +16,8 @@ export function defined<T>(value: T | undefined, what: string): T {
 
 /** The sentences of a draft: an answer that is `ok` or `partial` holds them, any other answer holds none. */
 export function sentencesOf(outcome: CaseSummaryOutcome): readonly SummarySentence[] {
-  return outcome.status === 'ok' || outcome.status === 'partial' ? outcome.sentences : [];
+  // `storable` is the notes' concern (tested with the notes); this suite compares what the checks kept
+  return outcome.status === 'ok' || outcome.status === 'partial' ? outcome.sentences.map(({ text, cites }) => ({ text, cites })) : [];
 }
 
 export function keysOfSentText(sent: string): Set<string> {
