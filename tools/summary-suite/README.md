@@ -201,3 +201,8 @@ Limits of the method: phrases are matched as lower-case text, so a paraphrase is
 | The kept sentences that are not stored are named, so a word list change shows | `src/notes-reasons.test.ts` | every kept sentence of the labelled set that is not storable is named here |
 | A storage rule taken out of the product is caught | `src/removed-notes-rules.test.ts` | fails the suite when the source of the product no longer tests |
 | The word list version check of the copy taken out is caught | `src/removed-notes-rules.test.ts` | fails the suite when the source of the copy no longer checks the word list version |
+| Every drafted sentence of every labelled view is carried by an export of the same reading, labelled and cited | `src/export-cases.test.ts` | keeps every drafted sentence for an export of the same reading |
+| An export drops exactly the sentences that cite or name an element it does not hold | `src/export-cases.test.ts` | drops exactly the sentences that cite or name an element the export does not hold |
+| An export drops the sentences that quote a value it masks | `src/export-cases.test.ts` | drops the sentences that quote a value the export masks |
+| Every unusable token gives the same single refusal | `src/export-cases.test.ts` | gives the same single refusal for an expired token |
+| A rule of the export taken out of the product is caught | `src/removed-export-rules.test.ts` | fails the suite when the source of the export no longer tests |
