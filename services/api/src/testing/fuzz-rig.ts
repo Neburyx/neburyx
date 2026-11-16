@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { appendFileSync, rmSync } from 'node:fs';
 import type { CaseSummarizer, ProfileExtension } from '@neburyx/contracts';
-import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
+import { createCopyToNotesRoute, createReadAiNotesRoute, createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
 import { afterAll, expect } from 'vitest';
 import { buildApp } from '../app.js';
 import { assembleGate } from '../gate/assemble.js';
@@ -22,10 +22,14 @@ import { makeWebRoot } from './web-root.js';
 const FUZZ_SUMMARIZER: CaseSummarizer = {
   maxElements: 300,
   availability: () => ({ available: true }),
-  summarize: async () => ({ status: 'ok', sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: 'sent', model: 'fuzz', calls: 1, summaryToken: 'v1.fuzz' }),
+  summarize: async () => ({ status: 'ok', sentences: [{ text: 'A fixed sentence.', cites: ['n1'], storable: false }], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: 'sent', model: 'fuzz', calls: 1, summaryToken: 'v1.fuzz' }),
 };
 
+/** The sealing key of the summary tokens of the rig, so the fuzz and the sweep can make a token the application accepts. */
+export const FUZZ_TOKEN_KEYS = { current: { kid: 'fuzz0001', bytes: Buffer.alloc(32, 5) } };
+
 /** The source every fuzz request names. */
+
 export const FUZZ_SOURCE = 'demo';
 
 export const FUZZ_ENTITIES = [
@@ -273,7 +277,7 @@ export async function startFuzzRig(options: FuzzRigOptions = {}) {
   const cursors = createCursorCodec({ key: TEST_CURSOR_KEY, clock: clock.now });
   const parts = assembleGate({ mapping: FUZZ_MAPPING, seams, executor, logger: { warn: () => undefined }, clock: clock.now, cursors, referenceKeys: TEST_REFERENCE_KEYS, policyVersion: () => policy.version });
   const webRoot = makeWebRoot();
-  const summaryExtension: ProfileExtension = { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] };
+  const summaryExtension: ProfileExtension = { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => FUZZ_TOKEN_KEYS }), createReadAiNotesRoute({ maxRefs: () => 300 })] })] };
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping: FUZZ_MAPPING, extension: summaryExtension, previewOn: true, seams: { ...defaults, ...seams, caseSummarizer: FUZZ_SUMMARIZER }, gate: parts.gate, indexes: parts.indexes, referenceKeys: TEST_REFERENCE_KEYS, limiter: neverRefuses, templateRunClock: () => new Date(clock.now()) });
   const tally = { answers: new Map<string, number>(), statements: 0, distinct: new Set<string>() };
   const fold = (): void => {

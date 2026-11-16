@@ -57,6 +57,11 @@ import {
   type SummaryRequest,
   type SummaryResponse,
   summaryResponseSchema,
+  type CopyToNotesRequest,
+  type CopyToNotesResponse,
+  copyToNotesResponseSchema,
+  type AiNotesResponse,
+  aiNotesResponseSchema,
   type SavedPatternRunResponse,
   type SavePatternRequest,
   type DeletePatternResponse,
@@ -187,6 +192,10 @@ export interface ApiClient {
   askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
+  /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
+  copyToNotes(investigationId: string, request: CopyToNotesRequest, signal?: AbortSignal): Promise<ApiResult<CopyToNotesResponse>>;
+  /** The AI notes stored with the investigation's draft, rebuilt for the person through the gate; `mask` is the masking of the session. */
+  readAiNotes(investigationId: string, mask: boolean, signal?: AbortSignal): Promise<ApiResult<AiNotesResponse>>;
   testSource(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceTestReport>>;
   /** One entity of a source, without its neighbors; `mask` asks for the personal-data fields to be masked. */
   getEntity(ref: ElementRef, options?: { readonly mask?: boolean }, signal?: AbortSignal): Promise<ApiResult<GraphNode>>;
@@ -359,6 +368,8 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
     ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
+    copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
+    readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),
     summarize: (body, key, signal) => request(fetcher, '/v1/summary', summaryResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     runSavedPattern: (id, body, key, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/run`, savedPatternRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),
     runTemplate: (id, body, key, signal) => request(fetcher, `/v1/templates/${encodeURIComponent(id)}/run`, templateRunResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),

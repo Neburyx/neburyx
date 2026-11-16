@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { summaryReadingSchema, summaryRequestSchema, summaryResponseSchema } from './summary.js';
+import { copyToNotesRequestSchema, copyToNotesResponseSchema, summaryReadingSchema, summaryRequestSchema, summaryResponseSchema } from './summary.js';
 
 const entity = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
 const coverage = { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' };
-const draft = { sentences: [{ text: 'A sentence.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref: entity }], coverage, removedCount: 0, sent: 'text', model: 'm', calls: 1, summaryToken: 'v1.token' };
+const draft = { sentences: [{ text: 'A sentence.', cites: ['n1'], storable: false }], citations: [{ key: 'n1', kind: 'entity', ref: entity }], coverage, removedCount: 0, sent: 'text', model: 'm', calls: 1, summaryToken: 'v1.token' };
 
 describe('the summary request', () => {
   it('takes the four lists of references, each empty by default, and nothing else', () => {
@@ -40,5 +40,20 @@ describe('the reading of a view', () => {
   it('holds the elements, the unresolved count, the omission flag and the not-yet-retrieved count with its uncounted entities', () => {
     expect(summaryReadingSchema.safeParse({ nodes: [], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 }).success).toBe(true);
     expect(summaryReadingSchema.safeParse({ nodes: [], edges: [], unresolved: -1, omitted: false, notRetrieved: { quality: 'unknown', scope: 'coverage' }, uncounted: 0 }).success).toBe(false);
+  });
+});
+
+describe('the copy to notes schemas', () => {
+  it('take a token and the draft version, and answer the counts, the version and the save state, in every branch', () => {
+    expect(copyToNotesRequestSchema.safeParse({ summaryToken: 'x', version: 2 }).success).toBe(true);
+    expect(copyToNotesRequestSchema.safeParse({ summaryToken: 'x', version: 0 }).success).toBe(false);
+    expect(copyToNotesRequestSchema.safeParse({ summaryToken: 'x', version: 2, extra: 1 }).success).toBe(false);
+    const save = { state: 'unsaved', savedAt: null };
+    for (const answer of [
+      { copied: 2, notCopied: 1, alreadyCopied: false, version: 3, save },
+      { copied: 0, notCopied: 0, alreadyCopied: true, version: 3, save },
+      { copied: 0, notCopied: 4, alreadyCopied: false, version: 2, save: { state: 'saved', savedAt: '2026-11-15T10:00:00.000Z' } },
+    ]) expect(copyToNotesResponseSchema.safeParse(answer).success).toBe(true);
+    expect(copyToNotesResponseSchema.safeParse({ copied: 1, notCopied: 0, alreadyCopied: false, save }).success).toBe(false);
   });
 });

@@ -373,6 +373,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
   const elementReaders: { current?: NonNullable<ExtensionMount['readElementsFor']> } = {};
   const investigationChecks: { current?: NonNullable<ExtensionMount['investigationReadableFor']> } = {};
+  const investigationSources: { current?: NonNullable<ExtensionMount['investigationSourceFor']> } = {};
+  const aiNotesCapabilities: { current?: NonNullable<ExtensionMount['aiNotesFor']> } = {};
   if (options.extension !== undefined) {
     mountExtensionRoutes(app, options.extension, options.store, {
       previewOn: options.previewOn === true,
@@ -392,6 +394,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
       readElementsFor: (context) => elementReaders.current?.(context),
       investigationReadableFor: (context) => investigationChecks.current?.(context),
+      aiNotesFor: (context) => aiNotesCapabilities.current?.(context),
+      investigationSourceFor: (context) => investigationSources.current?.(context),
       signalOf,
     });
   }
@@ -692,6 +696,12 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
     elementReaders.current = (context) => createElementsReader({ shownReader: summaryShownReader, investigations, access, ...context });
     investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
+    investigationSources.current = ({ principal }) => async (investigationId) => (await investigations.read({ id: investigationId, principal })).investigation.sourceId;
+    aiNotesCapabilities.current = ({ principal }) => ({
+      append: (call) => investigations.appendAiNotes({ id: call.investigationId, principal, expectedVersion: call.expectedVersion, entry: call.entry, maxRefs: call.maxRefs }),
+      canWrite: (investigationId) => investigations.checkAiNotesWrite({ id: investigationId, principal }),
+      read: (investigationId) => investigations.readAiNotes({ id: investigationId, principal }),
+    });
     app.post('/v1/investigations', { config: { permission: 'principal' } }, async (request, reply) => {
       const body = openInvestigationRequestSchema.safeParse(request.body);
       if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');

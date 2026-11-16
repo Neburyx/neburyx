@@ -7,7 +7,7 @@ import { migrationFileNames } from './migrate/provider.js';
 import { probeStepMs, READINESS_LIMIT_MS, runReadiness } from './health/readiness.js';
 import { readIdentity, seedFirstStart } from './db/identity-repository.js';
 import { createExportStore, type ExportStore } from './db/exports-repository.js';
-import { changeInvestigationStatus, createInvestigation, deleteInvestigation, purgeExpiredInvestigations, restoreInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, type InvestigationStore } from './db/investigations-repository.js';
+import { changeInvestigationStatus, createInvestigation, deleteInvestigation, purgeExpiredInvestigations, restoreInvestigation, findReusableInvestigation, readInvestigation, readLibrary, renameInvestigation, saveDraft, appendAiNotes, readAiNotes, type InvestigationStore } from './db/investigations-repository.js';
 import { listOwnedViews, type OwnedViewStore } from './db/views-list-repository.js';
 import { deleteNamedView, listNamedViews, renameNamedView, restoreNamedView, saveNamedView, type ViewStore } from './db/views-repository.js';
 import { referenceKeyOf } from './db/reference-key-repository.js';
@@ -97,6 +97,8 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
     ...createPatternStore(pool),
     readInvestigation: (id, ownerId) => readInvestigation(pool, id, ownerId),
     saveDraft: (write) => saveDraft(pool, write),
+    appendAiNotes: (write) => appendAiNotes(pool, write),
+    readAiNotes: (investigationId, ownerId) => readAiNotes(pool, investigationId, ownerId),
     renameInvestigation: (change) => renameInvestigation(pool, change),
     changeInvestigationStatus: (change) => changeInvestigationStatus(pool, change),
     saveNamedView: (save) => saveNamedView(pool, save),

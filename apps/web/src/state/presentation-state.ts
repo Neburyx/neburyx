@@ -108,6 +108,10 @@ export interface PresentationState {
   readonly askOpen: boolean;
   /** Whether the AI case summary panel is open: a panel of its own, and opening it closes the Ask panel. */
   readonly summaryOpen: boolean;
+  /** The summary panel was opened to read the AI notes of the view, so it makes no draft by itself. */
+  readonly summaryNotesOnly: boolean;
+  /** How many times the AI notes were asked for from the workspace, so that a panel that is open already opens its section again. */
+  readonly summaryNotesRequests: number;
   /** The preset the Patterns panel selects when it next shows its list: handed over by the way into the panel from Home, read once and cleared by the panel, and cleared when the panel closes. Not saved with a view, and not kept when another source is bound. */
   readonly patternsPreset: string | undefined;
   readonly panelSizes: ReadonlyMap<string, number>;
@@ -175,6 +179,8 @@ export const INITIAL_PRESENTATION: PresentationState = {
   pathsFocus: undefined,
   askOpen: false,
   summaryOpen: false,
+  summaryNotesOnly: false,
+  summaryNotesRequests: 0,
   patternsPreset: undefined,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
@@ -243,6 +249,9 @@ export interface PresentationActions {
   clearPathsFocus(): void;
   setAskOpen(open: boolean): void;
   setSummaryOpen(open: boolean): void;
+  /** Opens the summary panel for the AI notes alone: no draft is made until the person asks for one. */
+  openSummaryNotes(): void;
+  setSummaryNotesOnly(notesOnly: boolean): void;
   setPatternsPreset(preset: string | undefined): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
@@ -502,8 +511,15 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), pathsHandover: undefined });
     },
     setSummaryOpen(summaryOpen) {
-      if (store.getState().summaryOpen === summaryOpen) return;
-      store.setState({ ...store.getState(), summaryOpen });
+      if (store.getState().summaryOpen === summaryOpen && !store.getState().summaryNotesOnly) return;
+      store.setState({ ...store.getState(), summaryOpen, summaryNotesOnly: false });
+    },
+    openSummaryNotes() {
+      store.setState({ ...store.getState(), summaryOpen: true, summaryNotesOnly: true, summaryNotesRequests: store.getState().summaryNotesRequests + 1 });
+    },
+    setSummaryNotesOnly(summaryNotesOnly) {
+      if (store.getState().summaryNotesOnly === summaryNotesOnly) return;
+      store.setState({ ...store.getState(), summaryNotesOnly });
     },
     setAskOpen(askOpen) {
       if (store.getState().askOpen === askOpen) return;
@@ -623,8 +639,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes });
     },
   };
 }

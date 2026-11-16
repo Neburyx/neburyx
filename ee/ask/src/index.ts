@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { aiStatusResponseSchema, type AskClassifier, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { SUMMARY_DEFAULTS, aiStatusResponseSchema, type AskClassifier, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedModelCall } from './audited.js';
@@ -14,6 +14,8 @@ import { createCaseSummarizer } from './case-summary/summarizer.js';
 import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
 import { readTokenKeys } from './case-summary/token-keys.js';
 import type { TokenKeys } from './case-summary/token-keys.js';
+import { createCopyToNotesRoute } from './case-summary/copy-route.js';
+import { createReadAiNotesRoute } from './case-summary/notes-read-route.js';
 import { createSummaryRoute } from './case-summary/summary-route.js';
 import { loadSummaryInstructions } from './case-summary/load-instructions.js';
 import type { SummaryInstructions } from './case-summary/instructions.js';
@@ -38,7 +40,11 @@ export { createMemorySummaryRunStore, createPgSummaryRunStore } from './case-sum
 /** @public The instructions of that test. */
 export { buildSummaryInstructions } from './case-summary/instructions.js';
 /** @public Opens a summary token for the copy to notes and the export that follow, and for the tests of the token. */
-export { openToken } from './case-summary/token.js';
+export { openToken, sealToken } from './case-summary/token.js';
+/** @public The routes of the AI notes, for the tests that mount them with a sealing key of their own. */
+export { createCopyToNotesRoute } from './case-summary/copy-route.js';
+/** @public */
+export { createReadAiNotesRoute } from './case-summary/notes-read-route.js';
 /** @public The prompt record of a request, which a stub provider of the completed-route test stamps on its answers. */
 export { promptRecordOf } from './provider.js';
 /** @public The types of a stub provider. */
@@ -197,6 +203,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
           createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }),
           createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger }),
           createSummaryRoute(),
+          createCopyToNotesRoute({ tokenKeys: () => tokenKeys }),
+          createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements }),
         ],
       }),
     ],

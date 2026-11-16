@@ -2,6 +2,7 @@ import { z, type ZodType } from 'zod';
 import type { AiSettings } from './ai.js';
 import type { AskFolder } from './ask-folder.js';
 import type { ReadRefsRequest } from './read-refs.js';
+import type { AiNotesCapability } from './ai-notes.js';
 import type { CaseSummarizer, SummaryReading } from './summary.js';
 import type { ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID, AskPatternListing, AskPatternOffer, AskClassifier, AskRunResult } from './ask.js';
 import { SOURCE_UNAVAILABLE_REASONS } from './error-codes.js';
@@ -19,6 +20,12 @@ export interface ExtensionRequest {
   readonly audit: AuditSink;
   /** The body of a `POST` route, already parsed by the route's request schema. */
   readonly body?: unknown;
+  /** The path parameters of the route, already parsed by its `params` schema. */
+  readonly params?: unknown;
+  /** The query of the route, already parsed by its `query` schema. */
+  readonly query?: unknown;
+  /** For a route that declares an `investigation`: the caller's investigation the path names and its source, read from the record and never from the body or the query. */
+  readonly investigation?: { readonly id: string; readonly sourceId: string };
   /** The application's `AskClassifier`: the Community default unless the application was given another. */
   readonly askClassifier: AskClassifier;
   /** The application's `CaseSummarizer`: the Community default unless the application was given another. */
@@ -41,6 +48,8 @@ export interface ExtensionRequest {
    * read through the reader the exports use, with the mask of the request: what the person may not export is left out, and the answer says how many references did not resolve, whether anything was left out and how many relationships are not yet retrieved.
    */
   readonly readElements?: (scope: ElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
+  /** The AI notes of the caller's own drafts; absent, a route that stores or reads them refuses. */
+  readonly aiNotes?: AiNotesCapability;
   /** Resolves when the investigation is the caller's and is for the source, and the source is as the investigation left it; rejects with `NOT_FOUND`, or the source-changed refusal, otherwise. */
   readonly investigationReadable?: (investigationId: string, sourceId: string) => Promise<void>;
   /** The caller's own saved patterns on a source (never the shared ones of other people), available against the mapping, newest changed first, at most as many as a catalog holds; `NOT_FOUND` for a source the caller may not read. */
@@ -84,6 +93,12 @@ export interface ExtensionRoute {
   readonly method: ExtensionRouteMethod;
   readonly url: string;
   readonly permission: ExtensionRoutePermission;
+  /** The strict schema of the path parameters; a value that does not fit is `INVALID_REQUEST` and the handler does not run. */
+  readonly params?: ZodType;
+  /** The strict schema of the query string; a value that does not fit is `INVALID_REQUEST` and the handler does not run. */
+  readonly query?: ZodType;
+  /** A route about one investigation of the caller: the path parameter that names it and the code a miss is answered with, before the handler runs. The request then carries `investigation` with the source of the record. */
+  readonly investigation?: { readonly param: string; readonly missing: 'NOT_FOUND' | 'ACCESS_DENIED' };
   /** Required for a `POST` route and refused on a `GET` route: the strict schema of the body. */
   readonly requestSchema?: ZodType;
   readonly responseSchema: ZodType;

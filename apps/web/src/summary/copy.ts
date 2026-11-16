@@ -35,6 +35,23 @@ export const SUMMARY_COPY = {
   noSupportBody: 'No sentences had valid citations. No draft is available to copy.',
   noData: 'No data was submitted',
   summarize: 'Summarize',
+  copyToNotes: 'Copy to notes',
+  copying: 'Copying…',
+  editedNoCopy: "Edited text can't be stored as AI notes.",
+  noneStorable: "None of these sentences can be stored as AI notes.",
+  notCopied: 'Not copied',
+  alreadyCopied: 'These sentences were copied to notes before.',
+  generateAgain: 'Generate the summary again',
+  copyFailed: 'The draft could not be saved first, so nothing was copied.',
+  copyConflict: 'This view changed somewhere else. Resolve that first, then copy again.',
+  notesTitle: 'AI notes',
+  notesRebuilt: 'Rebuilt from your own access each time this view opens.',
+  notesNone: 'No AI notes are saved with this view.',
+  notesLoading: 'Reading the AI notes…',
+  notesFailed: 'The AI notes could not be read.',
+  notesRefused: 'The AI notes cannot be shown to you.',
+  notesSkipped: 'An AI note of this view was not read.',
+  notesFull: 'The AI notes of this view cannot take this summary.',
   entity: 'Entity',
   relationship: 'Relationship',
   sentence: 'Sentence',
@@ -57,6 +74,10 @@ export const TOO_LARGE_ELEMENTS_TEXT = `Narrow the current view before drafting.
 export const TOO_LARGE_TEXT = `The text of this view is over the size allowed. Narrow the current view before drafting. ${SUMMARY_COPY.noData}.`;
 
 export const sentencesText = (count: number): string => `${count} ${count === 1 ? 'sentence' : 'sentences'}`;
+
+export const copiedText = (copied: number): string => `${copied} ${copied === 1 ? 'sentence' : 'sentences'} copied to notes.`;
+
+export const notCopiedText = (notCopied: number, total: number): string => `${notCopied} of ${total} ${total === 1 ? 'sentence' : 'sentences'} weren't copied: they state numbers or dates in words, which can't be stored.`;
 
 export const callsText = (calls: number): string => `${calls} ${calls === 1 ? 'call' : 'calls'} made`;
 

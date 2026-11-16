@@ -2,9 +2,10 @@ import { elementKey, edgeKey } from '../state/keys.js';
 import { useClientState, useVisibleGraph } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { drawnKeys } from '../state/loaded-graph.js';
-import { callsText, removedText, SUMMARY_COPY } from './copy.js';
-import type { CitationEntry } from './summary-model.js';
-import type { SummaryDraft } from './summary-session.js';
+import { failureWords } from '../patterns/failure-words.js';
+import { callsText, copiedText, notCopiedText, removedText, SUMMARY_COPY } from './copy.js';
+import { editedOf, storableCountOf, type CitationEntry } from './summary-model.js';
+import type { CopyStage, SummaryDraft } from './summary-session.js';
 
 const labelOf = (entry: CitationEntry): string => entry.label ?? `${entry.kind === 'entity' ? SUMMARY_COPY.entity : SUMMARY_COPY.relationship} ${entry.key}`;
 
@@ -33,18 +34,39 @@ export function CoverageBox({ retrieval, summary }: { readonly retrieval: string
   );
 }
 
+function copyWords(copy: CopyStage, total: number, sourceId: string): string {
+  switch (copy.kind) {
+    case 'idle':
+    case 'copying':
+      return '';
+    case 'copied':
+      return copy.alreadyCopied ? SUMMARY_COPY.alreadyCopied : copy.notCopied === 0 ? copiedText(copy.copied) : `${copiedText(copy.copied)} ${notCopiedText(copy.notCopied, total)}`;
+    case 'refused':
+      return SUMMARY_COPY.generateAgain;
+    case 'full':
+      return SUMMARY_COPY.notesFull;
+    case 'conflict':
+      return SUMMARY_COPY.copyConflict;
+    case 'failed':
+      return copy.failure === undefined ? SUMMARY_COPY.copyFailed : failureWords(copy.failure, sourceId).text;
+  }
+}
+
 interface DraftCardProps {
   readonly draft: SummaryDraft;
   readonly previous: boolean;
   readonly busy: boolean;
   readonly note: string;
+  readonly copy: CopyStage;
+  readonly sourceId: string;
+  readonly onCopy: () => void;
   readonly onEdit: (index: number, text: string) => void;
   readonly onPress: (entry: CitationEntry) => void;
   readonly onRegenerate: () => void;
   readonly onDiscard: () => void;
 }
 
-export function DraftCard({ draft, previous, busy, note, onEdit, onPress, onRegenerate, onDiscard }: DraftCardProps) {
+export function DraftCard({ draft, previous, busy, note, copy, sourceId, onCopy, onEdit, onPress, onRegenerate, onDiscard }: DraftCardProps) {
   const graph = useVisibleGraph();
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
@@ -52,7 +74,10 @@ export function DraftCard({ draft, previous, busy, note, onEdit, onPress, onRege
   const drawn = drawnKeys(graph);
   const { response, entries } = draft;
   const byKey = new Map(entries.map((entry) => [entry.key, entry]));
-  const edited = [...draft.edits].some(([index, text]) => text !== response.sentences[index]?.text);
+  const edited = editedOf(draft);
+  const storable = storableCountOf(response);
+  const skipped = copy.kind === 'copied' && copy.notCopied > 0;
+  const canCopy = !edited && storable > 0 && !busy && copy.kind !== 'copying';
   const statusWords = (entry: CitationEntry): string => (drawn.has(entry.graphKey) ? SUMMARY_COPY.select : heldKeys.has(entry.graphKey) ? SUMMARY_COPY.outsideView : SUMMARY_COPY.gone);
   return (
     <section className="summary-draft" aria-labelledby="summary-draft-title">
@@ -69,7 +94,7 @@ export function DraftCard({ draft, previous, busy, note, onEdit, onPress, onRege
       {response.status === 'partial' ? <p className="summary-note">{removedText(response.removedCount)}</p> : null}
       <ol className="summary-sentences">
         {response.sentences.map((sentence, index) => (
-          <li key={index} className="summary-block">
+          <li key={index} className={skipped && !sentence.storable ? 'summary-block summary-block-skipped' : 'summary-block'}>
             <textarea
               className="summary-sentence"
               aria-label={`${SUMMARY_COPY.sentence} ${index + 1}`}
@@ -93,6 +118,7 @@ export function DraftCard({ draft, previous, busy, note, onEdit, onPress, onRege
                 );
               })}
             </span>
+            {sentence.storable ? null : <span className="summary-tag summary-tag-skipped">{SUMMARY_COPY.notCopied}</span>}
           </li>
         ))}
       </ol>
@@ -101,6 +127,9 @@ export function DraftCard({ draft, previous, busy, note, onEdit, onPress, onRege
       </p>
       <CoverageBox retrieval={response.coverage.retrieval} summary={response.coverage.summary} />
       <div className="summary-actions">
+        <button type="button" className="summary-button" disabled={!canCopy} onClick={onCopy}>
+          {copy.kind === 'copying' ? SUMMARY_COPY.copying : SUMMARY_COPY.copyToNotes}
+        </button>
         <button type="button" className="summary-button summary-button-outline" disabled={busy} onClick={onRegenerate}>
           {SUMMARY_COPY.regenerate}
         </button>
@@ -108,6 +137,14 @@ export function DraftCard({ draft, previous, busy, note, onEdit, onPress, onRege
           {SUMMARY_COPY.discard}
         </button>
       </div>
+      <p className="summary-note" role="status">
+        {edited ? SUMMARY_COPY.editedNoCopy : storable === 0 ? SUMMARY_COPY.noneStorable : copyWords(copy, response.sentences.length, sourceId)}
+      </p>
+      {copy.kind === 'conflict' || (copy.kind === 'failed' && (copy.failure === undefined || failureWords(copy.failure, sourceId).action === 'try-again')) ? (
+        <button type="button" className="summary-link" onClick={onCopy}>
+          {SUMMARY_COPY.tryAgain}
+        </button>
+      ) : null}
       <p className="summary-tags">
         <span className="summary-tag">{SUMMARY_COPY.notSaved}</span>
       </p>

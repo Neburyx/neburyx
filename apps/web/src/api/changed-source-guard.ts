@@ -2,7 +2,7 @@ import type { ClientState } from '../state/client-state.js';
 import { isSourceChanged } from '../state/investigation-state.js';
 import type { ApiClient, ApiResult } from './client.js';
 
-type GuardedRead = 'getEntity' | 'getEdge' | 'lookupEntity' | 'searchEntities' | 'searchMore' | 'previewExpansion' | 'expandNeighbors' | 'derivedNeighbors' | 'graphCoverage' | 'readRefs' | 'createExport' | 'runTemplate' | 'findPaths' | 'runPattern' | 'runSavedPattern' | 'ask' | 'askContinue' | 'summarize';
+type GuardedRead = 'getEntity' | 'getEdge' | 'lookupEntity' | 'searchEntities' | 'searchMore' | 'previewExpansion' | 'expandNeighbors' | 'derivedNeighbors' | 'graphCoverage' | 'readRefs' | 'createExport' | 'runTemplate' | 'findPaths' | 'runPattern' | 'runSavedPattern' | 'ask' | 'askContinue' | 'summarize' | 'readAiNotes';
 
 /** Nothing was sent: the answer says only that the request ended, which no store shows as a failure. */
 const NOT_SENT: ApiResult<never> = { ok: false, failure: { code: 'ABORTED' } };
@@ -35,5 +35,6 @@ export function withoutReadsWhileSourceChanged(client: ApiClient, state: ClientS
     ask: guard('ask'),
     askContinue: guard('askContinue'),
     summarize: guard('summarize'),
+    readAiNotes: guard('readAiNotes'),
   };
 }

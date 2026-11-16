@@ -29,6 +29,10 @@ export interface ExtensionMount {
   readonly readElementsFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['readElements'];
   /** Whether the caller still has the investigation of a view and its source, for one request; absent, a route that asks it refuses. */
   readonly investigationReadableFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['investigationReadable'];
+  /** The source of the caller's investigation, from its record, for one request; rejects as `NOT_FOUND` for an investigation that is not the caller's; absent, a route that declares an `investigation` refuses. */
+  readonly investigationSourceFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ((investigationId: string) => Promise<string>) | undefined;
+  /** The AI notes of the caller's own drafts, for one request; absent, a route that stores or reads them refuses. */
+  readonly aiNotesFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['aiNotes'];
   /** The runner of Ask for one request, bound to its caller, its trace ID and its abort signal; absent, a route that runs Ask refuses. */
   readonly askRunnerFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['askRunner'];
   /** Whether the caller may read a source, for one request; absent, a route that asks it refuses. */
@@ -58,10 +62,37 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             if (!parsedBody.success) throw new AppError('INVALID_REQUEST');
             body = parsedBody.data;
           }
+          let params: unknown;
+          let queryValues: unknown;
+          let investigation: { readonly id: string; readonly sourceId: string } | undefined;
+          if (mount.previewOn) {
+            if (route.params !== undefined) {
+              const parsedParams = route.params.safeParse(request.params);
+              if (!parsedParams.success) throw new AppError('INVALID_REQUEST');
+              params = parsedParams.data;
+            }
+            if (route.query !== undefined) {
+              const parsedQuery = route.query.safeParse(request.query);
+              if (!parsedQuery.success) throw new AppError('INVALID_REQUEST');
+              queryValues = parsedQuery.data;
+            }
+            if (route.investigation !== undefined) {
+              const named = params === undefined || typeof params !== 'object' || params === null ? undefined : Object.getOwnPropertyDescriptor(params, route.investigation.param)?.value;
+              const sourceOf = mount.investigationSourceFor?.({ principal, traceId: request.id });
+              if (typeof named !== 'string' || sourceOf === undefined) throw new AppError(sourceOf === undefined ? 'INTERNAL_ERROR' : 'INVALID_REQUEST');
+              try {
+                investigation = { id: named, sourceId: await sourceOf(named) };
+              } catch (error) {
+                if (error instanceof AppError && error.code === 'NOT_FOUND') throw new AppError(route.investigation.missing);
+                throw error;
+              }
+            }
+          }
           const build = (): ExtensionRequest => {
             const askSourceReadable = mount.askSourceReadableFor?.({ principal, traceId: request.id });
             const readElements = mount.signalOf === undefined ? undefined : mount.readElementsFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
             const investigationReadable = mount.investigationReadableFor?.({ principal, traceId: request.id });
+            const aiNotes = mount.aiNotesFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
             const askPatternFind = mount.askPatternFindFor?.({ principal, traceId: request.id });
             const askRunner = mount.signalOf === undefined ? undefined : mount.askRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
@@ -82,7 +113,11 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(askRunner === undefined ? {} : { askRunner }),
               ...(readElements === undefined ? {} : { readElements }),
               ...(investigationReadable === undefined ? {} : { investigationReadable }),
+              ...(aiNotes === undefined ? {} : { aiNotes }),
               ...(body === undefined ? {} : { body }),
+              ...(params === undefined ? {} : { params }),
+              ...(queryValues === undefined ? {} : { query: queryValues }),
+              ...(investigation === undefined ? {} : { investigation }),
             };
           };
           const produce = async (): Promise<unknown> => {

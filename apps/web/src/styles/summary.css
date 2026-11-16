@@ -282,3 +282,37 @@
 .summary-coverage p {
   margin-top: var(--space-4);
 }
+
+.summary-tag-skipped {
+  align-self: flex-start;
+}
+
+.summary-block-skipped {
+  background: var(--color-caution-surface);
+}
+
+.summary-notes {
+  padding-top: var(--space-10);
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.summary-notes > summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.summary-notes[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.summary-note-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.summary-block p {
+  margin: 0;
+}

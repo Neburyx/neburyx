@@ -1,4 +1,4 @@
-import { layoutDocumentSchema, queryContextDocumentSchema, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, storedAiNotesSchema, type AiNotesEntryInput, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type pg from 'pg';
 import { readOnlyStatusOf, type ReadOnlyStatus } from '../investigations/read-only.js';
 import { lockLiveInvestigation } from './locks.js';
@@ -70,6 +70,25 @@ export interface DraftWrite {
 
 /** `unchanged` is a write whose content equals the stored one: nothing was written and `version` is the one that was sent. */
 export type DraftWriteResult = { readonly outcome: 'saved' | 'unchanged'; readonly version: number; readonly save: InvestigationSave } | { readonly outcome: 'conflict' } | { readonly outcome: 'not-found' } | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus };
+
+/** One entry added to the AI notes of the owner's draft. `contentHashOf` is given the draft as it is stored and the AI notes it will hold, and returns the hash of everything the Save dialog would snapshot. */
+export interface AiNotesAppendWrite {
+  readonly investigationId: string;
+  readonly ownerId: string;
+  readonly expectedVersion: number;
+  readonly entry: AiNotesEntryInput;
+  readonly maxEntries: number;
+  readonly contentHashOf: (held: { readonly layout: LayoutDocument; readonly queryContext: QueryContextDocument; readonly notes: string | null; readonly aiNotes: unknown }) => string;
+}
+
+export type AiNotesAppendResult =
+  | { readonly outcome: 'appended' | 'already-stored'; readonly version: number; readonly save: InvestigationSave }
+  | { readonly outcome: 'conflict' }
+  | { readonly outcome: 'full' }
+  | { readonly outcome: 'not-found' }
+  | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus };
+
+export type AiNotesReadResult = { readonly outcome: 'read'; readonly entries: readonly Record<string, unknown>[]; readonly version: number; readonly save: InvestigationSave } | { readonly outcome: 'not-found' };
 
 /** What a title change or a status change asks of the investigation of `investigationId`. */
 interface InvestigationChange {
@@ -212,6 +231,10 @@ export interface InvestigationStore {
   readInvestigation(id: string, ownerId: string): Promise<StoredInvestigation | undefined>;
   /** Replaces the owner's draft when `expectedVersion` is its version, in one transaction under a lock on the draft row, so two writes with one version make one winner. `last_edited_at` of the investigation moves only when the content changed. */
   saveDraft(write: DraftWrite): Promise<DraftWriteResult>;
+  /** Adds an entry to the AI notes of the owner's draft in one transaction under a lock on the draft row: a token id already stored changes nothing (and is decided before the version is compared), else a stale version is a conflict, a full list is refused, and an append raises the version, rehashes the draft and moves `last_edited_at`. */
+  appendAiNotes(write: AiNotesAppendWrite): Promise<AiNotesAppendResult>;
+  /** The AI notes of the owner's draft with its version and save state. */
+  readAiNotes(investigationId: string, ownerId: string): Promise<AiNotesReadResult>;
   /** Changes the title in one transaction under a lock on the investigation: the order of checks is the owner's investigation, then read-only, then the version. `last_edited_at` does not move. */
   renameInvestigation(change: TitleChange): Promise<TitleChangeResult>;
   /** Moves the investigation to another status in one transaction under a lock on the investigation; a request for its current status writes nothing, and a stale `expectedVersion` is a conflict. `last_edited_at` does not move. */
@@ -424,6 +447,68 @@ export async function saveDraft(pool: pg.Pool, write: DraftWrite): Promise<Draft
   } finally {
     client.release();
   }
+}
+
+interface HeldAiNotes {
+  readonly layout: unknown;
+  readonly query_context: unknown;
+}
+
+export async function appendAiNotes(pool: pg.Pool, write: AiNotesAppendWrite): Promise<AiNotesAppendResult> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await lockLiveInvestigation(client, write.investigationId, write.ownerId);
+    const found = await client.query<DraftRecord>(`${DRAFT_STATE} FOR UPDATE OF draft`, [write.investigationId, write.ownerId]);
+    const [held] = found.rows;
+    if (held === undefined) {
+      await client.query('ROLLBACK');
+      return { outcome: 'not-found' };
+    }
+    const readOnly = readOnlyStatusOf(held.investigation_status);
+    if (readOnly !== undefined) {
+      await client.query('ROLLBACK');
+      return { outcome: 'read-only', status: readOnly };
+    }
+    const stored = held.ai_notes === null ? { entries: [] } : storedAiNotesSchema.parse(held.ai_notes);
+    if (stored.entries.some((entry) => entry.tokenId === write.entry.tokenId)) {
+      await client.query('COMMIT');
+      return { outcome: 'already-stored', version: held.version, save: saveOf(held.saved_at) };
+    }
+    if (held.version !== write.expectedVersion) {
+      await client.query('ROLLBACK');
+      return { outcome: 'conflict' };
+    }
+    if (stored.entries.length >= write.maxEntries) {
+      await client.query('ROLLBACK');
+      return { outcome: 'full' };
+    }
+    const documents = await client.query<HeldAiNotes>(`SELECT draft.layout, draft.query_context FROM saved_views draft WHERE draft.id = $1 AND draft.kind = 'draft'`, [held.id]);
+    const [row] = documents.rows;
+    if (row === undefined) throw new Error('the draft was not returned for its AI notes');
+    const aiNotes = { entries: [...stored.entries, write.entry] };
+    const contentHash = write.contentHashOf({ layout: layoutDocumentSchema.parse(row.layout), queryContext: queryContextDocumentSchema.parse(row.query_context), notes: held.notes, aiNotes });
+    await client.query(`UPDATE saved_views SET ai_notes = $2, content_hash = $3, version = version + 1, updated_at = now() WHERE id = $1`, [held.id, JSON.stringify(aiNotes), contentHash]);
+    await client.query(`UPDATE investigations SET last_edited_at = now() WHERE id = $1`, [write.investigationId]);
+    const after = await client.query<DraftRecord>(DRAFT_STATE, [write.investigationId, write.ownerId]);
+    await client.query('COMMIT');
+    const [now] = after.rows;
+    if (now === undefined) throw new Error('the draft was not returned after its AI notes were written');
+    return { outcome: 'appended', version: now.version, save: saveOf(now.saved_at) };
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function readAiNotes(pool: pg.Pool, investigationId: string, ownerId: string): Promise<AiNotesReadResult> {
+  const found = await pool.query<DraftRecord>(DRAFT_STATE, [investigationId, ownerId]);
+  const [held] = found.rows;
+  if (held === undefined) return { outcome: 'not-found' };
+  const stored = held.ai_notes === null ? { entries: [] } : storedAiNotesSchema.parse(held.ai_notes);
+  return { outcome: 'read', entries: stored.entries, version: held.version, save: saveOf(held.saved_at) };
 }
 
 /** Runs `work` in a transaction on one connection; a throw rolls back, and the error that caused it is the one reported. */

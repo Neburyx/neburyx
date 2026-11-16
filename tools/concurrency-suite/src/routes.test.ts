@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { CaseSummarizer } from '@neburyx/contracts';
-import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
+import { createCopyToNotesRoute, createReadAiNotesRoute, createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
 import { startRig, type Rig } from './rig.js';
 
 const SUMMARIZER: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'ok', sentences: [], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }) };
-const SUMMARY = { extension: { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] }, caseSummarizer: SUMMARIZER } as const;
+const SUMMARY = { extension: { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => undefined }), createReadAiNotesRoute({ maxRefs: () => 300 })] })] }, caseSummarizer: SUMMARIZER } as const;
 
 let rig: Rig;
 afterEach(() => rig.close());
@@ -40,6 +40,8 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'POST /v1/patterns/preview': 'reads no source: it answers from the mapping and the definition, and takes no read slot',
   'POST /v1/graph/read-refs': 'counted in rate-routes.test.ts; the slot is the gate\'s',
   'POST /v1/sources/:id/test': 'counted in rate-routes.test.ts; it runs the source tester, not a gate read',
+  'POST /v1/investigations/:id/draft/ai-notes': 'reads no source: it opens a token and writes to the application database, and takes no read slot',
+  'GET /v1/investigations/:id/draft/ai-notes': 'counted once for the whole read, by the access check of the elements reader; its inner reads count no further (`countRate: false`), and the slot is the gate\'s; an empty list reads no source',
   'GET /v1/me': 'reads no source',
   'GET /v1/sources': 'reads no source',
   'GET /v1/sources/:id/profile': 'reads no source',

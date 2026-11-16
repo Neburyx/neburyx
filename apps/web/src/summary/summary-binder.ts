@@ -31,10 +31,15 @@ export function bindSummaryPanel(state: ClientState, panels: PanelRegistry): () 
     state.presentation.setAskOpen(false);
     state.presentation.setSummaryOpen(!state.presentation.view.getState().summaryOpen);
   });
+  const unregisterNotes = registerAiAction('notes', () => {
+    state.presentation.setAskOpen(false);
+    state.presentation.openSummaryNotes();
+  });
   sync();
   return () => {
     unsubscribe();
     unregister();
+    unregisterNotes();
     remove?.();
     remove = undefined;
   };

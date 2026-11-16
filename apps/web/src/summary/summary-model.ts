@@ -1,7 +1,8 @@
 import type { ElementRef, SummaryFailureKind, GraphEdge, GraphNode, SummaryRequest, SummaryResponse } from '@neburyx/contracts';
 import type { ApiFailure, ApiResult } from '../api/client.js';
-import { reasonOf } from '../patterns/failure-words.js';
+
 import { viewRefsOf } from '../exports/export-attempt.js';
+import { reasonOf } from '../patterns/failure-words.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 
@@ -97,3 +98,9 @@ function outcomeOfFailure(failure: ApiFailure): SummaryOutcome {
   if ((failure.code === 'CONFLICT' && reason === 'source-changed') || failure.code === 'ABORTED') return { kind: 'source-changed' };
   return { kind: 'request-failed', failure };
 }
+
+/** Whether the person changed the text of any sentence of the draft. */
+export const editedOf = (draft: { readonly response: DraftResponse; readonly edits: ReadonlyMap<number, string> }): boolean => [...draft.edits].some(([index, edited]) => edited !== draft.response.sentences[index]?.text);
+
+/** How many sentences of the draft the server says Copy to notes will keep. */
+export const storableCountOf = (response: DraftResponse): number => response.sentences.filter((sentence) => sentence.storable).length;

@@ -52,6 +52,12 @@ export function usePrincipalIdWhenProvided(): string | undefined {
   return principal;
 }
 
+/** Whether `GET /v1/me` says the edition is enterprise; false while that answer is not here and on a page without shell data. */
+export function useEnterpriseWhenProvided(): boolean {
+  const store = useContext(ShellDataContext);
+  return useStoreSelector<ShellData | undefined, boolean>(store ?? NO_ONE, (data) => (data === undefined ? false : answeredData(data.me)?.edition === 'enterprise'));
+}
+
 export function answeredData<T>(state: RequestState<T>): T | undefined {
   return state.phase === 'ready' || state.phase === 'loading' ? state.data : undefined;
 }

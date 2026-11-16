@@ -1,4 +1,4 @@
-import { DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type AiNotesAppended, type AiNotesEntryInput, type AiNotesRead, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
@@ -42,6 +42,12 @@ export interface InvestigationService {
   list(call: InvestigationListCall): Promise<InvestigationListResponse>;
   /** Replaces the caller's draft when `expectedVersion` is the draft's version; `CONFLICTED_VIEW_VERSION` when it is not. */
   saveDraft(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly draft: DraftWriteRequest }): Promise<DraftWriteResponse>;
+  /** Adds an entry to the AI notes of the caller's draft; a token id already stored changes nothing, `CONFLICTED_VIEW_VERSION` for a stale version, `INVALID_REQUEST` with `ai-notes-full` or `ai-notes-entry-too-large` for a list or an entry over its bounds, and the refusals of a draft write for a closed, archived or source-changed investigation. */
+  appendAiNotes(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly entry: AiNotesEntryInput; readonly maxRefs: number }): Promise<AiNotesAppended>;
+  /** Resolves when the caller's draft may be written, and refuses as a draft write does; nothing is written. */
+  checkAiNotesWrite(call: { readonly id: string; readonly principal: Principal }): Promise<void>;
+  /** The AI notes of the caller's draft with the draft's version and save state; `NOT_FOUND` for an investigation that is not the caller's. */
+  readAiNotes(call: { readonly id: string; readonly principal: Principal }): Promise<AiNotesRead>;
   /** Stores the title as typed when `expectedVersion` is the investigation's version; a closed or archived investigation is refused first. */
   rename(call: { readonly id: string; readonly principal: Principal; readonly expectedVersion: number; readonly title: string }): Promise<RenameResponse>;
   /** Closes, archives or reopens the investigation, with one audit event, recorded after the commit; if the event cannot be recorded the change is kept and the call answers `INTERNAL_ERROR`. */
@@ -311,6 +317,44 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
       if (result.outcome === 'conflict') throw new AppError('CONFLICTED_VIEW_VERSION');
       return { version: result.version, save: result.save, notes: draft.notes };
+    },
+    async appendAiNotes({ id, principal, expectedVersion, entry, maxRefs }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      if (entry.sentences.length > AI_NOTES_MAX_SENTENCES || entry.inputRefs.length > maxRefs) throw new AppError('INVALID_REQUEST', { reason: 'ai-notes-entry-too-large' });
+      const stored = await deps.store.readInvestigation(id, principal.id);
+      if (stored === undefined) throw new AppError('NOT_FOUND');
+      const readOnly = readOnlyStatusOf(stored.investigation.status);
+      if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
+      const state = sourceStateOf(deps.mapping, stored.investigation);
+      if (state !== 'available') throw sourceChangedError(state);
+      const result = await deps.store.appendAiNotes({
+        investigationId: id,
+        ownerId: principal.id,
+        expectedVersion,
+        entry,
+        maxEntries: AI_NOTES_MAX_ENTRIES,
+        contentHashOf: ({ layout, queryContext, notes, aiNotes }) => contentHashOf({ layout, queryContext }, notes, aiNotes),
+      });
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      if (result.outcome === 'read-only') throw readOnlyRefusal(result.status);
+      if (result.outcome === 'conflict') throw new AppError('CONFLICTED_VIEW_VERSION');
+      if (result.outcome === 'full') throw new AppError('INVALID_REQUEST', { reason: 'ai-notes-full' });
+      return { outcome: result.outcome, version: result.version, save: result.save };
+    },
+    async checkAiNotesWrite({ id, principal }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const stored = await deps.store.readInvestigation(id, principal.id);
+      if (stored === undefined) throw new AppError('NOT_FOUND');
+      const readOnly = readOnlyStatusOf(stored.investigation.status);
+      if (readOnly !== undefined) throw readOnlyRefusal(readOnly);
+      const state = sourceStateOf(deps.mapping, stored.investigation);
+      if (state !== 'available') throw sourceChangedError(state);
+    },
+    async readAiNotes({ id, principal }) {
+      if (!UUID.test(id)) throw new AppError('NOT_FOUND');
+      const result = await deps.store.readAiNotes(id, principal.id);
+      if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
+      return { entries: result.entries, version: result.version, save: result.save };
     },
     async rename({ id, principal, expectedVersion, title }) {
       if (!UUID.test(id)) throw new AppError('NOT_FOUND');

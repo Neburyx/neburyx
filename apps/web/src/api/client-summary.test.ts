@@ -5,7 +5,7 @@ import { createApiClient, type Fetcher } from './client.js';
 const REQUEST: Parameters<ReturnType<typeof createApiClient>['summarize']>[0] = { investigationId: 'inv-1', sourceId: 'a', entities: [], edges: [], aggregates: [], derived: [] };
 const KEY = 'a-key-of-sixteen-chars';
 const COVERAGE = { retrieval: 'r', summary: 's' };
-const DRAFT = { status: 'ok', sentences: [{ text: 'One.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'x' } }], coverage: COVERAGE, removedCount: 0, sent: 'text', model: 'm', calls: 1, summaryToken: 't' };
+const DRAFT = { status: 'ok', sentences: [{ text: 'One.', cites: ['n1'], storable: true }], citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'x' } }], coverage: COVERAGE, removedCount: 0, sent: 'text', model: 'm', calls: 1, summaryToken: 't' };
 
 function once(body: unknown, status = 200): { readonly fetcher: Fetcher; readonly asked: { path: string; init: Parameters<Fetcher>[1] }[] } {
   const asked: { path: string; init: Parameters<Fetcher>[1] }[] = [];

@@ -487,6 +487,244 @@
         }
       }
     },
+    "/v1/investigations/{id}/draft/ai-notes": {
+      "post": {
+        "operationId": "copySummaryToNotes",
+        "summary": "Copy the storable sentences of a summary into the notes of a view",
+        "description": "Present only when the deployment has switched the AI preview on; otherwise this path answers 404 (not mounted) or 403 (ACCESS_DENIED with the reason ai-preview-off). Takes the sealed summaryToken of a draft and the version of the draft the caller read, and appends to the AI notes of the caller's own draft the sentences the token says are storable (listed words and placeholders only, never a name, an id or a number), once for each token: a token already copied stores nothing and answers alreadyCopied. The token must be the caller's, for this investigation, within 30 minutes, from the policy version and the word list version in force; any other is ACCESS_DENIED, as is an investigation the caller may not write. A stale version is CONFLICTED_VIEW_VERSION; a full list or an entry over its bounds is INVALID_REQUEST with the reason ai-notes-full or ai-notes-entry-too-large. The audit event holds the run and counts, never a sentence.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyToNotesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "How many sentences were copied and how many were not, whether the token had been copied before, and the draft's current version and save state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopyToNotesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid, a list or an entry is over its bounds (INVALID_REQUEST with the reason ai-notes-full or ai-notes-entry-too-large)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The preview is off, the token is not valid for this person, investigation and moment, or the caller may not write the investigation: ACCESS_DENIED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The route is not mounted in this build: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The version is not the draft's: CONFLICTED_VIEW_VERSION",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON: UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The audit could not be written: AUDIT_UNAVAILABLE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "readAiNotes",
+        "summary": "The AI notes of a view, rebuilt from the viewer's own access",
+        "description": "Present only when the deployment has switched the AI preview on; otherwise this path answers 404 (not mounted) or 403 (ACCESS_DENIED with the reason ai-preview-off). Reads the AI notes stored with the caller's own draft and rebuilds each entry through the gate for the signed-in person, in one batch: names and titles as they are shown to them (with their masking, the mask query parameter), member counts with their own quality label, times as they read them; a sentence that cites or names something the person cannot see, or whose count is not known to them, is left out without a message. The coverage line is built for the person and never stored. An entry over the bounds of an entry is not read and is named in skipped.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "mask",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The entries, rebuilt, and any entry that was not read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiNotesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The mask is not true or false: INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The preview is off: ACCESS_DENIED with the reason ai-preview-off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The investigation is not the caller's, the source is not configured or not readable by the caller, or the route is not mounted in this build: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The investigation's source was re-pointed or removed since the investigation was made: CONFLICT with the reason source-changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The notes are not available in this build: ASK_UNSUPPORTED, or the re-read went over a budget of the source: QUERY_BUDGET_EXCEEDED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The person has asked too often: RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The source is not available or is busy: SOURCE_UNAVAILABLE or SOURCE_BUSY",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The re-read timed out: QUERY_TIMEOUT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sources/{id}/profile": {
       "get": {
         "operationId": "getSourceProfile",
@@ -5982,11 +6220,15 @@
                         "type": "string",
                         "minLength": 1
                       }
+                    },
+                    "storable": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "text",
-                    "cites"
+                    "cites",
+                    "storable"
                   ],
                   "additionalProperties": false
                 }
@@ -6305,11 +6547,15 @@
                         "type": "string",
                         "minLength": 1
                       }
+                    },
+                    "storable": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
                     "text",
-                    "cites"
+                    "cites",
+                    "storable"
                   ],
                   "additionalProperties": false
                 }
@@ -6773,6 +7019,428 @@
             "additionalProperties": false
           }
         ]
+      },
+      "CopyToNotesRequest": {
+        "type": "object",
+        "properties": {
+          "summaryToken": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "summaryToken",
+          "version"
+        ],
+        "additionalProperties": false
+      },
+      "CopyToNotesResponse": {
+        "type": "object",
+        "properties": {
+          "copied": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "notCopied": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "alreadyCopied": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "save": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "const": "saved"
+                  },
+                  "savedAt": {
+                    "type": "string",
+                    "format": "date-time",
+                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                  }
+                },
+                "required": [
+                  "state",
+                  "savedAt"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "const": "unsaved"
+                  },
+                  "savedAt": {
+                    "type": "null"
+                  }
+                },
+                "required": [
+                  "state",
+                  "savedAt"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "required": [
+          "copied",
+          "notCopied",
+          "alreadyCopied",
+          "version",
+          "save"
+        ],
+        "additionalProperties": false
+      },
+      "AiNotesResponse": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tokenId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label": {
+                  "type": "string",
+                  "const": "AI-drafted"
+                },
+                "model": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "generatedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                },
+                "sentences": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "citations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "entity",
+                                "relationship"
+                              ]
+                            },
+                            "ref": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "entityType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stableId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "entityType",
+                                    "stableId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "sourceId": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "type": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "from": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "to": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "stableId": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "sourceId",
+                                        "type",
+                                        "from",
+                                        "to",
+                                        "stableId"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "sourceId": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "aggregate": {
+                                          "type": "object",
+                                          "properties": {
+                                            "type": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "from": {
+                                              "type": "object",
+                                              "properties": {
+                                                "sourceId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "entityType": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "stableId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "sourceId",
+                                                "entityType",
+                                                "stableId"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "to": {
+                                              "type": "object",
+                                              "properties": {
+                                                "sourceId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "entityType": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "stableId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "sourceId",
+                                                "entityType",
+                                                "stableId"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "type",
+                                            "from",
+                                            "to"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "sourceId",
+                                        "aggregate"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "sourceId": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "derived": {
+                                          "type": "object",
+                                          "properties": {
+                                            "ruleId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "from": {
+                                              "type": "object",
+                                              "properties": {
+                                                "sourceId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "entityType": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "stableId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "sourceId",
+                                                "entityType",
+                                                "stableId"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            "to": {
+                                              "type": "object",
+                                              "properties": {
+                                                "sourceId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "entityType": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "stableId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "sourceId",
+                                                "entityType",
+                                                "stableId"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "ruleId",
+                                            "from",
+                                            "to"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "sourceId",
+                                        "derived"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              ]
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "ref",
+                            "title",
+                            "type"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "text",
+                      "citations"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "coverage": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "tokenId",
+                "label",
+                "model",
+                "generatedAt",
+                "sentences",
+                "coverage"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tokenId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "too-large",
+                    "unreadable"
+                  ]
+                }
+              },
+              "required": [
+                "tokenId",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "entries",
+          "skipped"
+        ],
+        "additionalProperties": false
       },
       "DerivedEdgeDetail": {
         "type": "object",
@@ -16715,6 +17383,90 @@
                       "reason": {
                         "type": "string",
                         "const": "continue-invalid"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "The AI notes of this view cannot take another summary."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "ai-notes-full"
+                      }
+                    },
+                    "required": [
+                      "reason"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "retryable",
+                  "traceId",
+                  "details"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "const": "INVALID_REQUEST"
+                  },
+                  "message": {
+                    "type": "string",
+                    "const": "This summary is too large to keep as AI notes."
+                  },
+                  "retryable": {
+                    "type": "boolean",
+                    "const": false
+                  },
+                  "traceId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "details": {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "const": "ai-notes-entry-too-large"
                       }
                     },
                     "required": [

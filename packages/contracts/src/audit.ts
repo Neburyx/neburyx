@@ -119,6 +119,11 @@ export const caseSummaryAuditDetailSchema = z.strictObject({
 
 export type CaseSummaryAuditDetail = z.infer<typeof caseSummaryAuditDetailSchema>;
 
+/** What a Copy to notes leaves in its audit event: the run of the click the draft came from and how many sentences were kept, not kept, and whether the token had been copied; never a sentence. */
+export const notesAuditDetailSchema = z.strictObject({ runId: z.uuid().optional(), copied: wholeCount, notCopied: wholeCount, alreadyCopied: z.boolean() });
+
+export type NotesAuditDetail = z.infer<typeof notesAuditDetailSchema>;
+
 /** The per-action fields of an audit event, one shape at a time: every shape holds counts and codes only. */
 export const auditDetailSchema = z.union([
   z.strictObject({ reason: z.enum(['cancelled', 'timeout']) }),
@@ -136,6 +141,7 @@ export const auditDetailSchema = z.union([
   z.strictObject({ ai: aiAuditDetailSchema }),
   z.strictObject({ askRun: askRunAuditDetailSchema }),
   z.strictObject({ summary: caseSummaryAuditDetailSchema }),
+  z.strictObject({ notes: notesAuditDetailSchema }),
   z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
 ]);
 
@@ -161,8 +167,10 @@ export type AuditDetail =
   /** What a question of Ask was: the intent, the outcome or cause, and hashes and counts only. */
   | { readonly askRun: AskRunAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
 
+  /** What a Copy to notes was: the run, and counts. */
+  | { readonly notes: NotesAuditDetail; readonly summary?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What a click of the case summary was: counts, hashes, the model and prompt used and the outcome. */
-  | { readonly summary: CaseSummaryAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
+  | { readonly summary: CaseSummaryAuditDetail; readonly notes?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
 
 export function parseAuditDetail(value: unknown): AuditDetail {
   return auditDetailSchema.parse(value);

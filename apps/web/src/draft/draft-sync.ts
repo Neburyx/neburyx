@@ -112,6 +112,8 @@ export interface DraftSync {
   hold(options?: { readonly discardPending?: boolean }): Promise<HoldOutcome>;
   /** What the sync holds of the draft of an investigation: its version, notes and the view it is based on. */
   stateOf(investigationId: string): DraftAccepted | undefined;
+  /** How many times a draft was taken over for the investigation (opened, or replaced by a restored view, even the same one again). */
+  adoptionsOf(investigationId: string): number;
   /** Starts writing the draft of an investigation that is shown: from now on its changes are saved. */
   adopt(investigationId: string, session: DraftSession): void;
   /** Stops writing the draft of an investigation that no longer exists (it was deleted): what waits, and what would be sent as the page is left, is dropped. */
@@ -174,6 +176,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   const doc: DocumentEvents | undefined = options.document ?? (typeof document === 'undefined' ? undefined : document);
   const status = createStore<DraftStatus>(IDLE);
   const sessions = new Map<string, Session>();
+  const adoptions = new Map<string, number>();
   let timer: unknown;
   let deferred: NonNullable<typeof watched> | undefined;
   let watched: { readonly id: string; readonly session: Session; readonly body: DraftWriteRequest; readonly json: string } | undefined;
@@ -575,7 +578,9 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       const session = sessions.get(investigationId);
       return session === undefined ? undefined : { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId };
     },
+    adoptionsOf: (investigationId) => adoptions.get(investigationId) ?? 0,
     adopt(investigationId, session) {
+      adoptions.set(investigationId, (adoptions.get(investigationId) ?? 0) + 1);
       const adopted: Session = { version: session.version, notes: session.notes, basedOnViewId: session.basedOnViewId, kept: session.kept ?? NOTHING_KEPT, writable: session.writable, conflicted: false, pendingFilters: session.filters, carried: session.carried, rehashHeld: session.rehash === true, carriedTypes: undefined, applied: undefined, awaitingFit: false, lastJson: undefined };
       sessions.set(investigationId, adopted);
       if (state.investigation.getState().id === investigationId && adopted.writable) {

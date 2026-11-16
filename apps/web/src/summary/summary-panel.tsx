@@ -1,10 +1,19 @@
 import { useEffect, useRef } from 'react';
+import { MENU_BUTTON_LABEL } from '../lifecycle/copy.js';
 import { SUMMARY_COPY, sentencesText } from './copy.js';
 import { DraftCard } from './draft-card.js';
+import { NotesSection } from './notes-section.js';
 import { OutcomeCard } from './outcome-card.js';
 import { useSummary } from './use-summary.js';
 
-function focusSummarizeControl(): void {
+function focusSummarizeControl(fromMenu: boolean): void {
+  if (fromMenu) {
+    const menu = document.querySelector<HTMLElement>(`button[aria-label="${MENU_BUTTON_LABEL}"]`);
+    if (menu !== null) {
+      menu.focus();
+      return;
+    }
+  }
   const controls = [...document.querySelectorAll<HTMLElement>('.header-ai')];
   controls.find((control) => control.textContent?.trim().startsWith('Summarize'))?.focus();
 }
@@ -19,10 +28,12 @@ function Sparkle() {
 }
 
 export function SummaryPanel({ onClose, returnToGraph }: { readonly onClose: () => void; readonly returnToGraph: () => void }) {
+  const fromMenu = useRef(false);
   const model = useSummary(() => {
     onClose();
-    focusSummarizeControl();
+    focusSummarizeControl(fromMenu.current);
   });
+  fromMenu.current = model.notesOnly;
   const body = useRef<HTMLDivElement>(null);
   const { draft, attempt } = model.state;
   const generating = attempt.kind === 'generating';
@@ -92,7 +103,10 @@ export function SummaryPanel({ onClose, returnToGraph }: { readonly onClose: () 
           </section>
         ) : null}
         {outcome !== undefined ? <OutcomeCard outcome={outcome} sourceId={model.sourceId ?? ''} onTryAgain={model.generate} onReturn={returnToGraph} /> : null}
-        {draft !== undefined ? <DraftCard draft={draft} previous={generating || outcome !== undefined} busy={generating} note={model.note} onEdit={model.edit} onPress={model.press} onRegenerate={model.generate} onDiscard={model.discard} /> : null}
+        {draft !== undefined ? <DraftCard draft={draft} previous={generating || outcome !== undefined} busy={generating} note={model.note} copy={model.state.copy} sourceId={model.sourceId ?? ''} onCopy={model.copy} onEdit={model.edit} onPress={model.press} onRegenerate={model.generate} onDiscard={model.discard} /> : null}
+      </div>
+      <div className="summary-body">
+        <NotesSection copies={model.state.copies} sourceId={model.sourceId ?? ''} request={model.notesRequests} />
       </div>
       <footer className="summary-foot">{draft === undefined ? `${SUMMARY_COPY.rule} ${SUMMARY_COPY.notAFinding}` : SUMMARY_COPY.notAFinding}</footer>
     </div>

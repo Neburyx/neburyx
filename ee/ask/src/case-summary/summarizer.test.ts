@@ -45,7 +45,7 @@ describe('the case summarizer', () => {
     const answer = await summarizer.summarize(input(), new AbortController().signal);
     expect(answer).toEqual({
       status: 'ok',
-      sentences: [{ text: 'A fixed sentence.', cites: ['n1'] }],
+      sentences: [{ text: 'A fixed sentence.', cites: ['n1'], storable: false }],
       citations: [{ key: 'n1', kind: 'entity', ref: node.ref }],
       coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
       removedCount: 0,

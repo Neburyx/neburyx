@@ -6,6 +6,8 @@ import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
 import { judgeSentences } from './checks.js';
 import { draftSummary, type Checked } from './draft.js';
 import type { SummaryInstructions } from './instructions.js';
+import { templatesOf } from './notes-convert.js';
+import { NOTES_WORD_LIST_VERSION } from './notes-words.js';
 import { prepareSummary } from './prepare.js';
 import { SummaryRunStoreError, type SummaryRunStore } from './run-store.js';
 import type { SummaryAvailability, SummarySettings } from './settings.js';
@@ -193,6 +195,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         if (drafted.sentences.length === 0) return record({ status: 'unsupported', removedCount: drafted.removed, coverage, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls }, checked);
         const keys = options.tokenKeys();
         if (keys === undefined) throw new Error('the case summarizer was asked without a sealing key');
+        const templates = templatesOf(drafted.sentences, prepared.assembled, input.reading);
         const summaryToken = sealToken(
           keys,
           {
@@ -205,10 +208,14 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
             sentences: drafted.sentences,
             inputRefs: [...prepared.assembled.keys].map(([key, element]) => ({ key, kind: element.kind, ref: element.ref })),
             propertyValuesSent: prepared.assembled.carriesPropertyValues,
+            runId,
+            mask: input.request.mask === true,
+            wordListVersion: NOTES_WORD_LIST_VERSION,
+            templates,
           },
           (options.now ?? Date.now)(),
         );
-        return record({ status: drafted.removed === 0 ? 'ok' : 'partial', sentences: [...drafted.sentences], citations: citationsOf(drafted.sentences, prepared.assembled), coverage, removedCount: drafted.removed, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken }, checked);
+        return record({ status: drafted.removed === 0 ? 'ok' : 'partial', sentences: drafted.sentences.map((sentence, index) => ({ ...sentence, storable: templates[index]?.storable === true })), citations: citationsOf(drafted.sentences, prepared.assembled), coverage, removedCount: drafted.removed, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls, summaryToken }, checked);
       } catch (error) {
         if (error instanceof AuditUnavailableError) {
           // the click ends as unavailable: the run row says how far it got, if it can

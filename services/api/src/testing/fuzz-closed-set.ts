@@ -1,3 +1,4 @@
+import { sealToken } from '@neburyx/ee-ask';
 import { edgeRefSegmentOf, pathsResponseSchema, sourceLinkSegmentOf } from '@neburyx/contracts';
 import { registeredRoutesOf } from '../app.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
@@ -8,9 +9,35 @@ import { makeToken } from '../reference/token.js';
 import { expandWindowInstantsOf } from '../graph/expand-window.js';
 import { windowInstantsOf } from '../graph/template-window.js';
 import { TEST_REFERENCE_KEYS } from './gate.js';
+import { FUZZ_TOKEN_KEYS } from './fuzz-rig.js';
+import { LOCAL_IDENTITY } from './app-store.js';
 import { FUZZ_PATTERN_STOPPED, FUZZ_PATTERN_SUPERNODE, FUZZ_HEAVY_ANCHOR, FUZZ_MAPPING, FUZZ_LINKED_PRESETS, FUZZ_SHARED_PRESETS, FUZZ_TIGHT_SOURCE, FUZZ_SOURCE, FUZZ_TEXT, allowedNames, type FuzzRig } from './fuzz-rig.js';
 
 /** The text a pattern condition of the sample compares with: a benign value that no statement may hold. */
+/** A token of a draft of the fuzz rig, as the application accepts it: one storable sentence, for the investigation of the person. */
+export function fuzzToken(investigationId: string): string {
+  const ref = { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' };
+  return sealToken(
+    FUZZ_TOKEN_KEYS,
+    {
+      investigationId,
+      generatedBy: LOCAL_IDENTITY.principal.id,
+      policyVersion: 'none',
+      modelRef: 'fuzz',
+      promptId: 'case-summary',
+      promptVersion: '1',
+      sentences: [{ text: 'The record is linked.', cites: ['n1'] }],
+      inputRefs: [{ key: 'n1', kind: 'entity', ref }],
+      propertyValuesSent: false,
+      runId: '0192f000-0000-7000-8000-0000000000aa',
+      mask: false,
+      wordListVersion: 1,
+      templates: [{ storable: true, text: 'The record is linked.', placeholders: [] }],
+    },
+    Date.now(),
+  );
+}
+
 export const FUZZ_PATTERN_TEXT = 'zz-condition-text';
 
 /** The names a statement quotes in backticks. */
@@ -370,6 +397,18 @@ async function buildClosedSet(rig: FuzzRig): Promise<{ readonly statements: Set<
   const investigationId = (JSON.parse(opened.body) as { investigation: { id: string } }).investigation.id;
   for (const mask of [undefined, true, false]) {
     await post('/v1/summary', { investigationId, sourceId: FUZZ_SOURCE, entities: [{ sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' }], ...(mask === undefined ? {} : { mask }) });
+    keep();
+  }
+  const notesUrl = `/v1/investigations/${investigationId}/draft/ai-notes`;
+  await post(notesUrl, { summaryToken: 'not-a-token', version: 1 });
+  keep();
+  const notesToken = fuzzToken(investigationId);
+  await post(notesUrl, { summaryToken: notesToken, version: 1 });
+  keep();
+  await post(notesUrl, { summaryToken: notesToken, version: 1 });
+  keep();
+  for (const mask of [undefined, 'true', 'false', 'maybe']) {
+    await get(`${notesUrl}${mask === undefined ? '' : `?mask=${mask}`}`);
     keep();
   }
   for (const mask of [undefined, 'true', 'false']) {

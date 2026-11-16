@@ -1,6 +1,6 @@
 import type { AiActionName } from './ai-actions.js';
 
-export const AI_LABELS: Readonly<Record<AiActionName, string>> = { ask: 'Ask', summarize: 'Summarize' };
+export const AI_LABELS: Readonly<Record<AiActionName, string>> = { ask: 'Ask', summarize: 'Summarize', notes: 'AI notes' };
 
 export const LOCKED_REASON = 'Enterprise capability, locked';
 

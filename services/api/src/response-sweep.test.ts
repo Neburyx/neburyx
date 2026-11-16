@@ -27,6 +27,7 @@ import { plainNode, plainRelationship } from './testing/normalize-fixtures.js';
 import { elementIdsIn, sweepFindings } from './testing/response-sweep.js';
 import { postMore, postSearch, RELATED_ENTITIES, searchMappingOf, startSearchApp } from './testing/search-app.js';
 import { searchModelOf, type StoredNode, type StoredRelationship } from './testing/search-fixtures.js';
+import { fuzzToken } from './testing/fuzz-closed-set.js';
 
 /**
  * No response of any route of the inspector holds the element ID of the source's database: not as a field, not in a text, not in a header. Each route is asked once the way the inspector asks it, over
@@ -102,6 +103,8 @@ const SCENARIOS: readonly Scenario[] = [
 /** Routes no scenario asks, each with the reason: the next page of the search (its own describe below) and the routes that carry no element of the source. */
 const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
   'POST /v1/summary': 'swept in its own describe below: the investigation it names must exist before it is asked',
+  'POST /v1/investigations/:id/draft/ai-notes': 'swept in the describe of the AI notes below: the investigation it names must exist before it is asked',
+  'GET /v1/investigations/:id/draft/ai-notes': 'swept in the describe of the AI notes below: the investigation it names must exist before it is asked',
   'POST /v1/search/entities/more': 'the next pages of the search are swept in the describe of the evidence group below',
   'GET /v1/me': 'answers the person, not an element of the source',
   'GET /v1/sources': 'answers the registry of sources, not an element of one',
@@ -218,6 +221,26 @@ describe('the summary of a view', () => {
     });
     expect(answer.statusCode).toBe(200);
     expect(sweepFindings('summary', { body: answer.body, headers: answer.headers }, issued)).toEqual([]);
+  });
+});
+
+describe('the AI notes of a view', () => {
+  it('answer without the element ID of the source, when a summary is copied, when it is copied again and when the notes are read', async () => {
+    const opened = await rig.app.inject({ method: 'POST', url: '/v1/investigations', payload: { sourceId: FUZZ_SOURCE, entity: { sourceId: FUZZ_SOURCE, entityType: 'widget', stableId: 'W-1' } } });
+    const investigationId = (opened.json() as { investigation: { id: string } }).investigation.id;
+    const url = `/v1/investigations/${investigationId}/draft/ai-notes`;
+    const token = fuzzToken(investigationId);
+    const copied = await rig.app.inject({ method: 'POST', url, payload: { summaryToken: token, version: 1 } });
+    expect(copied.statusCode).toBe(200);
+    expect(sweepFindings('copy to notes', { body: copied.body, headers: copied.headers }, issued)).toEqual([]);
+    const again = await rig.app.inject({ method: 'POST', url, payload: { summaryToken: token, version: 2 } });
+    expect(sweepFindings('copy to notes again', { body: again.body, headers: again.headers }, issued)).toEqual([]);
+    const read = await rig.app.inject({ url: `${url}?mask=false` });
+    expect(read.statusCode).toBe(200);
+    expect(sweepFindings('read of the notes', { body: read.body, headers: read.headers }, issued)).toEqual([]);
+    const refused = await rig.app.inject({ method: 'POST', url, payload: { summaryToken: 'not-a-token', version: 1 } });
+    expect(refused.statusCode).toBe(403);
+    expect(sweepFindings('copy to notes refused', { body: refused.body, headers: refused.headers }, issued)).toEqual([]);
   });
 });
 

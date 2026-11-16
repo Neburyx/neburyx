@@ -1,5 +1,6 @@
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
 import type { SummarySentence } from '@neburyx/contracts';
+import type { NotesTemplate } from './notes-convert.js';
 import type { TokenKey, TokenKeys } from './token-keys.js';
 
 /** How long a token is valid after it was drafted, in milliseconds. */
@@ -29,6 +30,14 @@ interface TokenPayload {
   readonly sentences: readonly SummarySentence[];
   readonly inputRefs: readonly TokenInputRef[];
   readonly propertyValuesSent: boolean;
+  /** The id of the stored record of the click, for the audit event of a copy. */
+  readonly runId: string;
+  /** Whether the generation masked the personal data of its elements. */
+  readonly mask: boolean;
+  /** The version of the word list the templates were made under; a copy under another version is refused. */
+  readonly wordListVersion: number;
+  /** What each sentence becomes as AI notes, in the order of `sentences`. */
+  readonly templates: readonly NotesTemplate[];
 }
 
 export type SealInput = Omit<TokenPayload, 'tokenId' | 'generatedAt' | 'expiresAt'>;
@@ -58,7 +67,7 @@ export type OpenedToken = { readonly ok: true; readonly payload: TokenPayload } 
 const keyFor = (keys: TokenKeys, kid: string): TokenKey | undefined => [keys.current, keys.previous].find((key) => key?.kid === kid);
 
 function isPayload(value: unknown): value is TokenPayload {
-  return typeof value === 'object' && value !== null && 'tokenId' in value && 'investigationId' in value && 'generatedBy' in value && 'policyVersion' in value && 'expiresAt' in value && 'sentences' in value && 'inputRefs' in value && 'propertyValuesSent' in value;
+  return typeof value === 'object' && value !== null && 'tokenId' in value && 'investigationId' in value && 'generatedBy' in value && 'policyVersion' in value && 'expiresAt' in value && 'sentences' in value && 'inputRefs' in value && 'propertyValuesSent' in value && 'templates' in value && 'runId' in value && 'mask' in value && 'wordListVersion' in value;
 }
 
 /** Opens a token for one investigation, person and policy version: a changed byte, another investigation, another person, a changed policy version, an expired token or an unknown key is refused alike, with nothing said of which. */

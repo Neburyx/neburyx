@@ -14,7 +14,7 @@ describe('the enterprise extension', () => {
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
     const [route, ...more] = group?.routes ?? [];
-    expect(more.map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal']]);
+    expect(more.map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal'], ['POST', '/v1/investigations/:id/draft/ai-notes', 'principal'], ['GET', '/v1/investigations/:id/draft/ai-notes', 'principal']]);
     expect([route?.method, route?.url, route?.permission]).toEqual(['GET', '/v1/ai/status', 'principal']);
     const reply = await route?.handler({ principalId: 'p', principalRole: 'investigator', previewOn: true, traceId: 'tr-1', audit: { record: async () => undefined }, askClassifier: { availability: () => ({ available: false, reason: 'x' }), classify: async () => ({ ok: false as const, cause: 'unavailable' as const }) }, caseSummarizer: UNAVAILABLE_SUMMARIZER, signal: new AbortController().signal });
     expect(aiStatusResponseSchema.safeParse(reply).success).toBe(true);

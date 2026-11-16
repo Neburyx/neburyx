@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { ApiClient } from '../api/client.js';
 import { useBanner } from '../banner/banner-context.js';
+import { useAiActions } from '../ai/ai-actions.js';
+import { useEnterpriseWhenProvided } from '../shell/shell-data.js';
 import { useClientState } from '../state/context.js';
 import { isSourceChanged, type InvestigationStatus } from '../state/investigation-state.js';
 import { useStoreSelector } from '../state/store.js';
@@ -37,8 +39,23 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
     wasOpen.current = dialogOpen;
   }, [dialogOpen]);
 
+  const enterprise = useEnterpriseWhenProvided();
+  const notesHandler = useStoreSelector(useAiActions().view, (handlers) => handlers.get('notes'));
   if (status === undefined) return null;
-  const items: readonly ActionMenuItem[] = lifecycleActionsOf(status, busy, sourceChanged).map((action) => ({
+  const notesItem: ActionMenuItem | undefined =
+    enterprise && notesHandler !== undefined
+      ? {
+          id: 'ai-notes',
+          label: 'AI notes',
+          description: 'Opens the AI notes saved with this view',
+          disabled: false,
+          run: (close) => {
+            close(false);
+            notesHandler();
+          },
+        }
+      : undefined;
+  const lifecycleItems: readonly ActionMenuItem[] = lifecycleActionsOf(status, busy, sourceChanged).map((action) => ({
     ...action,
     run: (close) => {
       if (action.id === 'rename') {
@@ -55,6 +72,8 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
       void changeStatus({ client, state, banner }, TARGET_OF[action.id]);
     },
   }));
+  const deleteAt = lifecycleItems.findIndex((item) => item.id === 'delete');
+  const items: readonly ActionMenuItem[] = notesItem === undefined ? lifecycleItems : [...lifecycleItems.slice(0, deleteAt < 0 ? lifecycleItems.length : deleteAt), notesItem, ...lifecycleItems.slice(deleteAt < 0 ? lifecycleItems.length : deleteAt)];
 
   return (
     <>

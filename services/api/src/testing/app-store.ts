@@ -1,12 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import type { AppStore } from '../app-store.js';
-import { layoutDocumentSchema, queryContextDocumentSchema, sourceTestReportSchema, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, sourceTestReportSchema, storedAiNotesSchema, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
 import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
 import { readOnlyStatusOf } from '../investigations/read-only.js';
 import { planStatusChange } from '../investigations/status-change.js';
-import { validatedDraft, type DeleteResult, type RestoreResult, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type MatchQuery, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
+import { validatedDraft, type DeleteResult, type RestoreResult, type CreatedInvestigation, type DraftRow, type DraftWriteResult, type AiNotesAppendResult, type AiNotesReadResult, type StatusChangeResult, type TitleChangeResult, type InvestigationRow, type ListedInvestigation, type MatchQuery, type NewDraft, type NewInvestigation, type ReusableQuery, type StoredInvestigation } from '../db/investigations-repository.js';
 import type { ViewDeleteResult, ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { memoryExports, type MemoryExports } from './memory-exports.js';
@@ -54,7 +54,7 @@ export interface MemoryAppStore extends AppStore, Pick<MemoryPatterns, 'patternR
   readonly namedViews: MemoryNamedView[];
   readonly checks: SourceCheck[];
   readonly investigations: InvestigationRow[];
-  readonly drafts: (DraftRow & { readonly investigationId: string; contentHash?: string })[];
+  readonly drafts: (DraftRow & { readonly investigationId: string; contentHash?: string; aiNotes?: unknown })[];
 }
 
 function checkedDraft(draft: NewDraft): { readonly ok: true; readonly draft: NewDraft } | { readonly ok: false; readonly error: unknown } {
@@ -85,7 +85,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       .map((check) => ({ id: check.id, checkedAt: check.report.checkedAt, identityHash: check.identityHash, configHash: check.configHash, reachedSource: check.report.server !== null, state: check.report.state, stateReason: check.report.stateReason }));
   let statusChanges = 0;
   const investigations: InvestigationRow[] = [];
-  const drafts: (DraftRow & { readonly investigationId: string; contentHash?: string })[] = [];
+  const drafts: (DraftRow & { readonly investigationId: string; contentHash?: string; aiNotes?: unknown })[] = [];
   const namedViews: MemoryNamedView[] = [];
   const deletedAt = new Map<string, { readonly deletedAt: string; readonly purgeAfter: string }>();
   const liveOf = (id: string, ownerId: string): InvestigationRow | undefined => (deletedAt.has(id) ? undefined : investigations.find((row) => row.id === id && row.ownerId === ownerId));
@@ -200,7 +200,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const readOnly = readOnlyStatusOf(investigation.status);
       if (readOnly !== undefined) return Promise.resolve({ outcome: 'read-only', status: readOnly });
       if (draft.version !== write.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
-      const contentHash = write.contentHashOf({ aiNotes: null });
+      const contentHash = write.contentHashOf({ aiNotes: draft.aiNotes ?? null });
       if (contentHash === draft.contentHash && draft.mappingHash === write.mappingHash) return Promise.resolve({ outcome: 'unchanged', version: draft.version, save: { state: 'unsaved', savedAt: null } });
       if (contentHash === draft.contentHash) {
         drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, mappingHash: write.mappingHash };
@@ -210,6 +210,30 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       drafts[drafts.indexOf(draft)] = saved;
       investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
       return Promise.resolve({ outcome: 'saved', version: saved.version, save: { state: 'unsaved', savedAt: null } });
+    },
+    appendAiNotes: (write): Promise<AiNotesAppendResult> => {
+      const investigation = liveOf(write.investigationId, write.ownerId);
+      const draft = drafts.find((candidate) => candidate.investigationId === write.investigationId);
+      if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const readOnly = readOnlyStatusOf(investigation.status);
+      if (readOnly !== undefined) return Promise.resolve({ outcome: 'read-only', status: readOnly });
+      const stored = draft.aiNotes === undefined || draft.aiNotes === null ? { entries: [] } : storedAiNotesSchema.parse(draft.aiNotes);
+      const save = { state: 'unsaved' as const, savedAt: null };
+      if (stored.entries.some((entry) => entry.tokenId === write.entry.tokenId)) return Promise.resolve({ outcome: 'already-stored', version: draft.version, save });
+      if (draft.version !== write.expectedVersion) return Promise.resolve({ outcome: 'conflict' });
+      if (stored.entries.length >= write.maxEntries) return Promise.resolve({ outcome: 'full' });
+      const aiNotes = { entries: [...stored.entries, write.entry] };
+      const contentHash = write.contentHashOf({ layout: layoutDocumentSchema.parse(draft.layout), queryContext: queryContextDocumentSchema.parse(draft.queryContext), notes: draft.notes, aiNotes });
+      drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, aiNotes, contentHash };
+      investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
+      return Promise.resolve({ outcome: 'appended', version: draft.version + 1, save });
+    },
+    readAiNotes: (investigationId, ownerId): Promise<AiNotesReadResult> => {
+      const investigation = liveOf(investigationId, ownerId);
+      const draft = drafts.find((candidate) => candidate.investigationId === investigationId);
+      if (investigation === undefined || draft === undefined) return Promise.resolve({ outcome: 'not-found' });
+      const stored = draft.aiNotes === undefined || draft.aiNotes === null ? { entries: [] } : storedAiNotesSchema.parse(draft.aiNotes);
+      return Promise.resolve({ outcome: 'read', entries: stored.entries, version: draft.version, save: { state: 'unsaved', savedAt: null } });
     },
     renameInvestigation: (change): Promise<TitleChangeResult> => {
       const held = liveOf(change.investigationId, change.ownerId);
@@ -246,7 +270,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       if (save.title !== undefined && investigation.version !== save.title.expectedInvestigationVersion) return Promise.resolve({ outcome: 'investigation-conflict' });
       const layout = layoutDocumentSchema.parse(draft.layout);
       const queryContext = queryContextDocumentSchema.parse(draft.queryContext);
-      const contentHash = save.contentHashOf({ layout, queryContext, aiNotes: null });
+      const contentHash = save.contentHashOf({ layout, queryContext, aiNotes: draft.aiNotes ?? null });
       const createdAt = new Date(Date.UTC(2026, 10, 5, 13, 0, namedViews.length)).toISOString();
       namedViews.push({ id: save.viewId, investigationId: save.investigationId, name: save.name, notes: save.notes, layout, queryContext, contentHash, createdAt, version: 1 });
       drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, notes: save.notes, basedOnViewId: save.viewId, contentHash };

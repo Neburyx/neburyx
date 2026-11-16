@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { aggregateEdgeRefSchema, derivedEdgeRefSchema } from './edge-detail.js';
 import { storedEdgeRefSchema } from './graph.js';
 import { countSchema, edgeRefSchema, edgeSchema, elementRefSchema, nodeSchema } from './graph.js';
+import { investigationSaveSchema } from './investigations.js';
 import type { roleSchema } from './me.js';
 
 const text = z.string().min(1);
@@ -42,12 +43,15 @@ export type SummarySentence = z.infer<typeof summarySentenceSchema>;
 
 const callCount = z.number().int().nonnegative();
 
+/** A sentence of a draft as the answer carries it: `storable` says whether Copy to notes will keep it, by the rule the copy itself applies. */
+export const summaryResponseSentenceSchema = z.strictObject({ text: text, cites: z.array(text), storable: z.boolean() });
+
 const citationSchema = z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) });
 
 /** What the server says the draft does not cover, in two parts: what the re-read left out (written as the export header writes it) and how much of what is shown the draft cites. */
 const coverageSchema = z.strictObject({ retrieval: text, summary: text });
 
-const draftFields = { sentences: z.array(summarySentenceSchema), citations: z.array(citationSchema), coverage: coverageSchema, removedCount: callCount, sent: z.string(), model: text, calls: callCount.min(1), summaryToken: text };
+const draftFields = { sentences: z.array(summaryResponseSentenceSchema), citations: z.array(citationSchema), coverage: coverageSchema, removedCount: callCount, sent: z.string(), model: text, calls: callCount.min(1), summaryToken: text };
 
 export const summaryResponseSchema = z.union([
   z.strictObject({ status: z.literal('ok'), ...draftFields }),
@@ -60,6 +64,18 @@ export const summaryResponseSchema = z.union([
 ]);
 
 export type SummaryResponse = z.infer<typeof summaryResponseSchema>;
+
+export const copyToNotesParamsSchema = z.strictObject({ id: text });
+
+/** `POST /v1/investigations/{id}/draft/ai-notes`: the token of a draft and the draft's version the caller read. */
+export const copyToNotesRequestSchema = z.strictObject({ summaryToken: text, version: z.number().int().positive() });
+
+export type CopyToNotesRequest = z.infer<typeof copyToNotesRequestSchema>;
+
+/** How many sentences were kept and how many were not, whether the token had been copied before, and the draft's current version and save state, which only an append changes. */
+export const copyToNotesResponseSchema = z.strictObject({ copied: callCount, notCopied: callCount, alreadyCopied: z.boolean(), version: z.number().int().positive(), save: investigationSaveSchema });
+
+export type CopyToNotesResponse = z.infer<typeof copyToNotesResponseSchema>;
 
 export type CaseSummaryAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 

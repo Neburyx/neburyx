@@ -46,6 +46,8 @@ export const INVALID_REQUEST_ENTRIES: Readonly<Record<InvalidRequestReason, Omit
   'export-too-large': { message: 'This view holds more than one export can. Hide some items, then export again.', retryable: false },
   'export-view-changed': { message: 'Some items in this view are no longer available to you. Reload the view and try again.', retryable: false },
   'pattern-limit': { message: 'You have saved as many patterns on this source as are allowed. Delete one, then save again.', retryable: false },
+  'ai-notes-full': { message: 'The AI notes of this view cannot take another summary.', retryable: false },
+  'ai-notes-entry-too-large': { message: 'This summary is too large to keep as AI notes.', retryable: false },
   'continue-invalid': { message: 'This continue is no longer valid. Ask the question again.', retryable: false },
   'pattern-personal-condition': { message: 'A saved pattern cannot hold a condition on personal data. Remove it, then save again.', retryable: false },
   'file-query-text': { message: 'This query is not allowed to run.', retryable: false },

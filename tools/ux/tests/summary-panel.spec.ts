@@ -7,7 +7,7 @@ const SENT = 'n1 account AC-1\n  as shown';
 const draftFor = (sourceId: string, over: Record<string, unknown> = {}): SummaryResponse =>
   summaryResponseSchema.parse({
     status: 'ok',
-    sentences: [{ text: 'AC-1 is an account.', cites: ['n1'] }],
+    sentences: [{ text: 'AC-1 is an account.', cites: ['n1'], storable: true }],
     citations: [{ key: 'n1', kind: 'entity', ref: { sourceId, entityType: 'account', stableId: 'AC-1' } }],
     coverage: { retrieval: '1 shown · ~38 not yet retrieved (estimated)', summary: 'The draft cites 1 of the 1 shown elements' },
     removedCount: 0,
@@ -113,6 +113,30 @@ test.describe('the AI case summary panel', () => {
     await panel(page).getByRole('button', { name: 'Discard' }).click();
     await expect(panel(page).getByLabel('Sentence 1')).toHaveCount(0);
     await expect(panel(page).getByRole('button', { name: 'Summarize' })).toBeFocused();
+  });
+
+  test('Copy to notes sends the token and the draft version, says what was copied, and the AI notes section shows the stored entry', async ({ page }) => {
+    await openWorkspace(page);
+    await answerWith(page, (sourceId) => draftFor(sourceId));
+    const copies: string[] = [];
+    let stored = false;
+    await page.route((url) => /\/draft\/ai-notes$/.test(url.pathname), async (route) => {
+      if (route.request().method() === 'POST') {
+        copies.push(route.request().postData() ?? '');
+        stored = true;
+        await route.fulfill({ json: { copied: 1, notCopied: 0, alreadyCopied: false, version: 2, save: { state: 'unsaved', savedAt: null } } });
+        return;
+      }
+      await route.fulfill({ json: { entries: stored ? [{ tokenId: 't1', label: 'AI-drafted', model: 'stub-model', generatedAt: '2026-11-15T10:00:00.000Z', sentences: [{ text: 'Account AC-1 is an account.', citations: [{ kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' }, title: 'Account AC-1', type: 'account' }] }], coverage: '1 shown · 0 not yet retrieved (exact)' }] : [], skipped: [] } });
+    });
+    await summarize(page).click();
+    await panel(page).getByText('AI notes').click();
+    await expect(panel(page).getByText('No AI notes are saved with this view.')).toBeVisible();
+    await panel(page).getByRole('button', { name: 'Copy to notes' }).click();
+    await expect(panel(page).getByText('1 sentence copied to notes.')).toBeVisible();
+    expect(JSON.parse(copies[0] ?? '{}')).toMatchObject({ summaryToken: 'tok', version: expect.any(Number) });
+    await expect(panel(page).getByText('Account AC-1 is an account.')).toBeVisible();
+    await expect(panel(page).getByText('Rebuilt from your own access each time this view opens.')).toBeVisible();
   });
 
   const STATES: ReadonlyArray<readonly [string, (sourceId: string) => SummaryResponse, string]> = [

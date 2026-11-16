@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 
-const AI_ACTION_NAMES = ['ask', 'summarize'] as const;
+const AI_ACTION_NAMES = ['ask', 'summarize', 'notes'] as const;
 
 export type AiActionName = (typeof AI_ACTION_NAMES)[number];
 

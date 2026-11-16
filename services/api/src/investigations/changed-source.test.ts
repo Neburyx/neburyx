@@ -194,7 +194,7 @@ const REFUSED_ROUTES: readonly (readonly [string, keyof typeof write])[] = [
   ['POST /v1/investigations/{id}/views/{viewId}/restore', 'restore'],
 ];
 /** Refused too, but tested where the route's own rig is (an export reads the source, so a changed source blocks it). */
-const REFUSED_ELSEWHERE: readonly string[] = ['POST /v1/investigations/{id}/exports'];
+const REFUSED_ELSEWHERE: readonly string[] = ['POST /v1/investigations/{id}/exports', 'POST /v1/investigations/{id}/draft/ai-notes'];
 const ALLOWED_ROUTES: readonly string[] = [
   // opening reads nothing for a changed source (above), and these change the status or the deletion mark, which no source read or draft write is part of
   'POST /v1/investigations',
