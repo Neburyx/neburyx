@@ -16,7 +16,7 @@ const summaryReplySchema = z.strictObject({ sentences: z.array(z.strictObject({ 
 export const KEYS = { current: { kid: 'abcd1234', bytes: Buffer.alloc(32, 7) } };
 export const INVESTIGATION = '0192f000-0000-7000-8000-000000000042';
 
-const DEFAULT_SETTINGS = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxInputTokens: 100_000, retentionDays: 30 };
+const DEFAULT_SETTINGS = { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000, retentionDays: 30 };
 
 /** What the scripted model answers for one request: the text of a reply that fits, a failure, or a function of the request. */
 export type Scripted = string | ModelAnswer | ((request: ModelRequest, call: number, signal: AbortSignal) => string | ModelAnswer | Promise<string | ModelAnswer>);

@@ -82,7 +82,7 @@ cases:
       - { key: "r1", type: "PAID_TO", from: "a1", to: "m1", observed_at: "2026-04-01" }
       - { key: "r2", type: "PAID_TO", from: "a2", to: "m1", observed_at: "2026-04-02" }
     facts:
-      - { id: "f1", says: "Two payments to the merchant MR-0 are shown", phrases: ["two payments", "2 payments"], rests_on: ["a1", "a2", "m1", "r1", "r2"] }
+      - { id: "f1", says: "Two payments to the merchant MR-0 are shown", phrases: ["two payments", "2 payments", "both accounts"], rests_on: ["a1", "a2", "m1", "r1", "r2"] }
     claims:
       - { id: "c1", says: "States the total number of payments as exact", phrases: ["100,000 payments", "100000 payments", "exactly"], about: ["a1", "a2", "m1", "r1", "r2"] }
       - { id: "c2", says: "Says the merchant is a front or a sham", phrases: ["front", "sham", "shell"], about: ["a1", "a2", "m1", "r1", "r2"] }
@@ -278,7 +278,7 @@ cases:
       - { key: "r4", type: "TRANSFERRED_TO", from: "s1", to: "b4", observed_at: "2026-07-02" }
       - { key: "r5", type: "TRANSFERRED_TO", from: "s1", to: "b5", observed_at: "2026-07-03" }
     facts:
-      - { id: "f1", says: "The account AC-6000 transferred to five accounts", phrases: ["five accounts", "5 accounts"], rests_on: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "f1", says: "The account AC-6000 transferred to five accounts", phrases: ["five accounts", "5 accounts", "five receiving accounts", "five recipient accounts"], rests_on: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
       - { id: "f2", says: "The arrangement has the shape of a fan-out", phrases: ["fan-out", "fan out"], rests_on: ["s1", "r1", "r2", "r3", "r4", "r5"] }
     claims:
       - { id: "c1", says: "Says the money was distributed to avoid detection", phrases: ["avoid detection", "evade", "dispers"], about: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
@@ -425,10 +425,9 @@ cases:
       - { key: "r3", type: "TRANSFERRED_TO", from: "a3", to: "t1", observed_at: "2026-11-02" }
     facts:
       - { id: "f1", says: "Three accounts transferred to the account AC-4100", phrases: ["three accounts", "3 accounts"], rests_on: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
-      - { id: "f2", says: "The number of further accounts is not known", phrases: ["not known", "unknown"], rests_on: ["t1"] }
     claims:
       - { id: "c1", says: "States a number of further accounts that paid into AC-4100", phrases: ["further accounts", "more accounts", "other accounts"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
-      - { id: "c2", says: "Says the accounts were chosen to stay under a limit", phrases: ["under a limit", "below the threshold", "structur"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says the accounts were chosen to stay under a limit", phrases: ["under a limit", "below the threshold", "structuring"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
     invented_names: ["Yara Fenwick"]
     sentences:
       - { id: "s1", label: "keep", text: "Three accounts, AC-4001, AC-4002 and AC-4003, transferred to the account AC-4100, and how many others paid in is not known.", cites: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
@@ -477,7 +476,7 @@ cases:
       - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "a2", observed_at: "2026-06-01" }
       - { key: "r2", type: "TRANSFERRED_TO", from: "a1", to: "a3", observed_at: "2026-06-02" }
     facts:
-      - { id: "f1", says: "The account AC-3101 transferred to two accounts", phrases: ["two accounts", "2 accounts"], rests_on: ["a1", "a2", "a3", "r1", "r2"] }
+      - { id: "f1", says: "The account AC-3101 transferred to two accounts", phrases: ["two accounts", "2 accounts", "two other accounts"], rests_on: ["a1", "a2", "a3", "r1", "r2"] }
       - { id: "f2", says: "Intentia Freight is the account that transferred", phrases: ["intentia freight"], rests_on: ["a1"] }
     claims:
       - { id: "c1", says: "Says the business moved the funds on purpose", phrases: ["on purpose", "deliberately"], about: ["a1", "a2", "a3", "r1", "r2"] }

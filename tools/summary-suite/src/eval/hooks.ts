@@ -7,7 +7,8 @@ export interface RunSettings {
   readonly totalTimeoutMs: number;
   readonly maxCalls: number;
   readonly maxElements: number;
-  readonly maxInputTokens?: number;
+  readonly maxOutputTokens: number;
+  readonly maxInputTokens: number;
   readonly retentionDays: number;
 }
 

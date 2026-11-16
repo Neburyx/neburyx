@@ -19,8 +19,11 @@ export interface Manifest {
 
 export type MeasureMode = 'none' | 'add' | 'only';
 
-/** The sizes of the samples a measuring run builds: 10 and 100 elements and the element cap. */
+/** The sizes of the plain samples a measuring run builds: 10 and 100 elements and the element cap. */
 export const sampleSizes = (settings: RunSettings): number[] => [...new Set([10, 100, settings.maxElements])].sort((left, right) => left - right);
+
+/** The sizes of the samples whose elements carry properties, twice (a realistic set of properties and a heavy one): 100 elements and the element cap. */
+export const richSampleSizes = (settings: RunSettings): number[] => [...new Set([100, settings.maxElements])].sort((left, right) => left - right);
 
 /**
  * What a run can cost before it is made: each category of views with the most and the fewest requests it can make. A scoring view can make as many as the call limit (a reply that does not fit, a verdict, an emptied
@@ -30,7 +33,7 @@ export function manifestOf(scoring: readonly LabelledCase[], settings: RunSettin
   const categories: ManifestCategory[] = [];
   if (measure !== 'only') categories.push({ name: 'scoring', views: scoring.length, mostCalls: scoring.length * settings.maxCalls, leastCalls: scoring.length });
   if (measure !== 'none') {
-    const views = scoring.length + sampleSizes(settings).length;
+    const views = scoring.length + sampleSizes(settings).length + 2 * richSampleSizes(settings).length;
     categories.push({ name: 'measurement', views, mostCalls: views, leastCalls: views });
   }
   return { categories, mostCalls: categories.reduce((total, each) => total + each.mostCalls, 0), leastCalls: categories.reduce((total, each) => total + each.leastCalls, 0) };

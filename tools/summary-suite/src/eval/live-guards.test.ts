@@ -28,10 +28,9 @@ function counted(): { readonly hooks: EvalHooks<ModelProvider>; readonly built: 
 }
 
 describe('a live run, before any call', () => {
-  it('is refused, with exit 2 and before the provider is built, without a finite size guard, a budget, an output folder or an Ask folder', async () => {
+  it('is refused, with exit 2 and before the provider is built, without a budget, an output folder or an Ask folder', async () => {
     const spy = counted();
     const missing = [
-      { args: ['--budget', '30', '--out', join(outside, 'a'), '--folder', 'f'], env: {}, said: 'NEBURYX_SUMMARY_MAX_INPUT_TOKENS' },
       { args: ['--out', join(outside, 'a'), '--folder', 'f'], env: GUARD, said: '--budget' },
       { args: ['--budget', '30', '--folder', 'f'], env: GUARD, said: '--out' },
       { args: ['--budget', '30', '--out', join(outside, 'a')], env: GUARD, said: '--folder' },

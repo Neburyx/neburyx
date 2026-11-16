@@ -8,7 +8,7 @@ import { caseOf, loadCases } from '../cases.js';
 import { realHooks } from '../testing/eval-hooks.js';
 import { cli } from '../testing/harness.js';
 import type { EvalHooks } from './hooks.js';
-import { elementsOf, estimatedTokensOf, proposalOf, scaledReading, utf8Bytes, type Measurement } from './measure.js';
+import { elementsOf, estimatedTokensOf, heavyReading, proposalOf, realisticReading, scaledReading, utf8Bytes, type Measurement } from './measure.js';
 
 const outside = mkdtempSync(join(tmpdir(), 'nbx-measure-out-'));
 afterAll(() => rmSync(outside, { recursive: true, force: true }));
@@ -39,7 +39,10 @@ function counting(tokensFor: (elements: number) => number, over: { cacheRead?: n
   };
 }
 
-async function measure(hooks: EvalHooks<ModelProvider>, extra: string[] = [], env: Record<string, string> = {}) {
+/** A measuring run sets a guard large enough for the heavy samples, as a live one does. */
+const BIG_GUARD = { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '300000' };
+
+async function measure(hooks: EvalHooks<ModelProvider>, extra: string[] = [], env: Record<string, string> = BIG_GUARD) {
   const result = await cli(['--stub', '--measure-only', '--json', ...extra], env, hooks);
   return { result, report: reportSchema.parse(JSON.parse(result.text)) };
 }
@@ -58,8 +61,8 @@ describe('the views of a measuring run', () => {
 
   it('are measured with one request each: the views selected and the three samples, and no repair call', async () => {
     const { report } = await measure(counting((elements) => 100 + 30 * elements), ['--views', 'aml']);
-    expect(report.measurements.map((each) => each.id)).toEqual([...set.cases.filter((each) => each.shape !== undefined).map((each) => each.id), 'sample-10', 'sample-100', 'sample-300']);
-    expect(report.usage.calls).toBe(10);
+    expect(report.measurements.map((each) => each.id)).toEqual([...set.cases.filter((each) => each.shape !== undefined).map((each) => each.id), 'sample-10', 'sample-100', 'sample-300', 'sample-100-realistic', 'sample-300-realistic', 'sample-100-heavy', 'sample-300-heavy']);
+    expect(report.usage.calls).toBe(14);
   });
 
   it('send their request through a provider with caching off: a live measuring run builds the provider with the cache switched off, and a plain run does not', async () => {
@@ -96,7 +99,31 @@ describe('the views of a measuring run', () => {
     };
     const { report } = await measure(hooks, ['--views', 'aml-cycle']);
     expect(report.measurements.find((each) => each.id === 'aml-cycle')).toMatchObject({ measured: true, inputTokens: 900 });
-    expect(report.usage.calls).toBe(4);
+    expect(report.usage.calls).toBe(8);
+  });
+});
+
+describe('the rich samples', () => {
+  it('are the same view with 8 properties on each entity and 3 on each relationship, the same every time, and larger than the plain view', () => {
+    const plain = scaledReading(base, 100);
+    const rich = heavyReading(plain);
+    expect(JSON.stringify(heavyReading(plain))).toBe(JSON.stringify(rich));
+    expect(elementsOf(rich)).toBe(100);
+    for (const node of rich.nodes) expect(node.properties).toHaveLength(8);
+    for (const edge of rich.edges) expect(edge.properties).toHaveLength(3);
+    expect(JSON.stringify(rich).length).toBeGreaterThan(JSON.stringify(plain).length * 2);
+  });
+});
+
+describe('the realistic samples', () => {
+  it('are the same view with 4 short properties on each entity and 1 on each relationship, the same every time, and smaller than the heavy ones', () => {
+    const plain = scaledReading(base, 100);
+    const realistic = realisticReading(plain);
+    expect(JSON.stringify(realisticReading(plain))).toBe(JSON.stringify(realistic));
+    for (const node of realistic.nodes) expect(node.properties.map((each) => each.key)).toEqual(['status', 'opened', 'amount', 'region']);
+    for (const edge of realistic.edges) expect(edge.properties).toHaveLength(1);
+    expect(JSON.stringify(realistic).length).toBeGreaterThan(JSON.stringify(plain).length);
+    expect(JSON.stringify(realistic).length).toBeLessThan(JSON.stringify(heavyReading(plain)).length / 2);
   });
 });
 
@@ -112,7 +139,7 @@ describe('a measurement', () => {
   it('counts the bytes of a text with non-ASCII characters as UTF-8 bytes', () => {
     expect(utf8Bytes('é')).toBe(2);
     expect(utf8Bytes('a', '日本')).toBe(7);
-    expect(estimatedTokensOf(utf8Bytes('éééé'))).toBe(3);
+    expect(estimatedTokensOf(utf8Bytes('éééé'))).toBe(5);
   });
 });
 
@@ -124,6 +151,13 @@ describe('what the measurements support', () => {
   it('proposes the smallest bytes-per-token rounded down to one decimal and the guard from the most tokens at the cap times 1.2 rounded up to the next 1,000, worked out by hand', () => {
     const proposal = proposalOf([view('aml-a', 3140, 1000), view('x', 2960, 1000), sample(10, 3500, 1000), sample(300, 60_000, 18_001)], aml, 300);
     expect(proposal).toEqual({ proposed: true, bytesPerToken: 2.9, maxInputTokens: 22_000, missing: [] });
+  });
+
+  it('takes the guard from the larger of the plain and the realistic samples, and reports the heavy ones as the upper bound only', () => {
+    const heavy = { ...sample(300, 200_000, 84_606), id: 'sample-300-heavy' };
+    const realistic = { ...sample(300, 36_000, 18_598), id: 'sample-300-realistic' };
+    expect(proposalOf([view('aml-a', 4000, 1000), sample(300, 21_666, 11_961), realistic, heavy], aml, 300)).toEqual({ proposed: true, bytesPerToken: 1.8, maxInputTokens: 23_000, upperBoundMaxInputTokens: 102_000, missing: [] });
+    expect(proposalOf([view('aml-a', 4000, 1000), heavy], aml, 300)).toMatchObject({ proposed: false, missing: ['no sample of 300 elements was measured'] });
   });
 
   it('rounds the guard up only to the next 1,000, and keeps an exact multiple', () => {
@@ -148,13 +182,15 @@ describe('what the measurements support', () => {
     const refused = await measure(counting((elements) => 100 + elements), [], { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '3000' });
     expect(refused.report.measurements.find((each) => each.id === 'sample-300')).toMatchObject({ measured: false, missing: 'refused by the size guard: no request was made' });
     expect(refused.report.proposal.proposed).toBe(false);
-    expect(refused.report.usage.calls).toBe(set.cases.length + 3 - 1);
+    const refusedIds = refused.report.measurements.filter((each) => each.missing === 'refused by the size guard: no request was made').map((each) => each.id);
+    expect(refusedIds).toEqual(expect.arrayContaining(['sample-300', 'sample-300-heavy']));
+    expect(refused.report.usage.calls).toBe(set.cases.length + 7 - refusedIds.length);
     const whole = await measure(counting((elements) => 100 + elements));
     expect(whole.report.proposal.proposed).toBe(true);
   });
 
   it('says `not measured` and proposes nothing for the scripted provider', async () => {
-    const text = (await cli(['--stub', '--measure-only', '--views', 'aml-cycle'])).text;
+    const text = (await cli(['--stub', '--measure-only', '--views', 'aml-cycle'], BIG_GUARD)).text;
     expect(text).toContain('not measured: a scripted provider states no token counts; nothing is proposed');
     expect(text).toContain('not measured (a scripted provider states no token counts)');
   });

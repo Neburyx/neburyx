@@ -142,7 +142,7 @@ export function textOf(report: Report): string[] {
       );
     }
     const proposal = report.proposal;
-    if (proposal?.proposed === true) lines.push(`proposal: ${proposal.bytesPerToken} bytes a token (replaces the estimate of 3), size guard ${proposal.maxInputTokens} tokens`);
+    if (proposal?.proposed === true) lines.push(`proposal: ${proposal.bytesPerToken} bytes a token (replaces the product's estimate), size guard ${proposal.maxInputTokens} tokens${proposal.upperBoundMaxInputTokens === undefined ? '' : ` (upper bound with heavy properties: ${proposal.upperBoundMaxInputTokens} tokens)`}`);
     else if (report.mode === 'stub') lines.push('not measured: a scripted provider states no token counts; nothing is proposed');
     else lines.push(`no proposal: ${(proposal?.missing ?? ['not measured']).join('; ')}`);
   }

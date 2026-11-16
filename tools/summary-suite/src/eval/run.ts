@@ -4,8 +4,8 @@ import { sentencesOf } from '../checks.js';
 import { scoreLabelled, scoreSummary } from '../score.js';
 import { causeOf, removedOf } from './diagnose.js';
 import type { BudgetUsage, EvalHooks, EvalSummarizer, ReplyObservation, RunSettings } from './hooks.js';
-import { manifestOf, selectViews, sampleSizes, type MeasureMode } from './manifest.js';
-import { elementsOf, estimatedTokensOf, proposalOf, scaledReading, utf8Bytes, type Measurement } from './measure.js';
+import { manifestOf, richSampleSizes, selectViews, sampleSizes, type MeasureMode } from './manifest.js';
+import { elementsOf, estimatedTokensOf, heavyReading, proposalOf, realisticReading, scaledReading, utf8Bytes, type Measurement } from './measure.js';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, UsageError, writePrivateFile } from './paths.js';
 import { jsonOf, recordOf, textOf, type Report, type ViewReport } from './report.js';
 
@@ -24,7 +24,6 @@ export interface RunOptions {
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-const STUB_GUARD = 100_000;
 const EMPTY_REPLY = JSON.stringify({ sentences: [] });
 const RECORD_FILE = 'run-record.json';
 
@@ -141,8 +140,7 @@ async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readon
   return { ...base, measured: true, bytes: bytes ?? 0, inputTokens, bytesPerToken: (bytes ?? 0) / inputTokens, tokensPerElement: inputTokens / elements };
 }
 
-function guardLive(options: RunOptions, settings: RunSettings): void {
-  if (settings.maxInputTokens === undefined) throw new UsageError('a live run needs NEBURYX_SUMMARY_MAX_INPUT_TOKENS, a finite size guard, as the summary does');
+function guardLive(options: RunOptions): void {
   if (options.out === undefined) throw new UsageError('a live run needs --out, a folder outside every git working tree');
   if (options.folder === undefined) throw new UsageError('a live run needs --folder, an Ask folder that gives the provider its settings');
   requireOutsideGitTree(options.out, '--out');
@@ -157,8 +155,7 @@ function guardLive(options: RunOptions, settings: RunSettings): void {
 export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHooks<Provider>, env: Env, signal: AbortSignal = new AbortController().signal): Promise<{ readonly lines: string[]; readonly code: number; readonly report?: Report }> {
   const settingsRead = hooks.settings(env);
   if (!settingsRead.ok) throw new UsageError(settingsRead.problems.join('; '));
-  /** A stub run has no key and no cost, so it uses a guard of its own when the environment gives none; a live run never does. */
-  const settings = options.stub && settingsRead.settings.maxInputTokens === undefined ? { ...settingsRead.settings, maxInputTokens: STUB_GUARD } : settingsRead.settings;
+  const { settings } = settingsRead;
   const views = selectViews(loadCases().cases, options.views);
   const manifest = manifestOf(views, settings, options.measure);
   const mode = options.stub ? 'stub' : 'live';
@@ -171,14 +168,14 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
         `call limit of a click: ${settings.maxCalls}`,
         ...manifest.categories.map((each) => `${each.name}: ${each.views} views, at most ${each.mostCalls} calls, at least ${each.leastCalls}`),
         `calls: at most ${manifest.mostCalls}, budget needed at least ${manifest.leastCalls}`,
-        `size guard: ${settings.maxInputTokens === undefined ? 'not set' : `${settings.maxInputTokens} tokens`}`,
+        `size guard: ${settings.maxInputTokens} tokens`,
       ],
     };
   }
   const budget = options.budget ?? (options.stub ? manifest.mostCalls : undefined);
   if (budget === undefined || !Number.isSafeInteger(budget) || budget < 1) throw new UsageError('a live run needs --budget, a whole number of calls');
   if (budget < manifest.leastCalls) throw new UsageError(`the budget ${budget} is below the ${manifest.leastCalls} calls the run needs`);
-  if (!options.stub) guardLive(options, settings);
+  if (!options.stub) guardLive(options);
   let current: () => LabelledCase | undefined = () => undefined;
   const inner = options.stub ? hooks.scriptedProvider((values) => scriptedReplyFor(current(), values)) : await liveProviderOf(hooks, options, env, settings);
   const state: Run = { current: undefined, sent: '', observations: [], usage: () => budgeted.usage(), signal, stopped: false, budget };
@@ -197,6 +194,8 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
     const targets = [
       ...views.map((labelled) => ({ id: labelled.id, kind: 'view' as const, reading: readingOf(labelled), labelled })),
       ...sampleSizes(settings).map((size) => ({ id: `sample-${size}`, kind: 'sample' as const, reading: scaledReading(sampleBase(), size) })),
+      ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-realistic`, kind: 'sample' as const, reading: realisticReading(scaledReading(sampleBase(), size)) })),
+      ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-heavy`, kind: 'sample' as const, reading: heavyReading(scaledReading(sampleBase(), size)) })),
     ];
     for (const target of targets) measurements.push(await measureOne(state, measuring.summarizer, target, options.stub));
   }

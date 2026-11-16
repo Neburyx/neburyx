@@ -65,15 +65,15 @@ describe('the call budget', () => {
 
 describe('the call budget with measuring', () => {
   it('is one budget for scoring and measuring: an exact fit exits 0, and one call short leaves a measurement not run and exits 1', async () => {
-    // the ring view earns a further call (2 calls) and the cycle view makes 1; measuring then makes 2 + 3 calls: 8 in all
+    // the ring view earns a further call (2 calls) and the cycle view makes 1; measuring then makes 2 + 3 + 4 calls: 12 in all
     const args = ['--stub', '--measure', '--views', 'ring-on-one-device,aml-cycle'];
-    const env = { NEBURYX_SUMMARY_MAX_CALLS: '2' };
-    const exact = await cli([...args, '--budget', '8'], env, verdictOnRing({ count: 0 }));
+    const env = { NEBURYX_SUMMARY_MAX_CALLS: '2', NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '300000' };
+    const exact = await cli([...args, '--budget', '12'], env, verdictOnRing({ count: 0 }));
     expect(exact.code).toBe(0);
-    expect(exact.text).toContain('calls: 8 of 8\n');
-    const short = await cli([...args, '--budget', '7'], env, verdictOnRing({ count: 0 }));
+    expect(exact.text).toContain('calls: 12 of 12\n');
+    const short = await cli([...args, '--budget', '11'], env, verdictOnRing({ count: 0 }));
     expect(short.code).toBe(1);
-    expect(short.text).toContain('sample-300 [sample]: 300 elements');
+    expect(short.text).toContain('sample-300-heavy [sample]: 300 elements');
     expect(short.text).toContain('not measured (not run: the budget was spent or the run was stopped)');
     expect(short.text).toContain('(the budget was spent)');
   });
