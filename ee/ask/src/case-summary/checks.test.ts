@@ -125,6 +125,54 @@ describe('the verdict check', () => {
   });
 });
 
+describe('the verdict check and the title or id of an element the sentence cites', () => {
+  const crimson = node('W-7', 'Crimson Lake Traders');
+  const fraud = node('FRAUD-7', 'Fraud Prevention Ltd', 'company');
+  const special = node('W-8', 'Intent (Freight) & Sons');
+  const named = assembleText(reading([crimson, fraud, special, ana]));
+  const keyOf = (title: string): string => [...named.lines].find(([, line]) => line.includes(`title: ${JSON.stringify(title)}`))?.[0] ?? 'missing';
+  const verdictOf = (text: string, ...cites: string[]) => judgeSentences([sentence(text, ...cites)], named);
+
+  it('keeps a sentence that quotes the title of an element it cites, and does not call for a further call', () => {
+    expect(verdictOf('Crimson Lake Traders is listed.', keyOf('Crimson Lake Traders'))).toMatchObject({ removed: 0, verdictFound: false });
+    expect(verdictOf('crimson lake traders is listed.', keyOf('Crimson Lake Traders'))).toMatchObject({ removed: 0, verdictFound: false });
+    expect(verdictOf('Fraud Prevention Ltd is listed.', keyOf('Fraud Prevention Ltd'))).toMatchObject({ removed: 0, verdictFound: false });
+    expect(verdictOf('Intent (Freight) & Sons is listed.', keyOf('Intent (Freight) & Sons'))).toMatchObject({ removed: 0, verdictFound: false });
+  });
+
+  it('keeps a sentence that names an element by an id that holds a verdict word, when it cites that element', () => {
+    expect(verdictOf('The company FRAUD-7 is listed.', keyOf('Fraud Prevention Ltd'))).toMatchObject({ removed: 0, verdictFound: false });
+  });
+
+  it('still removes the same words anywhere else: a verdict beside the title, a verdict with no title, and a title the sentence does not cite', () => {
+    expect(verdictOf('Crimson Lake Traders committed fraud.', keyOf('Crimson Lake Traders'))).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+    expect(verdictOf('This is fraud.', keyOf('Crimson Lake Traders'))).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+    expect(verdictOf('Fraud Prevention Ltd is listed.', keyOf('Crimson Lake Traders'))).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+    expect(verdictOf('The account is guilty.', 'n1')).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+  });
+
+  it('takes a title out only as a whole: a short title does not cut a verdict word out of a longer one, and the longest title goes first', () => {
+    const short = node('W-21', 'Ra');
+    const mid = node('W-22', 'Del');
+    const prevention = node('W-23', 'Prevention');
+    const shorts = assembleText(reading([short, mid, prevention, fraud]));
+    const key = (title: string): string => [...shorts.lines].find(([, line]) => line.includes(`title: ${JSON.stringify(title)}`))?.[0] ?? 'missing';
+    expect(judgeSentences([sentence('AC-1 shows fraud.', key('Ra'))], shorts)).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+    expect(judgeSentences([sentence('AC-2 acted deliberately.', key('Del'))], shorts)).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+    expect(judgeSentences([sentence('Fraud Prevention Ltd is listed.', key('Prevention'), key('Fraud Prevention Ltd'))], shorts)).toMatchObject({ removed: 0, verdictFound: false });
+  });
+
+  it('has a stated limit: an element whose title is only a word of the list hides that word in a sentence that cites it', () => {
+    const only = node('W-24', 'Fraud', 'company');
+    const alone = assembleText(reading([only]));
+    expect(judgeSentences([sentence('The holder committed fraud.', 'n1')], alone)).toMatchObject({ removed: 0, verdictFound: false });
+  });
+
+  it('removes a verdict inside a title of the sentence when it cites a key that was not sent (no title is ignored for an element that is not there)', () => {
+    expect(verdictOf('Crimson Lake Traders is listed.', 'n99')).toMatchObject({ kept: [], removed: 1, verdictFound: true });
+  });
+});
+
 describe('the boundaries of the checks', () => {
   it.each(['The value is -999.', 'The value is .999.', 'The value is +7.', 'The value is 999.5.'])('removes the absent number in %j', (text) => {
     expect(kept([sentence(text, 'n1')])).toEqual([]);

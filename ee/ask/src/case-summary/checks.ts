@@ -52,6 +52,33 @@ const words = (text: string): Set<string> => new Set(text.toLowerCase().match(/[
 
 const identifierTokens = (text: string): Set<string> => new Set(text.match(IDENTIFIER_LIKE) ?? []);
 
+const TITLE_AND_ID = /\| title: ("(?:[^"\\]|\\.)*") \| id: ("(?:[^"\\]|\\.)*")/u;
+
+/** The title and the id of an element, as its line of the text sent holds them: strings written as JSON. */
+function titleAndIdOf(line: string): string[] {
+  const found = TITLE_AND_ID.exec(line);
+  if (found === null) return [];
+  return [found[1], found[2]].flatMap((quoted) => {
+    try {
+      const value: unknown = JSON.parse(quoted ?? '');
+      return typeof value === 'string' && value !== '' ? [value] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
+/**
+ * Whether a sentence states a verdict. The title and the id of an element the sentence cites are what the text sent says that element is called, so a word of the verdict list inside them (a business called
+ * "Crimson Trading") is a name and not a verdict; the same word anywhere else in the sentence still is one. A title is taken out only as a whole (not as part of a longer word), longest first. The limit: an
+ * element whose title or id is itself only a word of the list, cited by the sentence, hides that word wherever the sentence says it; the title comes from the source, and the sentence has to cite the element.
+ */
+function holdsVerdict(sentence: SummarySentence, assembled: AssembledText): boolean {
+  const names = sentence.cites.flatMap((cite) => titleAndIdOf(assembled.lines.get(cite) ?? '')).sort((left, right) => right.length - left.length);
+  const left = names.reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'giu'), ' '), sentence.text);
+  return VERDICT.test(left);
+}
+
 function citationsHold(sentence: SummarySentence, assembled: AssembledText): boolean {
   return sentence.cites.length > 0 && sentence.cites.every((cite) => assembled.keys.has(cite));
 }
@@ -115,7 +142,7 @@ export function judgeSentences(sentences: readonly SummarySentence[], assembled:
   let keysStripped = 0;
   let keysRemoved = 0;
   for (const original of sentences) {
-    if (VERDICT.test(original.text)) {
+    if (holdsVerdict(original, assembled)) {
       verdictFound = true;
       removed += 1;
       continue;
