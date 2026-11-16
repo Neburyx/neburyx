@@ -113,7 +113,7 @@ async function scoreView(run: Run, summarizer: EvalSummarizer, labelled: Labelle
   };
 }
 
-/** One measuring request for a reading, through the product's own assembly and guard. It is measured when the request was made, the provider's exchange did not fail and it stated its input tokens: what the summary made of the reply is not looked at. */
+/** One measuring request for a reading, through the product's own assembly and guard. It is measured when the request was made and the provider stated its input tokens, whatever the reply was (a reply cut off at the output limit included): what the summary made of the reply is not looked at. */
 async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readonly id: string; readonly kind: 'view' | 'sample'; readonly reading: ReturnType<typeof readingOf>; readonly labelled?: LabelledCase }, stub: boolean): Promise<Measurement> {
   const elements = elementsOf(target.reading);
   if (run.signal.aborted || run.stopped || run.usage().calls >= run.budget) {
@@ -136,8 +136,8 @@ async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readon
     return { ...base, measured: false, missing: 'not run: the budget was spent' };
   }
   if (run.sent === '') return { ...base, measured: false, missing: done?.outcome.status === 'tooLarge' ? 'refused by the size guard: no request was made' : 'no request was made' };
-  if (after.failed > before.failed) return { ...base, measured: false, missing: 'the call failed' };
-  if (after.withoutCounts > before.withoutCounts || inputTokens <= 0) return { ...base, measured: false, missing: stub ? 'a scripted provider states no token counts' : 'the provider stated no token counts' };
+  // the input is what is measured: a call whose reply was cut off (or refused) still had its input counted by the provider; a call that failed without a count did not reach the model
+  if (after.withoutCounts > before.withoutCounts || inputTokens <= 0) return { ...base, measured: false, missing: after.failed > before.failed ? 'the call failed' : stub ? 'a scripted provider states no token counts' : 'the provider stated no token counts' };
   return { ...base, measured: true, bytes: bytes ?? 0, inputTokens, bytesPerToken: (bytes ?? 0) / inputTokens, tokensPerElement: inputTokens / elements };
 }
 

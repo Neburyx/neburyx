@@ -72,6 +72,23 @@ describe('the views of a measuring run', () => {
     expect(seen.map((each) => each['NEBURYX_AI_CACHE'])).toEqual(['off', undefined]);
   });
 
+  it('measure a view whose reply was cut off, since the provider counted its input, and not a call that failed without a count', async () => {
+    const hooks: EvalHooks<ModelProvider> = {
+      ...realHooks,
+      scriptedProvider: () => ({
+        complete: async (request) => {
+          const elements = request.values.split('\n').filter((line) => /^[ne]\d+ \|/u.test(line)).length;
+          if (elements > 200) return { status: 'failed', code: 'truncated', usage: { kind: 'known', inputTokens: 12_000, outputTokens: 2000 }, prompt: promptRecordOf(request) };
+          if (elements > 90) return { status: 'failed', code: 'unreachable', prompt: promptRecordOf(request) };
+          return { status: 'ok', text: '{"sentences":[]}', usage: { kind: 'known', inputTokens: 100 + elements, outputTokens: 4 }, model: 'm', prompt: promptRecordOf(request) };
+        },
+      }),
+    };
+    const { report } = await measure(hooks, ['--views', 'aml-cycle']);
+    expect(report.measurements.find((each) => each.id === 'sample-300')).toMatchObject({ measured: true, inputTokens: 12_000 });
+    expect(report.measurements.find((each) => each.id === 'sample-100')).toMatchObject({ measured: false, missing: 'the call failed' });
+  });
+
   it('measure a view whose reply does not fit the reply format, since the provider answered and counted its input: what the summary makes of the reply is not looked at', async () => {
     const hooks: EvalHooks<ModelProvider> = {
       ...realHooks,
