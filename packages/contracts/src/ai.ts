@@ -23,22 +23,20 @@ export const AI_DEFAULTS = {
   cache: { enabled: true, ttl: '5m' satisfies AiCacheTtl },
 } as const;
 
-/** What the case summary uses when its settings do not say; the size guard has no default until a measured run sets one. */
+/** What the case summary uses when its settings do not say. */
 export const SUMMARY_DEFAULTS = {
   model: 'claude-sonnet-5-5',
   timeoutMs: AI_DEFAULTS.timeoutMs,
   totalTimeoutMs: 180_000,
   maxCalls: 5,
   maxElements: 300,
-  /** The most output tokens of a model call, the reasoning of the model included; 2,000 cut a 300-element view short on Opus in the first measured run. */
+  /** The most output tokens of a model call, its reasoning included. */
   maxOutputTokens: 4000,
   /**
-   * The size guard on the text sent to the model, in tokens, estimated with `BYTES_PER_TOKEN_ESTIMATE` of the summarizer. Set from the first measured runs (2026-11-15; Sonnet and Opus count the same): a view of 300
-   * elements (the element cap) of bare elements (type, title, id) is 11,961 tokens and one whose elements carry four short properties and a relationship property is 18,598 tokens, the larger times 1.2 and rounded up
-   * to the next 1,000 is 23,000. Elements with long text properties are larger (eight sentence-long properties on each of 300 elements is 84,606 tokens, a guard of 102,000, the documented upper bound): an operator
-   * whose data looks like that raises `NEBURYX_SUMMARY_MAX_INPUT_TOKENS`.
+   * The size guard on the text sent to the model, in tokens as the summarizer estimates them: measured on 300 elements, the larger of bare ones and ones with a few short properties (about 20,300 estimated),
+   * times 1.2, rounded up. Operators whose elements carry long text properties raise `NEBURYX_SUMMARY_MAX_INPUT_TOKENS` (136,000 admits the heavy sample of the evaluation); see `tools/summary-suite/README.md`.
    */
-  maxInputTokens: 23_000,
+  maxInputTokens: 25_000,
   retentionDays: 30,
 } as const;
 

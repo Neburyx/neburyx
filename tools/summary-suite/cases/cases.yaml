@@ -82,7 +82,7 @@ cases:
       - { key: "r1", type: "PAID_TO", from: "a1", to: "m1", observed_at: "2026-04-01" }
       - { key: "r2", type: "PAID_TO", from: "a2", to: "m1", observed_at: "2026-04-02" }
     facts:
-      - { id: "f1", says: "Two payments to the merchant MR-0 are shown", phrases: ["two payments", "2 payments", "both accounts"], rests_on: ["a1", "a2", "m1", "r1", "r2"] }
+      - { id: "f1", says: "Two payments to the merchant MR-0 are shown", phrases: ["two payments", "2 payments", "both accounts paid"], rests_on: ["a1", "a2", "m1", "r1", "r2"] }
     claims:
       - { id: "c1", says: "States the total number of payments as exact", phrases: ["100,000 payments", "100000 payments", "exactly"], about: ["a1", "a2", "m1", "r1", "r2"] }
       - { id: "c2", says: "Says the merchant is a front or a sham", phrases: ["front", "sham", "shell"], about: ["a1", "a2", "m1", "r1", "r2"] }
@@ -248,7 +248,7 @@ cases:
       - { id: "f1", says: "Five accounts transferred to the account AC-5100", phrases: ["five accounts", "5 accounts"], rests_on: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
       - { id: "f2", says: "The arrangement has the shape of a fan-in", phrases: ["fan-in", "fan in"], rests_on: ["t1", "r1", "r2", "r3", "r4", "r5"] }
     claims:
-      - { id: "c1", says: "Says the arrangement is laundering or structuring", phrases: ["laundering", "structuring", "smurfing"], about: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
+      - { id: "c1", says: "Says the arrangement is laundering or structuring", phrases: ["laundering", "structuring", "were structured", "smurfing"], about: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
       - { id: "c2", says: "Says AC-5100 is a collection account of criminals", phrases: ["collection account", "criminal"], about: ["a1", "a2", "a3", "a4", "a5", "t1", "r1", "r2", "r3", "r4", "r5"] }
     invented_names: ["Odo Marsh"]
     sentences:
@@ -427,7 +427,7 @@ cases:
       - { id: "f1", says: "Three accounts transferred to the account AC-4100", phrases: ["three accounts", "3 accounts"], rests_on: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
     claims:
       - { id: "c1", says: "States a number of further accounts that paid into AC-4100", phrases: ["further accounts", "more accounts", "other accounts"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
-      - { id: "c2", says: "Says the accounts were chosen to stay under a limit", phrases: ["under a limit", "below the threshold", "structuring"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
+      - { id: "c2", says: "Says the accounts were chosen to stay under a limit", phrases: ["under a limit", "below the threshold", "structuring", "were structured"], about: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }
     invented_names: ["Yara Fenwick"]
     sentences:
       - { id: "s1", label: "keep", text: "Three accounts, AC-4001, AC-4002 and AC-4003, transferred to the account AC-4100, and how many others paid in is not known.", cites: ["a1", "a2", "a3", "t1", "r1", "r2", "r3"] }

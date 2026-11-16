@@ -2,10 +2,8 @@ import { canonicalText } from '../questions/canonical.js';
 import type { Count, ElementRef, GraphEdge, GraphNode, GraphProperty, SummaryReading } from '@neburyx/contracts';
 
 /**
- * Bytes of UTF-8 text to a token, measured. The text of a view is dense with ids, dates and short words, so it runs well below the four bytes a token of English: the first measured runs (2026-11-15; Sonnet and
- * Opus count the same) gave 2.56 to 2.90 for views of 3 to 12 elements, 1.90 for 100 and 1.81 for 300 bare elements (4,441 and 11,961 tokens for 8,436 and 21,666 bytes of text with the instructions), 2.0 for
- * elements with four short properties and 2.4 for elements with eight long ones. The smallest, rounded down to one decimal, counts the most tokens and errs toward refusing a view, never toward sending too much.
- * The estimate of 3 that stood before this measurement under-counted by about 40% at 300 elements.
+ * Bytes of UTF-8 text to a token, measured on the views and samples of `tools/summary-suite` (1.81 for 300 bare elements, the smallest of the samples up to 300 elements). The smallest ratio counts the most tokens, so
+ * up to about 300 elements the estimate errs toward refusing a view; a much larger element cap under-counts slightly.
  */
 export const BYTES_PER_TOKEN_ESTIMATE = 1.8;
 

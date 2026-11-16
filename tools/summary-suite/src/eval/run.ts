@@ -113,11 +113,11 @@ async function scoreView(run: Run, summarizer: EvalSummarizer, labelled: Labelle
 }
 
 /** One measuring request for a reading, through the product's own assembly and guard. It is measured when the request was made and the provider stated its input tokens, whatever the reply was (a reply cut off at the output limit included): what the summary made of the reply is not looked at. */
-async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readonly id: string; readonly kind: 'view' | 'sample'; readonly reading: ReturnType<typeof readingOf>; readonly labelled?: LabelledCase }, stub: boolean): Promise<Measurement> {
+async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readonly id: string; readonly kind: 'view' | 'sample'; readonly properties?: 'none' | 'realistic' | 'heavy'; readonly reading: ReturnType<typeof readingOf>; readonly labelled?: LabelledCase }, stub: boolean): Promise<Measurement> {
   const elements = elementsOf(target.reading);
   if (run.signal.aborted || run.stopped || run.usage().calls >= run.budget) {
     run.stopped = true;
-    return { id: target.id, kind: target.kind, elements, measured: false, missing: 'not run: the budget was spent or the run was stopped' };
+    return { id: target.id, kind: target.kind, ...(target.properties === undefined ? {} : { properties: target.properties }), elements, measured: false, missing: 'not run: the budget was spent or the run was stopped' };
   }
   run.current = target.labelled;
   run.sent = '';
@@ -128,7 +128,7 @@ async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readon
   });
   const after = run.usage();
   const bytes = run.sent === '' ? undefined : utf8Bytes(summarizer.instructions, run.sent);
-  const base = { id: target.id, kind: target.kind, elements, ...(bytes === undefined ? {} : { bytes, estimatedTokens: estimatedTokensOf(bytes) }) };
+  const base = { id: target.id, kind: target.kind, ...(target.properties === undefined ? {} : { properties: target.properties }), elements, ...(bytes === undefined ? {} : { bytes, estimatedTokens: estimatedTokensOf(bytes) }) };
   const inputTokens = after.inputTokens - before.inputTokens + (after.cacheReadTokens - before.cacheReadTokens) + (after.cacheWriteTokens - before.cacheWriteTokens);
   if (after.refused > before.refused) {
     run.stopped = true;
@@ -193,9 +193,9 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
     if (!measuring.ok) throw new UsageError(measuring.problems.join('; '));
     const targets = [
       ...views.map((labelled) => ({ id: labelled.id, kind: 'view' as const, reading: readingOf(labelled), labelled })),
-      ...sampleSizes(settings).map((size) => ({ id: `sample-${size}`, kind: 'sample' as const, reading: scaledReading(sampleBase(), size) })),
-      ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-realistic`, kind: 'sample' as const, reading: realisticReading(scaledReading(sampleBase(), size)) })),
-      ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-heavy`, kind: 'sample' as const, reading: heavyReading(scaledReading(sampleBase(), size)) })),
+      ...sampleSizes(settings).map((size) => ({ id: `sample-${size}`, kind: 'sample' as const, properties: 'none' as const, reading: scaledReading(sampleBase(), size) })),
+      ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-realistic`, kind: 'sample' as const, properties: 'realistic' as const, reading: realisticReading(scaledReading(sampleBase(), size)) })),
+      ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-heavy`, kind: 'sample' as const, properties: 'heavy' as const, reading: heavyReading(scaledReading(sampleBase(), size)) })),
     ];
     for (const target of targets) measurements.push(await measureOne(state, measuring.summarizer, target, options.stub));
   }

@@ -13,7 +13,7 @@ export const SUMMARY_VARIABLES = {
   retentionDays: 'NEBURYX_SUMMARY_RUN_RETENTION_DAYS',
 } as const;
 
-/** The output limit of a call: from enough for twelve sentences to the most a model call takes. */
+/** The output limit of a call: from enough for twelve sentences to within the range Ask accepts. */
 const OUTPUT_TOKEN_LIMITS = { min: 1000, max: 32_000 } as const;
 
 export interface SummarySettings {
@@ -59,7 +59,7 @@ export function readSummarySettings(env: Env): SummarySettingsRead {
 
 export type SummaryAvailability = { readonly available: true } | { readonly available: false; readonly reason: string };
 
-/** The summary is available when Ask is configured, its settings are read and the size guard is set. */
+/** The summary is available when Ask is configured, its settings are read and the token key is set. */
 export function summaryAvailability(state: { readonly askConfigured: boolean; readonly settings: SummarySettings | undefined; readonly tokenKeyConfigured: boolean }): SummaryAvailability {
   if (!state.askConfigured || state.settings === undefined) return { available: false, reason: 'the AI preview is not configured' };
   if (!state.tokenKeyConfigured) return { available: false, reason: `${TOKEN_KEY_VARIABLES.current} is not set` };

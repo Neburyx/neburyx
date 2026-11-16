@@ -283,7 +283,7 @@ describe('the record of a click', () => {
     await summarizer.summarize(input(), new AbortController().signal);
     const [run] = store.runs;
     expect(store.runs).toHaveLength(1);
-    expect(run?.start).toMatchObject({ actorId: 'a', investigationId: '0192f000-0000-7000-8000-000000000042', sourceId: 'demo', traceId: 't', settings: { model: 'claude-sonnet-5-5', maxCalls: 5, maxElements: 300 } });
+    expect(run?.start).toMatchObject({ actorId: 'a', investigationId: '0192f000-0000-7000-8000-000000000042', sourceId: 'demo', traceId: 't', settings: { model: 'claude-sonnet-5-5', maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 100_000 } });
     expect(run?.callStarts.map((call) => call.number)).toEqual([1, 2]);
     expect(run?.callStarts[0]?.valuesText).toBe(requests[0]?.values);
     expect(run?.callStarts[0]?.instructionsText).toBe(requests[0]?.instructions);

@@ -47,7 +47,6 @@ const DERIVED = { sourceId: 'demo', derived: { ruleId: 'shared-leaf', from: { so
 
 const SUMMARIZER: CaseSummarizer = {
   maxElements: 300,
-  maxOutputTokens: 4000,
   availability: () => ({ available: true }),
   summarize: async () => ({ status: 'ok', sentences: [], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }),
 };

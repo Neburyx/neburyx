@@ -42,7 +42,7 @@ describe('the manifest of a run', () => {
       'call limit of a click: 3',
       'scoring: 7 views, at most 21 calls, at least 7',
       'calls: at most 21, budget needed at least 7',
-      'size guard: 23000 tokens',
+      'size guard: 25000 tokens',
     ]);
   });
 });

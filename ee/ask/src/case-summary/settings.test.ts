@@ -21,7 +21,7 @@ describe('the summary settings', () => {
     const read = readSummarySettings({});
     expect(read).toEqual({
       ok: true,
-      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 23_000, retentionDays: 30 },
+      settings: { model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 25_000, retentionDays: 30 },
     });
     expect(SUMMARY_DEFAULTS.maxCalls).toBe(5);
   });
@@ -105,7 +105,7 @@ describe('the summary settings in the extension', () => {
     const extension = createEnterpriseExtension();
     expect(extension.summaryAvailability().available).toBe(false);
     expect(await extension.configure?.({}, askEnv(makeAskFolder(['s1'])), CONTEXT)).toEqual({ ok: true });
-    expect(extension.summarySettings()).toMatchObject({ maxCalls: 5, maxElements: 300, maxInputTokens: 23_000 });
+    expect(extension.summarySettings()).toMatchObject({ maxCalls: 5, maxElements: 300, maxInputTokens: 25_000 });
     expect(extension.summaryAvailability()).toEqual({ available: false, reason: 'NEBURYX_SUMMARY_TOKEN_KEY_FILE is not set' });
   });
 

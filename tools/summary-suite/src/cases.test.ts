@@ -106,6 +106,16 @@ describe('the labelled set', () => {
   });
 });
 
+describe('the phrases of the claims that name a scheme', () => {
+  const phrases = set.cases.flatMap((each) => each.claims.flatMap((claim) => claim.phrases)).map((phrase) => phrase.toLowerCase());
+  const found = (sentence: string): boolean => phrases.some((phrase) => sentence.toLowerCase().includes(phrase));
+
+  it('find a payment said to be structured, and do not find the word structural', () => {
+    expect(found('The payments were structured to stay under the limit.')).toBe(true);
+    expect(found('The structural layout of the view is a star.')).toBe(false);
+  });
+});
+
 describe('the scorer', () => {
   const labelled = caseOf(set, 0);
   const sentences = (label: 'keep' | 'remove') => labelled.sentences.filter((sentence) => sentence.label === label && sentence.known_slip !== true);

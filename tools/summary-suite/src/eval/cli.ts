@@ -15,8 +15,8 @@ const USAGE = [
   'usage: summary-eval [--stub | --budget <n> --out <folder> --folder <ask folder>] [--dry-run] [--views all|demo|aml|<id,id>] [--measure | --measure-only] [--json] [--force]',
   '  --stub     answer every view with its own labelled sentences: no key, no network, no model call',
   '  --dry-run  make no call: print what a run can cost',
-  '  --measure  also measure the size of the text sent (the views and samples of 10, 100 and the element cap) against the tokens the provider counts; --measure-only measures and does not score',
-  '  a live run needs NEBURYX_ASK_API_KEY_FILE and NEBURYX_SUMMARY_MAX_INPUT_TOKENS in the environment',
+  '  --measure  also measure the size of the text sent (the views and the samples of 10, 100 and the element cap, plain, with short properties and with long ones) against the tokens the provider counts; --measure-only measures and does not score',
+  '  a live run needs NEBURYX_ASK_API_KEY_FILE in the environment; a measuring run also needs NEBURYX_SUMMARY_MAX_INPUT_TOKENS of at least 136000, or the long-property samples are refused and nothing is proposed',
 ];
 
 function parse(args: readonly string[]): RunOptions {

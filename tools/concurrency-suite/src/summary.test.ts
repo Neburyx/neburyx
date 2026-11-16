@@ -9,7 +9,7 @@ afterEach(async () => {
   expectNothingLeft(rig);
 });
 
-const SUMMARIZER: CaseSummarizer = { maxElements: 300, maxOutputTokens: 4000, availability: () => ({ available: true }), summarize: async () => ({ status: 'ok', sentences: [], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }) };
+const SUMMARIZER: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'ok', sentences: [], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: '', model: 'stub', calls: 1, summaryToken: 'v1.stub' }) };
 const withSummary = (extra: RigOptions = {}): RigOptions => ({ ...extra, summary: true, caseSummarizer: SUMMARIZER, extension: { name: 'summary', routeGroups: [guardAiRouteGroup({ routes: [createSummaryRoute()] })] } });
 
 describe('a summary request, which reads the elements of a view through the gate', () => {

@@ -30,7 +30,7 @@ describe('the ai settings of the mapping file', () => {
 
 describe('the case summary defaults', () => {
   it('are the agreed ones, inside the range Ask uses for a timeout', () => {
-    expect(SUMMARY_DEFAULTS).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, retentionDays: 30 });
+    expect(SUMMARY_DEFAULTS).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxElements: 300, maxOutputTokens: 4000, maxInputTokens: 25_000, retentionDays: 30 });
     expect(SUMMARY_DEFAULTS.timeoutMs).toBeGreaterThanOrEqual(AI_LIMITS.timeoutMs.min);
     expect(SUMMARY_DEFAULTS.totalTimeoutMs).toBeLessThanOrEqual(AI_LIMITS.timeoutMs.max);
   });

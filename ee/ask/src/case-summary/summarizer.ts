@@ -99,7 +99,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         sourceId: input.request.sourceId,
         traceId: input.traceId,
         startedAt: new Date((options.now ?? Date.now)()),
-        settings: { model: settings.model, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, maxCalls: settings.maxCalls, maxElements: settings.maxElements, ...(settings.maxInputTokens === undefined ? {} : { maxInputTokens: settings.maxInputTokens }) },
+        settings: { model: settings.model, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, maxCalls: settings.maxCalls, maxElements: settings.maxElements, maxOutputTokens: settings.maxOutputTokens, maxInputTokens: settings.maxInputTokens },
       }),
     );
     const publish = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked): Promise<void> => {

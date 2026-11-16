@@ -2,12 +2,14 @@ import type { GraphEdge, GraphNode, SummaryReading } from '@neburyx/contracts';
 import type { LabelledCase } from '../cases.js';
 import { readingOf } from '../cases.js';
 
-/** The product's own estimate: the bytes of the text over this many make its tokens (`BYTES_PER_TOKEN_ESTIMATE` of the summarizer, 1.8 since the first measured runs; it was 3). */
+/** The product's own estimate, `BYTES_PER_TOKEN_ESTIMATE` of the summarizer; a test keeps the two equal. */
 const ESTIMATED_BYTES_PER_TOKEN = 1.8;
 
 export interface Measurement {
   readonly id: string;
   readonly kind: 'view' | 'sample';
+  /** For a sample: the properties its elements carry. */
+  readonly properties?: 'none' | 'realistic' | 'heavy';
   readonly elements: number;
   /** Whether the call was made and the provider stated its input tokens. */
   readonly measured: boolean;
@@ -26,9 +28,9 @@ export interface Proposal {
   readonly proposed: boolean;
   /** The smallest bytes-per-token of the measurements that succeeded, rounded down to one decimal: it replaces the product's estimate. */
   readonly bytesPerToken?: number;
-  /** The most input tokens measured for a view at the element cap, times 1.2, rounded up to the next 1,000. */
+  /** The guard: the estimate (bytes over the proposed ratio, as the product counts) of the larger of the plain and the realistic sample at the element cap, times 1.2, rounded up to the next 1,000. */
   readonly maxInputTokens?: number;
-  /** What the guard would be if the elements were heavy (the most input tokens measured for a heavy sample at the element cap, by the same rule): the documented upper bound, not a default. */
+  /** What the guard would be if the elements were heavy (the heavy sample at the element cap, by the same rule): the documented upper bound, not a default. */
   readonly upperBoundMaxInputTokens?: number;
   /** What is missing when nothing is proposed. */
   readonly missing: readonly string[];
@@ -84,13 +86,13 @@ export function proposalOf(measurements: readonly Measurement[], aml: ReadonlySe
   const succeeded = measurements.filter((each) => each.measured && each.bytes !== undefined && each.inputTokens !== undefined && each.inputTokens > 0);
   for (const each of measurements) if (!each.measured) missing.push(`${each.id}: ${each.missing ?? 'not measured'}`);
   if (!succeeded.some((each) => each.kind === 'view' && aml.has(each.id))) missing.push('no AML view was measured');
-  const atCap = succeeded.filter((each) => each.kind === 'sample' && each.elements === elementCap && !each.id.endsWith('-heavy'));
+  const atCap = succeeded.filter((each) => each.kind === 'sample' && each.elements === elementCap && each.properties !== 'heavy');
   if (atCap.length === 0) missing.push(`no sample of ${elementCap} elements was measured`);
   if (missing.length > 0) return { proposed: false, missing };
   const ratios = succeeded.map((each) => (each.bytes ?? 0) / (each.inputTokens ?? 1));
   const bytesPerToken = Math.floor(Math.min(...ratios) * 10) / 10;
-  const guardOf = (samples: readonly Measurement[]): number => Math.ceil((Math.max(...samples.map((each) => each.inputTokens ?? 0)) * 1.2) / 1000) * 1000;
-  const heavy = succeeded.filter((each) => each.kind === 'sample' && each.elements === elementCap && each.id.endsWith('-heavy'));
+  const guardOf = (samples: readonly Measurement[]): number => Math.ceil(((Math.max(...samples.map((each) => each.bytes ?? 0)) / bytesPerToken) * 1.2) / 1000) * 1000;
+  const heavy = succeeded.filter((each) => each.kind === 'sample' && each.elements === elementCap && each.properties === 'heavy');
   return { proposed: true, bytesPerToken, maxInputTokens: guardOf(atCap), ...(heavy.length === 0 ? {} : { upperBoundMaxInputTokens: guardOf(heavy) }), missing: [] };
 }
 
@@ -105,8 +107,8 @@ const withProperties = (view: SummaryReading, onNode: (id: string) => Property[]
 });
 
 /**
- * The same view with the properties a real element carries, the heavy case: eight on each entity and three on each relationship, text values of a sentence's length, written from the element's own id so that the
- * same input gives the same view. It is an upper bound: real properties are mostly short.
+ * The same view with many long properties, an upper bound only: eight on each entity and three on each relationship, text values of a sentence's length, written from the element's own id so that the
+ * same input gives the same view.
  */
 export const heavyReading = (view: SummaryReading): SummaryReading =>
   withProperties(

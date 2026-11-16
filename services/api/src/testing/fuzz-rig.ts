@@ -21,7 +21,6 @@ import { makeWebRoot } from './web-root.js';
 /** The summarizer of the fuzz rig: it drafts one fixed sentence, so a summary request exercises the re-read of its elements through the gate. */
 const FUZZ_SUMMARIZER: CaseSummarizer = {
   maxElements: 300,
-  maxOutputTokens: 4000,
   availability: () => ({ available: true }),
   summarize: async () => ({ status: 'ok', sentences: [{ text: 'A fixed sentence.', cites: ['n1'], storable: false }], citations: [], coverage: { retrieval: '0 shown', summary: 'No sentence was kept.' }, removedCount: 0, sent: 'sent', model: 'fuzz', calls: 1, summaryToken: 'v1.fuzz' }),
 };

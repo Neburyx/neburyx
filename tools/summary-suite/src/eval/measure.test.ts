@@ -150,13 +150,13 @@ describe('what the measurements support', () => {
 
   it('proposes the smallest bytes-per-token rounded down to one decimal and the guard from the most tokens at the cap times 1.2 rounded up to the next 1,000, worked out by hand', () => {
     const proposal = proposalOf([view('aml-a', 3140, 1000), view('x', 2960, 1000), sample(10, 3500, 1000), sample(300, 60_000, 18_001)], aml, 300);
-    expect(proposal).toEqual({ proposed: true, bytesPerToken: 2.9, maxInputTokens: 22_000, missing: [] });
+    expect(proposal).toEqual({ proposed: true, bytesPerToken: 2.9, maxInputTokens: 25_000, missing: [] });
   });
 
   it('takes the guard from the larger of the plain and the realistic samples, and reports the heavy ones as the upper bound only', () => {
-    const heavy = { ...sample(300, 200_000, 84_606), id: 'sample-300-heavy' };
-    const realistic = { ...sample(300, 36_000, 18_598), id: 'sample-300-realistic' };
-    expect(proposalOf([view('aml-a', 4000, 1000), sample(300, 21_666, 11_961), realistic, heavy], aml, 300)).toEqual({ proposed: true, bytesPerToken: 1.8, maxInputTokens: 23_000, upperBoundMaxInputTokens: 102_000, missing: [] });
+    const heavy = { ...sample(300, 200_000, 84_606), id: 'sample-300-heavy', properties: 'heavy' as const };
+    const realistic = { ...sample(300, 36_000, 18_598), id: 'sample-300-realistic', properties: 'realistic' as const };
+    expect(proposalOf([view('aml-a', 4000, 1000), sample(300, 21_666, 11_961), realistic, heavy], aml, 300)).toEqual({ proposed: true, bytesPerToken: 1.8, maxInputTokens: 24_000, upperBoundMaxInputTokens: 134_000, missing: [] });
     expect(proposalOf([view('aml-a', 4000, 1000), heavy], aml, 300)).toMatchObject({ proposed: false, missing: ['no sample of 300 elements was measured'] });
   });
 
@@ -187,6 +187,25 @@ describe('what the measurements support', () => {
     expect(refused.report.usage.calls).toBe(set.cases.length + 7 - refusedIds.length);
     const whole = await measure(counting((elements) => 100 + elements));
     expect(whole.report.proposal.proposed).toBe(true);
+  });
+
+  it('with the default guard, refuses the samples of long properties, says so, and proposes nothing', async () => {
+    const defaults = await measure(counting((elements) => 100 + elements), [], { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '25000' });
+    const refusedIds = defaults.report.measurements.filter((each) => each.missing === 'refused by the size guard: no request was made').map((each) => each.id);
+    expect(refusedIds).toEqual(expect.arrayContaining(['sample-300-heavy']));
+    expect(refusedIds).not.toContain('sample-300-realistic');
+    expect(defaults.report.proposal.proposed).toBe(false);
+    expect(defaults.report.proposal.missing).toEqual(expect.arrayContaining(['sample-300-heavy: refused by the size guard: no request was made']));
+  });
+
+  it('counts as the product does: a sample is admitted at a guard equal to its estimate and refused one token below', async () => {
+    const first = await measure(counting((elements) => 100 + elements));
+    const estimate = first.report.measurements.find((each) => each.id === 'sample-10')?.estimatedTokens ?? 0;
+    expect(estimate).toBeGreaterThan(0);
+    const at = await measure(counting((elements) => 100 + elements), [], { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: String(estimate) });
+    const below = await measure(counting((elements) => 100 + elements), [], { NEBURYX_SUMMARY_MAX_INPUT_TOKENS: String(estimate - 1) });
+    expect(at.report.measurements.find((each) => each.id === 'sample-10')).toMatchObject({ measured: true });
+    expect(below.report.measurements.find((each) => each.id === 'sample-10')).toMatchObject({ measured: false, missing: 'refused by the size guard: no request was made' });
   });
 
   it('says `not measured` and proposes nothing for the scripted provider', async () => {

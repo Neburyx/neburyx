@@ -60,7 +60,7 @@ describe('the environments of the children', () => {
   });
 
   it('pick the settings of the case summary as they are given, an empty value included, and nothing else', () => {
-    const given = { NEBURYX_SUMMARY_MODEL: 'a-model', NEBURYX_SUMMARY_TOKEN_KEY_FILE: '/keys/summary', NEBURYX_SUMMARY_MAX_CALLS: '2', NEBURYX_SUMMARY_PROMPT_FILE: '' };
+    const given = { NEBURYX_SUMMARY_MODEL: 'a-model', NEBURYX_SUMMARY_TOKEN_KEY_FILE: '/keys/summary', NEBURYX_SUMMARY_MAX_CALLS: '2', NEBURYX_SUMMARY_MAX_OUTPUT_TOKENS: '3000', NEBURYX_SUMMARY_PROMPT_FILE: '' };
     expect(summaryEnvironment({ ...developer, ...given, NEBURYX_PORT: '1', NEBURYX_ASK_PROVIDER: 'not passed' })).toEqual(given);
     expect(summaryEnvironment(developer)).toEqual({});
   });
