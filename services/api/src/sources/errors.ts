@@ -33,6 +33,18 @@ const REFUSED_CODES: ReadonlySet<string> = new Set([
 ]);
 const REFUSED_PREFIX = 'Neo.ClientError.Procedure.';
 const ACQUISITION_TIMEOUT = 'Connection acquisition timed out';
+/**
+ * The driver's own text for a wait that ran out (neo4j-driver 6.3.0, `getAcquisitionTimeoutError`): "Connection acquisition timed out in 2000 ms. Pool status: Active conn count = 0, Idle conn count = 0."
+ * A connection counts as active once it is made, so no active connection and no idle one means that the wait was spent making the first connection: the source did not connect in time, which is
+ * not a full pool. A text that does not have this shape (another driver version) stays a full pool, as before; the test that pins the text fails when an upgrade changes it.
+ */
+const POOL_STATUS = /^Connection acquisition timed out in \d+ ms\. Pool status: Active conn count = (\d+), Idle conn count = (\d+)\./;
+
+function nothingConnected(message: string): boolean {
+  const found = POOL_STATUS.exec(message);
+  return found?.[1] === '0' && found[2] === '0';
+}
+
 const SERVER_CODE = /^Neo\.[A-Za-z]+\.[A-Za-z]+\.[A-Za-z]+$/;
 
 function fieldOf(error: unknown, name: 'code' | 'message'): string {
@@ -49,7 +61,8 @@ export function classify(error: unknown): FailureKind {
   if (DATABASE_CODES.has(code)) return 'database';
   if (REFUSED_CODES.has(code) || code.startsWith(REFUSED_PREFIX)) return 'refused';
   // the driver raises the pool wait as a general error with no code of its own
-  if (fieldOf(error, 'message').startsWith(ACQUISITION_TIMEOUT)) return 'pool-full';
+  const message = fieldOf(error, 'message');
+  if (message.startsWith(ACQUISITION_TIMEOUT)) return nothingConnected(message) ? 'unreachable' : 'pool-full';
   return 'other';
 }
 

@@ -4,7 +4,7 @@ How long a read of the source may take, what happens when it takes longer, what 
 
 ## The limit
 
-Every read of a source is opened as a transaction with the source's own timeout, set by the source's `timeout_ms` budget: 5 seconds when the mapping names none, and 10 seconds at most. A mapping that asks for more fails to load. The server stops the read when the timeout passes; the adapter also holds a guard at the request's deadline, so a read that the server does not stop is still given up.
+Every read of a source is opened as a transaction with the source's own timeout, set by the source's `timeout_ms` budget: 5 seconds when the mapping names none, and 10 seconds at most. A mapping that asks for more fails to load. The same budget is how long the product waits to make a connection to the source, and the lookup of the source's name counts in it: when the name resolves slowly, raise the budget or give an address. The server stops the read when the timeout passes; the adapter also holds a guard at the request's deadline, so a read that the server does not stop is still given up.
 
 A request that reads several things (an expansion of several neighbor types) shares one deadline of 10 seconds for all of its reads. When that deadline stops a request before the source's own timeout would, the answer names the deadline, not the source's timeout, so the number a person reads is the limit that was actually hit.
 

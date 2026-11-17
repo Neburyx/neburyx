@@ -3,6 +3,7 @@ import { parseCommand, USAGE } from './commands.js';
 import { runMigrateCommand } from './migrate/command.js';
 import { createInterface } from 'node:readline/promises';
 import { runSourceRebindCommand } from './source-rebind/command.js';
+import { runInitCommand } from './init/command.js';
 import { runTestSourceCommand } from './source-test/command.js';
 
 const command = parseCommand(process.argv.slice(2));
@@ -18,6 +19,11 @@ if (command === 'migrate') {
 
 if (command === 'test-source') {
   const code = await runTestSourceCommand(process.argv.slice(3), process.env, { stdout: process.stdout, stderr: process.stderr });
+  process.exit(code);
+}
+
+if (command === 'init') {
+  const code = await runInitCommand(process.argv.slice(3), process.env, { stdout: process.stdout, stderr: process.stderr });
   process.exit(code);
 }
 

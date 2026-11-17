@@ -182,6 +182,9 @@ const sourceSchema = z.strictObject({
   style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' })).optional(),
 });
 
+/** The connection part of a source entry: the one check of an id, an address, a database name and the two environment variable names that a mapping file and `neburyx init` share. */
+export const sourceConnectionSchema = sourceSchema.pick({ id: true, uri: true, database: true, auth: true });
+
 export const mappingFileSchema = z.strictObject({ sources: z.array(sourceSchema), retention: retentionSchema.optional(), ai: aiSettingsSchema.optional() });
 
 export type RawMappingFile = z.infer<typeof mappingFileSchema>;

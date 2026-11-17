@@ -115,6 +115,12 @@ describe('a source that cannot be reached', () => {
     expect(await executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'pool-full' });
   });
 
+  it('answers unreachable, not a full pool, when the wait for a connection ran out with no connection made', async () => {
+    useClock();
+    const { executor } = rig({ beginError: neo4jError('N/A', 'Connection acquisition timed out in 2000 ms. Pool status: Active conn count = 0, Idle conn count = 0.') });
+    expect(await executor.execute(callFor())).toEqual({ status: 'unavailable', reason: 'unreachable' });
+  });
+
   it('answers unavailable for an authentication failure and discards the driver, so corrected credentials are read again', async () => {
     useClock();
     const made = rig({ beginError: neo4jError('Neo.ClientError.Security.Unauthorized') });

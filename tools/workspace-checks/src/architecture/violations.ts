@@ -1,4 +1,4 @@
-export type Rule = 'adapter-access' | 'demo-graph-isolated' | 'system-principal' | 'source-gate' | 'write-probe' | 'test-source-command' | 'container-start' | 'open-core' | 'ai-imports' | 'pattern-events';
+export type Rule = 'adapter-access' | 'demo-graph-isolated' | 'system-principal' | 'source-gate' | 'write-probe' | 'test-source-command' | 'init-command' | 'container-start' | 'open-core' | 'ai-imports' | 'pattern-events';
 
 export interface Violation {
   readonly rule: Rule;

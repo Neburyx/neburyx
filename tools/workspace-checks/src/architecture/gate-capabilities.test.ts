@@ -23,6 +23,7 @@ describe.each([
   ['createSourceGate', 'gate', 'source-gate', 'source-gate'],
   ['the write probe', 'sources', 'write-probe', 'write-probe'],
   ['the test-source command', 'source-test', 'command', 'test-source-command'],
+  ['the init command', 'init', 'command', 'init-command'],
 ] as const)('%s', (_name, folderName, moduleName, rule) => {
   const specifierFrom = (_folder: string) => `../${folderName}/${moduleName}.js`;
 
@@ -106,6 +107,24 @@ describe('who may import the test-source command', () => {
 
   it('is reported when cli.ts re-exports it', () => {
     expect(snippet(`${API}/cli.ts`, "export { runTestSourceCommand } from './source-test/command.js';")).toMatchObject([{ rule: 'test-source-command' }]);
+  });
+});
+
+describe('who may import the init command', () => {
+  it('is cli.ts, and nothing else', () => {
+    expect(snippet(`${API}/cli.ts`, "import { runInitCommand } from './init/command.js';")).toEqual([]);
+    expect(snippet(`${API}/start.ts`, "import { runInitCommand } from './init/command.js';")).toMatchObject([{ rule: 'init-command' }]);
+    expect(snippet(`${API}/source-test/command.ts`, "import { runInitCommand } from '../init/command.js';")).toMatchObject([{ rule: 'init-command' }]);
+    expect(snippet(`${API}/init/schema-read.ts`, "import { runInitCommand } from './command.js';")).toMatchObject([{ rule: 'init-command' }]);
+  });
+
+  it('is reported when cli.ts re-exports it', () => {
+    expect(snippet(`${API}/cli.ts`, "export { runInitCommand } from './init/command.js';")).toMatchObject([{ rule: 'init-command' }]);
+  });
+
+  it('is the only other module, with the test-source command, that may build a source gate', () => {
+    expect(snippet(`${API}/init/command.ts`, "import { createSourceGate } from '../gate/source-gate.js';")).toEqual([]);
+    expect(snippet(`${API}/init/schema-read.ts`, "import { createSourceGate } from '../gate/source-gate.js';")).toMatchObject([{ rule: 'source-gate' }]);
   });
 });
 

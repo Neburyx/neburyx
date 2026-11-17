@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCommand, parseRebindArgs, parseTestSourceArgs, SOURCE_REBIND_USAGE, TEST_SOURCE_USAGE, USAGE } from './commands.js';
+import { INIT_USAGE, parseCommand, parseRebindArgs, parseTestSourceArgs, SOURCE_REBIND_USAGE, TEST_SOURCE_USAGE, USAGE } from './commands.js';
 
 describe('parseCommand', () => {
   it.each([
@@ -9,6 +9,7 @@ describe('parseCommand', () => {
     [['migrate', 'extra'], 'migrate'],
     [['test-source', '--name', 'alpha'], 'test-source'],
     [['source', 'rebind', 'alpha'], 'source'],
+    [['init', '--source', 'alpha', '--uri', 'bolt://h:7687'], 'init'],
   ] as const)('reads %j as %s', (args, expected) => {
     expect(parseCommand(args)).toBe(expected);
   });
@@ -18,7 +19,8 @@ describe('parseCommand', () => {
   });
 
   it('prints the usage line the image documents', () => {
-    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe] | source rebind <source> [--confirm <source>]\n');
+    expect(USAGE).toBe('usage: neburyx api | migrate | test-source --name <source> [--write-probe] | source rebind <source> [--confirm <source>] | init --source <source> --uri <uri> [--database <name>] [--username-env <name>] [--password-env <name>] [--connect-wait-ms <ms>] [--out <file>]\n');
+    expect(INIT_USAGE).toBe('usage: neburyx init --source <source> --uri <uri> [--database <name>] [--username-env <name>] [--password-env <name>] [--connect-wait-ms <ms>] [--out <file>]\n');
     expect(SOURCE_REBIND_USAGE).toBe('usage: neburyx source rebind <source> [--confirm <source>]\n');
     expect(TEST_SOURCE_USAGE).toBe('usage: neburyx test-source --name <source> [--write-probe]\n');
   });

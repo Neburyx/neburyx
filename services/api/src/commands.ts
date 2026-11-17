@@ -1,13 +1,14 @@
-export type Command = 'api' | 'migrate' | 'test-source' | 'source';
+export type Command = 'api' | 'migrate' | 'test-source' | 'source' | 'init';
 
-export const USAGE = 'usage: neburyx api | migrate | test-source --name <source> [--write-probe] | source rebind <source> [--confirm <source>]\n';
+export const USAGE = 'usage: neburyx api | migrate | test-source --name <source> [--write-probe] | source rebind <source> [--confirm <source>] | init --source <source> --uri <uri> [--database <name>] [--username-env <name>] [--password-env <name>] [--connect-wait-ms <ms>] [--out <file>]\n';
+export const INIT_USAGE = 'usage: neburyx init --source <source> --uri <uri> [--database <name>] [--username-env <name>] [--password-env <name>] [--connect-wait-ms <ms>] [--out <file>]\n';
 export const SOURCE_REBIND_USAGE = 'usage: neburyx source rebind <source> [--confirm <source>]\n';
 export const TEST_SOURCE_USAGE = 'usage: neburyx test-source --name <source> [--write-probe]\n';
 
 export function parseCommand(args: readonly string[]): Command | undefined {
   const [word] = args;
   if (word === undefined) return 'api';
-  return word === 'api' || word === 'migrate' || word === 'test-source' || word === 'source' ? word : undefined;
+  return word === 'api' || word === 'migrate' || word === 'test-source' || word === 'source' || word === 'init' ? word : undefined;
 }
 
 export interface TestSourceArgs {
@@ -32,6 +33,36 @@ export function parseTestSourceArgs(args: readonly string[]): TestSourceArgs | u
   if (first === '--name' && isName(second) && third === WRITE_PROBE_FLAG) return { name: second, writeProbe: true };
   if (first === WRITE_PROBE_FLAG && second === '--name' && isName(third)) return { name: third, writeProbe: true };
   return undefined;
+}
+
+export interface InitArgs {
+  readonly source: string;
+  readonly uri: string;
+  readonly database?: string;
+  readonly usernameEnv?: string;
+  readonly passwordEnv?: string;
+  readonly connectWaitMs?: string;
+  readonly out?: string;
+}
+
+const INIT_FLAGS = { '--source': 'source', '--uri': 'uri', '--database': 'database', '--username-env': 'usernameEnv', '--password-env': 'passwordEnv', '--connect-wait-ms': 'connectWaitMs', '--out': 'out' } as const;
+
+/**
+ * The arguments of `init --source <id> --uri <uri>` and its optional flags, in any order, or undefined for anything else:
+ * a missing `--source` or `--uri`, a flag with no value, a repeated or unknown flag or an extra argument.
+ */
+export function parseInitArgs(args: readonly string[]): InitArgs | undefined {
+  const found: Partial<Record<(typeof INIT_FLAGS)[keyof typeof INIT_FLAGS], string>> = {};
+  for (let at = 0; at < args.length; at += 2) {
+    const flag = args[at];
+    const value = args[at + 1];
+    const key = flag === undefined || !Object.hasOwn(INIT_FLAGS, flag) ? undefined : INIT_FLAGS[flag as keyof typeof INIT_FLAGS];
+    if (key === undefined || !isName(value) || found[key] !== undefined) return undefined;
+    found[key] = value;
+  }
+  const { source, uri } = found;
+  if (source === undefined || uri === undefined) return undefined;
+  return { source, uri, ...(found.database === undefined ? {} : { database: found.database }), ...(found.usernameEnv === undefined ? {} : { usernameEnv: found.usernameEnv }), ...(found.passwordEnv === undefined ? {} : { passwordEnv: found.passwordEnv }), ...(found.connectWaitMs === undefined ? {} : { connectWaitMs: found.connectWaitMs }), ...(found.out === undefined ? {} : { out: found.out }) };
 }
 
 export interface RebindArgs {

@@ -245,7 +245,7 @@ A mapping may only lower a product limit, never raise it. `default_page` is 10 t
 <!-- budgets -->
 | Key | Minimum | Ceiling | Default | What it limits |
 |---|---|---|---|---|
-| `timeout_ms` | 1 | 10000 | 5000 | How long one read may run |
+| `timeout_ms` | 1 | 10000 | 5000 | How long one read may run. It is also how long the product waits to make a connection to the source, and a slow lookup of the source's name counts against it: if the name takes several seconds to resolve, raise it or give an address in `uri` |
 | `max_page` | 1 | 50 | 50 | The largest page a read may return |
 | `default_page` | 10 | 50 | 25 | The page size when none is asked for |
 | `max_hops` | 1 | 4 | 4 | The most hops a read may take: the gate refuses a request for more than the lower of this and the template's own maximum, with `QUERY_BUDGET_EXCEEDED` and `details.maxHops` |
@@ -262,6 +262,73 @@ A mapping may only lower a product limit, never raise it. `default_page` is 10 t
 ## Defaults
 
 Only `type`, `label` and `stable_id` are required for an entity type, so a minimal mapping is usable on day one: a generic icon, the stable ID as the title, the first mapped properties as key properties, no style rules. The mapping is the projection list: a property that is not mapped is never read or shown.
+
+## Drafting a mapping with neburyx init
+
+`neburyx init` reads the schema of a Neo4j database and writes a draft mapping, so that you fill in a few choices instead of writing the file. It reads names only: the labels, relationship types and property keys the database holds, and its indexes and constraints. It never reads a property value, so none is in the draft. It needs no application database and no mapping file; it needs the address of the source and the names of the two environment variables that hold the login.
+
+```bash
+GRAPH_USER=… GRAPH_PASSWORD=… neburyx init --source my-graph --uri bolt://graph.example:7687 --username-env GRAPH_USER --password-env GRAPH_PASSWORD --out neburyx.yaml
+```
+
+| Flag | Meaning |
+|---|---|
+| `--source` | Required. The ID of the source in the draft, written by the same rule as a source `id` in a mapping |
+| `--uri` | Required. The address of the server, checked by the same rule as a source `uri` |
+| `--database` | The database to read. It defaults to `neo4j` |
+| `--username-env`, `--password-env` | The names of the environment variables that hold the login. They default to `NEO4J_USERNAME` and `NEO4J_PASSWORD`, and the draft writes the same names into its `auth` block. Their values are never printed or written |
+| `--connect-wait-ms` | How long the first connection may take, in milliseconds: it sets the wait for a connection, the timeout to make one and the timeout of each read of `init`. It defaults to 8000 and may be from 1000 to 9000 (a read ends after 10,000 ms whatever the wait). A name that resolves to an address that does not answer can take longer than the 2,000 ms the rest of the product waits for a connection. A connection that could not be made in time is reported as `The source could not be reached.` |
+| `--out` | A file to write the draft to. It must not exist: `init` never overwrites a file. Without it the draft goes to standard output |
+
+A worked run on the banking demo graph (`domain-packs/banking-fraud`, built by `tools/demo-graph`), trimmed. The draft is what `init` printed for that database; the stable ID candidates are the properties of its uniqueness constraints, the `search` candidates are its indexes:
+
+```bash
+GRAPH_USER=… GRAPH_PASSWORD=… neburyx init --source banking-demo --uri bolt://graph.example:7687 --database banking --username-env GRAPH_USER --password-env GRAPH_PASSWORD
+```
+
+```text
+sources:
+  - id: "banking-demo"
+    uri: "bolt://graph.example:7687"
+    database: "banking"
+    auth:
+      kind: basic
+      username_env: GRAPH_USER
+      password_env: GRAPH_PASSWORD
+    entities:
+      # TODO: keep the labels that are entity types and delete the others; rename a type if you want a different name in the app.
+      - type: "Account"
+        label: "Account"
+        # stable ID: the property that names one node. Properties on a uniqueness or key constraint of this label: accountId
+        stable_id: TODO
+        # TODO search: a list of properties people search by. Properties on a range or text index of this label: accountId, holderName
+        # TODO pii: the properties that hold personal data
+      ...
+    relationships:
+      - type: "CONNECTS_FROM"
+        from: TODO
+        to: TODO
+      ...
+
+# ...
+# Constraints:
+#   constraint_126b626e: UNIQUENESS on label Merchant, properties merchantId
+#   constraint_2ca2ecf: UNIQUENESS on label Device, properties fingerprint
+#   ...
+```
+
+The login should be one that can only read. `init` reads through a read-only session, with a few fixed reads, and writes nothing to the source. The reads follow the product's rules (the gate, the mapping's default budgets and its request deadline of 10,000 ms) with one difference: the connection wait, the connection timeout and the read timeout of these reads are the value of `--connect-wait-ms`, 8,000 ms unless you say otherwise. Each list it reads (labels, relationship types, property keys, indexes, constraints) is cut at 500 names. When a list is cut, the draft says that the database has more than 500 of that kind and that the list is partial; it never states a count it did not read.
+
+The draft has one entity type for each label, with `stable_id: TODO`, and one relationship type for each relationship type, with `from: TODO` and `to: TODO`. Next to each entity type it lists, as comments, the properties on a uniqueness or key constraint of the label (candidates for the stable ID) and the properties on a range or text index of the label (candidates for `search`), with a `TODO` comment for `search` and for `pii`. At the end it lists everything it read: every property key, index and constraint. A `TODO` marks a choice only you can make:
+
+1. Keep the labels that are entity types and delete the others, and rename a type if you want a different name in the app.
+2. Replace each `stable_id: TODO` with the property that names one node of the label.
+3. Replace `from` and `to` of each relationship type with entity types of the draft, or delete the relationship type.
+4. Turn the `search` and `pii` comments into `search:` and `pii:` lists where you want them.
+
+An entity type or relationship type that keeps a `TODO` is not a passing mapping: the loader refuses a `from` or `to` that names no entity type, and `neburyx test-source` reports a `stable_id` that no index or constraint covers. When a name read from the database is itself `TODO`, the draft writes the markers with a different text, so a marker never names a real label or property. When the database has no labels there is nothing to draft from: `init` says so, writes nothing and exits `1`.
+
+`init` exits `0` when it made a draft (it also says how many places to fill in, and whether a list was cut), `1` when it could not (the source could not be reached or refused the sign-in or a read, the database has no labels, or the file exists), and `2` for a usage error or an address, database name or ID that a mapping would refuse. When the draft is filled in, check it with `neburyx test-source`, as described next.
 
 ## Checking a mapping
 

@@ -39,16 +39,16 @@ When a new place must build the gate with the adapter, change the zones in `adap
 ## The system principal and the system runner
 
 `createSourceGate` builds the gate and the Neo4j executor from the mapping, and returns the user `Gate` (which has `run` only), a separate
-system runner and a `close()`. Routes receive only the `Gate`; the system runner goes to the startup check and the scheduled ping. Two rules
+system runner and a `close()`. Routes receive only the `Gate`; the system runner goes to the startup check, the scheduled ping and the schema reads of `neburyx init`. Two rules
 keep the capabilities where they belong (`tools/workspace-checks/src/architecture/gate-capabilities.ts`):
 
 | Import | Allowed in |
 |---|---|
 | the system-principal module, `gate/system-principal.ts` | `services/api/src/gate/` |
-| the module that exports `createSourceGate`, `gate/source-gate.ts` | `services/api/src/gate/`, `services/api/src/start.ts` and `services/api/src/source-test/command.ts` (the `test-source` command builds its own gate and uses only the `Gate` it returns) |
+| the module that exports `createSourceGate`, `gate/source-gate.ts` | `services/api/src/gate/`, `services/api/src/start.ts`, `services/api/src/source-test/command.ts` (the `test-source` command builds its own gate and uses only the `Gate` it returns) and `services/api/src/init/command.ts` (the `init` command builds its own gate and runs its fixed schema reads through the system runner, so it needs no application database) |
 
 Test files (`*.test.*`) and `services/api/src/testing/` are exempt, as above. A re-export of either module is never allowed, even from a file
-that may import it, so `gate/types.ts`, `start.ts` and `source-test/command.ts` cannot pass the system principal or the system runner on. Both rules read the same
+that may import it, so `gate/types.ts`, `start.ts`, `source-test/command.ts` and `init/command.ts` cannot pass the system principal or the system runner on. Both rules read the same
 imports and re-exports as the adapter check, in the folders `services/`, `packages/` and `apps/`, and report the file, line and import.
 
 ## The write probe
@@ -61,6 +61,7 @@ transaction and always rolls it back (see the probe's module, `services/api/src/
 | `adapter-access` | the one module under `services/api/src/sources/` that a file outside `gate/` and `sources/` may import: `sources/write-probe.ts` | `services/api/src/source-test/command.ts` (one exception in `adapter.ts`; every other `sources/` module is still reported there) |
 | `write-probe` | `sources/write-probe.ts` | `services/api/src/source-test/command.ts` only. A file under `gate/` or `sources/` is reported too, and the command never re-exports it |
 | `test-source-command` | the command module, `services/api/src/source-test/command.ts` | `services/api/src/cli.ts` only, with no re-export |
+| `init-command` | the command module, `services/api/src/init/command.ts` | `services/api/src/cli.ts` only, with no re-export |
 
 The tester takes the probe as an optional function whose type is declared in `source-test/probe.ts`, so it imports nothing from `sources/`; the route builds its tester without
 one. Test files and `services/api/src/testing/` are exempt, as above, and static, type-only and dynamic imports and every form of re-export are read the same way.
