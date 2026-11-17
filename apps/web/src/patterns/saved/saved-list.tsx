@@ -86,10 +86,12 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
           {words === undefined ? null : <TypologyRows items={group.items} client={words.client} sourceId={words.sourceId} sourceName={sourceName} mask={words.mask} actions={words.actions} />}
         </Section>
       ))}
+      {groups.named.length > 0 && groups.general.length === 0 && presets?.length === 0 ? null : (
       <Section id="built-in" label={groups.named.length === 0 ? SAVED_COPY.builtIn : `${SAVED_COPY.builtIn} · ${SAVED_COPY.builtInGeneral}`} count={presets === undefined ? undefined : String(presets.length + groups.general.length)} headingRef={builtIn}>
         {words === undefined || groups.general.length === 0 ? null : <TypologyRows items={groups.general} client={words.client} sourceId={words.sourceId} sourceName={sourceName} mask={words.mask} actions={words.actions} />}
         {presets === undefined ? null : <BuiltInRows presets={presets} text={text} actions={actions} nameOf={nameOf} hasOthers={groups.general.length > 0} />}
       </Section>
+      )}
       {state.phase === 'failed' ? (
         <ListUnreadable failure={state.failure} sourceName={sourceName} retry={list.reload} />
       ) : state.phase === 'loading' ? (

@@ -165,6 +165,13 @@ describe('running and copying a built-in definition', () => {
 });
 
 describe('the groups of built-in definitions', () => {
+  it('shows no general section, and none that says there are no built-in patterns, when the only built-ins are typologies', async () => {
+    await patternsWorkspace({ list: async () => ({ ok: true, value: { ...listOf(), presets: [], builtInDefinitions: [FAN_OUT, PASS_THROUGH] } }) });
+    await openPatterns();
+    expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · AML typologies · 2', 'My patterns · 0', 'Shared on this source · 0']);
+    expect(screen.queryByText('This source has no built-in patterns.')).toBeNull();
+  });
+
   it('puts a definition whose group is "general" in the one general section with the built-in templates', async () => {
     await patternsWorkspace({ list: listWith([{ ...FAN_OUT, id: 'g', name: 'Named general', group: 'General' }]) });
     await openPatterns();
