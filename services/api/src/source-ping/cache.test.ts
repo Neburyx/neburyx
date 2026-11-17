@@ -48,4 +48,15 @@ describe('seeding from the startup check', () => {
     seedFromStartup(cache, [{ sourceId: 'a', outcome: 'error', answered: true, findings: [] }]);
     expect(cache.get('a')).toBe('reachable');
   });
+
+  it('follows a reload: a source that stays keeps its state, a new one is unknown, a removed one is no longer counted', () => {
+    const cache = createReachabilityCache(['a', 'b', 'c']);
+    cache.set('a', 'reachable');
+    cache.set('b', 'unreachable');
+    cache.replaceSources(['a', 'c', 'd']);
+    expect([cache.get('a'), cache.get('c'), cache.get('d'), cache.get('b')]).toEqual(['reachable', 'unknown', 'unknown', 'unknown']);
+    expect(cache.counts()).toEqual({ reachable: 1, unreachable: 0, unknown: 2 });
+    cache.set('b', 'reachable');
+    expect(cache.counts()).toEqual({ reachable: 1, unreachable: 0, unknown: 2 });
+  });
 });

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { accessSync, constants, existsSync, statSync } from 'node:fs';
+import { accessSync, constants, existsSync, statSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ConfigureSourceBudgets, MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
@@ -12,6 +12,9 @@ import { isInContainer, warnIfExposed } from './exposure.js';
 import { IdentityStartError } from './identity/errors.js';
 import { MappingError } from './mapping/diagnostics.js';
 import { loadMappingFile } from './mapping/load.js';
+import { createDevReloader, type DevReloader } from './mapping/dev-reload.js';
+import { createLiveMapping } from './mapping/live.js';
+import { createSwitchableGate } from './gate/switchable-gate.js';
 import { causeOf, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, loadProfileExtension, registeredExtensionLoader, type ExtensionLoader } from './profile/extension.js';
 import { decidePreviewSwitch, previewInputsOf } from './profile/switch.js';
 import type { MappingModel } from './mapping/model.js';
@@ -62,6 +65,9 @@ export interface StartIo {
   readonly fileExists?: (path: string) => boolean;
   /** The loader of the enterprise extension; the registered one unless a test names its own. */
   readonly extensionLoader?: ExtensionLoader;
+  /** What watches the folder of the mapping file in dev mode, and how long it waits after the last change; the shipped ones unless a test names its own. */
+  readonly watch?: typeof watch;
+  readonly devReloadDebounceMs?: number;
 }
 
 class StartupStop extends Error {}
@@ -109,6 +115,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   } catch (error) {
     if (!(error instanceof ConfigError)) throw error;
     io.stderr.write(`${error.message}\n`);
+    if (error.keys.includes('NEBURYX_DEV')) io.stderr.write('NEBURYX_DEV is 1 to read the mapping file again when it is saved, and unset otherwise\n');
     return { exitCode: 1 };
   }
 
@@ -203,6 +210,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let pingSchedule: PingSchedule | undefined;
   let firstContact: FirstContact | undefined;
   let mountedAudit: MountedAuditSink | undefined;
+  let devReloader: DevReloader | undefined;
   try {
     const addresses = createAddressCache();
     const openStore = io.openStore ?? ((url, report, directory, preview) => createAppStore(url, report, { migrationsDirectory: directory, connectionTimeoutMs: config.connectTimeoutMs, readinessLimitMs: config.readinessLimitMs, addresses, ...(preview === undefined ? {} : { previewMigrationsDirectory: preview }) }));
@@ -242,7 +250,12 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     });
     const seams = mountedAudit === undefined ? community : { ...community, audit: mountedAudit.sink };
     sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys, ...(extension?.askFolder === undefined ? {} : { fileQueries: fileQueryDepsOf(() => extension?.askFolder?.()) }) });
-    const gate = sourceGate;
+    const initialGate = sourceGate;
+    // in dev mode the mapping and the gate can be replaced by a reload, so what the app, the checks and the ping hold is a live mapping and a switchable gate; otherwise it is the model and the gate made here
+    const switchable = config.dev ? createSwitchableGate(initialGate) : undefined;
+    const live = config.dev ? createLiveMapping(mapping) : undefined;
+    const served: MappingModel = live ?? mapping;
+    const gate = switchable ?? initialGate;
     const results = await createStartupChecker({ system: gate.system, mapping, store: observingStore, logger: io.logger }).run();
     const reachability = createReachabilityCache(mapping.sources.map((source) => source.id));
     seedFromStartup(reachability, results);
@@ -263,8 +276,8 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       logger: io.logger,
       store,
       jobs,
-      mapping,
-      sourceTester: createSourceTester({ gate: gate.gate, mapping, store: observingStore, logger: io.logger }),
+      mapping: served,
+      sourceTester: createSourceTester({ gate: gate.gate, mapping: served, store: observingStore, logger: io.logger }),
       gate: gate.gate,
       catalog: gate.catalog,
       seams,
@@ -278,11 +291,13 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       indexes: gate.indexes,
       reachability,
       stopPing: () => {
+        devReloader?.stop();
         pingSchedule?.stop();
         firstContact?.stop();
       },
       // a first-contact check that was already running ends before the sources and the store are closed
       drainPing: async () => {
+        await devReloader?.close();
         await pingSchedule?.drain();
         await firstContact?.drain();
       },
@@ -293,21 +308,49 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     });
     await app.listen({ host: config.host, port: io.portOverride ?? config.port });
     const pingIntervalMs = io.pingIntervalMs ?? PING_INTERVAL_MS;
-    const contact = createFirstContact({ system: gate.system, mapping, store: observingStore, record: usability, logger: io.logger, intervalMs: pingIntervalMs });
-    firstContact = contact;
     const logPingOutcomes = createPingOutcomeLog(io.logger);
-    pingSchedule = startPingSchedule({
-      ping: createScheduledPing({ system: gate.system, mapping, cache: reachability }),
-      intervalMs: pingIntervalMs,
-      onResults: async (results) => {
-        logPingOutcomes(results);
-        await applyPingResults(openedStore, io.logger, results, { mapping });
-        await refreshUsability(openedStore, usability, mapping, startedAt, io.logger);
-        contact.afterTick(results);
-      },
-      onFailure: () => io.logger.warn({ event: 'source.ping_failed' }, 'source ping failed'),
-      onOverlap: () => io.logger.warn({ event: 'source.ping_overlap' }, 'source ping run has not ended before the next one is due'),
-    });
+    const startChecks = (): void => {
+      const contact = createFirstContact({ system: gate.system, mapping: served, store: observingStore, record: usability, logger: io.logger, intervalMs: pingIntervalMs });
+      firstContact = contact;
+      pingSchedule = startPingSchedule({
+        ping: createScheduledPing({ system: gate.system, mapping: served, cache: reachability }),
+        intervalMs: pingIntervalMs,
+        onResults: async (results) => {
+          logPingOutcomes(results);
+          await applyPingResults(openedStore, io.logger, results, { mapping: served });
+          await refreshUsability(openedStore, usability, served, startedAt, io.logger);
+          contact.afterTick(results);
+        },
+        onFailure: () => io.logger.warn({ event: 'source.ping_failed' }, 'source ping failed'),
+        onOverlap: () => io.logger.warn({ event: 'source.ping_overlap' }, 'source ping run has not ended before the next one is due'),
+      });
+    };
+    startChecks();
+    if (config.dev && switchable !== undefined && live !== undefined) {
+      if (config.mappingPath === undefined) io.logger.warn({ event: 'mapping.dev_reload_nothing_to_watch' }, 'NEBURYX_DEV is 1 and NEBURYX_CONFIG is not set: there is no mapping file to watch');
+      else {
+        devReloader = createDevReloader({
+          path: config.mappingPath,
+          live,
+          gate: switchable,
+          openGate: (next) => (io.openSourceGate ?? createSourceGate)({ mapping: next, env, seams, logger: io.logger, cursors, referenceKeys, ...(extension?.askFolder === undefined ? {} : { fileQueries: fileQueryDepsOf(() => extension?.askFolder?.()) }) }),
+          syncSources: (sources) => openedStore.syncSources(sources),
+          reachability,
+          pause: async () => {
+            pingSchedule?.stop();
+            firstContact?.stop();
+            await pingSchedule?.drain();
+            await firstContact?.drain();
+          },
+          resume: startChecks,
+          extensionLoaded: extension !== undefined,
+          logger: io.logger,
+          ...(io.watch === undefined ? {} : { watch: io.watch }),
+          ...(io.devReloadDebounceMs === undefined ? {} : { debounceMs: io.devReloadDebounceMs }),
+        });
+        io.logger.warn({ event: 'mapping.dev_reload_on' }, 'NEBURYX_DEV is 1: the mapping file is read again when it is saved; this is for development, not for production');
+      }
+    }
     return { exitCode: 0, app };
   } catch (error) {
     io.stderr.write(`${error instanceof IdentityStartError || error instanceof SourceGateError || error instanceof StartupStop ? error.message : describeStartFailure(error)}\n`);

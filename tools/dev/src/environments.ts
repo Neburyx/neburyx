@@ -9,6 +9,8 @@ const LIMIT_VARIABLES = [CONNECT_LIMIT_VARIABLE, READINESS_LIMIT_VARIABLE] as co
 /** The API's own default, `CONNECTION_TIMEOUT_MS` in `services/api/src/db/pool.ts`; a workspace check keeps the two equal. */
 export const DEFAULT_CONNECT_LIMIT_MS = 10_000;
 
+const DEV_VARIABLE = 'NEBURYX_DEV';
+
 const CACHE_VARIABLES = ['NEBURYX_AI_CACHE', 'NEBURYX_AI_CACHE_TTL'] as const;
 
 const ASK_VARIABLES = [
@@ -57,6 +59,11 @@ export function baseEnvironment(source: Source): Environment {
 /** The two limits on the application database that the developer may set; only the migrate step and the API are given them. */
 export function limitsEnvironment(source: Source): Environment {
   return pick(source, LIMIT_VARIABLES);
+}
+
+/** The dev switch of the API: `NEBURYX_DEV` in the developer's shell is passed to the API (it reads the mapping file again when it is saved); only the API reads it. */
+export function devEnvironment(source: Source): Environment {
+  return pick(source, [DEV_VARIABLE]);
 }
 
 /** The two prompt-cache settings the developer may set; only the API reads them, so the migrate step and the web server are not given them. */

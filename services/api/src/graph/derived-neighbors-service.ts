@@ -1,7 +1,7 @@
 import { DERIVED_NEIGHBOR_CAP, type Count, type DerivedNeighborsResponse, type DerivedNeighborsResult, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { EntityReader } from '../entities/entity-reader.js';
-import { allowlistFromMapping } from '../gate/allowlist.js';
+import { liveAllowlists } from '../gate/live-allowlists.js';
 import { DERIVED_RULE_RUN_ID, derivedRuleRunTemplate } from '../gate/templates/derived-rule-run.js';
 import type { Gate, GatePage, GateRequest } from '../gate/types.js';
 import type { SourceAccess } from '../investigations/source-access.js';
@@ -47,7 +47,7 @@ function resultOf(rule: { readonly id: string; readonly ruleVersion: number }, p
 }
 
 export function createDerivedNeighborsService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader }): DerivedNeighborsService {
-  const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const allowlists = liveAllowlists(deps.mapping);
   return {
     async derive(request) {
       await deps.access.require({ traceId: request.traceId, principal: request.principal, sourceId: request.sourceId, auditAction: derivedRuleRunTemplate.auditAction, rate: 'count' });

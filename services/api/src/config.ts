@@ -27,6 +27,7 @@ const keys = {
   exportDirectory: 'NEBURYX_EXPORT_DIR',
   connectTimeoutMs: 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS',
   readinessLimitMs: 'NEBURYX_READINESS_LIMIT_MS',
+  dev: 'NEBURYX_DEV',
 } as const;
 
 function isPostgresUrl(value: string): boolean {
@@ -70,6 +71,8 @@ const configSchema = z.object({
   connectTimeoutMs: z.number().int().min(MIN_CONNECT_TIMEOUT_MS).max(MAX_CONNECT_TIMEOUT_MS),
   /** How long `/readyz` waits for its check of the database. */
   readinessLimitMs: z.number().int().min(MIN_READINESS_LIMIT_MS).max(MAX_READINESS_LIMIT_MS),
+  /** Dev mode: the mapping file is read again when it is saved. Only `1` turns it on; unset or empty leaves it off. */
+  dev: z.boolean(),
   /** The key that signs page cursors; absent, the API makes one of its own for the process. */
   cursorKey: z
     .string()
@@ -92,6 +95,12 @@ export class ConfigError extends Error {
   }
 }
 
+/** `1` is dev mode, unset and empty are not; any other value is not a setting and is refused, so a typo never leaves the reload off or on by guess. */
+function parseDev(value: string | undefined): boolean | undefined {
+  if (value === undefined || value === '') return false;
+  return value === '1' ? true : undefined;
+}
+
 export function parseConfig(
   env: Readonly<Record<string, string | undefined>>,
   defaults: { readonly webRoot: string; readonly exportDirectory?: string },
@@ -106,12 +115,13 @@ export function parseConfig(
     exportDirectory: env[keys.exportDirectory] ?? defaults.exportDirectory ?? DEFAULT_EXPORT_DIRECTORY,
     connectTimeoutMs: parseConnectTimeout(env[keys.connectTimeoutMs]),
     readinessLimitMs: parseReadinessLimit(env[keys.readinessLimitMs]),
+    dev: parseDev(env[keys.dev]),
   });
   if (result.success) return result.data;
 
   const failed = result.error.issues.flatMap((issue) => {
     const field = issue.path[0];
-    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' || field === 'connectTimeoutMs' || field === 'readinessLimitMs' ? [keys[field]] : [];
+    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' || field === 'connectTimeoutMs' || field === 'readinessLimitMs' || field === 'dev' ? [keys[field]] : [];
   });
   throw new ConfigError([...new Set(failed)]);
 }

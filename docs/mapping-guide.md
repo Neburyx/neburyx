@@ -330,6 +330,19 @@ An entity type or relationship type that keeps a `TODO` is not a passing mapping
 
 `init` exits `0` when it made a draft (it also says how many places to fill in, and whether a list was cut), `1` when it could not (the source could not be reached or refused the sign-in or a read, the database has no labels, or the file exists), and `2` for a usage error or an address, database name or ID that a mapping would refuse. When the draft is filled in, check it with `neburyx test-source`, as described next.
 
+## Reloading the mapping while you edit it
+
+While you write a mapping you can have the running API read the file again each time you save it. Set `NEBURYX_DEV=1` before the API starts (with `pnpm dev`, set it in your shell before the command; see [run locally](run-locally.md)) and the API watches the folder of the file `NEBURYX_CONFIG` names. A moment after a save it reads the file as it does at start, checks it, and, if it is good, serves from it with no restart: a new entity type can be explored, a new source appears on the Sources page and a removed one goes, and the profile of a source that changed is new. The API writes one line to its output for each reload (the IDs of the sources added, changed and removed) or for each refusal (why).
+
+A reload keeps the mapping that works when it cannot use the file. It refuses, and says why in the output:
+
+- a file that is not valid, with the same message and the same line and column as at start;
+- a change to the address, the database or the names of the login variables of a source the API already serves, because that source's connection is made once (restart the API);
+- a change to the `ai` section, and, with the enterprise extension loaded, a change to the set of sources or to a budget, because those are checked once at start (restart the API);
+- a mapping that the source gate refuses to build.
+
+The environment (the logins themselves, `DATABASE_URL`) is read at start and needs a restart. Saved investigations are judged against the mapping the API holds, as after a restart: one whose source was removed says so. Without `NEBURYX_DEV`, or with any other value than `1`, the file is read once, at start, as always. The setting is for development; none of the files that ship sets it, and it is not for production.
+
 ## Checking a mapping
 
 `test-source` checks one configured source. It needs the database of the application (`DATABASE_URL`, after `neburyx migrate` and one start of the API), the mapping (`NEBURYX_CONFIG`) and the variables that the mapping's `auth` names:

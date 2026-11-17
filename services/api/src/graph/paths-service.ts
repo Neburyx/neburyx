@@ -1,6 +1,6 @@
 import type { Count, GraphEdge, GraphNode, PathsRequest, PathsResponse } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import { allowlistFromMapping } from '../gate/allowlist.js';
+import { liveAllowlists } from '../gate/live-allowlists.js';
 import { isNormalizedPaths, type FoundStep } from '../gate/normalize/shortest-paths.js';
 import { shortestPathsTemplate, SHORTEST_PATHS_ID } from '../gate/templates/shortest-paths.js';
 import { PATHS_MAX_HOPS } from '../gate/templates/shortest-paths-statement.js';
@@ -40,7 +40,7 @@ function shownBy(paths: readonly (readonly FoundStep[])[], nodes: readonly Graph
 
 export function createPathsService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly now?: () => Date; readonly probes?: ReadonlyMap<string, TemplateProbe> }): PathsService {
   const probe = (deps.probes ?? defaultTemplateProbes()).get(SHORTEST_PATHS_ID);
-  const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const allowlists = liveAllowlists(deps.mapping);
   const now = deps.now ?? (() => new Date());
   return {
     async find(request) {

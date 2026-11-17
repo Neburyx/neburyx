@@ -1,6 +1,6 @@
 import { patternDefinitionSchema, type Count, type PatternRunResponse } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import { allowlistFromMapping } from '../gate/allowlist.js';
+import { liveAllowlists } from '../gate/live-allowlists.js';
 import { isNormalizedPattern } from '../gate/normalize/pattern.js';
 import { patternTemplate } from '../gate/templates/pattern.js';
 import { patternNoticesOf, patternCountQualityOf } from '../gate/templates/pattern-notices.js';
@@ -42,7 +42,7 @@ export interface PatternRunService {
  * request with a cursor reads no estimate and is never a heavy stop; the count of its page is a lower bound, never exact, because the total is not known. The answer's count is labelled by what the read did, and its notices are the ones the preview and the compiler follow.
  */
 export function createPatternRunService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly now?: () => Date; readonly probes?: ReadonlyMap<string, TemplateProbe> }): PatternRunService {
-  const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const allowlists = liveAllowlists(deps.mapping);
   const now = deps.now ?? (() => new Date());
   const probes = deps.probes ?? defaultTemplateProbes();
   return {

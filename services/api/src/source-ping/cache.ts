@@ -11,6 +11,8 @@ export interface ReachabilityView {
 export interface ReachabilityCache extends ReachabilityView {
   get(sourceId: string): Reachability;
   set(sourceId: string, state: Reachability): void;
+  /** Follows a reload: a source that stays keeps its state, a new one is unknown, a removed one is no longer counted. */
+  replaceSources(sourceIds: readonly string[]): void;
 }
 
 export function createReachabilityCache(sourceIds: readonly string[]): ReachabilityCache {
@@ -19,6 +21,11 @@ export function createReachabilityCache(sourceIds: readonly string[]): Reachabil
     get: (sourceId) => states.get(sourceId) ?? 'unknown',
     set(sourceId, state) {
       if (states.has(sourceId)) states.set(sourceId, state);
+    },
+    replaceSources(ids) {
+      const kept = new Map(ids.map((id) => [id, states.get(id) ?? ('unknown' as Reachability)]));
+      states.clear();
+      for (const [id, state] of kept) states.set(id, state);
     },
     counts() {
       const counts = { reachable: 0, unreachable: 0, unknown: 0 };

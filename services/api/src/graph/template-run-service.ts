@@ -1,6 +1,6 @@
 import { HEAVY_CONTINUE_LIMIT, linkedEntitiesParamsSchema, sharedAttributeParamsSchema, type Count, type TemplateRunNotice, type TemplateRunResponse } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
-import { allowlistFromMapping } from '../gate/allowlist.js';
+import { liveAllowlists } from '../gate/live-allowlists.js';
 import { isNormalizedLinked, type NormalizedLinked } from '../gate/normalize/linked-entities.js';
 import { isNormalizedShared } from '../gate/normalize/shared-attribute.js';
 import { LINKED_ENTITIES_ID, linkedEntitiesTemplate } from '../gate/templates/linked-entities.js';
@@ -153,7 +153,7 @@ async function heavyStopOf(gate: Gate, run: GateRequest, params: Params, probe: 
 }
 
 export function createTemplateRunService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly now?: () => Date; readonly probes?: ReadonlyMap<string, TemplateProbe> }): TemplateRunService {
-  const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const allowlists = liveAllowlists(deps.mapping);
   const now = deps.now ?? (() => new Date());
   const probes = deps.probes ?? defaultTemplateProbes();
   function linkedResponseOf(item: unknown, page: GatePage, resolved: Resolved, params: Record<string, unknown>, allowlist: SourceAllowlist): TemplateRunResponse {

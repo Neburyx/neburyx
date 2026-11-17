@@ -60,6 +60,7 @@ describe('parseConfig', () => {
       exportDirectory: DEFAULT_EXPORT_DIRECTORY,
       connectTimeoutMs: 10_000,
       readinessLimitMs: 2000,
+      dev: false,
     });
   });
 
@@ -149,6 +150,19 @@ describe('the connect limit', () => {
     const failure = (): unknown => parseConfig({ ...database, NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: value }, defaults);
     expect(failure).toThrow('invalid configuration: NEBURYX_DATABASE_CONNECT_TIMEOUT_MS');
     expect(failure).not.toThrow(value);
+  });
+});
+
+describe('the dev switch', () => {
+  it('is off when NEBURYX_DEV is unset or empty, and on only for 1', () => {
+    expect(parseConfig({ ...database }, defaults).dev).toBe(false);
+    expect(parseConfig({ ...database, NEBURYX_DEV: '' }, defaults).dev).toBe(false);
+    expect(parseConfig({ ...database, NEBURYX_DEV: '1' }, defaults).dev).toBe(true);
+  });
+
+  it.each(['0', 'true', 'yes', 'on', ' 1', '11'])('refuses %j, naming the variable', (value) => {
+    const failure = () => parseConfig({ ...database, NEBURYX_DEV: value }, defaults);
+    expect(failure).toThrow('invalid configuration: NEBURYX_DEV');
   });
 });
 

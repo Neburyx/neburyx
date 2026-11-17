@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
+import { apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
 
 const developer = { PATH: '/bin', HOME: '/home/dev', TMPDIR: '/tmp', NODE_ENV: 'development', LANG: 'C', AWS_SECRET_ACCESS_KEY: 'a developer secret', DATABASE_URL: 'postgres://elsewhere', NEBURYX_DB_ADMIN_PASSWORD: 'inherited' };
 const cursorKey = Buffer.alloc(32, 3).toString('base64');
@@ -63,6 +63,12 @@ describe('the environments of the children', () => {
     const given = { NEBURYX_SUMMARY_MODEL: 'a-model', NEBURYX_SUMMARY_TOKEN_KEY_FILE: '/keys/summary', NEBURYX_SUMMARY_MAX_CALLS: '2', NEBURYX_SUMMARY_MAX_OUTPUT_TOKENS: '3000', NEBURYX_SUMMARY_PROMPT_FILE: '' };
     expect(summaryEnvironment({ ...developer, ...given, NEBURYX_PORT: '1', NEBURYX_ASK_PROVIDER: 'not passed' })).toEqual(given);
     expect(summaryEnvironment(developer)).toEqual({});
+  });
+
+  it('picks the dev switch of the API as it is given, and nothing else, so that a reload of the mapping file is on only when the developer sets it', () => {
+    expect(devEnvironment({ ...developer, NEBURYX_DEV: '1', NEBURYX_PORT: '1' })).toEqual({ NEBURYX_DEV: '1' });
+    expect(devEnvironment({ ...developer, NEBURYX_DEV: '' })).toEqual({ NEBURYX_DEV: '' });
+    expect(devEnvironment(developer)).toEqual({});
   });
 
   it('pick the two prompt cache settings as they are given, an empty value included, and nothing else', () => {

@@ -12,7 +12,9 @@
  */
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { readdirSync } from 'node:fs';
+import { readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { stringify } from 'yaml';
 import { fileURLToPath } from 'node:url';
 import { sourcesResponseSchema } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
@@ -371,6 +373,53 @@ describe('a change of the login a source uses', () => {
     expect(await nodeCounts()).toEqual(countsBefore);
     await assertPingLinesLogged();
     await assertNoPasswordAnywhere();
+  });
+});
+
+describe('a dev reload of the mapping file', () => {
+  const SOURCE = {
+    id: 'reload-source',
+    uri: 'bolt://graph.invalid:7687',
+    database: 'neo4j',
+    auth: { kind: 'basic', username_env: 'RELOAD_USER', password_env: 'RELOAD_PASSWORD' },
+    entities: [{ type: 'thing', label: 'Thing', stable_id: 'id' }],
+  };
+  const textOf = (entities: object[]): string => stringify({ sources: [{ ...SOURCE, entities }] });
+  let stack: Stack;
+
+  const entityTypes = async (): Promise<string[]> => {
+    const response = await fetch(`${stack.url}/v1/sources/${SOURCE.id}/profile`);
+    const body = (await response.json()) as { entityTypes?: { type: string }[] };
+    return (body.entityTypes ?? []).map((entry) => entry.type).sort();
+  };
+
+  beforeAll(async () => {
+    stack = await Stack.create({
+      image: IMAGE,
+      tag: TAG,
+      overrides: [fileURLToPath(new URL('./fixtures/dev-reload.yaml', import.meta.url))],
+      settings: { ...settingsFile() },
+      mapping: { text: textOf(SOURCE.entities) },
+    });
+    stacks.push(stack);
+    const result = await stack.up();
+    expect(result.code, result.stderr).toBe(0);
+  }, STACK_TEST_TIMEOUT_MS);
+
+  it('shows an edit of the mapping file in the running API with no restart, and keeps the mapping that works when a save breaks the file', { timeout: STACK_TEST_TIMEOUT_MS }, async () => {
+    const file = join(stack.configFolder, 'neburyx.yaml');
+    const apiBefore = await dockerOk(['inspect', '--format', '{{.State.StartedAt}}', await stack.containerId('api')]);
+    expect(await entityTypes()).toEqual(['thing']);
+
+    writeFileSync(file, textOf([...SOURCE.entities, { type: 'other', label: 'Other', stable_id: 'ref' }]));
+    await vi.waitFor(async () => expect(await entityTypes()).toEqual(['other', 'thing']), { timeout: 60_000, interval: 1000 });
+
+    writeFileSync(file, 'sources: [\n  - id: reload-source\n   broken: [');
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    expect(await entityTypes()).toEqual(['other', 'thing']);
+    expect(await dockerOk(['inspect', '--format', '{{.State.Running}}', await stack.containerId('api')])).toBe('true');
+    expect(await dockerOk(['inspect', '--format', '{{.State.StartedAt}}', await stack.containerId('api')]), 'the container was not restarted').toBe(apiBefore);
+    expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).toContain('mapping.reload_refused');
   });
 });
 

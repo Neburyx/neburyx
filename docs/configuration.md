@@ -4,6 +4,10 @@ The mapping file (the file `NEBURYX_CONFIG` names) holds the sources, their mapp
 
 A setting that is out of range, of the wrong type or not known is refused when the API starts: the message names the key (for example `retention.deleted_investigations_days`), the API does not start and the exit code is 1.
 
+## Dev reload
+
+`NEBURYX_DEV=1` makes the API read the mapping file (`NEBURYX_CONFIG`) again when it is saved, so a change shows in the running app with no restart; unset (the default) reads the file once, at start. Any other value is refused when the API starts. It is for development: no shipped file sets it, and it is not for production. The mapping guide describes what a save does and what is refused.
+
 ## Retention
 
 How long deleted things are kept. The block is optional, and so is each key in it.

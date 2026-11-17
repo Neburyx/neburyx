@@ -1,7 +1,7 @@
 import type { Count, ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandResponse, GraphEdge, GraphNode, Window } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import type { EntityReader } from '../entities/entity-reader.js';
-import { allowlistFromMapping } from '../gate/allowlist.js';
+import { liveAllowlists } from '../gate/live-allowlists.js';
 import { canonicalJson } from '../gate/cursor/binding.js';
 import type { ExpansionPage } from '../gate/normalize/expansion.js';
 import { EXPAND_COUNT_ID, type ExpandCountItem } from '../gate/templates/expand-count.js';
@@ -90,7 +90,7 @@ function distinct<T>(values: readonly T[], keyOf: (value: T) => string): T[] {
 }
 
 export function createExpandService(deps: { readonly gate: Gate; readonly mapping: MappingModel; readonly access: SourceAccess; readonly entities: EntityReader; readonly now?: () => Date }): ExpandService {
-  const allowlists = new Map(deps.mapping.sources.map((source) => [source.id, allowlistFromMapping(source)]));
+  const allowlists = liveAllowlists(deps.mapping);
   const now = deps.now ?? (() => new Date());
   return {
     async expand(request) {
