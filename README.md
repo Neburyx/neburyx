@@ -51,7 +51,7 @@ Run Neburyx on two synthetic demo graphs, on your own machine, with the demo com
 
 The image is published as `ghcr.io/neburyx/neburyx`. You can build it from this checkout, as below, or
 skip the build and use the published image: after you write `.env` in the next step, add
-`NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.0` to it.
+`NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.1` to it.
 
 ### Build the image
 
@@ -218,7 +218,7 @@ docker compose down -v
   output names a service after the setting, for example `NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes`. Run
   `docker compose logs NEBURYX_CURSOR_KEY-base64-of-at-least-32-bytes` with that service's name: it says what is wrong and how to make a valid value.
 - **The image step was skipped.** Compose cannot find the image called `neburyx`. Build it as above, or
-  set `NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.0` in `.env`.
+  set `NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.1` in `.env`.
 - **Docker does not have enough memory.** See the figures under "What you need".
 - **A service did not become healthy.** Run `docker compose ps` to see which one, then
   `docker compose logs api` with that service's name instead of `api`.

@@ -287,7 +287,7 @@ Remove the keys from the mapping file (leaving `ai: preview: true` only if you a
 
 The `/v1/ask` and `/v1/ask/continue` routes are back and answer questions for template intents and file queries (see [The Ask folder](#the-ask-folder)). The settings for prompt files, property lists and the PII override are gone too (a mapping file that still has one is refused at start; remove it).
 
-The database migration of an earlier change drops the table `ask_plans` and the column `ask_runs.plan_id`. It cannot be undone, so the previous image cannot run against the migrated database. To go back to the previous image, restore a backup taken before the upgrade.
+The database migration of an earlier change drops the table `ask_plans` and the column `ask_runs.plan_id`. It cannot be undone, so the previous image cannot run against the migrated database. To go back to the previous image, restore a backup taken before the upgrade. This concerns a database on which an earlier build of the enterprise code had already applied the migration that made `ask_plans`. The 0.1.0 release has no enterprise migrations, so a database that it made gets all of them in one run, in their own history, when the enterprise code is loaded (see the settings above), and the 0.1.0 image ignores that history.
 
 ## Running it with `pnpm dev`
 

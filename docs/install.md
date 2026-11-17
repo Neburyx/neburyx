@@ -18,7 +18,7 @@ git clone https://github.com/Neburyx/neburyx neburyx
 cd neburyx
 ```
 
-The image is published as `ghcr.io/neburyx/neburyx`. To use it, skip the build below and, in the next section, set `NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.0` in `.env` in place of `NEBURYX_TAG=local`. Or build the image from the repository, from its root:
+The image is published as `ghcr.io/neburyx/neburyx`. To use it, skip the build below and, in the next section, set `NEBURYX_IMAGE=ghcr.io/neburyx/neburyx` and `NEBURYX_TAG=0.1.1` in `.env` in place of `NEBURYX_TAG=local`. Or build the image from the repository, from its root:
 
 ```bash
 docker build -f deploy/docker/Dockerfile -t neburyx:local .
@@ -217,7 +217,7 @@ Each version you build has its own tag. To upgrade, build the new tag, keep the 
 docker compose up --wait
 ```
 
-The database migrations run before the API starts. Where an AI provider key is set (or the older preview switch is on), they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service reads the same provider key, on/off settings, mapping and `NEBURYX_PROFILE` as the `api` service, so with only one of the two older switch settings `migrate` stops first and says which is missing (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI features on](ai-preview.md) says how to set them up.
+The database migrations run before the API starts. Where the AI code is loaded (a provider key is set and Ask or the summary is on, or the older preview switch is on), they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service reads the same provider key, on/off settings, mapping and `NEBURYX_PROFILE` as the `api` service, so with only one of the two older switch settings `migrate` stops first and says which is missing (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI features on](ai-preview.md) says how to set them up.
 
 ## Roll back by one tag
 
@@ -225,7 +225,7 @@ Set `NEBURYX_TAG` back to the previous tag and run `docker compose up --wait` ag
 
 - Going back one tag is supported. Going back further is not: the command cannot tell how far back an image is, so it accepts any, but compatibility is promised for the previous tag only.
 - A migration file of the older image that is not applied yet but sorts before one that is applied is refused: the run stops, names the file and applies nothing, because it would run after migrations that on every other database run after it.
-- v0.1 is the first tag, so there is no previous tag to go back to yet.
+- From 0.1.1 the previous tag is 0.1.0, and going back to it is the case that is tested: a deployment with no AI provider key started on 0.1.0, upgraded to 0.1.1 and put back on 0.1.0 keeps its saved work. The enterprise migrations that apply where the AI code is loaded are not part of that test.
 
 ## Stop and remove
 

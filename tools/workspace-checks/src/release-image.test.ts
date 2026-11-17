@@ -88,6 +88,11 @@ describe('the tag rule', () => {
     expect(release.tagProblem('v0.1.0')).toBeUndefined();
     expect(release.versionOf('v0.1.0')).toBe('0.1.0');
   });
+
+  it('accepts the tag of the first patch release and derives its version', () => {
+    expect(release.tagProblem('v0.1.1')).toBeUndefined();
+    expect(release.versionOf('v0.1.1')).toBe('0.1.1');
+  });
 });
 
 describe('the options', () => {
