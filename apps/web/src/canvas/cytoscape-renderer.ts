@@ -334,6 +334,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
     cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + moved.x, y: viewport.y + moved.y } });
     if (size.width > 0 && size.height > 0) sizeShown = size;
+    else if (viewport.canvas !== undefined) sizeShown = viewport.canvas;
   };
 
   const keepCentre = (cy: Core): void => {

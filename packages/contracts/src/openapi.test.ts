@@ -16,6 +16,13 @@ describe('buildOpenApiDocument', () => {
     expect(document.components.schemas.MeResponse).not.toHaveProperty('$schema');
   });
 
+  it('lets only the draft and the restored view carry the size of the canvas a camera was taken at, and no export, picture, summary or Ask schema', () => {
+    const properties = (node: unknown): boolean =>
+      typeof node === 'object' && node !== null && ('properties' in node && typeof node.properties === 'object' && node.properties !== null && 'canvas' in node.properties ? true : Object.values(node).some(properties));
+    const holding = Object.entries(buildOpenApiDocument().components.schemas).filter(([, schema]) => properties(schema)).map(([name]) => name);
+    expect(holding).toEqual(['DraftWriteRequest', 'InvestigationResponse', 'RestoreViewResponse']);
+  });
+
   it('lists the reasons of CONFLICT with their detail keys in the error response', () => {
     const text = JSON.stringify(buildOpenApiDocument().components.schemas.ErrorResponse);
     expect(text).toContain('"status-change-not-allowed"');

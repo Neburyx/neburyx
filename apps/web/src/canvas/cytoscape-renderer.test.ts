@@ -1215,14 +1215,14 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     restoreCanvas();
   });
 
-  function inContainer(nextFrame: (callback: () => void) => void = () => undefined, canvasSize?: () => { width: number; height: number }) {
+  function inContainer(nextFrame: (callback: () => void) => void = () => undefined, canvasSize?: () => { width: number; height: number }, viewport: Viewport = { zoom: 1.5, x: -20, y: 30 }) {
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame, onCore: (made) => void (core = made), ...(canvasSize === undefined ? {} : { canvasSize }) });
     const container = document.createElement('div');
     document.body.append(container);
     sizes.resize(container, 1000, 800);
     made.push(renderer);
-    renderer.mount(container, NO_EVENTS, { zoom: 1.5, x: -20, y: 30 });
+    renderer.mount(container, NO_EVENTS, viewport);
     if (core === undefined) throw new Error('the renderer made no core');
     return { renderer, container, core };
   }
@@ -1237,6 +1237,23 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     size = { width: 968, height: 720 };
     sizes.resize(container, 968, 720);
     expect(core.pan()).toEqual(before);
+  });
+
+  it('moves a stored camera that holds a canvas size by half the difference when the canvas first reports its size after the camera was restored', () => {
+    let size = { width: 0, height: 0 };
+    const { container, core } = inContainer(undefined, () => size, { zoom: 1, x: 484, y: 360, canvas: { width: 968, height: 720 } });
+    expect(core.pan()).toEqual({ x: 484, y: 360 });
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    expect(core.pan()).toEqual({ x: 612, y: 376 });
+  });
+
+  it('leaves a stored camera that holds no canvas size where it was stored when the canvas first reports its size', () => {
+    let size = { width: 0, height: 0 };
+    const { container, core } = inContainer(undefined, () => size, { zoom: 1, x: 484, y: 360 });
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    expect(core.pan()).toEqual({ x: 484, y: 360 });
   });
 
   it('leaves the pan alone when the container reports no size', () => {

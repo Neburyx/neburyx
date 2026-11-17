@@ -14483,6 +14483,24 @@
                   },
                   "y": {
                     "type": "number"
+                  },
+                  "canvas": {
+                    "type": "object",
+                    "properties": {
+                      "width": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "height": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      }
+                    },
+                    "required": [
+                      "width",
+                      "height"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
@@ -21273,6 +21291,24 @@
                       },
                       "y": {
                         "type": "number"
+                      },
+                      "canvas": {
+                        "type": "object",
+                        "properties": {
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "height": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [
@@ -24702,6 +24738,24 @@
                       },
                       "y": {
                         "type": "number"
+                      },
+                      "canvas": {
+                        "type": "object",
+                        "properties": {
+                          "width": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          "height": {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          }
+                        },
+                        "required": [
+                          "width",
+                          "height"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

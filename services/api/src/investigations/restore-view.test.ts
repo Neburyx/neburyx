@@ -120,6 +120,24 @@ describe('POST /v1/investigations/{id}/views/{viewId}/restore', () => {
     await app.close();
   });
 
+  it('keeps the size of the canvas that the view stored with its camera, and a view stored without one comes back without one', async () => {
+    const camera = { zoom: 1.5, x: 484, y: 360, canvas: { width: 968, height: 720 } };
+    const withSize = seeded();
+    withSize.namedViews[0] = { ...savedView, layout: { ...LARGER.layout, viewport: camera } };
+    const sized = await started(withSize);
+    const restored = restoreViewResponseSchema.parse((await restore(sized.app)).json());
+    expect(restored.draft.layout.viewport).toEqual(camera);
+    expect(withSize.drafts[0]?.layout.viewport).toEqual(camera);
+    await sized.app.close();
+
+    const legacy = seeded();
+    legacy.namedViews[0] = { ...savedView, layout: { ...LARGER.layout, viewport: { zoom: 1.5, x: 484, y: 360 } } };
+    const old = await started(legacy);
+    const answer = restoreViewResponseSchema.parse((await restore(old.app)).json());
+    expect(answer.draft.layout.viewport).toEqual({ zoom: 1.5, x: 484, y: 360 });
+    await old.app.close();
+  });
+
   it('leaves last_edited_at where it was when the draft already holds what the view holds', async () => {
     const store = seeded();
     const [draft] = store.drafts;
