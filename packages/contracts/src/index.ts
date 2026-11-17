@@ -15,6 +15,8 @@ export { AUDIT_RESULTS, CASE_SUMMARY_OUTCOMES, SYSTEM_ACTOR_ID, aiAuditDetailSch
 export type { AiAuditDetail, AskRunAuditDetail, CaseSummaryAuditDetail, NotesAuditDetail, AuditDetail, AuditEvent, AuditResult, AuditSink, AuditSinkContext, MountedAuditSink, TokenCount } from './audit.js';
 export { editionSchema, identityModeSchema, meResponseSchema, permittedSourceSchema, roleSchema } from './me.js';
 export type { MeResponse } from './me.js';
+export { PREFERENCE_KEYS, preferencesResponseSchema, preferencesSchema, preferencesWriteRequestSchema, tourPreferenceSchema } from './preferences.js';
+export type { Preferences, PreferencesResponse, PreferencesWriteRequest } from './preferences.js';
 export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';
 export { databaseCheckSchema, migrationsCheckSchema, readyResponseSchema, sourceReachabilitySchema } from './ready.js';

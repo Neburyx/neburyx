@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { AppStore } from '../app-store.js';
-import { layoutDocumentSchema, queryContextDocumentSchema, sourceTestReportSchema, storedAiNotesSchema, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, sourceTestReportSchema, storedAiNotesSchema, type LayoutDocument, type Preferences, type QueryContextDocument } from '@neburyx/contracts';
 import type { PingStateChange, SourceCheck } from '../db/source-checks-repository.js';
 import type { SourceRow } from '../db/sources-repository.js';
 import type { Identity } from '../identity/identity.js';
@@ -94,7 +94,16 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
   const exports = memoryExports({ investigations, isDeleted: (id) => deletedAt.has(id), now: () => Date.UTC(2026, 10, 7, 12, 0, deletions) });
   const { rows: _rows, keys: _keys, clock: _clock, ...exportStore } = exports;
   const { patternRows, patternEvents, deletedPatterns, ...patternStore } = memoryPatterns(options.failPatternEvent === undefined ? {} : { failPatternEvent: options.failPatternEvent });
+  const preferences = new Map<string, Preferences>();
   return {
+    async readPreferences(userId) {
+      return preferences.get(userId) ?? {};
+    },
+    async writePreferences(userId, written) {
+      const stored = { ...(preferences.get(userId) ?? {}), ...written };
+      preferences.set(userId, stored);
+      return stored;
+    },
     ...exportStore,
     ...patternStore,
     patternRows,

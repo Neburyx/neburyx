@@ -80,6 +80,82 @@
         }
       }
     },
+    "/v1/me/preferences": {
+      "get": {
+        "operationId": "getPreferences",
+        "summary": "The calling user's preferences",
+        "description": "Small per-user display settings that carry no security weight. A user who has stored nothing gets an empty map. The user is the principal of the request.",
+        "responses": {
+          "200": {
+            "description": "The stored preferences",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The preferences could not be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putPreferences",
+        "summary": "Store preferences of the calling user",
+        "description": "Stores the keys named in the body and leaves every other key as it was. The closed list of keys holds `tour` only (`completed` or `skipped`).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreferencesWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The whole stored map after the write",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not valid (an unknown key, a value that is not allowed, an extra field, no body) or the request has a query string: INVALID_REQUEST. Nothing is stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The preferences could not be stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/ai/status": {
       "get": {
         "operationId": "getAiStatus",
@@ -5264,6 +5340,50 @@
         },
         "required": [
           "preview"
+        ],
+        "additionalProperties": false
+      },
+      "PreferencesResponse": {
+        "type": "object",
+        "properties": {
+          "preferences": {
+            "type": "object",
+            "properties": {
+              "tour": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "skipped"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "preferences"
+        ],
+        "additionalProperties": false
+      },
+      "PreferencesWriteRequest": {
+        "type": "object",
+        "properties": {
+          "preferences": {
+            "type": "object",
+            "properties": {
+              "tour": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "skipped"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "preferences"
         ],
         "additionalProperties": false
       },

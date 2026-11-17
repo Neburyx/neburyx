@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, deleteInvestigationResponseSchema, deleteViewRequestSchema, pathsRequestSchema, pathsResponseSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, createExportResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, preferencesResponseSchema, preferencesWriteRequestSchema, deleteInvestigationResponseSchema, deleteViewRequestSchema, pathsRequestSchema, pathsResponseSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, createExportResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -364,6 +364,19 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const [identity, rows] = await Promise.all([options.store.current(), options.store.listSources()]);
     const sources = summariesOf(rows, mapping, undefined, options.referenceKeys).map((source) => ({ sourceId: source.id, viewSensitive: true, synthetic: source.synthetic }));
     return meResponseSchema.parse({ ...identity, edition: options.extension === undefined ? 'community' : 'enterprise', sources });
+  });
+
+  app.get('/v1/me/preferences', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
+    if (!noQuerySchema.safeParse(request.query).success) throw new AppError('INVALID_REQUEST');
+    const identity = await options.store.current();
+    return preferencesResponseSchema.parse({ preferences: await options.store.readPreferences(identity.principal.id) });
+  });
+
+  app.put('/v1/me/preferences', { config: { permission: 'principal' } }, async (request) => {
+    const body = preferencesWriteRequestSchema.safeParse(request.body);
+    if (!noQuerySchema.safeParse(request.query).success || !body.success) throw new AppError('INVALID_REQUEST');
+    const identity = await options.store.current();
+    return preferencesResponseSchema.parse({ preferences: await options.store.writePreferences(identity.principal.id, body.data.preferences) });
   });
 
   const fallbackKeyMaterial = randomBytes(32);
