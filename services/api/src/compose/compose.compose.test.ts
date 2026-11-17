@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { docker, dockerOk, dockerStream } from '../image/docker.js';
 import { planImages } from './image-plan.js';
-import { buildDerivedImage, composeFile, destroyAll, repository, serviceOf, Stack, type StackOptions } from './stack.js';
+import { buildDerivedImage, composeFile, destroyAll, repository, serviceOf, Stack, type EventRecorder, type StackOptions } from './stack.js';
 
 const images = planImages(process.env, { image: 'neburyx-compose-test', tag: `a-${randomBytes(3).toString('hex')}` });
 const IMAGE = images.image;
@@ -17,6 +17,7 @@ const TAG_A = images.tag;
 const TAG_B = `b-${randomBytes(3).toString('hex')}`;
 const TAG_C = `c-${randomBytes(3).toString('hex')}`;
 const stacks: Stack[] = [];
+const recorders: EventRecorder[] = [];
 
 /** The number after the last shipped migration, so a migration the test adds comes after every one the older image has run. */
 const NEXT_MIGRATION = String(
@@ -41,6 +42,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   try {
+    await Promise.all(recorders.map((recorder) => recorder.stop()));
     await destroyAll(stacks);
   } finally {
     for (const tag of images.built ? [TAG_C, TAG_B, TAG_A] : [TAG_C, TAG_B]) await docker(['rmi', '-f', `${IMAGE}:${tag}`]);
@@ -380,6 +382,8 @@ describe('an upgrade by changing the image tag', () => {
     expect((await stack.psql("SELECT to_regclass('upgrade_marker')")).stdout.trim()).toBe('');
 
     stack.setTag(TAG_B);
+    const recorder = await stack.record();
+    recorders.push(recorder);
     const marker = Date.now() * 1e6;
     const issued = stack.commands.length;
     const upgrade = await stack.up();
@@ -388,7 +392,9 @@ describe('an upgrade by changing the image tag', () => {
     expect(stack.commands.slice(issued).map((command) => command[0])).toEqual(['up']);
     expect(await imageOf(stack, 'migrate')).toBe(`${IMAGE}:${TAG_B}`);
     expect(await imageOf(stack, 'api')).toBe(`${IMAGE}:${TAG_B}`);
-    const events = await stack.events(marker);
+    await recorder.sync();
+    const events = recorder.since(marker);
+    await recorder.stop();
     const migrated = events.find((event) => serviceOf(event) === 'migrate' && event.Action === 'die' && event.Actor.Attributes['image'] === `${IMAGE}:${TAG_B}`);
     const serving = events.find((event) => serviceOf(event) === 'api' && event.Action === 'start' && event.Actor.Attributes['image'] === `${IMAGE}:${TAG_B}`);
     expect(migrated?.Actor.Attributes['exitCode']).toBe('0');
@@ -407,11 +413,15 @@ describe('an upgrade by changing the image tag', () => {
     const before = await localUser(stack);
 
     stack.setTag(TAG_C);
+    const recorder = await stack.record();
+    recorders.push(recorder);
     const marker = Date.now() * 1e6;
     const failed = await stack.compose(['up', '--wait', '--wait-timeout', '60']);
     expect(failed.code).not.toBe(0);
     expect(await dockerOk(['inspect', '--format', '{{.State.ExitCode}}', await stack.containerId('migrate')])).not.toBe('0');
-    const events = await stack.events(marker);
+    await recorder.sync();
+    const events = recorder.since(marker);
+    await recorder.stop();
     expect(events.filter((event) => serviceOf(event) === 'api' && event.Action === 'start' && event.Actor.Attributes['image'] === `${IMAGE}:${TAG_C}`)).toEqual([]);
     expect(await dockerOk(['inspect', '--format', '{{.State.Running}}', await stack.containerId('api')])).toBe('false');
     expect((await stack.psql("SELECT to_regclass('half_done')")).stdout.trim()).toBe('');
