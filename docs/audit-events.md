@@ -88,7 +88,7 @@ The stored model-run records (`ask_runs`, `summary_runs`, `summary_run_calls`) a
 | `NEBURYX_AUDIT_RETRY_WAIT_MS` | 500 (10 to 60000) | The wait before the first retry, doubled for each later one. |
 | `NEBURYX_AUDIT_WRITE_TIMEOUT_MS` | 5000 (100 to 60000) | How long one write may take before it counts as failed. |
 
-A setting outside its range, or not a whole number, stops the API at start and names the setting, not its value.
+The defaults of the four queue settings are provisional: they are to be measured from a burst of the product's own events and confirmed or replaced before a release. A setting outside its range, or not a whole number, stops the API at start and names the setting, not its value.
 
 ## What `GET /readyz` shows
 
