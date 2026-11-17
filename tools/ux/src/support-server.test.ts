@@ -558,3 +558,19 @@ describe('the support server\'s named views', () => {
     expect((await counted(base)).count.value).toBe(0);
   });
 });
+
+describe('the support server, preferences', () => {
+  const send = (base: string, method: string, path: string, body?: unknown) => fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+
+  it('starts with the tour seen, keeps a written value, is replaced by the support call and goes back on reset', async () => {
+    const base = await start();
+    expect(await (await send(base, 'GET', '/v1/me/preferences')).json()).toEqual({ preferences: { tour: 'completed' } });
+    expect((await send(base, 'POST', '/__support/preferences', {})).status).toBe(200);
+    expect(await (await send(base, 'GET', '/v1/me/preferences')).json()).toEqual({ preferences: {} });
+    expect(await (await send(base, 'PUT', '/v1/me/preferences', { preferences: { tour: 'skipped' } })).json()).toEqual({ preferences: { tour: 'skipped' } });
+    expect(await (await send(base, 'GET', '/v1/me/preferences')).json()).toEqual({ preferences: { tour: 'skipped' } });
+    expect((await send(base, 'PUT', '/v1/me/preferences', { nope: 1 })).status).toBe(400);
+    await send(base, 'POST', '/__support/reset', {});
+    expect(await (await send(base, 'GET', '/v1/me/preferences')).json()).toEqual({ preferences: { tour: 'completed' } });
+  });
+});

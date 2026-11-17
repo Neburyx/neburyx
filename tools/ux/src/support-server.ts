@@ -886,6 +886,31 @@ function createSearch(options: SupportServerOptions) {
   };
 }
 
+/**
+ * The signed-in person's stored preferences. A run starts with the tour already seen, so no other spec meets its overlay;
+ * `POST /__support/preferences` replaces them (a body of `{}` is a person who has not seen the tour) and `POST /__support/reset` puts the default back.
+ */
+function createPreferences() {
+  const SEEN = { tour: 'completed' };
+  let held: Record<string, unknown> = { ...SEEN };
+  return {
+    reset: (): void => {
+      held = { ...SEEN };
+    },
+    control(body: unknown, response: ServerResponse): void {
+      held = typeof body === 'object' && body !== null ? { ...(body as Record<string, unknown>) } : {};
+      json(response, 200, {});
+    },
+    read: (response: ServerResponse): void => json(response, 200, { preferences: held }),
+    write(body: unknown, response: ServerResponse): void {
+      const given = (body as { preferences?: Record<string, unknown> } | null)?.preferences;
+      if (typeof given !== 'object' || given === null) return json(response, 400, { error: { code: 'INVALID_REQUEST' } });
+      held = { ...held, ...given };
+      json(response, 200, { preferences: held });
+    },
+  };
+}
+
 function api(path: string, options: SupportServerOptions, response: ServerResponse): void {
   const profiles = profilesOf(options);
   if (path === '/healthz' || path === '/readyz') return json(response, 200, { status: 'ok' });
@@ -921,6 +946,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
   const sources = createSources(options);
   const patterns = createPatterns(() => profilesOf(options));
   const savedPatterns = createSavedPatterns(runPattern);
+  const preferences = createPreferences();
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname;
@@ -976,10 +1002,13 @@ export function createSupportServer(options: SupportServerOptions): Server {
         investigations.forgetInvestigations();
         return json(response, 200, {});
       }
+      if (request.method === 'PUT' && path === '/v1/me/preferences') return preferences.write(await bodyOf(request), response);
+      if (request.method === 'POST' && path === '/__support/preferences') return preferences.control(await bodyOf(request), response);
       if (request.method === 'POST' && path.startsWith('/__support/')) {
         if (path === '/__support/reset') {
           investigations.forgetNamedViews();
           savedPatterns.reset();
+          preferences.reset();
         }
         return sources.control(path, await bodyOf(request), response);
       }
@@ -987,6 +1016,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
       if (request.method === 'POST' && testing?.[1] !== undefined) return sources.test(decodeURIComponent(testing[1]), response);
       if (request.method !== 'GET' && request.method !== 'HEAD') return json(response, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });
       if (isApi) {
+        if (path === '/v1/me/preferences') return preferences.read(response);
         const parts = path.split('/').map((part) => decodeURIComponent(part));
         const [, , kind, first, second, third] = parts;
         if (kind === 'entities' && parts.length === 6 && first !== undefined && second !== undefined && third !== undefined) {

@@ -25,6 +25,7 @@ export const WIDTH_DEPENDENT: readonly string[] = [
   'sources-enterprise.spec.ts',
   'starting-hint.spec.ts',
   'summary-panel.spec.ts',
+  'tour.spec.ts',
   'workspace-shell.spec.ts',
   'zoomed-out.spec.ts',
 ];

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const ITEMS = ['Keyboard shortcuts', 'Documentation', 'Quickstart: the demo case', 'Talk to us about Enterprise', 'Report a problem'];
+const ITEMS = ['Take the tour', 'Keyboard shortcuts', 'Documentation', 'Quickstart: the demo case', 'Talk to us about Enterprise', 'Report a problem'];
 const REPOSITORY = 'https://github.com/Neburyx/neburyx';
 /** An address of `undefined` is the Enterprise item: its target is the app's one constant, an https address or a mailto address, read from the menu itself. */
 const EXTERNAL: ReadonlyArray<readonly [string, string | undefined]> = [
@@ -22,10 +22,10 @@ async function openMenu(page: Page): Promise<void> {
 }
 
 test.describe('the Help menu on Home', () => {
-  test('lists the five items of the design in order, with the divider, inside the viewport, and sits above the Help item', async ({ page }, testInfo) => {
+  test('lists the six items (the tour first, then the five of the design) in order, with the divider, inside the viewport, and sits above the Help item', async ({ page }, testInfo) => {
     await openMenu(page);
     const rows = menu(page).getByRole('menuitem');
-    await expect(rows).toHaveCount(5);
+    await expect(rows).toHaveCount(6);
     const labels = await rows.evaluateAll((elements) => elements.map((element) => element.querySelector('.menu-label')?.textContent ?? ''));
     expect(labels).toEqual(ITEMS);
     await expect(menu(page).getByRole('separator')).toHaveCount(1);
@@ -47,6 +47,8 @@ test.describe('the Help menu on Home', () => {
     await helpButton(page).focus();
     await page.keyboard.press('Enter');
     await expect(menu(page).getByRole('menuitem').first()).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(menu(page).getByRole('menuitem', { name: /^Keyboard shortcuts/ })).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(menu(page).getByRole('menuitem', { name: /^Documentation/ })).toBeFocused();
     await page.keyboard.press('End');
