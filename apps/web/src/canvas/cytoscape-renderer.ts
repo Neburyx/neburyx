@@ -343,7 +343,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     const size = sizeOf(cy);
     const shift = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
-    const show = (): void => cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + shift.x, y: viewport.y + shift.y } });
+    const show = (): void => {
+      cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + shift.x, y: viewport.y + shift.y } });
+    };
     if (restored) automatically(show);
     else show();
     sizeShown = size.width > 0 && size.height > 0 ? size : viewport.canvas;
@@ -359,7 +361,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     if (size.width === sizeShown.width && size.height === sizeShown.height) return;
     const before = sizeShown;
     sizeShown = size;
-    automatically(() => cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 }));
+    automatically(() => {
+      cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 });
+    });
   };
 
   const fitEntities = (cy: Core, entitiesOnly = false): void => {
