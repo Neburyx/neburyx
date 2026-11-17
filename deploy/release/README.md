@@ -28,6 +28,18 @@ A run of the commit with `"status": "completed"` and `"conclusion": "success"` i
 
 [`image-target.json`](image-target.json) names the registry host (`registry`) and the image path (`image`). It is the only place either appears. Both are chosen. If either field holds a release placeholder (a name starting `NEBURYX_RELEASE_` and ending `_REGISTRY` or `_IMAGE`) or is empty, `--check-target` and `--push` exit `1` and the workflow stops at step 3, before it logs in.
 
+## The upgrade test
+
+Before a tag is pushed, run the upgrade test once on the commit to tag. It starts the previous published image on the demo stack, saves work (an investigation, its draft and a named view), changes the image to the build under test, and checks that the saved work is kept, that every migration the previous image did not have is applied once, and that the previous image starts again on the upgraded database. A migration that drops or rewrites saved work makes it fail. It is not part of the push checks: it does nothing unless the previous image is named, because it pulls that image.
+
+```bash
+NEBURYX_UPGRADE_FROM=<the previous release image, with its tag> \
+NEBURYX_UPGRADE_RECORD_DIR=<a folder outside this repository> \
+pnpm test:compose src/compose/upgrade.compose.test.ts
+```
+
+`NEBURYX_UPGRADE_FROM` is the full reference of the previous release image, with its tag. `NEBURYX_UPGRADE_RECORD_DIR` makes the run write `<UTC date-time>-<short commit>[-dry-run].json` and `.md` there, naming both images, the digest of the previous one, the migrations the database held before and after, the migrations each image ships and the result of each check; a check that did not run is recorded as failed. The run refuses a working tree with uncommitted changes; `NEBURYX_UPGRADE_DRY_RUN=1` allows one, adds `-dry-run` to the names and marks the record "Dry run: does not count."
+
 ## Local dry run
 
 A dry run builds the image the way the workflow does and publishes nothing. It needs Docker with Buildx.

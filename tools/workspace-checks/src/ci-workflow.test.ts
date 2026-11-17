@@ -41,6 +41,9 @@ const pinnedAction = /^[\w-]+\/[\w-]+@v\d+\.\d+\.\d+$/;
 const RUNNER = 'ubuntu-26.04';
 const PRINT_DOCKER_VERSIONS = 'docker version\ndocker compose version\n';
 
+/** Compose test files that pull a published image: they are run by hand once per release, so no job of the push workflow lists them (they skip unless the previous image is named). */
+const RUN_ONCE_PER_RELEASE = ['src/compose/upgrade.compose.test.ts'];
+
 describe('CI workflow', () => {
   it('runs on push and pull request', () => {
     expect(Object.keys(workflow.on).sort()).toEqual(['pull_request', 'push']);
@@ -155,10 +158,10 @@ describe('CI workflow', () => {
     expect(Object.keys(rootScripts)).toContain('test:compose');
   });
 
-  it('runs every compose test file in some job: the matrix, or the quickstart job that runs when the files it reads change', () => {
+  it('runs every compose test file in some job (the matrix, or the quickstart job that runs when the files it reads change), except the files run once per release', () => {
     const matrixFiles = (workflow.jobs['compose']?.strategy?.matrix['files'] ?? []).flatMap((entry) => entry.split(' '));
     const quickstart = (workflow.jobs['quickstart']?.steps ?? []).flatMap((step) => step.run?.match(/src\/compose\/\S+\.compose\.test\.ts/g) ?? []);
-    expect([...matrixFiles, ...quickstart].sort()).toEqual(composeFiles().sort());
+    expect([...matrixFiles, ...quickstart, ...RUN_ONCE_PER_RELEASE].sort()).toEqual(composeFiles().sort());
     expect(new Set([...matrixFiles, ...quickstart]).size).toBe(matrixFiles.length + quickstart.length);
   });
 

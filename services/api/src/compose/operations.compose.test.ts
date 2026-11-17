@@ -2,9 +2,9 @@
  * The operations an operator does with the shipped image: install it fresh, go back one image tag, and change a
  * source's database login. Each runs through Docker Compose on the published files and nothing else.
  *
- * Rollback: there is no earlier release yet, so the "newer" image is the build under test plus one migration the
- * "older" image (the build itself) does not ship. This is a stand-in for a real previous tag; once a tag exists the
- * rollback test runs against it.
+ * Rollback: the "newer" image is the build under test plus one migration the "older" image (the build itself) does
+ * not ship, so this runs on every push without pulling anything. The real previous release image is put back after an
+ * upgrade in `upgrade.compose.test.ts`, which runs once per release.
  *
  * Rotation: the Community file has no source of its own yet, so the test runs on the demo stack, which has sources,
  * graphs and a mapping. The run that is recorded as the proof of rotation uses the Community file with a graph server
