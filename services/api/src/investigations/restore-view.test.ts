@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { restoreViewResponseSchema, type LayoutDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, restoreViewResponseSchema, type LayoutDocument } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp } from '../app.js';
 import type { InvestigationRow } from '../db/investigations-repository.js';
@@ -127,7 +127,7 @@ describe('POST /v1/investigations/{id}/views/{viewId}/restore', () => {
     const sized = await started(withSize);
     const restored = restoreViewResponseSchema.parse((await restore(sized.app)).json());
     expect(restored.draft.layout.viewport).toEqual(camera);
-    expect(withSize.drafts[0]?.layout.viewport).toEqual(camera);
+    expect(layoutDocumentSchema.parse(withSize.drafts[0]?.layout).viewport).toEqual(camera);
     await sized.app.close();
 
     const legacy = seeded();
