@@ -5,7 +5,7 @@ import type { AuditEvent, AuditSink } from '@neburyx/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createAnthropicProvider } from './anthropic.js';
 import { createAuditedModelCall, type AuditedCallContext } from './audited.js';
-import { configureAsk, type AskConfiguration } from './configure.js';
+import { configureProvider, type ProviderConfiguration } from './provider-configuration.js';
 import type { ModelRequest } from './provider.js';
 import { CONFORMANCE_CASES, type ConformanceScenario } from './testing/conformance.js';
 
@@ -73,8 +73,8 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-async function configurationWith(): Promise<AskConfiguration> {
-  const { configuration, outcome } = await configureAsk({ NEBURYX_ASK_MAPPING_FOLDER: '/etc/neburyx/mapping', NEBURYX_ASK_CLASSIFICATION_MODEL: 'claude-sonnet-5-5', NEBURYX_ASK_API_KEY: KEY, NEBURYX_ASK_TIMEOUT_MS: '1000', NEBURYX_ASK_MAX_RETRIES: '0' });
+async function configurationWith(): Promise<ProviderConfiguration> {
+  const { configuration, outcome } = await configureProvider({ NEBURYX_ASK_CLASSIFICATION_MODEL: 'claude-sonnet-5-5', NEBURYX_ASK_API_KEY: KEY, NEBURYX_ASK_TIMEOUT_MS: '1000', NEBURYX_ASK_MAX_RETRIES: '0' });
   if (configuration === undefined) throw new Error(JSON.stringify(outcome));
   return configuration;
 }
@@ -102,7 +102,7 @@ function recordingSink(): { readonly sink: AuditSink; readonly events: AuditEven
   return { events, sink: { record: (event) => (events.push(event), Promise.resolve()) } };
 }
 
-async function audited(configuration: AskConfiguration) {
+async function audited(configuration: ProviderConfiguration) {
   const recorded = recordingSink();
   const call = createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl }), configuration, sink: recorded.sink });
   return { call, ...recorded };

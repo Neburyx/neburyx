@@ -29,8 +29,9 @@ import {
   type ExtensionRequest,
   type ExtensionRoute,
 } from '@neburyx/contracts';
+import { gateClientOf, type GateClient } from '@neburyx/ee-ai-runtime';
 import { createHash } from 'node:crypto';
-import { AuditUnavailableError } from '../audited.js';
+import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
 import { summarizeRun } from './run-summary.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
@@ -55,15 +56,16 @@ export interface QuestionRouteOptions {
 }
 
 type Entities = AskEntities;
-type Capabilities = { readonly askRunner: NonNullable<ExtensionRequest['askRunner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<ExtensionRequest['askSourceReadable']> };
+type Capabilities = { readonly askRunner: NonNullable<GateClient['runner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<GateClient['sourceReadable']> };
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
 const unavailableAudit = (): ExtensionRefusal => new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
 
 function capabilitiesOf(request: ExtensionRequest): Capabilities {
-  const { askRunner, signText, askSourceReadable } = request;
-  if (askRunner === undefined || signText === undefined || askSourceReadable === undefined) throw unsupported();
-  return { askRunner, signText, askSourceReadable };
+  const { runner, sourceReadable } = gateClientOf(request);
+  const { signText } = request;
+  if (runner === undefined || signText === undefined || sourceReadable === undefined) throw unsupported();
+  return { askRunner: runner, signText, askSourceReadable: sourceReadable };
 }
 
 const refusal = (cause: AskRefusalCause, more: Partial<Extract<AskAnswer, { refused: unknown }>['refused']> = {}): AskAnswer => ({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause], ...more } });
@@ -298,7 +300,8 @@ export function createAskQuestionRoute(options: QuestionRouteOptions): Extension
         return refusal('no-ask-for-source');
       }
       // the caller's own saved patterns, listed only for a source that has Ask; the classifier is shown their catalog and the route keeps the keys
-      const listing = request.askPatterns === undefined ? undefined : await request.askPatterns(body.sourceId);
+      const { patterns } = gateClientOf(request);
+      const listing = patterns === undefined ? undefined : await patterns(body.sourceId);
       const built = listing === undefined ? undefined : buildPatternCatalog(listing);
       // the application's classifier: the one it was given, or the extension's own, or the Community default that says it is not available
       const { askClassifier: classifier } = request;
@@ -320,7 +323,7 @@ export function createAskQuestionRoute(options: QuestionRouteOptions): Extension
 }
 
 /** The saved pattern a continue names by its id, as the application offers it to the caller; anything that is not that, a refusal of the application included, is undefined. */
-async function patternOf(find: NonNullable<ExtensionRequest['askPatternFind']>, sourceId: string, entities: Entities): Promise<AskPatternOffer | undefined> {
+async function patternOf(find: NonNullable<GateClient['findPattern']>, sourceId: string, entities: Entities): Promise<AskPatternOffer | undefined> {
   const id = entities['pattern'];
   if (id === undefined || !PATTERN_ID_TEXT.test(id)) return undefined;
   try {
@@ -345,8 +348,9 @@ export function createAskContinueRoute(options: QuestionRouteOptions): Extension
       let offer: AskPatternOffer | undefined;
       let definition: string | undefined;
       if (body.intent === ASK_SAVED_PATTERN_INTENT) {
-        if (request.askPatternFind === undefined) throw unsupported();
-        offer = await patternOf(request.askPatternFind, body.sourceId, body.entities);
+        const { findPattern } = gateClientOf(request);
+        if (findPattern === undefined) throw unsupported();
+        offer = await patternOf(findPattern, body.sourceId, body.entities);
         definition = offer === undefined ? undefined : patternDefinitionOf(offer);
       } else {
         const found = options.folder()?.intent(body.sourceId, body.intent);

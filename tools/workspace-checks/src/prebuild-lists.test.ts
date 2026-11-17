@@ -33,7 +33,7 @@ describe('prebuild lists', () => {
 
   it('prints the packages of a real selection in the same order on every run, each after its workspace dependencies', () => {
     const first = resolveWithPnpm('@neburyx/api^...');
-    expect([...first].sort()).toEqual(['@neburyx/contracts', '@neburyx/ee-ask', '@neburyx/ee-audit', '@neburyx/test-containers', '@neburyx/test-neo4j']);
+    expect([...first].sort()).toEqual(['@neburyx/contracts', '@neburyx/ee-ai-runtime', '@neburyx/ee-ask', '@neburyx/ee-audit', '@neburyx/test-containers', '@neburyx/test-neo4j']);
     expect(resolveWithPnpm('@neburyx/api^...')).toEqual(first);
     const dependenciesOf = (name: string): readonly string[] => {
       const pkg = workspacePackageDirs().map((dir) => readPackageJson(dir)).find((candidate) => candidate.name === name);

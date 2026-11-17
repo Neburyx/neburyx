@@ -37,6 +37,7 @@ With the preview on, the API reads these variables. An empty value counts as not
 | `NEBURYX_ASK_MAX_TOKENS` | The most tokens a reply may use, from 1 to 32768. The default is 8192 |
 | `NEBURYX_AI_CACHE` | `on` or `off`. The default is `on`; see [Prompt caching](#prompt-caching) |
 | `NEBURYX_AI_CACHE_TTL` | `5m` or `1h`. The default is `5m` |
+| `NEBURYX_AI_MAX_SLOT_SHARE` | The most of each pool of read slots, a source's and a person's, that AI reads may hold together: a number above 0 and up to 1. The default is 0.5, which leaves manual exploration at least half. An AI read over its share waits, and never holds up a manual read |
 
 The defaults are hypotheses that will change with measurement. A value that is set and not accepted stops the start and names the variable, never the value. The variables are checked only when the preview is on.
 

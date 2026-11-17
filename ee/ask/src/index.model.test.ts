@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AuditEvent, AuditSink, ExtensionLogger } from '@neburyx/contracts';
-import type { ModelRequest } from './provider.js';
+import type { ModelRequest } from '@neburyx/ee-ai-runtime';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createMemorySummaryRunStore } from './case-summary/run-store.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
@@ -14,7 +14,7 @@ vi.mock('@neburyx/ee-audit', () => ({ createAuditSink: () => ({ sink, close: asy
 vi.mock('./questions/pg-run-store.js', () => ({ createPgRunStore: () => ({ record: async () => undefined, close: async () => undefined }) }));
 
 const { createEnterpriseExtension } = await import('./index.js');
-const { createFailureReporter } = await import('./failure-line.js');
+const { createFailureReporter } = await import('@neburyx/ee-ai-runtime');
 
 const SINK_CONTEXT = { databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => 'id', onConnectionError: () => undefined };
 const SETTINGS = { preview: true };

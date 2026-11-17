@@ -1,8 +1,8 @@
 import { loadAskFolder } from '../folder/load.js';
 import type { AskClassification, AskFolder } from '@neburyx/contracts';
 import { createAskClassifier } from '../classify/classifier.js';
-import { createAuditedModelCall } from '../audited.js';
-import type { ModelProvider } from '../provider.js';
+import { createAuditedModelCall } from '@neburyx/ee-ai-runtime';
+import type { ModelProvider } from '@neburyx/ee-ai-runtime';
 
 export interface LoadedSource {
   readonly sourceId: string;

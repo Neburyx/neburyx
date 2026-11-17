@@ -1,5 +1,5 @@
 import { ERROR_TABLE, isTokenCount, parseAiAuditDetail, tokenCount, type AiAuditDetail, type AuditEvent, type AuditResult, type AuditSink, type ErrorCode } from '@neburyx/contracts';
-import type { AskConfiguration } from './configure.js';
+import type { ProviderConfiguration } from './provider-configuration.js';
 import { promptRecordOf, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptRecord, type TokenUsage } from './provider.js';
 
 /** Who asked and where it belongs: a model request carries none of it. */
@@ -31,7 +31,7 @@ export class AuditUnavailableError extends Error {
 export interface AuditedModelOptions {
   readonly provider: ModelProvider;
   /** The configuration the provider was built from: its model is the one a refused or failed call is recorded under. */
-  readonly configuration: Pick<AskConfiguration, 'model'>;
+  readonly configuration: Pick<ProviderConfiguration, 'model'>;
   readonly sink: AuditSink;
 }
 

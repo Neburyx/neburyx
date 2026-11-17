@@ -1,4 +1,5 @@
 import { AppError, RequestCancelled } from '../errors.js';
+import { currentReadOrigin } from '../seams/read-origin.js';
 import type { Coordinator, ReadLease, ReadOutcome } from '../seams/seams.js';
 import { exhaustive } from './exhaustive.js';
 import type { ExecuteOutcome, ReadExecutor } from './executor.js';
@@ -55,6 +56,7 @@ export async function acquireLease(deps: Pick<ExecuteDeps, 'coordinator' | 'cloc
     sourceId: context.sourceId,
     limits: { userConcurrency: context.system ? sourceConcurrency : userConcurrency, sourceConcurrency, queueWaitMs: Math.min(queueWaitMs, left) },
     role: context.role,
+    ...(currentReadOrigin() === 'ai' ? { origin: 'ai' as const } : {}),
     breaker: context.budgets.breaker,
     leaseTtlMs: left + timeoutMs,
     ...(context.signal === undefined ? {} : { signal: context.signal }),

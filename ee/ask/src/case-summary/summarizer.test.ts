@@ -1,7 +1,7 @@
 import type { AuditEvent, CaseSummaryInput, GraphNode } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { AuditUnavailableError, createAuditedModelCall } from '../audited.js';
-import { promptRecordOf, type ModelProvider, type ModelRequest } from '../provider.js';
+import { AuditUnavailableError, createAuditedModelCall } from '@neburyx/ee-ai-runtime';
+import { promptRecordOf, type ModelProvider, type ModelRequest } from '@neburyx/ee-ai-runtime';
 import { buildSummaryInstructions } from './instructions.js';
 import { openToken } from './token.js';
 import { createMemorySummaryRunStore } from './run-store.js';

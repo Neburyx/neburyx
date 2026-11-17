@@ -6,12 +6,14 @@
     "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --passWithNoTests",
-    "test:neo4j": "vitest run --config vitest.neo4j.config.ts --reporter=verbose"
+    "test:neo4j": "vitest run --config vitest.neo4j.config.ts --reporter=verbose",
+    "calibrate": "NBX_AI_CALIBRATE=1 vitest run src/ai-load.test.ts -t \"records the workload\""
   },
   "dependencies": {
     "@neburyx/contracts": "workspace:*"
   },
   "devDependencies": {
+    "@neburyx/ee-ai-runtime": "workspace:*",
     "@neburyx/ee-ask": "workspace:*",
     "@types/node": "24.19.2",
     "typescript": "6.0.3",

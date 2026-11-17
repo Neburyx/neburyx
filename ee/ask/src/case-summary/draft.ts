@@ -1,6 +1,6 @@
 import { type SummaryFailureKind, type SummarySentence } from '@neburyx/contracts';
-import type { AuditedCallContext, AuditedModelCall } from '../audited.js';
-import type { FailureCode, ModelAnswer } from '../provider.js';
+import type { AuditedCallContext, AuditedModelCall } from '@neburyx/ee-ai-runtime';
+import type { FailureCode, ModelAnswer } from '@neburyx/ee-ai-runtime';
 import type { SummaryCallEnd } from './run-store.js';
 import { MAX_SUMMARY_SENTENCES } from './instructions.js';
 
@@ -41,13 +41,25 @@ export type Drafted =
   | { readonly status: 'timeLimit'; readonly calls: number; readonly checked?: Checked }
   | { readonly status: 'failed'; readonly kind: SummaryFailureKind; readonly calls: number; readonly checked?: Checked };
 
+interface Judgement {
+  readonly kept: readonly SummarySentence[];
+  readonly removed: number;
+  readonly verdictFound: boolean;
+}
+
+interface CheckRefused {
+  readonly refused: 'worker-failed' | 'timeout' | 'cancelled';
+}
+
 export interface DraftOptions {
   readonly call: AuditedModelCall;
   readonly context: AuditedCallContext;
   readonly instructions: string;
   readonly values: string;
   /** The checks of a reply that fits the format: what is kept, how many were removed, and whether a sentence was removed for its wording. */
-  readonly judge: (sentences: readonly SummarySentence[]) => { readonly kept: readonly SummarySentence[]; readonly removed: number; readonly verdictFound: boolean };
+  readonly judge: (sentences: readonly SummarySentence[], signal: AbortSignal) => Promise<Judgement | CheckRefused> | Judgement | CheckRefused;
+  /** Told why a check could not run, which is not a reply that cited nothing: the click ends at once, with no further call. */
+  readonly onCheckRefused?: (reason: CheckRefused['refused']) => void;
   readonly maxCalls: number;
   readonly totalTimeoutMs: number;
   readonly signal: AbortSignal;
@@ -145,7 +157,13 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
         values = `${options.values}\n\n${FORMAT_NOTE}`;
         continue;
       }
-      const judged = options.judge(sentences);
+      const judged = await options.judge(sentences, AbortSignal.any([options.signal, limit.signal]));
+      if ('refused' in judged) {
+        if (judged.refused !== 'cancelled') options.onCheckRefused?.(judged.refused);
+        if (options.signal.aborted) throw new Error('the request was cancelled');
+        if (limit.signal.aborted) return { status: 'timeLimit', calls, ...so() };
+        throw new Error('a check of the reply could not run');
+      }
       checked = { kept: judged.kept.length, removed: judged.removed };
       if ((judged.verdictFound || judged.kept.length === 0) && calls < options.maxCalls) {
         values = `${options.values}\n\n${judged.verdictFound ? VERDICT_NOTE : NOTHING_LEFT_NOTE}`;

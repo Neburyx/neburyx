@@ -1,5 +1,5 @@
 import { ASK_QUESTION_MAX_CODE_POINTS, ASK_SAVED_PATTERN_INTENT, ASK_SAVED_PATTERN_NOTE, readClassification, type AskClassification, type AskClassifier, type AskFolder } from '@neburyx/contracts';
-import { AuditUnavailableError, type AuditedModelCall } from '../audited.js';
+import { AuditUnavailableError, type AuditedModelCall } from '@neburyx/ee-ai-runtime';
 
 export const CLASSIFY_PROMPT_ID = 'ask.classify';
 export const CLASSIFY_PROMPT_VERSION = 1;

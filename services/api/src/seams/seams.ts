@@ -28,6 +28,9 @@ interface ReadLimits {
 /** What a read is for: the data read of a person's request, the index-list read made for such a request, or a read nobody asked for (scheduled pings, start-up). The breaker lets only a data read decide whether a recovering source is well again. */
 export type ReadRole = 'data' | 'index' | 'background';
 
+/** Who a read is for: a person's own request, or an AI feature (Ask, the case summary, the assistant). AI reads share only a part of each pool of slots. */
+export type ReadOrigin = 'manual' | 'ai';
+
 /** How a read ended, as far as the circuit breaker is concerned: rows came back, the source did not answer within the time it was given, or anything else (cancelled, failed, never ran). */
 export type ReadOutcome = 'answered' | 'timeout' | 'other';
 
@@ -44,6 +47,8 @@ export interface ReadAccessRequest {
   readonly limits: ReadLimits;
   /** Every caller says what its read is for. */
   readonly role: ReadRole;
+  /** Absent means a person's own read. */
+  readonly origin?: ReadOrigin;
   /** The source's trip rule; a coordinator without a breaker ignores it. */
   readonly breaker?: BreakerLimits;
   /** How long a granted lease may be held before it frees itself: a duration, so that a store shared by several copies can count it on its own clock. */

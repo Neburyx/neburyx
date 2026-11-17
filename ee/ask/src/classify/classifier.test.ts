@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { ASK_SAVED_PATTERN_NOTE, type AskClassifyInput, type AskFolder, type AuditEvent, type AuditSink } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { createAuditedModelCall } from '../audited.js';
-import type { ModelProvider } from '../provider.js';
-import { createFixtureProvider, replyKey, type FixtureReply } from '../testing/fixture.js';
+import { createAuditedModelCall } from '@neburyx/ee-ai-runtime';
+import type { ModelProvider } from '@neburyx/ee-ai-runtime';
+import { createFixtureProvider, replyKey, type FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 import { CLASSIFY_AUDIT_ACTION, CLASSIFY_PROMPT_ID, CLASSIFY_PROMPT_VERSION, createAskClassifier } from './classifier.js';
 
 const SIGNAL = new AbortController().signal;

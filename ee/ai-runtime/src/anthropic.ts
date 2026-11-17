@@ -1,6 +1,6 @@
 import { readFile, stat } from 'node:fs/promises';
 import Anthropic, { APIConnectionError, APIConnectionTimeoutError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
-import type { AskConfiguration } from './configure.js';
+import type { ProviderConfiguration } from './provider-configuration.js';
 import { parseKeyText } from './key-file.js';
 import { promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptRecord, type TokenUsage } from './provider.js';
 
@@ -10,7 +10,7 @@ const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 const GROUP_AND_OTHER_BITS = 0o077;
 
 export interface AnthropicProviderOptions {
-  readonly configuration: Pick<AskConfiguration, 'model' | 'key' | 'limits' | 'cache'>;
+  readonly configuration: Pick<ProviderConfiguration, 'model' | 'key' | 'limits' | 'cache'>;
   /** Where a key given as an environment variable is read, at each call. The default is the process environment. */
   readonly env?: Readonly<Record<string, string | undefined>>;
   /** Only a test sets this, to a stub on the loopback address. */
@@ -116,7 +116,7 @@ function codeOf(error: unknown): FailureCode {
 }
 
 /** The one place that decides what is cached: only the instructions, as the caller wrote them, as the one system block with the one breakpoint, and never the values (the question). The prefix is cached only above the model's minimum cacheable length; a shorter one is simply sent uncached. With caching off, or with no fixed part, the whole prompt is the user message. */
-function promptParts(request: ModelRequest, cache: AskConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
+function promptParts(request: ModelRequest, cache: ProviderConfiguration['cache']): Pick<Anthropic.Messages.MessageCreateParamsNonStreaming, 'system' | 'messages'> {
   if (!cache.enabled || request.instructions === undefined) return { messages: [{ role: 'user', content: request.instructions === undefined ? request.values : `${request.instructions}\n\n${request.values}` }] };
   const breakpoint = cache.ttl === '1h' ? { type: 'ephemeral' as const, ttl: '1h' as const } : { type: 'ephemeral' as const };
   return { system: [{ type: 'text', text: request.instructions, cache_control: breakpoint }], messages: [{ role: 'user', content: request.values }] };

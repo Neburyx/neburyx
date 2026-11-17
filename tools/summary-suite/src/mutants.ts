@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import { z } from 'zod';
 
-const CHECKS_SOURCE = resolve(import.meta.dirname, '../../../ee/ask/src/case-summary/checks.ts');
+const CHECKS_SOURCE = resolve(import.meta.dirname, '../../../ee/ai-runtime/src/reply-checks.ts');
 
 export interface Mutation {
   readonly name: string;

@@ -1,9 +1,9 @@
-import { createAuditedModelCall } from '../audited.js';
+import { createAuditedModelCall } from '@neburyx/ee-ai-runtime';
 import { loadSummaryInstructions } from '../case-summary/load-instructions.js';
 import { createMemorySummaryRunStore } from '../case-summary/run-store.js';
 import { readSummarySettings, type SummarySettings } from '../case-summary/settings.js';
 import { createCaseSummarizer, type ReplyObservation } from '../case-summary/summarizer.js';
-import { promptRecordOf, type ModelAnswer, type ModelProvider, type ModelRequest } from '../provider.js';
+import { promptRecordOf, type ModelAnswer, type ModelProvider, type ModelRequest } from '@neburyx/ee-ai-runtime';
 import type { CaseSummaryOutcome, SummaryReading } from '@neburyx/contracts';
 
 type Env = Readonly<Record<string, string | undefined>>;

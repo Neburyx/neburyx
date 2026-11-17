@@ -7,7 +7,7 @@ import { INVALID_SPAN_CONTEXT, trace } from '@opentelemetry/api';
 import { AI_DEFAULTS } from '@neburyx/contracts';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createAnthropicProvider, type ProviderFailure } from './anthropic.js';
-import { configureAsk, type AskConfiguration } from './configure.js';
+import { configureProvider, type ProviderConfiguration } from './provider-configuration.js';
 import type { ModelAnswer, ModelRequest } from './provider.js';
 
 const KEY = 'test-key-1234567890';
@@ -83,7 +83,7 @@ type Limits = Partial<{ timeout_ms: number; max_retries: number; max_tokens: num
 
 /** The settings of Ask are in the environment: the same names an operator sets. */
 function askEnv(limits: Limits = {}, key: { env: string } | { file: string } = { env: 'NEBURYX_ASK_API_KEY' }, model = 'claude-sonnet-5-5'): Record<string, string> {
-  const env: Record<string, string> = { NEBURYX_ASK_MAPPING_FOLDER: '/etc/neburyx/mapping', NEBURYX_ASK_CLASSIFICATION_MODEL: model };
+  const env: Record<string, string> = { NEBURYX_ASK_CLASSIFICATION_MODEL: model };
   if ('file' in key) env.NEBURYX_ASK_API_KEY_FILE = key.file;
   else env.NEBURYX_ASK_API_KEY = KEY;
   if (limits.timeout_ms !== undefined) env.NEBURYX_ASK_TIMEOUT_MS = String(limits.timeout_ms);
@@ -95,13 +95,13 @@ function askEnv(limits: Limits = {}, key: { env: string } | { file: string } = {
   return env;
 }
 
-async function configurationWith(limits: Limits = {}, key: { env: string } | { file: string } = { env: 'NEBURYX_ASK_API_KEY' }, model = 'claude-sonnet-5-5'): Promise<AskConfiguration> {
-  const { configuration } = await configureAsk(askEnv(limits, key, model));
+async function configurationWith(limits: Limits = {}, key: { env: string } | { file: string } = { env: 'NEBURYX_ASK_API_KEY' }, model = 'claude-sonnet-5-5'): Promise<ProviderConfiguration> {
+  const { configuration } = await configureProvider(askEnv(limits, key, model));
   if (configuration === undefined) throw new Error('the configuration of the test is not valid');
   return configuration;
 }
 
-async function complete(configuration: AskConfiguration, env: Record<string, string | undefined> = { NEBURYX_ASK_API_KEY: KEY }, signal: AbortSignal = SIGNAL): Promise<ModelAnswer> {
+async function complete(configuration: ProviderConfiguration, env: Record<string, string | undefined> = { NEBURYX_ASK_API_KEY: KEY }, signal: AbortSignal = SIGNAL): Promise<ModelAnswer> {
   return createAnthropicProvider({ configuration, env, baseUrl }).complete(REQUEST, signal);
 }
 
@@ -577,9 +577,9 @@ describe('prompt caching', () => {
   const sentBody = (): Sent => JSON.parse(seen[0]?.body ?? '') as Sent;
   const VALUE_REQUEST: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: 'SENTINEL-INSTRUCTIONS Plan the question.', values: 'SENTINEL-VALUES [[values]]' };
 
-  async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST): Promise<AskConfiguration> {
+  async function callWith(settings: Parameters<typeof configurationWith>[0], request: ModelRequest = VALUE_REQUEST): Promise<ProviderConfiguration> {
     handler = reply(200, message());
-    const { configuration } = await configureAsk(askEnv(settings));
+    const { configuration } = await configureProvider(askEnv(settings));
     if (configuration === undefined) throw new Error('the configuration of the test is not valid');
     await createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl }).complete(request, SIGNAL);
     return configuration;

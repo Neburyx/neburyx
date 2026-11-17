@@ -19,6 +19,7 @@ import { createAppStore, STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS, typ
 import { createAddressCache, lookupStream } from './db/lookup.js';
 import { POOL_SIZE } from './db/pool.js';
 import { uuidv7 } from './identity/uuid.js';
+import { readAiSlotShare } from './seams/ai-share.js';
 import { communitySeams } from './seams/community-seams.js';
 import { fileQueryDepsOf } from './gate/file-query.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
@@ -147,6 +148,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   }
 
   let extension: ProfileExtension | undefined;
+  let aiShare: number | undefined;
   if (decision.state === 'on') {
     const loaded = await loadProfileExtension(io.extensionLoader ?? registeredExtensionLoader());
     if (!loaded.ok) {
@@ -178,6 +180,12 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       }
       for (const warning of outcome.warnings ?? []) io.logger.warn({ event: warning.event }, warning.message);
     }
+    const share = readAiSlotShare(env);
+    if (!share.ok) {
+      io.stderr.write(`invalid configuration: ${share.problem}\n`);
+      return { exitCode: 1 };
+    }
+    aiShare = share.share;
   }
 
   try {
@@ -220,7 +228,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     const cursors = createCursorCodec({ key: cursorKeyMaterial, clock: Date.now });
     const referenceKeys = deriveReferenceKeys(await store.referenceKey());
     // one set of seams for the process: the gate's read slots are the app's
-    const community = communitySeams();
+    const community = communitySeams(aiShare === undefined ? {} : { aiShare });
     // the preview's sink writes with the application's own login and the limits of the application's pool
     mountedAudit = extension?.createAuditSink?.({
       databaseUrl: config.databaseUrl,

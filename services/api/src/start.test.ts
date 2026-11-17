@@ -431,6 +431,30 @@ describe('the enterprise extension at start', () => {
       expect(rig.lines.join('')).not.toContain('SENTINEL-CONTENT');
     });
 
+    it('exits 1 naming the share setting and never its value when a provider is configured and the value is bad', async () => {
+      const rig = configuring(async () => ({ ok: true }));
+      expect(await start({ ...CONFIGURED, NEBURYX_AI_MAX_SLOT_SHARE: 'SENTINEL-SHARE' }, rig.io)).toEqual({ exitCode: 1 });
+      expect(rig.errors.join('')).toBe('invalid configuration: NEBURYX_AI_MAX_SLOT_SHARE must be a number above 0 and up to 1\n');
+      expect(rig.events).toEqual(['configure']);
+    });
+
+    it('starts with a good share setting when a provider is configured', async () => {
+      const rig = configuring(async () => ({ ok: true }));
+      const result = await start({ ...CONFIGURED, NEBURYX_AI_MAX_SLOT_SHARE: '0.25' }, rig.io);
+      expect(result.exitCode).toBe(0);
+      if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('ignores a bad share setting when the switch is off and no provider is configured', async () => {
+      const off = join(folder, 'off-bad-share.yaml');
+      writeFileSync(off, stringify({ sources: [], ai: { preview: false } }));
+      const rig = configuring(async () => ({ ok: true }));
+      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: off, NEBURYX_AI_MAX_SLOT_SHARE: 'SENTINEL-SHARE' }, rig.io);
+      expect(result.exitCode).toBe(0);
+      expect(rig.errors.join('')).toBe('');
+      if (result.exitCode === 0) await result.app.close();
+    });
+
     it('never loads the extension or calls configure when the switch is off, whatever Ask variables the environment has', async () => {
       const offWithKeys = join(folder, 'off-with-keys.yaml');
       writeFileSync(offWithKeys, stringify({ sources: [], ai: { preview: false } }));
@@ -439,6 +463,32 @@ describe('the enterprise extension at start', () => {
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['open-store']);
       if (result.exitCode === 0) await result.app.close();
+    });
+
+    it('loads no extension and creates no AI resource in the Community profile, with or without an ai section', async () => {
+      const withoutAi = join(folder, 'community-no-ai.yaml');
+      writeFileSync(withoutAi, stringify({ sources: [] }));
+      const previewOff = join(folder, 'community-preview-off.yaml');
+      writeFileSync(previewOff, stringify({ sources: [], ai: { preview: false } }));
+      for (const config of [withoutAi, previewOff]) {
+        const calls: string[] = [];
+        const extension: ProfileExtension = { ...extensionWith(route()), configure: async () => (calls.push('configure'), { ok: true }), createAuditSink: () => (calls.push('sink'), { sink: { record: async () => undefined }, close: async () => undefined }) };
+        const base = io({ portOverride: 0, extensionLoader: { load: async () => (calls.push('load'), extension) } });
+        const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: config }, base.io);
+        expect(result.exitCode).toBe(0);
+        expect(calls).toEqual([]);
+        if (result.exitCode === 0) await result.app.close();
+      }
+    });
+
+    it('refuses the Enterprise profile with the AI preview off before loading the extension', async () => {
+      const previewOff = join(folder, 'enterprise-preview-off.yaml');
+      writeFileSync(previewOff, stringify({ sources: [], ai: { preview: false } }));
+      const calls: string[] = [];
+      const base = io({ portOverride: 0, extensionLoader: { load: async () => (calls.push('load'), extensionWith(route())) } });
+      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: previewOff, NEBURYX_PROFILE: 'enterprise' }, base.io);
+      expect(result).toEqual({ exitCode: 1 });
+      expect(calls).toEqual([]);
     });
   });
 });

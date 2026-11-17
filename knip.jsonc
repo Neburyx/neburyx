@@ -5,6 +5,7 @@
       "entry": ["tools/ci/*.mjs", "deploy/docker/*.mjs", "deploy/release/*.mjs"],
       "project": ["tools/ci/*.mjs", "deploy/**/*.mjs"]
     },
+    "ee/ai-runtime": {},
     "ee/audit": {},
     "services/api": {},
     "packages/test-containers": {},

@@ -1,6 +1,6 @@
 import type { GraphNode, SummaryReading } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { promptRecordOf, type ModelProvider, type ModelRequest } from '../provider.js';
+import { promptRecordOf, type ModelProvider, type ModelRequest } from '@neburyx/ee-ai-runtime';
 import { SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import type { ReplyObservation } from '../case-summary/summarizer.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';

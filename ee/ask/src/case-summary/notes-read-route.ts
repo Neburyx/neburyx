@@ -1,4 +1,5 @@
 import { AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, ExtensionRefusal, aiNotesQuerySchema, aiNotesResponseSchema, copyToNotesParamsSchema, type AiNotesResponse, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
+import { gateClientOf } from '@neburyx/ee-ai-runtime';
 import { parseStoredEntry, rebuildEntry, refsOf, type StoredEntry } from './notes-rebuild.js';
 
 const READ_URL = '/v1/investigations/:id/draft/ai-notes';
@@ -33,8 +34,9 @@ export function createReadAiNotesRoute(options: { readonly maxRefs: () => number
     investigation: { param: 'id', missing: 'NOT_FOUND' },
     responseSchema: aiNotesResponseSchema,
     async handler(request: ExtensionRequest): Promise<AiNotesResponse> {
-      const { investigation, aiNotes, readElements, investigationReadable, askSourceReadable } = request;
-      if (investigation === undefined || aiNotes === undefined || readElements === undefined || investigationReadable === undefined || askSourceReadable === undefined) throw new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
+      const { investigation, aiNotes } = request;
+      const { readElements, investigationReadable, sourceReadable } = gateClientOf(request);
+      if (investigation === undefined || aiNotes === undefined || readElements === undefined || investigationReadable === undefined || sourceReadable === undefined) throw new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
       const mask = aiNotesQuerySchema.parse(request.query).mask === 'true';
       const held = await aiNotes.read(investigation.id);
       const skipped: Skipped[] = [];
@@ -53,7 +55,7 @@ export function createReadAiNotesRoute(options: { readonly maxRefs: () => number
       });
       if (entries.length === 0) {
         await investigationReadable(investigation.id, investigation.sourceId);
-        await askSourceReadable(investigation.sourceId);
+        await sourceReadable(investigation.sourceId);
         return { entries: [], skipped };
       }
       const reading = await readElements({ investigationId: investigation.id, sourceId: investigation.sourceId, mask }, refsOf(entries));

@@ -21,3 +21,7 @@ What it measures, how a position and a sample are defined, and what the figures 
 ## Supernode test suite
 
 `pnpm test:supernodes` runs the suite of `services/api/src/testing/supernodes/` against the Neo4j server of the Neo4j tests (it is also run by `pnpm test:neo4j`). It builds the three anchors of this benchmark once, in a database of its own that it drops at the end, and checks that no payload exceeds the page bound, that every count carries its quality, and that load-more reaches every row once. With `NBX_SUPERNODE_RECORD` set to a file, it also writes the wall time, size and (from one profile of the statement) db hits of the first page of every read set at each size and of the deep pages. Db hits of a first page of the dated read set carry the cause and the notice of the benchmark record. The suite has not been run on Neo4j 2026.x: no such server was reachable.
+
+## AI runtime
+
+`ai-runtime.md` and `ai-runtime.json` record the workload and the margin of the test that a manual expand stays within a margin of its time alone while AI requests are running, and the figure at which a reply check leaves the main thread. `pnpm --filter @neburyx/concurrency-suite calibrate` writes them again; see `ai-runtime.md`.

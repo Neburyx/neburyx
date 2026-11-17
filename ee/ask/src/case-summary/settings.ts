@@ -1,5 +1,5 @@
 import { AI_LIMITS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
-import { given, integerChoice, type Env } from '../configure.js';
+import { given, integerChoice, type Env } from '@neburyx/ee-ai-runtime';
 import { TOKEN_KEY_VARIABLES } from './token-keys.js';
 
 export const SUMMARY_VARIABLES = {

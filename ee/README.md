@@ -23,8 +23,20 @@ Rules:
 - **The switch is a safety rail, not a lock.** The code is open, so whoever runs a deployment can set both parts. The switch keeps AI features from reaching a source by accident.
 - No customer-specific code, no real data, no credentials.
 
+## The AI runtime
+
+`ee/ai-runtime` holds what the AI features share, in the same image:
+
+- the provider layer: the model request and answer types, the Anthropic adapter, the reading of the key, the provider settings, the audited model call and the failure line;
+- the gate client, the one small interface through which AI code reaches the core (running an intent or a template, re-reading a view, checking that the caller may read a source or an investigation, and the caller's saved patterns); the import check of `tools/workspace-checks` fails on any other way for `ee/ask` or `ee/ai-runtime` to reach the core or a source;
+- the shared checks on a model's reply and the evaluation harness (the replay and the recording providers);
+- the check runner, which runs a reply check in a worker thread once it measures over a set time, with a cap on the threads and a refusal, never a hang, when a worker fails;
+- the switches that turn one AI feature off, so that a feature that is off opens no database pool, starts no timer and spawns no thread.
+
+`ee/ask` (Ask and the AI case summary) builds on it. `docs/benchmarks/ai-runtime.md` records the measured share of read slots and the figures behind the offload.
+
 ## Testing the AI features without a model
 
-`ee/ask/src/testing/` holds what the tests of the AI features use so that no test calls a live model: a fixture provider that answers from scripted replies keyed by prompt id and version, and a suite of conformance cases that every provider is run through (the fixture, and the real client against a local stub server). It is not built into the package or the image, and the package's main entry exports none of it; code inside `ee/ask` imports it by relative path.
+`ee/ai-runtime/src/testing/` holds what the tests of the AI features use so that no test calls a live model: a fixture provider that answers from scripted replies keyed by prompt id and version, and a suite of conformance cases that every provider is run through (the fixture, and the real client against a local stub server). It is not built into the package or the image, and the package's main entry exports none of it; tests of the AI packages import it by relative path.
 
 How well Ask classifies a question is scored by the code in `ee/ask/src/eval`, reached through the entry script of [`tools/ask-eval`](../tools/ask-eval/README.md). It runs the product's own classifier over a replay of recorded replies of the model (`replayProvider`), so a scoring run makes no model call. A recording run wraps the real provider (`recordingProvider`) so that every question makes exactly one call, never more than the budget given, and keeps only the question, the model's reply and the name of the model, in the form a replay reads; it needs a key and is run by hand against the synthetic demo packs, never against a source with real data. See the README of `tools/ask-eval` for the commands, the targets and the baseline.

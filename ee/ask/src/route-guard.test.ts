@@ -2,8 +2,8 @@ import { ExtensionRefusal, aiStatusResponseSchema, parseExtensionRefusal, type A
 import { UNAVAILABLE_SUMMARIZER } from './testing/case-summarizer.js';
 import { describe, expect, it } from 'vitest';
 import { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
-import { replyKey, createFixtureProvider } from './testing/fixture.js';
-import type { ModelRequest } from './provider.js';
+import { replyKey, createFixtureProvider } from '../../ai-runtime/src/testing/fixture.js';
+import type { ModelRequest } from '@neburyx/ee-ai-runtime';
 
 const SIGNAL = new AbortController().signal;
 const MODEL_REQUEST: ModelRequest = { promptId: 'test.prompt', version: 1, instructions: 'Answer the question.', values: 'who is ‹person#1›?' };

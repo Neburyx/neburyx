@@ -4,7 +4,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ExtensionRefusal, type AskClassification, type AskPatternOffer, type AskFolder, type AskRun, type AskRunResult, type AuditEvent, type ExtensionRefusalFields, type ExtensionRequest, type ExtensionRoute } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
-import { AuditUnavailableError } from '../audited.js';
+import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { loadAskFolder } from '../folder/load.js';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 import { createAskContinueRoute, createAskQuestionRoute, type QuestionRouteOptions } from './question-routes.js';

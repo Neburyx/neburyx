@@ -35,8 +35,12 @@ describe('workspace layout', () => {
     return pkg === undefined ? undefined : Object.entries(pkg.dependencies ?? {}).filter(([, range]) => range.startsWith('workspace:')).map(([found]) => found);
   };
 
-  it('includes the ee/ask package, whose workspace runtime dependencies are the contracts and the audit package', () => {
-    expect(workspaceRuntimeOf('@neburyx/ee-ask')).toEqual(['@neburyx/contracts', '@neburyx/ee-audit']);
+  it('includes the ee/ask package, whose workspace runtime dependencies are the contracts, the AI runtime and the audit package', () => {
+    expect(workspaceRuntimeOf('@neburyx/ee-ask')).toEqual(['@neburyx/contracts', '@neburyx/ee-ai-runtime', '@neburyx/ee-audit']);
+  });
+
+  it('includes the ee/ai-runtime package, whose only workspace runtime dependency is the contracts', () => {
+    expect(workspaceRuntimeOf('@neburyx/ee-ai-runtime')).toEqual(['@neburyx/contracts']);
   });
 
   it('includes the ee/audit package, whose only workspace runtime dependency is the contracts', () => {

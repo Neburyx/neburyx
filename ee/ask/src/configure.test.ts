@@ -5,7 +5,7 @@ import { AI_DEFAULTS, AI_EFFORTS, AI_LIMITS } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { configureAsk } from './configure.js';
 import { createEnterpriseExtension } from './index.js';
-import { parseKeyText } from './key-file.js';
+import { parseKeyText } from '@neburyx/ee-ai-runtime';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'ee-ask-configure-'));

@@ -1,7 +1,8 @@
 import { AI_DEFAULTS } from '@neburyx/contracts';
-import { createAnthropicProvider } from '../anthropic.js';
-import { configureAsk, DEFAULT_ASK_MODEL } from './../configure.js';
-import type { ModelProvider } from '../provider.js';
+import { createAnthropicProvider } from '@neburyx/ee-ai-runtime';
+import { DEFAULT_ASK_MODEL } from '@neburyx/ee-ai-runtime';
+import { configureAsk } from '../configure.js';
+import type { ModelProvider } from '@neburyx/ee-ai-runtime';
 import { summaryProviderConfiguration } from '../case-summary/provider-configuration.js';
 import type { SummarySettings } from '../case-summary/settings.js';
 

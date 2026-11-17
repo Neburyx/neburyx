@@ -1,3 +1,4 @@
+import { markAskRunner, markReadElements } from './ai-reads.js';
 import { parseExtensionRefusal, type AskClassifier, type CaseSummarizer, type ExtensionRefusalFields, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppStore } from '../app-store.js';
@@ -90,12 +91,14 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           }
           const build = (): ExtensionRequest => {
             const askSourceReadable = mount.askSourceReadableFor?.({ principal, traceId: request.id });
-            const readElements = mount.signalOf === undefined ? undefined : mount.readElementsFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
+            const unmarkedElements = mount.signalOf === undefined ? undefined : mount.readElementsFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
+            const readElements = unmarkedElements === undefined ? undefined : markReadElements(unmarkedElements);
             const investigationReadable = mount.investigationReadableFor?.({ principal, traceId: request.id });
             const aiNotes = mount.aiNotesFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
             const askPatternFind = mount.askPatternFindFor?.({ principal, traceId: request.id });
-            const askRunner = mount.signalOf === undefined ? undefined : mount.askRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
+            const unmarkedRunner = mount.signalOf === undefined ? undefined : mount.askRunnerFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
+            const askRunner = unmarkedRunner === undefined ? undefined : markAskRunner(unmarkedRunner);
             return {
               principalId: principal.id,
               principalRole: principal.role,

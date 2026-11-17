@@ -1,5 +1,5 @@
 import { ExtensionRefusal, summaryRequestSchema, summaryResponseSchema, type CaseSummaryAuditDetail, type ExtensionRequest, type ExtensionRoute, type SummaryRequest, type SummaryResponse } from '@neburyx/contracts';
-import { AuditUnavailableError } from '../audited.js';
+import { AuditUnavailableError, gateClientOf } from '@neburyx/ee-ai-runtime';
 import { SUMMARY_CLOSING_ACTION, SummaryHandled, auditInvestigationOf, elementCountOf, elementsHashOf } from './summarizer.js';
 
 const SUMMARY_URL = '/v1/summary';
@@ -41,10 +41,11 @@ export function createSummaryRoute(): ExtensionRoute {
       sourceOf: (body) => summaryRequestSchema.parse(body).sourceId,
       recheck: async (request) => {
         if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') return false;
-        if (!request.caseSummarizer.availability().available || request.investigationReadable === undefined) return false;
+        const { investigationReadable } = gateClientOf(request);
+        if (!request.caseSummarizer.availability().available || investigationReadable === undefined) return false;
         const body = summaryRequestSchema.parse(request.body);
         try {
-          await request.investigationReadable(body.investigationId, body.sourceId);
+          await investigationReadable(body.investigationId, body.sourceId);
           return true;
         } catch {
           return false;
@@ -67,10 +68,11 @@ export function createSummaryRoute(): ExtensionRoute {
         await closeEarly(request, role, body, 'tooLarge', true);
         return { status: 'tooLarge', limit: 'elements', elements, cap: caseSummarizer.maxElements };
       }
-      if (request.readElements === undefined) throw new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
+      const { readElements } = gateClientOf(request);
+      if (readElements === undefined) throw new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
       let reading;
       try {
-        reading = await request.readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true }, refs);
+        reading = await readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true }, refs);
       } catch (error) {
         await closeEarly(request, role, body, request.signal.aborted ? 'cancelled' : 'read-failed', false);
         throw error;

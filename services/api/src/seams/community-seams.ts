@@ -21,12 +21,12 @@ export const communityCaseSummarizer: CaseSummarizer = {
   summarize: () => Promise.reject(new Error('the case summary is not available in this edition')),
 };
 
-/** The Community seams; each call has read slots of its own, so one process builds them once. */
-export function communitySeams(): Seams {
+/** The Community seams; each call has read slots of its own, so one process builds them once. `aiShare` is the share of each pool of slots that AI reads may hold. */
+export function communitySeams(options: { readonly aiShare?: number } = {}): Seams {
   return {
     policy: communityPolicy,
     audit: communityAudit,
-    coordinator: withBreaker(createReadSlots()),
+    coordinator: withBreaker(createReadSlots(options.aiShare === undefined ? {} : { aiShare: options.aiShare })),
     askClassifier: communityAskClassifier,
     caseSummarizer: communityCaseSummarizer,
   };

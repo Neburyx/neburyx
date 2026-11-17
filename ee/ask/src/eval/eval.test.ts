@@ -4,9 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { classify, loadSource } from './evaluate.js';
 import { LiveProviderError, liveProvider, runSettings } from './live.js';
-import { BudgetReached, recordingProvider } from './recording.js';
-import { replayProvider, type ReplayAnswer } from './replay.js';
-import { promptRecordOf, type ModelProvider } from '../provider.js';
+import { BudgetReached, promptRecordOf, recordingProvider, replayProvider, type ModelProvider, type ReplayAnswer } from '@neburyx/ee-ai-runtime';
 
 const made: string[] = [];
 afterAll(() => {

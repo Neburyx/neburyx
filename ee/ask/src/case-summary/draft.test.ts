@@ -1,7 +1,7 @@
 import type { AuditEvent } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { AuditUnavailableError, createAuditedModelCall } from '../audited.js';
-import { promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest } from '../provider.js';
+import { AuditUnavailableError, createAuditedModelCall } from '@neburyx/ee-ai-runtime';
+import { promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest } from '@neburyx/ee-ai-runtime';
 import { draftSummary } from './draft.js';
 
 const PROMPT = { id: 'case-summary', version: 1, sha256: 'a'.repeat(64) };

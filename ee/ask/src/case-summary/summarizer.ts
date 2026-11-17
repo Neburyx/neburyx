@@ -1,8 +1,9 @@
 import { renderForExport } from './export-render.js';
 import { createHash } from 'node:crypto';
 import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
-import { AuditUnavailableError, type AuditedModelCall } from '../audited.js';
+import { AuditUnavailableError, JUDGE_MODULE, createCheckRunner, parseJudged, type AuditedModelCall, type CheckedText, type CheckRunner, type HeavyCheck, type JudgeInput, type Judged } from '@neburyx/ee-ai-runtime';
 import { canonicalText } from '../questions/canonical.js';
+import type { AssembledText } from './assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
 import { judgeSentences } from './checks.js';
 import { draftSummary, type Checked } from './draft.js';
@@ -19,6 +20,11 @@ const SUMMARY_AUDIT_ACTION = 'ai.case-summary';
 
 /** The action of the closing event of a click: the one event that says how it ended, beside the event of each model call. */
 export const SUMMARY_CLOSING_ACTION = 'ai.case-summary.closed';
+
+const judgeCheck: HeavyCheck<JudgeInput, Judged> = { name: 'judge-sentences', inline: (input) => judgeSentences(input.sentences, input.text), module: JUDGE_MODULE, parse: parseJudged };
+
+/** What the checks read of the text, without the references each key stands for, which a worker thread would have to copy. */
+const checkedTextOf = (assembled: AssembledText): CheckedText => ({ text: assembled.text, keys: new Map([...assembled.keys.keys()].map((key) => [key, true] as const)), lines: assembled.lines, inexactCounts: assembled.inexactCounts, unknownCountKeys: assembled.unknownCountKeys });
 
 const PROMPT_ID = 'case-summary';
 const PROMPT_VERSION = '1';
@@ -45,6 +51,10 @@ interface SummarizerOptions {
   readonly now?: () => number;
   /** Only the evaluation command passes this: it is told, for each reply the checks judge, what they did. It gets copies, and what it does or throws never changes the click. */
   readonly observe?: (observation: ReplyObservation) => void;
+  /** Runs the checks of a reply; the extension gives one for the life of the process, so that what it measured is kept. Absent, a runner of its own is made. */
+  readonly checks?: CheckRunner;
+  /** Told why a check of a reply could not run; the click then ends at once. */
+  readonly onCheckRefused?: (reason: 'worker-failed' | 'timeout' | 'cancelled') => void;
 }
 
 /** The investigation id as an audit event takes it: only a UUID, since the audit column is one; any other text is left out of the event, never refused. */
@@ -71,7 +81,8 @@ const resultOf = (outcome: CaseSummaryOutcome): AuditResult => (outcome.status =
 /** Drafts the summary of a read view: measures the text against the size guard, then calls the model within the operator's limits. */
 export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer {
   const { settings, instructions } = options;
-  const observeReply = (written: readonly SummarySentence[], judged: ReturnType<typeof judgeSentences>): void => {
+  const checks = options.checks ?? createCheckRunner();
+  const observeReply = (written: readonly SummarySentence[], judged: Judged): void => {
     if (options.observe === undefined) return;
     try {
       // a promise the observer returns is let go too: a rejection of it is not an unhandled one
@@ -169,6 +180,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         return outcome;
       };
       if (!prepared.ready) return record(prepared.refusal);
+      const checkedText = checkedTextOf(prepared.assembled);
       let callsMade = 0;
       let lastChecked: Checked | undefined;
       try {
@@ -181,12 +193,15 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
             beforeCall: (call) => stored(() => runs.beginCall({ runId, number: call.number, startedAt: call.startedAt, instructionsSha256: instructions.sha256, instructionsText: call.instructions, valuesText: call.values })),
             afterCall: (end) => stored(() => runs.endCall({ runId, ...end })),
           },
-        judge: (sentences) => {
-            const judged = judgeSentences(sentences, prepared.assembled);
+        judge: async (sentences, checkSignal) => {
+            const outcome = await checks.run(judgeCheck, { sentences, text: checkedText }, { timeoutMs: settings.timeoutMs, signal: checkSignal });
+            if (outcome.status === 'refused') return { refused: outcome.reason };
+            const judged = outcome.value;
             lastChecked = { kept: judged.kept.length, removed: judged.removed };
             observeReply(sentences, judged);
             return judged;
           },
+          ...(options.onCheckRefused === undefined ? {} : { onCheckRefused: options.onCheckRefused }),
           maxCalls: settings.maxCalls,
           totalTimeoutMs: settings.totalTimeoutMs,
           signal,

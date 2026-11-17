@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { promptRecordOf } from '../provider.js';
+import { promptRecordOf } from '@neburyx/ee-ai-runtime';
 import { buildSummaryInstructions, MAX_SUMMARY_SENTENCES } from './instructions.js';
 
 const shipped = (name: string): string => readFileSync(fileURLToPath(new URL(`../../prompts/${name}`, import.meta.url)), 'utf8');

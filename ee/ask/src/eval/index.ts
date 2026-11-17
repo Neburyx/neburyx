@@ -3,9 +3,9 @@ export { classify, loadSource } from './evaluate.js';
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */
 export { liveProvider, runSettings } from './live.js';
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */
-export { recordingProvider } from './recording.js';
+export { recordingProvider } from '@neburyx/ee-ai-runtime';
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */
-export { replayProvider } from './replay.js';
+export { replayProvider } from '@neburyx/ee-ai-runtime';
 /** @public Imported by the entry script of the summary evaluation command through the package subpath `./eval`, which knip does not follow. */
 export { budgetedProvider, evalSummarizer, scriptedSummaryProvider, summaryRunSettings } from './summary.js';
 /** @public The same, for the live summary provider. */

@@ -6,7 +6,7 @@ import type { MountedAuditSink } from '@neburyx/contracts';
 import pg from 'pg';
 import { stringify } from 'yaml';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { createFixtureProvider, replyKey, type FixtureReply } from '../../../../ee/ask/src/testing/fixture.js';
+import { createFixtureProvider, replyKey, type FixtureReply } from '../../../../ee/ai-runtime/src/testing/fixture.js';
 import { uuidv7 } from '../identity/uuid.js';
 import { clearRegisteredExtension, type ExtensionLoader } from './extension.js';
 import { fixtureFolder, removeFixtureFolders, rows, runInProcess } from '../testing/database.js';

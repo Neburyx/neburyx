@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { createAnthropicProvider } from '../anthropic.js';
+import { createAnthropicProvider } from '@neburyx/ee-ai-runtime';
 import { configureAsk } from '../configure.js';
 import { summaryProviderConfiguration } from './provider-configuration.js';
 import { readSummarySettings } from './settings.js';

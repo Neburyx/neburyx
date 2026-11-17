@@ -1,0 +1,37 @@
+{
+  "workload": {
+    "aiRequests": 48,
+    "readMsList": [
+      10,
+      15,
+      20,
+      25,
+      30,
+      35,
+      40,
+      45,
+      50
+    ],
+    "repetitions": 9
+  },
+  "share": 0.5,
+  "alone": {
+    "medianMs": 60,
+    "p95Ms": 100
+  },
+  "withAiRequests": {
+    "medianMs": 60,
+    "p95Ms": 100
+  },
+  "withoutShare": {
+    "medianMs": 780,
+    "p95Ms": 1300
+  },
+  "margin": {
+    "ratio": 1.25
+  },
+  "offload": {
+    "thresholdMs": 50,
+    "measuredP95Ms": 11.806
+  }
+}
