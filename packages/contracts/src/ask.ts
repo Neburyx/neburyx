@@ -142,8 +142,8 @@ export interface AskPatternCatalog {
 }
 
 /**
- * One step of a saved pattern as an intent may be told of it: types and kinds only, never a property, a value or a name. The three structural fields of a step are the one number it may carry: the fan's threshold is a bound of the
- * pattern's shape (bounded by the source's count cap), not a value of the data, a condition or a time; a field a step does not use is absent.
+ * One step of a saved pattern as an intent may be told of it: types and kinds only, never a property, a value or a name. The structural fields of a step carry the only numbers it may hold: the fan's threshold and the delay's length and unit are bounds of the
+ * pattern's shape (the threshold bounded by the source's count cap, the length by the contract's ceiling), not a value of the data, a condition or a time; a field a step does not use is absent.
  */
 export interface AskPatternStep {
   readonly relationshipTypes: readonly string[];
@@ -153,6 +153,8 @@ export interface AskPatternStep {
   readonly windowed: boolean;
   /** The step's relationship is at or after the previous step's in time. */
   readonly orderedAfterPrevious?: true;
+  /** The step's relationship is no later than the previous step's plus this length, in the unit the definition wrote. */
+  readonly within?: { readonly unit: 'minutes' | 'hours' | 'days'; readonly amount: number };
   /** The step starts only from a node with at least this many distinct neighbours over the step. */
   readonly fanAtLeast?: number;
   /** The step arrives at the starting entity itself (the last step of a cycle). */

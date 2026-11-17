@@ -41,20 +41,28 @@ function fanPart(atLeast: number, direction: Step['direction'], arrives: string)
   return { atLeast, direction, text: `at least ${atLeast} other ${arrives}s` };
 }
 
-/** A time order in words: the relationship of this step has a date the same as or later than the previous step's, read on the time properties the mapping gives each. */
+/** The delay of a step in words, in the unit the definition wrote. */
+function withinPart(within: NonNullable<Step['within']>): NonNullable<NonNullable<PreviewStep['timeOrder']>['within']> {
+  if ('minutes' in within) return { unit: 'minutes', amount: within.minutes, text: `within ${plural(within.minutes, 'minute', 'minutes')}` };
+  if ('hours' in within) return { unit: 'hours', amount: within.hours, text: `within ${plural(within.hours, 'hour', 'hours')}` };
+  return { unit: 'days', amount: within.days, text: `within ${plural(within.days, 'day', 'days')}` };
+}
+
+/** A time order in words: the relationship of this step has a date the same as or later than the previous step's, read on the time properties the mapping gives each, and no later than the delay when the step has one. */
 function timeOrderPart(step: Step, before: Step | undefined, beforePrevious: string, previous: string, source: SourceModel): NonNullable<PreviewStep['timeOrder']> {
   const propertiesOf = (found: Step | undefined, from: string, to: string): string[] => [...new Set((found?.relationshipTypes ?? []).flatMap((type) => source.relationships.filter((row) => row.type === type && found !== undefined && carries(row, from, to, found.direction)).flatMap((row) => (row.observedAt === undefined ? [] : [row.observedAt]))))];
   const properties = propertiesOf(step, previous, step.arrivesAt);
   const previousProperties = propertiesOf(before, beforePrevious, previous);
-  return { properties, previousProperties, text: `after the previous step (by ${properties.join(' or ')})` };
+  const within = step.within === undefined ? undefined : withinPart(step.within);
+  return { properties, previousProperties, ...(within === undefined ? {} : { within }), text: `after the previous step (by ${properties.join(' or ')})${within === undefined ? '' : `, ${within.text}`}` };
 }
 
-/** The sentence of a step: the chain as before, and for the three kinds of the extension the words of the approved frames: to at least N other Accounts, close back at the start Account, after the previous step (by the time property). */
-function stepText(index: number, step: Step, types: string, arrives: string, start: string, properties: readonly string[] | undefined): string {
+/** The sentence of a step: the chain as before, and for the kinds of the extension the words of the approved frames: to at least N other Accounts, close back at the start Account, after the previous step (by the time property), and within a delay. */
+function stepText(index: number, step: Step, types: string, arrives: string, start: string, timeOrderText: string | undefined): string {
   const lead = `Step ${index + 1}: follow ${types} ${DIRECTION_WORDS[step.direction]}`;
   const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${arrives}s to choose from`;
   const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to ${arrives}` : `to at least ${step.fan.atLeast} other ${arrives}s`) : `and close back at the start ${start}${fan}`;
-  return `${lead} ${to}${step.after === undefined ? '' : `, after the previous step (by ${(properties ?? []).join(' or ')})`}`;
+  return `${lead} ${to}${timeOrderText === undefined ? '' : `, ${timeOrderText}`}`;
 }
 
 /** What a type is called: the mapping's display name for it, else its label, as the profile gives them. */
@@ -78,7 +86,7 @@ function previewPattern(definition: PatternDefinition, source: SourceModel): Pat
         relationshipTypes: step.relationshipTypes,
         direction: step.direction,
         arrivesAt: { type: step.arrivesAt, name: arrives },
-        text: stepText(index, step, types, arrives, start, timeOrder?.properties),
+        text: stepText(index, step, types, arrives, start, timeOrder?.text),
         conditions: (step.conditions ?? []).map((condition) => conditionPart(condition, condition.on === 'neighbor' ? arrives : types)),
         ...(step.window === undefined ? {} : { window: windowPart(step.window, step, previous, source) }),
         ...(step.fan === undefined ? {} : { fan: fanPart(step.fan.atLeast, step.direction, arrives) }),

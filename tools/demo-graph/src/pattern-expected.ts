@@ -13,6 +13,8 @@ export interface ExpectedStep {
   readonly arrivesAt: string;
   /** The step is ordered after the previous one: its relationship has a time at or after the previous relationship's (a relationship with no time is never on such a path). */
   readonly ordered?: boolean;
+  /** With `ordered`: the relationship's time is no later than the previous one's plus this many minutes. */
+  readonly withinMinutes?: number;
   /** The node the step starts from has at least this many distinct neighbours over the step's edges in its direction (a node on the path counts; the time order is not applied to the count). */
   readonly fan?: number;
 }
@@ -34,6 +36,7 @@ export function expectedReach(anchorType: string, anchor: string, steps: readonl
         const [from, to] = step.direction === 'out' ? [edge.f, edge.t] : [edge.t, edge.f];
         if (from !== path.last || path.seen.has(`${step.arrivesAt}:${to}`)) continue;
         if (step.ordered === true && (edge.at === undefined || path.at === undefined || Number.isNaN(edge.at) || Number.isNaN(path.at) || edge.at < path.at)) continue;
+        if (step.ordered === true && step.withinMinutes !== undefined && (edge.at ?? 0) - (path.at ?? 0) > step.withinMinutes * 60_000) continue;
         next.push({ last: to, seen: new Set([...path.seen, `${step.arrivesAt}:${to}`]), at: edge.at });
       }
     }

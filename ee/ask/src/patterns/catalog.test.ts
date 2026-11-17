@@ -37,6 +37,15 @@ describe('the pattern catalog', () => {
     expect(built?.catalog.text).toContain('step 1: out over link to widget, no conditions, from an entity with at least 3 neighbours; step 2: out over link to widget, no conditions, after the previous step in time, arriving back at the starting entity');
   });
 
+  it('says the delay of an ordered step as a length and a unit, and two patterns that differ only by it are described differently', () => {
+    const step = { relationshipTypes: ['link'], direction: 'out' as const, arrivesAt: 'widget', conditions: [], windowed: false };
+    const described = (within?: { unit: 'minutes' | 'hours' | 'days'; amount: number }) => buildPatternCatalog({ offers: [offer('a', { projection: projection({ steps: [step, { ...step, orderedAfterPrevious: true, ...(within === undefined ? {} : { within }) }] }) })], cut: false })?.catalog.text;
+    expect(described({ unit: 'hours', amount: 24 })).toContain('after the previous step in time, no later than 24 hours after it');
+    expect(described({ unit: 'minutes', amount: 90 })).toContain('no later than 90 minutes after it');
+    expect(described({ unit: 'hours', amount: 24 })).not.toBe(described({ unit: 'days', amount: 1 }));
+    expect(described()).not.toContain('no later than');
+  });
+
   it('is absent when no pattern is offered', () => {
     expect(buildPatternCatalog({ offers: [], cut: false })).toBeUndefined();
   });

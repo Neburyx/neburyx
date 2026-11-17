@@ -40,10 +40,18 @@ const longNode = (sourceId: string, entityType: string, stableId: string) => ({
 /** The time property the stand-in's mapping gives the relationship types of a step: a transfer is dated by `transferredAt`, the other dated types by `lastSeen`. */
 const timeOf = (step: { relationshipTypes: string[] }): string => (step.relationshipTypes.includes('TRANSFERRED_TO') ? 'transferredAt' : 'lastSeen');
 
-const stubSentence = (index: number, step: { relationshipTypes: string[]; direction: string; arrivesAt: string; after?: 'previous'; fan?: { atLeast: number }; closesAtAnchor?: true }, start: string): string => {
+type Within = { minutes: number } | { hours: number } | { days: number };
+const withinOf = (within: Within | undefined): { unit: 'minutes' | 'hours' | 'days'; amount: number; text: string } | undefined => {
+  if (within === undefined) return undefined;
+  const [unit, amount] = 'minutes' in within ? (['minutes', within.minutes] as const) : 'hours' in within ? (['hours', within.hours] as const) : (['days', within.days] as const);
+  return { unit, amount, text: `within ${amount} ${amount === 1 ? unit.slice(0, -1) : unit}` };
+};
+const orderWords = (step: { relationshipTypes: string[]; within?: Within }): string => `after the previous step (by ${timeOf(step)})${withinOf(step.within) === undefined ? '' : `, ${withinOf(step.within)?.text ?? ''}`}`;
+
+const stubSentence = (index: number, step: { relationshipTypes: string[]; direction: string; arrivesAt: string; after?: 'previous'; within?: Within; fan?: { atLeast: number }; closesAtAnchor?: true }, start: string): string => {
   const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${step.arrivesAt}s to choose from`;
   const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to a ${step.arrivesAt}` : `to at least ${step.fan.atLeast} other ${step.arrivesAt}s`) : `and close back at the start ${start}${fan}`;
-  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : `, after the previous step (by ${timeOf(step)})`}`;
+  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : `, ${orderWords(step)}`}`;
 };
 
 export function previewPattern(body: unknown, response: ServerResponse): void {
@@ -51,7 +59,7 @@ export function previewPattern(body: unknown, response: ServerResponse): void {
   if (!parsed.success) return json(response, 400, INVALID);
   const problems = patternProblemsOf(parsed.data.definition);
   if (problems.length > 0) return json(response, 200, patternPreviewResponseSchema.parse({ status: 'invalid', problems }));
-  const definition = parsed.data.definition as { anchorType: string; steps: Array<{ after?: 'previous'; fan?: { atLeast: number }; closesAtAnchor?: true; relationshipTypes: string[]; direction: keyof typeof DIRECTION_WORD; arrivesAt: string; conditions?: unknown[]; window?: unknown }> };
+  const definition = parsed.data.definition as { anchorType: string; steps: Array<{ after?: 'previous'; within?: Within; fan?: { atLeast: number }; closesAtAnchor?: true; relationshipTypes: string[]; direction: keyof typeof DIRECTION_WORD; arrivesAt: string; conditions?: unknown[]; window?: unknown }> };
   json(
     response,
     200,
@@ -66,7 +74,7 @@ export function previewPattern(body: unknown, response: ServerResponse): void {
           text: step.fan === undefined && step.after === undefined && step.closesAtAnchor === undefined ? `Follows ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction]} to a ${step.arrivesAt}.` : stubSentence(index, step, definition.anchorType),
           conditions: [],
           ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast, direction: step.direction, text: `at least ${step.fan.atLeast} other ${step.arrivesAt}s` } }),
-          ...(step.after === undefined ? {} : { timeOrder: { properties: [timeOf(step)], previousProperties: [timeOf(step)], text: `after the previous step (by ${timeOf(step)})` } }),
+          ...(step.after === undefined ? {} : { timeOrder: { properties: [timeOf(step)], previousProperties: [timeOf(step)], ...(withinOf(step.within) === undefined ? {} : { within: withinOf(step.within) }), text: orderWords(step) } }),
           ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: { type: definition.anchorType, name: definition.anchorType, text: `close back at the start ${definition.anchorType}` } }),
         })),
         bounds: { hopLimit: { value: 4, text: 'At most 4 steps.' }, pageLimit: { value: 50, text: 'At most 50 results at a time.' }, countCap: { value: 500, text: 'Counts stop at 500.' } },

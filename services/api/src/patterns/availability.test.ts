@@ -89,6 +89,7 @@ describe('the availability of a saved definition across the fan, time order and 
   it('is available for a definition that uses the new fields while the mapping has what they need', () => {
     for (const definition of [
       { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous' }] },
+      { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous', within: { hours: 24 } }] },
       { anchorType: 'maker', steps: [{ ...LINKS_ONCE, fan: { atLeast: 3 } }] },
       { anchorType: 'maker', steps: [LINKS_ONCE, LINKS_ONCE, { ...LINKS_ONCE, closesAtAnchor: true }] },
     ]) expect(availabilityOf(definitionRow({ definition }), sourceOf()), JSON.stringify(definition)).toEqual({ status: 'available' });
@@ -98,6 +99,16 @@ describe('the availability of a saved definition across the fan, time order and 
     const untimed = PATTERN_RELATIONSHIPS.map((row) => (row.type === 'LINKS' ? { ...row, observed_at: undefined } : row));
     const definition = { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous' }] };
     expect(availabilityOf(definitionRow({ definition }), sourceOf({ relationships: untimed }))).toEqual({ status: 'unavailable', reasons: [{ code: 'bad-definition', path: ['steps', 1, 'after'] }] });
+  });
+
+  it('is unavailable, at the order, when the mapping lost the time property a delay needs, and says a stored delay without an order or a field the schema does not know is a bad definition', () => {
+    const untimed = PATTERN_RELATIONSHIPS.map((row) => (row.type === 'LINKS' ? { ...row, observed_at: undefined } : row));
+    const bounded = { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous', within: { hours: 24 } }] };
+    expect(availabilityOf(definitionRow({ definition: bounded }), sourceOf({ relationships: untimed }))).toEqual({ status: 'unavailable', reasons: [{ code: 'bad-definition', path: ['steps', 1, 'after'] }] });
+    const alone = { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, within: { hours: 24 } }] };
+    expect(availabilityOf(definitionRow({ definition: alone }), sourceOf())).toEqual({ status: 'unavailable', reasons: [{ code: 'bad-definition', path: ['steps', 1, 'within'] }] });
+    const unknown = { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous', soon: true }] };
+    expect(codesOf(availabilityOf(definitionRow({ definition: unknown }), sourceOf()))).toEqual(['bad-definition']);
   });
 
   it('keeps the specific reason of an existing mapping problem beside it when a new field is also on the definition', () => {

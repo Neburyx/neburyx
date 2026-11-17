@@ -61,13 +61,19 @@ describe('the typologies of the banking pack on its demo graph', () => {
     expect((await run('cycles', off)).size).toBe(0);
   });
 
-  it('pass-through returns the accounts a transfer reaches whose next transfer is not earlier, and leaves out the chain whose second transfer is earlier', async () => {
-    const steps = [{ edges: transfers(), direction: 'out' as const, arrivesAt: 'account' }, { edges: transfers(), direction: 'out' as const, arrivesAt: 'account', ordered: true }];
-    const hit = await run('pass-through', account(7300));
-    expect(hit).toEqual(expectedReach('account', account(7300), steps));
+  it('rapid pass-through returns the accounts a transfer reaches whose next transfer is not earlier and within a day, and leaves out the chain whose second transfer is earlier and the one that is later than a day', async () => {
+    const first = { edges: transfers(), direction: 'out' as const, arrivesAt: 'account' };
+    const ordered = { ...first, ordered: true };
+    const bounded = [first, { ...ordered, withinMinutes: 1440 }];
+    const hit = await run('rapid-pass-through', account(7300));
+    expect(hit).toEqual(expectedReach('account', account(7300), bounded));
     expect(hit.has(account(7302))).toBe(true);
-    const miss = await run('pass-through', account(7310));
-    expect(miss).toEqual(expectedReach('account', account(7310), steps));
-    expect(miss.has(account(7312))).toBe(false);
+    const early = await run('rapid-pass-through', account(7310));
+    expect(early).toEqual(expectedReach('account', account(7310), bounded));
+    expect(early.has(account(7312))).toBe(false);
+    const late = await run('rapid-pass-through', account(7320));
+    expect(late).toEqual(expectedReach('account', account(7320), bounded));
+    expect(late.has(account(7322))).toBe(false);
+    expect(expectedReach('account', account(7320), [first, ordered]).has(account(7322))).toBe(true);
   });
 });

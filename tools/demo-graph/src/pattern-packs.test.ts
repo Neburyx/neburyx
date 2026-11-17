@@ -167,7 +167,7 @@ describe('the preview of a pattern over each pack', () => {
     expect(await words('fan-out')).toEqual(['Step 1: follow TRANSFERRED_TO forward to at least 10 other Accounts']);
     expect(await words('fan-in')).toEqual(['Step 1: follow TRANSFERRED_TO backward to at least 10 other Accounts']);
     expect(await words('cycles')).toEqual(['Step 1: follow TRANSFERRED_TO forward to Account', 'Step 2: follow TRANSFERRED_TO forward to Account', 'Step 3: follow TRANSFERRED_TO forward and close back at the start Account']);
-    expect(await words('pass-through')).toEqual(['Step 1: follow TRANSFERRED_TO forward to Account', 'Step 2: follow TRANSFERRED_TO forward to Account, after the previous step (by transferredAt)']);
+    expect(await words('rapid-pass-through')).toEqual(['Step 1: follow TRANSFERRED_TO forward to Account', 'Step 2: follow TRANSFERRED_TO forward to Account, after the previous step (by transferredAt), within 24 hours']);
   });
 
   it('answers the problems of the validation, and no preview, when a name is changed', async () => {

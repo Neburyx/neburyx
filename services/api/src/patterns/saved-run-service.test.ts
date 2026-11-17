@@ -329,6 +329,14 @@ describe('running a saved pattern across the fan, time order and cycle', () => {
     expect(calls('pattern')[0]?.parameters['steps']).toMatchObject([{ fan: { atLeast: 2 } }, { after: 'previous' }, { closesAtAnchor: true }]);
   });
 
+  it('hands the delay of a saved definition to the gate in whole minutes, as stored', async () => {
+    const LINKS = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const definition = { anchorType: 'maker', steps: [LINKS, { ...LINKS, after: 'previous', within: { days: 2 } }] };
+    const { save, saveRun, calls } = rig();
+    expect((await saveRun(await save({ definition }))).status).toBe('ok');
+    expect(calls('pattern')[0]?.parameters['steps']).toMatchObject([{}, { after: 'previous', withinMinutes: 2880 }]);
+  });
+
   it('stays available and is refused when it is run after the source lowered its count cap or its step limit, and reads nothing', async () => {
     const LINKS = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
     const fan = rig({ mapping: savedMappingOf({ budgets: { heavy_op_threshold: 10 } }) });

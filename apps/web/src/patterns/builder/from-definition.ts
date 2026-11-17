@@ -30,6 +30,7 @@ export function fromDefinition(definition: unknown): { readonly draft: Draft; re
       ...(conditions.length === 0 ? {} : { conditions }),
       ...(step.window === undefined ? {} : { window: windowOf(step.window) }),
       ...(step.after === undefined ? {} : { after: step.after }),
+      ...(step.within === undefined ? {} : { within: step.within }),
       ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast } }),
       ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: step.closesAtAnchor }),
     };

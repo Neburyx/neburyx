@@ -69,8 +69,48 @@ describe('a step ordered after the previous one, at the gate', () => {
     expect(patternNoticesOf({ stopListed: false, supernodes: [], bounded: false }, requestOf([LINKS, LINKS])).map((notice) => notice.code)).not.toContain('undatedExcluded');
   });
 
-  it('moves the templates to versions 3 and 2', () => {
-    expect([patternTemplate.version, patternCountTemplate.version]).toEqual(['3', '2']);
+  it('moves the templates to versions 4 and 3', () => {
+    expect([patternTemplate.version, patternCountTemplate.version]).toEqual(['4', '3']);
+  });
+});
+
+const WITHIN = step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 1440 });
+
+describe('a delay after the previous step, at the gate', () => {
+  it('is read from the parameters of an ordered step as whole minutes, and refused on a step that is not ordered, on the first step, and as a fraction, zero or over the ceiling', () => {
+    expect(patternParamsSchema.safeParse(patternParams([LINKS, WITHIN])).success).toBe(true);
+    for (const bad of [step({ relationshipTypes: ['LINKS'], withinMinutes: 60 }), step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 1.5 }), step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 0 }), step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 525601 }), step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: '60' }), step({ relationshipTypes: ['LINKS'], after: 'previous', within: { hours: 1 } })]) {
+      expect(patternParamsSchema.safeParse(patternParams([LINKS, bad])).success).toBe(false);
+    }
+    expect(patternParamsSchema.safeParse(patternParams([step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 60 })])).success).toBe(false);
+    expect(patternParamsSchema.safeParse(patternParams([LINKS, step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 525600 })])).success).toBe(true);
+  });
+
+  it('is carried by the request of the step that holds it and no other', () => {
+    expect(requestOf([LINKS, WITHIN]).steps.map((entry) => entry.withinMinutes)).toEqual([undefined, 1440]);
+    expect(requestOf([LINKS, AFTER]).steps.map((entry) => entry.withinMinutes)).toEqual([undefined, undefined]);
+  });
+
+  it('writes one upper bound against the previous time plus the length, as a parameter and never as text, in the run and in the count, and nothing of the kind without the field', () => {
+    for (const text of [patternStatementOf(allowlist, requestOf([LINKS, WITHIN])), patternCountStatementOf(allowlist, requestOf([LINKS, WITHIN]))]) {
+      expect(text).toContain('>= t1');
+      expect(text).toContain('<= t1 + duration({minutes: $steps[1].withinMinutes})');
+      expect(text).not.toContain('1440');
+      expect(text.split('withinMinutes')).toHaveLength(2);
+    }
+    for (const text of [patternStatementOf(allowlist, requestOf([LINKS, AFTER])), patternCountStatementOf(allowlist, requestOf([LINKS, AFTER]))]) expect(text).not.toContain('withinMinutes');
+  });
+
+  it('bounds each ordered step on its own through three steps', () => {
+    const text = patternStatementOf(allowlist, requestOf([LINKS, WITHIN, step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 90 })]));
+    expect(text).toContain('<= t1 + duration({minutes: $steps[1].withinMinutes})');
+    expect(text).toContain('<= t2 + duration({minutes: $steps[2].withinMinutes})');
+  });
+
+  it('is the same statement as before for a definition without the field', () => {
+    const without = patternStatementOf(allowlist, requestOf([LINKS, AFTER]));
+    expect(without).toContain('>= t1');
+    expect(without).not.toContain('duration');
   });
 });
 
@@ -102,5 +142,25 @@ describe('the cursor of a run with a time order', () => {
     await expect(read([LINKS, AFTER], { cursor: first.nextCursor })).resolves.toBeDefined();
     const plain = await read([LINKS, LINKS]);
     await expect(read([LINKS, AFTER], { cursor: plain.nextCursor })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+  });
+
+  it('is refused as invalidated, before any read, when the delay is added, removed or changed, and is accepted for the same request', async () => {
+    const { read, executor } = rig();
+    const bounded = await read([LINKS, WITHIN]);
+    expect(bounded.nextCursor).toBeDefined();
+    const before = executor.calls.length;
+    await expect(read([LINKS, AFTER], { cursor: bounded.nextCursor })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+    await expect(read([LINKS, step({ relationshipTypes: ['LINKS'], after: 'previous', withinMinutes: 60 })], { cursor: bounded.nextCursor })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+    expect(executor.calls).toHaveLength(before);
+    await expect(read([LINKS, WITHIN], { cursor: bounded.nextCursor })).resolves.toBeDefined();
+    const unbounded = await read([LINKS, AFTER]);
+    await expect(read([LINKS, WITHIN], { cursor: unbounded.nextCursor })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
+  });
+
+  it('hands the delay to the source as a parameter of the step, whole minutes', async () => {
+    const { read, executor } = rig();
+    await read([LINKS, WITHIN]);
+    const steps = executor.calls.find((call) => call.templateId === PATTERN_ID)?.parameters['steps'] as { withinMinutes?: number }[] | undefined;
+    expect(steps?.map((entry) => entry.withinMinutes)).toEqual([undefined, 1440]);
   });
 });

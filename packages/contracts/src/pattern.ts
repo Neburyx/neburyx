@@ -107,6 +107,37 @@ const windowFieldSchema = z.custom<Window>().superRefine((value, ctx) => {
   if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ code: 'custom', path: [...issue.path], params: { problem: codeOf(issue, value) } });
 });
 
+/** The longest delay a step may allow after the previous one: 365 days. */
+export const PATTERN_WITHIN_MAX_HOURS = 8_760;
+
+const WITHIN_UNIT_MINUTES = { minutes: 1, hours: 60, days: 1440 } as const;
+type WithinUnit = keyof typeof WITHIN_UNIT_MINUTES;
+export type PatternWithin = { readonly minutes: number } | { readonly hours: number } | { readonly days: number };
+
+const isWithinUnit = (key: string): key is WithinUnit => Object.hasOwn(WITHIN_UNIT_MINUTES, key);
+
+/** The length of a `within` in whole minutes, as a run reads it. */
+export function withinMinutesOf(within: PatternWithin): number {
+  const [unit, amount] = Object.entries(within)[0] ?? [];
+  if (unit === undefined || amount === undefined || !isWithinUnit(unit)) throw new Error('not a within');
+  return amount * WITHIN_UNIT_MINUTES[unit];
+}
+
+/** A delay after the previous step: exactly one of minutes, hours or days, a whole number of 1 or more, at most `PATTERN_WITHIN_MAX_HOURS` hours. */
+const withinFieldSchema = z.custom<PatternWithin>().superRefine((value, ctx) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    ctx.addIssue({ code: 'custom', params: { problem: 'wrong-type' } });
+    return;
+  }
+  const entries = Object.entries(value);
+  const [unit, amount] = entries[0] ?? [];
+  if (entries.length !== 1 || unit === undefined || !isWithinUnit(unit)) {
+    ctx.addIssue({ code: 'custom', params: { problem: 'bad-value' } });
+    return;
+  }
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 1 || amount * WITHIN_UNIT_MINUTES[unit] > PATTERN_WITHIN_MAX_HOURS * 60) ctx.addIssue({ code: 'custom', path: [unit], params: { problem: 'bad-value' } });
+});
+
 /** The fields of a step, before the rules that look across them; a run reads the same fields with its window already resolved to two instants. */
 export const patternStepBaseSchema = z.strictObject({
   relationshipTypes: z.array(name).min(1).max(PATTERN_LIMITS.relationshipTypesPerStep),
@@ -116,6 +147,8 @@ export const patternStepBaseSchema = z.strictObject({
   window: windowFieldSchema.optional(),
   /** The step's relationship has a time at or after the previous step's, read on the mapping's time properties of both; not allowed on the first step. */
   after: z.literal('previous').optional(),
+  /** The step's relationship has a time no later than the previous step's plus this length; only with `after`. */
+  within: withinFieldSchema.optional(),
   /** The step's origin node (the anchor for the first step) has at least this many distinct neighbours over the step's types in its direction (fan-out for `out`, fan-in for `in`), that meet the step's conditions and window. */
   fan: z.strictObject({ atLeast: z.number().int().min(2) }).optional(),
   /** The last step arrives at the anchor node itself: the pattern is a cycle of as many hops as it has steps (two to the source's `max_hops`). Only on the last step. */
@@ -123,7 +156,8 @@ export const patternStepBaseSchema = z.strictObject({
 });
 
 /** The rules that look across the fields of a step: distinct relationship types, and the cap of conditions on each element. */
-export function refinePatternStep(step: { readonly relationshipTypes: readonly string[]; readonly conditions?: readonly ExpandFilter[] | undefined }, ctx: z.core.$RefinementCtx): void {
+export function refinePatternStep(step: { readonly relationshipTypes: readonly string[]; readonly conditions?: readonly ExpandFilter[] | undefined; readonly after?: 'previous' | undefined; readonly within?: PatternWithin | undefined }, ctx: z.core.$RefinementCtx): void {
+  if (step.within !== undefined && step.after === undefined) ctx.addIssue({ code: 'custom', path: ['within'], params: { problem: 'bad-value' } });
   const seen = new Set<string>();
   step.relationshipTypes.forEach((type, index) => {
     if (seen.has(type)) ctx.addIssue({ code: 'custom', path: ['relationshipTypes', index], params: { problem: 'bad-value' } });
@@ -135,8 +169,9 @@ export function refinePatternStep(step: { readonly relationshipTypes: readonly s
 }
 
 /** The rules that look across the steps: the first step has no previous one to be ordered after, and only the last of two or more steps closes at the anchor. */
-export function refinePatternSteps(steps: readonly { readonly after?: 'previous' | undefined; readonly closesAtAnchor?: true | undefined }[], ctx: z.core.$RefinementCtx): void {
+export function refinePatternSteps(steps: readonly { readonly after?: 'previous' | undefined; readonly within?: unknown; readonly withinMinutes?: number | undefined; readonly closesAtAnchor?: true | undefined }[], ctx: z.core.$RefinementCtx): void {
   if (steps[0]?.after !== undefined) ctx.addIssue({ code: 'custom', path: ['steps', 0, 'after'], params: { problem: 'bad-value' } });
+  if (steps[0]?.within !== undefined || steps[0]?.withinMinutes !== undefined) ctx.addIssue({ code: 'custom', path: ['steps', 0, steps[0]?.within === undefined ? 'withinMinutes' : 'within'], params: { problem: 'bad-value' } });
   steps.forEach((step, index) => {
     if (step.closesAtAnchor !== undefined && (index !== steps.length - 1 || steps.length < 2)) ctx.addIssue({ code: 'custom', path: ['steps', index, 'closesAtAnchor'], params: { problem: 'bad-value' } });
   });
@@ -231,6 +266,8 @@ export const patternPreviewTimeOrderSchema = z.strictObject({
   /** A relationship type may have a row for each direction between two types, each with a time property of its own. */
   properties: z.array(name).max(2 * PATTERN_LIMITS.relationshipTypesPerStep),
   previousProperties: z.array(name).max(2 * PATTERN_LIMITS.relationshipTypesPerStep),
+  /** The delay the step allows after the previous one, in the unit the definition wrote; absent when the step has none. The part's `text` and the step's sentence carry it too. */
+  within: z.strictObject({ unit: z.enum(['minutes', 'hours', 'days']), amount: z.number().int().positive(), text: previewText }).optional(),
   text: previewText,
 });
 

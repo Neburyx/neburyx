@@ -49,6 +49,7 @@ function conditionsOf(request: PatternRequest, index: number, branchObservedAt: 
     ...step.conditions.map((condition, position) => conditionPredicateOf(condition, variables, `${at}.conditions[${position}]`)),
     ...(step.windowed && branchObservedAt !== undefined ? inWindow(`r${index}`, quoteName(branchObservedAt), `${at}.windowFrom`, `${at}.windowTo`) : []),
     ...(step.ordered && branchObservedAt !== undefined ? [`${instantOf(`r${index}`, quoteName(branchObservedAt))} >= t${index - 1}`] : []),
+    ...(step.ordered && step.withinMinutes !== undefined && branchObservedAt !== undefined ? [`${instantOf(`r${index}`, quoteName(branchObservedAt))} <= t${index - 1} + duration({minutes: ${at}.withinMinutes})`] : []),
   ];
 }
 

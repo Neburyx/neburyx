@@ -112,7 +112,7 @@ const TYPOLOGIES = [
   { id: 'fan-out', name: 'Fan-out', description: 'One account sends to many accounts.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [{ ...TRANSFER, fan: { atLeast: 10 } }] } },
   { id: 'fan-in', name: 'Fan-in', description: 'Many accounts send to one account.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [{ ...TRANSFER, direction: 'in', fan: { atLeast: 10 } }] } },
   { id: 'cycles', name: 'Cycles', description: 'Money leaves an account and comes back to it.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [TRANSFER, TRANSFER, { ...TRANSFER, closesAtAnchor: true }] } },
-  { id: 'pass-through', name: 'Pass-through', description: 'Money moves on: an account sends to another, which sends on afterwards.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [TRANSFER, { ...TRANSFER, after: 'previous' }] } },
+  { id: 'rapid-pass-through', name: 'Rapid pass-through', description: 'Money moves on at once: an account sends to another, which sends on within a day.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [TRANSFER, { ...TRANSFER, after: 'previous', within: { hours: 24 } }] } },
 ];
 
 /** `GET /v1/templates` and `POST /v1/templates/{id}/run`, scripted: the list is the profile's presets (or none while the mode says so) and the run answers by the limit of the request. */

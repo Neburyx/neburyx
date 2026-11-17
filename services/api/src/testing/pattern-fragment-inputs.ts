@@ -12,7 +12,10 @@ const classOf = (key: string): number => {
 
 const step = (over: Partial<StepShape> = {}): StepShape => ({ direction: 'out', typeClass: classOf('1|T1|0'), conditions: [], windowed: false, ...over });
 const one = (over: Partial<StepShape> = {}, stopRules: 0 | 1 | 2 = 0): Shape => ({ steps: [step(over)], stopRules });
-const timed = (count: number, ordered: readonly boolean[], over: Partial<StepShape> = {}): Shape => ({ steps: Array.from({ length: count }, (_unused, position) => step({ typeClass: classOf('1|T1|0'), ordered: ordered[position] === true, ...over })), stopRules: 0 });
+const timed = (count: number, ordered: readonly boolean[], over: Partial<StepShape> = {}): Shape => {
+  const { within, ...rest } = over;
+  return { steps: Array.from({ length: count }, (_unused, position) => step({ typeClass: classOf('1|T1|0'), ordered: ordered[position] === true, ...rest, ...(ordered[position] === true && within !== undefined ? { within } : {}) })), stopRules: 0 };
+};
 const many = (count: number, stopRules: 0 | 1 | 2 = 0): Shape => ({ steps: Array.from({ length: count }, () => step()), stopRules });
 
 export interface FragmentInput {
@@ -60,6 +63,12 @@ export function fragmentInputs(): readonly FragmentInput[] {
   add('time-order/3-second-only', timed(3, [false, true, false]));
   add('time-order/windowed', timed(2, [false, true], { windowed: true }));
   add('time-order/in', timed(2, [false, true], { direction: 'in' }));
+  add('time-order/within', timed(2, [false, true], { within: 1440 }));
+  add('time-order/within-3', timed(3, [false, true, true], { within: 90 }));
+  add('time-order/within-in', timed(2, [false, true], { direction: 'in', within: 1440 }));
+  add('time-order/within-windowed', timed(2, [false, true], { windowed: true, within: 1440 }));
+  add('fan/within', { steps: [step({ typeClass: classOf('1|T1|0') }), step({ typeClass: classOf('1|T1|0'), fan: 3, ordered: true, within: 1440 })], stopRules: 0 });
+  add('cycle/3-within', cycle(3, {}, { ordered: true, within: 1440 }));
   add('time-order/different-properties', { steps: [step({ typeClass: classOf('1|T1|0') }), step({ typeClass: classOf('2|T1+T1|0'), ordered: true })], stopRules: 0 });
   for (const rules of [1, 2] as const) add(`stop-list/${rules}`, many(2, rules));
   for (const entry of pathEntries()) {

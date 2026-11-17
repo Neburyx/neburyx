@@ -92,3 +92,19 @@ describe('a template run whose source stops answering', () => {
     expect(rig.snapshot()).toBe(added);
   });
 });
+
+describe('a pattern run with a delay after the previous step whose source stops answering', () => {
+  const run = (rig: Rig, key: string) =>
+    fetch(`${rig.base}/v1/patterns/run`, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify({ sourceId: 'demo', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }, { relationshipTypes: ['LINKED'], direction: 'in', arrivesAt: 'hub', after: 'previous', within: { hours: 24 } }] }, anchor: { entityType: 'hub', stableId: 'H-1' } }) });
+
+  it('answers SOURCE_UNAVAILABLE with no query text, stores no answer and leaves the client and the slots as they were', async () => {
+    rig = await startRig({ timed: true });
+    const before = rig.snapshot();
+    const sent = run(rig, 'delay-outage-key-0001');
+    (await rig.nextRead()).fail(unreachable);
+    const answer = await sent;
+    expect(await answer.json()).toMatchObject({ error: { code: 'SOURCE_UNAVAILABLE', retryable: true } });
+    expect(rig.snapshot()).toBe(before);
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+});

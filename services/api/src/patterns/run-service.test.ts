@@ -161,7 +161,7 @@ describe('a pattern run: the read', () => {
       ['W-3', 1, [], [['LINKS', 'W-1', 'W-3']]],
     ]);
     expect(answer.nodes.length).toBeGreaterThan(0);
-    expect(answer.templateVersion).toBe('3');
+    expect(answer.templateVersion).toBe('4');
   });
 
   it('answers a two-step match with the entity between', async () => {
@@ -457,6 +457,22 @@ describe('a pattern run: the pages after the first', () => {
     await expect(one.run({ limit: 2, cursor, anchor: { entityType: 'maker', stableId: 'W-9' } })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
     await expect(one.run({ limit: 2, cursor, mask: true })).rejects.toMatchObject({ code: 'CURSOR_INVALIDATED' });
     expect(one.reads()).toHaveLength(reads);
+  });
+
+  it('hands the delay of an ordered step to the run and to the estimate, in whole minutes', async () => {
+    const bounded = definition([step(), step({ after: 'previous', within: { hours: 24 } })]);
+    const mapping = patternMappingOf({ heavy_op_threshold: 5 });
+    const { run, executor } = rig({ mapping, rows, probes: defaultTemplateProbes(), count: { status: 'rows', rows: [{ matches: 1, bounded: false, stopListed: false, supernodes: 0 }] } });
+    expect((await run({ definition: bounded, limit: 2 })).status).toBe('ok');
+    const minutesOf = (templateId: string) => (executor.calls.find((candidate) => candidate.templateId === templateId)?.parameters['steps'] as { withinMinutes?: number }[] | undefined)?.map((entry) => entry.withinMinutes);
+    expect(minutesOf('pattern')).toEqual([undefined, 1440]);
+    expect(minutesOf('pattern-count')).toEqual([undefined, 1440]);
+  });
+
+  it('refuses a delay on a step that is not ordered, before anything is read', async () => {
+    const { run, reads } = rig();
+    expect((await failureOf(run({ definition: definition([step(), step({ within: { hours: 24 } })]) })))?.code).toBe('INVALID_REQUEST');
+    expect(reads()).toHaveLength(0);
   });
 
   it('reads the estimate over the same whole-day window as the run', async () => {

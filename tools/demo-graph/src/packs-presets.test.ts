@@ -13,7 +13,7 @@ export const DEFINITION_PROOFS: Readonly<Record<string, Readonly<Record<string, 
     'fan-out': 'built-in-definitions.neo4j.test.ts',
     'fan-in': 'built-in-definitions.neo4j.test.ts',
     cycles: 'built-in-definitions.neo4j.test.ts',
-    'pass-through': 'built-in-definitions.neo4j.test.ts',
+    'rapid-pass-through': 'built-in-definitions.neo4j.test.ts',
   },
 };
 
@@ -107,7 +107,7 @@ describe('the presets of the shipped packs', () => {
   });
 
   it('each built-in definition has a test that runs it on the demo graph, and the presets assertions above are for entries without one', () => {
-    expect(definitionsOf('banking-fraud').map((entry) => entry.id)).toEqual(['fan-out', 'fan-in', 'cycles', 'pass-through']);
+    expect(definitionsOf('banking-fraud').map((entry) => entry.id)).toEqual(['fan-out', 'fan-in', 'cycles', 'rapid-pass-through']);
     expect(definitionsOf('insurance-claims')).toEqual([]);
     expect(unproved(declaredDefinitions, DEFINITION_PROOFS, (file) => (existsSync(join(here, file)) ? readFileSync(join(here, file), 'utf8') : undefined))).toEqual([]);
   });

@@ -2,7 +2,7 @@ import type { AskPatternProjection, AskPatternStep } from '@neburyx/contracts';
 
 function stepText(step: AskPatternStep, index: number): string {
   const conditions = step.conditions.length === 0 ? 'no conditions' : `${step.conditions.length} ${step.conditions.length === 1 ? 'condition' : 'conditions'} (${step.conditions.map((condition) => `${condition.on} ${condition.kind}`).join(', ')})`;
-  return `step ${index + 1}: ${step.direction} over ${step.relationshipTypes.join(' or ')} to ${step.arrivesAt}, ${conditions}${step.windowed ? ', with a time window' : ''}${step.orderedAfterPrevious === true ? ', after the previous step in time' : ''}${step.fanAtLeast === undefined ? '' : `, from an entity with at least ${step.fanAtLeast} neighbours`}${step.closesAtAnchor === true ? ', arriving back at the starting entity' : ''}`;
+  return `step ${index + 1}: ${step.direction} over ${step.relationshipTypes.join(' or ')} to ${step.arrivesAt}, ${conditions}${step.windowed ? ', with a time window' : ''}${step.orderedAfterPrevious === true ? ', after the previous step in time' : ''}${step.within === undefined ? '' : `, no later than ${step.within.amount} ${step.within.unit} after it`}${step.fanAtLeast === undefined ? '' : `, from an entity with at least ${step.fanAtLeast} neighbours`}${step.closesAtAnchor === true ? ', arriving back at the starting entity' : ''}`;
 }
 
 /** The description of a pattern's structure that the model is shown: type names, directions, counts and kinds; the projection holds nothing else. */

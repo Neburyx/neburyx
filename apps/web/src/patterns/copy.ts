@@ -1,5 +1,5 @@
 import type { ApiFailure } from '../api/client.js';
-import type { Count, TemplateRunNotice } from '@neburyx/contracts';
+import type { Count, PatternWithin, TemplateRunNotice } from '@neburyx/contracts';
 import { degreeCountText } from '../workspace/degree-text.js';
 import type { AddedOutcome } from './add-to-graph.js';
 import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
@@ -136,6 +136,13 @@ export const SHELL_COPY = {
   restartedByMask: 'Masking changed, so the pattern was started again.',
 } as const;
 
-export function extensionTags(step: { readonly fan?: { readonly atLeast: number } | undefined; readonly after?: 'previous' | undefined; readonly closesAtAnchor?: true | undefined }): readonly string[] {
-  return [...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back']), ...(step.after === undefined ? [] : ['after previous'])];
+/** The bound of an ordered step as a short tag: "within 24 h", "within 90 min", "within 3 days". */
+export function withinTag(within: PatternWithin): string {
+  if ('minutes' in within) return `within ${within.minutes} min`;
+  if ('hours' in within) return `within ${within.hours} h`;
+  return `within ${within.days} ${within.days === 1 ? 'day' : 'days'}`;
+}
+
+export function extensionTags(step: { readonly fan?: { readonly atLeast: number } | undefined; readonly after?: 'previous' | undefined; readonly within?: PatternWithin | undefined; readonly closesAtAnchor?: true | undefined }): readonly string[] {
+  return [...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back']), ...(step.after === undefined ? [] : ['after previous']), ...(step.within === undefined ? [] : [withinTag(step.within)])];
 }

@@ -1,4 +1,4 @@
-import { PATTERN_LIMITS, type PatternDefinition, type SourceProfile } from '@neburyx/contracts';
+import { PATTERN_LIMITS, type PatternDefinition, type PatternWithin, type SourceProfile } from '@neburyx/contracts';
 import { addConditionBlock, countOn, firstChoice, isOffered, nextRowId, offeredProperties, propertyKind, readRows, readWindow, rowKindFor, rowsOf, windowOf, windowReach, type ConditionRow, type WindowDraft } from './conditions.js';
 
 export type Direction = 'out' | 'in' | 'both';
@@ -15,6 +15,7 @@ export interface StepDraft {
   readonly window?: WindowDraft;
   /** The three fields of a fan, a time order and a cycle are not edited here: a draft holds them as a stored definition had them, so that opening, editing something else and saving keeps them whole. */
   readonly after?: 'previous';
+  readonly within?: PatternWithin;
   readonly fan?: { readonly atLeast: number };
   readonly closesAtAnchor?: true;
 }
@@ -315,6 +316,7 @@ export function toDefinition(draft: Draft, profile: SourceProfile, mask: boolean
       ...(read.filters.length === 0 ? {} : { conditions: [...read.filters] }),
       ...(window.window === undefined ? {} : { window: window.window }),
       ...(step.after === undefined ? {} : { after: step.after }),
+      ...(step.within === undefined ? {} : { within: step.within }),
       ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast } }),
       ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: step.closesAtAnchor }),
     });

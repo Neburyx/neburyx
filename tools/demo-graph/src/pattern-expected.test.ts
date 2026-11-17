@@ -25,4 +25,19 @@ describe('the set a pattern is expected to reach, computed from an export', () =
     expect(expectedReach('person', 'p1', steps)).toEqual(new Set(['p2', 'p3', 'p4']));
     expect(expectedReach('person', 'p5', steps)).toEqual(new Set());
   });
+
+  it('keeps a later transfer only when it is not earlier than the one before and, with a delay, not later than that plus the delay (both ends included)', () => {
+    const HOUR = 3_600_000;
+    const timed = [
+      { f: 'a', t: 'b', at: 0 },
+      { f: 'b', t: 'zero', at: 0 },
+      { f: 'b', t: 'edge', at: 24 * HOUR },
+      { f: 'b', t: 'late', at: 24 * HOUR + 60_000 },
+      { f: 'b', t: 'before', at: -HOUR },
+      { f: 'b', t: 'undated', at: undefined },
+    ];
+    const first = { edges: timed, direction: 'out' as const, arrivesAt: 'node' };
+    expect(expectedReach('node', 'a', [first, { ...first, ordered: true }])).toEqual(new Set(['zero', 'edge', 'late']));
+    expect(expectedReach('node', 'a', [first, { ...first, ordered: true, withinMinutes: 1440 }])).toEqual(new Set(['zero', 'edge']));
+  });
 });

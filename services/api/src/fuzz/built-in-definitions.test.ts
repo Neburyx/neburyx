@@ -1,4 +1,4 @@
-import { patternDefinitionSchema } from '@neburyx/contracts';
+import { patternDefinitionSchema, withinMinutesOf } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { patternParamsSchema, patternRequestOf } from '../gate/templates/pattern-request.js';
@@ -24,12 +24,13 @@ describe('the built-in definitions of every shipped pack', () => {
       const params = patternParamsSchema.parse({
         anchorType: definition.anchorType,
         stableId: SENTINEL_ANCHOR,
-        steps: definition.steps.map(({ window: _window, ...rest }) => rest),
+        steps: definition.steps.map(({ window: _window, within, ...rest }) => ({ ...rest, ...(within === undefined ? {} : { withinMinutes: withinMinutesOf(within) }) })),
       });
       const request = patternRequestOf(allowlist, params, source.budgets.heavyOpThreshold);
       for (const [statement, learned] of [[patternStatementOf(allowlist, request), grammar], [patternCountStatementOf(allowlist, request), countGrammar]] as const) {
         expect(grammarProblems(statement, learned, allowlist), entry.id).toEqual([]);
         expect(statement, entry.id).not.toContain(SENTINEL_ANCHOR);
+        for (const step of definition.steps) if (step.within !== undefined) expect(statement, `${entry.id}: the delay is a parameter`).not.toMatch(new RegExp(`\\b${withinMinutesOf(step.within)}\\b`));
         for (const step of definition.steps) if (step.fan !== undefined) expect(statement, `${entry.id}: the fan threshold is a parameter`).not.toMatch(new RegExp(`>=\\s*${step.fan.atLeast}\\b`));
         expect(statement, entry.id).not.toMatch(/\b(DELETE|CREATE|MERGE|SET|REMOVE|DROP)\b/);
       }
@@ -38,7 +39,7 @@ describe('the built-in definitions of every shipped pack', () => {
 
   it('holds the four typologies in the banking pack and none in the insurance pack', () => {
     const idsOf = (pack: (typeof PACKS)[number]) => (parseMapping(packMappingText(pack), 'neburyx.yaml').sources[0]?.builtInDefinitions ?? []).map((entry) => entry.id);
-    expect(idsOf('banking-fraud')).toEqual(['fan-out', 'fan-in', 'cycles', 'pass-through']);
+    expect(idsOf('banking-fraud')).toEqual(['fan-out', 'fan-in', 'cycles', 'rapid-pass-through']);
     expect(idsOf('insurance-claims')).toEqual([]);
   });
 });

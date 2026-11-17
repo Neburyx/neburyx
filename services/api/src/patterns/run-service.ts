@@ -1,4 +1,4 @@
-import { patternDefinitionSchema, type Count, type PatternRunResponse } from '@neburyx/contracts';
+import { patternDefinitionSchema, withinMinutesOf, type Count, type PatternRunResponse } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
 import { liveAllowlists } from '../gate/live-allowlists.js';
 import { isNormalizedPattern } from '../gate/normalize/pattern.js';
@@ -70,6 +70,7 @@ export function createPatternRunService(deps: { readonly gate: Gate; readonly ma
           arrivesAt: step.arrivesAt,
           ...(step.conditions === undefined ? {} : { conditions: step.conditions }),
           ...(step.after === undefined ? {} : { after: step.after }),
+          ...(step.within === undefined ? {} : { withinMinutes: withinMinutesOf(step.within) }),
           ...(step.fan === undefined ? {} : { fan: step.fan }),
           ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: step.closesAtAnchor }),
           ...(step.window === undefined ? {} : expandWindowInstantsOf(step.window, at)),

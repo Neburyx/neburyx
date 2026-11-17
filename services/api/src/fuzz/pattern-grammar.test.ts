@@ -6,7 +6,7 @@ import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import { patternStatementOf } from '../gate/templates/pattern-statement.js';
 import { GRAMMAR_ALLOWLIST, learnedBaseGrammar, learnedCountGrammar, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
 import { grammarProblems, learnGrammar, K } from '../testing/pattern-grammar.js';
-import { PATHS, SHAPE_RELATIONSHIPS, TIMED_CLASSES, enumerateExtendedShapes, enumerateShapes, randomExtendedShapes, formsOf, pathCountStatements, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape, countStatementOfShape } from '../testing/pattern-shapes.js';
+import { PATHS, SEED_OF_RECORD, SHAPE_RELATIONSHIPS, TIMED_CLASSES, withinOfMinutes, type Shape, enumerateExtendedShapes, enumerateShapes, randomExtendedShapes, formsOf, pathCountStatements, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape, countStatementOfShape } from '../testing/pattern-shapes.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { statementProblems, quotedNamesOf } from '../testing/fuzz-closed-set.js';
@@ -175,9 +175,15 @@ describe('the grammar of the extension: a fan, a time order and a cycle', () => 
   const extended = [...enumerateExtendedShapes()];
   const FAN = statementOfShape({ steps: [{ direction: 'out', typeClass: 0, conditions: [], windowed: false, fan: 3 }, { direction: 'out', typeClass: 0, conditions: [], windowed: false, fan: 4 }], stopRules: 1 });
   const CYCLE = statementOfShape({ steps: [0, 1, 2].map((index) => ({ direction: 'out' as const, typeClass: index, conditions: [], windowed: false, ...(index === 2 ? { closes: true } : {}) })), stopRules: 0 });
+  const BOUNDED = statementOfShape({ steps: [0, 1].map((index) => ({ direction: 'out' as const, typeClass: TIMED_CLASSES[0] ?? 0, conditions: [], windowed: false, ...(index === 1 ? { ordered: true, within: 1440 } : {}) })), stopRules: 0 });
   const ORDER = statementOfShape({ steps: [0, 1].map((index) => ({ direction: 'out' as const, typeClass: TIMED_CLASSES[0] ?? 0, conditions: [], windowed: false, ...(index === 1 ? { ordered: true } : {}) })), stopRules: 0 });
 
   it('has hundreds of shapes: each kind alone, at every position, and the three together', () => {
+    expect(extended.filter((shape) => shape.steps.some((step) => step.within !== undefined)).length, 'a delay').toBeGreaterThan(40);
+    for (const minutes of [1, 90, 120, 1440, 525_600]) expect(extended.some((shape) => shape.steps.some((step) => step.within === minutes)), `${minutes} minutes`).toBe(true);
+    const unitsOf = (shapes: readonly Shape[]) => new Set(shapes.flatMap((shape) => shape.steps.flatMap((step) => (step.within === undefined ? [] : Object.keys(withinOfMinutes(step.within))))));
+    expect([...unitsOf(extended)].sort()).toEqual(['days', 'hours', 'minutes']);
+    expect([...unitsOf(randomExtendedShapes(SEED_OF_RECORD, 400))].sort()).toEqual(['days', 'hours', 'minutes']);
     expect(extended.length).toBeGreaterThan(500);
     for (const kind of ['fan', 'ordered', 'closes'] as const) expect(extended.filter((shape) => shape.steps.some((step) => step[kind] !== undefined)).length, kind).toBeGreaterThan(100);
     expect(extended.filter((shape) => shape.steps.some((step) => step.fan !== undefined) && shape.steps.some((step) => step.ordered === true) && shape.steps.some((step) => step.closes === true)).length).toBeGreaterThan(20);
@@ -196,14 +202,14 @@ describe('the grammar of the extension: a fan, a time order and a cycle', () => 
     }
   });
 
-  it('is exactly the new fragments: the grammar learned before the extension accepts every statement without them and none of a shape with a fan, a time order or a cycle', () => {
+  it('is exactly the new fragments: the grammar learned before the extension accepts every statement without them and none of a shape with a fan, a time order, a delay or a cycle', () => {
     for (const shape of enumerateShapes()) expect(baseProblems(statementOfShape(shape)), JSON.stringify(shape)).toEqual([]);
-    for (const statement of [FAN, CYCLE, ORDER]) expect(baseProblems(statement)).not.toEqual([]);
+    for (const statement of [FAN, CYCLE, ORDER, BOUNDED]) expect(baseProblems(statement)).not.toEqual([]);
     for (const shape of extended.filter((candidate) => candidate.steps.some((step) => step.fan !== undefined || step.ordered === true || step.closes === true))) expect(baseProblems(statementOfShape(shape)), JSON.stringify(shape)).not.toEqual([]);
   });
 
   it('refuses a statement altered by a clause, an unmapped name, a value written into the text, a dropped bound, a dropped degree check or a fan read that scans without the cap', () => {
-    for (const statement of [FAN, CYCLE, ORDER]) {
+    for (const statement of [FAN, CYCLE, ORDER, BOUNDED]) {
       expect(problems(statement)).toEqual([]);
       expect(problems(`${statement}\nDETACH DELETE a`)).not.toEqual([]);
       expect(problems(statement.replace('`Maker`', '`Elsewhere`'))).not.toEqual([]);
@@ -215,5 +221,8 @@ describe('the grammar of the extension: a fan, a time order and a cycle', () => 
     expect(problems(FAN.replace('WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(*) AS fanned0', 'WITH DISTINCT n1 RETURN count(*) AS fanned0'))).not.toEqual([]);
     expect(problems(CYCLE.replace('n3 = a', "n3 = 'x'"))).not.toEqual([]);
     expect(problems(ORDER.replace('>= t1', '>= 0'))).not.toEqual([]);
+    expect(problems(BOUNDED.replace('$steps[1].withinMinutes', '1440'))).not.toEqual([]);
+    expect(problems(BOUNDED.replace('<= t1 + duration({minutes: $steps[1].withinMinutes})', '<= t1 + duration({days: 400})'))).not.toEqual([]);
+    expect(problems(BOUNDED.replace(' <= t1 + duration({minutes: $steps[1].withinMinutes})', ''))).not.toEqual([]);
   });
 });

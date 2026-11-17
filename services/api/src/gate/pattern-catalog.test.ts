@@ -16,9 +16,9 @@ const problem = (overrides: Partial<TemplateDefinition>): string | undefined => 
 const schemaWith = (shape: Record<string, z.ZodType>) => z.strictObject({ anchorType: z.string(), stableId: z.string(), steps: z.array(z.unknown()), ...shape });
 
 describe('the catalog entry of the pattern template', () => {
-  it('is in the default catalog, and is a version 2 read paged by the end entity whose steps are its hop list', () => {
+  it('is in the default catalog, and is a version 4 read paged by the end entity whose steps are its hop list', () => {
     expect(defaultCatalogTemplates().map((template) => template.id)).toContain(PATTERN_ID);
-    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '3', auditAction: 'pattern.run', paged: true, sort: 'end-id', referencePositions: [{ entityType: 'endType', stableId: 'endKey' }], hops: { listParam: 'steps', max: 4 } });
+    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '4', auditAction: 'pattern.run', paged: true, sort: 'end-id', referencePositions: [{ entityType: 'endType', stableId: 'endKey' }], hops: { listParam: 'steps', max: 4 } });
   });
 
   it('accepts the shipped declaration', () => {

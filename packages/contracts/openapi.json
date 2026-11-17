@@ -11231,6 +11231,34 @@
                                 "maxLength": 256
                               }
                             },
+                            "within": {
+                              "type": "object",
+                              "properties": {
+                                "unit": {
+                                  "type": "string",
+                                  "enum": [
+                                    "minutes",
+                                    "hours",
+                                    "days"
+                                  ]
+                                },
+                                "amount": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 9007199254740991
+                                },
+                                "text": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "unit",
+                                "amount",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
                             "text": {
                               "type": "string",
                               "minLength": 1

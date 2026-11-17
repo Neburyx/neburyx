@@ -28,6 +28,8 @@ export interface StepShape {
   readonly ordered?: boolean;
   /** The origin of the step has at least this many qualifying neighbours (`fan: { atLeast }`). Left out, no fan. */
   readonly fan?: number;
+  /** The step's time is no later than the previous step's plus this many minutes (`within: { minutes }`); only on an ordered step. Left out, no delay. */
+  readonly within?: number;
   /** The step arrives at the anchor itself (`closesAtAnchor: true`); only the last step of two or more. Left out, it does not. */
   readonly closes?: boolean;
 }
@@ -168,6 +170,7 @@ export function paramsOf(shape: Shape, alternate = false): unknown {
       ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, alternate)) }),
       ...(step.windowed ? WINDOW : {}),
       ...(step.ordered === true ? { after: 'previous' } : {}),
+      ...(step.within === undefined ? {} : { withinMinutes: step.within }),
       ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan } }),
       ...(step.closes === true ? { closesAtAnchor: true } : {}),
     };
@@ -189,7 +192,7 @@ export function countStatementOfShape(shape: Shape, alternate = false, allowlist
 export function definitionOf(shape: Shape, text?: string): unknown {
   return {
     anchorType: 'maker',
-    steps: shape.steps.map((step) => ({ relationshipTypes: TYPE_CLASSES[step.typeClass]?.types ?? [], direction: step.direction, arrivesAt: 'maker', ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, false, text)) }), ...(step.windowed ? { window: { days: 7 } } : {}), ...(step.ordered === true ? { after: 'previous' } : {}), ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan } }), ...(step.closes === true ? { closesAtAnchor: true } : {}) })),
+    steps: shape.steps.map((step) => ({ relationshipTypes: TYPE_CLASSES[step.typeClass]?.types ?? [], direction: step.direction, arrivesAt: 'maker', ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, false, text)) }), ...(step.windowed ? { window: { days: 7 } } : {}), ...(step.ordered === true ? { after: 'previous' } : {}), ...(step.within === undefined ? {} : { within: withinOfMinutes(step.within) }), ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan } }), ...(step.closes === true ? { closesAtAnchor: true } : {}) })),
   };
 }
 
@@ -378,6 +381,16 @@ export const TIMED_CLASSES: readonly number[] = TYPE_CLASSES.flatMap((cls, index
 /** The values of a fan the extended shapes use: the least, one more, and the count cap's default (the most the fixture's source accepts). */
 const FAN_VALUES = [2, 3, 500] as const;
 
+/** The lengths of a delay the extended shapes use, in minutes: the least, an odd length, two hours, a day and the ceiling (365 days). */
+const WITHIN_VALUES = [1, 90, 120, 1440, 525_600] as const;
+
+/** The delay of a shape as a definition writes it: whole days when it is, else whole hours, else minutes, so that each unit is met. */
+export function withinOfMinutes(minutes: number): { days: number } | { hours: number } | { minutes: number } {
+  if (minutes % 1440 === 0) return { days: minutes / 1440 };
+  if (minutes % 60 === 0) return { hours: minutes / 60 };
+  return { minutes };
+}
+
 /**
  * The shapes of the extension, each once, in a fixed order: a time order, a fan and a cycle each alone at every position and step count, in every direction, with and without a window and for every number of stop-list
  * rules, and the three together (a fan at the first step, a time order on the later ones, the last closing at the anchor, a fan and a time order on one step). A shape with a time order crosses only classes of types that all have a time property.
@@ -412,6 +425,13 @@ export function* enumerateExtendedShapes(): Generator<Shape> {
             }
             const all = emit({ steps: build(count, classes, direction, windowed, (at) => (at > 0 ? { ordered: true } : {})), stopRules });
             if (all !== undefined) yield all;
+            // a delay alone on one ordered step, in each length, and on every ordered step
+            for (const position of Array.from({ length: count - 1 }, (_unused, index) => index + 1)) for (const within of WITHIN_VALUES) {
+              const bounded = emit({ steps: build(count, classes, direction, windowed, (at) => (at === position ? { ordered: true, within } : at > 0 ? { ordered: true } : {})), stopRules });
+              if (bounded !== undefined) yield bounded;
+            }
+            const everywhere = emit({ steps: build(count, classes, direction, windowed, (at) => (at > 0 ? { ordered: true, within: 1440 } : {})), stopRules });
+            if (everywhere !== undefined) yield everywhere;
           }
           // a cycle alone, and with the others
           for (const classes of [plain, timed]) {
@@ -420,6 +440,8 @@ export function* enumerateExtendedShapes(): Generator<Shape> {
           }
           const together = emit({ steps: build(count, timed, direction, windowed, (at) => ({ ...(at === 0 ? { fan: 2 } : { ordered: true }), ...(at === count - 1 ? { closes: true, fan: 3 } : {}) })), stopRules });
           if (together !== undefined) yield together;
+          const boundedTogether = emit({ steps: build(count, timed, direction, windowed, (at) => ({ ...(at === 0 ? { fan: 2 } : { ordered: true, within: 90 }), ...(at === count - 1 ? { closes: true, fan: 3 } : {}) })), stopRules });
+          if (boundedTogether !== undefined) yield boundedTogether;
           const onOneStep = emit({ steps: build(count, timed, direction, windowed, (at) => (at === count - 1 ? { fan: 3, ordered: true, closes: true } : {})), stopRules });
           if (onOneStep !== undefined) yield onOneStep;
         }
@@ -428,9 +450,10 @@ export function* enumerateExtendedShapes(): Generator<Shape> {
   }
 }
 
-/** Shapes of the extension drawn at random from a seed: each step may carry a fan, a time order (only when every step crosses timed types) and the last may close at the anchor. */
+/** Shapes of the extension drawn at random from a seed: each step may carry a fan, a time order (only when every step crosses timed types) with a delay drawn from a stream of its own, and the last may close at the anchor. */
 export function randomExtendedShapes(seed: number, count: number): Shape[] {
   const next = generator(seed);
+  const nextDelay = generator(seed + 1);
   const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)] as T;
   return Array.from({ length: count }, (): Shape => {
     const length = 1 + Math.floor(next() * CAPS.steps);
@@ -441,7 +464,7 @@ export function randomExtendedShapes(seed: number, count: number): Shape[] {
         direction: pick(DIRECTIONS),
         windowed: next() < 0.4,
         ...(next() < 0.35 ? { fan: pick([2, 3, 4, 9, 100, 500]) } : {}),
-        ...(allTimed && position > 0 && next() < 0.5 ? { ordered: true } : {}),
+        ...(allTimed && position > 0 && next() < 0.5 ? { ordered: true, ...(nextDelay() < 0.5 ? { within: WITHIN_VALUES[Math.floor(nextDelay() * WITHIN_VALUES.length)] } : {}) } : {}),
         ...(closes && position === length - 1 ? { closes: true } : {}),
       }));
     return { steps, stopRules: pick([0, 1, 2] as const) };

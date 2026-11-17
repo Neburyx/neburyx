@@ -14,7 +14,7 @@ A mapping for a synthetic graph of bank accounts and the things that connect the
 | Shared addresses | `shared-attribute` | Which accounts connect from the same address as this account |
 | Connected accounts | `linked-entities` | Which accounts this account has transferred to |
 
-**AML typologies.** The pack also ships four built-in definitions, listed under "Built-in · AML typologies": Fan-out, Fan-in, Cycles and Pass-through (see [the AML typologies](../../docs/aml-typologies.md)). `TRANSFERRED_TO` carries a time (`transferredAt`), and the demo data holds the accounts each typology finds: `AC-0007000` sends to twelve accounts, twelve send to `AC-0007100`, `AC-0007200` is on a cycle of three, and `AC-0007300` starts a pass-through chain.
+**AML typologies.** The pack also ships four built-in definitions, listed under "Built-in · AML typologies": Fan-out, Fan-in, Cycles and Rapid pass-through (see [the AML typologies](../../docs/aml-typologies.md)). `TRANSFERRED_TO` carries a time (`transferredAt`), and the demo data holds the accounts each typology finds: `AC-0007000` sends to twelve accounts, twelve send to `AC-0007100`, `AC-0007200` is on a cycle of three, and `AC-0007300` starts a rapid pass-through chain (its second transfer within a day; `AC-0007310` and `AC-0007320` are the misses: the second transfer is earlier, or later than a day).
 
 Each preset gives its parameters a label ("Starting account"). To adapt the pack to your own graph, follow [Start from a pack](../README.md#start-from-a-pack).
 

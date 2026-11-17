@@ -237,7 +237,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `template` | no | With `bind`, and without a `definition`: a built-in template, `shared-attribute` or `linked-entities` |
 | `bind` | no | With `template`: binds the template to your types: `anchor`, `attribute` and `via` for `shared-attribute`; `anchor`, `target` and `via` for `linked-entities` |
 | `labels` | no | The labels of the preset's inputs (with a template) |
-| `definition` | no | Instead of `template` and `bind`: a pattern definition in your types, as the pattern builder writes one: a start type and one to four steps, which may use a fan, a time order or a cycle (see [the pattern definition](pattern-definition.md)) |
+| `definition` | no | Instead of `template` and `bind`: a pattern definition in your types, as the pattern builder writes one: a start type and one to four steps, which may use a fan, a time order (with an optional maximum delay) or a cycle (see [the pattern definition](pattern-definition.md)) |
 | `description` | no | With a definition: one plain sentence for the list, at most 160 characters |
 | `group` | no | With a definition: the section it is listed in, at most 40 characters |
 | `tag` | no | With a definition: the small label beside the name, at most 12 characters |

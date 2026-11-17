@@ -1,3 +1,4 @@
+import type { PatternWithin } from '@neburyx/contracts';
 import { ARROW, extensionTags } from '../copy.js';
 
 /** The path of a pattern in a line, as the builder draws it: the start type, then for each step its relationship types and the type it arrives at, with an arrow for the direction. */
@@ -9,6 +10,7 @@ export interface PathShape {
     readonly relationshipTypes: readonly string[];
     readonly arrivesAt: string;
     readonly after?: 'previous' | undefined;
+    readonly within?: PatternWithin | undefined;
     readonly fan?: { readonly atLeast: number } | undefined;
     readonly closesAtAnchor?: true | undefined;
   }[];

@@ -241,6 +241,32 @@ describe('the preview of a fan, a time order and a cycle', () => {
     expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview }).success).toBe(true);
   });
 
+  it('says the delay of an ordered step in the unit it was written, in the sentence of the step and in the typed part of its order', () => {
+    const words: [Record<string, number>, string, string, number][] = [
+      [{ hours: 24 }, 'within 24 hours', 'hours', 24],
+      [{ minutes: 90 }, 'within 90 minutes', 'minutes', 90],
+      [{ days: 3 }, 'within 3 days', 'days', 3],
+      [{ hours: 1 }, 'within 1 hour', 'hours', 1],
+    ];
+    for (const [within, text, unit, amount] of words) {
+      const preview = previewOf(definition([step(), step({ after: 'previous', within })]));
+      expect(preview.steps[1]?.text, text).toBe(`Step 2: follow LINKS forward to Maker, after the previous step (by seenAt), ${text}`);
+      expect(preview.steps[1]?.timeOrder, text).toEqual({ properties: ['seenAt'], previousProperties: ['seenAt'], within: { unit, amount, text }, text: `after the previous step (by seenAt), ${text}` });
+      expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview }).success, text).toBe(true);
+    }
+  });
+
+  it('says a delay beside a closing and a fan, and leaves an order with no delay as it was', () => {
+    const preview = previewOf(definition([step(), step({ closesAtAnchor: true, after: 'previous', fan: { atLeast: 3 }, within: { hours: 24 } })]));
+    expect(preview.steps[1]?.text).toBe('Step 2: follow LINKS forward and close back at the start Maker with at least 3 other Makers to choose from, after the previous step (by seenAt), within 24 hours');
+    const plain = previewOf(definition([step(), step({ after: 'previous' })]));
+    expect(plain.steps[1]?.timeOrder).not.toHaveProperty('within');
+  });
+
+  it('answers the problem and no preview for a delay on a step that is not ordered', () => {
+    expect(previewOrProblems(definition([step(), step({ within: { hours: 24 } })]), sourceOf())).toEqual({ status: 'invalid', problems: [{ path: ['steps', 1, 'within'], code: 'bad-value' }] });
+  });
+
   it('says every kind a step carries in its sentence: a closing with an order and a fan keeps both', () => {
     const preview = previewOf(definition([step(), step({ closesAtAnchor: true, after: 'previous', fan: { atLeast: 3 } })]));
     expect(preview.steps[1]?.text).toBe('Step 2: follow LINKS forward and close back at the start Maker with at least 3 other Makers to choose from, after the previous step (by seenAt)');

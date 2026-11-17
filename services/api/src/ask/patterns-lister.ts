@@ -1,4 +1,4 @@
-import { patternDefinitionSchema, windowSchema, type AskPatternListing, type AskPatternOffer, type AskPatternProjection, type ExtensionRequest } from '@neburyx/contracts';
+import { patternDefinitionSchema, windowSchema, type AskPatternListing, type AskPatternOffer, type AskPatternProjection, type AskPatternStep, type ExtensionRequest, type PatternStep } from '@neburyx/contracts';
 import type { PatternListPosition, PatternRow, PatternStore } from '../db/patterns-repository.js';
 import { AppError } from '../errors.js';
 import type { SourceAccess } from '../investigations/source-access.js';
@@ -12,6 +12,12 @@ export const ASK_PATTERN_CATALOG_MAX = 30;
 /** The most pages of the caller's patterns the lister reads to fill the catalog with available ones (a hypothesis, decided 2026-11-13). */
 export const ASK_PATTERN_READ_PAGES = 4;
 const PAGE_SIZE = 25;
+
+function withinOf(within: NonNullable<PatternStep['within']>): NonNullable<AskPatternStep['within']> {
+  if ('minutes' in within) return { unit: 'minutes', amount: within.minutes };
+  if ('hours' in within) return { unit: 'hours', amount: within.hours };
+  return { unit: 'days', amount: within.days };
+}
 
 function presetProjectionOf(row: PatternRow, source: SourceModel): AskPatternProjection | undefined {
   const preset = source.presets.find((candidate) => candidate.id === row.presetId);
@@ -51,6 +57,7 @@ function projectionOf(row: PatternRow, source: SourceModel): AskPatternProjectio
       conditions: (step.conditions ?? []).map((condition) => ({ on: condition.on, kind: condition.op })),
       windowed: step.window !== undefined,
       ...(step.after === undefined ? {} : { orderedAfterPrevious: true as const }),
+      ...(step.within === undefined ? {} : { within: withinOf(step.within) }),
       ...(step.fan === undefined ? {} : { fanAtLeast: step.fan.atLeast }),
       ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: true as const }),
     })),

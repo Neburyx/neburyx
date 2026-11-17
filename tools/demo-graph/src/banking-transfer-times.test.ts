@@ -53,6 +53,14 @@ describe('the banking pack with a time on its transfers', () => {
     expect(hashOf(before)).toBe('d8b256011bf61099');
   });
 
+  it('keeps every transfer line of before, times included, byte for byte, and appends only the two lines of the chain that is later than a day (pinned by hash)', () => {
+    const lines = data.files.find((file) => file.type === 'TRANSFERRED_TO')?.lines ?? [];
+    expect(lines).toHaveLength(12_067);
+    expect(hashOf(lines.slice(0, 12_065))).toBe('5c040799390cf0f4');
+    const appended = lines.slice(12_065).map((line) => JSON.parse(line) as { f: string; t: string });
+    expect(appended.map((row) => [row.f, row.t])).toEqual([[account(7320), account(7321)], [account(7321), account(7322)]]);
+  });
+
   it('gives a time to every transfer but a small share, which stays without one so that the left-out path is shown', () => {
     const untimed = transfers.filter((transfer) => transfer.at === undefined).length;
     expect(untimed).toBeGreaterThan(0);
@@ -60,7 +68,7 @@ describe('the banking pack with a time on its transfers', () => {
     for (const typology of [between(7000, 7001), between(7101, 7100), between(7200, 7201), between(7300, 7301)]) expect(typology.every((transfer) => transfer.at !== undefined)).toBe(true);
   });
 
-  it('holds the accounts each typology finds: twelve out, twelve in, a cycle of three, a pass-through chain and its miss', () => {
+  it('holds the accounts each typology finds: twelve out, twelve in, a cycle of three, a rapid pass-through chain, the chain whose second transfer is earlier and the chain that is later than a day', () => {
     expect(new Set(transfers.filter((transfer) => transfer.f === account(7000) && Number(transfer.t.slice(3)) >= 7001 && Number(transfer.t.slice(3)) <= 7012).map((transfer) => transfer.t)).size).toBe(12);
     expect(new Set(transfers.filter((transfer) => transfer.t === account(7100) && Number(transfer.f.slice(3)) >= 7101 && Number(transfer.f.slice(3)) <= 7112).map((transfer) => transfer.f)).size).toBe(12);
     for (const [from, to] of [[7200, 7201], [7201, 7202], [7202, 7200]] as const) expect(between(from, to)).toHaveLength(1);
@@ -70,5 +78,13 @@ describe('the banking pack with a time on its transfers', () => {
     const [early] = between(7311, 7312);
     const [late] = between(7310, 7311);
     expect((early?.at ?? 0) < (late?.at ?? 0)).toBe(true);
+    const DAY = 24 * 3_600_000;
+    const [slowFirst] = between(7320, 7321);
+    const [slowSecond] = between(7321, 7322);
+    const gap = (slowSecond?.at ?? 0) - (slowFirst?.at ?? 0);
+    expect(gap).toBeGreaterThan(DAY);
+    const [quickFirst] = between(7300, 7301);
+    const [quickSecond] = between(7301, 7302);
+    expect((quickSecond?.at ?? 0) - (quickFirst?.at ?? 0)).toBeLessThan(DAY);
   });
 });

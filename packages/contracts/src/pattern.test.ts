@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_FILTER_TEXT, MAX_FILTER_VALUES, MAX_FILTERS } from './expand.js';
-import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternValidateRequestSchema, patternPreviewResponseSchema, patternDefinitionSchema, patternProblemsOf, patternValidateResponseSchema } from './pattern.js';
+import { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, PATTERN_WITHIN_MAX_HOURS, withinMinutesOf, patternValidateRequestSchema, patternPreviewResponseSchema, patternDefinitionSchema, patternProblemsOf, patternValidateResponseSchema } from './pattern.js';
 
 const step = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker', ...extra });
 const definition = (extra: Record<string, unknown> = {}) => ({ anchorType: 'maker', steps: [step()], ...extra });
@@ -182,6 +182,53 @@ describe('the request and the answer of the preview route', () => {
     expect(problems(definition({ steps: [step({ after: 'previous' })] }))).toEqual([{ path: ['steps', 0, 'after'], code: 'bad-value' }]);
     expect(problems(definition({ steps: [step(), step({ after: 'next' })] }))).toEqual([{ path: ['steps', 1, 'after'], code: 'bad-value' }]);
     expect(problems(definition({ steps: [step(), step({ after: true })] })).map((problem) => problem.path.join('.'))).toEqual(['steps.1.after']);
+  });
+
+  it('takes a delay in minutes, hours or days on a step ordered after the previous one, and parses it back to the same value', () => {
+    for (const within of [{ hours: 24 }, { minutes: 90 }, { days: 3 }]) {
+      const written = definition({ steps: [step(), step({ after: 'previous', within })] });
+      expect(patternDefinitionSchema.parse(written)).toEqual(written);
+    }
+  });
+
+  it('refuses a delay on a step with no order after the previous one, and on the first step, at the delay', () => {
+    expect(problems(definition({ steps: [step(), step({ within: { hours: 24 } })] }))).toEqual([{ path: ['steps', 1, 'within'], code: 'bad-value' }]);
+    expect(problems(definition({ steps: [step({ within: { hours: 24 } })] }))).toEqual([
+      { path: ['steps', 0, 'within'], code: 'bad-value' },
+    ]);
+    expect(problems(definition({ steps: [step({ after: 'previous', within: { hours: 24 } })] })).map((problem) => problem.path.join('.'))).toEqual(['steps.0.after', 'steps.0.within']);
+  });
+
+  it.each([
+    ['two keys', { hours: 1, days: 1 }],
+    ['a unit that is not minutes, hours or days', { weeks: 1 }],
+    ['no key', {}],
+    ['a name every object has', { toString: 1 }],
+    ['the constructor', { constructor: 1 }],
+    ['a prototype key', JSON.parse('{"__proto__": 1}')],
+    ['a fraction', { hours: 1.5 }],
+    ['zero', { minutes: 0 }],
+    ['a negative number', { hours: -2 }],
+    ['a text', { hours: '24' }],
+    ['a nested value', { hours: { value: 24 } }],
+    ['more than the ceiling in hours', { hours: 8761 }],
+    ['more than the ceiling in days', { days: 366 }],
+    ['more than the ceiling in minutes', { minutes: 525601 }],
+    ['a number beyond any ceiling', { minutes: 1e300 }],
+  ])('refuses a delay with %s', (_name, within) => {
+    expect(patternProblemsOf(definition({ steps: [step(), step({ after: 'previous', within })] })).map((problem) => problem.code)).toEqual(['bad-value']);
+  });
+
+  it('refuses a delay that is not an object', () => {
+    for (const within of ['24', 24, null, [1]]) expect(problems(definition({ steps: [step(), step({ after: 'previous', within })] })).map((problem) => problem.path.join('.'))).toEqual(['steps.1.within']);
+  });
+
+  it('takes the ceiling itself in each unit: 8,760 hours, 365 days and 525,600 minutes', () => {
+    for (const within of [{ hours: PATTERN_WITHIN_MAX_HOURS }, { days: 365 }, { minutes: 525600 }]) expect(problems(definition({ steps: [step(), step({ after: 'previous', within })] }))).toEqual([]);
+  });
+
+  it('counts the length of a delay in whole minutes', () => {
+    expect([withinMinutesOf({ minutes: 90 }), withinMinutesOf({ hours: 24 }), withinMinutesOf({ days: 3 })]).toEqual([90, 1440, 4320]);
   });
 
   it('knows the problem code of a time order on a relationship with no mapped time', () => {

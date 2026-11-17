@@ -120,3 +120,23 @@ describe('a template run whose read times out', () => {
     expect(rig.snapshot()).toBe(added);
   });
 });
+
+describe('a pattern run with a delay after the previous step whose read times out', () => {
+  const run = (rig: Rig, key: string) =>
+    fetch(`${rig.base}/v1/patterns/run`, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify({ sourceId: 'demo', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }, { relationshipTypes: ['LINKED'], direction: 'in', arrivesAt: 'hub', after: 'previous', within: { hours: 24 } }] }, anchor: { entityType: 'hub', stableId: 'H-1' } }) });
+
+  it('answers QUERY_TIMEOUT with the limit, stores no answer for the key and leaves the client and the slots as they were', async () => {
+    rig = await startRig({ timed: true });
+    const before = rig.snapshot();
+    const sent = run(rig, 'delay-timeout-key-0001');
+    (await rig.nextRead()).fail(timeout);
+    const answer = await sent;
+    expect(answer.status).toBe(504);
+    expect(await answer.json()).toMatchObject({ error: { code: 'QUERY_TIMEOUT', retryable: true, details: { timeoutMs: 5000 } } });
+    const again = run(rig, 'delay-timeout-key-0001');
+    (await rig.nextRead()).fail(timeout);
+    expect((await again).headers.get('idempotent-replay')).toBeNull();
+    expect(rig.snapshot()).toBe(before);
+    await until(() => rig.slots.inspect().sources.size === 0 && rig.slots.inspect().users.size === 0, 'the read slots to be free');
+  });
+});

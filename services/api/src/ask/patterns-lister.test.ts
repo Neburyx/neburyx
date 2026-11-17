@@ -87,6 +87,21 @@ describe('the saved patterns offered to Ask', () => {
     expect(JSON.stringify(projectionOf(extended.id))).not.toMatch(/SECRET|previous|seenAt/);
   });
 
+  it('projects the delay of an ordered step as a length and a unit, so that patterns that differ only by it differ, and no time or property name comes with it', async () => {
+    const { save, list } = rig();
+    const links = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const day = await save({ anchorType: 'maker', steps: [links, { ...links, after: 'previous', within: { hours: 24 } }] });
+    const week = await save({ anchorType: 'maker', steps: [links, { ...links, after: 'previous', within: { days: 7 } }] });
+    const plain = await save({ anchorType: 'maker', steps: [links, { ...links, after: 'previous' }] });
+    const { offers } = await list(OWNER);
+    const projectionOf = (id: string) => offers.find((offer) => offer.id === id)?.projection;
+    expect(projectionOf(day.id)).toMatchObject({ steps: [{}, { orderedAfterPrevious: true, within: { unit: 'hours', amount: 24 } }] });
+    expect(projectionOf(week.id)).toMatchObject({ steps: [{}, { within: { unit: 'days', amount: 7 } }] });
+    expect(projectionOf(day.id)).not.toEqual(projectionOf(week.id));
+    expect(JSON.stringify(projectionOf(plain.id))).not.toContain('within');
+    expect(JSON.stringify(projectionOf(day.id))).not.toMatch(/SECRET|seenAt|withinMinutes/);
+  });
+
   it('says a pattern with a held starting entity holds it, and leaves out one that is unavailable against the mapping, without a reason', async () => {
     const { save, list } = rig();
     await save(DEFINITION, OWNER, { anchor: { entityType: 'maker', stableId: 'W-1' } });

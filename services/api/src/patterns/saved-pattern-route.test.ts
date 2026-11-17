@@ -105,6 +105,28 @@ describe('POST /v1/patterns, a definition', () => {
     await context.app.close();
   });
 
+  it('saves a definition with a delay as it was sent, lists it, and keeps it whole through a rename, a change that keeps it and a copy, and refuses one that has none of an order', async () => {
+    const context = await patternApp();
+    const links = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const bounded = { anchorType: 'maker', steps: [links, { ...links, after: 'previous', within: { hours: 24 } }] };
+    const saved = savedPatternSchema.parse((await save(context, definitionBody({ definition: bounded }))).json());
+    expect(saved.kind === 'definition' ? saved.definition : undefined).toEqual(bounded);
+    expect(context.store.patternRows[0]?.definition).toEqual(bounded);
+    const listed = await context.app.inject({ method: 'GET', url: '/v1/patterns?sourceId=demo' });
+    expect((listed.json() as { items: { kind: string; definition?: unknown; availability: { status: string } }[] }).items[0]).toMatchObject({ definition: bounded, availability: { status: 'available' } });
+    const renamed = await context.app.inject({ method: 'PUT', url: `/v1/patterns/${saved.id}`, payload: JSON.stringify({ expectedVersion: 1, name: 'Renamed' }), headers: jsonHeaders });
+    expect(savedPatternSchema.parse(renamed.json())).toMatchObject({ definition: bounded });
+    const longer = { anchorType: 'maker', steps: [links, { ...links, after: 'previous', within: { days: 3 } }] };
+    const changed = await context.app.inject({ method: 'PUT', url: `/v1/patterns/${saved.id}`, payload: JSON.stringify({ expectedVersion: 2, definition: longer }), headers: jsonHeaders });
+    expect(savedPatternSchema.parse(changed.json())).toMatchObject({ definition: longer });
+    const copied = await context.app.inject({ method: 'POST', url: `/v1/patterns/${saved.id}/copy` });
+    expect(savedPatternSchema.parse(copied.json())).toMatchObject({ definition: longer });
+    const loose = { anchorType: 'maker', steps: [links, { ...links, within: { hours: 24 } }] };
+    expect((await save(context, definitionBody({ definition: loose, name: 'No order' }))).statusCode).toBe(400);
+    expect(context.store.patternRows).toHaveLength(2);
+    await context.app.close();
+  });
+
   it('refuses a query string', async () => {
     const context = await patternApp();
     expect(codeOf(await save(context, definitionBody(), '?x=1'))).toBe('INVALID_REQUEST');

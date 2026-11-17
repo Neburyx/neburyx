@@ -144,13 +144,13 @@ sources:
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account }
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account }
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account, closesAtAnchor: true }
-      - id: pass-through
-        name: "Pass-through"
-        description: "Money moves on: an account sends to another, which sends on afterwards."
+      - id: rapid-pass-through
+        name: "Rapid pass-through"
+        description: "Money moves on at once: an account sends to another, which sends on within a day."
         group: "AML typologies"
         tag: "AML"
         definition:
           anchorType: account
           steps:
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account }
-            - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account, after: previous }
+            - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account, after: previous, within: { hours: 24 } }

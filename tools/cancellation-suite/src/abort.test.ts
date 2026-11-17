@@ -242,12 +242,13 @@ describe('cancelling a running template run', () => {
   });
 });
 
-/** The definitions the pattern cancellations run: one plain step, and each kind of the extension (a fan, a time order, a cycle), so that an abort is shown to stop the estimate and the run of each. */
+/** The definitions the pattern cancellations run: one plain step, and each kind of the extension (a fan, a time order, a time order with a delay, a cycle), so that an abort is shown to stop the estimate and the run of each. */
 interface StepOf {
   readonly relationshipTypes: string[];
   readonly direction: 'out' | 'in' | 'both';
   readonly arrivesAt: string;
   readonly after?: 'previous';
+  readonly within?: { readonly hours: number };
   readonly fan?: { readonly atLeast: number };
   readonly closesAtAnchor?: true;
 }
@@ -257,6 +258,7 @@ const DEFINITIONS: readonly (readonly [string, StepOf[]])[] = [
   ['a plain step', [LINKED_OUT]],
   ['a fan', [{ ...LINKED_OUT, fan: { atLeast: 3 } }]],
   ['a time order', [LINKED_OUT, { ...LINKED_BACK, after: 'previous' }]],
+  ['a time order with a delay', [LINKED_OUT, { ...LINKED_BACK, after: 'previous', within: { hours: 24 } }]],
   ['a cycle', [LINKED_OUT, { ...LINKED_BACK, closesAtAnchor: true }]],
 ];
 

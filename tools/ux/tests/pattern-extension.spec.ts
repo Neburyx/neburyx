@@ -122,3 +122,91 @@ test.describe('the three kinds of the extension in the Patterns panel', () => {
     await shot(page, 'patterns-builder-no-time');
   });
 });
+
+test.describe('a delay after the previous step in the Patterns panel', () => {
+  const BOUNDED = 'Within a day';
+  test.beforeEach(async ({ page }) => {
+    await page.request.post('/__support/reset');
+    await openOneEntity(page, SOURCE, 'AC-1');
+    const out = { relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device' };
+    const back = { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account', after: 'previous', within: { hours: 24 } };
+    const saved = await page.request.post('/v1/patterns', { headers: { 'content-type': 'application/json' }, data: { sourceId: SOURCE, kind: 'definition', name: BOUNDED, definition: { anchorType: 'account', steps: [out, back] } } });
+    expect(saved.status()).toBe(201);
+    await openPatternList(page);
+  });
+
+  test('shows the bound in the row and in the words of the preview', async ({ page }) => {
+    const row = rowOf(page, BOUNDED);
+    await expect(row).toContainText('after previous');
+    await expect(row).toContainText('within 24 h');
+    await shot(page, 'patterns-list-within');
+    await press(page, row.getByRole('button', { name: `Run ${BOUNDED}` }));
+    const words = panelOf(page).getByRole('region', { name: 'In plain words' });
+    await expect(words).toContainText('after the previous step (by lastSeen), within 24 hours');
+    await shot(page, 'patterns-preview-within');
+  });
+
+  test('keeps the bound through the builder, marks it when its step becomes the first, and Undo gives it back', async ({ page }) => {
+    await openRowMenu(page, BOUNDED);
+    await chooseMenuItem(page, 'Change');
+    const builder = panelOf(page);
+    const chain = builder.locator('.pattern-chain');
+    await expect(chain).toContainText('within 24 h');
+    await builder.getByRole('tab', { name: /^Step 2( !)?$/ }).click();
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('No later than');
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('24 h after the previous step');
+    await expect(builder.getByRole('region', { name: 'In words' })).toContainText('within 24 hours');
+    await shot(page, 'patterns-builder-within');
+    await builder.getByRole('tab', { name: /^Step 1( !)?$/ }).click();
+    await press(page, builder.getByRole('button', { name: 'Remove step' }));
+    const banner = builder.getByRole('group', { name: 'Changes that break the pattern' });
+    await expect(banner).toContainText('it is ordered after the previous step, and it is now the first step, which has none.');
+    await expect(chain).toContainText('within 24 h');
+    await expect(builder.getByRole('button', { name: 'Preview' })).toBeDisabled();
+    await shot(page, 'patterns-builder-within-broken');
+    await press(page, banner.getByRole('button', { name: 'Undo change' }));
+    await expect(banner).toHaveCount(0);
+    await expect(chain).toContainText('within 24 h');
+    await expect(builder.getByRole('button', { name: 'Preview' })).toBeEnabled();
+  });
+
+  test('keeps the bound whole through Preview, Save, a reopen and a run of an unrelated change, and shows no sideways scroll', async ({ page }) => {
+    await openRowMenu(page, BOUNDED);
+    await chooseMenuItem(page, 'Change');
+    const builder = panelOf(page);
+    await builder.getByRole('tab', { name: /^Step 1( !)?$/ }).click();
+    const first = stepPanel(builder, 1);
+    await first.getByRole('tab', { name: /^Conditions/ }).click();
+    await first.getByRole('button', { name: '+ Add condition' }).click();
+    await page.keyboard.press('Enter');
+    await first.getByLabel('Step 1 condition 1: Value').fill('ios');
+    await first.getByRole('group', { name: 'Step 1 condition 1' }).getByRole('button', { name: 'Done' }).click();
+    await expect(builder.getByText('The mapping can follow this pattern')).toBeVisible();
+    const carries = (url: string, method: string) => page.waitForRequest((request) => request.url().includes(url) && request.method() === method && (request.postData() ?? '').includes('"within":{"hours":24}'));
+    const previewed = carries('/v1/patterns/preview', 'POST');
+    await press(page, builder.getByRole('button', { name: 'Preview' }));
+    await previewed;
+    const changed = carries('/v1/patterns/', 'PUT');
+    await press(page, builder.getByRole('button', { name: 'Save changes…' }));
+    const dialog = page.getByRole('dialog');
+    if (await dialog.count() > 0) await press(page, dialog.getByRole('button', { name: /^Save( changes)?$/ }));
+    await changed;
+    await expect(builder.getByText(/Pattern (saved|changed)\./)).toBeVisible();
+    await expect(rowOf(page, BOUNDED)).toContainText('within 24 h');
+    const stored = await page.request.get(`/v1/patterns?sourceId=${SOURCE}`);
+    expect(JSON.stringify(await stored.json())).toContain('"within":{"hours":24}');
+    await openRowMenu(page, BOUNDED);
+    await chooseMenuItem(page, 'Change');
+    await expect(builder.locator('.pattern-chain')).toContainText('within 24 h');
+    await expect(builder.locator('.pattern-chain')).toContainText('1 of 24 conditions');
+    await press(page, builder.getByRole('button', { name: 'Cancel' }));
+    const discard = page.getByRole('dialog');
+    if (await discard.count() > 0) await press(page, discard.getByRole('button', { name: 'Discard draft' }));
+    await press(page, rowOf(page, BOUNDED).getByRole('button', { name: `Run ${BOUNDED}` }));
+    await expect(panelOf(page).getByRole('region', { name: 'In plain words' })).toContainText('within 24 hours');
+    const ran = page.waitForResponse((response) => /\/v1\/patterns\/[^/]+\/run$/.test(response.url()) && response.request().method() === 'POST');
+    await panelOf(page).getByRole('button', { name: 'Run pattern' }).click();
+    expect((await ran).ok()).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+});

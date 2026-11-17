@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { patternProblemsOf } from '@neburyx/contracts';
+import { patternProblemsOf, patternStepBaseSchema, withinMinutesOf } from '@neburyx/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { patternParamsSchema, patternRequestOf } from '../gate/templates/pattern-request.js';
@@ -30,7 +30,11 @@ function paramsOf(input: { anchorType: string; steps: Record<string, unknown>[] 
   return patternParamsSchema.parse({
     anchorType: input.anchorType,
     stableId: 'A-1',
-    steps: input.steps.map(({ window, ...rest }) => ({ ...rest, ...(window === undefined ? {} : { windowFrom: '2026-01-01T00:00:00Z', windowTo: '2026-02-01T00:00:00Z' }) })),
+    steps: input.steps.map(({ window, within, ...rest }) => ({
+      ...rest,
+      ...(window === undefined ? {} : { windowFrom: '2026-01-01T00:00:00Z', windowTo: '2026-02-01T00:00:00Z' }),
+      ...(within === undefined ? {} : { withinMinutes: withinMinutesOf(patternStepBaseSchema.shape.within.parse(within) ?? { minutes: 1 }) }),
+    })),
   });
 }
 
@@ -217,5 +221,8 @@ describe('a hostile value of the extension: a fan, a time order and a cycle', ()
     const statement = patternStatementOf(allowlist, patternRequestOf(allowlist, paramsOf(definition([step({ fan: { atLeast: 7 } })]) as never) as never));
     expect(statement).not.toMatch(/\b7\b/);
     expect(statement).toContain('$steps[0].fan.atLeast');
+    const bounded = patternStatementOf(allowlist, patternRequestOf(allowlist, paramsOf(definition([step(), step({ after: 'previous', within: { minutes: 7777 } })]) as never) as never));
+    expect(bounded).not.toMatch(/\b7777\b/);
+    expect(bounded).toContain('$steps[1].withinMinutes');
   });
 });

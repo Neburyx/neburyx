@@ -1,4 +1,4 @@
-import { PATTERN_LIMITS, patternStepBaseSchema, referenceValueSchema, refinePatternStep, refinePatternSteps, type ExpandFilter } from '@neburyx/contracts';
+import { PATTERN_LIMITS, PATTERN_WITHIN_MAX_HOURS, patternStepBaseSchema, referenceValueSchema, refinePatternStep, refinePatternSteps, type ExpandFilter } from '@neburyx/contracts';
 import { z } from 'zod';
 import { AppError } from '../../errors.js';
 import type { Params, SourceAllowlist } from '../types.js';
@@ -7,12 +7,13 @@ import { integerCandidateOf } from './stable-id.js';
 
 const instant = z.iso.datetime({ offset: true });
 
-/** One step of a run: the definition's step with its window already resolved to two instants. */
+/** One step of a run: the definition's step with its window already resolved to two instants and its delay to whole minutes. */
 const stepParamsSchema = patternStepBaseSchema
-  .omit({ window: true })
-  .extend({ windowFrom: instant.optional(), windowTo: instant.optional() })
+  .omit({ window: true, within: true })
+  .extend({ windowFrom: instant.optional(), windowTo: instant.optional(), withinMinutes: z.number().int().min(1).max(PATTERN_WITHIN_MAX_HOURS * 60).optional() })
   .superRefine((step, ctx) => {
     refinePatternStep(step, ctx);
+    if (step.withinMinutes !== undefined && step.after === undefined) ctx.addIssue({ code: 'custom', path: ['withinMinutes'], message: 'a delay needs the order after the previous step' });
     if ((step.windowFrom === undefined) !== (step.windowTo === undefined)) ctx.addIssue({ code: 'custom', message: 'a window has both instants or neither' });
   });
 
@@ -37,6 +38,8 @@ export interface PatternStepRequest {
   readonly windowed: boolean;
   /** The step's relationship has a time at or after the previous step's; every row either step crosses has a time property. */
   readonly ordered: boolean;
+  /** The most minutes after the previous step's time that this step's time may be; absent when the step has no delay. */
+  readonly withinMinutes: number | undefined;
   /** The origin of the step has at least this many distinct qualifying neighbours; absent when the step has no fan. */
   readonly fan: number | undefined;
   /** The step arrives at the anchor node itself (the last step of a cycle). */
@@ -80,7 +83,7 @@ export function patternRequestOf(allowlist: SourceAllowlist, params: Params, cou
     const ordered = step.after !== undefined;
     if (ordered && [...(lastBranches ?? []), ...branches].some((branch) => branch.observedAt === undefined)) throw new AppError('INVALID_REQUEST');
     lastBranches = branches;
-    const request: PatternStepRequest = { from: previous, arrivesAt: step.arrivesAt, branches, conditions, windowed: step.windowFrom !== undefined, ordered, fan, closes };
+    const request: PatternStepRequest = { from: previous, arrivesAt: step.arrivesAt, branches, conditions, windowed: step.windowFrom !== undefined, ordered, withinMinutes: step.withinMinutes, fan, closes };
     previous = step.arrivesAt;
     return request;
   });

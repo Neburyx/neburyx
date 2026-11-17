@@ -55,7 +55,7 @@ function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContex
  */
 export const patternTemplate: TemplateDefinition = {
   id: PATTERN_ID,
-  version: '3',
+  version: '4',
   auditAction: 'pattern.run',
   name: 'Pattern',
   description: 'Follows the steps of a stated pattern from one entity and finds the entities the last step reaches.',

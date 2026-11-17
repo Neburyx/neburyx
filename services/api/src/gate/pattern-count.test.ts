@@ -133,7 +133,7 @@ describe('the count in the catalog', () => {
 
   it('declares what the run declares, so the reads its login needs are the run’s and no more', () => {
     for (const key of ['hops', 'paramsSchema', 'entityParams', 'referenceParams', 'relationshipParams', 'indexNeeds', 'usedProperties', 'scope'] as const) expect(patternCountTemplate[key], key).toBe(patternTemplate[key]);
-    expect(patternCountTemplate).toMatchObject({ version: '2', paged: false, cutMeans: 'lowerBound' });
+    expect(patternCountTemplate).toMatchObject({ version: '3', paged: false, cutMeans: 'lowerBound' });
     expect(patternCountTemplate.nextPosition).toBeUndefined();
     expect(patternCountTemplate.referencePositions).toBeUndefined();
   });

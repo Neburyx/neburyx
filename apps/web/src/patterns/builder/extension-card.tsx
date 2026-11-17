@@ -1,5 +1,5 @@
 import type { SourceProfile } from '@neburyx/contracts';
-import { extensionTags } from '../copy.js';
+import { extensionTags, withinTag } from '../copy.js';
 import type { Draft } from './model.js';
 import { timePropertiesOf } from './model.js';
 
@@ -24,6 +24,7 @@ export function ExtensionCard({ profile, draft, index, nameOf, wrong }: Props) {
   if (step.fan !== undefined) rows.push(['N', String(step.fan.atLeast)]);
   if (step.closesAtAnchor !== undefined) rows.push(['Closes back at', `the start ${nameOf(draft.anchorType)}`]);
   if (step.after !== undefined) rows.push(['Ordered by', properties.length === 0 ? 'no time in the mapping' : `${properties.join(', ')} (date)`]);
+  if (step.within !== undefined) rows.push(['No later than', withinTag(step.within).replace(/^within /, '') + ' after the previous step']);
   rows.push(['Relationship', `${step.relationshipTypes.join(', ')}, ${DIRECTION_WORD[step.direction ?? 'out']}`]);
   if (step.arrivesAt !== undefined) rows.push(['Arrives at', nameOf(step.arrivesAt)]);
   return (

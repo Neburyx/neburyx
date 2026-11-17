@@ -1,4 +1,4 @@
-import type { PatternProblem, SourceProfile } from '@neburyx/contracts';
+import type { PatternProblem, PatternWithin, SourceProfile } from '@neburyx/contracts';
 import { problemText } from '../copy.js';
 import { breakText } from './copy.js';
 import type { Break, Draft } from './model.js';
@@ -11,7 +11,13 @@ export interface DraftWordsLine {
   readonly bad?: string;
 }
 
-const afterPhrase = (properties: readonly string[]): string => `after the previous step (${properties.length === 0 ? 'no time in the mapping' : `by ${properties.join(' or ')}`})`;
+const afterPhrase = (properties: readonly string[], within: PatternWithin | undefined): string => `after the previous step (${properties.length === 0 ? 'no time in the mapping' : `by ${properties.join(' or ')}`})${within === undefined ? '' : `, ${withinWords(within)}`}`;
+
+function withinWords(within: PatternWithin): string {
+  if ('minutes' in within) return `within ${within.minutes} ${within.minutes === 1 ? 'minute' : 'minutes'}`;
+  if ('hours' in within) return `within ${within.hours} ${within.hours === 1 ? 'hour' : 'hours'}`;
+  return `within ${within.days} ${within.days === 1 ? 'day' : 'days'}`;
+}
 
 const DIRECTION_WORD = { out: 'forward', in: 'backward', both: 'in either direction' } as const;
 
@@ -22,7 +28,7 @@ export function draftWords(profile: SourceProfile, draft: Draft, nameOf: (type: 
     const phrases = [
       ...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} other ${nameOf(step.arrivesAt)}s`]),
       ...(step.closesAtAnchor === undefined ? [] : [`close back at the start ${nameOf(draft.anchorType)}`]),
-      ...(step.after === undefined ? [] : [afterPhrase(timePropertiesOf(profile, draft, index))]),
+      ...(step.after === undefined ? [] : [afterPhrase(timePropertiesOf(profile, draft, index), step.within)]),
     ];
     const fan = step.fan === undefined ? '' : `at least ${step.fan.atLeast} other ${nameOf(step.arrivesAt)}s`;
     const lead = `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction ?? 'out']}`;
