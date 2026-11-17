@@ -188,7 +188,9 @@ describe('Escape in the start field', () => {
     await runWorkspace({ preview: async () => ({ ok: true, value: { status: 'ok', preview: withParts } as PatternPreviewResponse }) });
     await previewed();
     const words = screen.getByRole('region', { name: 'In plain words' });
-    for (const text of ['Step 1: follow r-1 forward to at least 3 other N-Bs', 'Step 2: follow r-1 forward and close back at the start N-A']) expect(within(words).getByText(text)).toBeTruthy();
+    expect(words.textContent).toContain('Step 1: follow r-1 forward to at least 3 other N-Bs');
+    expect(words.textContent).toContain('Step 2: follow r-1 forward and close back at the start N-A');
+    expect(within(words).getByText('at least 3 other N-Bs').className).toBe('pattern-words-tag');
   });
 });
 

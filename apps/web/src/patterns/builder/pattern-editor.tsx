@@ -7,6 +7,8 @@ import { BreakBanner } from './break-banner.js';
 import { ChainSummary } from './chain-summary.js';
 import { ExtensionCard } from './extension-card.js';
 import { usePatternWords } from './use-words.js';
+import { draftWords } from './draft-words.js';
+import { accentPhrases } from '../accent-phrases.js';
 import { extensionTags } from '../copy.js';
 import { BUILDER_COPY, CHECK_COPY, EDITOR_COPY, blockText, checkedAtText, placeOf, previewWhy, type ProblemPlace } from './copy.js';
 import { ProblemsPanel } from './problems-panel.js';
@@ -186,14 +188,29 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
           </div>
         ) : null}
         <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(draft.steps.flatMap((_, index) => (wrongAt(index) ? [index] : [])))} sourceProblems={breaks.length === 0 ? problems.length : 0} stepLimit={limit} />
-        {words !== undefined ? (
+        {ready !== undefined && (words !== undefined || (hasExtension && (breaks.length > 0 || problems.length > 0))) ? (
           <section className="pattern-words" aria-label="In words">
             <h3 className="supernode-label">In words</h3>
             <div className="run-words">
-              <p>{words.start.text}</p>
-              {words.steps.map((entry, at) => (
-                <p key={at}>{entry.text}</p>
-              ))}
+              {words !== undefined ? (
+                <>
+                  <p>{words.start.text}</p>
+                  {words.steps.map((entry, at) => (
+                    <p key={at}>{accentPhrases(entry.text, [entry.fan?.text ?? '', entry.timeOrder?.text ?? '', entry.closesAtAnchor?.text ?? ''])}</p>
+                  ))}
+                </>
+              ) : (
+                draftWords(ready, draft, nameOf, breaks, problems).map((line, at) => (
+                  <div key={at}>
+                    <p className={line.bad === undefined ? undefined : 'pattern-words-bad'}>{line.bad === undefined ? accentPhrases(line.text, line.phrases) : line.text}</p>
+                    {line.bad === undefined ? null : (
+                      <p className="pattern-words-bad" role="status">
+                        {line.bad}
+                      </p>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </section>
         ) : null}
@@ -272,7 +289,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                 />
               )}
             </div>
-            {ready === undefined || step === undefined || current === 'start' ? null : <ExtensionCard profile={ready} draft={draft} index={current} nameOf={nameOf} breaks={breaks.filter((found) => found.step === current)} />}
+            {ready === undefined || step === undefined || current === 'start' ? null : <ExtensionCard profile={ready} draft={draft} index={current} nameOf={nameOf} wrong={wrongAt(current)} />}
             <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} checkedAt={check.checkedAt} />
             {footer === undefined || ready === undefined ? null : footer({ profile: ready, definition, anchorType: draft.anchorType, check: check.state, validFor: check.validFor, nameOf, focusStart: () => { setSelected('start'); focusStart.current = true; } })}
         </>

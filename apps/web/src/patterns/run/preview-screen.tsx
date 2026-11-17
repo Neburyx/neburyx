@@ -4,6 +4,7 @@ import type { ApiClient } from '../../api/client.js';
 import { failureView, problemText } from '../copy.js';
 import type { PreviewState } from './use-preview.js';
 import { RUN_COPY, boundsLine } from './run-copy.js';
+import { accentPhrases } from '../accent-phrases.js';
 import { StartChoice } from './start-choice.js';
 
 interface Props {
@@ -95,7 +96,7 @@ function Words({ preview }: { readonly preview: PatternPreview }) {
           <p>{preview.start.text}</p>
           {preview.steps.map((step, index) => (
             <div key={index}>
-              <p>{step.text}</p>
+              <p>{accentPhrases(step.text, [step.fan?.text ?? '', step.timeOrder?.text ?? '', step.closesAtAnchor?.text ?? ''])}</p>
               {step.conditions.map((condition, row) => (
                 <p key={row} className="run-words-sub">
                   {condition.text}

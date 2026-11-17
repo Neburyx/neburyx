@@ -52,8 +52,8 @@ function timeOrderPart(step: Step, before: Step | undefined, beforePrevious: str
 /** The sentence of a step: the chain as before, and for the three kinds of the extension the words of the approved frames: to at least N other Accounts, close back at the start Account, after the previous step (by the time property). */
 function stepText(index: number, step: Step, types: string, arrives: string, start: string, properties: readonly string[] | undefined): string {
   const lead = `Step ${index + 1}: follow ${types} ${DIRECTION_WORDS[step.direction]}`;
-  if (step.closesAtAnchor !== undefined) return `${lead} and close back at the start ${start}`;
-  const to = step.fan === undefined ? `to ${arrives}` : `to at least ${step.fan.atLeast} other ${arrives}s`;
+  const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${arrives}s to choose from`;
+  const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to ${arrives}` : `to at least ${step.fan.atLeast} other ${arrives}s`) : `and close back at the start ${start}${fan}`;
   return `${lead} ${to}${step.after === undefined ? '' : `, after the previous step (by ${(properties ?? []).join(' or ')})`}`;
 }
 

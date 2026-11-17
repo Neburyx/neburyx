@@ -59,7 +59,6 @@ test.describe('the three kinds of the extension in the Patterns panel', () => {
     await builder.getByRole('tab', { name: /^Step 1( !)?$/ }).click();
     await expect(builder.getByRole('region', { name: 'Step 1 extended' })).toContainText('Shown here, not editable yet');
     await shot(page, 'patterns-builder-extension');
-    // an edit of something else (a condition on step 1) before the save
     await builder.getByRole('tab', { name: /^Step 1( !)?$/ }).click();
     const first = stepPanel(builder, 1);
     await first.getByRole('tab', { name: /^Conditions/ }).click();
@@ -80,7 +79,6 @@ test.describe('the three kinds of the extension in the Patterns panel', () => {
     await expect(rowOf(page, NAME)).toContainText('(at least 3 neighbours)');
     await expect(rowOf(page, NAME)).toContainText('after previous');
     await expect(rowOf(page, NAME)).toContainText('closes back');
-    // reopened: the edit and all three fields are there
     await openRowMenu(page, NAME);
     await chooseMenuItem(page, 'Change');
     await expect(chain).toContainText('1 of 24 conditions');
@@ -90,17 +88,36 @@ test.describe('the three kinds of the extension in the Patterns panel', () => {
     await press(page, builder.getByRole('button', { name: 'Cancel' }));
     const discard = page.getByRole('dialog');
     if (await discard.count() > 0) await press(page, discard.getByRole('button', { name: 'Discard draft' }));
-    // an added step leaves the closing on a step that is no longer the last: kept, marked, Preview off, Undo puts it back
     await openRowMenu(page, NAME);
     await chooseMenuItem(page, 'Change');
     await press(page, builder.getByRole('button', { name: '+ Step' }));
     const banner = builder.getByRole('group', { name: 'Changes that break the pattern' });
     await expect(banner).toContainText('it closes the cycle at the start, and it is no longer the last step');
+    await expect(builder.getByRole('region', { name: 'In words' })).toContainText('Kept, not valid');
     await expect(builder.getByRole('button', { name: 'Preview' })).toBeDisabled();
     await expect(chain).toContainText('closes back');
     await shot(page, 'patterns-builder-extension-broken');
     await press(page, banner.getByRole('button', { name: 'Undo change' }));
     await expect(banner).toHaveCount(0);
     await expect(builder.getByRole('button', { name: 'Preview' })).toBeEnabled();
+  });
+
+  test('keeps and marks a step ordered after the previous one when the mapping gives its relationship no time', async ({ page }) => {
+    const hop = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account', ...extra });
+    const saved = await page.request.post('/v1/patterns', { headers: { 'content-type': 'application/json' }, data: { sourceId: SOURCE, kind: 'definition', name: 'Needs a time', definition: { anchorType: 'account', steps: [hop(), hop({ after: 'previous' })] } } });
+    expect(saved.status()).toBe(201);
+    await page.reload();
+    await openPatternList(page);
+    await openRowMenu(page, 'Needs a time');
+    await chooseMenuItem(page, 'Change');
+    const builder = panelOf(page);
+    const banner = builder.getByRole('group', { name: 'Changes that break the pattern' });
+    await expect(banner).toContainText('“after the previous step” needs a time in the mapping. TRANSFERRED_TO has none.');
+    await expect(builder.getByRole('region', { name: 'In words' })).toContainText('Kept, not valid');
+    await builder.getByRole('tab', { name: /^Step 2( !)?$/ }).click();
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('Not valid');
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('no time in the mapping');
+    await expect(builder.getByRole('button', { name: 'Preview' })).toBeDisabled();
+    await shot(page, 'patterns-builder-no-time');
   });
 });

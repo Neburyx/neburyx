@@ -241,6 +241,11 @@ describe('the preview of a fan, a time order and a cycle', () => {
     expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview }).success).toBe(true);
   });
 
+  it('says every kind a step carries in its sentence: a closing with an order and a fan keeps both', () => {
+    const preview = previewOf(definition([step(), step({ closesAtAnchor: true, after: 'previous', fan: { atLeast: 3 } })]));
+    expect(preview.steps[1]?.text).toBe('Step 2: follow LINKS forward and close back at the start Maker with at least 3 other Makers to choose from, after the previous step (by seenAt)');
+  });
+
   it('puts the fan of a later step on its own arrival type', () => {
     const preview = previewOf(definition([step({ relationshipTypes: ['USES_TOOL'], arrivesAt: 'tool' }), step({ relationshipTypes: ['USES_TOOL'], direction: 'in', fan: { atLeast: 4 } })]));
     expect(preview.steps[1]?.text).toBe('Step 2: follow USES_TOOL backward to at least 4 other Makers');

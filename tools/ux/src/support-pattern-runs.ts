@@ -37,6 +37,12 @@ const longNode = (sourceId: string, entityType: string, stableId: string) => ({
   ],
 });
 
+const stubSentence = (index: number, step: { relationshipTypes: string[]; direction: string; arrivesAt: string; after?: 'previous'; fan?: { atLeast: number }; closesAtAnchor?: true }, start: string): string => {
+  const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${step.arrivesAt}s to choose from`;
+  const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to a ${step.arrivesAt}` : `to at least ${step.fan.atLeast} other ${step.arrivesAt}s`) : `and close back at the start ${start}${fan}`;
+  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : ', after the previous step (by lastSeen)'}`;
+};
+
 export function previewPattern(body: unknown, response: ServerResponse): void {
   const parsed = patternValidateRequestSchema.safeParse(body);
   if (!parsed.success) return json(response, 400, INVALID);
@@ -54,7 +60,7 @@ export function previewPattern(body: unknown, response: ServerResponse): void {
           relationshipTypes: step.relationshipTypes,
           direction: step.direction,
           arrivesAt: { type: step.arrivesAt, name: step.arrivesAt },
-          text: step.fan === undefined && step.after === undefined && step.closesAtAnchor === undefined ? `Follows ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction]} to a ${step.arrivesAt}.` : `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'}${step.closesAtAnchor === undefined ? ` to ${step.fan === undefined ? `a ${step.arrivesAt}` : `at least ${step.fan.atLeast} other ${step.arrivesAt}s`}` : ` and close back at the start ${definition.anchorType}`}${step.after === undefined ? '' : ', after the previous step (by lastSeen)'}`,
+          text: step.fan === undefined && step.after === undefined && step.closesAtAnchor === undefined ? `Follows ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction]} to a ${step.arrivesAt}.` : stubSentence(index, step, definition.anchorType),
           conditions: [],
           ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast, direction: step.direction, text: `at least ${step.fan.atLeast} other ${step.arrivesAt}s` } }),
           ...(step.after === undefined ? {} : { timeOrder: { properties: ['lastSeen'], previousProperties: ['lastSeen'], text: 'after the previous step (by lastSeen)' } }),

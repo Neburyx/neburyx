@@ -1,6 +1,6 @@
 import type { SourceProfile } from '@neburyx/contracts';
 import { extensionTags } from '../copy.js';
-import type { Break, Draft } from './model.js';
+import type { Draft } from './model.js';
 import { timePropertiesOf } from './model.js';
 
 interface Props {
@@ -8,19 +8,15 @@ interface Props {
   readonly draft: Draft;
   readonly index: number;
   readonly nameOf: (type: string | undefined) => string;
-  readonly breaks: readonly Break[];
+  /** The step is marked: the mapping does not follow it, or the source refused it. */
+  readonly wrong: boolean;
 }
 
 const DIRECTION_WORD = { out: 'outgoing', in: 'incoming', both: 'either way' } as const;
 
-/**
- * What a step that uses a fan, a time order or a closing says in words, as the approved frames draw it: a title, the kind, the number or the time property, the relationship and where it arrives. These kinds are displayed here and
- * kept as they are, not edited; a step the mapping no longer follows is marked not valid and its reason is in the banner above.
- */
-export function ExtensionCard({ profile, draft, index, nameOf, breaks }: Props) {
+export function ExtensionCard({ profile, draft, index, nameOf, wrong }: Props) {
   const step = draft.steps[index];
   if (step === undefined || extensionTags(step).length === 0) return null;
-  const wrong = breaks.length > 0;
   const properties = timePropertiesOf(profile, draft, index);
   const rows: [string, string][] = [];
   const kinds = [...(step.fan === undefined ? [] : [`at least N neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back at the anchor']), ...(step.after === undefined ? [] : ['after the previous step'])];

@@ -106,6 +106,8 @@ export const UNAVAILABLE_TEXT: Readonly<Record<(typeof PATTERN_UNAVAILABLE_CODES
   'params-invalid': 'The saved parameters of this pattern are no longer valid.',
 };
 
+export const UNAVAILABLE_TIME_TEXT = '“After the previous step” needs a time in the mapping, and it has none now.';
+
 export const stepWhere = (path: readonly (string | number)[] | undefined): string => {
   const at = path?.[0] === 'steps' && typeof path[1] === 'number' ? path[1] + 1 : undefined;
   return at === undefined ? '' : ` (step ${at})`;

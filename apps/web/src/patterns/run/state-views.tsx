@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { PatternUnavailable } from '@neburyx/contracts';
 import type { ApiFailure } from '../../api/client.js';
 import { canRetry } from '../../failure-notice.js';
-import { SAVED_COPY, UNAVAILABLE_TEXT, stepWhere } from '../saved/saved-copy.js';
+import { SAVED_COPY, UNAVAILABLE_TEXT, UNAVAILABLE_TIME_TEXT, stepWhere } from '../saved/saved-copy.js';
 import { failureView } from '../copy.js';
 import { TRY_AGAIN } from '../failure-words.js';
 import { RunFailure } from '../run-failure.js';
@@ -16,7 +16,7 @@ export function ReasonSentences({ reasons }: { readonly reasons: Reasons }) {
     <>
       {reasons.map((reason, index) => (
         <p key={`${reason.code}-${index}`}>
-          {UNAVAILABLE_TEXT[reason.code]}
+          {reason.code === 'bad-definition' && reason.path?.[2] === 'after' ? UNAVAILABLE_TIME_TEXT : UNAVAILABLE_TEXT[reason.code]}
           {stepWhere(reason.path)}
         </p>
       ))}

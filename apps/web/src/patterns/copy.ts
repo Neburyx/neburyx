@@ -136,7 +136,6 @@ export const SHELL_COPY = {
   restartedByMask: 'Masking changed, so the pattern was started again.',
 } as const;
 
-/** The tags a step shows for the three kinds of the extension, in the words of the approved frames: at least N neighbours, closes back, after previous. */
 export function extensionTags(step: { readonly fan?: { readonly atLeast: number } | undefined; readonly after?: 'previous' | undefined; readonly closesAtAnchor?: true | undefined }): readonly string[] {
   return [...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back']), ...(step.after === undefined ? [] : ['after previous'])];
 }
