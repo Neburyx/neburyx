@@ -8,7 +8,7 @@ import { builtInKeyBindings } from '../test-utils.js';
 import { KeyBindingsProvider } from '../workspace/key-binding-registry.js';
 import { HELP_ITEMS, type HelpItem } from './help-items.js';
 import { HelpMenu } from './help-menu.js';
-import { HELP_LINKS } from './links.js';
+import { HELP_LINKS, opensInNewTab } from './links.js';
 
 const ready = () => clientWith({ me: me(), sources: [source('a')] });
 const helpButton = () => screen.getByRole('button', { name: 'Help' });
@@ -45,7 +45,7 @@ describe('the Help menu', () => {
     expect(separators[0]?.nextElementSibling?.textContent).toContain('Talk to us about Enterprise');
   });
 
-  it('opens each of the four links in a new tab without the opener, and closes', async () => {
+  it('opens each of the four links as its address needs (a new tab without the opener for an https address) and closes', async () => {
     renderApp('/', ready());
     const expected: Record<string, string> = {
       Documentation: HELP_LINKS.documentation,
@@ -57,8 +57,8 @@ describe('the Help menu', () => {
       await userEvent.click(helpButton());
       const link = screen.getByRole('menuitem', { name: new RegExp(`^${name}`) });
       expect(link.getAttribute('href')).toBe(href);
-      expect(link.getAttribute('target')).toBe('_blank');
-      expect(link.getAttribute('rel')?.split(' ').sort()).toEqual(['noopener', 'noreferrer']);
+      expect(link.getAttribute('target')).toBe(opensInNewTab(href) ? '_blank' : null);
+      expect(link.getAttribute('rel')?.split(' ').sort() ?? null).toEqual(opensInNewTab(href) ? ['noopener', 'noreferrer'] : null);
       link.addEventListener('click', (event) => event.preventDefault());
       await userEvent.click(link);
       expect(screen.queryByRole('menu')).toBeNull();

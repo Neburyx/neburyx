@@ -827,27 +827,35 @@ describe('the Enterprise link on the Sources page', () => {
     expect(anchor.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
-  it('makes no request when the page is used and the link is followed, and every request it does make is to the page itself', async () => {
-    const urls: string[] = [];
-    const fetched = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      urls.push(String(input instanceof Request ? input.url : input));
-      return new Response('{}');
-    });
-    const opened = vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation((_method, url) => void urls.push(String(url)));
+  it('makes no request to any other origin when every control of the page is used and the link is followed, whether the sources are read or not', async () => {
+    const asked: string[] = [];
+    const answer = (input: string): Response => {
+      if (input === '/v1/me') return new Response(JSON.stringify(me()));
+      if (input === '/v1/sources') return new Response(JSON.stringify({ items: [source('a', { alias: 'alpha' }), source('b', { alias: 'beta' })], nextCursor: null }));
+      if (input.endsWith('/profile')) return new Response(JSON.stringify(testProfile('a')));
+      return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'No.', retryable: false, traceId: 't' } }), { status: 404 });
+    };
     const beacon = vi.fn(() => true);
+    const opened = vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation((_method, url) => void asked.push(String(url)));
     Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: beacon });
     try {
-      render(<Harness client={answering([[source('a')]])} />);
-      await within(main()).findByRole('list', { name: 'Configured sources' });
+      const user = userEvent.setup();
+      const listed = render(<Harness client={createApiClient(async (input) => (asked.push(input), answer(input)))} />);
+      const detail = await screen.findByRole('region', { name: 'alpha health' });
+      await user.click(within(main()).getByRole('button', { name: /beta/ }));
+      await user.click(within(detail.ownerDocument.body).getByRole('button', { name: 'Test source' }));
       const anchor = link();
       anchor.addEventListener('click', (event) => event.preventDefault());
-      await userEvent.click(anchor);
-      await userEvent.tab();
+      await user.click(anchor);
+      listed.unmount();
+      let refused = false;
+      render(<Harness client={createApiClient(async (input) => (asked.push(input), input === '/v1/sources' && !refused ? ((refused = true), new Response('{}', { status: 503 })) : answer(input)))} />);
+      await user.click(await screen.findByRole('button', { name: 'Try again' }));
+      expect(asked.length).toBeGreaterThan(3);
+      expect(asked.filter((url) => !url.startsWith('/') || url.startsWith('//'))).toEqual([]);
+      expect(asked.some((url) => url.includes(HELP_LINKS.enterprise))).toBe(false);
       expect(beacon).not.toHaveBeenCalled();
-      expect(urls.filter((url) => !new URL(url, window.location.origin).href.startsWith(window.location.origin))).toEqual([]);
-      expect(urls.some((url) => url.includes(HELP_LINKS.enterprise))).toBe(false);
     } finally {
-      fetched.mockRestore();
       opened.mockRestore();
       Reflect.deleteProperty(navigator, 'sendBeacon');
     }

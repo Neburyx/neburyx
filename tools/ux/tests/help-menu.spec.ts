@@ -2,10 +2,11 @@ import { expect, test, type Page } from '@playwright/test';
 
 const ITEMS = ['Keyboard shortcuts', 'Documentation', 'Quickstart: the demo case', 'Talk to us about Enterprise', 'Report a problem'];
 const REPOSITORY = 'https://github.com/Neburyx/neburyx';
-const EXTERNAL: ReadonlyArray<readonly [string, string]> = [
+/** An address of `undefined` is the Enterprise item: its target is the app's one constant, an https address or a mailto address, read from the menu itself. */
+const EXTERNAL: ReadonlyArray<readonly [string, string | undefined]> = [
   ['Documentation', `${REPOSITORY}/tree/main/docs`],
   ['Quickstart: the demo case', `${REPOSITORY}#quickstart`],
-  ['Talk to us about Enterprise', `${REPOSITORY}/discussions`],
+  ['Talk to us about Enterprise', undefined],
   ['Report a problem', `${REPOSITORY}/issues`],
 ];
 
@@ -84,8 +85,8 @@ test.describe('the Help menu on Home', () => {
     await expect(sheet(page)).toHaveCount(0);
   });
 
-  for (const [name, target] of EXTERNAL) {
-    test(`opens ${name} in a new page with no opener and no query data, without following it`, async ({ page, context }) => {
+  for (const [name, expected] of EXTERNAL) {
+    test(`opens ${name} as its address needs, in a new page with no opener and no query data for an https address, without following it`, async ({ page, context }) => {
       const requested: URL[] = [];
       const offsite: string[] = [];
       await context.route((url) => url.hostname !== '127.0.0.1' && url.hostname !== 'localhost', async (route) => {
@@ -102,7 +103,20 @@ test.describe('the Help menu on Home', () => {
       });
       await openMenu(page);
       const link = menu(page).getByRole('menuitem', { name: new RegExp(`^${name}`) });
+      const target = expected ?? (await link.getAttribute('href')) ?? '';
+      expect(target).toMatch(/^(https:\/\/|mailto:)/);
       await expect(link).toHaveAttribute('href', target);
+      if (target.startsWith('mailto:')) {
+        await expect(link).not.toHaveAttribute('target');
+        await expect(link).not.toHaveAttribute('rel');
+        return;
+      }
+      if (new URL(target).origin !== new URL(REPOSITORY).origin) {
+        await context.route(`${new URL(target).origin}/**`, async (route) => {
+          requested.push(new URL(route.request().url()));
+          await route.fulfill({ status: 200, contentType: 'text/html', body: '<title>stand-in</title>' });
+        });
+      }
       await expect(link).toHaveAttribute('target', '_blank');
       await expect(link).toHaveAttribute('rel', /noopener/);
       const popupPromise = page.waitForEvent('popup');
