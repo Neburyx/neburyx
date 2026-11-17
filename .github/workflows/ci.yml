@@ -177,6 +177,7 @@ jobs:
         files:
           - src/compose/compose.compose.test.ts src/compose/destroy-all.compose.test.ts
           - src/compose/operations.compose.test.ts
+          - src/compose/install-guide.compose.test.ts
           - src/compose/demo.compose.test.ts
     env:
       NEBURYX_TEST_IMAGE: neburyx-ci-test:${{ github.sha }}
