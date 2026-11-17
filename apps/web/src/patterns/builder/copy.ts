@@ -1,6 +1,6 @@
 import type { PatternProblem } from '@neburyx/contracts';
 import { MAX_FILTER_TEXT, PATTERN_LIMITS } from '@neburyx/contracts';
-import { SHELL_COPY } from '../copy.js';
+import { SHELL_COPY, withinWords } from '../copy.js';
 import { FILTERS_NONE_OFFERED } from '../../workspace/expand-copy.js';
 import type { AddConditionBlock } from './conditions.js';
 import type { AddStepBlock, Break, Direction } from './model.js';
@@ -258,7 +258,7 @@ export function breakText(found: Break, nameOf: (type: string | undefined) => st
     case 'window':
       return `${step}: the window needs a relationship type with a date.`;
     case 'no-time':
-      return `${step}: “after the previous step” needs a time in the mapping. ${listOf(found.types)} ${found.types.length === 1 ? 'has' : 'have'} none.`;
+      return found.within === undefined ? `${step}: “after the previous step” needs a time in the mapping. ${listOf(found.types)} ${found.types.length === 1 ? 'has' : 'have'} none.` : `${step}: “within ${withinWords(found.within)}” needs a time to measure from. ${listOf(found.types)} ${found.types.length === 1 ? 'has' : 'have'} none in the mapping.`;
     case 'order-first':
       return `${step}: it is ordered after the previous step, and it is now the first step, which has none.`;
     case 'closing':

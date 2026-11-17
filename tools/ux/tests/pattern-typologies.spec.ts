@@ -35,7 +35,7 @@ test.describe('the AML typologies of a mapping in the Patterns panel', () => {
     await expect(panel.getByText('One account sends to many accounts.')).toBeVisible();
     await rowOf(page, 'Rapid pass-through').getByRole('button', { name: 'Rapid pass-through', exact: true }).click();
     const words = panel.getByRole('region', { name: 'Rapid pass-through: Steps in words' });
-    await expect(words).toContainText('follow TRANSFERRED_TO forward to a account, after the previous step (by transferredAt), within 24 hours');
+    await expect(words).toContainText('follow TRANSFERRED_TO forward to a account, after the previous step, within 24 hours (by transferredAt)');
     await rowOf(page, 'Fan-out').getByRole('button', { name: 'Fan-out', exact: true }).click();
     await expect(panel.getByRole('region', { name: 'Fan-out: Steps in words' })).toContainText('follow TRANSFERRED_TO forward to at least 10 other accounts');
     await shot(page, 'typologies-list');
@@ -66,8 +66,8 @@ test.describe('the AML typologies of a mapping in the Patterns panel', () => {
     await expect(panel.getByText('Copy of Rapid pass-through · not saved')).toBeVisible();
     const chain = panel.locator('.pattern-chain');
     await expect(chain).toContainText('after previous');
-    await expect(chain).toContainText('within 24 h');
-    await expect(panel.getByRole('region', { name: 'In words' })).toContainText('after the previous step (by transferredAt), within 24 hours');
+    await expect(chain).toContainText('after previous · within 24 hours');
+    await expect(panel.getByRole('region', { name: 'In words' })).toContainText('after the previous step, within 24 hours (by transferredAt)');
     await shot(page, 'typologies-copy-in-builder');
     await press(page, panel.getByRole('button', { name: 'Cancel' }));
     const discard = page.getByRole('dialog');
@@ -116,7 +116,7 @@ test.describe('the AML typologies of a mapping in the Patterns panel', () => {
     const banner = panel.getByRole('group', { name: 'Changes that break the pattern' });
     await expect(banner).toContainText('it is ordered after the previous step, and it is now the first step, which has none.');
     await expect(panel.getByRole('button', { name: 'Preview' })).toBeDisabled();
-    await expect(panel.locator('.pattern-chain')).toContainText('within 24 h');
+    await expect(panel.locator('.pattern-chain')).toContainText('after previous · within 24 hours');
     await press(page, banner.getByRole('button', { name: 'Undo change' }));
     await expect(banner).toHaveCount(0);
     await expect(panel.getByRole('button', { name: 'Preview' })).toBeEnabled();

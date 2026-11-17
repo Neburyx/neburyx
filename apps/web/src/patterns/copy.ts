@@ -136,13 +136,15 @@ export const SHELL_COPY = {
   restartedByMask: 'Masking changed, so the pattern was started again.',
 } as const;
 
-/** The bound of an ordered step as a short tag: "within 24 h", "within 90 min", "within 3 days". */
-export function withinTag(within: PatternWithin): string {
-  if ('minutes' in within) return `within ${within.minutes} min`;
-  if ('hours' in within) return `within ${within.hours} h`;
-  return `within ${within.days} ${within.days === 1 ? 'day' : 'days'}`;
+/** The delay of an ordered step in words, in the unit the definition wrote: "24 hours", "30 minutes", "3 days", "1 hour". */
+export function withinWords(within: PatternWithin): string {
+  if ('minutes' in within) return `${within.minutes} ${within.minutes === 1 ? 'minute' : 'minutes'}`;
+  if ('hours' in within) return `${within.hours} ${within.hours === 1 ? 'hour' : 'hours'}`;
+  return `${within.days} ${within.days === 1 ? 'day' : 'days'}`;
 }
 
-export function extensionTags(step: { readonly fan?: { readonly atLeast: number } | undefined; readonly after?: 'previous' | undefined; readonly within?: PatternWithin | undefined; readonly closesAtAnchor?: true | undefined }): readonly string[] {
-  return [...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back']), ...(step.after === undefined ? [] : ['after previous']), ...(step.within === undefined ? [] : [withinTag(step.within)])];
+/** The tags of the extension fields of a step; an order with a delay is one tag, "after previous · within 24 hours", whose parts the caller may join with another mark. */
+export function extensionTags(step: { readonly fan?: { readonly atLeast: number } | undefined; readonly after?: 'previous' | undefined; readonly within?: PatternWithin | undefined; readonly closesAtAnchor?: true | undefined }, join = ' · '): readonly string[] {
+  const order = step.after === undefined ? [] : [step.within === undefined ? 'after previous' : `after previous${join}within ${withinWords(step.within)}`];
+  return [...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back']), ...order];
 }

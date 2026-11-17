@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PatternDefinition } from '@neburyx/contracts';
-import { extensionTags, withinTag } from '../copy.js';
+import { extensionTags, withinWords } from '../copy.js';
 import { builderProfile } from './builder-kit.js';
 import { draftWords } from './draft-words.js';
 import { fromDefinition } from './from-definition.js';
@@ -21,13 +21,15 @@ const nameOf = (type: string | undefined): string => type ?? '';
 
 describe('the bound of a step ordered after the previous one, in the builder', () => {
   it.each([
-    [{ hours: 24 }, 'within 24 h'],
-    [{ minutes: 90 }, 'within 90 min'],
-    [{ days: 3 }, 'within 3 days'],
-    [{ days: 1 }, 'within 1 day'],
-  ])('is the tag %j next to the order', (within, tag) => {
-    expect(withinTag(within)).toBe(tag);
-    expect(extensionTags({ after: 'previous', within })).toEqual(['after previous', tag]);
+    [{ hours: 24 }, '24 hours'],
+    [{ minutes: 30 }, '30 minutes'],
+    [{ days: 3 }, '3 days'],
+    [{ days: 1 }, '1 day'],
+    [{ hours: 1 }, '1 hour'],
+  ])('is the words %j and one tag with the order', (within, words) => {
+    expect(withinWords(within)).toBe(words);
+    expect(extensionTags({ after: 'previous', within })).toEqual([`after previous · within ${words}`]);
+    expect(extensionTags({ after: 'previous', within }, ', ')).toEqual([`after previous, within ${words}`]);
   });
 
   it('has no tag when the step has none, and the order alone is as it was', () => {
@@ -45,7 +47,7 @@ describe('the bound of a step ordered after the previous one, in the builder', (
 
   it('is said in the words the client writes when the source’s words cannot be had', () => {
     const lines = draftWords(profile, stateOf(bounded({ hours: 24 })).draft, nameOf, [], []);
-    expect(lines[2]?.text).toBe('Step 2: follow r-3 forward to n-c, after the previous step (by when), within 24 hours');
+    expect(lines[2]?.text).toBe('Step 2: follow r-3 forward to n-c, after the previous step, within 24 hours (by when)');
     expect(draftWords(profile, stateOf(bounded({ minutes: 1 })).draft, nameOf, [], [])[2]?.text).toContain('within 1 minute');
   });
 

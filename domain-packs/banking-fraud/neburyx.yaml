@@ -146,7 +146,7 @@ sources:
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account, closesAtAnchor: true }
       - id: rapid-pass-through
         name: "Rapid pass-through"
-        description: "Money moves on at once: an account sends to another, which sends on within a day."
+        description: "Money arrives and leaves again within 24 hours."
         group: "AML typologies"
         tag: "AML"
         definition:

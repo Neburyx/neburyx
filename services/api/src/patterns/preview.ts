@@ -54,15 +54,15 @@ function timeOrderPart(step: Step, before: Step | undefined, beforePrevious: str
   const properties = propertiesOf(step, previous, step.arrivesAt);
   const previousProperties = propertiesOf(before, beforePrevious, previous);
   const within = step.within === undefined ? undefined : withinPart(step.within);
-  return { properties, previousProperties, ...(within === undefined ? {} : { within }), text: `after the previous step (by ${properties.join(' or ')})${within === undefined ? '' : `, ${within.text}`}` };
+  return { properties, previousProperties, ...(within === undefined ? {} : { within }), text: within === undefined ? `after the previous step (by ${properties.join(' or ')})` : `after the previous step, ${within.text}` };
 }
 
 /** The sentence of a step: the chain as before, and for the kinds of the extension the words of the approved frames: to at least N other Accounts, close back at the start Account, after the previous step (by the time property), and within a delay. */
-function stepText(index: number, step: Step, types: string, arrives: string, start: string, timeOrderText: string | undefined): string {
+function stepText(index: number, step: Step, types: string, arrives: string, start: string, timeOrder: PreviewStep['timeOrder']): string {
   const lead = `Step ${index + 1}: follow ${types} ${DIRECTION_WORDS[step.direction]}`;
   const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${arrives}s to choose from`;
   const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to ${arrives}` : `to at least ${step.fan.atLeast} other ${arrives}s`) : `and close back at the start ${start}${fan}`;
-  return `${lead} ${to}${timeOrderText === undefined ? '' : `, ${timeOrderText}`}`;
+  return `${lead} ${to}${timeOrder === undefined ? '' : `, ${timeOrder.text}${timeOrder.within === undefined ? '' : ` (by ${timeOrder.properties.join(' or ')})`}`}`;
 }
 
 /** What a type is called: the mapping's display name for it, else its label, as the profile gives them. */
@@ -86,7 +86,7 @@ function previewPattern(definition: PatternDefinition, source: SourceModel): Pat
         relationshipTypes: step.relationshipTypes,
         direction: step.direction,
         arrivesAt: { type: step.arrivesAt, name: arrives },
-        text: stepText(index, step, types, arrives, start, timeOrder?.text),
+        text: stepText(index, step, types, arrives, start, timeOrder),
         conditions: (step.conditions ?? []).map((condition) => conditionPart(condition, condition.on === 'neighbor' ? arrives : types)),
         ...(step.window === undefined ? {} : { window: windowPart(step.window, step, previous, source) }),
         ...(step.fan === undefined ? {} : { fan: fanPart(step.fan.atLeast, step.direction, arrives) }),

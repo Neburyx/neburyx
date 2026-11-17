@@ -89,7 +89,7 @@ function TypologyWords({ item, client, sourceId, sourceName, mask }: Omit<Props,
       </div>
     );
   }
-  const tags = [...new Set(definition.steps.flatMap((step) => extensionTags(step)))];
+  const tags = [...new Set(definition.steps.flatMap((step) => extensionTags(step, ', ')))];
   return (
     <section className="pattern-typology-words" aria-label={`${item.name}: ${SAVED_COPY.stepsInWords}`}>
       <h5 className="supernode-label">{SAVED_COPY.stepsInWords}</h5>

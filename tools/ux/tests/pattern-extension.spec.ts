@@ -138,11 +138,11 @@ test.describe('a delay after the previous step in the Patterns panel', () => {
   test('shows the bound in the row and in the words of the preview', async ({ page }) => {
     const row = rowOf(page, BOUNDED);
     await expect(row).toContainText('after previous');
-    await expect(row).toContainText('within 24 h');
+    await expect(row).toContainText('after previous · within 24 hours');
     await shot(page, 'patterns-list-within');
     await press(page, row.getByRole('button', { name: `Run ${BOUNDED}` }));
     const words = panelOf(page).getByRole('region', { name: 'In plain words' });
-    await expect(words).toContainText('after the previous step (by lastSeen), within 24 hours');
+    await expect(words).toContainText('after the previous step, within 24 hours (by lastSeen)');
     await shot(page, 'patterns-preview-within');
   });
 
@@ -151,22 +151,23 @@ test.describe('a delay after the previous step in the Patterns panel', () => {
     await chooseMenuItem(page, 'Change');
     const builder = panelOf(page);
     const chain = builder.locator('.pattern-chain');
-    await expect(chain).toContainText('within 24 h');
+    await expect(chain).toContainText('after previous · within 24 hours');
     await builder.getByRole('tab', { name: /^Step 2( !)?$/ }).click();
-    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('No later than');
-    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('24 h after the previous step');
-    await expect(builder.getByRole('region', { name: 'In words' })).toContainText('within 24 hours');
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('Step 2 · after the previous step, with a limit');
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('Within');
+    await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('24 hours');
+    await expect(builder.getByRole('region', { name: 'In words' })).toContainText('within 24 hours (by lastSeen)');
     await shot(page, 'patterns-builder-within');
     await builder.getByRole('tab', { name: /^Step 1( !)?$/ }).click();
     await press(page, builder.getByRole('button', { name: 'Remove step' }));
     const banner = builder.getByRole('group', { name: 'Changes that break the pattern' });
     await expect(banner).toContainText('it is ordered after the previous step, and it is now the first step, which has none.');
-    await expect(chain).toContainText('within 24 h');
+    await expect(chain).toContainText('after previous · within 24 hours');
     await expect(builder.getByRole('button', { name: 'Preview' })).toBeDisabled();
     await shot(page, 'patterns-builder-within-broken');
     await press(page, banner.getByRole('button', { name: 'Undo change' }));
     await expect(banner).toHaveCount(0);
-    await expect(chain).toContainText('within 24 h');
+    await expect(chain).toContainText('after previous · within 24 hours');
     await expect(builder.getByRole('button', { name: 'Preview' })).toBeEnabled();
   });
 
@@ -192,12 +193,12 @@ test.describe('a delay after the previous step in the Patterns panel', () => {
     if (await dialog.count() > 0) await press(page, dialog.getByRole('button', { name: /^Save( changes)?$/ }));
     await changed;
     await expect(builder.getByText(/Pattern (saved|changed)\./)).toBeVisible();
-    await expect(rowOf(page, BOUNDED)).toContainText('within 24 h');
+    await expect(rowOf(page, BOUNDED)).toContainText('after previous · within 24 hours');
     const stored = await page.request.get(`/v1/patterns?sourceId=${SOURCE}`);
     expect(JSON.stringify(await stored.json())).toContain('"within":{"hours":24}');
     await openRowMenu(page, BOUNDED);
     await chooseMenuItem(page, 'Change');
-    await expect(builder.locator('.pattern-chain')).toContainText('within 24 h');
+    await expect(builder.locator('.pattern-chain')).toContainText('after previous · within 24 hours');
     await expect(builder.locator('.pattern-chain')).toContainText('1 of 24 conditions');
     await press(page, builder.getByRole('button', { name: 'Cancel' }));
     const discard = page.getByRole('dialog');

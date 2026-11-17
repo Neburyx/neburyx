@@ -1,5 +1,5 @@
 import type { SourceProfile } from '@neburyx/contracts';
-import { extensionTags, withinTag } from '../copy.js';
+import { extensionTags, withinWords } from '../copy.js';
 import type { Draft } from './model.js';
 import { timePropertiesOf } from './model.js';
 
@@ -23,14 +23,14 @@ export function ExtensionCard({ profile, draft, index, nameOf, wrong }: Props) {
   rows.push(['Kind', kinds.join(', ')]);
   if (step.fan !== undefined) rows.push(['N', String(step.fan.atLeast)]);
   if (step.closesAtAnchor !== undefined) rows.push(['Closes back at', `the start ${nameOf(draft.anchorType)}`]);
-  if (step.after !== undefined) rows.push(['Ordered by', properties.length === 0 ? 'no time in the mapping' : `${properties.join(', ')} (date)`]);
-  if (step.within !== undefined) rows.push(['No later than', withinTag(step.within).replace(/^within /, '') + ' after the previous step']);
+  if (step.after !== undefined) rows.push(['Ordered by', properties.length === 0 ? (step.within === undefined ? 'no time in the mapping' : 'none in the mapping') : `${properties.join(', ')} (date)`]);
+  if (step.within !== undefined) rows.push(['Within', `${withinWords(step.within)}${wrong ? ' (unchecked)' : ''}`]);
   rows.push(['Relationship', `${step.relationshipTypes.join(', ')}, ${DIRECTION_WORD[step.direction ?? 'out']}`]);
   if (step.arrivesAt !== undefined) rows.push(['Arrives at', nameOf(step.arrivesAt)]);
   return (
     <section className="pattern-ext-card" data-broken={wrong ? 'true' : undefined} aria-label={`Step ${index + 1} extended`}>
       <p className="pattern-step-title">
-        {`Step ${index + 1} · ${kinds.join(', ').replace('at least N neighbours', 'at least N neighbours')}`}
+        {step.within === undefined ? `Step ${index + 1} · ${kinds.join(', ')}` : wrong ? `Step ${index + 1} · time limit` : `Step ${index + 1} · ${kinds.join(', ')}, with a limit`}
         {wrong ? <span className="pattern-ext-pill">Not valid</span> : null}
       </p>
       <dl className="pattern-ext-table">

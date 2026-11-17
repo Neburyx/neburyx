@@ -207,7 +207,7 @@ export type Break =
   /** A step ordered after the previous one that has none (it is now the first). */
   | { readonly kind: 'order-first'; readonly step: number; readonly part: 'link' }
   /** A step ordered after the previous one whose relationship types, or the previous step's, have no time in the mapping. */
-  | { readonly kind: 'no-time'; readonly step: number; readonly part: 'link'; readonly types: readonly string[] }
+  | { readonly kind: 'no-time'; readonly step: number; readonly part: 'link'; readonly types: readonly string[]; readonly within?: PatternWithin }
   /** A closing at the start that no longer fits: the step is not the last, the pattern has one step, or the step arrives at another type than the start. */
   | { readonly kind: 'closing'; readonly step: number; readonly part: 'link'; readonly why: 'not-last' | 'one-step' | 'other-type'; readonly arrival: string | undefined };
 
@@ -260,7 +260,7 @@ export function breaksOf(profile: SourceProfile, draft: Draft, mask: boolean): r
     if (step.after !== undefined && index === 0) found.push({ kind: 'order-first', step: index, part: 'link' });
     if (step.after !== undefined && index > 0) {
       const untimed = untimedTypesOf(profile, draft, index);
-      if (untimed.length > 0) found.push({ kind: 'no-time', step: index, part: 'link', types: untimed });
+      if (untimed.length > 0) found.push({ kind: 'no-time', step: index, part: 'link', types: untimed, ...(step.within === undefined ? {} : { within: step.within }) });
     }
     if (step.closesAtAnchor !== undefined) {
       const why = index !== draft.steps.length - 1 ? 'not-last' : draft.steps.length < 2 ? 'one-step' : step.arrivesAt !== undefined && step.arrivesAt !== draft.anchorType ? 'other-type' : undefined;

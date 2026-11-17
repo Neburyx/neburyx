@@ -46,12 +46,13 @@ const withinOf = (within: Within | undefined): { unit: 'minutes' | 'hours' | 'da
   const [unit, amount] = 'minutes' in within ? (['minutes', within.minutes] as const) : 'hours' in within ? (['hours', within.hours] as const) : (['days', within.days] as const);
   return { unit, amount, text: `within ${amount} ${amount === 1 ? unit.slice(0, -1) : unit}` };
 };
-const orderWords = (step: { relationshipTypes: string[]; within?: Within }): string => `after the previous step (by ${timeOf(step)})${withinOf(step.within) === undefined ? '' : `, ${withinOf(step.within)?.text ?? ''}`}`;
+const orderWords = (step: { relationshipTypes: string[]; within?: Within }): string => (withinOf(step.within) === undefined ? `after the previous step (by ${timeOf(step)})` : `after the previous step, ${withinOf(step.within)?.text ?? ''}`);
+const orderSentence = (step: { relationshipTypes: string[]; within?: Within }): string => (step.within === undefined ? orderWords(step) : `${orderWords(step)} (by ${timeOf(step)})`);
 
 const stubSentence = (index: number, step: { relationshipTypes: string[]; direction: string; arrivesAt: string; after?: 'previous'; within?: Within; fan?: { atLeast: number }; closesAtAnchor?: true }, start: string): string => {
   const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${step.arrivesAt}s to choose from`;
   const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to a ${step.arrivesAt}` : `to at least ${step.fan.atLeast} other ${step.arrivesAt}s`) : `and close back at the start ${start}${fan}`;
-  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : `, ${orderWords(step)}`}`;
+  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : `, ${orderSentence(step)}`}`;
 };
 
 export function previewPattern(body: unknown, response: ServerResponse): void {
