@@ -1256,6 +1256,31 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     expect(core.pan()).toEqual({ x: 484, y: 360 });
   });
 
+  it('keeps the centre on every later resize of a stored camera that held no canvas size, after leaving it where it was stored at the first size', () => {
+    let size = { width: 0, height: 0 };
+    const { container, core } = inContainer(undefined, () => size, { zoom: 1, x: 484, y: 360 });
+    size = { width: 968, height: 720 };
+    sizes.resize(container, 968, 720);
+    expect(core.pan()).toEqual({ x: 484, y: 360 });
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    expect(core.pan()).toEqual({ x: 612, y: 376 });
+  });
+
+  it('forgets the size of an earlier camera when a camera that holds no size is shown while the canvas has none', () => {
+    let size = { width: 968, height: 720 };
+    const { renderer, container, core } = inContainer(undefined, () => size, { zoom: 1, x: 484, y: 360, canvas: { width: 968, height: 720 } });
+    size = { width: 0, height: 0 };
+    renderer.show({ zoom: 1, x: 10, y: 20 });
+    expect(core.pan()).toEqual({ x: 10, y: 20 });
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    expect(core.pan()).toEqual({ x: 10, y: 20 });
+    size = { width: 1000, height: 800 };
+    sizes.resize(container, 1000, 800);
+    expect(core.pan()).toEqual({ x: 10 - 112, y: 20 + 24 });
+  });
+
   it('leaves the pan alone when the container reports no size', () => {
     let size = { width: 968, height: 720 };
     const { container, core } = inContainer(undefined, () => size);

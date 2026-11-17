@@ -333,13 +333,17 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     const moved = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
     cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + moved.x, y: viewport.y + moved.y } });
-    if (size.width > 0 && size.height > 0) sizeShown = size;
-    else if (viewport.canvas !== undefined) sizeShown = viewport.canvas;
+    sizeShown = size.width > 0 && size.height > 0 ? size : viewport.canvas;
   };
 
   const keepCentre = (cy: Core): void => {
     const size = sizeOf(cy);
-    if (sizeShown === undefined || size.width <= 0 || size.height <= 0 || (size.width === sizeShown.width && size.height === sizeShown.height)) return;
+    if (size.width <= 0 || size.height <= 0) return;
+    if (sizeShown === undefined) {
+      sizeShown = size;
+      return;
+    }
+    if (size.width === sizeShown.width && size.height === sizeShown.height) return;
     const before = sizeShown;
     sizeShown = size;
     cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 });
