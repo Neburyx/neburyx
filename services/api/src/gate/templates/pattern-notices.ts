@@ -10,7 +10,7 @@ export function patternNoticesOf(item: Pick<NormalizedPattern, 'stopListed' | 's
   return [
     ...(item.stopListed ? [{ code: 'stopListSkipped' as const }] : []),
     ...(request.steps.length > 1 && request.stopListed.size === 0 ? [{ code: 'noStopList' as const }] : []),
-    ...(request.windowApplied ? [{ code: 'undatedExcluded' as const }] : []),
+    ...(request.windowApplied || request.timeOrdered ? [{ code: 'undatedExcluded' as const }] : []),
     ...(request.windowed && request.untimedTypes.length > 0 ? [{ code: 'windowNotApplied' as const, relationshipTypes: [...request.untimedTypes] }] : []),
     ...(item.supernodes.length > 0 ? [{ code: 'supernodesSkipped' as const, entities: [...item.supernodes] }] : []),
     ...(item.bounded ? [{ code: 'readBounded' as const }] : []),

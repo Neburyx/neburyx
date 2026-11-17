@@ -1,4 +1,4 @@
-import { PATTERN_LIMITS, patternStepBaseSchema, referenceValueSchema, refinePatternStep, type ExpandFilter } from '@neburyx/contracts';
+import { PATTERN_LIMITS, patternStepBaseSchema, referenceValueSchema, refinePatternStep, refinePatternSteps, type ExpandFilter } from '@neburyx/contracts';
 import { z } from 'zod';
 import { AppError } from '../../errors.js';
 import type { Params, SourceAllowlist } from '../types.js';
@@ -23,6 +23,7 @@ export const patternParamsSchema = z
   .strictObject({ anchorType: z.string().min(1), stableId: referenceValueSchema, steps: stepsSchema })
   .superRefine((params, ctx) => {
     if (params.steps.reduce((sum, step) => sum + (step.conditions?.length ?? 0), 0) > PATTERN_LIMITS.conditionsPerPattern) ctx.addIssue({ code: 'custom', path: ['steps'], message: 'too many conditions' });
+    refinePatternSteps(params.steps, ctx);
   })
   .transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) }));
 
@@ -34,6 +35,12 @@ export interface PatternStepRequest {
   readonly branches: readonly ExpandBranch[];
   readonly conditions: readonly ExpandFilter[];
   readonly windowed: boolean;
+  /** The step's relationship has a time at or after the previous step's; every row either step crosses has a time property. */
+  readonly ordered: boolean;
+  /** The origin of the step has at least this many distinct qualifying neighbours; absent when the step has no fan. */
+  readonly fan: number | undefined;
+  /** The step arrives at the anchor node itself (the last step of a cycle). */
+  readonly closes: boolean;
 }
 
 export interface PatternRequest {
@@ -44,6 +51,8 @@ export interface PatternRequest {
   readonly windowed: boolean;
   /** A window is applied to at least one relationship the pattern reads: a windowed step crosses a row with a time property. Only then are relationships with no usable time left out. */
   readonly windowApplied: boolean;
+  /** A step is ordered after the previous one: a relationship with no usable time is left out there. */
+  readonly timeOrdered: boolean;
   /** The relationship types of windowed steps that have a row with no time property, so that the window cannot apply to it. */
   readonly untimedTypes: readonly string[];
 }
@@ -52,18 +61,26 @@ export interface PatternRequest {
  * What the request names, checked against the mapping: the anchor's and every arrival entity type, the relationship types and the rows that carry them in the stated direction, the conditions (each on a property the mapping declares
  * filterable), the windows and the stop-list of the types a run passes through. A name or a join the mapping does not have is refused without saying which.
  */
-export function patternRequestOf(allowlist: SourceAllowlist, params: Params): PatternRequest {
+export function patternRequestOf(allowlist: SourceAllowlist, params: Params, countCap?: number): PatternRequest {
   const parsed = z.object({ anchorType: z.string(), steps: stepsSchema }).safeParse(params);
   if (!parsed.success || !allowlist.entityLabels.has(parsed.data.anchorType)) throw new AppError('INVALID_REQUEST');
   const anchor = parsed.data.anchorType;
   let previous = anchor;
+  let lastBranches: readonly ExpandBranch[] | undefined;
   const steps = parsed.data.steps.map((step): PatternStepRequest => {
     if (!allowlist.entityLabels.has(step.arrivesAt) || !step.relationshipTypes.every((type) => allowlist.relationshipTypes.has(type))) throw new AppError('INVALID_REQUEST');
     const branches = expandBranchesOf(allowlist, previous, step.arrivesAt, step.relationshipTypes, step.direction);
     if (!step.relationshipTypes.every((type) => branches.some((branch) => branch.type === type))) throw new AppError('INVALID_REQUEST');
     const conditions = step.conditions ?? [];
     if (undeclaredFilter(allowlist, step.arrivesAt, branches, conditions) !== undefined) throw new AppError('INVALID_REQUEST');
-    const request: PatternStepRequest = { from: previous, arrivesAt: step.arrivesAt, branches, conditions, windowed: step.windowFrom !== undefined };
+    const fan = step.fan?.atLeast;
+    if (fan !== undefined && countCap !== undefined && fan > countCap) throw new AppError('INVALID_REQUEST');
+    const closes = step.closesAtAnchor === true;
+    if (closes && (parsed.data.steps.length < 2 || step !== parsed.data.steps.at(-1) || step.arrivesAt !== anchor)) throw new AppError('INVALID_REQUEST');
+    const ordered = step.after !== undefined;
+    if (ordered && [...(lastBranches ?? []), ...branches].some((branch) => branch.observedAt === undefined)) throw new AppError('INVALID_REQUEST');
+    lastBranches = branches;
+    const request: PatternStepRequest = { from: previous, arrivesAt: step.arrivesAt, branches, conditions, windowed: step.windowFrom !== undefined, ordered, fan, closes };
     previous = step.arrivesAt;
     return request;
   });
@@ -76,5 +93,5 @@ export function patternRequestOf(allowlist: SourceAllowlist, params: Params): Pa
     }
   }
   const untimed = steps.filter((step) => step.windowed).flatMap((step) => step.branches.filter((branch) => branch.observedAt === undefined).map((branch) => branch.type));
-  return { anchor, steps, stopListed, windowed: steps.some((step) => step.windowed), windowApplied: steps.some((step) => step.windowed && step.branches.some((branch) => branch.observedAt !== undefined)), untimedTypes: [...new Set(untimed)] };
+  return { anchor, steps, stopListed, windowed: steps.some((step) => step.windowed), windowApplied: steps.some((step) => step.windowed && step.branches.some((branch) => branch.observedAt !== undefined)), untimedTypes: [...new Set(untimed)], timeOrdered: steps.some((step) => step.ordered) };
 }

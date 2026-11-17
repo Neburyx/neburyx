@@ -257,6 +257,12 @@ export function breakText(found: Break, nameOf: (type: string | undefined) => st
       return `${step}: the condition on ${found.row.property} is not available on ${found.row.on === 'neighbor' ? nameOf(found.arrival) : listOf(found.types)}${found.rows > 1 ? ` (${found.rows} conditions)` : ''}.`;
     case 'window':
       return `${step}: the window needs a relationship type with a date.`;
+    case 'no-time':
+      return `${step}: “after the previous step” needs a time in the mapping. ${listOf(found.types)} ${found.types.length === 1 ? 'has' : 'have'} none.`;
+    case 'order-first':
+      return `${step}: it is ordered after the previous step, and it is now the first step, which has none.`;
+    case 'closing':
+      return found.why === 'not-last' ? `${step}: it closes the cycle at the start, and it is no longer the last step.` : found.why === 'one-step' ? `${step}: it closes the cycle at the start, and a cycle needs at least two steps.` : `${step}: it closes the cycle at the start, and it arrives at ${nameOf(found.arrival)} instead of the start type.`;
     default: {
       const unreachable: never = found;
       return unreachable;

@@ -4,9 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { patternRequestOf } from '../gate/templates/pattern-request.js';
 import { patternStatementOf } from '../gate/templates/pattern-statement.js';
-import { GRAMMAR_ALLOWLIST, learnedCountGrammar, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
+import { GRAMMAR_ALLOWLIST, learnedBaseGrammar, learnedCountGrammar, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
 import { grammarProblems, learnGrammar, K } from '../testing/pattern-grammar.js';
-import { PATHS, SHAPE_RELATIONSHIPS, enumerateShapes, formsOf, pathCountStatements, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape, countStatementOfShape } from '../testing/pattern-shapes.js';
+import { PATHS, SHAPE_RELATIONSHIPS, TIMED_CLASSES, enumerateExtendedShapes, enumerateShapes, randomExtendedShapes, formsOf, pathCountStatements, pathStatements, paramsOf, randomShapes, shapeAllowlist, statementOfShape, countStatementOfShape } from '../testing/pattern-shapes.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { statementProblems, quotedNamesOf } from '../testing/fuzz-closed-set.js';
@@ -164,5 +164,56 @@ describe('the check of a recorded call', () => {
     const params = paramsOf({ steps: [{ direction: 'out', typeClass: 0, conditions: [], windowed: false }], stopRules: 0 }) as { stableId: string };
     const text = patternStatementOf(allowlist, patternRequestOf(allowlist, paramsOf({ steps: [{ direction: 'out', typeClass: 0, conditions: [], windowed: false }], stopRules: 0 }) as never));
     expect(statementProblems(rig([{ templateId: 'pattern', cypher: text }]), new Set(), [params.stableId], { grammar, allowlist, names: NAMES })).toEqual([]);
+  });
+});
+
+describe('the grammar of the extension: a fan, a time order and a cycle', () => {
+  const baseGrammar = learnedBaseGrammar();
+  const baseProblems = (statement: string): string[] => grammarProblems(statement, baseGrammar, allowlist);
+  const countGrammar = learnedCountGrammar();
+  const countProblems = (statement: string): string[] => grammarProblems(statement, countGrammar, allowlist);
+  const extended = [...enumerateExtendedShapes()];
+  const FAN = statementOfShape({ steps: [{ direction: 'out', typeClass: 0, conditions: [], windowed: false, fan: 3 }, { direction: 'out', typeClass: 0, conditions: [], windowed: false, fan: 4 }], stopRules: 1 });
+  const CYCLE = statementOfShape({ steps: [0, 1, 2].map((index) => ({ direction: 'out' as const, typeClass: index, conditions: [], windowed: false, ...(index === 2 ? { closes: true } : {}) })), stopRules: 0 });
+  const ORDER = statementOfShape({ steps: [0, 1].map((index) => ({ direction: 'out' as const, typeClass: TIMED_CLASSES[0] ?? 0, conditions: [], windowed: false, ...(index === 1 ? { ordered: true } : {}) })), stopRules: 0 });
+
+  it('has hundreds of shapes: each kind alone, at every position, and the three together', () => {
+    expect(extended.length).toBeGreaterThan(500);
+    for (const kind of ['fan', 'ordered', 'closes'] as const) expect(extended.filter((shape) => shape.steps.some((step) => step[kind] !== undefined)).length, kind).toBeGreaterThan(100);
+    expect(extended.filter((shape) => shape.steps.some((step) => step.fan !== undefined) && shape.steps.some((step) => step.ordered === true) && shape.steps.some((step) => step.closes === true)).length).toBeGreaterThan(20);
+  });
+
+  it('accepts the run and the count statement of every shape of the extension and of shapes drawn from seeds the corpus does not use', () => {
+    for (const shape of extended) {
+      expect(problems(statementOfShape(shape)), JSON.stringify(shape)).toEqual([]);
+      expect(countProblems(countStatementOfShape(shape)), JSON.stringify(shape)).toEqual([]);
+    }
+    for (const seed of [7777, 31337, 424242]) {
+      for (const shape of randomExtendedShapes(seed, 150)) {
+        expect(problems(statementOfShape(shape)), `${seed} ${JSON.stringify(shape)}`).toEqual([]);
+        expect(countProblems(countStatementOfShape(shape)), `${seed} ${JSON.stringify(shape)}`).toEqual([]);
+      }
+    }
+  });
+
+  it('is exactly the new fragments: the grammar learned before the extension accepts every statement without them and none of a shape with a fan, a time order or a cycle', () => {
+    for (const shape of enumerateShapes()) expect(baseProblems(statementOfShape(shape)), JSON.stringify(shape)).toEqual([]);
+    for (const statement of [FAN, CYCLE, ORDER]) expect(baseProblems(statement)).not.toEqual([]);
+    for (const shape of extended.filter((candidate) => candidate.steps.some((step) => step.fan !== undefined || step.ordered === true || step.closes === true))) expect(baseProblems(statementOfShape(shape)), JSON.stringify(shape)).not.toEqual([]);
+  });
+
+  it('refuses a statement altered by a clause, an unmapped name, a value written into the text, a dropped bound, a dropped degree check or a fan read that scans without the cap', () => {
+    for (const statement of [FAN, CYCLE, ORDER]) {
+      expect(problems(statement)).toEqual([]);
+      expect(problems(`${statement}\nDETACH DELETE a`)).not.toEqual([]);
+      expect(problems(statement.replace('`Maker`', '`Elsewhere`'))).not.toEqual([]);
+      expect(problems(statement.replace('$stableId', "'item-a'"))).not.toEqual([]);
+      expect(problems(statement.replaceAll('LIMIT $countCap + 1', ''))).not.toEqual([]);
+    }
+    expect(problems(FAN.replace('$steps[0].fan.atLeast', '3'))).not.toEqual([]);
+    expect(problems(FAN.replaceAll('WHERE degree0 <= $countCap', ''))).not.toEqual([]);
+    expect(problems(FAN.replace('WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(*) AS fanned0', 'WITH DISTINCT n1 RETURN count(*) AS fanned0'))).not.toEqual([]);
+    expect(problems(CYCLE.replace('n3 = a', "n3 = 'x'"))).not.toEqual([]);
+    expect(problems(ORDER.replace('>= t1', '>= 0'))).not.toEqual([]);
   });
 });

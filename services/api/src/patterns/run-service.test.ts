@@ -133,6 +133,18 @@ describe('a pattern run: the read', () => {
     expect(call?.signal).toBeDefined();
   });
 
+  it('hands the order of a step after the previous one to the gate, in the run and in the probe, and refuses it on the first step and on an untimed row before any read', async () => {
+    const { run, reads, countReads } = rig({ rows: [noMatchRow('W-1')] });
+    await run({ definition: definition([step(), step({ after: 'previous' })]) });
+    expect(reads()[0]?.parameters['steps']).toMatchObject([{}, { after: 'previous' }]);
+    expect(JSON.stringify(reads()[0]?.parameters['steps'])).not.toContain('"after":"previous"},{"after"');
+    expect(countReads().every((call) => JSON.stringify(call.parameters['steps']).includes('"after":"previous"'))).toBe(true);
+    const refusing = rig({ rows: [noMatchRow('W-1')] });
+    await expect(refusing.run({ definition: definition([step({ after: 'previous' })]) })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    await expect(refusing.run({ definition: definition([step(), step({ relationshipTypes: ['ALLIES'], after: 'previous' })]) })).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(refusing.reads()).toHaveLength(0);
+  });
+
   it('reads the source’s default page when no limit is asked', async () => {
     const { run, reads } = rig({ rows: [noMatchRow('W-1')] });
     await run();
@@ -149,7 +161,7 @@ describe('a pattern run: the read', () => {
       ['W-3', 1, [], [['LINKS', 'W-1', 'W-3']]],
     ]);
     expect(answer.nodes.length).toBeGreaterThan(0);
-    expect(answer.templateVersion).toBe('2');
+    expect(answer.templateVersion).toBe('3');
   });
 
   it('answers a two-step match with the entity between', async () => {

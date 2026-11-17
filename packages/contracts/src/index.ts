@@ -145,7 +145,7 @@ export {
   typeaheadTextSchema,
   unreferencedHitSchema,
 } from './search.js';
-export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewConditionSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewWindowSchema, patternProblemsOf, patternStepBaseSchema, patternValidateRequestSchema, patternValidateResponseSchema, refinePatternStep } from './pattern.js';
+export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDefinitionSchema, patternProblemSchema, patternPreviewClosesSchema, patternPreviewConditionSchema, patternPreviewFanSchema, patternPreviewResponseSchema, patternPreviewSchema, patternPreviewStepSchema, patternPreviewTimeOrderSchema, patternPreviewWindowSchema, patternProblemsOf, patternStepBaseSchema, patternValidateRequestSchema, patternValidateResponseSchema, refinePatternStep, refinePatternSteps } from './pattern.js';
 export type { PatternDefinition, PatternPreview, PatternPreviewRequest, PatternPreviewResponse, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
 export { patternHopSchema, patternMatchSchema, patternRunHeavySchema, patternRunOkSchema, patternRunRequestSchema, patternRunResponseSchema } from './pattern-run.js';
 export type { PatternHop, PatternMatch, PatternRunHeavy, PatternRunOk, PatternRunRequest, PatternRunResponse } from './pattern-run.js';

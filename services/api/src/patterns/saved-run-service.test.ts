@@ -12,9 +12,11 @@ import { TEST_REFERENCE_KEYS, TestExecutor } from '../testing/gate.js';
 import { LINKED_PRESET, linkedRow } from '../testing/linked-entities-fixtures.js';
 import { memoryPatterns, type MemoryPatterns } from '../testing/memory-patterns.js';
 import { PATTERN_ENTITIES, PATTERN_RELATIONSHIPS, oneStepRow } from '../testing/pattern-fixtures.js';
-import { savedMappingOf } from '../testing/saved-pattern-fixtures.js';
+import { definitionRow, presetRow, savedMappingOf } from '../testing/saved-pattern-fixtures.js';
+import { previewOrProblems } from './preview.js';
 import { onlineIndexesOf, schemaAnswer, withSchema } from '../testing/search-fixtures.js';
 import { testSourceGate } from '../testing/source-gate.js';
+import before from '../testing/saved-definitions-stored-before-fan.json' with { type: 'json' };
 import { createPatternRunService } from './run-service.js';
 import { createSavedPatternRunService } from './saved-run-service.js';
 
@@ -293,3 +295,49 @@ describe('running a saved pattern: the pages after the first', () => {
   });
 });
 
+
+describe('running a saved pattern across the fan, time order and cycle', () => {
+  it('runs every stored row written before the extension unchanged: rows seeded as they were stored, run with none of the new fields in the read', async () => {
+    for (const [index, definition] of before.definitions.entries()) {
+      const { patterns, saveRun, calls } = rig();
+      const row = { ...definitionRow({ definition, id: `0192f000-0000-7000-8000-00000000b${index}00`, name: `old ${index}` }), ownerId: OWNER.id, sourceId: 'demo', anchorEntityType: null, anchorStableId: null };
+      patterns.patternRows.push(row);
+      expect(previewOrProblems(row.definition, savedMappingOf().sources[0] as never).status, JSON.stringify(definition)).toBe('ok');
+      const answer = await saveRun(row);
+      expect(answer.status, JSON.stringify(definition)).toBe('ok');
+      const steps = calls('pattern')[0]?.parameters['steps'] as Record<string, unknown>[];
+      expect(steps).toHaveLength(definition.steps.length);
+      for (const read of steps) for (const field of ['after', 'fan', 'closesAtAnchor']) expect(read).not.toHaveProperty(field);
+    }
+  });
+
+  it('runs a stored preset row written before the extension as it did', async () => {
+    const { patterns, saveRun, calls } = rig();
+    const row = { ...presetRow({ id: '0192f000-0000-7000-8000-00000000b900', name: 'old preset' }), ownerId: OWNER.id, sourceId: 'demo' };
+    patterns.patternRows.push(row);
+    const answer = await saveRun(row);
+    expect(answer.status).toBe('ok');
+    expect(calls('linked-entities').length).toBeGreaterThan(0);
+  });
+
+  it('hands a saved definition’s new fields to the gate as stored, for a run from the entity held and for a change that kept them', async () => {
+    const LINKS = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const definition = { anchorType: 'maker', steps: [{ ...LINKS, fan: { atLeast: 2 } }, { ...LINKS, after: 'previous' }, { ...LINKS, closesAtAnchor: true }] };
+    const { save, saveRun, calls } = rig({ mapping: savedMappingOf({ budgets: { max_hops: 4 } }) });
+    const answer = await saveRun(await save({ definition }));
+    expect(answer.status).toBe('ok');
+    expect(calls('pattern')[0]?.parameters['steps']).toMatchObject([{ fan: { atLeast: 2 } }, { after: 'previous' }, { closesAtAnchor: true }]);
+  });
+
+  it('stays available and is refused when it is run after the source lowered its count cap or its step limit, and reads nothing', async () => {
+    const LINKS = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const fan = rig({ mapping: savedMappingOf({ budgets: { heavy_op_threshold: 10 } }) });
+    const fanned = await fan.save({ definition: { anchorType: 'maker', steps: [{ ...LINKS, fan: { atLeast: 100 } }] } });
+    expect((await failureOf(fan.saveRun(fanned)))?.code).toBe('INVALID_REQUEST');
+    expect(fan.calls('pattern')).toHaveLength(0);
+    const cycle = rig({ mapping: savedMappingOf({ budgets: { max_hops: 2 } }) });
+    const closed = await cycle.save({ definition: { anchorType: 'maker', steps: [LINKS, LINKS, { ...LINKS, closesAtAnchor: true }] } });
+    expect((await failureOf(cycle.saveRun(closed)))?.code).toBe('QUERY_BUDGET_EXCEEDED');
+    expect(cycle.calls('pattern')).toHaveLength(0);
+  });
+});

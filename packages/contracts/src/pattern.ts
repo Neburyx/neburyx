@@ -37,6 +37,12 @@ export const PATTERN_PROBLEM_CODES = [
   'personal-data-masked',
   /** More steps than the source's `max_hops` allows: raised by the validation against the source's budgets, so that a pattern is never found fine and then refused by the run. */
   'too-many-hops',
+  /** A step ordered after the previous one crosses a relationship the mapping gives no time property (`observed_at`), on its own row or on the previous step's. */
+  'time-not-mapped',
+  /** A fan of at least more neighbours than the source's count cap (`heavy_op_threshold`) can count: raised by the validation against the source's budgets, and again at run time if the budget was lowered after saving. */
+  'over-ceiling',
+  /** A pattern that closes back at the anchor with more steps than the source's `max_hops` allows (raised instead of `too-many-hops` for it): the length of a cycle is its number of steps. */
+  'cycle-too-long',
 ] as const;
 /** The most problems one answer lists, so that an input with many faults cannot make an answer of unbounded size. */
 export const MAX_PATTERN_PROBLEMS = 100;
@@ -108,6 +114,12 @@ export const patternStepBaseSchema = z.strictObject({
   arrivesAt: name,
   conditions: z.array(conditionSchema).max(2 * PATTERN_LIMITS.conditionsPerElement).optional(),
   window: windowFieldSchema.optional(),
+  /** The step's relationship has a time at or after the previous step's, read on the mapping's time properties of both; not allowed on the first step. */
+  after: z.literal('previous').optional(),
+  /** The step's origin node (the anchor for the first step) has at least this many distinct neighbours over the step's types in its direction (fan-out for `out`, fan-in for `in`), that meet the step's conditions and window. */
+  fan: z.strictObject({ atLeast: z.number().int().min(2) }).optional(),
+  /** The last step arrives at the anchor node itself: the pattern is a cycle of as many hops as it has steps (two to the source's `max_hops`). Only on the last step. */
+  closesAtAnchor: z.literal(true).optional(),
 });
 
 /** The rules that look across the fields of a step: distinct relationship types, and the cap of conditions on each element. */
@@ -120,6 +132,14 @@ export function refinePatternStep(step: { readonly relationshipTypes: readonly s
   for (const on of ['neighbor', 'relationship'] as const) {
     if ((step.conditions ?? []).filter((condition) => condition.on === on).length > PATTERN_LIMITS.conditionsPerElement) ctx.addIssue({ code: 'custom', path: ['conditions'], params: { problem: 'too-many' } });
   }
+}
+
+/** The rules that look across the steps: the first step has no previous one to be ordered after, and only the last of two or more steps closes at the anchor. */
+export function refinePatternSteps(steps: readonly { readonly after?: 'previous' | undefined; readonly closesAtAnchor?: true | undefined }[], ctx: z.core.$RefinementCtx): void {
+  if (steps[0]?.after !== undefined) ctx.addIssue({ code: 'custom', path: ['steps', 0, 'after'], params: { problem: 'bad-value' } });
+  steps.forEach((step, index) => {
+    if (step.closesAtAnchor !== undefined && (index !== steps.length - 1 || steps.length < 2)) ctx.addIssue({ code: 'custom', path: ['steps', index, 'closesAtAnchor'], params: { problem: 'bad-value' } });
+  });
 }
 
 const stepSchema = patternStepBaseSchema.superRefine(refinePatternStep);
@@ -136,6 +156,7 @@ export const patternDefinitionSchema = z
   .superRefine((definition, ctx) => {
     const total = definition.steps.reduce((sum, step) => sum + (step.conditions?.length ?? 0), 0);
     if (total > PATTERN_LIMITS.conditionsPerPattern) ctx.addIssue({ code: 'custom', path: ['steps'], params: { problem: 'too-many' } });
+    refinePatternSteps(definition.steps, ctx);
   });
 
 export type PatternDefinition = z.infer<typeof patternDefinitionSchema>;
@@ -202,6 +223,20 @@ export const patternPreviewWindowSchema = z.strictObject({
   text: previewText,
 });
 
+/** A fan in words: how many distinct neighbours the step's origin needs (the start for the first step, the entity the previous step reached after that), and the direction it counts them in. */
+export const patternPreviewFanSchema = z.strictObject({ atLeast: z.number().int().min(2), direction: z.enum(EXPAND_DIRECTIONS), text: previewText });
+
+/** A time order in words: the time properties the mapping reads on the relationships of this step and of the previous one, which the order compares. */
+export const patternPreviewTimeOrderSchema = z.strictObject({
+  /** A relationship type may have a row for each direction between two types, each with a time property of its own. */
+  properties: z.array(name).max(2 * PATTERN_LIMITS.relationshipTypesPerStep),
+  previousProperties: z.array(name).max(2 * PATTERN_LIMITS.relationshipTypesPerStep),
+  text: previewText,
+});
+
+/** A closing in words: the last step of a cycle comes back to the start, whose type and display name this gives. */
+export const patternPreviewClosesSchema = z.strictObject({ type: name, name: previewText, text: previewText });
+
 export const patternPreviewStepSchema = z.strictObject({
   relationshipTypes: z.array(name).min(1).max(PATTERN_LIMITS.relationshipTypesPerStep),
   direction: z.enum(EXPAND_DIRECTIONS),
@@ -209,6 +244,9 @@ export const patternPreviewStepSchema = z.strictObject({
   text: previewText,
   conditions: z.array(patternPreviewConditionSchema).max(2 * PATTERN_LIMITS.conditionsPerElement),
   window: patternPreviewWindowSchema.optional(),
+  fan: patternPreviewFanSchema.optional(),
+  timeOrder: patternPreviewTimeOrderSchema.optional(),
+  closesAtAnchor: patternPreviewClosesSchema.optional(),
 });
 
 export const patternPreviewSchema = z.strictObject({

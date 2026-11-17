@@ -1,6 +1,6 @@
 import { totalConditions } from './conditions.js';
 import { BUILDER_COPY, DIRECTION_TEXT, EDITOR_COPY, chainProblems, chainTitle, sourceProblems } from './copy.js';
-import { ARROW } from '../copy.js';
+import { ARROW, extensionTags } from '../copy.js';
 import type { Draft } from './model.js';
 import { isComplete } from './model.js';
 
@@ -40,6 +40,11 @@ export function ChainSummary({ draft, nameOf, valid, problems, brokenSteps, sour
                 <span className="pattern-chip pattern-chip-node" data-complete={isComplete(step) ? 'true' : undefined} data-broken={brokenSteps.has(index) ? 'true' : undefined}>
                   {step.arrivesAt === undefined ? '…' : nameOf(step.arrivesAt)}
                 </span>
+                {extensionTags(step).map((note) => (
+                  <span className="pattern-chip pattern-chip-node" data-broken={brokenSteps.has(index) ? 'true' : undefined} key={note}>
+                    {note}
+                  </span>
+                ))}
               </span>
             );
           })}

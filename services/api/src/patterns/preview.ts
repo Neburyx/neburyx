@@ -36,6 +36,27 @@ function windowPart(window: NonNullable<Step['window']>, step: Step, previous: s
   return { appliesTo, notAppliedTo, ...('days' in window ? { days: window.days } : { from: window.from, to: window.to }), text: parts.join('. ') };
 }
 
+/** A fan in words: the phrase of the step's sentence; a neighbour reached by more than one relationship counts once. */
+function fanPart(atLeast: number, direction: Step['direction'], arrives: string): NonNullable<PreviewStep['fan']> {
+  return { atLeast, direction, text: `at least ${atLeast} other ${arrives}s` };
+}
+
+/** A time order in words: the relationship of this step has a date the same as or later than the previous step's, read on the time properties the mapping gives each. */
+function timeOrderPart(step: Step, before: Step | undefined, beforePrevious: string, previous: string, source: SourceModel): NonNullable<PreviewStep['timeOrder']> {
+  const propertiesOf = (found: Step | undefined, from: string, to: string): string[] => [...new Set((found?.relationshipTypes ?? []).flatMap((type) => source.relationships.filter((row) => row.type === type && found !== undefined && carries(row, from, to, found.direction)).flatMap((row) => (row.observedAt === undefined ? [] : [row.observedAt]))))];
+  const properties = propertiesOf(step, previous, step.arrivesAt);
+  const previousProperties = propertiesOf(before, beforePrevious, previous);
+  return { properties, previousProperties, text: `after the previous step (by ${properties.join(' or ')})` };
+}
+
+/** The sentence of a step: the chain as before, and for the three kinds of the extension the words of the approved frames: to at least N other Accounts, close back at the start Account, after the previous step (by the time property). */
+function stepText(index: number, step: Step, types: string, arrives: string, start: string, properties: readonly string[] | undefined): string {
+  const lead = `Step ${index + 1}: follow ${types} ${DIRECTION_WORDS[step.direction]}`;
+  if (step.closesAtAnchor !== undefined) return `${lead} and close back at the start ${start}`;
+  const to = step.fan === undefined ? `to ${arrives}` : `to at least ${step.fan.atLeast} other ${arrives}s`;
+  return `${lead} ${to}${step.after === undefined ? '' : `, after the previous step (by ${(properties ?? []).join(' or ')})`}`;
+}
+
 /** What a type is called: the mapping's display name for it, else its label, as the profile gives them. */
 function nameOf(source: SourceModel, type: string): string {
   const found = source.entities.find((entity) => entity.type === type);
@@ -52,13 +73,17 @@ function previewPattern(definition: PatternDefinition, source: SourceModel): Pat
       const previous = index === 0 ? definition.anchorType : (definition.steps[index - 1]?.arrivesAt ?? definition.anchorType);
       const arrives = nameOf(source, step.arrivesAt);
       const types = step.relationshipTypes.join(' or ');
+      const timeOrder = step.after === undefined ? undefined : timeOrderPart(step, definition.steps[index - 1], index === 0 ? definition.anchorType : (definition.steps[index - 2]?.arrivesAt ?? definition.anchorType), previous, source);
       return {
         relationshipTypes: step.relationshipTypes,
         direction: step.direction,
         arrivesAt: { type: step.arrivesAt, name: arrives },
-        text: `Step ${index + 1}: follow ${types} ${DIRECTION_WORDS[step.direction]} to ${arrives}`,
+        text: stepText(index, step, types, arrives, start, timeOrder?.properties),
         conditions: (step.conditions ?? []).map((condition) => conditionPart(condition, condition.on === 'neighbor' ? arrives : types)),
         ...(step.window === undefined ? {} : { window: windowPart(step.window, step, previous, source) }),
+        ...(step.fan === undefined ? {} : { fan: fanPart(step.fan.atLeast, step.direction, arrives) }),
+        ...(timeOrder === undefined ? {} : { timeOrder }),
+        ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: { type: definition.anchorType, name: start, text: `close back at the start ${start}` } }),
       };
     }),
     bounds: {

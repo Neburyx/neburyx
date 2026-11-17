@@ -21,6 +21,22 @@ describe('the pattern catalog', () => {
     expect(text.length).toBeLessThan(66_000);
   });
 
+  it('stays bounded when every step also carries the three structural fields: the largest catalog is under 80,000 characters (the 66,000 of a pattern without them is unchanged)', () => {
+    const step = { relationshipTypes: Array.from({ length: PATTERN_LIMITS.relationshipTypesPerStep }, (_, index) => `${index}`.padEnd(40, 'r')), direction: 'both' as const, arrivesAt: 'g'.repeat(60), conditions: Array.from({ length: PATTERN_LIMITS.conditionsPerElement }, () => ({ on: 'neighbor' as const, kind: 'between' as const })), windowed: true, orderedAfterPrevious: true as const, fanAtLeast: 9_999_999, closesAtAnchor: true as const };
+    const offers = Array.from({ length: 30 }, (_, index) => offer(`id-${index}`, { name: `${index}`.padEnd(PATTERN_LIMITS.nameLength, 'n'), projection: projection({ anchorType: 'a'.repeat(60), steps: Array.from({ length: PATTERN_LIMITS.steps }, () => step) }) }));
+    const text = buildPatternCatalog({ offers, cut: true })?.catalog.text ?? '';
+    expect(text).toContain('after the previous step in time');
+    expect(text).toContain('from an entity with at least 9999999 neighbours');
+    expect(text).toContain('arriving back at the starting entity');
+    expect(text.length).toBeGreaterThan(66_000);
+    expect(text.length).toBeLessThan(80_000);
+  });
+
+  it('describes a step by its three structural fields in fixed words, and a step without them as before', () => {
+    const built = buildPatternCatalog({ offers: [offer('a', { projection: projection({ steps: [{ relationshipTypes: ['link'], direction: 'out', arrivesAt: 'widget', conditions: [], windowed: false, fanAtLeast: 3 }, { relationshipTypes: ['link'], direction: 'out', arrivesAt: 'widget', conditions: [], windowed: false, orderedAfterPrevious: true, closesAtAnchor: true }] }) })], cut: false });
+    expect(built?.catalog.text).toContain('step 1: out over link to widget, no conditions, from an entity with at least 3 neighbours; step 2: out over link to widget, no conditions, after the previous step in time, arriving back at the starting entity');
+  });
+
   it('is absent when no pattern is offered', () => {
     expect(buildPatternCatalog({ offers: [], cut: false })).toBeUndefined();
   });

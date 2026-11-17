@@ -141,13 +141,22 @@ export interface AskPatternCatalog {
   readonly entries: ReadonlyMap<string, AskPatternEntry>;
 }
 
-/** One step of a saved pattern as an intent may be told of it: types and kinds only, never a property, a value or a name. */
+/**
+ * One step of a saved pattern as an intent may be told of it: types and kinds only, never a property, a value or a name. The three structural fields of a step are the one number it may carry: the fan's threshold is a bound of the
+ * pattern's shape (bounded by the source's count cap), not a value of the data, a condition or a time; a field a step does not use is absent.
+ */
 export interface AskPatternStep {
   readonly relationshipTypes: readonly string[];
   readonly direction: 'out' | 'in' | 'both';
   readonly arrivesAt: string;
   readonly conditions: readonly { readonly on: 'neighbor' | 'relationship'; readonly kind: 'eq' | 'in' | 'between' }[];
   readonly windowed: boolean;
+  /** The step's relationship is at or after the previous step's in time. */
+  readonly orderedAfterPrevious?: true;
+  /** The step starts only from a node with at least this many distinct neighbours over the step. */
+  readonly fanAtLeast?: number;
+  /** The step arrives at the starting entity itself (the last step of a cycle). */
+  readonly closesAtAnchor?: true;
 }
 
 /** The structure of a saved pattern that may reach the classifier. It has no field for a name, a description, a value, an owner, an identifier or a time. */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { patternDefinitionSchema, type PatternDefinition } from '@neburyx/contracts';
-import { conditionsProfile } from './builder-kit.js';
+import { builderProfile, conditionsProfile } from './builder-kit.js';
 import { toDefinition } from './model.js';
 import { fromDefinition } from './from-definition.js';
 
@@ -52,5 +52,32 @@ describe('the draft of a stored definition', () => {
     expect(opened.whole).toBe(false);
     expect(opened.draft.steps).toEqual([]);
     expect(fromDefinition(undefined).whole).toBe(false);
+  });
+});
+
+describe('the three fields of the extension through the builder', () => {
+  const base = builderProfile();
+  const loop = { ...base, relationshipTypes: base.relationshipTypes.map((row) => ({ ...row, observedAt: 'when' })) };
+  const hop = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['r-self'], direction: 'out', arrivesAt: 'n-a', ...extra });
+  const extended = { anchorType: 'n-a', steps: [hop({ fan: { atLeast: 3 } }), hop({ after: 'previous' }), hop({ closesAtAnchor: true })] };
+
+  it('keeps a fan, an order and a closing as stored when a definition is opened and read back', () => {
+    const opened = fromDefinition(extended);
+    expect(opened.whole).toBe(true);
+    expect(opened.draft.steps.map((entry) => [entry.fan, entry.after, entry.closesAtAnchor])).toEqual([[{ atLeast: 3 }, undefined, undefined], [undefined, 'previous', undefined], [undefined, undefined, true]]);
+    expect(toDefinition(opened.draft, loop, false)).toEqual(patternDefinitionSchema.parse(extended));
+  });
+
+  it('keeps them through an unrelated edit of the same step: its window', () => {
+    const opened = fromDefinition({ anchorType: 'n-a', steps: [hop({ fan: { atLeast: 3 } }), hop()] }).draft;
+    const edited = { ...opened, steps: opened.steps.map((entry, index) => (index === 0 ? { ...entry, window: { kind: 'days' as const, text: '7' } } : entry)) };
+    const back = toDefinition(edited, { ...loop, relationshipTypes: loop.relationshipTypes.map((row) => (row.type === 'r-self' ? { ...row, observedAt: 'when' } : row)) } as never, false);
+    expect(back?.steps[0]).toMatchObject({ fan: { atLeast: 3 } });
+  });
+
+  it('writes none of them for a definition that had none: nothing is added', () => {
+    const back = toDefinition(fromDefinition({ anchorType: 'n-a', steps: [hop(), hop()] }).draft, loop, false);
+    expect(back?.steps).toHaveLength(2);
+    for (const entry of back?.steps ?? []) for (const field of ['fan', 'after', 'closesAtAnchor']) expect(entry).not.toHaveProperty(field);
   });
 });

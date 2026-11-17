@@ -480,3 +480,49 @@
   border-radius: var(--radius-small);
   background: var(--color-neutral-surface);
 }
+
+.pattern-ext-card {
+  margin-top: var(--space-8);
+  padding: var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-tag);
+}
+
+.pattern-ext-card[data-broken='true'] {
+  border-color: var(--color-danger);
+}
+
+.pattern-ext-pill {
+  margin-left: var(--space-8);
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-tag);
+  background: var(--color-danger-surface);
+  color: var(--color-danger);
+  font-size: var(--font-size-small);
+}
+
+.pattern-ext-table {
+  margin: var(--space-8) 0;
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border-radius: var(--radius-tag);
+}
+
+.pattern-ext-table > div {
+  display: flex;
+  gap: var(--space-16);
+}
+
+.pattern-ext-table dt {
+  flex: 0 0 35%;
+  color: var(--color-text-muted);
+}
+
+.pattern-ext-table dd {
+  margin: 0;
+}
+
+.pattern-ext-card[data-broken='true'] .pattern-ext-table {
+  border: var(--border-width) solid var(--color-danger);
+  background: var(--color-danger-surface);
+}

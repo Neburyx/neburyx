@@ -10,7 +10,7 @@ import type { FuzzRig } from '../testing/fuzz-rig.js';
 import { TestExecutor } from '../testing/gate.js';
 import { noMatchRow } from '../testing/pattern-fixtures.js';
 import { learnedCountGrammar, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
-import { RECORDED_RUNS, RUN_SEED, definitionOf, enumerateShapes, randomShapes, shapeAllowlist, shapeMappingOf, type Shape } from '../testing/pattern-shapes.js';
+import { RECORDED_RUNS, RUN_SEED, definitionOf, enumerateExtendedShapes, enumerateShapes, randomExtendedShapes, randomShapes, shapeAllowlist, shapeMappingOf, type Shape } from '../testing/pattern-shapes.js';
 import { onlineIndexesOf, schemaAnswer, withSchema } from '../testing/search-fixtures.js';
 import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
@@ -62,5 +62,33 @@ describe('the run route over the shapes of the enumerator', () => {
     for (const shape of enumerateShapes()) await run(shape);
     for (const shape of randomShapes(RUN_SEED, RECORDED_RUNS)) await run(shape);
     expect(sent).toBeGreaterThan(1000);
+  });
+});
+
+describe('the run route over the shapes of the extension: a fan, a time order and a cycle', () => {
+  it('sends each shape of the extension once and every statement the executor sees is accepted by the grammar, holds no value of the request and quotes only mapped names', async () => {
+    const grammar = learnedGrammar();
+    const countGrammar = learnedCountGrammar();
+    const apps = { 0: await started(0), 1: await started(1), 2: await started(2) } as const;
+    let sent = 0;
+    const run = async (shape: Shape): Promise<void> => {
+      const { app, executor } = apps[shape.stopRules];
+      sent += 1;
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/patterns/run',
+        payload: { sourceId: 'demo', definition: definitionOf(shape, SENTINEL_TEXT) as object, anchor: { entityType: 'maker', stableId: SENTINEL_ANCHOR } },
+        headers: { 'idempotency-key': `key-x${String(sent).padStart(8, '0')}-of-sixteen`, 'content-type': 'application/json' },
+      });
+      expect(response.statusCode, `${JSON.stringify(shape)} ${response.body.slice(0, 200)}`).toBe(200);
+      const reads = executor.calls.splice(0);
+      expect(reads.some((call) => call.templateId === 'pattern'), JSON.stringify(shape)).toBe(true);
+      expect(reads.some((call) => call.templateId === 'pattern-count'), JSON.stringify(shape)).toBe(true);
+      const rig = { executor: { calls: reads.filter((call) => call.templateId === 'pattern' || call.templateId === 'pattern-count') } } as unknown as FuzzRig;
+      expect(statementProblems(rig, new Set(), [SENTINEL_TEXT, SENTINEL_ANCHOR], { grammar, countGrammar, allowlist: shapeAllowlist(shape.stopRules), names: NAMES }), JSON.stringify(shape)).toEqual([]);
+    };
+    for (const shape of enumerateExtendedShapes()) await run(shape);
+    for (const shape of randomExtendedShapes(RUN_SEED, RECORDED_RUNS)) await run(shape);
+    expect(sent).toBeGreaterThan(900);
   });
 });

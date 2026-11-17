@@ -42,6 +42,93 @@ describe('a pattern over the banking pack on its demo graph', () => {
   });
 });
 
+describe('a pattern with a time order over the banking pack on its demo graph', () => {
+  it('returns the accounts that used a device the anchor used at or after the anchor’s use, and only those: the set computed from the export, smaller than the set without the order', async () => {
+    const uses = banking.timedRelationships('USES_DEVICE', 'lastSeen');
+    const steps = (ordered: boolean) => [{ edges: uses, direction: 'out' as const, arrivesAt: 'device' }, { edges: uses, direction: 'in' as const, arrivesAt: 'account', ordered }];
+    const candidates = [...new Set(uses.map((edge) => edge.f))];
+    const anchor = candidates.find((id) => {
+      const free = expectedReach('account', id, steps(false)).size;
+      const ordered = expectedReach('account', id, steps(true)).size;
+      return ordered > 0 && ordered < free && free < PAGE;
+    });
+    if (anchor === undefined) throw new Error('the export has no account whose time order leaves out a sharing account');
+    const expected = expectedReach('account', anchor, steps(true));
+    const definition = [
+      { relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device' },
+      { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account', after: 'previous' },
+    ];
+    const { item, ids } = await reached(banking, 'banking-demo', 'account', anchor, definition);
+    expect(ids).toEqual(expected);
+    expect(item.bounded).toBe(false);
+    const free = await reached(banking, 'banking-demo', 'account', anchor, definition.map(({ after: _after, ...rest }) => rest));
+    expect(free.ids).toEqual(expectedReach('account', anchor, steps(false)));
+    expect(ids.size).toBeLessThan(free.ids.size);
+  });
+});
+
+describe('a pattern with a fan over the banking pack on its demo graph', () => {
+  const definitionOf = (anchorFan: number | undefined, deviceFan: number | undefined) => [
+    { relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device', ...(anchorFan === undefined ? {} : { fan: { atLeast: anchorFan } }) },
+    { relationshipTypes: ['USES_DEVICE'], direction: 'in', arrivesAt: 'account', ...(deviceFan === undefined ? {} : { fan: { atLeast: deviceFan } }) },
+  ];
+
+  it('passes an anchor with at least n devices (fan-out) and no anchor with more, returning the set computed from the export', async () => {
+    const uses = banking.relationships('USES_DEVICE');
+    const devicesOf = (id: string) => new Set(uses.filter((edge) => edge.f === id).map((edge) => edge.t));
+    const steps = (anchorFan?: number) => [{ edges: uses, direction: 'out' as const, arrivesAt: 'device', ...(anchorFan === undefined ? {} : { fan: anchorFan }) }, { edges: uses, direction: 'in' as const, arrivesAt: 'account' }];
+    const anchor = [...new Set(uses.map((edge) => edge.f))].find((id) => devicesOf(id).size >= 2 && expectedReach('account', id, steps()).size > 0 && expectedReach('account', id, steps()).size < PAGE);
+    if (anchor === undefined) throw new Error('the export has no account with two devices that shares one');
+    const count = devicesOf(anchor).size;
+    const at = await reached(banking, 'banking-demo', 'account', anchor, definitionOf(count, undefined));
+    expect(at.ids).toEqual(expectedReach('account', anchor, steps(count)));
+    expect(at.ids.size).toBeGreaterThan(0);
+    const above = await reached(banking, 'banking-demo', 'account', anchor, definitionOf(count + 1, undefined));
+    expect(above.ids.size).toBe(0);
+    expect(above.item.anchorFound).toBe(true);
+  });
+
+  it('passes only the devices with at least n accounts (fan-in) on a later step, returning the set computed from the export', async () => {
+    const uses = banking.relationships('USES_DEVICE');
+    const accountsOf = (device: string) => new Set(uses.filter((edge) => edge.t === device).map((edge) => edge.f));
+    const steps = (deviceFan?: number) => [{ edges: uses, direction: 'out' as const, arrivesAt: 'device' }, { edges: uses, direction: 'in' as const, arrivesAt: 'account', ...(deviceFan === undefined ? {} : { fan: deviceFan }) }];
+    const anchor = [...new Set(uses.map((edge) => edge.f))].find((id) => {
+      const free = expectedReach('account', id, steps());
+      const high = expectedReach('account', id, steps(3));
+      return free.size > 0 && free.size < PAGE && high.size < free.size;
+    });
+    if (anchor === undefined) throw new Error('the export has no account that reaches a device with fewer than 3 accounts');
+    const run = await reached(banking, 'banking-demo', 'account', anchor, definitionOf(undefined, 3));
+    expect(run.ids).toEqual(expectedReach('account', anchor, steps(3)));
+    const free = await reached(banking, 'banking-demo', 'account', anchor, definitionOf(undefined, undefined));
+    expect(free.ids).toEqual(expectedReach('account', anchor, steps()));
+    expect(run.ids.size).toBeLessThan(free.ids.size);
+  });
+});
+
+describe('a pattern that closes back at the anchor over the banking pack on its demo graph', () => {
+  it('returns the account that lies on a transfer cycle of four steps (the demo graph has four, and none of two or three) and no account that does not, as the export computes it', async () => {
+    const transfers = banking.relationships('TRANSFERRED_TO');
+    const next = new Map<string, string[]>();
+    for (const edge of transfers) next.set(edge.f, [...(next.get(edge.f) ?? []), edge.t]);
+    // an account is on a cycle of `length` transfers when a path of distinct accounts leaves it and comes back
+    const onCycle = (anchor: string, length: number): boolean => {
+      const walk = (at: string, depth: number, seen: ReadonlySet<string>): boolean =>
+        (next.get(at) ?? []).some((to) => (depth === length - 1 ? to === anchor : !seen.has(to) && walk(to, depth + 1, new Set([...seen, to]))));
+      return walk(anchor, 0, new Set([anchor]));
+    };
+    const accounts = [...new Set(transfers.flatMap((edge) => [edge.f, edge.t]))];
+    const steps = (length: number) => [...Array.from({ length: length - 1 }, () => ({ relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account' })), { relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account', closesAtAnchor: true }];
+    for (const length of [4]) {
+      const yes = accounts.find((id) => onCycle(id, length));
+      const no = accounts.find((id) => !onCycle(id, length));
+      if (yes === undefined || no === undefined) throw new Error(`the export has no account on a transfer cycle of ${length}, or none off it`);
+      expect((await reached(banking, 'banking-demo', 'account', yes, steps(length))).ids, `on a cycle of ${length}`).toEqual(new Set([yes]));
+      expect((await reached(banking, 'banking-demo', 'account', no, steps(length))).ids, `off a cycle of ${length}`).toEqual(new Set());
+    }
+  });
+});
+
 describe('a pattern over the insurance pack on its demo graph', () => {
   it('follows LIVES_AT out to an address and back in and returns the set computed from the export, never the anchor', async () => {
     const lives = insurance.relationships('LIVES_AT');

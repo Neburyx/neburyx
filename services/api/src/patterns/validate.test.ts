@@ -128,3 +128,27 @@ describe('property kinds in the mapping', () => {
     expect(allowlistFromMapping(kinded)).toEqual(allowlistFromMapping(source));
   });
 });
+
+describe('a step ordered after the previous one', () => {
+  const after = { after: 'previous' };
+  it('is fine when every row of the step and of the previous step has a time property', () => {
+    expect(check(definition([step(), step(after)]))).toEqual([]);
+    expect(check(definition([step(), step(after), step(after)]))).toEqual([]);
+  });
+
+  it('is time-not-mapped at the step when its row has no time property, and when the previous step crosses one that has none', () => {
+    expect(check(definition([step(), step({ relationshipTypes: ['KNOWS'], ...after })]))).toEqual([{ path: ['steps', 1, 'after'], code: 'time-not-mapped' }]);
+    expect(check(definition([step({ relationshipTypes: ['KNOWS'] }), step(after)]))).toEqual([{ path: ['steps', 1, 'after'], code: 'time-not-mapped' }]);
+    expect(check(definition([step(), step({ relationshipTypes: ['LINKS', 'KNOWS'], ...after })]))).toEqual([{ path: ['steps', 1, 'after'], code: 'time-not-mapped' }]);
+  });
+
+  it('is bad-value on the first step, from the schema alone, and names no value', () => {
+    expect(check(definition([step(after)]))).toEqual([{ path: ['steps', 0, 'after'], code: 'bad-value' }]);
+  });
+
+  it('reports time-not-mapped for a saved definition whose mapping lost the time property (the same check)', () => {
+    const lost = parseMapping(fileOf(baseSource({ id: 'demo', entities: ENTITIES, relationships: RELATIONSHIPS.map((row) => (row.type === 'LINKS' ? { ...row, observed_at: undefined } : row)) })), 'neburyx.yaml').sources[0];
+    if (lost === undefined) throw new Error('no source');
+    expect(validatePattern(definition([step(), step(after)]), lost)).toEqual([{ path: ['steps', 1, 'after'], code: 'time-not-mapped' }]);
+  });
+});

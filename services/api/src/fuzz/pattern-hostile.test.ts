@@ -8,7 +8,7 @@ import { validatePattern } from '../patterns/validate.js';
 import { FUZZ_RUNS, fuzzParams, hostileText, wrongType, UNICODE_SAMPLES } from '../testing/fuzz-corpus.js';
 import { GRAMMAR_ALLOWLIST, learnedGrammar } from '../testing/pattern-grammar-fixture.js';
 import { grammarProblems } from '../testing/pattern-grammar.js';
-import { RECORDED_RUNS, SHAPE_RELATIONSHIPS, definitionOf, randomShapes, shapeSource } from '../testing/pattern-shapes.js';
+import { RECORDED_RUNS, SHAPE_RELATIONSHIPS, definitionOf, randomExtendedShapes, randomShapes, shapeSource } from '../testing/pattern-shapes.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
 
 // compiling every shape is slow when the suites run together
@@ -166,3 +166,56 @@ describe('a hostile definition', () => {
   });
 });
 
+
+describe('a hostile value of the extension: a fan, a time order and a cycle', () => {
+  const NUMBERS = [-1, 0, 1, 1.5, 2 ** 31, 2 ** 53, Number.MAX_SAFE_INTEGER, -0, 1e308, Number.MIN_VALUE];
+  const TIMED = { relationshipTypes: ['LINKS'] };
+
+  it('is refused with a code, never compiled, wherever the text or number is put: the order, the fan, its threshold, the closing and a key beside them', () => {
+    const placed = fc.tuple(hostile, fc.constantFrom('after', 'fan', 'atLeast', 'closesAtAnchor', 'key-in-fan'));
+    fc.assert(
+      fc.property(placed, ([text, where]) => {
+        const second = step({
+          ...TIMED,
+          ...(where === 'after' ? { after: text } : {}),
+          ...(where === 'fan' ? { fan: text } : {}),
+          ...(where === 'atLeast' ? { fan: { atLeast: text } } : {}),
+          ...(where === 'closesAtAnchor' ? { closesAtAnchor: text } : {}),
+          ...(where === 'key-in-fan' ? { fan: { atLeast: 3, [text]: 1 } } : {}),
+        });
+        expect(outcomeOf(definition([step(TIMED), second]), [text])).toBe('refused');
+      }),
+      fuzzParams(FUZZ_RUNS),
+    );
+  });
+
+  it('is refused for a fan threshold that is not a whole number of 2 or more, or is above the source’s count cap, and for a closing that is not the value true', () => {
+    for (const bad of NUMBERS) {
+      const outcome = outcomeOf(definition([step({ fan: { atLeast: bad } })]));
+      expect(outcome, String(bad)).toBe('refused');
+    }
+    for (const bad of [false, 0, 1, 'true', null, [], {}, [true]]) expect(outcomeOf(definition([step(), step({ closesAtAnchor: bad })])), JSON.stringify(bad)).toBe('refused');
+    for (const bad of [false, 0, 1, 'previous ', 'PREVIOUS', null, [], {}, ['previous']]) expect(outcomeOf(definition([step(), step({ after: bad })])), JSON.stringify(bad)).toBe('refused');
+  });
+
+  it('is refused where it does not belong: a time order or a closing on the wrong step, and what the mapping does not give a time', () => {
+    expect(outcomeOf(definition([step({ after: 'previous' })]))).toBe('refused');
+    expect(outcomeOf(definition([step({ closesAtAnchor: true })]))).toBe('refused');
+    expect(outcomeOf(definition([step({ closesAtAnchor: true }), step()]))).toBe('refused');
+    expect(outcomeOf(definition([step(), step({ relationshipTypes: ['KNOWS'], after: 'previous' })]))).toBe('refused');
+    expect(outcomeOf(definition([step(), step({ arrivesAt: 'tool', relationshipTypes: ['USES_TOOL'], closesAtAnchor: true })]))).toBe('refused');
+  });
+
+  it('compiles, with the number a parameter and nothing of it in the text, a valid one wherever it is put, over shapes drawn at random', () => {
+    for (const seed of [11, 4242]) {
+      for (const shape of randomExtendedShapes(seed, 120)) {
+        const input = definitionOf(shape, 'zz-hostile-sentinel');
+        const outcome = outcomeOf(input, ['zz-hostile-sentinel']);
+        expect(outcome === 'compiled' || outcome === 'refused').toBe(true);
+      }
+    }
+    const statement = patternStatementOf(allowlist, patternRequestOf(allowlist, paramsOf(definition([step({ fan: { atLeast: 7 } })]) as never) as never));
+    expect(statement).not.toMatch(/\b7\b/);
+    expect(statement).toContain('$steps[0].fan.atLeast');
+  });
+});

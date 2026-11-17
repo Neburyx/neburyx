@@ -18,7 +18,7 @@ const schemaWith = (shape: Record<string, z.ZodType>) => z.strictObject({ anchor
 describe('the catalog entry of the pattern template', () => {
   it('is in the default catalog, and is a version 2 read paged by the end entity whose steps are its hop list', () => {
     expect(defaultCatalogTemplates().map((template) => template.id)).toContain(PATTERN_ID);
-    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '2', auditAction: 'pattern.run', paged: true, sort: 'end-id', referencePositions: [{ entityType: 'endType', stableId: 'endKey' }], hops: { listParam: 'steps', max: 4 } });
+    expect(patternTemplate).toMatchObject({ id: 'pattern', version: '3', auditAction: 'pattern.run', paged: true, sort: 'end-id', referencePositions: [{ entityType: 'endType', stableId: 'endKey' }], hops: { listParam: 'steps', max: 4 } });
   });
 
   it('accepts the shipped declaration', () => {

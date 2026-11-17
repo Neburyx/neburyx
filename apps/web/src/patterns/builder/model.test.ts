@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PATTERN_LIMITS } from '@neburyx/contracts';
 import { builderProfile, conditionsProfile } from './builder-kit.js';
 import { breakText, doesNotLeave, leavingText } from './copy.js';
-import { addStepBlock, arrivalTypes, breaksOf, type Break, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
+import { addStepBlock, arrivalTypes, breaksOf, type Break, type Draft, EMPTY_DRAFT, INITIAL, reduce, relationshipChoices, stepLimitOf, toDefinition, typeOptions, type Action, type BuilderState } from './model.js';
 
 const profile = builderProfile();
 const run = (state: BuilderState, ...actions: Action[]): BuilderState => actions.reduce((held, action) => reduce(profile, held, action), state);
@@ -159,5 +159,57 @@ describe('what a change leaves unfollowed, said once', () => {
     expect(leavingText('Beta', 'in')).toBe('Leaving a Beta, incoming');
     expect(doesNotLeave('r-1', 'Beta')).toBe('r-1 does not leave a Beta.');
     expect(doesNotLeave('r-1', 'Echo')).toBe('r-1 does not leave an Echo.');
+  });
+});
+
+describe('the three fields of the extension when an edit makes them invalid', () => {
+  const hop = (extra: Partial<Draft['steps'][number]> = {}): Draft['steps'][number] => ({ direction: 'out', arrivesAt: 'n-a', relationshipTypes: ['r-self'], ...extra });
+  const timed = { ...profile, relationshipTypes: profile.relationshipTypes.map((row) => ({ ...row, observedAt: 'when' })) };
+  const runTimed = (state: BuilderState, ...actions: Action[]): BuilderState => actions.reduce((held, action) => reduce(timed, held, action), state);
+  const draftOf = (...steps: Draft['steps'][number][]): BuilderState => ({ draft: { anchorType: 'n-a', steps } });
+
+  it('keeps an order on the step that became the first, marks it, offers undo and blocks the definition until it is fixed', () => {
+    const state = runTimed(draftOf(hop(), hop({ after: 'previous' })), { type: 'remove', index: 0 });
+    expect(state.draft.steps).toHaveLength(1);
+    expect(state.draft.steps[0]?.after).toBe('previous');
+    expect(breaksOf(timed, state.draft, false)).toMatchObject([{ kind: 'order-first', step: 0 }]);
+    expect(toDefinition(state.draft, timed, false)).toBeUndefined();
+    expect(state.undo).toBeDefined();
+    const undone = runTimed(state, { type: 'undo' });
+    expect(undone.draft.steps).toHaveLength(2);
+    expect(undone.draft.steps[1]?.after).toBe('previous');
+    expect(breaksOf(timed, undone.draft, false)).toEqual([]);
+  });
+
+  it('keeps a closing that is no longer on the last step when a step is added, marks it, and undo puts it back', () => {
+    const closed = draftOf(hop(), hop({ closesAtAnchor: true }));
+    expect(breaksOf(profile, closed.draft, false)).toEqual([]);
+    const added = run(closed, { type: 'add' });
+    expect(added.draft.steps[1]?.closesAtAnchor).toBe(true);
+    const found = breaksOf(profile, added.draft, false).filter((entry) => entry.kind === 'closing');
+    expect(found).toMatchObject([{ kind: 'closing', step: 1, why: 'not-last' }]);
+    expect(breakText(found[0] as Break, (type) => type ?? '')).toBe('Step 2: it closes the cycle at the start, and it is no longer the last step.');
+    const undone = run(added, { type: 'undo' });
+    expect(undone.draft.steps).toHaveLength(2);
+    expect(breaksOf(profile, undone.draft, false)).toEqual([]);
+  });
+
+  it('marks a closing on a single step and one that arrives at another type than the start, and deleting the step deletes the field', () => {
+    expect(breaksOf(profile, draftOf(hop({ closesAtAnchor: true })).draft, false)).toMatchObject([{ kind: 'closing', why: 'one-step' }]);
+    const other = draftOf(hop(), { direction: 'out', arrivesAt: 'n-b', relationshipTypes: ['r-1'], closesAtAnchor: true });
+    expect(breaksOf(profile, other.draft, false).some((entry) => entry.kind === 'closing' && entry.why === 'other-type')).toBe(true);
+    const removed = run(other, { type: 'remove', index: 1 });
+    expect(removed.draft.steps.some((entry) => entry.closesAtAnchor !== undefined)).toBe(false);
+    expect(breaksOf(profile, removed.draft, false).some((entry) => entry.kind === 'closing')).toBe(false);
+  });
+});
+
+describe('a step ordered after the previous one when the mapping gives no time', () => {
+  it('is kept and marked with the frame’s words, naming the relationship types that have none, and blocks the definition', () => {
+    const draft: Draft = { anchorType: 'n-a', steps: [{ direction: 'out', arrivesAt: 'n-a', relationshipTypes: ['r-self'] }, { direction: 'out', arrivesAt: 'n-a', relationshipTypes: ['r-self'], after: 'previous' }] };
+    const found = breaksOf(profile, draft, false);
+    expect(found).toMatchObject([{ kind: 'no-time', step: 1, types: ['r-self'] }]);
+    expect(breakText(found[0] as Break, (type) => type ?? '')).toBe('Step 2: “after the previous step” needs a time in the mapping. r-self has none.');
+    expect(toDefinition(draft, profile, false)).toBeUndefined();
   });
 });

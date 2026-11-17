@@ -242,14 +242,32 @@ describe('cancelling a running template run', () => {
   });
 });
 
-describe('cancelling a running pattern run', () => {
-  const body = JSON.stringify({ sourceId: 'demo', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }] }, anchor: { entityType: 'hub', stableId: 'H-1' } });
+/** The definitions the pattern cancellations run: one plain step, and each kind of the extension (a fan, a time order, a cycle), so that an abort is shown to stop the estimate and the run of each. */
+interface StepOf {
+  readonly relationshipTypes: string[];
+  readonly direction: 'out' | 'in' | 'both';
+  readonly arrivesAt: string;
+  readonly after?: 'previous';
+  readonly fan?: { readonly atLeast: number };
+  readonly closesAtAnchor?: true;
+}
+const LINKED_OUT: StepOf = { relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' };
+const LINKED_BACK: StepOf = { relationshipTypes: ['LINKED'], direction: 'in', arrivesAt: 'hub' };
+const DEFINITIONS: readonly (readonly [string, StepOf[]])[] = [
+  ['a plain step', [LINKED_OUT]],
+  ['a fan', [{ ...LINKED_OUT, fan: { atLeast: 3 } }]],
+  ['a time order', [LINKED_OUT, { ...LINKED_BACK, after: 'previous' }]],
+  ['a cycle', [LINKED_OUT, { ...LINKED_BACK, closesAtAnchor: true }]],
+];
+
+describe.each(DEFINITIONS)('cancelling a running pattern run: %s', (_kind, steps) => {
+  const body = JSON.stringify({ sourceId: 'demo', definition: { anchorType: 'hub', steps }, anchor: { entityType: 'hub', stableId: 'H-1' } });
 
   it.each([
     ['its estimate', 'pattern-count', 'pattern.count'],
     ['its run', 'pattern', 'pattern.run'],
   ])('aborts the read of %s when the request is aborted, audits the call as failed with the reason cancelled, sends no run after an aborted estimate, stores no answer and frees the slots', async (_name, templateId, action) => {
-    rig = await startRig();
+    rig = await startRig({ timed: true });
     const before = rig.snapshot();
     const controller = new AbortController();
     const sent = fetch(`${rig.base}/v1/patterns/run`, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': 'cancel-pattern-run-key-1' }, body, signal: controller.signal }).catch(() => undefined);
@@ -277,15 +295,15 @@ describe('cancelling a running pattern run', () => {
   });
 });
 
-describe('cancelling a running saved pattern run', () => {
+describe.each(DEFINITIONS)('cancelling a running saved pattern run: %s', (_kind, steps) => {
   const body = JSON.stringify({ anchor: { entityType: 'hub', stableId: 'H-1' } });
-  const saving = JSON.stringify({ sourceId: 'demo', name: 'A saved pattern', kind: 'definition', definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out', arrivesAt: 'leaf' }] } });
+  const saving = JSON.stringify({ sourceId: 'demo', name: 'A saved pattern', kind: 'definition', definition: { anchorType: 'hub', steps } });
 
   it.each([
     ['its estimate', 'pattern-count', 'pattern.count'],
     ['its run', 'pattern', 'pattern.run'],
   ])('aborts the read of %s when the request is aborted, audits the call as failed with the reason cancelled, records no run, stores no answer and frees the slots', async (_name, templateId, action) => {
-    rig = await startRig();
+    rig = await startRig({ timed: true });
     const made = await fetch(`${rig.base}/v1/patterns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: saving });
     const { id } = (await made.json()) as { id: string };
     const before = rig.snapshot();
@@ -317,11 +335,11 @@ describe('cancelling a running saved pattern run', () => {
   });
 });
 
-describe('cancelling a pattern built in the panel', () => {
-  const ask = { definition: { anchorType: 'hub', steps: [{ relationshipTypes: ['LINKED'], direction: 'out' as const, arrivesAt: 'leaf' }] }, anchor: { entityType: 'hub', stableId: 'H-1' } };
+describe.each(DEFINITIONS)('cancelling a pattern built in the panel: %s', (_kind, steps) => {
+  const ask = { definition: { anchorType: 'hub', steps }, anchor: { entityType: 'hub', stableId: 'H-1' } };
 
   it('aborts the estimate read on Cancel, shows no result, ignores an answer that comes after, and leaves the client as it was', async () => {
-    rig = await startRig();
+    rig = await startRig({ timed: true });
     personalise(rig);
     const before = rig.snapshot();
     rig.definitionRuns.run(ask);
@@ -338,7 +356,7 @@ describe('cancelling a pattern built in the panel', () => {
   });
 
   it('shows QUERY_TIMEOUT when the source times out, with no result, and leaves the client as it was', async () => {
-    rig = await startRig();
+    rig = await startRig({ timed: true });
     personalise(rig);
     const before = rig.snapshot();
     rig.definitionRuns.run(ask);
@@ -349,7 +367,7 @@ describe('cancelling a pattern built in the panel', () => {
   });
 
   it('is aborted by a newer run, and the older answer is never shown', async () => {
-    rig = await startRig();
+    rig = await startRig({ timed: true });
     rig.definitionRuns.run(ask);
     const older = await rig.nextRead();
     rig.definitionRuns.run({ ...ask, anchor: { entityType: 'hub', stableId: 'H-2' } });
@@ -364,7 +382,7 @@ describe('cancelling a pattern built in the panel', () => {
   });
 
   it('is stopped by a change of the builder: the read is aborted and nothing is left on screen', async () => {
-    rig = await startRig();
+    rig = await startRig({ timed: true });
     rig.definitionRuns.run(ask);
     const read = await rig.nextRead();
     rig.definitionRuns.stop();

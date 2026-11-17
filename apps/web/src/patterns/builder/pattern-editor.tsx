@@ -5,6 +5,9 @@ import { Dialog } from '../../views/dialog.js';
 import { failureView, problemText } from '../copy.js';
 import { BreakBanner } from './break-banner.js';
 import { ChainSummary } from './chain-summary.js';
+import { ExtensionCard } from './extension-card.js';
+import { usePatternWords } from './use-words.js';
+import { extensionTags } from '../copy.js';
 import { BUILDER_COPY, CHECK_COPY, EDITOR_COPY, blockText, checkedAtText, placeOf, previewWhy, type ProblemPlace } from './copy.js';
 import { ProblemsPanel } from './problems-panel.js';
 import { TRY_AGAIN, rateLimitedSentence, retryAfterMsOf, tryAgainIn } from '../failure-words.js';
@@ -72,6 +75,8 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
   const limit = stepLimitOf(maxHops);
   const definition = ready === undefined ? undefined : toDefinition(draft, ready, mask);
   const check = usePatternCheck(client, sourceId, mask, definition);
+  const hasExtension = draft.steps.some((entry) => extensionTags(entry).length > 0);
+  const words = usePatternWords(client, sourceId, mask, hasExtension ? definition : undefined, check.validFor);
   const block = ready === undefined ? undefined : addStepBlock(ready, draft, limit);
   const reasonId = 'pattern-builder-add-reason';
   const problems = check.state.kind === 'invalid' ? check.state.problems : [];
@@ -181,6 +186,17 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
           </div>
         ) : null}
         <ChainSummary draft={draft} nameOf={nameOf} valid={checked} problems={breaks.length} brokenSteps={new Set(draft.steps.flatMap((_, index) => (wrongAt(index) ? [index] : [])))} sourceProblems={breaks.length === 0 ? problems.length : 0} stepLimit={limit} />
+        {words !== undefined ? (
+          <section className="pattern-words" aria-label="In words">
+            <h3 className="supernode-label">In words</h3>
+            <div className="run-words">
+              <p>{words.start.text}</p>
+              {words.steps.map((entry, at) => (
+                <p key={at}>{entry.text}</p>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <BreakBanner breaks={breaks} undo={state.undo} nameOf={nameOf} onUndo={() => dispatch({ type: 'undo' })} />
         {breaks.length === 0 ? <ProblemsPanel problems={problems} onShow={show} /> : null}
         <>
@@ -256,6 +272,7 @@ export function PatternEditor({ profile, retryProfile, client, sourceId, sourceN
                 />
               )}
             </div>
+            {ready === undefined || step === undefined || current === 'start' ? null : <ExtensionCard profile={ready} draft={draft} index={current} nameOf={nameOf} breaks={breaks.filter((found) => found.step === current)} />}
             <CheckResult state={check.state} sourceName={sourceName} retry={check.retry} checkedAt={check.checkedAt} />
             {footer === undefined || ready === undefined ? null : footer({ profile: ready, definition, anchorType: draft.anchorType, check: check.state, validFor: check.validFor, nameOf, focusStart: () => { setSelected('start'); focusStart.current = true; } })}
         </>

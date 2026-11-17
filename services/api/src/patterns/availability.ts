@@ -9,7 +9,7 @@ type Reason = { readonly code: Extract<PatternAvailability, { status: 'unavailab
 /** The problems of a definition that say the mapping no longer has what it names, as the codes of a reason. */
 const MAPPING_CODES = ['unknown-entity-type', 'unknown-relationship-type', 'relationship-does-not-join', 'unknown-property', 'not-filterable'] as const;
 /** The problems the run answers as it answers the same definition through the run route, so they are not a reason: a source whose step limit was lowered, and a personal-data condition while the runner masks. */
-const RUN_TIME_CODES: readonly PatternProblem['code'][] = ['too-many-hops', 'personal-data-masked'];
+const RUN_TIME_CODES: readonly PatternProblem['code'][] = ['too-many-hops', 'cycle-too-long', 'over-ceiling', 'personal-data-masked'];
 
 function definitionReasons(row: PatternRow, source: SourceModel): Reason[] {
   const problems = validatePattern(row.definition, source, { mask: false });

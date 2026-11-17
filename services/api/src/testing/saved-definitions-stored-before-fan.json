@@ -1,0 +1,9 @@
+{
+  "note": "Definitions as the code before the fan, time order and cycle saved them. They are kept as they were and never regenerated: they must load and run unchanged.",
+  "definitions": [
+    { "anchorType": "maker", "steps": [{ "relationshipTypes": ["LINKS"], "direction": "out", "arrivesAt": "maker" }] },
+    { "anchorType": "maker", "steps": [{ "relationshipTypes": ["LINKS", "ALLIES"], "direction": "both", "arrivesAt": "maker", "window": { "days": 30 } }] },
+    { "anchorType": "maker", "steps": [{ "relationshipTypes": ["USES_TOOL"], "direction": "out", "arrivesAt": "tool" }, { "relationshipTypes": ["USES_TOOL"], "direction": "in", "arrivesAt": "maker" }] },
+    { "anchorType": "maker", "steps": [{ "relationshipTypes": ["LINKS"], "direction": "out", "arrivesAt": "maker", "conditions": [{ "op": "eq", "on": "relationship", "property": "lane", "value": { "kind": "text", "value": "web" } }], "window": { "from": "2026-01-01", "to": "2026-02-01" } }, { "relationshipTypes": ["LINKS"], "direction": "in", "arrivesAt": "maker" }, { "relationshipTypes": ["ALLIES"], "direction": "out", "arrivesAt": "maker" }, { "relationshipTypes": ["TRUSTS"], "direction": "out", "arrivesAt": "maker" }] }
+  ]
+}

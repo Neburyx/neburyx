@@ -31,7 +31,7 @@ function propertyProblem(property: string, named: ReadonlySet<string>, filterabl
 }
 
 /**
- * The problems of a pattern against one source's mapping: a type or property the mapping does not name, more steps than the source's `max_hops` allows, a step that does not join the previous node type, a property that is not declared `filterable`, and a personal-data
+ * The problems of a pattern against one source's mapping: a type or property the mapping does not name, more steps than the source's `max_hops` allows, a step that does not join the previous node type, a time order on a step or a previous step that crosses a row with no time property, a property that is not declared `filterable`, and a personal-data
  * property while masking is asked. The definition must pass the schema first (the schema's own problems are returned alone otherwise). The mapping is the only input: nothing is read from the source, and no name or value of the
  * definition is in a problem.
  */
@@ -41,9 +41,11 @@ export function validatePattern(input: unknown, source: SourceModel, options: Pa
   const definition = patternDefinitionSchema.parse(input);
   const entities = new Map(source.entities.map((entity) => [entity.type, entity]));
   const problems: PatternProblem[] = [];
-  if (definition.steps.length > source.budgets.maxHops) problems.push({ path: ['steps'], code: 'too-many-hops' });
+  const closing = definition.steps.at(-1)?.closesAtAnchor === true;
+  if (definition.steps.length > source.budgets.maxHops) problems.push({ path: ['steps'], code: closing ? 'cycle-too-long' : 'too-many-hops' });
   if (!entities.has(definition.anchorType)) problems.push({ path: ['anchorType'], code: 'unknown-entity-type' });
   let previous = definition.anchorType;
+  let previousCarrying: readonly RelationshipModel[] = [];
   definition.steps.forEach((step, stepIndex) => {
     const arrives = entities.get(step.arrivesAt);
     if (arrives === undefined) problems.push({ path: ['steps', stepIndex, 'arrivesAt'], code: 'unknown-entity-type' });
@@ -60,6 +62,8 @@ export function validatePattern(input: unknown, source: SourceModel, options: Pa
       if (here.length === 0) problems.push({ path: ['steps', stepIndex, 'relationshipTypes', typeIndex], code: 'relationship-does-not-join' });
       carrying.push(...here);
     });
+    if (step.fan !== undefined && step.fan.atLeast > source.budgets.heavyOpThreshold) problems.push({ path: ['steps', stepIndex, 'fan', 'atLeast'], code: 'over-ceiling' });
+    if (step.after !== undefined && [...previousCarrying, ...carrying].some((row) => row.observedAt === undefined)) problems.push({ path: ['steps', stepIndex, 'after'], code: 'time-not-mapped' });
     (step.conditions ?? []).forEach((condition: ExpandFilter, conditionIndex) => {
       const path = ['steps', stepIndex, 'conditions', conditionIndex, 'property'];
       if (condition.on === 'neighbor') {
@@ -73,7 +77,9 @@ export function validatePattern(input: unknown, source: SourceModel, options: Pa
       const worst = found.includes('unknown-property') ? 'unknown-property' : found.find((problem) => problem !== undefined);
       if (worst !== undefined) problems.push({ path, code: worst });
     });
+    if (step.closesAtAnchor === true && step.arrivesAt !== definition.anchorType) problems.push({ path: ['steps', stepIndex, 'closesAtAnchor'], code: 'bad-value' });
     previous = step.arrivesAt;
+    previousCarrying = carrying;
   });
   return problems;
 }

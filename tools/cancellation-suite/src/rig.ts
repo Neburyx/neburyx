@@ -44,7 +44,7 @@ export const HUB: ElementRef = ref(SOURCE, 'hub', 'H-1');
 export const HUB_TWO: ElementRef = ref(SOURCE, 'hub', 'H-2');
 export const HUB_THREE: ElementRef = ref(SOURCE, 'hub', 'H-3');
 
-const mappingWith = (budgets: Record<string, number> | undefined) => parseMapping(
+const mappingWith = (budgets: Record<string, number> | undefined, timed = false) => parseMapping(
   fileOf(
     baseSource({
       ...(budgets === undefined ? {} : { budgets }),
@@ -56,7 +56,7 @@ const mappingWith = (budgets: Record<string, number> | undefined) => parseMappin
         { type: 'item', label: 'Item', stable_id: 'itemId' },
       ],
       relationships: [
-        { type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId' },
+        { type: 'LINKED', from: 'hub', to: 'leaf', stable_id: 'relId', ...(timed ? { observed_at: 'seenAt' } : {}) },
         { type: 'HAS', from: 'hub', to: 'part', stable_id: 'relId' },
         { type: 'HOLDS', from: 'hub', to: 'item', stable_id: 'relId' },
       ],
@@ -190,8 +190,8 @@ export interface Rig {
 }
 
 /** The real API (the gate, the read slots, an app store) on a loopback port, and the real web client, stores and banner in front of it, with a scripted source behind the gate. */
-export async function startRig(options: { readonly delayMs?: number; readonly budgets?: Record<string, number> } = {}): Promise<Rig> {
-  const mapping = mappingWith(options.budgets);
+export async function startRig(options: { readonly delayMs?: number; readonly budgets?: Record<string, number>; readonly timed?: boolean } = {}): Promise<Rig> {
+  const mapping = mappingWith(options.budgets, options.timed === true);
   const { executor, nextRead, drain } = scriptedSource(mapping);
   return startOn({ mapping, executor, hub: HUB, nextRead, drain, time: { now: 1_000_000 } }, options);
 }

@@ -23,7 +23,7 @@ function usedProperties(params: Params, allowlist?: SourceAllowlist): readonly U
       condition.on === 'neighbor' ? [{ entityType: step.arrivesAt, property: condition.property }] : step.branches.map((branch) => ({ relationshipType: branch.type, from: branch.from, to: branch.to, property: condition.property })),
     ),
   );
-  const times = request.steps.filter((step) => step.windowed).flatMap((step) => step.branches.flatMap((branch) => (branch.observedAt === undefined ? [] : [{ relationshipType: branch.type, from: branch.from, to: branch.to, property: branch.observedAt }])));
+  const times = request.steps.flatMap((step, index) => [...(step.windowed || step.ordered ? [step] : []), ...(request.steps[index + 1]?.ordered === true ? [step] : [])]).flatMap((step) => step.branches.flatMap((branch) => (branch.observedAt === undefined ? [] : [{ relationshipType: branch.type, from: branch.from, to: branch.to, property: branch.observedAt }])));
   const all = [...stops, ...conditions, ...times];
   return all.filter((used, index) => all.findIndex((other) => JSON.stringify(other) === JSON.stringify(used)) === index);
 }
@@ -55,7 +55,7 @@ function normalize(rows: readonly Row[], _plan?: Plan, context?: NormalizeContex
  */
 export const patternTemplate: TemplateDefinition = {
   id: PATTERN_ID,
-  version: '2',
+  version: '3',
   auditAction: 'pattern.run',
   name: 'Pattern',
   description: 'Follows the steps of a stated pattern from one entity and finds the entities the last step reaches.',

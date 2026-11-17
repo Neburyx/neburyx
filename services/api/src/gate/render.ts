@@ -302,9 +302,9 @@ function linkedEntitiesOf(template: Template, params: Params, allowlist: SourceA
 }
 
 /** The statement of a pattern run: the entity types, relationship types and conditions the request names, checked against the mapping's rows, written as `patternStatementOf` says. */
-function patternOf(template: Template, params: Params, allowlist: SourceAllowlist): string {
+function patternOf(template: Template, params: Params, allowlist: SourceAllowlist, countCap: number): string {
   if (template.pattern === undefined) return '';
-  const request = patternRequestOf(allowlist, params);
+  const request = patternRequestOf(allowlist, params, countCap > 0 ? countCap : undefined);
   return template.pattern.count === true ? patternCountStatementOf(allowlist, request) : patternStatementOf(allowlist, request);
 }
 
@@ -384,7 +384,7 @@ export function renderTemplate(template: Template, params: Params, allowlist: So
   const shared = sharedAttributeOf(template, params, allowlist);
   const linked = linkedEntitiesOf(template, params, allowlist);
   const paths = shortestPathsOf(template, params, allowlist);
-  const walked = patternOf(template, params, allowlist);
+  const walked = patternOf(template, params, allowlist, countCap);
   const edge = edgeLoadOf(template, params, allowlist);
   const aggregate = aggregateReadOf(template, params, allowlist);
   const cypher = template.cypher.replace(MARKER, (_whole, kind: string, name: string) => {

@@ -176,4 +176,34 @@ describe('the request and the answer of the preview route', () => {
     expect(PATTERN_PROBLEM_CODES).toContain('too-many-hops');
     expect(patternValidateResponseSchema.safeParse({ status: 'invalid', problems: [{ path: ['steps'], code: 'too-many-hops' }] }).success).toBe(true);
   });
+
+  it('takes a step ordered after the previous one from the second step on, and refuses it on the first and any other value', () => {
+    expect(patternDefinitionSchema.safeParse(definition({ steps: [step(), step({ after: 'previous' })] })).success).toBe(true);
+    expect(problems(definition({ steps: [step({ after: 'previous' })] }))).toEqual([{ path: ['steps', 0, 'after'], code: 'bad-value' }]);
+    expect(problems(definition({ steps: [step(), step({ after: 'next' })] }))).toEqual([{ path: ['steps', 1, 'after'], code: 'bad-value' }]);
+    expect(problems(definition({ steps: [step(), step({ after: true })] })).map((problem) => problem.path.join('.'))).toEqual(['steps.1.after']);
+  });
+
+  it('knows the problem code of a time order on a relationship with no mapped time', () => {
+    expect(PATTERN_PROBLEM_CODES).toContain('time-not-mapped');
+  });
+
+  it('parses every definition written before the fan, the time order and the cycle unchanged: a step with none of the new fields keeps the parsed value it had', () => {
+    const old = definition({ steps: [step({ conditions: [eq()], window: { days: 30 } }), step({ direction: 'in' })] });
+    expect(patternDefinitionSchema.parse(old)).toEqual(old);
+  });
+
+  it('reads the three typed preview parts of a step, strictly, and a validation still answers only ok or its problems', () => {
+    const base = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: { type: 'maker', name: 'Maker' }, text: 'Step 1', conditions: [] };
+    const preview = (extra: Record<string, unknown>) => ({ status: 'ok', preview: { start: { type: 'maker', name: 'Maker', text: 'Start: Maker' }, steps: [{ ...base, ...extra }], bounds: { hopLimit: { value: 4, text: 'a' }, pageLimit: { value: 50, text: 'b' }, countCap: { value: 500, text: 'c' } } } });
+    const parts = { fan: { atLeast: 3, direction: 'out', text: 'w' }, timeOrder: { properties: ['seenAt'], previousProperties: ['seenAt'], text: 'w' }, closesAtAnchor: { type: 'maker', name: 'Maker', text: 'w' } };
+    expect(patternPreviewResponseSchema.safeParse(preview(parts)).success).toBe(true);
+    expect(patternPreviewResponseSchema.safeParse(preview({})).success).toBe(true);
+    expect(patternPreviewResponseSchema.safeParse(preview({ fan: { ...parts.fan, atLeast: 1 } })).success).toBe(false);
+    expect(patternPreviewResponseSchema.safeParse(preview({ timeOrder: { ...parts.timeOrder, extra: 1 } })).success).toBe(false);
+    expect(patternValidateResponseSchema.safeParse({ status: 'ok', fan: parts.fan }).success).toBe(false);
+    const twelve = Array.from({ length: 2 * PATTERN_LIMITS.relationshipTypesPerStep }, (_unused, index) => `time${index}`);
+    expect(patternPreviewResponseSchema.safeParse(preview({ timeOrder: { properties: twelve, previousProperties: twelve, text: 'w' } })).success).toBe(true);
+    expect(patternPreviewResponseSchema.safeParse(preview({ timeOrder: { properties: [...twelve, 'one-more'], previousProperties: [], text: 'w' } })).success).toBe(false);
+  });
 });

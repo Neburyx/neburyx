@@ -1,5 +1,6 @@
 import { PATTERN_LIMITS, savedPatternSchema } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
+import { definitionRow, presetRow } from '../testing/saved-pattern-fixtures.js';
 import { codeOf, DEFINITION, jsonHeaders, patternApp, reasonOf, type PatternApp } from '../testing/saved-pattern-rig.js';
 
 const save = (context: PatternApp, body: unknown, query = '') => context.app.inject({ method: 'POST', url: `/v1/patterns${query}`, payload: JSON.stringify(body), headers: jsonHeaders });
@@ -61,6 +62,46 @@ describe('POST /v1/patterns, a definition', () => {
     expect(response.statusCode).toBe(400);
     expect(codeOf(response)).toBe('INVALID_REQUEST');
     expect(context.store.patternRows).toEqual([]);
+    await context.app.close();
+  });
+
+  it('saves a definition with a time order, a fan and a cycle as it was sent, shows it unchanged in the answer and in the row, and refuses a fan above the source’s count cap with no row', async () => {
+    const context = await patternApp();
+    const links = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const extended = { anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 3 } }, { ...links, after: 'previous' }, { ...links, closesAtAnchor: true }] };
+    const response = await save(context, definitionBody({ definition: extended }));
+    expect(response.statusCode).toBe(201);
+    const saved = savedPatternSchema.parse(response.json());
+    expect(saved.kind === 'definition' ? saved.definition : undefined).toEqual(extended);
+    expect(context.store.patternRows[0]?.definition).toEqual(extended);
+    const over = { anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 100_000 } }] };
+    expect((await save(context, definitionBody({ definition: over, name: 'Too wide' }))).statusCode).toBe(400);
+    expect(context.store.patternRows).toHaveLength(1);
+    await context.app.close();
+  });
+
+  it('lists rows stored before the extension and one with the three added fields, and keeps the added fields whole through a change and a copy', async () => {
+    const context = await patternApp();
+    const links = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const extended = { anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 3 } }, { ...links, after: 'previous' }, { ...links, closesAtAnchor: true }] };
+    const owner = '0192f000-0000-7000-8000-000000000001';
+    const stored = [definitionRow({ id: '0192f000-0000-7000-8000-0000000000c1', name: 'Stored before', ownerId: owner, definition: DEFINITION }), presetRow({ id: '0192f000-0000-7000-8000-0000000000c2', name: 'Stored preset', ownerId: owner })];
+    context.store.patternRows.push(...stored);
+    const listed = await context.app.inject({ method: 'GET', url: '/v1/patterns?sourceId=demo' });
+    expect(listed.statusCode).toBe(200);
+    expect((listed.json() as { items: { name: string; availability: { status: string } }[] }).items.map((item) => [item.name, item.availability.status]).sort()).toEqual([['Stored before', 'available'], ['Stored preset', 'available']]);
+    const saved = savedPatternSchema.parse((await save(context, definitionBody({ definition: extended }))).json());
+    const renamed = await context.app.inject({ method: 'PUT', url: `/v1/patterns/${saved.id}`, payload: JSON.stringify({ expectedVersion: 1, name: 'Renamed' }), headers: jsonHeaders });
+    expect(renamed.statusCode).toBe(200);
+    const same = savedPatternSchema.parse(renamed.json());
+    expect(same.kind === 'definition' ? same.definition : undefined).toEqual(extended);
+    const less = { anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 5 } }, { ...links, after: 'previous' }, { ...links, closesAtAnchor: true }] };
+    const changed = await context.app.inject({ method: 'PUT', url: `/v1/patterns/${saved.id}`, payload: JSON.stringify({ expectedVersion: 2, definition: less }), headers: jsonHeaders });
+    expect(savedPatternSchema.parse(changed.json())).toMatchObject({ version: 3, definition: less });
+    const copied = await context.app.inject({ method: 'POST', url: `/v1/patterns/${saved.id}/copy` });
+    expect(copied.statusCode).toBe(201);
+    expect(savedPatternSchema.parse(copied.json())).toMatchObject({ definition: less });
+    expect(context.store.patternRows.filter((row) => row.name.startsWith('Renamed')).map((row) => row.definition)).toEqual([less, less]);
     await context.app.close();
   });
 

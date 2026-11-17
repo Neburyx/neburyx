@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ListedPattern } from '@neburyx/contracts';
 import { presetSummary, rowMatches, savedSummary } from './list-model.js';
+import { pathSummary } from './path-summary.js';
 
 const names: Record<string, string> = { 'kind-a': 'Kind A', 'kind-b': 'Kind B' };
 const nameOf = (type: string): string => names[type] ?? type;
@@ -37,5 +38,17 @@ describe('the search of the list', () => {
     expect(rowMatches('  ALP ', 'Alpha', '')).toBe(true);
     expect(rowMatches('uses', 'Alpha', 'Kind A → USES → Kind B')).toBe(true);
     expect(rowMatches('zzz', 'Alpha', 'Kind A → USES → Kind B')).toBe(false);
+  });
+});
+
+describe('the chain of a saved pattern with the extension’s fields', () => {
+  it('adds a short note for each field to the step it is on, and a step without them reads as before', () => {
+    const steps = [
+      { relationshipTypes: ['USES'], direction: 'out', arrivesAt: 'kind-b', fan: { atLeast: 3 } },
+      { relationshipTypes: ['USES'], direction: 'in', arrivesAt: 'kind-a', after: 'previous' },
+      { relationshipTypes: ['PAYS'], direction: 'out', arrivesAt: 'kind-a', closesAtAnchor: true },
+    ] as const;
+    expect(pathSummary({ anchorType: 'kind-a', steps }, nameOf)).toBe('Kind A → USES → Kind B (at least 3 neighbours) ← USES ← Kind A (after previous) → PAYS → Kind A (closes back)');
+    expect(pathSummary({ anchorType: 'kind-a', steps: [{ relationshipTypes: ['USES'], direction: 'out', arrivesAt: 'kind-b' }] }, nameOf)).toBe('Kind A → USES → Kind B');
   });
 });

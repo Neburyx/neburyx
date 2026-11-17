@@ -2,6 +2,8 @@
 interface Edge {
   readonly f: string;
   readonly t: string;
+  /** The observed time of the relationship, in milliseconds, when the export has one and a step reads it. */
+  readonly at?: number;
 }
 
 /** One step of a pattern, over the relationships of the export of the types it lists: the direction it crosses them and the entity type it arrives at. */
@@ -9,6 +11,10 @@ export interface ExpectedStep {
   readonly edges: readonly Edge[];
   readonly direction: 'out' | 'in';
   readonly arrivesAt: string;
+  /** The step is ordered after the previous one: its relationship has a time at or after the previous relationship's (a relationship with no time is never on such a path). */
+  readonly ordered?: boolean;
+  /** The node the step starts from has at least this many distinct neighbours over the step's edges in its direction (a node on the path counts; the time order is not applied to the count). */
+  readonly fan?: number;
 }
 
 /**
@@ -16,14 +22,19 @@ export interface ExpectedStep {
  * the compiled statement must return on a graph in which no step is cut by the count cap.
  */
 export function expectedReach(anchorType: string, anchor: string, steps: readonly ExpectedStep[]): Set<string> {
-  let paths: { readonly last: string; readonly seen: ReadonlySet<string> }[] = [{ last: anchor, seen: new Set([`${anchorType}:${anchor}`]) }];
+  let paths: { readonly last: string; readonly seen: ReadonlySet<string>; readonly at: number | undefined }[] = [{ last: anchor, seen: new Set([`${anchorType}:${anchor}`]), at: undefined }];
   for (const step of steps) {
-    const next: { last: string; seen: ReadonlySet<string> }[] = [];
+    const next: { last: string; seen: ReadonlySet<string>; at: number | undefined }[] = [];
     for (const path of paths) {
+      if (step.fan !== undefined) {
+        const neighbours = new Set(step.edges.filter((edge) => (step.direction === 'out' ? edge.f : edge.t) === path.last).map((edge) => (step.direction === 'out' ? edge.t : edge.f)));
+        if (neighbours.size < step.fan) continue;
+      }
       for (const edge of step.edges) {
         const [from, to] = step.direction === 'out' ? [edge.f, edge.t] : [edge.t, edge.f];
         if (from !== path.last || path.seen.has(`${step.arrivesAt}:${to}`)) continue;
-        next.push({ last: to, seen: new Set([...path.seen, `${step.arrivesAt}:${to}`]) });
+        if (step.ordered === true && (edge.at === undefined || path.at === undefined || Number.isNaN(edge.at) || Number.isNaN(path.at) || edge.at < path.at)) continue;
+        next.push({ last: to, seen: new Set([...path.seen, `${step.arrivesAt}:${to}`]), at: edge.at });
       }
     }
     paths = next;

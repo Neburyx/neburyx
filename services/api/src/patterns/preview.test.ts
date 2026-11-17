@@ -227,3 +227,33 @@ describe('a condition on personal data', () => {
     expect(JSON.stringify(answer)).toContain('gold');
   });
 });
+
+describe('the preview of a fan, a time order and a cycle', () => {
+  it('says each in the words of the approved frames in the sentence of its step, and as a typed part', () => {
+    const preview = previewOf(definition([step({ fan: { atLeast: 3 } }), step({ after: 'previous', direction: 'in' }), step({ closesAtAnchor: true })]));
+    expect(preview.steps[0]?.text).toBe('Step 1: follow LINKS forward to at least 3 other Makers');
+    expect(preview.steps[0]).toMatchObject({ fan: { atLeast: 3, direction: 'out', text: 'at least 3 other Makers' } });
+    expect(preview.steps[0]).not.toHaveProperty('timeOrder');
+    expect(preview.steps[1]?.text).toBe('Step 2: follow LINKS backward to Maker, after the previous step (by seenAt)');
+    expect(preview.steps[1]).toMatchObject({ timeOrder: { properties: ['seenAt'], previousProperties: ['seenAt'], text: 'after the previous step (by seenAt)' } });
+    expect(preview.steps[2]?.text).toBe('Step 3: follow LINKS forward and close back at the start Maker');
+    expect(preview.steps[2]).toMatchObject({ closesAtAnchor: { type: 'maker', name: 'Maker', text: 'close back at the start Maker' } });
+    expect(patternPreviewResponseSchema.safeParse({ status: 'ok', preview }).success).toBe(true);
+  });
+
+  it('puts the fan of a later step on its own arrival type', () => {
+    const preview = previewOf(definition([step({ relationshipTypes: ['USES_TOOL'], arrivesAt: 'tool' }), step({ relationshipTypes: ['USES_TOOL'], direction: 'in', fan: { atLeast: 4 } })]));
+    expect(preview.steps[1]?.text).toBe('Step 2: follow USES_TOOL backward to at least 4 other Makers');
+  });
+
+  it('answers the problems and no preview when a new field is not acceptable', () => {
+    expect(previewOrProblems(definition([step(), step({ relationshipTypes: ['KNOWS'], after: 'previous' })]), sourceOf())).toEqual({ status: 'invalid', problems: [{ path: ['steps', 1, 'after'], code: 'time-not-mapped' }] });
+    expect(previewOrProblems(definition([step({ fan: { atLeast: 501 } })]), sourceOf())).toEqual({ status: 'invalid', problems: [{ path: ['steps', 0, 'fan', 'atLeast'], code: 'over-ceiling' }] });
+    expect(previewOrProblems(definition([step({ closesAtAnchor: true })]), sourceOf())).toEqual({ status: 'invalid', problems: [{ path: ['steps', 0, 'closesAtAnchor'], code: 'bad-value' }] });
+  });
+
+  it('leaves every step of a definition saved before the extension as it was: no part of the new kinds', () => {
+    const preview = previewOf(definition([step({ window: { days: 7 } }), step({ direction: 'both' })]));
+    for (const entry of preview.steps) for (const part of ['fan', 'timeOrder', 'closesAtAnchor']) expect(entry).not.toHaveProperty(part);
+  });
+});

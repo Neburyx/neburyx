@@ -72,6 +72,21 @@ describe('the saved patterns offered to Ask', () => {
     expect(JSON.stringify(offers.map((offer) => offer.projection))).not.toMatch(/SECRET|region|lane/);
   });
 
+  it('tells of the three structural fields of a step, and of nothing else, so two definitions that differ only by them differ in their offers', async () => {
+    const { save, list } = rig();
+    const links = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const plain = await save({ anchorType: 'maker', steps: [links, links, links] });
+    const extended = await save({ anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 3 } }, { ...links, after: 'previous' }, { ...links, closesAtAnchor: true }] });
+    const other = await save({ anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 4 } }, { ...links, after: 'previous' }, { ...links, closesAtAnchor: true }] });
+    const { offers } = await list(OWNER);
+    const projectionOf = (id: string) => offers.find((offer) => offer.id === id)?.projection;
+    expect(projectionOf(plain.id)).toMatchObject({ steps: [{ windowed: false }, { windowed: false }, { windowed: false }] });
+    expect(JSON.stringify(projectionOf(plain.id))).not.toMatch(/fanAtLeast|orderedAfterPrevious|closesAtAnchor/);
+    expect(projectionOf(extended.id)).toMatchObject({ steps: [{ fanAtLeast: 3 }, { orderedAfterPrevious: true }, { closesAtAnchor: true }] });
+    expect(projectionOf(extended.id)).not.toEqual(projectionOf(other.id));
+    expect(JSON.stringify(projectionOf(extended.id))).not.toMatch(/SECRET|previous|seenAt/);
+  });
+
   it('says a pattern with a held starting entity holds it, and leaves out one that is unavailable against the mapping, without a reason', async () => {
     const { save, list } = rig();
     await save(DEFINITION, OWNER, { anchor: { entityType: 'maker', stableId: 'W-1' } });

@@ -7,7 +7,7 @@ import { forwardTo, type Forwarder } from '../../../services/api/src/testing/for
 import { envFor, runAll, seedItems, SLOW_READ, sourceFor, startNeo4j, type RunningNeo4j } from '../../../services/api/src/testing/neo4j-server.js';
 import { startOn, type Rig } from './rig.js';
 
-/** The real adapter on a database of this run's own, behind a forwarder that can close the port, with a way to make the next expansion reads slow. */
+/** The real adapter on a database of this run's own, behind a forwarder that can close the port, with a way to make the next expansion and pattern reads slow. */
 export interface Neo4jRig extends Rig {
   readonly server: RunningNeo4j;
   readonly forwarder: Forwarder;
@@ -36,7 +36,7 @@ export async function startNeo4jRig(options: { readonly size: number; readonly t
       calls,
       execute: (call: ExecuteCall): Promise<ExecuteOutcome> => {
         calls.push(call);
-        return inner.execute(slowOn && call.templateId === EXPAND_NEIGHBORS_ID ? { ...call, cypher: SLOW_READ, parameters: {}, integerParameters: [] } : call);
+        return inner.execute(slowOn && (call.templateId === EXPAND_NEIGHBORS_ID || call.templateId === 'pattern' || call.templateId === 'pattern-count') ? { ...call, cypher: SLOW_READ, parameters: {}, integerParameters: [] } : call);
       },
     };
     const stopAll = (): Promise<void> => runAll([() => inner.close(), () => forwarder?.stop(), () => server.stop()]);

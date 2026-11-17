@@ -110,6 +110,9 @@ const PROBLEM_TEXT: Readonly<Record<PatternProblemCode, string>> = {
   'too-many': 'There are more here than a pattern may have.',
   'too-few': 'There are fewer here than a pattern needs.',
   'too-many-hops': 'This pattern has more steps than the source allows.',
+  'cycle-too-long': 'This cycle has more steps than the source allows.',
+  'over-ceiling': 'This number is more than the source can count.',
+  'time-not-mapped': 'A step ordered after the previous one needs a time on the relationships of both steps, and the mapping gives none.',
   'bad-value': 'This choice is not allowed.',
   'bad-shape': 'This choice does not fit with the others.',
   'unknown-entity-type': 'This type is not in the mapping.',
@@ -132,3 +135,8 @@ export const SHELL_COPY = {
   newPattern: 'New pattern',
   restartedByMask: 'Masking changed, so the pattern was started again.',
 } as const;
+
+/** The tags a step shows for the three kinds of the extension, in the words of the approved frames: at least N neighbours, closes back, after previous. */
+export function extensionTags(step: { readonly fan?: { readonly atLeast: number } | undefined; readonly after?: 'previous' | undefined; readonly closesAtAnchor?: true | undefined }): readonly string[] {
+  return [...(step.fan === undefined ? [] : [`at least ${step.fan.atLeast} neighbours`]), ...(step.closesAtAnchor === undefined ? [] : ['closes back']), ...(step.after === undefined ? [] : ['after previous'])];
+}

@@ -176,5 +176,19 @@ describe('Escape in the start field', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Discard draft' }));
     expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
   });
+
+  it('shows the fan, the time order and the closing in the sentence of their step, as the server wrote it, and a step without them reads as before', async () => {
+    const withParts = {
+      ...PREVIEW,
+      steps: [
+        { ...PREVIEW.steps[0], text: 'Step 1: follow r-1 forward to at least 3 other N-Bs', fan: { atLeast: 3, direction: 'out' as const, text: 'at least 3 other N-Bs' } },
+        { ...PREVIEW.steps[0], text: 'Step 2: follow r-1 forward and close back at the start N-A', closesAtAnchor: { type: 'n-a', name: 'N-A', text: 'close back at the start N-A' } },
+      ],
+    };
+    await runWorkspace({ preview: async () => ({ ok: true, value: { status: 'ok', preview: withParts } as PatternPreviewResponse }) });
+    await previewed();
+    const words = screen.getByRole('region', { name: 'In plain words' });
+    for (const text of ['Step 1: follow r-1 forward to at least 3 other N-Bs', 'Step 2: follow r-1 forward and close back at the start N-A']) expect(within(words).getByText(text)).toBeTruthy();
+  });
 });
 

@@ -55,7 +55,7 @@ export function createPatternRunService(deps: { readonly gate: Gate; readonly ma
       if (typeof claimed === 'string' && claimed !== call.anchor.entityType) throw new AppError('INVALID_REQUEST');
       const problems = validatePattern(call.definition, source, { mask: call.mask });
       if (problems.length > 0) {
-        if (problems.every((problem) => problem.code === 'too-many-hops')) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxHops: source.budgets.maxHops });
+        if (problems.every((problem) => problem.code === 'too-many-hops' || problem.code === 'cycle-too-long')) throw new AppError('QUERY_BUDGET_EXCEEDED', { maxHops: source.budgets.maxHops });
         throw new AppError('INVALID_REQUEST');
       }
       const definition = patternDefinitionSchema.parse(call.definition);
@@ -69,6 +69,9 @@ export function createPatternRunService(deps: { readonly gate: Gate; readonly ma
           direction: step.direction,
           arrivesAt: step.arrivesAt,
           ...(step.conditions === undefined ? {} : { conditions: step.conditions }),
+          ...(step.after === undefined ? {} : { after: step.after }),
+          ...(step.fan === undefined ? {} : { fan: step.fan }),
+          ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: step.closesAtAnchor }),
           ...(step.window === undefined ? {} : expandWindowInstantsOf(step.window, at)),
         })),
       };

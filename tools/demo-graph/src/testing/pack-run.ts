@@ -48,6 +48,8 @@ export interface PackRun {
   readonly generated: Generated;
   /** The lines of the export file of one relationship type, parsed. */
   readonly relationships: (type: string) => readonly { readonly f: string; readonly t: string }[];
+  /** The same lines with the observed time of each, in milliseconds, read from the property the mapping names for the type. */
+  readonly timedRelationships: (type: string, property: string) => readonly { readonly f: string; readonly t: string; readonly at: number }[];
   /** The properties of the generated entities of one type. */
   readonly entities: (type: string) => readonly Record<string, unknown>[];
   /** The gate of the pack's source, to run a built-in template that no route runs. */
@@ -162,6 +164,10 @@ export async function startPackRun(pack: 'banking-fraud' | 'insurance-claims', s
     relationships: (type) => generated.files.filter((file) => file.kind === 'relationship' && file.type === type).flatMap((file) => file.lines).map((line) => {
       const { f, t } = JSON.parse(line) as { f: string; t: string };
       return { f, t };
+    }),
+    timedRelationships: (type, property) => generated.files.filter((file) => file.kind === 'relationship' && file.type === type).flatMap((file) => file.lines).map((line) => {
+      const { f, t, p } = JSON.parse(line) as { f: string; t: string; p: Record<string, { $datetime?: string } | undefined> };
+      return { f, t, at: Date.parse(p[property]?.$datetime ?? '') };
     }),
     entities: (type) => generated.files.filter((file) => file.kind === 'entity' && file.type === type).flatMap((file) => file.lines).map((line) => (JSON.parse(line) as { p: Record<string, unknown> }).p),
     run,

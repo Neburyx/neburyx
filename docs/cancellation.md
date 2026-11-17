@@ -32,6 +32,9 @@ On a Neo4j Enterprise 5.26 server, with the Neo4j driver 6.3. Each test makes a 
 | A login that can only read, ending its own running read with `TERMINATE TRANSACTION` | Permitted. The adapter reports a read ended this way as a failed read (`READ_FAILED`) |
 | A write statement sent in a read-access session, by a login that may write | Refused by the server (`Neo.ClientError.Statement.AccessMode`); nothing is written. The product also sends only read-access sessions |
 | Four reads cancelled together at a source limit of four (set for the test) | Every transaction is gone, no slot is held, no session stays open, and the next read is served |
+| The estimate and the run of a pattern with a fan, a time order or a cycle, aborted from the run route, from a saved pattern and from the panel (a newer run, Cancel and a change of the builder), against a scripted source | The read is aborted, the call is audited as failed with the reason cancelled, no run follows an aborted estimate, no answer is stored, no run is recorded on the saved pattern, no slot is held, and a late answer is never shown |
+| The estimate of a pattern run with a fan, a time order or a cycle, aborted once the server lists its transaction, from a node with 100,000 relationships | The transaction is gone from the server's list, no slot is held, the run is audited as cancelled and the next read is served. The statement of that read is the slow read of the Neo4j tests (as for the expansion above); the adapter, the session and the abort are the real ones |
+| The real statement of a pattern run with a fan, a time order or a cycle, from the same node | Answers within the read timeout, reads at most the count cap, and its count is a lower bound or a heavy stop, never an exact count of the 100,000 |
 
 The checks run with `pnpm test:neo4j` and `pnpm bench:supernode` against a server you own; they are not in CI. Run them again when the driver or a supported server version changes.
 

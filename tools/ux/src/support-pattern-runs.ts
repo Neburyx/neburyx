@@ -42,7 +42,7 @@ export function previewPattern(body: unknown, response: ServerResponse): void {
   if (!parsed.success) return json(response, 400, INVALID);
   const problems = patternProblemsOf(parsed.data.definition);
   if (problems.length > 0) return json(response, 200, patternPreviewResponseSchema.parse({ status: 'invalid', problems }));
-  const definition = parsed.data.definition as { anchorType: string; steps: Array<{ relationshipTypes: string[]; direction: keyof typeof DIRECTION_WORD; arrivesAt: string; conditions?: unknown[]; window?: unknown }> };
+  const definition = parsed.data.definition as { anchorType: string; steps: Array<{ after?: 'previous'; fan?: { atLeast: number }; closesAtAnchor?: true; relationshipTypes: string[]; direction: keyof typeof DIRECTION_WORD; arrivesAt: string; conditions?: unknown[]; window?: unknown }> };
   json(
     response,
     200,
@@ -50,12 +50,15 @@ export function previewPattern(body: unknown, response: ServerResponse): void {
       status: 'ok',
       preview: {
         start: { type: definition.anchorType, name: definition.anchorType, text: `Starts at a ${definition.anchorType}.` },
-        steps: definition.steps.map((step) => ({
+        steps: definition.steps.map((step, index) => ({
           relationshipTypes: step.relationshipTypes,
           direction: step.direction,
           arrivesAt: { type: step.arrivesAt, name: step.arrivesAt },
-          text: `Follows ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction]} to a ${step.arrivesAt}.`,
+          text: step.fan === undefined && step.after === undefined && step.closesAtAnchor === undefined ? `Follows ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction]} to a ${step.arrivesAt}.` : `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'}${step.closesAtAnchor === undefined ? ` to ${step.fan === undefined ? `a ${step.arrivesAt}` : `at least ${step.fan.atLeast} other ${step.arrivesAt}s`}` : ` and close back at the start ${definition.anchorType}`}${step.after === undefined ? '' : ', after the previous step (by lastSeen)'}`,
           conditions: [],
+          ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast, direction: step.direction, text: `at least ${step.fan.atLeast} other ${step.arrivesAt}s` } }),
+          ...(step.after === undefined ? {} : { timeOrder: { properties: ['lastSeen'], previousProperties: ['lastSeen'], text: 'after the previous step (by lastSeen)' } }),
+          ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: { type: definition.anchorType, name: definition.anchorType, text: `close back at the start ${definition.anchorType}` } }),
         })),
         bounds: { hopLimit: { value: 4, text: 'At most 4 steps.' }, pageLimit: { value: 50, text: 'At most 50 results at a time.' }, countCap: { value: 500, text: 'Counts stop at 500.' } },
       },

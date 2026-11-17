@@ -50,6 +50,9 @@ function projectionOf(row: PatternRow, source: SourceModel): AskPatternProjectio
       arrivesAt: step.arrivesAt,
       conditions: (step.conditions ?? []).map((condition) => ({ on: condition.on, kind: condition.op })),
       windowed: step.window !== undefined,
+      ...(step.after === undefined ? {} : { orderedAfterPrevious: true as const }),
+      ...(step.fan === undefined ? {} : { fanAtLeast: step.fan.atLeast }),
+      ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: true as const }),
     })),
   };
 }

@@ -3,6 +3,8 @@ import { LINKED_PRESET } from '../testing/linked-entities-fixtures.js';
 import { PATTERN_ENTITIES, PATTERN_RELATIONSHIPS } from '../testing/pattern-fixtures.js';
 import { SHARED_PRESET } from '../testing/shared-attribute-fixtures.js';
 import { SAVED_DEFINITION, definitionRow, presetRow, savedMappingOf } from '../testing/saved-pattern-fixtures.js';
+import { patternDefinitionSchema } from '@neburyx/contracts';
+import before from '../testing/saved-definitions-stored-before-fan.json' with { type: 'json' };
 import { availabilityOf } from './availability.js';
 
 const sourceOf = (parts: Parameters<typeof savedMappingOf>[0] = {}) => {
@@ -71,6 +73,43 @@ describe('the availability of a saved definition', () => {
   it('says a held starting entity of a type the definition does not start at is a changed anchor, and a row with none never is', () => {
     expect(codesOf(availabilityOf(definitionRow({ anchorEntityType: 'tool', anchorStableId: 'T-1', askForStartingEntity: false }), sourceOf()))).toEqual(['anchor-changed']);
     expect(availabilityOf(definitionRow({ anchorEntityType: 'maker', anchorStableId: 'W-1', askForStartingEntity: false }), sourceOf())).toEqual({ status: 'available' });
+  });
+});
+
+describe('the availability of a saved definition across the fan, time order and cycle', () => {
+  const LINKS_ONCE = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+
+  it('is available for every definition saved before the extension, unchanged by the schema that now reads it', () => {
+    for (const definition of before.definitions) {
+      expect(patternDefinitionSchema.parse(definition)).toEqual(definition);
+      expect(availabilityOf(definitionRow({ definition }), sourceOf()), JSON.stringify(definition)).toEqual({ status: 'available' });
+    }
+  });
+
+  it('is available for a definition that uses the new fields while the mapping has what they need', () => {
+    for (const definition of [
+      { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous' }] },
+      { anchorType: 'maker', steps: [{ ...LINKS_ONCE, fan: { atLeast: 3 } }] },
+      { anchorType: 'maker', steps: [LINKS_ONCE, LINKS_ONCE, { ...LINKS_ONCE, closesAtAnchor: true }] },
+    ]) expect(availabilityOf(definitionRow({ definition }), sourceOf()), JSON.stringify(definition)).toEqual({ status: 'available' });
+  });
+
+  it('is unavailable, as a bad definition at the step, when the mapping lost the time property a time order needs', () => {
+    const untimed = PATTERN_RELATIONSHIPS.map((row) => (row.type === 'LINKS' ? { ...row, observed_at: undefined } : row));
+    const definition = { anchorType: 'maker', steps: [LINKS_ONCE, { ...LINKS_ONCE, after: 'previous' }] };
+    expect(availabilityOf(definitionRow({ definition }), sourceOf({ relationships: untimed }))).toEqual({ status: 'unavailable', reasons: [{ code: 'bad-definition', path: ['steps', 1, 'after'] }] });
+  });
+
+  it('keeps the specific reason of an existing mapping problem beside it when a new field is also on the definition', () => {
+    const definition = { anchorType: 'maker', steps: [{ relationshipTypes: ['GONE'], direction: 'out', arrivesAt: 'maker', fan: { atLeast: 2 } }] };
+    expect(codesOf(availabilityOf(definitionRow({ definition }), sourceOf()))).toEqual(['unknown-relationship-type']);
+  });
+
+  it('stays available when the source later lowers the count cap or the step limit: the run answers those', () => {
+    const fan = { anchorType: 'maker', steps: [{ ...LINKS_ONCE, fan: { atLeast: 100 } }] };
+    expect(availabilityOf(definitionRow({ definition: fan }), sourceOf({ budgets: { heavy_op_threshold: 10 } }))).toEqual({ status: 'available' });
+    const cycle = { anchorType: 'maker', steps: [LINKS_ONCE, LINKS_ONCE, { ...LINKS_ONCE, closesAtAnchor: true }] };
+    expect(availabilityOf(definitionRow({ definition: cycle }), sourceOf({ budgets: { max_hops: 2 } }))).toEqual({ status: 'available' });
   });
 });
 

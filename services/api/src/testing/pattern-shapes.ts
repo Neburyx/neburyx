@@ -24,6 +24,12 @@ export interface StepShape {
   readonly typeClass: number;
   readonly conditions: readonly Form[];
   readonly windowed: boolean;
+  /** The step is ordered after the previous one (`after: 'previous'`). Left out, it is not. */
+  readonly ordered?: boolean;
+  /** The origin of the step has at least this many qualifying neighbours (`fan: { atLeast }`). Left out, no fan. */
+  readonly fan?: number;
+  /** The step arrives at the anchor itself (`closesAtAnchor: true`); only the last step of two or more. Left out, it does not. */
+  readonly closes?: boolean;
 }
 export interface Shape {
   readonly steps: readonly StepShape[];
@@ -161,6 +167,9 @@ export function paramsOf(shape: Shape, alternate = false): unknown {
       arrivesAt: 'maker',
       ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, alternate)) }),
       ...(step.windowed ? WINDOW : {}),
+      ...(step.ordered === true ? { after: 'previous' } : {}),
+      ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan } }),
+      ...(step.closes === true ? { closesAtAnchor: true } : {}),
     };
   });
   return patternParamsSchema.parse({ anchorType: 'maker', stableId: alternate ? 'item-b' : 'item-a', steps });
@@ -180,7 +189,7 @@ export function countStatementOfShape(shape: Shape, alternate = false, allowlist
 export function definitionOf(shape: Shape, text?: string): unknown {
   return {
     anchorType: 'maker',
-    steps: shape.steps.map((step) => ({ relationshipTypes: TYPE_CLASSES[step.typeClass]?.types ?? [], direction: step.direction, arrivesAt: 'maker', ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, false, text)) }), ...(step.windowed ? { window: { days: 7 } } : {}) })),
+    steps: shape.steps.map((step) => ({ relationshipTypes: TYPE_CLASSES[step.typeClass]?.types ?? [], direction: step.direction, arrivesAt: 'maker', ...(step.conditions.length === 0 ? {} : { conditions: step.conditions.map((form) => conditionOf(form, false, text)) }), ...(step.windowed ? { window: { days: 7 } } : {}), ...(step.ordered === true ? { after: 'previous' } : {}), ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan } }), ...(step.closes === true ? { closesAtAnchor: true } : {}) })),
   };
 }
 
@@ -361,6 +370,82 @@ export function grammarCorpus(seed = SEED_OF_RECORD, drawn = 600): Shape[] {
     everywhere.push({ steps, stopRules: 2 });
   }
   return [...enumerateShapes(), ...randomShapes(seed, drawn), ...everywhere];
+}
+
+/** The type classes whose every row has a time property: a time order is only valid between steps that cross them. */
+export const TIMED_CLASSES: readonly number[] = TYPE_CLASSES.flatMap((cls, index) => (/^\d+\|T\d+(\+T\d+)*\|\d+$/.test(cls.key) ? [index] : []));
+
+/** The values of a fan the extended shapes use: the least, one more, and the count cap's default (the most the fixture's source accepts). */
+const FAN_VALUES = [2, 3, 500] as const;
+
+/**
+ * The shapes of the extension, each once, in a fixed order: a time order, a fan and a cycle each alone at every position and step count, in every direction, with and without a window and for every number of stop-list
+ * rules, and the three together (a fan at the first step, a time order on the later ones, the last closing at the anchor, a fan and a time order on one step). A shape with a time order crosses only classes of types that all have a time property.
+ */
+export function* enumerateExtendedShapes(): Generator<Shape> {
+  const seen = new Set<string>();
+  const emit = (shape: Shape): Shape | undefined => {
+    const key = JSON.stringify(shape);
+    if (seen.has(key)) return undefined;
+    seen.add(key);
+    return shape;
+  };
+  const timed = [...new Set([TIMED_CLASSES[0] ?? 0, TIMED_CLASSES[TIMED_CLASSES.length - 1] ?? 0])];
+  const plain = [...new Set([0, SELECTED_CLASSES[SELECTED_CLASSES.length - 1] ?? 0])];
+  const build = (count: number, classes: readonly number[], direction: Direction, windowed: boolean, mark: (position: number) => Partial<StepShape>): StepShape[] =>
+    Array.from({ length: count }, (_unused, position) => stepOf(classes[position % classes.length] ?? 0, { direction: cycle(DIRECTIONS, DIRECTIONS.indexOf(direction), count)[position] ?? direction, windowed: windowed && position % 2 === 0, ...mark(position) }));
+  for (const count of [1, 2, 3, 4]) {
+    for (const stopRules of [0, 1, 2] as const) {
+      for (const direction of DIRECTIONS) {
+        for (const windowed of [false, true]) {
+          // a fan alone, at each position
+          for (const position of Array.from({ length: count }, (_unused, index) => index)) for (const value of FAN_VALUES) for (const classes of [plain, timed]) {
+            const shape = emit({ steps: build(count, classes, direction, windowed, (at) => (at === position ? { fan: value } : {})), stopRules });
+            if (shape !== undefined) yield shape;
+          }
+          if (count < 2) continue;
+          // a time order alone, on each later step and on all of them
+          for (const classes of [timed]) {
+            for (const position of Array.from({ length: count - 1 }, (_unused, index) => index + 1)) {
+              const shape = emit({ steps: build(count, classes, direction, windowed, (at) => (at === position ? { ordered: true } : {})), stopRules });
+              if (shape !== undefined) yield shape;
+            }
+            const all = emit({ steps: build(count, classes, direction, windowed, (at) => (at > 0 ? { ordered: true } : {})), stopRules });
+            if (all !== undefined) yield all;
+          }
+          // a cycle alone, and with the others
+          for (const classes of [plain, timed]) {
+            const shape = emit({ steps: build(count, classes, direction, windowed, (at) => (at === count - 1 ? { closes: true } : {})), stopRules });
+            if (shape !== undefined) yield shape;
+          }
+          const together = emit({ steps: build(count, timed, direction, windowed, (at) => ({ ...(at === 0 ? { fan: 2 } : { ordered: true }), ...(at === count - 1 ? { closes: true, fan: 3 } : {}) })), stopRules });
+          if (together !== undefined) yield together;
+          const onOneStep = emit({ steps: build(count, timed, direction, windowed, (at) => (at === count - 1 ? { fan: 3, ordered: true, closes: true } : {})), stopRules });
+          if (onOneStep !== undefined) yield onOneStep;
+        }
+      }
+    }
+  }
+}
+
+/** Shapes of the extension drawn at random from a seed: each step may carry a fan, a time order (only when every step crosses timed types) and the last may close at the anchor. */
+export function randomExtendedShapes(seed: number, count: number): Shape[] {
+  const next = generator(seed);
+  const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)] as T;
+  return Array.from({ length: count }, (): Shape => {
+    const length = 1 + Math.floor(next() * CAPS.steps);
+    const allTimed = length > 1 && next() < 0.6;
+    const closes = length > 1 && next() < 0.4;
+    const steps = Array.from({ length }, (_unused, position): StepShape =>
+      stepOf(allTimed ? pick(TIMED_CLASSES) : Math.floor(next() * TYPE_CLASSES.length), {
+        direction: pick(DIRECTIONS),
+        windowed: next() < 0.4,
+        ...(next() < 0.35 ? { fan: pick([2, 3, 4, 9, 100, 500]) } : {}),
+        ...(allTimed && position > 0 && next() < 0.5 ? { ordered: true } : {}),
+        ...(closes && position === length - 1 ? { closes: true } : {}),
+      }));
+    return { steps, stopRules: pick([0, 1, 2] as const) };
+  });
 }
 
 export const SEED_OF_RECORD = 5017;

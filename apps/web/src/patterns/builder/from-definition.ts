@@ -29,6 +29,9 @@ export function fromDefinition(definition: unknown): { readonly draft: Draft; re
       relationshipTypes: [...step.relationshipTypes],
       ...(conditions.length === 0 ? {} : { conditions }),
       ...(step.window === undefined ? {} : { window: windowOf(step.window) }),
+      ...(step.after === undefined ? {} : { after: step.after }),
+      ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast } }),
+      ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: step.closesAtAnchor }),
     };
   });
   return { draft: { anchorType: parsed.data.anchorType, steps }, whole: true };

@@ -13,9 +13,10 @@ import { makeWebRoot } from '../testing/web-root.js';
 const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
-const mapping = linkedMappingOf();
+const defaultMapping = linkedMappingOf();
 
-async function started(options: { readonly deny?: boolean } = {}) {
+async function started(options: { readonly deny?: boolean; readonly mapping?: typeof defaultMapping } = {}) {
+  const mapping = options.mapping ?? defaultMapping;
   const executor = new TestExecutor(() => {
     throw new Error('the preview route called the source');
   });
@@ -113,6 +114,27 @@ describe('POST /v1/patterns/preview', () => {
     const open = await preview(app, { sourceId: 'demo', definition });
     expect(patternPreviewResponseSchema.parse(open.json()).status).toBe('ok');
     expect(open.body).toContain('SENTINEL-REGION');
+    expect(executor.calls).toEqual([]);
+    await app.close();
+  });
+});
+
+describe('POST /v1/patterns/preview with a time order over rows that have a time property of their own in each direction', () => {
+  it('answers 200 with the preview, and the typed parts hold every property: four types of two rows each give eight', async () => {
+    const types = ['T1', 'T2', 'T3', 'T4'];
+    const rows = types.flatMap((type, index) => [
+      { type, from: 'maker', to: 'tool', stable_id: `s${index}a`, observed_at: `out${index}` },
+      { type, from: 'tool', to: 'maker', stable_id: `s${index}b`, observed_at: `back${index}` },
+    ]);
+    const crowded = linkedMappingOf({ entities: [{ type: 'maker', label: 'Maker', stable_id: 'makerId' }, { type: 'tool', label: 'Tool', stable_id: 'toolId' }], relationships: rows, derived: [], patterns: [] });
+    const { app, executor } = await started({ mapping: crowded });
+    const step = { relationshipTypes: types, direction: 'both', arrivesAt: 'tool' };
+    const back = { relationshipTypes: types, direction: 'both', arrivesAt: 'maker', after: 'previous' };
+    const response = await preview(app, { sourceId: 'demo', definition: { anchorType: 'maker', steps: [step, back] } });
+    expect(response.statusCode).toBe(200);
+    const parsed = patternPreviewResponseSchema.parse(response.json());
+    expect(parsed.status).toBe('ok');
+    if (parsed.status === 'ok') expect(parsed.preview.steps[1]?.timeOrder?.properties.length).toBe(8);
     expect(executor.calls).toEqual([]);
     await app.close();
   });

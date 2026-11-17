@@ -13,6 +13,10 @@ export interface StepDraft {
   /** The conditions on the step's node and relationship, in the order typed; they go with the step. */
   readonly conditions?: readonly ConditionRow[];
   readonly window?: WindowDraft;
+  /** The three fields of a fan, a time order and a cycle are not edited here: a draft holds them as a stored definition had them, so that opening, editing something else and saving keeps them whole. */
+  readonly after?: 'previous';
+  readonly fan?: { readonly atLeast: number };
+  readonly closesAtAnchor?: true;
 }
 
 export interface Draft {
@@ -112,8 +116,8 @@ export interface BuilderState {
 export const INITIAL: BuilderState = { draft: EMPTY_DRAFT };
 
 /** The changes that can leave a later part of the pattern unfollowed: the ones to the start, a step's direction, arrival or relationship types, and removing a step. */
-const changesLink = (action: Action): boolean => action.type === 'start' || action.type === 'direction' || action.type === 'arrives' || action.type === 'toggle' || action.type === 'remove';
-const placeOf = (action: Action, draft: Draft): 'start' | number => (action.type === 'start' ? 'start' : action.type === 'remove' ? (action.index ?? draft.steps.length - 1) : action.type === 'direction' || action.type === 'arrives' || action.type === 'toggle' ? action.index : 'start');
+const changesLink = (action: Action): boolean => action.type === 'start' || action.type === 'direction' || action.type === 'arrives' || action.type === 'toggle' || action.type === 'remove' || action.type === 'add';
+const placeOf = (action: Action, draft: Draft): 'start' | number => (action.type === 'start' ? 'start' : action.type === 'remove' ? (action.index ?? draft.steps.length - 1) : action.type === 'add' ? draft.steps.length : action.type === 'direction' || action.type === 'arrives' || action.type === 'toggle' ? action.index : 'start');
 
 /**
  * Applies a change to the draft. A change never removes anything the person built: what the mapping then does not follow is kept and marked (`breaksOf`), and the state keeps the draft as it was before the first change that broke something,
@@ -198,7 +202,13 @@ export type Break =
   | { readonly kind: 'types-lead'; readonly step: number; readonly part: 'link'; readonly types: readonly string[]; readonly arrival: string }
   | { readonly kind: 'arrival'; readonly step: number; readonly part: 'link'; readonly from: string; readonly arrival: string }
   | { readonly kind: 'condition'; readonly step: number; readonly part: 'conditions'; readonly row: ConditionRow; /** How many conditions of the step are on this property of this side and are not offered: they are said once. */ readonly rows: number; readonly arrival: string; readonly types: readonly string[] }
-  | { readonly kind: 'window'; readonly step: number; readonly part: 'window' };
+  | { readonly kind: 'window'; readonly step: number; readonly part: 'window' }
+  /** A step ordered after the previous one that has none (it is now the first). */
+  | { readonly kind: 'order-first'; readonly step: number; readonly part: 'link' }
+  /** A step ordered after the previous one whose relationship types, or the previous step's, have no time in the mapping. */
+  | { readonly kind: 'no-time'; readonly step: number; readonly part: 'link'; readonly types: readonly string[] }
+  /** A closing at the start that no longer fits: the step is not the last, the pattern has one step, or the step arrives at another type than the start. */
+  | { readonly kind: 'closing'; readonly step: number; readonly part: 'link'; readonly why: 'not-last' | 'one-step' | 'other-type'; readonly arrival: string | undefined };
 
 type MappingRow = SourceProfile['relationshipTypes'][number];
 
@@ -215,6 +225,29 @@ export function leadsTo(profile: SourceProfile, type: string, from: string, dire
   return found;
 }
 
+/** The relationship types, of the step and of the one before it, that cross a row of the mapping with no time property. */
+function untimedTypesOf(profile: SourceProfile, draft: Draft, index: number): readonly string[] {
+  const found: string[] = [];
+  for (const at of [index, index - 1]) {
+    const step = draft.steps[at];
+    const from = previousTypeOf(draft, at);
+    if (step === undefined || from === undefined || step.direction === undefined || step.arrivesAt === undefined) continue;
+    for (const type of step.relationshipTypes) {
+      const rows = profile.relationshipTypes.filter((row) => row.type === type && joins(row, from, step.arrivesAt ?? '', step.direction ?? 'out'));
+      if (rows.some((row) => row.observedAt === null) && !found.includes(type)) found.push(type);
+    }
+  }
+  return found;
+}
+
+/** The time properties the rows of a step's relationship types carry, each once. */
+export function timePropertiesOf(profile: SourceProfile, draft: Draft, index: number): readonly string[] {
+  const step = draft.steps[index];
+  const from = previousTypeOf(draft, index);
+  if (step === undefined || from === undefined || step.direction === undefined || step.arrivesAt === undefined) return [];
+  return [...new Set(profile.relationshipTypes.filter((row) => step.relationshipTypes.includes(row.type) && joins(row, from, step.arrivesAt ?? '', step.direction ?? 'out') && row.observedAt !== null).map((row) => row.observedAt ?? ''))];
+}
+
 /**
  * Every part of the draft that the mapping does not follow, in the order of the steps: a relationship type that does not leave the step's start, one that leads somewhere else than the chosen arrival, an arrival the direction does not reach,
  * a condition on a property the step no longer offers, and a window on a step none of whose chosen types has a date. Nothing is changed for the person: this only says where.
@@ -222,6 +255,15 @@ export function leadsTo(profile: SourceProfile, type: string, from: string, dire
 export function breaksOf(profile: SourceProfile, draft: Draft, mask: boolean): readonly Break[] {
   const found: Break[] = [];
   draft.steps.forEach((step, index) => {
+    if (step.after !== undefined && index === 0) found.push({ kind: 'order-first', step: index, part: 'link' });
+    if (step.after !== undefined && index > 0) {
+      const untimed = untimedTypesOf(profile, draft, index);
+      if (untimed.length > 0) found.push({ kind: 'no-time', step: index, part: 'link', types: untimed });
+    }
+    if (step.closesAtAnchor !== undefined) {
+      const why = index !== draft.steps.length - 1 ? 'not-last' : draft.steps.length < 2 ? 'one-step' : step.arrivesAt !== undefined && step.arrivesAt !== draft.anchorType ? 'other-type' : undefined;
+      if (why !== undefined) found.push({ kind: 'closing', step: index, part: 'link', why, arrival: step.arrivesAt });
+    }
     const from = previousTypeOf(draft, index);
     if (from === undefined) return;
     const { direction, arrivesAt: arrival } = step;
@@ -271,6 +313,9 @@ export function toDefinition(draft: Draft, profile: SourceProfile, mask: boolean
       arrivesAt: step.arrivesAt,
       ...(read.filters.length === 0 ? {} : { conditions: [...read.filters] }),
       ...(window.window === undefined ? {} : { window: window.window }),
+      ...(step.after === undefined ? {} : { after: step.after }),
+      ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast } }),
+      ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: step.closesAtAnchor }),
     });
   }
   return { anchorType: draft.anchorType, steps };

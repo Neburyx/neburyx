@@ -10532,7 +10532,10 @@
                         "unknown-property",
                         "not-filterable",
                         "personal-data-masked",
-                        "too-many-hops"
+                        "too-many-hops",
+                        "time-not-mapped",
+                        "over-ceiling",
+                        "cycle-too-long"
                       ]
                     }
                   },
@@ -11178,6 +11181,91 @@
                             "text"
                           ],
                           "additionalProperties": false
+                        },
+                        "fan": {
+                          "type": "object",
+                          "properties": {
+                            "atLeast": {
+                              "type": "integer",
+                              "minimum": 2,
+                              "maximum": 9007199254740991
+                            },
+                            "direction": {
+                              "type": "string",
+                              "enum": [
+                                "out",
+                                "in",
+                                "both"
+                              ]
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "atLeast",
+                            "direction",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "timeOrder": {
+                          "type": "object",
+                          "properties": {
+                            "properties": {
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "previousProperties": {
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 256
+                              }
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "properties",
+                            "previousProperties",
+                            "text"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "closesAtAnchor": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 256
+                            },
+                            "name": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "text": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "name",
+                            "text"
+                          ],
+                          "additionalProperties": false
                         }
                       },
                       "required": [
@@ -11317,7 +11405,10 @@
                         "unknown-property",
                         "not-filterable",
                         "personal-data-masked",
-                        "too-many-hops"
+                        "too-many-hops",
+                        "time-not-mapped",
+                        "over-ceiling",
+                        "cycle-too-long"
                       ]
                     }
                   },
