@@ -40,7 +40,9 @@ test.describe('the Enterprise link of the Sources page', () => {
       expect(box.y).toBeGreaterThanOrEqual(layout.y + layout.height);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(size.width);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const widthWith = await page.evaluate(() => document.documentElement.scrollWidth);
+      await link.evaluate((element) => void (element.style.display = 'none'));
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), 'the link does not widen the page').toBe(widthWith);
     });
   }
 });
