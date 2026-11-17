@@ -296,3 +296,8 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
 }
+
+.sources-enterprise {
+  margin: 0;
+  font-size: var(--font-size-small);
+}

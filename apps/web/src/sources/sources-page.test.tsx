@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useMemo } from 'react';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MeResponse, SourceSummary } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
@@ -13,10 +13,12 @@ import { clientWith, counted, me, renderApp, source, testReport } from '../test-
 import type { SourceProfile, SourceTestReport } from '@neburyx/contracts';
 import { createApiClient, type ApiResult } from '../api/client.js';
 import { testProfile } from '../dev/test-profile.js';
+import { HELP_LINKS } from '../help/links.js';
 import { createExcerpts } from './excerpts.js';
 import { ExcerptsProvider } from './excerpts-context.js';
 import { createTestRuns } from './test-runs.js';
 import { TestRunsProvider } from './test-runs-context.js';
+import { EnterpriseLink } from './enterprise-link.js';
 import { SourcesPage } from './sources-page.js';
 
 const profiled = (overrides: Partial<ApiClient> = {}): ApiClient => fakeClient({ getProfile: async (id) => ({ ok: true, value: testProfile(id) }), ...overrides });
@@ -794,5 +796,68 @@ describe('the Sources page', () => {
       await user.tab();
       expect(document.activeElement).not.toBe(within(detail).getByRole('button', { name: 'Diagnostics bundle' }));
     });
+  });
+});
+
+describe('the Enterprise link on the Sources page', () => {
+  const link = () => within(main()).getByRole('link', { name: 'Talk to us about Enterprise' });
+
+  it.each([
+    ['sources listed', () => answering([[source('a')]])],
+    ['no source configured', () => answering([[]])],
+    ['sources that could not be read', () => answering(['fail'])],
+    ['sources still loading', () => profiled({ getMe: async () => ({ ok: true, value: me() }), getSources: () => new Promise<never>(() => undefined) })],
+  ])('is on the page, with the address of the Help menu, when the page shows %s', (_name, client) => {
+    render(<Harness client={client()} />);
+    expect(link().getAttribute('href')).toBe(HELP_LINKS.enterprise);
+  });
+
+  it('comes after the content of the page, so it takes the last tab stop', async () => {
+    render(<Harness client={answering([[source('a')]])} />);
+    await within(main()).findByRole('list', { name: 'Configured sources' });
+    const controls = within(main()).getAllByRole('link').concat(within(main()).getAllByRole('button'));
+    const last = controls.filter((control) => !(control.compareDocumentPosition(link()) & Node.DOCUMENT_POSITION_PRECEDING) || control === link()).length;
+    expect(last).toBe(controls.length);
+  });
+
+  it('opens an https address in a new tab with no referrer, as the Help menu does', () => {
+    render(<EnterpriseLink address="https://example.test/inquiries" />);
+    const anchor = screen.getByRole('link', { name: 'Talk to us about Enterprise' });
+    expect(anchor.getAttribute('target')).toBe('_blank');
+    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
+  it('makes no request when the page is used and the link is followed, and every request it does make is to the page itself', async () => {
+    const urls: string[] = [];
+    const fetched = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      urls.push(String(input instanceof Request ? input.url : input));
+      return new Response('{}');
+    });
+    const opened = vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation((_method, url) => void urls.push(String(url)));
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: beacon });
+    try {
+      render(<Harness client={answering([[source('a')]])} />);
+      await within(main()).findByRole('list', { name: 'Configured sources' });
+      const anchor = link();
+      anchor.addEventListener('click', (event) => event.preventDefault());
+      await userEvent.click(anchor);
+      await userEvent.tab();
+      expect(beacon).not.toHaveBeenCalled();
+      expect(urls.filter((url) => !new URL(url, window.location.origin).href.startsWith(window.location.origin))).toEqual([]);
+      expect(urls.some((url) => url.includes(HELP_LINKS.enterprise))).toBe(false);
+    } finally {
+      fetched.mockRestore();
+      opened.mockRestore();
+      Reflect.deleteProperty(navigator, 'sendBeacon');
+    }
+  });
+
+  it('opens a mailto address in the mail program, with no new tab', () => {
+    render(<EnterpriseLink address="mailto:inquiries@example.test" />);
+    const anchor = screen.getByRole('link', { name: 'Talk to us about Enterprise' });
+    expect(anchor.getAttribute('href')).toBe('mailto:inquiries@example.test');
+    expect(anchor.hasAttribute('target')).toBe(false);
+    expect(anchor.hasAttribute('rel')).toBe(false);
   });
 });

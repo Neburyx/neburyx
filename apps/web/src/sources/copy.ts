@@ -18,6 +18,7 @@ export const COPY = {
   description: 'Sources are defined in a config file. This page shows their health. It never edits them.',
   listLabel: 'Configured sources',
   footnote: 'Health is independent of source access permissions.',
+  enterpriseInterest: 'Talk to us about Enterprise',
   readOnly: 'Read-only',
   loadingSources: 'Loading sources…',
   couldNotRead: 'The sources could not be read.',

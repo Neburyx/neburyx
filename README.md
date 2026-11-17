@@ -234,7 +234,8 @@ docker compose down -v
 
 ## Questions and problems
 
-- Questions, and talking to us about Enterprise: [GitHub Discussions](../../discussions).
+- Questions: [GitHub Discussions](../../discussions).
+- Talking to us about Enterprise: [Talk to us about Enterprise](../../discussions).
 - To report a problem: [GitHub Issues](../../issues).
 
 ## Layout

@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { ApiClient } from './api/client.js';
@@ -37,7 +37,7 @@ describe('routes and navigation', () => {
 
   it('shows the three links in the navigation of every other page, in order', () => {
     renderAt('/sources');
-    expect(screen.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Sources']);
+    expect(within(screen.getByRole('navigation')).getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Investigations', 'Sources']);
   });
 
   it('shows a not-found page with a link back to Home for a path that matches none, and for an unknown path under a known one', async () => {

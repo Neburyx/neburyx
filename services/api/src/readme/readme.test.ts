@@ -70,7 +70,8 @@ describe('the links of the README', () => {
     expect(discussions.map((link) => link.target)).toEqual(['../../discussions']);
     expect(issues.map((link) => link.target)).toEqual(['../../issues']);
     const section = readme.text.slice(readme.text.indexOf('## Questions and problems'));
-    expect(section).toContain('talking to us about Enterprise');
+    expect(links.filter((link) => link.text === 'Talk to us about Enterprise')).toHaveLength(1);
+    expect(section).toContain('Talking to us about Enterprise');
     for (const name of readdirSync(join(REPOSITORY_ROOT, 'docs')).filter((file) => file.endsWith('.md'))) {
       const text = new Doc(`docs/${name}`).text;
       expect(text).not.toContain('../../discussions');

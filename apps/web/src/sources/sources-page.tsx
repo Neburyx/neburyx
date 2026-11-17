@@ -3,6 +3,7 @@ import { FailureNotice } from '../failure-notice.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
 import { COPY } from './copy.js';
+import { EnterpriseLink } from './enterprise-link.js';
 import { useExcerpts } from './excerpts-context.js';
 import { SourceDetail } from './source-detail.js';
 import { SourceList } from './source-list.js';
@@ -50,6 +51,7 @@ export function SourcesPage() {
     <section className="sources-page">
       <PageHeading title={COPY.title} description={COPY.description} />
       <Body opening={opening} />
+      <EnterpriseLink />
     </section>
   );
 }
