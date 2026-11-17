@@ -19,7 +19,7 @@ const webRoot = makeWebRoot();
 afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
 
 const declaredSchema = z.object({
-  sources: z.array(z.object({ id: z.string(), patterns: z.array(z.object({ id: z.string(), name: z.string(), template: z.string(), bind: z.record(z.string(), z.string()), labels: z.record(z.string(), z.string()).optional() })).optional() })),
+  sources: z.array(z.object({ id: z.string(), patterns: z.array(z.object({ id: z.string(), name: z.string(), template: z.string().optional(), bind: z.record(z.string(), z.string()).optional(), definition: z.record(z.string(), z.unknown()).optional(), description: z.string().optional(), group: z.string().optional(), tag: z.string().optional(), labels: z.record(z.string(), z.string()).optional() })).optional() })),
 });
 
 /** The presets a pack declares in its own file, as a client reads them: the bind as it is and the labels as a list in the order of their keys. */
@@ -27,7 +27,9 @@ function declaredBy(pack: Pack) {
   const file = declaredSchema.parse(parse(readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8')));
   const source = file.sources[0];
   if (source === undefined) throw new Error('the pack has no source');
-  return { sourceId: source.id, presets: (source.patterns ?? []).map((preset) => ({ id: preset.id, name: preset.name, template: preset.template, bind: preset.bind, labels: Object.entries(preset.labels ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([key, text]) => ({ key, text })) })) };
+  const entries = source.patterns ?? [];
+  const definitions = entries.filter((entry) => entry.definition !== undefined).map((entry) => ({ id: entry.id, name: entry.name, ...(entry.description === undefined ? {} : { description: entry.description }), ...(entry.group === undefined ? {} : { group: entry.group }), ...(entry.tag === undefined ? {} : { tag: entry.tag }), definition: entry.definition }));
+  return { sourceId: source.id, definitions, presets: entries.filter((entry) => entry.definition === undefined).map((preset) => ({ id: preset.id, name: preset.name, template: preset.template, bind: preset.bind, labels: Object.entries(preset.labels ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([key, text]) => ({ key, text })) })) };
 }
 
 async function listOf(pack: Pack) {
@@ -49,6 +51,7 @@ describe.each(PACKS)('the template list of the %s pack', (pack) => {
     expect(declared.presets.length).toBeGreaterThan(0);
     expect(body.sourceId).toBe(declared.sourceId);
     expect(body.presets).toEqual(declared.presets);
+    expect(body.builtInDefinitions).toEqual(declared.definitions);
     expect(body.templates.map((template) => template.id)).toEqual([...PRESET_TEMPLATES]);
     expect(executor.calls).toEqual([]);
   });

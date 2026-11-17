@@ -13530,6 +13530,50 @@
               ],
               "additionalProperties": false
             }
+          },
+          "builtInDefinitions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                "group": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 40
+                },
+                "tag": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 12
+                },
+                "definition": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "definition"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [

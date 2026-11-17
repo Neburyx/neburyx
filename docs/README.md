@@ -11,6 +11,7 @@ Public technical documentation.
 - [architecture-checks.md](architecture-checks.md): the checks that fail the build (nothing outside the gate reaches the adapter; no domain words in code) and what they cannot see.
 - [configuration.md](configuration.md): the deployment settings of the mapping file: how long deleted investigations and exports are kept, their ranges and what a refused value says.
 - [pattern-definition.md](pattern-definition.md): the pattern definition: its fixed forms, the fan, time order and cycle, their limits and refusals, versions and what the checks prove.
+- [aml-typologies.md](aml-typologies.md): the four AML typologies the banking pack ships as built-in definitions, their public basis, how to change them and what is not expressible yet.
 - [api-conventions.md](api-conventions.md): the rules every endpoint follows: pagination, field limits, idempotency keys, concurrency and the permission each route declares.
 - [cancellation.md](cancellation.md): what happens when a request is cancelled, what is not promised, what was tested and what was not verified.
 - [query-timeout.md](query-timeout.md): the limit on every read, what a timed-out request answers and shows, what was measured and what was not verified.

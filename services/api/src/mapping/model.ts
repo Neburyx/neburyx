@@ -1,4 +1,4 @@
-import type { AiSettings, FilterKind, IconKey, PiiClass, PresetTemplate } from '@neburyx/contracts';
+import type { AiSettings, FilterKind, IconKey, PatternDefinition, PiiClass, PresetTemplate } from '@neburyx/contracts';
 import { buildLinkAddress } from './link-address.js';
 
 /** The most properties a source may list under `search` in all its entity types: each is a branch of the one search read. */
@@ -101,6 +101,16 @@ export interface PresetModel {
   readonly labels: Readonly<Record<string, string>>;
 }
 
+/** A built-in pattern written as a definition (the definition of a pattern built in the app) in the mapping: it names this source's own types, so it is declared here. */
+export interface BuiltInDefinitionModel {
+  readonly id: string;
+  readonly name: string;
+  readonly definition: PatternDefinition;
+  readonly description?: string;
+  readonly group?: string;
+  readonly tag?: string;
+}
+
 export interface BudgetsModel {
   readonly timeoutMs: number;
   readonly maxPage: number;
@@ -136,6 +146,8 @@ export interface SourceModel {
   readonly relationships: readonly RelationshipModel[];
   readonly derived: readonly DerivedRuleModel[];
   readonly presets: readonly PresetModel[];
+  /** Absent when the mapping declares none, so the hash of a mapping without any is what it was. */
+  readonly builtInDefinitions?: readonly BuiltInDefinitionModel[];
   readonly styleRules: readonly unknown[];
   readonly configHash: string;
 }

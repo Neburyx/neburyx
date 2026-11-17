@@ -8,7 +8,7 @@ export interface TemplateListService {
   list(sourceId: string): TemplateListResponse;
 }
 
-/** The templates a pattern can bind that the catalog the gate validates against has and allows for the source, and the source's own presets; it reads no source. */
+/** The templates a pattern can bind that the catalog the gate validates against has and allows for the source, the source's own presets and its built-in definitions; it reads no source. */
 export function createTemplateListService(deps: { readonly mapping: MappingModel; readonly catalog: TemplateCatalog }): TemplateListService {
   return {
     list(sourceId) {
@@ -19,7 +19,7 @@ export function createTemplateListService(deps: { readonly mapping: MappingModel
         if (template === undefined || !deps.catalog.isEnabled(id, sourceId) || template.name === undefined || template.description === undefined) return [];
         return [{ id, version: template.version, name: template.name, description: template.description, paramsSchema: paramsJsonSchemaOf(id) }];
       });
-      return { sourceId, templates, presets: [...presetProfilesOf(source)] };
+      return { sourceId, templates, presets: [...presetProfilesOf(source)], builtInDefinitions: (source.builtInDefinitions ?? []).map((item) => ({ ...item })) };
     },
   };
 }

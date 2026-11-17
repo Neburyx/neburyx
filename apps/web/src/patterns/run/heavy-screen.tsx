@@ -7,12 +7,13 @@ interface Props {
   readonly heavy: PatternRunHeavy;
   readonly startName: string;
   readonly onRefine: () => void;
+  readonly refineLabel?: string | undefined;
   readonly onContinue: () => void;
   readonly onCancel: () => void;
 }
 
 /** The run that stopped before reading matches: the estimate as a lower bound, the two choices and Cancel. The number is the answer's own: the estimate, or the threshold the stop was made at. */
-export function HeavyScreen({ heavy, startName, onRefine, onContinue, onCancel }: Props) {
+export function HeavyScreen({ heavy, startName, onRefine, refineLabel, onContinue, onCancel }: Props) {
   const count = heavy.estimate.value ?? heavy.threshold;
   const headline = useRef<HTMLParagraphElement>(null);
   useEffect(() => headline.current?.focus(), []);
@@ -45,7 +46,7 @@ export function HeavyScreen({ heavy, startName, onRefine, onContinue, onCancel }
           {RUN_COPY.cancel}
         </button>
         <button type="button" className="secondary" onClick={onRefine}>
-          {RUN_COPY.refine}
+          {refineLabel ?? RUN_COPY.refine}
         </button>
         <button type="button" className="primary" onClick={onContinue}>
           {continueWith(heavy.continueLimit)}

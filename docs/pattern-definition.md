@@ -50,3 +50,5 @@ The count of a run is labelled by what the read did, as for every pattern: `exac
 - The fuzz suite (see [fuzz-suite.md](fuzz-suite.md)) enumerates and draws shapes with the new fields, and checks every statement against the grammar learned from the compiler.
 - The demo graphs and a graph made for the edge cases run each kind on a real Neo4j and compare with sets computed from the export: boundary counts, parallel relationships, both directions, a supernode origin, self-loops, one relationship read back, two cycles through one entity.
 - The cancellation suite aborts the estimate and the run of each kind, directly, from a saved pattern and from the panel, and shows on a real Neo4j that an aborted read's transaction ends (see [cancellation.md](cancellation.md)).
+
+A mapping can ship definitions as built-in patterns (see [the AML typologies](aml-typologies.md) and [the mapping guide](mapping-guide.md#built-in-definitions)).

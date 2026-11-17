@@ -29,6 +29,7 @@ interface Props {
   readonly notice: ReactNode;
   readonly saveLink: ReactNode;
   readonly onEdit: () => void;
+  readonly editLabel?: string | undefined;
   readonly onRunAnother: () => void;
   readonly onPrevious: () => void;
   readonly onNext: () => void;
@@ -63,7 +64,7 @@ function summaryOf(count: Count, returned: number, before: number, at: Date, pag
 }
 
 /** A page of a result: the count with its label, Add to graph for the page, a card for each match, and Previous and Next when the run has more pages. */
-export function ResultScreen({ answer, at, page, before, hasNext, reading, mask, personal, keyProperties, keyed, startName, typeName, add, evidenceOpener, notice, saveLink, onEdit, onRunAnother, onPrevious, onNext }: Props) {
+export function ResultScreen({ answer, at, page, before, hasNext, reading, mask, personal, keyProperties, keyed, startName, typeName, add, evidenceOpener, notice, saveLink, onEdit, editLabel, onRunAnother, onPrevious, onNext }: Props) {
   const returned = answer.matches.length;
   const summary = summaryOf(answer.count, returned, before, at, page);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -106,7 +107,7 @@ export function ResultScreen({ answer, at, page, before, hasNext, reading, mask,
             </button>
           )}
           <button type="button" className="secondary" onClick={onEdit}>
-            {RUN_COPY.editPattern}
+            {editLabel ?? RUN_COPY.editPattern}
           </button>
           {returned === 0 ? (
             <button type="button" className="secondary" onClick={onRunAnother}>

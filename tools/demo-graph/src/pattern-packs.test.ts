@@ -156,19 +156,41 @@ describe('the preview of a pattern over each pack', () => {
     expect(answer.preview.steps.map((part) => part.text)).toEqual([`Step 1: follow LIVES_AT forward to ${named('address')}`, `Step 2: follow LIVES_AT backward to ${named('claimant')}`]);
   });
 
+  it('says each built-in typology of the banking pack in words, from the definition the mapping holds', async () => {
+    const mapping = parseMapping(readFileSync(join(PACKS, 'banking-fraud', 'neburyx.yaml'), 'utf8'), 'neburyx.yaml');
+    const ids = new Map((mapping.sources[0]?.builtInDefinitions ?? []).map((entry) => [entry.id, entry.definition]));
+    const words = async (id: string): Promise<string[]> => {
+      const { answer } = await previewOf('banking-fraud', ids.get(id));
+      if (answer.status !== 'ok') throw new Error(`${id}: not ok`);
+      return answer.preview.steps.map((part) => part.text);
+    };
+    expect(await words('fan-out')).toEqual(['Step 1: follow TRANSFERRED_TO forward to at least 10 other Accounts']);
+    expect(await words('fan-in')).toEqual(['Step 1: follow TRANSFERRED_TO backward to at least 10 other Accounts']);
+    expect(await words('cycles')).toEqual(['Step 1: follow TRANSFERRED_TO forward to Account', 'Step 2: follow TRANSFERRED_TO forward to Account', 'Step 3: follow TRANSFERRED_TO forward and close back at the start Account']);
+    expect(await words('pass-through')).toEqual(['Step 1: follow TRANSFERRED_TO forward to Account', 'Step 2: follow TRANSFERRED_TO forward to Account, after the previous step (by transferredAt)']);
+  });
+
   it('answers the problems of the validation, and no preview, when a name is changed', async () => {
     const { answer } = await previewOf('banking-fraud', { ...transfers(), steps: [{ ...transfers().steps[0], relationshipTypes: ['SENT_TO'] }] });
     expect(answer.status).toBe('invalid');
   });
 
-  it('lists the two steps of the banking pack with a condition and a window, and says the window does not apply to a relationship type that carries no date', async () => {
+  it('lists the two steps of the banking pack with a condition and a window, which applies to a transfer now that it carries a date', async () => {
     const two = { anchorType: 'account', steps: [transfers().steps[0], { ...transfers().steps[0], window: { days: 30 } }] };
     const { answer, named } = await previewOf('banking-fraud', two);
     if (answer.status !== 'ok') throw new Error('not ok');
     const [first, second] = answer.preview.steps;
     expect(first?.conditions.map((part) => part.text)).toEqual([`${named('account')}: status is "frozen"`]);
-    expect(second?.window?.text).toBe('The window does not apply to TRANSFERRED_TO: no date is declared for it');
-    expect(second?.window).toMatchObject({ appliesTo: [], notAppliedTo: ['TRANSFERRED_TO'] });
+    expect(second?.window?.text).toBe('Window on TRANSFERRED_TO: the last 30 days and today (UTC)');
+    expect(second?.window).toMatchObject({ appliesTo: ['TRANSFERRED_TO'], notAppliedTo: [] });
+  });
+
+  it('says the window does not apply to a relationship type of the banking pack that carries no date', async () => {
+    const payment = { anchorType: 'transaction', steps: [{ relationshipTypes: ['PAID_TO'], direction: 'out', arrivesAt: 'merchant', window: { days: 30 } }] };
+    const { answer } = await previewOf('banking-fraud', payment);
+    if (answer.status !== 'ok') throw new Error('not ok');
+    expect(answer.preview.steps[0]?.window?.text).toBe('The window does not apply to PAID_TO: no date is declared for it');
+    expect(answer.preview.steps[0]?.window).toMatchObject({ appliesTo: [], notAppliedTo: ['PAID_TO'] });
   });
 
   it('lists the two steps of the insurance pack with a condition and a window over a relationship type that carries a date', async () => {
@@ -182,9 +204,13 @@ describe('the preview of a pattern over each pack', () => {
 });
 
 describe('the mapping text of a pack run with a budget lowered', () => {
-  it.each(['banking-fraud', 'insurance-claims'] as const)('keeps the %s mapping valid and gives its source the budget', (pack) => {
-    const [source] = parseMapping(withBudgets(packMappingText(pack, 'bolt://localhost:7687', 'run-db'), { max_hops: 2 }), 'neburyx.yaml').sources;
-    expect(source?.budgets.maxHops).toBe(2);
+  it.each([['banking-fraud', 3], ['insurance-claims', 2]] as const)('keeps the %s mapping valid and gives its source the budget', (pack, hops) => {
+    const [source] = parseMapping(withBudgets(packMappingText(pack, 'bolt://localhost:7687', 'run-db'), { max_hops: hops }), 'neburyx.yaml').sources;
+    expect(source?.budgets.maxHops).toBe(hops);
     expect(withBudgets('x', undefined)).toBe('x');
+  });
+
+  it('stops the banking mapping at a budget of two hops, because its cycles typology has three steps: a definition the source cannot run is not loaded', () => {
+    expect(() => parseMapping(withBudgets(packMappingText('banking-fraud', 'bolt://localhost:7687', 'run-db'), { max_hops: 2 }), 'neburyx.yaml')).toThrow(/cycle-too-long/);
   });
 });

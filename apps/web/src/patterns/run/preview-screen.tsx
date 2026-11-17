@@ -25,13 +25,15 @@ interface Props {
   /** Save pattern…, given by the flow. */
   readonly saveLinks: ReactNode;
   readonly onEdit: () => void;
+  /** What the button back to the builder says, when it is not Edit. */
+  readonly editLabel?: string | undefined;
   readonly onRun: () => void;
 }
 
 const REASON_ID = 'run-start-reason';
 
 /** The pattern in plain words as the server wrote them, its bounds, the choice of where it starts, and the footer with Edit and Run pattern. The client writes the headings and the numbers of the bounds read from the answer; the phrases are the server's. */
-export function PreviewScreen({ client, sourceId, sourceName, mask, preview, retryPreview, typeName, entityType, candidates, chosen, onChoose, showIds, notice, saveLinks, onEdit, onRun }: Props) {
+export function PreviewScreen({ client, sourceId, sourceName, mask, preview, retryPreview, typeName, entityType, candidates, chosen, onChoose, showIds, notice, saveLinks, onEdit, editLabel, onRun }: Props) {
   const ready = preview.kind === 'ready';
   const blocked = !ready || chosen === undefined;
   return (
@@ -45,7 +47,7 @@ export function PreviewScreen({ client, sourceId, sourceName, mask, preview, ret
       <div className="run-footer">
         <button type="button" className="secondary" onClick={onEdit}>
           <span aria-hidden="true">‹ </span>
-          {RUN_COPY.edit}
+          {editLabel ?? RUN_COPY.edit}
         </button>
         <button type="button" className="primary" disabled={blocked} aria-describedby={blocked ? REASON_ID : undefined} onClick={onRun}>
           {RUN_COPY.run}

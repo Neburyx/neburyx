@@ -103,8 +103,9 @@ test.describe('the three kinds of the extension in the Patterns panel', () => {
   });
 
   test('keeps and marks a step ordered after the previous one when the mapping gives its relationship no time', async ({ page }) => {
-    const hop = (extra: Record<string, unknown> = {}) => ({ relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account', ...extra });
-    const saved = await page.request.post('/v1/patterns', { headers: { 'content-type': 'application/json' }, data: { sourceId: SOURCE, kind: 'definition', name: 'Needs a time', definition: { anchorType: 'account', steps: [hop(), hop({ after: 'previous' })] } } });
+    const holds = { relationshipTypes: ['HOLDS_ACCOUNT'], direction: 'out', arrivesAt: 'account' };
+    const sent = { relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account', after: 'previous' };
+    const saved = await page.request.post('/v1/patterns', { headers: { 'content-type': 'application/json' }, data: { sourceId: SOURCE, kind: 'definition', name: 'Needs a time', definition: { anchorType: 'customer', steps: [holds, sent] } } });
     expect(saved.status()).toBe(201);
     await page.reload();
     await openPatternList(page);
@@ -112,7 +113,7 @@ test.describe('the three kinds of the extension in the Patterns panel', () => {
     await chooseMenuItem(page, 'Change');
     const builder = panelOf(page);
     const banner = builder.getByRole('group', { name: 'Changes that break the pattern' });
-    await expect(banner).toContainText('“after the previous step” needs a time in the mapping. TRANSFERRED_TO has none.');
+    await expect(banner).toContainText('“after the previous step” needs a time in the mapping. HOLDS_ACCOUNT has none.');
     await expect(builder.getByRole('region', { name: 'In words' })).toContainText('Kept, not valid');
     await builder.getByRole('tab', { name: /^Step 2( !)?$/ }).click();
     await expect(builder.getByRole('region', { name: 'Step 2 extended' })).toContainText('Not valid');

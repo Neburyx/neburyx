@@ -150,11 +150,27 @@ relationships:
     to: account
     pattern: random
     perFrom: { min: 0, max: 2 }
+    properties:
+      transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.1 }
   # Seven payments from the first account of the first ring to the second, so that the grouped link between them holds several members (one line each).
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
-  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 2000, count: 1 }, toRange: { start: 2001, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2025-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" } } } }
+  # The accounts the AML typologies find, each at a stated account (AC-0007000 and up), with the times that make them hits or misses.
+  # Fan-out: AC-0007000 sends to twelve accounts.
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7000, count: 1 }, toRange: { start: 7001, count: 12 }, perFrom: { min: 12, max: 12 }, properties: { transferredAt: { datetime: { from: "2026-09-20T08:00:00Z", to: "2026-09-20T08:59:59Z" } } } }
+  # Fan-in: twelve accounts send to AC-0007100.
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7101, count: 12 }, toRange: { start: 7100, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T08:00:00Z", to: "2026-09-20T08:59:59Z" } } } }
+  # Cycle of three: AC-0007200 to AC-0007201 to AC-0007202 and back.
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7200, count: 1 }, toRange: { start: 7201, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T08:00:00Z", to: "2026-09-20T08:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7201, count: 1 }, toRange: { start: 7202, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T08:00:00Z", to: "2026-09-20T08:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7202, count: 1 }, toRange: { start: 7200, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T08:00:00Z", to: "2026-09-20T08:59:59Z" } } } }
+  # Pass-through: AC-0007300 sends to AC-0007301 at nine, which sends on to AC-0007302 at ten; AC-0007310 sends to AC-0007311 at ten, which sent on to AC-0007312 at nine (the miss: the second transfer is earlier).
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7300, count: 1 }, toRange: { start: 7301, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T09:00:00Z", to: "2026-09-20T09:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7301, count: 1 }, toRange: { start: 7302, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T10:00:00Z", to: "2026-09-20T10:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7310, count: 1 }, toRange: { start: 7311, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T10:00:00Z", to: "2026-09-20T10:59:59Z" } } } }
+  - { type: TRANSFERRED_TO, from: account, to: account, pattern: random, fromRange: { start: 7311, count: 1 }, toRange: { start: 7312, count: 1 }, perFrom: { min: 1, max: 1 }, properties: { transferredAt: { datetime: { from: "2026-09-20T09:00:00Z", to: "2026-09-20T09:59:59Z" } } } }

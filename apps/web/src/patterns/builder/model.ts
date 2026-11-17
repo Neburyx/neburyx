@@ -245,6 +245,7 @@ export function timePropertiesOf(profile: SourceProfile, draft: Draft, index: nu
   const step = draft.steps[index];
   const from = previousTypeOf(draft, index);
   if (step === undefined || from === undefined || step.direction === undefined || step.arrivesAt === undefined) return [];
+  if (step.after !== undefined && untimedTypesOf(profile, draft, index).length > 0) return [];
   return [...new Set(profile.relationshipTypes.filter((row) => step.relationshipTypes.includes(row.type) && joins(row, from, step.arrivesAt ?? '', step.direction ?? 'out') && row.observedAt !== null).map((row) => row.observedAt ?? ''))];
 }
 

@@ -71,7 +71,7 @@ describe('reading a result', () => {
     await ran();
     const path = (n: number): string[] => within(within(card(n)).getByRole('list', { name: 'Path' })).getAllByRole('listitem').map((item) => item.textContent ?? '');
     expect(path(1)).toEqual(['x-1', '→ r-1 →', 'dev-1', '→ r-3 →', 'acc-2']);
-    expect(path(2)).toEqual(['an entity without an ID', '→ a relationship →', 'an entity without an ID', '→ r-3 →', 'acc-3']);
+    expect(path(2)).toEqual(['an entity without an ID', '— a relationship —', 'an entity without an ID', '→ r-3 →', 'acc-3']);
   });
 
   it.each([

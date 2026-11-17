@@ -79,6 +79,38 @@ describe('GET /v1/templates', () => {
     await app.close();
   });
 
+  it('lists the built-in definitions of the source in the mapping’s order with their sentence, section and tag, none for a source without any, and reads no source', async () => {
+    const links = { relationshipTypes: ['LINKS'], direction: 'out', arrivesAt: 'maker' };
+    const fan = { id: 'fan-out', name: 'Fan-out', description: 'One maker links to many.', group: 'Typologies', tag: 'T', definition: { anchorType: 'maker', steps: [{ ...links, fan: { atLeast: 3 } }] } };
+    const ordered = { id: 'ordered', name: 'Ordered', definition: { anchorType: 'maker', steps: [links, { ...links, after: 'previous' }] } };
+    const { app, executor } = await started({ mapping: mappingOf([LINKED_PRESET, fan, ordered]) });
+    const body = templateListResponseSchema.parse((await list(app)).json());
+    expect(body.builtInDefinitions?.map((item) => item.id)).toEqual(['fan-out', 'ordered']);
+    expect(body.builtInDefinitions?.[0]).toEqual(fan);
+    expect(body.presets.map((preset) => preset.id)).toEqual(['linked-makers']);
+    expect(executor.calls).toEqual([]);
+    await app.close();
+    const { app: plain } = await started({ mapping: mappingOf([]) });
+    expect(templateListResponseSchema.parse((await list(plain)).json()).builtInDefinitions).toEqual([]);
+    await plain.close();
+  });
+
+  it('is read by the schema also when an answer has no built-in definitions field, as an older answer has none, and the new field is not accepted with another shape', () => {
+    const old = { sourceId: 'demo', templates: [], presets: [] };
+    expect(templateListResponseSchema.parse(old).builtInDefinitions).toBeUndefined();
+    expect(templateListResponseSchema.safeParse({ ...old, builtInDefinitions: [{ id: 'x', name: 'X', definition: {}, extra: 1 }] }).success).toBe(false);
+    expect(templateListResponseSchema.safeParse({ ...old, builtInDefinitions: [{ id: 'x', name: 'X', tag: 'a'.repeat(13), definition: {} }] }).success).toBe(false);
+  });
+
+  it('refuses a definition that is not a pattern definition, also when it is nested wrongly, and accepts one that is', () => {
+    const old = { sourceId: 'demo', templates: [], presets: [] };
+    const withDefinition = (definition: unknown) => templateListResponseSchema.safeParse({ ...old, builtInDefinitions: [{ id: 'x', name: 'X', definition }] }).success;
+    expect(withDefinition({ anchorType: 'kind-a', steps: [] })).toBe(false);
+    expect(withDefinition({ anchorType: 'kind-a', steps: [{ relationshipTypes: ['r-1'], direction: 'sideways', arrivesAt: 'kind-b' }] })).toBe(false);
+    expect(withDefinition({ anchorType: 'kind-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'kind-b', fan: { atLeast: 0 } }] })).toBe(false);
+    expect(withDefinition({ anchorType: 'kind-a', steps: [{ relationshipTypes: ['r-1'], direction: 'out', arrivesAt: 'kind-b', fan: { atLeast: 10 } }] })).toBe(true);
+  });
+
   it.each([
     ['an unknown source', '?sourceId=nowhere', 404, 'NOT_FOUND'],
     ['no source', '', 400, 'INVALID_REQUEST'],

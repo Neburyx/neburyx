@@ -3,7 +3,7 @@ import type { ElementRef, GraphEdge, GraphNode, PatternHop, PatternMatch, Patter
 import { edgeKey, elementKey } from '../../state/keys.js';
 import { RUN_COPY } from './run-copy.js';
 
-export type PathPart = { readonly kind: 'entity'; readonly text: string; readonly gap: boolean; readonly name?: string; readonly id?: string } | { readonly kind: 'relationship'; readonly text: string };
+export type PathPart = { readonly kind: 'entity'; readonly text: string; readonly gap: boolean; readonly name?: string; readonly id?: string } | { readonly kind: 'relationship'; readonly text: string; readonly direction: 'out' | 'in' | 'unknown' };
 
 const keyOf = (ref: ElementRef | null): string | undefined => (ref === null ? undefined : elementKey(ref));
 
@@ -19,11 +19,26 @@ export function pathOf(match: PatternMatch, answer: PatternRunOk, mask: boolean,
     const split = title !== undefined && ref.stableId !== '' && title.length > ref.stableId.length + 1 && title.endsWith(` ${ref.stableId}`);
     return split ? { kind: 'entity', text, gap: false, name: title.slice(0, title.length - ref.stableId.length - 1), id: ref.stableId } : { kind: 'entity', text, gap: false };
   };
-  const first = match.relationships[0]?.from;
+  // a hop is kept as the source holds it, so a step that follows a relationship backwards has the node the path arrives at as its from; an end with no usable ID says nothing, and a direction no end settles stays unknown
+  const arrivals = match.relationships.map((_, index) => (index < match.through.length ? match.through[index] : match.match));
+  const same = (a: ElementRef | null | undefined, b: ElementRef | null | undefined): boolean => a !== null && a !== undefined && b !== null && b !== undefined && elementKey(a) === elementKey(b);
+  const directionOf = (hop: PatternHop, origin: ElementRef | null | undefined, arrival: ElementRef | null | undefined): 'out' | 'in' | 'unknown' => {
+    if (same(hop.from, origin) || same(hop.to, arrival)) return 'out';
+    if (same(hop.from, arrival) || same(hop.to, origin)) return 'in';
+    return 'unknown';
+  };
+  const firstHop = match.relationships[0];
+  const startOf = (hop: PatternHop, arrival: ElementRef | null | undefined): ElementRef | null | undefined => {
+    if (arrival === null || arrival === undefined) return hop.from ?? hop.to;
+    return same(hop.from, arrival) && !same(hop.to, arrival) ? hop.to : hop.from;
+  };
+  const first = firstHop === undefined ? undefined : startOf(firstHop, arrivals[0]);
   const parts: PathPart[] = [entity(first)];
+  let at = first;
   match.relationships.forEach((hop, index) => {
-    parts.push({ kind: 'relationship', text: hop.relationshipType ?? RUN_COPY.unusableRelationship });
-    parts.push(entity(index < match.through.length ? match.through[index] : match.match));
+    parts.push({ kind: 'relationship', text: hop.relationshipType ?? RUN_COPY.unusableRelationship, direction: directionOf(hop, at, arrivals[index]) });
+    parts.push(entity(arrivals[index]));
+    at = arrivals[index];
   });
   return parts;
 }

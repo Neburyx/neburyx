@@ -1,5 +1,5 @@
 import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
-import { addressableTextOfAtMost, aiSettingsSchema, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
+import { addressableTextOfAtMost, aiSettingsSchema, BUILT_IN_DEFINITION_LIMITS, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
@@ -151,12 +151,30 @@ function isStringMap(value: unknown): value is Readonly<Record<string, string>> 
 
 const stringMap = z.custom<Readonly<Record<string, string>>>(isStringMap, { message: 'must be a map of non-empty text keys and values' });
 
+/** The longest sentence, section name and tag of a built-in definition. */
+export const MAX_PATTERN_DESCRIPTION = BUILT_IN_DEFINITION_LIMITS.description;
+export const MAX_PATTERN_GROUP = BUILT_IN_DEFINITION_LIMITS.group;
+export const MAX_PATTERN_TAG = BUILT_IN_DEFINITION_LIMITS.tag;
+
 const presetSchema = z.strictObject({
   id: name,
   name,
   template: presetTemplateSchema,
   bind: stringMap,
   labels: stringMap.optional(),
+});
+
+/** One entry of `patterns:`: a built-in run of a template (`template` and `bind`) or a built-in definition (`definition`, with an optional sentence, section and tag). Which one it is, and what each needs, is checked when the model is built, with a reason for each refusal. */
+const patternEntrySchema = z.strictObject({
+  id: name,
+  name,
+  template: presetTemplateSchema.optional(),
+  bind: stringMap.optional(),
+  labels: stringMap.optional(),
+  definition: z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' }).optional(),
+  description: z.string().min(1).max(MAX_PATTERN_DESCRIPTION).optional(),
+  group: z.string().min(1).max(MAX_PATTERN_GROUP).optional(),
+  tag: z.string().min(1).max(MAX_PATTERN_TAG).optional(),
 });
 
 const vocabularySchema = z.strictObject({ case_ref: name.optional() });
@@ -178,7 +196,7 @@ const sourceSchema = z.strictObject({
   entities: z.array(entitySchema).min(1),
   relationships: z.array(relationshipSchema).optional(),
   derived: z.array(derivedSchema).optional(),
-  patterns: z.array(presetSchema).optional(),
+  patterns: z.array(patternEntrySchema).optional(),
   style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' })).optional(),
 });
 
@@ -193,3 +211,4 @@ export type RawEntity = z.infer<typeof entitySchema>;
 export type RawRelationship = z.infer<typeof relationshipSchema>;
 export type RawDerivedRule = z.infer<typeof derivedSchema>;
 export type RawPreset = z.infer<typeof presetSchema>;
+export type RawPatternEntry = z.infer<typeof patternEntrySchema>;

@@ -5,6 +5,8 @@ import { detailsOf, edgesOfMatch, partOf, pathOf } from './match-model.js';
 import { RUN_COPY } from './run-copy.js';
 import type { AddResult } from './use-add-matches.js';
 
+const ARROWS = { out: '→', in: '←', unknown: '—' } as const;
+
 interface Props {
   /** The place of the match among the matches of the run, from 1. */
   readonly number: number;
@@ -41,7 +43,7 @@ export function MatchCard({ number, match, answer, mask, personal, keyProperties
       <ol className="run-path" aria-label={RUN_COPY.path}>
         {pathOf(match, answer, mask, keyed).map((part, index) => (
           <li key={index} className={part.kind === 'entity' ? 'run-chip run-path-entity' : 'run-path-relationship'} data-gap={part.kind === 'entity' && part.gap ? 'true' : undefined}>
-            {part.kind === 'relationship' ? <span aria-hidden="true">→ </span> : null}
+            {part.kind === 'relationship' ? <span aria-hidden="true">{ARROWS[part.direction]} </span> : null}
             {part.kind === 'entity' && part.name !== undefined && part.id !== undefined ? (
               <>
                 <span className="run-chip-name">{part.name}</span> <span className="run-chip-id" title={part.id}>{part.id}</span>
@@ -49,7 +51,7 @@ export function MatchCard({ number, match, answer, mask, personal, keyProperties
             ) : (
               part.text
             )}
-            {part.kind === 'relationship' ? <span aria-hidden="true"> →</span> : null}
+            {part.kind === 'relationship' ? <span aria-hidden="true"> {ARROWS[part.direction]}</span> : null}
           </li>
         ))}
       </ol>

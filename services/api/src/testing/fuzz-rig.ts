@@ -59,6 +59,9 @@ export const FUZZ_LINKED_PRESETS = [
 
 const FUZZ_PRESETS = [...FUZZ_SHARED_PRESETS, ...FUZZ_LINKED_PRESETS];
 
+/** A built-in definition of the first source, so that the template list's answer holds one. */
+const FUZZ_BUILT_IN = { id: 'busy-widget', name: 'Busy widget', description: 'A widget that uses many phones.', group: 'Fuzz', tag: 'FZ', definition: { anchorType: 'widget', steps: [{ relationshipTypes: ['USES'], direction: 'out', arrivesAt: 'phone', fan: { atLeast: 3 } }] } };
+
 /** A second source with the same shape, so a cursor of one can be replayed against the other. */
 export const FUZZ_TWIN_SOURCE = 'twin';
 
@@ -72,7 +75,7 @@ const FUZZ_TIGHT_PRESETS = [{ id: 'linked-holders', name: 'Linked holders', temp
 
 export const FUZZ_MAPPING = parseMapping(
   fileOf(
-    baseSource({ id: FUZZ_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS }),
+    baseSource({ id: FUZZ_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: [...FUZZ_PRESETS, FUZZ_BUILT_IN] }),
     baseSource({ id: FUZZ_TWIN_SOURCE, entities: FUZZ_ENTITIES, relationships: FUZZ_RELATIONSHIPS, derived: FUZZ_DERIVED, patterns: FUZZ_PRESETS }),
     baseSource({ id: FUZZ_TIGHT_SOURCE, entities: FUZZ_ENTITIES, relationships: [...FUZZ_RELATIONSHIPS, ...FUZZ_TIGHT_RELATIONSHIPS], derived: FUZZ_DERIVED, patterns: FUZZ_TIGHT_PRESETS, budgets: { max_hops: 1 } }),
   ),

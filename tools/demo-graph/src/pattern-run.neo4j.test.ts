@@ -274,7 +274,8 @@ describe('a saved pattern run through POST /v1/patterns/{id}/run on the banking 
 
   it('stops as heavy with the real estimate when the source’s threshold is low, and a continue reads the first page', async () => {
     const id = savedIdOf(await banking.saved.save({ name: 'Heavy at one', kind: 'definition', definition: { anchorType: 'account', steps: [transfersOut] } }));
-    const lowered = await banking.reopen((text) => withBudgets(text, { heavy_op_threshold: 1 }));
+    // the pack's fan typologies ask for ten neighbours, which a count cap of one cannot count, so a mapping at that cap does not load them: this test reads the pack without them
+    const lowered = await banking.reopen((text) => withBudgets(text.replace(/^ {6}# Built-in typologies[\s\S]*$/m, ''), { heavy_op_threshold: 1 }));
     try {
       const stopped = await lowered.saved.ok(id, { anchor });
       expect(stopped).toMatchObject({ status: 'heavy', threshold: 1, estimate: { value: 1, quality: 'lowerBound' } });

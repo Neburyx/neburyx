@@ -8,6 +8,7 @@ import {
   MAX_FACET_PROBES,
   MAX_REFERENCE_PROPERTIES,
   MAX_SEARCH_PROPERTIES,
+  type BuiltInDefinitionModel,
   type DerivedRuleModel,
   type EntityModel,
   type MappingModel,
@@ -15,7 +16,9 @@ import {
   type RelationshipModel,
   type SourceModel,
 } from './model.js';
-import type { RawDerivedRule, RawEntity, RawMappingFile, RawPreset, RawRelationship, RawSource } from './schema.js';
+import type { RawDerivedRule, RawEntity, RawMappingFile, RawPatternEntry, RawPreset, RawRelationship, RawSource } from './schema.js';
+import { patternDefinitionSchema, patternProblemsOf } from '@neburyx/contracts';
+import { validatePattern } from '../patterns/validate.js';
 
 export interface BuildIssue {
   readonly segments: readonly (string | number)[];
@@ -232,6 +235,25 @@ function buildPreset(
   return { id: raw.id, name: raw.name, template: raw.template, bind: raw.bind, labels: raw.labels ?? Object.create(null) };
 }
 
+/** A built-in definition: checked as a saved definition is, against this source's own types, relationships and budgets; a problem is named by its code and path in the definition, never by a value. */
+function buildDefinition(raw: RawPatternEntry, path: readonly (string | number)[], model: Omit<SourceModel, 'configHash'>, report: Report): BuiltInDefinitionModel | undefined {
+  if (PRESET_TEMPLATES.some((template) => template === raw.id)) report([...path, 'id'], 'names a template a pattern can bind, which a pattern may not use as its ID');
+  const shape = patternProblemsOf(raw.definition);
+  const problems = shape.length > 0 ? shape : validatePattern(raw.definition, { ...model, configHash: '' });
+  if (problems.length > 0) {
+    for (const problem of problems) report([...path, 'definition', ...problem.path], `is not acceptable: ${problem.code}`);
+    return undefined;
+  }
+  return {
+    id: raw.id,
+    name: raw.name,
+    definition: patternDefinitionSchema.parse(raw.definition),
+    ...(raw.description === undefined ? {} : { description: raw.description }),
+    ...(raw.group === undefined ? {} : { group: raw.group }),
+    ...(raw.tag === undefined ? {} : { tag: raw.tag }),
+  };
+}
+
 function reportDuplicates<T>(
   items: readonly T[],
   keyOf: (item: T) => readonly string[],
@@ -272,14 +294,26 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
   const base = ['sources', index] as const;
   const rawRelationships = raw.relationships ?? [];
   const rawDerived = raw.derived ?? [];
-  const rawPresets = raw.patterns ?? [];
+  const rawEntries = raw.patterns ?? [];
+  const rawPresets: { readonly entry: RawPreset; readonly index: number }[] = [];
+  const rawDefinitions: { readonly entry: RawPatternEntry; readonly index: number }[] = [];
+  rawEntries.forEach((entry, index) => {
+    if (entry.definition !== undefined) {
+      if (entry.template !== undefined || entry.bind !== undefined || entry.labels !== undefined) report([...base, 'patterns', index], 'has a definition and also a template, bind or labels: a pattern is one or the other');
+      else rawDefinitions.push({ entry, index });
+      return;
+    }
+    if (entry.description !== undefined || entry.group !== undefined || entry.tag !== undefined) report([...base, 'patterns', index], 'has a description, group or tag, which only a pattern with a definition has');
+    if (entry.template === undefined || entry.bind === undefined) report([...base, 'patterns', index], 'needs a template and bind, or a definition');
+    else rawPresets.push({ entry: { id: entry.id, name: entry.name, template: entry.template, bind: entry.bind, ...(entry.labels === undefined ? {} : { labels: entry.labels }) }, index });
+  });
   const entityTypes = new Set(raw.entities.map((entity) => entity.type));
   const relationshipTypes = new Set(rawRelationships.map((relationship) => relationship.type));
 
   reportDuplicates(raw.entities, (entity) => [entity.type], (i) => [...base, 'entities', i, 'type'], 'entity type', report);
   reportDuplicates(rawRelationships, (r) => [r.type, 'from', r.from, 'to', r.to], (i) => [...base, 'relationships', i, 'type'], 'relationship', report);
   reportDuplicates(rawDerived, (rule) => [rule.id], (i) => [...base, 'derived', i, 'id'], 'derived rule', report);
-  reportDuplicates(rawPresets, (preset) => [preset.id], (i) => [...base, 'patterns', i, 'id'], 'pattern', report);
+  reportDuplicates(rawEntries, (entry) => [entry.id], (i) => [...base, 'patterns', i, 'id'], 'pattern', report);
 
   for (const [entityIndex, entity] of raw.entities.entries()) checkDegree(entity, [...base, 'entities', entityIndex, 'degree'], rawRelationships, report);
 
@@ -324,10 +358,15 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
     entities: raw.entities.map((entity, i) => buildEntity(entity, [...base, 'entities', i], report)),
     relationships: rawRelationships.map((r, i) => buildRelationship(r, [...base, 'relationships', i], entityTypes, report)),
     derived: rawDerived.map((rule, i) => buildDerived(rule, [...base, 'derived', i], entityTypes, relationshipTypes, report)),
-    presets: rawPresets.map((preset, i) => buildPreset(preset, [...base, 'patterns', i], entityTypes, relationshipTypes, report)),
+    presets: rawPresets.map(({ entry, index }) => buildPreset(entry, [...base, 'patterns', index], entityTypes, relationshipTypes, report)),
     styleRules: raw.style_rules ?? [],
   };
-  return { ...model, configHash: hashSource(model) };
+  const builtIn = rawDefinitions.flatMap(({ entry, index }) => {
+    const built = buildDefinition(entry, [...base, 'patterns', index], model, report);
+    return built === undefined ? [] : [built];
+  });
+  const withDefinitions = builtIn.length === 0 ? model : { ...model, builtInDefinitions: builtIn };
+  return { ...withDefinitions, configHash: hashSource(withDefinitions) };
 }
 
 export function buildMapping(raw: RawMappingFile): { readonly model: MappingModel } | { readonly issues: readonly BuildIssue[] } {

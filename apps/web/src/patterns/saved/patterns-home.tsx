@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
-import type { ListedPattern, TemplateListResponse } from '@neburyx/contracts';
+import type { BuiltInDefinition, ListedPattern, TemplateListResponse } from '@neburyx/contracts';
+import type { ApiClient } from '../../api/client.js';
 import { useProfile } from '../../canvas/profile-context.js';
 import { SavedList as SavedListView, type RowActions } from './saved-list.js';
 import type { RowActionState } from './use-row-actions.js';
@@ -13,6 +14,9 @@ interface Props {
   readonly rows: RowActionState;
   /** The built-in patterns of the source, once read. */
   readonly presets: Preset[] | undefined;
+  /** The built-in definitions of the source, and what the rows need to say their steps and to run or copy one. */
+  readonly definitions?: readonly BuiltInDefinition[] | undefined;
+  readonly words?: { readonly client: ApiClient; readonly sourceId: string; readonly mask: boolean; readonly onRunDefinition: (item: BuiltInDefinition) => void; readonly onCopyDefinition: (item: BuiltInDefinition) => void } | undefined;
   /** Runs a saved pattern in the run view of the panel. */
   readonly onRun: (item: ListedPattern) => void;
   /** Opens a saved pattern in the builder. */
@@ -26,7 +30,7 @@ interface Props {
 }
 
 /** The home of the Patterns panel: the one list of built-in, own and shared patterns. Run opens the run view of the panel. */
-export function PatternsHome({ sourceName, saved, rows, presets, onRun, onChange, onCopyAndChange, onNewPattern, newRef, onRunPreset }: Props) {
+export function PatternsHome({ sourceName, saved, rows, presets, definitions, words, onRun, onChange, onCopyAndChange, onNewPattern, newRef, onRunPreset }: Props) {
   const profile = useProfile();
   const nameOf = useMemo(() => {
     const names = new Map((profile?.entityTypes ?? []).map((type) => [type.type, type.displayName]));
@@ -58,7 +62,7 @@ export function PatternsHome({ sourceName, saved, rows, presets, onRun, onChange
 
   return (
     <div ref={heading}>
-      <SavedListView list={saved} sourceName={sourceName} presets={presets} actions={actions} nameOf={nameOf} newRef={newRef} />
+      <SavedListView list={saved} sourceName={sourceName} presets={presets} definitions={definitions} words={words === undefined ? undefined : { client: words.client, sourceId: words.sourceId, mask: words.mask, actions: { run: words.onRunDefinition, copy: words.onCopyDefinition } }} actions={actions} nameOf={nameOf} newRef={newRef} />
     </div>
   );
 }

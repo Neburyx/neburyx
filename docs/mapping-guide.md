@@ -132,7 +132,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `entities` | yes | The entity types, at least one |
 | `relationships` | no | The relationship types between entity types |
 | `derived` | no | Relationships Neburyx computes along a path of mapped types; always shown as derived |
-| `patterns` | no | Presets: a built-in template bound to your types, with labels |
+| `patterns` | no | Built-in patterns: a template bound to your types, with labels, or a definition written in your types (see [built-in definitions](#built-in-definitions)) |
 | `style_rules` | no | Kept as written and hashed; plain data only |
 
 <!-- keys: auth -->
@@ -232,11 +232,19 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 <!-- keys: pattern -->
 | Key | Required | What it does |
 |---|---|---|
-| `id` | yes | The name of the preset |
+| `id` | yes | The name of the pattern; no two patterns of a source share one |
 | `name` | yes | The name shown to the person |
-| `template` | yes | A built-in template: `shared-attribute` or `linked-entities` |
-| `bind` | yes | Binds the template to your types: `anchor`, `attribute` and `via` for `shared-attribute`; `anchor`, `target` and `via` for `linked-entities` |
-| `labels` | no | The labels of the preset's inputs |
+| `template` | no | With `bind`, and without a `definition`: a built-in template, `shared-attribute` or `linked-entities` |
+| `bind` | no | With `template`: binds the template to your types: `anchor`, `attribute` and `via` for `shared-attribute`; `anchor`, `target` and `via` for `linked-entities` |
+| `labels` | no | The labels of the preset's inputs (with a template) |
+| `definition` | no | Instead of `template` and `bind`: a pattern definition in your types, as the pattern builder writes one: a start type and one to four steps, which may use a fan, a time order or a cycle (see [the pattern definition](pattern-definition.md)) |
+| `description` | no | With a definition: one plain sentence for the list, at most 160 characters |
+| `group` | no | With a definition: the section it is listed in, at most 40 characters |
+| `tag` | no | With a definition: the small label beside the name, at most 12 characters |
+
+### Built-in definitions
+
+A `patterns` entry with a `definition` is a built-in pattern an analyst runs from the Patterns panel without building it: it names your own entity and relationship types, so it is declared in your mapping. It holds no query text and is checked when the mapping loads, exactly as a saved definition is checked against the source (a type or relationship the mapping does not have, a time order on a relationship with no time property, a fan above `heavy_op_threshold`, a cycle longer than `max_hops`): a definition that fails stops the load, naming the pattern and the problem codes and where they are, never a value. An entry has a definition or a template, not both.
 
 ### The budgets
 

@@ -149,8 +149,8 @@ export { MAX_PATTERN_PROBLEMS, PATTERN_LIMITS, PATTERN_PROBLEM_CODES, patternDef
 export type { PatternDefinition, PatternPreview, PatternPreviewRequest, PatternPreviewResponse, PatternProblem, PatternProblemCode, PatternStep, PatternValidateRequest, PatternValidateResponse } from './pattern.js';
 export { patternHopSchema, patternMatchSchema, patternRunHeavySchema, patternRunOkSchema, patternRunRequestSchema, patternRunResponseSchema } from './pattern-run.js';
 export type { PatternHop, PatternMatch, PatternRunHeavy, PatternRunOk, PatternRunRequest, PatternRunResponse } from './pattern-run.js';
-export { TEMPLATE_PARAMS_SCHEMAS, listedTemplateSchema, paramsJsonSchemaOf, templateListQuerySchema, templateListResponseSchema } from './template-list.js';
-export type { ListedTemplate, TemplateListResponse } from './template-list.js';
+export { BUILT_IN_DEFINITION_LIMITS, TEMPLATE_PARAMS_SCHEMAS, builtInDefinitionSchema, listedTemplateSchema, paramsJsonSchemaOf, templateListQuerySchema, templateListResponseSchema } from './template-list.js';
+export type { BuiltInDefinition, ListedTemplate, TemplateListResponse } from './template-list.js';
 export { HEAVY_CONTINUE_LIMIT, LINKED_HOPS_MAX, MIN_SHARED_MAX, TEMPLATE_RUN_NOTICE_CODES, WINDOW_MAX_DAYS, linkedEntitiesParamsSchema, linkedMatchSchema, sharedAttributeParamsSchema, templateRunHeavySchema, templateRunNoticeSchema, templateRunOkSchema, templateRunRequestSchema, templateRunResponseSchema, windowSchema } from './template-run.js';
 export type { LinkedEntitiesParams, LinkedMatch, SharedAttributeParams, TemplateRunHeavy, TemplateRunNotice, TemplateRunOk, TemplateRunRequest, TemplateRunResponse, Window } from './template-run.js';
 export { DERIVED_NEIGHBOR_CAP, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, derivedNeighborsResultSchema } from './derived-neighbors.js';

@@ -7,6 +7,16 @@ import { z } from 'zod';
 import { PACKS, repoRoot } from '../../../services/api/src/testing/pack-fixtures.js';
 import { PACKS_FOLDER } from './packs.js';
 
+/** The test file that proves each built-in definition of each shipped pack: it runs the definition, by its id, on the demo graph. */
+export const DEFINITION_PROOFS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  'banking-fraud': {
+    'fan-out': 'built-in-definitions.neo4j.test.ts',
+    'fan-in': 'built-in-definitions.neo4j.test.ts',
+    cycles: 'built-in-definitions.neo4j.test.ts',
+    'pass-through': 'built-in-definitions.neo4j.test.ts',
+  },
+};
+
 /** The test file that proves each preset of each shipped pack on its demo graph. A preset with no entry, or an entry that names a file that is not there, fails the check below. */
 export const PROOFS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   'banking-fraud': {
@@ -52,9 +62,13 @@ export function unproved(presets: Readonly<Record<string, readonly string[]>>, p
   return problems;
 }
 
-const fileSchema = z.object({ sources: z.array(z.object({ patterns: z.array(z.object({ id: z.string(), template: z.string() })).optional() })) });
-const presetsOf = (pack: string) => (fileSchema.parse(parse(readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8'))).sources[0]?.patterns ?? []);
+const fileSchema = z.object({ sources: z.array(z.object({ patterns: z.array(z.object({ id: z.string(), template: z.string().optional(), definition: z.unknown().optional() })).optional() })) });
+const entriesOf = (pack: string) => (fileSchema.parse(parse(readFileSync(join(repoRoot, 'domain-packs', pack, 'neburyx.yaml'), 'utf8'))).sources[0]?.patterns ?? []);
+const presetsOf = (pack: string) =>
+  entriesOf(pack).flatMap((entry) => (entry.definition === undefined && entry.template !== undefined ? [{ id: entry.id, template: entry.template }] : []));
+const definitionsOf = (pack: string) => entriesOf(pack).filter((entry) => entry.definition !== undefined);
 const declared = Object.fromEntries(PACKS.map((pack) => [pack, presetsOf(pack).map((preset) => preset.id)]));
+const declaredDefinitions = Object.fromEntries(PACKS.map((pack) => [pack, definitionsOf(pack).map((entry) => entry.id)]));
 const here = join(repoRoot, 'tools', 'demo-graph', 'src');
 
 describe('the presets of the shipped packs', () => {
@@ -90,6 +104,12 @@ describe('the presets of the shipped packs', () => {
   it('each use a built-in template and have a test that proves them on the demo graph', () => {
     for (const pack of PACKS) for (const preset of presetsOf(pack)) expect(['shared-attribute', 'linked-entities'], `${pack}: ${preset.id}`).toContain(preset.template);
     expect(unproved(declared, PROOFS, (file) => (existsSync(join(here, file)) ? readFileSync(join(here, file), 'utf8') : undefined))).toEqual([]);
+  });
+
+  it('each built-in definition has a test that runs it on the demo graph, and the presets assertions above are for entries without one', () => {
+    expect(definitionsOf('banking-fraud').map((entry) => entry.id)).toEqual(['fan-out', 'fan-in', 'cycles', 'pass-through']);
+    expect(definitionsOf('insurance-claims')).toEqual([]);
+    expect(unproved(declaredDefinitions, DEFINITION_PROOFS, (file) => (existsSync(join(here, file)) ? readFileSync(join(here, file), 'utf8') : undefined))).toEqual([]);
   });
 
   it('reports a preset with no proof, a proof whose file is missing and a file that never runs the preset', () => {

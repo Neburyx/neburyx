@@ -51,6 +51,8 @@ export interface RunFlowProps {
   readonly onStale?: () => void;
   /** Set when the run is of a saved pattern built in the app: the pattern runs through its own route, and what only a saved pattern has (the way back, the out-of-date screen) is drawn. */
   readonly saved?: SavedRun;
+  /** Set when the run is of a built-in definition of the mapping: nothing of it is stored, Copy to builder opens a copy in the builder, and the way back to the list is drawn. */
+  readonly builtIn?: { readonly name: string; readonly onBack: () => void };
   /** Tells the panel what its heading and the line under it say for the screen that shows. */
   readonly onHeader: (header: RunHeader) => void;
   /** Closes the panel. */
@@ -79,7 +81,7 @@ const entityKeysOf = (answer: { readonly matches: readonly { readonly match: Gra
   answer.matches.flatMap((match) => [match.match, ...match.through, ...match.relationships.flatMap((hop) => [hop.from, hop.to])].flatMap((ref) => (ref === null ? [] : [elementKey(ref)])));
 
 /** The preview, the choice of where to start, the run and what it gives: running, cancelled, refused, the heavy stop, and the result with its pages and Add to graph. It never edits the draft. */
-export function RunFlow({ client, sourceId, sourceName, mask, profile, definition, editing, changed, onEdit, onSaved, onStale, saved, onHeader, close, escape }: RunFlowProps) {
+export function RunFlow({ client, sourceId, sourceName, mask, profile, definition, editing, changed, onEdit, onSaved, onStale, saved, builtIn, onHeader, close, escape }: RunFlowProps) {
   const state = useClientState();
   const loaded = useLoadedGraph();
   const visible = useVisibleGraph();
@@ -170,12 +172,17 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
     target?.focus();
   }, [run.cancelled, run.failure]);
 
-  const base = saved?.item.name ?? savedName ?? editing?.name;
+  const builtInName = builtIn?.name;
+  const base = saved?.item.name ?? builtInName ?? savedName ?? editing?.name;
   const named = base !== undefined && changed === true && saved === undefined ? `${base} · ${RUN_COPY.changesNotSaved}` : base;
   useEffect(() => {
+    if (builtInName !== undefined) {
+      onHeader({ title: builtInName, subtitle: screen === 'preview' || screen === 'running' || screen === 'outOfDate' ? RUN_COPY.builtInTitle : `${RUN_COPY.builtInTitle} · from ${startName}` });
+      return;
+    }
     const subtitle = screen === 'preview' || screen === 'running' || screen === 'outOfDate' ? (named ?? RUN_COPY.draft) : `${named ?? RUN_COPY.draftName} · from ${startName}`;
     onHeader({ title: screen === 'running' ? RUN_COPY.runningTitle : screen === 'heavy' ? RUN_COPY.pausedTitle : screen === 'result' ? RUN_COPY.resultTitle : screen === 'outOfDate' ? SAVED_COPY.unavailable : RUN_COPY.previewTitle, subtitle });
-  }, [onHeader, screen, named, startName]);
+  }, [onHeader, screen, named, startName, builtInName]);
 
   const shown = screen === 'result' ? run.result?.answer : undefined;
   const add = useAddMatches(sourceId, shown, run.running);
@@ -208,7 +215,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
     onStale: () => onStale?.(),
   });
   const saveLinks = (labels: { readonly isNew: string }): React.ReactNode =>
-    saved !== undefined || savedName !== undefined ? null : (
+    saved !== undefined || builtIn !== undefined || savedName !== undefined ? null : (
       <div className="run-save">
         {editing === undefined ? (
           <button type="button" className="link" onClick={() => setSaving(true)}>
@@ -251,6 +258,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         heavy={heavy}
         startName={startName}
         onRefine={onEdit}
+        refineLabel={builtIn === undefined ? undefined : RUN_COPY.copyToBuilder}
         onContinue={() => run.ask !== undefined && press({ definition: run.ask.definition, anchor: run.ask.anchor, continue: { limit: heavy.continueLimit } })}
         onCancel={back}
       />
@@ -276,6 +284,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         notice={failureNotice}
         saveLink={saveLinks({ isNew: RUN_COPY.save })}
         onEdit={onEdit}
+        editLabel={builtIn === undefined ? undefined : RUN_COPY.copyToBuilder}
         onRunAnother={() => {
           if (startedFrom !== undefined) start.decline(startedFrom);
           setFrom(undefined);
@@ -316,19 +325,21 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         }
         saveLinks={saveLinks({ isNew: RUN_COPY.savePattern })}
         onEdit={onEdit}
+        editLabel={builtIn === undefined ? undefined : RUN_COPY.copyToBuilder}
         onRun={() => press()}
       />
     );
   }
   return (
     <div className="run-flow">
-      {saved === undefined ? null : (
+      {saved === undefined && builtIn === undefined ? null : (
         <div className="patterns-actions">
-          <button type="button" className="secondary" onClick={saved.onBack}>
+          <button type="button" className="secondary" onClick={saved?.onBack ?? builtIn?.onBack}>
             {PATTERNS_COPY.backToList}
           </button>
         </div>
       )}
+      {builtIn === undefined ? null : <p className="search-panel-note">{RUN_COPY.builtInNote}</p>}
       {body}
       {saving ? (
         <SavePatternDialog

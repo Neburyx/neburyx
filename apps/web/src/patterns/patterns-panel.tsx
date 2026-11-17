@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent } from 'react';
-import { patternDefinitionSchema, type GraphNode, type ListedPattern, type PatternDefinition, type SavedPattern, type TemplateListResponse, type TemplateRunOk } from '@neburyx/contracts';
+import { patternDefinitionSchema, type BuiltInDefinition, type GraphNode, type ListedPattern, type PatternDefinition, type SavedPattern, type TemplateListResponse, type TemplateRunOk } from '@neburyx/contracts';
 import { withoutReadsWhileSourceChanged } from '../api/changed-source-guard.js';
 import { useApiClient } from '../api/client-context.js';
 import { heavyDecisionOfRun } from '../api/heavy-estimate.js';
@@ -111,6 +111,9 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const [savedItem, setSavedItem] = useState<ListedPattern | undefined>(undefined);
   // the draft the editor handed to the preview, and what the screen of the run says under the heading
   const [previewing, setPreviewing] = useState<PatternDefinition | undefined>(undefined);
+  // the built-in definition whose run the run view shows, and the one a copy in the builder was made from
+  const [builtIn, setBuiltIn] = useState<BuiltInDefinition | undefined>(undefined);
+  const [copiedFrom, setCopiedFrom] = useState<BuiltInDefinition | undefined>(undefined);
   const [runHeader, setRunHeader] = useState<RunHeader | undefined>(undefined);
   const [presetId, setPresetId] = useState<string | undefined>(undefined);
   // the run of a built-in pattern is kept while the panel is open, so that going back to the list and to the form again shows the result under its own pattern
@@ -161,6 +164,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const cancel = (): void => {
     setBuilder(INITIAL);
     setEditing(undefined);
+    setCopiedFrom(undefined);
     setPreviewing(undefined);
     setView('list');
   };
@@ -176,11 +180,16 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   closeRef.current = closeGuarded;
   const backToList = (): void => {
     setSavedItem(undefined);
+    setBuiltIn(undefined);
     setPreviewing(undefined);
     setView('list');
   };
-  const editingView = useMemo(() => (editing === undefined ? undefined : editingViewOf(editing.item, editing.whole)), [editing]);
+  const editingView = useMemo(
+    () => (editing !== undefined ? editingViewOf(editing.item, editing.whole) : copiedFrom === undefined ? undefined : ({ title: SHELL_COPY.newPattern, notes: [`Copy of ${copiedFrom.name} · not saved`], loose: [], stepNotes: new Map() } satisfies EditingView)),
+    [editing, copiedFrom],
+  );
   const change = (item: ListedPattern): void => {
+    setCopiedFrom(undefined);
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
     setBuilder({ draft: opened.draft });
     setEditing({ item, whole: opened.whole, baseline: JSON.stringify(opened.draft) });
@@ -191,10 +200,36 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   // Edit on the run of a saved pattern: the person's own pattern opens for a change; another person's opens as a draft of the person's own
   const editSaved = (item: ListedPattern): void => {
     if (item.ownedByYou) return change(item);
+    setCopiedFrom(undefined);
     const opened = fromDefinition(item.kind === 'definition' ? item.definition : undefined);
     setBuilder({ draft: opened.draft });
     setEditing(undefined);
     setSavedItem(undefined);
+    setNotice(undefined);
+    setView('builder');
+  };
+  const runBuiltIn = (item: BuiltInDefinition): void => {
+    const parsed = patternDefinitionSchema.safeParse(item.definition);
+    if (!parsed.success) {
+      setNotice({ text: SAVED_COPY.unavailable, tone: 'problem' });
+      return;
+    }
+    setNotice(undefined);
+    setSavedItem(undefined);
+    setCopiedFrom(undefined);
+    setBuiltIn(item);
+    setPreviewing(parsed.data);
+    setRunHeader(undefined);
+    setView('run');
+  };
+  // a copy of a built-in definition opens in the builder as a draft of the person's own, which Save pattern… keeps; the built-in does not change
+  const copyBuiltIn = (item: BuiltInDefinition): void => {
+    const opened = fromDefinition(item.definition);
+    setBuilder({ draft: opened.draft });
+    setEditing(undefined);
+    setSavedItem(undefined);
+    setBuiltIn(undefined);
+    setCopiedFrom(item);
     setNotice(undefined);
     setView('builder');
   };
@@ -233,7 +268,10 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const afterSave = (notice: Notice, mode: SaveMode, _saved?: SavedPattern): void => {
     setNotice(notice);
     // a draft saved from its preview is no longer lost by closing, until it is edited again
-    if (mode.kind === 'new' && notice.tone === 'done') setSavedDraft(JSON.stringify(builder.draft));
+    if (mode.kind === 'new' && notice.tone === 'done') {
+      setSavedDraft(JSON.stringify(builder.draft));
+      setCopiedFrom(undefined);
+    }
     saved.reload();
     if (mode.kind === 'change' && notice.tone === 'done') {
       setBuilder(INITIAL);
@@ -302,6 +340,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
                   onRestartedSeen();
                   setNotice(undefined);
                   setSavedItem(undefined);
+                  setCopiedFrom(undefined);
                   if (editing !== undefined) {
                     setBuilder(INITIAL);
                     setEditing(undefined);
@@ -325,6 +364,8 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               saved={saved}
               rows={rows}
               presets={templateData?.presets}
+              definitions={templateData?.builtInDefinitions}
+              words={sourceId === null ? undefined : { client, sourceId, mask, onRunDefinition: runBuiltIn, onCopyDefinition: copyBuiltIn }}
               onRun={runSaved}
               onChange={change}
               onCopyAndChange={(item) => void copyAndChange(item)}
@@ -332,6 +373,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               onNewPattern={() => {
                 onRestartedSeen();
                 setNotice(undefined);
+                setCopiedFrom(undefined);
                 setView('builder');
               }}
               onRunPreset={(preset) => {
@@ -387,7 +429,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
           ) : null}
           {view === 'run' && previewing !== undefined && profile !== undefined ? (
             <RunFlow
-              key={savedItem?.id ?? 'draft'}
+              key={builtIn?.id ?? savedItem?.id ?? 'draft'}
               client={client}
               sourceId={sourceId}
               sourceName={sourceName}
@@ -396,7 +438,8 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               definition={previewing}
               editing={savedItem === undefined ? editing?.item : undefined}
               changed={changed}
-              onEdit={savedItem === undefined ? () => setView('builder') : () => editSaved(savedItem)}
+              builtIn={builtIn === undefined ? undefined : { name: builtIn.name, onBack: backToList }}
+              onEdit={builtIn !== undefined ? () => copyBuiltIn(builtIn) : savedItem === undefined ? () => setView('builder') : () => editSaved(savedItem)}
               onSaved={afterSave}
               onStale={saved.reload}
               {...(savedItem === undefined || savedItem.kind !== 'definition'

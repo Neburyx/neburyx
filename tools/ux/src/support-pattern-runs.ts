@@ -37,10 +37,13 @@ const longNode = (sourceId: string, entityType: string, stableId: string) => ({
   ],
 });
 
+/** The time property the stand-in's mapping gives the relationship types of a step: a transfer is dated by `transferredAt`, the other dated types by `lastSeen`. */
+const timeOf = (step: { relationshipTypes: string[] }): string => (step.relationshipTypes.includes('TRANSFERRED_TO') ? 'transferredAt' : 'lastSeen');
+
 const stubSentence = (index: number, step: { relationshipTypes: string[]; direction: string; arrivesAt: string; after?: 'previous'; fan?: { atLeast: number }; closesAtAnchor?: true }, start: string): string => {
   const fan = step.fan === undefined ? '' : ` with at least ${step.fan.atLeast} other ${step.arrivesAt}s to choose from`;
   const to = step.closesAtAnchor === undefined ? (step.fan === undefined ? `to a ${step.arrivesAt}` : `to at least ${step.fan.atLeast} other ${step.arrivesAt}s`) : `and close back at the start ${start}${fan}`;
-  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : ', after the previous step (by lastSeen)'}`;
+  return `Step ${index + 1}: follow ${step.relationshipTypes.join(' or ')} ${step.direction === 'in' ? 'backward' : 'forward'} ${to}${step.after === undefined ? '' : `, after the previous step (by ${timeOf(step)})`}`;
 };
 
 export function previewPattern(body: unknown, response: ServerResponse): void {
@@ -63,7 +66,7 @@ export function previewPattern(body: unknown, response: ServerResponse): void {
           text: step.fan === undefined && step.after === undefined && step.closesAtAnchor === undefined ? `Follows ${step.relationshipTypes.join(' or ')} ${DIRECTION_WORD[step.direction]} to a ${step.arrivesAt}.` : stubSentence(index, step, definition.anchorType),
           conditions: [],
           ...(step.fan === undefined ? {} : { fan: { atLeast: step.fan.atLeast, direction: step.direction, text: `at least ${step.fan.atLeast} other ${step.arrivesAt}s` } }),
-          ...(step.after === undefined ? {} : { timeOrder: { properties: ['lastSeen'], previousProperties: ['lastSeen'], text: 'after the previous step (by lastSeen)' } }),
+          ...(step.after === undefined ? {} : { timeOrder: { properties: [timeOf(step)], previousProperties: [timeOf(step)], text: `after the previous step (by ${timeOf(step)})` } }),
           ...(step.closesAtAnchor === undefined ? {} : { closesAtAnchor: { type: definition.anchorType, name: definition.anchorType, text: `close back at the start ${definition.anchorType}` } }),
         })),
         bounds: { hopLimit: { value: 4, text: 'At most 4 steps.' }, pageLimit: { value: 50, text: 'At most 50 results at a time.' }, countCap: { value: 500, text: 'Counts stop at 500.' } },

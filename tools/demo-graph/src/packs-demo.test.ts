@@ -124,14 +124,15 @@ describe('the banking demo transfers', () => {
   });
 
   it('leave every other generated line as it was before the extra transfers were added', () => {
-    const added = definition.blocks.filter((block) => block.type === 'TRANSFERRED_TO' && block.fromRange?.count === 1);
+    const added = definition.blocks.filter((block) => block.type === 'TRANSFERRED_TO' && block.fromRange !== undefined);
     expect(added.length).toBeGreaterThanOrEqual(5);
+    const edgesOf = (block: (typeof added)[number]): number => (block.fromRange?.count ?? 0) * (block.perFrom?.min ?? 1);
     const before = generate(mapping, { ...definition, blocks: definition.blocks.filter((block) => !added.includes(block)) }, definition.seed);
     for (const file of full.files) {
       const earlier = before.files.find((candidate) => candidate.type === file.type);
       if (file.type === 'TRANSFERRED_TO') expect(file.lines.slice(0, earlier?.lines.length)).toEqual(earlier?.lines);
       else expect(file.lines).toEqual(earlier?.lines);
     }
-    expect(transfersOf(full)).toHaveLength(transfersOf(before).length + added.length);
+    expect(transfersOf(full)).toHaveLength(transfersOf(before).length + added.reduce((sum, block) => sum + edgesOf(block), 0));
   });
 });

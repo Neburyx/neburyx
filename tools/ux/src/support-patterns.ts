@@ -106,9 +106,19 @@ function linked(sourceId: string, anchor: string, presetId: string | undefined):
   });
 }
 
+/** The four typologies of the banking pack, as its mapping declares them, so that the panel lists them when a spec asks (`typologies` in the mode). */
+const TRANSFER = { relationshipTypes: ['TRANSFERRED_TO'], direction: 'out', arrivesAt: 'account' };
+const TYPOLOGIES = [
+  { id: 'fan-out', name: 'Fan-out', description: 'One account sends to many accounts.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [{ ...TRANSFER, fan: { atLeast: 10 } }] } },
+  { id: 'fan-in', name: 'Fan-in', description: 'Many accounts send to one account.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [{ ...TRANSFER, direction: 'in', fan: { atLeast: 10 } }] } },
+  { id: 'cycles', name: 'Cycles', description: 'Money leaves an account and comes back to it.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [TRANSFER, TRANSFER, { ...TRANSFER, closesAtAnchor: true }] } },
+  { id: 'pass-through', name: 'Pass-through', description: 'Money moves on: an account sends to another, which sends on afterwards.', group: 'AML typologies', tag: 'AML', definition: { anchorType: 'account', steps: [TRANSFER, { ...TRANSFER, after: 'previous' }] } },
+];
+
 /** `GET /v1/templates` and `POST /v1/templates/{id}/run`, scripted: the list is the profile's presets (or none while the mode says so) and the run answers by the limit of the request. */
 export function createPatterns(profiles: () => readonly PatternProfile[]) {
   let noPresets = false;
+  let typologies = false;
   return {
     /** `POST /v1/patterns/validate`: the contract's own check of the definition's shape and caps, and one scripted problem so that a spec reaches the not-valid state: a pattern that starts at a `merchant`. */
     validate(body: unknown, response: ServerResponse): void {
@@ -120,6 +130,7 @@ export function createPatterns(profiles: () => readonly PatternProfile[]) {
     },
     setMode(body: unknown, response: ServerResponse): void {
       noPresets = typeof body === 'object' && body !== null && 'noPresets' in body && body.noPresets === true;
+      typologies = typeof body === 'object' && body !== null && 'typologies' in body && body.typologies === true;
       json(response, 200, {});
     },
     list(sourceId: string | null, response: ServerResponse): void {
@@ -129,6 +140,7 @@ export function createPatterns(profiles: () => readonly PatternProfile[]) {
         sourceId: profile.sourceId,
         templates: (['shared-attribute', 'linked-entities'] as const).map((id) => ({ id, version: '1', name: id, description: id, paramsSchema: paramsJsonSchemaOf(id) })),
         presets: noPresets ? [] : (profile.presets ?? []),
+        builtInDefinitions: typologies && profile.sourceId === 'banking-demo' ? TYPOLOGIES : [],
       });
     },
     async run(presetId: string, body: unknown, response: ServerResponse, request: IncomingMessage): Promise<void> {

@@ -101,7 +101,7 @@ describe('a match', () => {
     const first = within(within(matchCard(1)).getByRole('list', { name: 'Path' })).getAllByRole('listitem').map((item) => item.textContent);
     expect(first).toEqual(['acc-1', '→ r-1 →', 'mid-1', '→ r-3 →', 'acc-2']);
     const second = within(within(matchCard(2)).getByRole('list', { name: 'Path' })).getAllByRole('listitem').map((item) => item.textContent);
-    expect(second).toEqual(['an entity without an ID', '→ a relationship →', 'an entity without an ID', '→ r-3 →', 'acc-3']);
+    expect(second).toEqual(['an entity without an ID', '— a relationship —', 'an entity without an ID', '→ r-3 →', 'acc-3']);
   });
 
   // A mount takes about 0.9 s, so each mount is a test of its own: two in one test came near the 5 s default on a shared CI runner.
