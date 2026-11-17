@@ -172,13 +172,13 @@ describe('POST /v1/investigations/{id}/status', () => {
     await rig.app.close();
   });
 
-  it('answers INTERNAL_ERROR without the sink\'s words when the sink rejects the event of a change that was committed', async () => {
+  it('answers INTERNAL_ERROR without the sink\'s words and leaves the status as it was when the sink rejects the event, because the event and the change commit together', async () => {
     const rig = await started(seeded(), { record: () => Promise.reject(new Error('sink down')) });
     const response = await changeStatus(rig, { status: 'closed', expectedVersion: 3 });
     expect(response.statusCode).toBe(500);
     expect(response.json()).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
     expect(JSON.stringify(response.json())).not.toContain('sink down');
-    expect(stored(rig.store)?.status).toBe('closed');
+    expect(stored(rig.store)?.status).toBe('open');
     await rig.app.close();
   });
 

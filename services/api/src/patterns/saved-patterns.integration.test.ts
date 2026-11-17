@@ -92,14 +92,14 @@ describe('saving a pattern in Postgres', () => {
     expect(await store.savePattern(definitionPattern(seeded.otherSourceId), { principal, traceId: 't', audit })).toMatchObject({ outcome: 'saved' });
   });
 
-  it('refuses with AUDIT_UNAVAILABLE and keeps no row and makes no seam call when the event cannot be written', async () => {
+  it('keeps the row, writes no history row and still passes the audit event on when the history cannot take the event', async () => {
     const { seeded, store, principal, events, audit } = await started();
     await rows(seeded.database.ownerUrl, `CREATE FUNCTION refuse_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'no'; END $$`);
     await rows(seeded.database.ownerUrl, `CREATE TRIGGER refuse_event BEFORE INSERT ON pattern_events FOR EACH ROW EXECUTE FUNCTION refuse_event()`);
-    const failure = await store.savePattern(definitionPattern(seeded.sourceId), { principal, traceId: 't', audit }).catch((error: unknown) => error);
-    expect(failure).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await rows(seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM saved_patterns`)).toEqual([{ n: 0 }]);
-    expect(events).toEqual([]);
+    expect(await store.savePattern(definitionPattern(seeded.sourceId), { principal, traceId: 't', audit })).toMatchObject({ outcome: 'saved' });
+    expect(await rows(seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM saved_patterns`)).toEqual([{ n: 1 }]);
+    expect(await rows(seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM pattern_events`)).toEqual([{ n: 0 }]);
+    expect(events).toHaveLength(1);
   });
 
   it('lists the caller\'s patterns of one source newest changed first in pages, and none of another person\'s', async () => {
@@ -166,15 +166,16 @@ describe('saving a pattern in Postgres', () => {
     expect((await readPatternEvents(pool, { patternId: saved.row.id })).map((event) => [event.action, event.version])).toEqual([['saved', 1], ['deleted', 2]]);
   });
 
-  it('refuses a change and a delete with AUDIT_UNAVAILABLE and leaves the pattern as it was when the event cannot be written', async () => {
+  it('commits a change and a delete when the history cannot take the events', async () => {
     const { seeded, store, principal, audit } = await started();
     const saved = await store.savePattern(definitionPattern(seeded.sourceId), { principal, traceId: 't', audit });
     if (saved.outcome !== 'saved') throw new Error('not saved');
     await rows(seeded.database.ownerUrl, `CREATE FUNCTION refuse_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'no'; END $$`);
     await rows(seeded.database.ownerUrl, `CREATE TRIGGER refuse_event BEFORE INSERT ON pattern_events FOR EACH ROW EXECUTE FUNCTION refuse_event()`);
-    expect(await store.changePattern({ id: saved.row.id, ownerId: principal.id, expectedVersion: 1, name: 'x' }, { principal, traceId: 't', audit }).catch((error: unknown) => error)).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await store.deletePattern({ id: saved.row.id, ownerId: principal.id, expectedVersion: 1, retentionDays: 30 }, { principal, traceId: 't', audit }).catch((error: unknown) => error)).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await store.readPattern(saved.row.id, principal.id)).toMatchObject({ name: 'My ring', version: 1 });
+    expect(await store.changePattern({ id: saved.row.id, ownerId: principal.id, expectedVersion: 1, name: 'x' }, { principal, traceId: 't', audit })).toMatchObject({ outcome: 'changed' });
+    expect(await store.deletePattern({ id: saved.row.id, ownerId: principal.id, expectedVersion: 2, retentionDays: 30 }, { principal, traceId: 't', audit })).toMatchObject({ outcome: 'deleted' });
+    expect(await store.readPattern(saved.row.id, principal.id)).toBeUndefined();
+    expect(await rows(seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM pattern_events`)).toEqual([{ n: 1 }]);
   });
 
   it('purges a deleted pattern past its purge date and not one before it or one that is not deleted, once, while its events stay', async () => {

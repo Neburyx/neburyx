@@ -274,27 +274,24 @@ describe('a prompt id the audit cannot hold', () => {
 describe('a call whose audit cannot be written', () => {
   const SINK_FAILURE = new Error('the sink broke: SINK-TEXT-MARKER');
 
-  it('rejects with the audit error and returns no text', async () => {
+  it('returns the answer of the provider, and the event is still handed to the sink', async () => {
     const { audited } = rig(undefined, { failure: SINK_FAILURE });
-    const outcome = await audited.call(REQUEST, CONTEXT, SIGNAL).catch((error: unknown) => error);
-    expect(outcome).toBeInstanceOf(AuditUnavailableError);
-    expect(outcome).toMatchObject({ code: 'AUDIT_UNAVAILABLE', message: 'The action could not be recorded, so nothing was returned.' });
-    const carried = JSON.stringify(outcome) + String(outcome) + (outcome instanceof Error ? (outcome.stack ?? '') + String(outcome.cause) : '');
-    for (const marker of [...MARKERS, 'SINK-TEXT-MARKER']) expect(carried).not.toContain(marker);
-    expect(outcome instanceof Error ? outcome.cause : 'not an error').toBeUndefined();
+    const answer = await audited.call(REQUEST, CONTEXT, SIGNAL).catch((error: unknown) => error);
+    expect(answer).toMatchObject({ status: 'ok' });
+    expect(JSON.stringify(answer)).toContain('ANSWER-MARKER');
   });
 
-  it.each<[string, FixtureReply]>([
-    ['a refusal', { kind: 'refused' }],
-    ['a failure', { kind: 'failed', code: 'timeout' }],
-  ])('rejects with the same error for %s and returns no answer', async (_name, reply) => {
+  it.each<[string, FixtureReply, string]>([
+    ['a refusal', { kind: 'refused' }, 'refused'],
+    ['a failure', { kind: 'failed', code: 'timeout' }, 'failed'],
+  ])('returns the answer for %s as well', async (_name, reply, status) => {
     const { audited } = rig(reply, { failure: SINK_FAILURE });
-    await expect(audited.call(REQUEST, CONTEXT, SIGNAL)).rejects.toBeInstanceOf(AuditUnavailableError);
+    await expect(audited.call(REQUEST, CONTEXT, SIGNAL)).resolves.toMatchObject({ status });
   });
 
-  it('rejects with the audit error when the provider threw and the failed event cannot be written either', async () => {
+  it('rethrows the failure of the provider as it was when the failed event cannot be written either', async () => {
     const { audited } = rig(undefined, { failure: SINK_FAILURE, provider: { complete: () => Promise.reject(new Error('broke')) } });
-    await expect(audited.call(REQUEST, CONTEXT, SIGNAL)).rejects.toBeInstanceOf(AuditUnavailableError);
+    await expect(audited.call(REQUEST, CONTEXT, SIGNAL)).rejects.toThrow('broke');
   });
 
   it('does not return an answer before a sink that has not settled does', async () => {

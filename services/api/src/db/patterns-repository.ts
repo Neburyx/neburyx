@@ -1,8 +1,8 @@
 import type pg from 'pg';
-import { PATTERN_LIMITS, type AuditSink } from '@neburyx/contracts';
+import { PATTERN_LIMITS, type AuditSink, type AuditTransaction } from '@neburyx/contracts';
 import { uuidv7 } from '../identity/uuid.js';
 import { inTransaction } from './investigations-repository.js';
-import { inPatternTransaction } from '../patterns/pattern-events.js';
+import { inPatternTransaction, insertPatternEvent, type PatternEvent, type PatternHistory } from '../patterns/pattern-events.js';
 import type { Principal } from '../seams/seams.js';
 
 type PatternKind = 'preset-run' | 'definition';
@@ -29,11 +29,13 @@ export interface PatternRow {
   readonly version: number;
 }
 
-/** What a write of a pattern needs of its caller: who changes it, the trace, and the seam the event is passed to after the commit. The store writes the pattern and its event in one transaction. */
+/** What a write of a pattern needs of its caller: who changes it, the trace, and where its events go after the commit: the audit seam and the pattern's history. */
 export interface PatternWriteContext {
   readonly principal: Principal;
   readonly traceId: string;
   readonly audit: AuditSink;
+  /** Absent, the store writes each event of the history itself, at once. */
+  readonly history?: PatternHistory;
 }
 
 export interface NewPattern {
@@ -148,7 +150,9 @@ export interface PatternStore {
   /** Marks the owner's pattern deleted (`deleted_at`, `purge_after`) under the same lock and guards, and records the `deleted` event. */
   deletePattern(deletion: PatternDeletion, context: PatternWriteContext): Promise<PatternDeleteResult>;
   /** Deletes the patterns whose purge date has passed, each in a transaction of its own that locks the row first (a row another transaction holds is left for the next run). `beforeDelete` runs inside that transaction, so a throw keeps the pattern and stops the run. No event row is written: the history of a pattern outlives it. Answers how many were deleted. */
-  purgeExpiredPatterns(beforeDelete: (purged: PurgedPattern) => Promise<void>): Promise<number>;
+  purgeExpiredPatterns(beforeDelete: (purged: PurgedPattern, transaction: AuditTransaction) => Promise<void>): Promise<number>;
+  /** Writes one event of the pattern's history, once whatever the number of tries. */
+  insertPatternEvent(event: PatternEvent, timeoutMs?: number): Promise<void>;
 }
 
 interface PatternRecord {
@@ -197,6 +201,10 @@ function patternRowOf(record: PatternRecord): PatternRow {
   };
 }
 
+function directHistory(pool: pg.Pool): PatternHistory {
+  return { record: (event) => insertPatternEvent(pool, event).catch(() => undefined) };
+}
+
 export function createPatternStore(pool: pg.Pool): PatternStore {
   return {
     savePattern: (input, context) => savePattern(pool, input, context),
@@ -209,12 +217,13 @@ export function createPatternStore(pool: pg.Pool): PatternStore {
     changePattern: (change, context) => changePattern(pool, change, context),
     deletePattern: (deletion, context) => deletePattern(pool, deletion, context),
     purgeExpiredPatterns: (beforeDelete) => purgeExpiredPatterns(pool, beforeDelete),
+    insertPatternEvent: (event, timeoutMs) => insertPatternEvent(pool, event, timeoutMs),
   };
 }
 
 async function savePattern(pool: pg.Pool, input: NewPattern, context: PatternWriteContext): Promise<PatternSaveResult> {
   const ownerId = context.principal.id;
-  return inPatternTransaction({ pool, audit: context.audit, newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
+  return inPatternTransaction({ pool, audit: context.audit, history: context.history ?? directHistory(pool), newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
     // one lock for the owner and the source: the count and the insert below are one step for every save of the pair
     await transaction.client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`saved_patterns:${ownerId}:${input.sourceId}`]);
     const counted = await transaction.client.query<{ held: number }>('SELECT count(*)::int AS held FROM saved_patterns WHERE owner_id = $1 AND source_id = $2 AND deleted_at IS NULL', [ownerId, input.sourceId]);
@@ -311,7 +320,7 @@ async function lockPattern(client: pg.PoolClient, id: string, ownerId: string): 
 }
 
 async function changePattern(pool: pg.Pool, change: PatternChange, context: PatternWriteContext): Promise<PatternChangeResult> {
-  return inPatternTransaction({ pool, audit: context.audit, newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
+  return inPatternTransaction({ pool, audit: context.audit, history: context.history ?? directHistory(pool), newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
     const held = await lockPattern(transaction.client, change.id, change.ownerId);
     if (held === undefined) return { outcome: 'not-found' } as const;
     if (held.version !== change.expectedVersion) return { outcome: 'conflict' } as const;
@@ -340,7 +349,7 @@ async function changePattern(pool: pg.Pool, change: PatternChange, context: Patt
 }
 
 async function deletePattern(pool: pg.Pool, deletion: PatternDeletion, context: PatternWriteContext): Promise<PatternDeleteResult> {
-  return inPatternTransaction({ pool, audit: context.audit, newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
+  return inPatternTransaction({ pool, audit: context.audit, history: context.history ?? directHistory(pool), newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
     const held = await lockPattern(transaction.client, deletion.id, deletion.ownerId);
     if (held === undefined) return { outcome: 'not-found' } as const;
     if (held.version !== deletion.expectedVersion) return { outcome: 'conflict' } as const;
@@ -362,7 +371,7 @@ async function nameHeld(client: pg.PoolClient, ownerId: string, sourceId: string
 
 async function copyPattern(pool: pg.Pool, copy: PatternCopy, context: PatternWriteContext): Promise<PatternCopyResult> {
   const callerId = context.principal.id;
-  return inPatternTransaction({ pool, audit: context.audit, newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
+  return inPatternTransaction({ pool, audit: context.audit, history: context.history ?? directHistory(pool), newId: uuidv7 }, { principal: context.principal, traceId: context.traceId }, async (transaction) => {
     // the original is held while it is copied, so a pattern unshared or deleted at the same moment is not copied
     const found = await transaction.client.query<PatternRecord>(`SELECT ${PATTERN_COLUMNS} FROM saved_patterns WHERE id = $1 AND deleted_at IS NULL AND (owner_id = $2 OR visibility = 'shared') FOR SHARE`, [copy.originalId, callerId]);
     const record = found.rows[0];
@@ -400,18 +409,18 @@ async function copyPattern(pool: pg.Pool, copy: PatternCopy, context: PatternWri
 
 const PURGE_PASS_SIZE = 100;
 
-async function purgeOne(pool: pg.Pool, beforeDelete: (purged: PurgedPattern) => Promise<void>): Promise<boolean> {
+async function purgeOne(pool: pg.Pool, beforeDelete: (purged: PurgedPattern, transaction: AuditTransaction) => Promise<void>): Promise<boolean> {
   return inTransaction(pool, async (client) => {
     const found = await client.query<{ id: string; source_id: string }>(`SELECT id, source_id FROM saved_patterns WHERE deleted_at IS NOT NULL AND purge_after <= now() ORDER BY purge_after, id LIMIT 1 FOR UPDATE SKIP LOCKED`);
     const [held] = found.rows;
     if (held === undefined) return false;
-    await beforeDelete({ id: held.id, sourceId: held.source_id });
+    await beforeDelete({ id: held.id, sourceId: held.source_id }, client);
     await client.query(`DELETE FROM saved_patterns WHERE id = $1 AND deleted_at IS NOT NULL AND purge_after <= now()`, [held.id]);
     return true;
   });
 }
 
-async function purgeExpiredPatterns(pool: pg.Pool, beforeDelete: (purged: PurgedPattern) => Promise<void>): Promise<number> {
+async function purgeExpiredPatterns(pool: pg.Pool, beforeDelete: (purged: PurgedPattern, transaction: AuditTransaction) => Promise<void>): Promise<number> {
   let purged = 0;
   for (;;) {
     for (let inPass = 0; inPass < PURGE_PASS_SIZE; inPass += 1) {

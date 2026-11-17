@@ -133,10 +133,5 @@ async function readThroughGate(gate: Gate, request: DegreePreviewRequest, templa
 
 /** A hit records the action its miss would have: the degree read's, or the entity read's for an entity type with no mapped relationship. */
 async function recordHit(cache: NonNullable<Parameters<typeof createDegreePreviewService>[0]['cache']>, request: DegreePreviewRequest, action: string): Promise<void> {
-  try {
-    await cache.audit.record({ actorId: request.principal.id, actorRole: request.principal.role, action, result: 'success', sourceId: request.sourceId, traceId: request.traceId });
-  } catch {
-    // the answer does not depend on the audit write, as for a read through the gate; the log line carries no event data
-    cache.logger.warn({ event: 'degree_preview.audit_failed' }, 'degree preview audit write failed');
-  }
+  await cache.audit.record({ actorId: request.principal.id, actorRole: request.principal.role, action, result: 'success', sourceId: request.sourceId, traceId: request.traceId });
 }

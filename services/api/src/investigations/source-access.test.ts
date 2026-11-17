@@ -5,6 +5,7 @@ import { buildApp } from '../app.js';
 import type { ExecuteOutcome } from '../gate/executor.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
+import { queuedAudit } from '../testing/queued-audit.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent, Decision, PolicyProvider, Seams } from '../seams/seams.js';
 import { memoryAppStore, type MemoryAppStore } from '../testing/app-store.js';
@@ -60,7 +61,7 @@ async function started(rule: Rule = EXCEPT_SECRET, answer: ExecuteOutcome = enti
     },
   };
   const defaults = communitySeams();
-  const seams: Seams = { ...defaults, policy, audit: { record: async (event) => (options.failAudit === true ? Promise.reject(new Error('sink down')) : void events.push(event)) } };
+  const seams: Seams = { ...defaults, policy, audit: queuedAudit({ record: async (event) => (options.failAudit === true ? Promise.reject(new Error('sink down')) : void events.push(event)) }).audit };
   const used = options.mapping ?? mapping;
   const store = options.store ?? memoryAppStore();
   const executor = new TestExecutor(withOnlineIndexes(used.sources[0] ?? (() => { throw new Error('the mapping has no source'); })(), () => Promise.resolve(answer)));

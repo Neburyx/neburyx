@@ -5,7 +5,7 @@ import type { RunRecord, RunStore } from './run-store.js';
 /** The size of the pool the store keeps of its own: a run is one short insert. */
 const RUN_POOL_SIZE = 2;
 
-const INSERT = 'INSERT INTO ask_runs (id, actor_id, intent, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5, $6)';
+const INSERT = 'INSERT INTO ask_runs (id, actor_id, intent, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING';
 
 /** What a failed write says: a fixed message, never the driver's text, the statement or a value. */
 export class RunStoreError extends Error {
@@ -46,7 +46,7 @@ export function createPgRunStore(context: AuditSinkContext, deps: RunStoreDeps =
   return {
     async record(run: RunRecord) {
       try {
-        await pool.query(INSERT, [context.newId(), run.actorId, run.intent, run.outcome, run.rowCount, run.elapsedMs]);
+        await pool.query(INSERT, [run.id, run.actorId, run.intent, run.outcome, run.rowCount, run.elapsedMs]);
       } catch {
         // the driver's error can hold the failing row, so only a fixed error leaves the store
         throw new RunStoreError();

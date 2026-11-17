@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AuditUnavailableError, createAuditedModelCall, createEnterpriseExtension, type AuditedCallContext, type ModelRequest } from '@neburyx/ee-ask';
+import { createAuditedModelCall, createEnterpriseExtension, type AuditedCallContext, type ModelRequest } from '@neburyx/ee-ask';
 import type { MountedAuditSink } from '@neburyx/contracts';
 import pg from 'pg';
 import { stringify } from 'yaml';
@@ -110,7 +110,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
     expect(await rows(database.appUrl, 'SELECT detail FROM audit_events')).toMatchObject([{ detail: { ai: { modelRef: 'fallback-model', tokensIn: 'unknown', tokensOut: 'unknown' } } }]);
   });
 
-  it('rejects with the audit error and returns no text when the table is locked and the insert stalls', async () => {
+  it('returns the answer within the query time limit, and writes no event, when the table is locked and the insert stalls', async () => {
     const database = await migrated();
     const { call } = await audited(database, OK);
     const owner = new pg.Client({ connectionString: database.ownerUrl });
@@ -120,9 +120,7 @@ describe('a model call through the fixture, recorded in audit_events', () => {
       await owner.query('LOCK TABLE audit_events IN ACCESS EXCLUSIVE MODE');
       const started = Date.now();
       const outcome = await call(REQUEST, CONTEXT, SIGNAL).catch((error: unknown) => error);
-      expect(outcome).toBeInstanceOf(AuditUnavailableError);
-      expect(outcome).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-      expect(JSON.stringify(outcome)).not.toContain('ANSWER-MARKER');
+      expect(JSON.stringify(outcome)).toContain('ANSWER-MARKER');
       expect(Date.now() - started).toBeLessThan(QUERY_TIMEOUT_MS * 4);
     } finally {
       await owner.query('ROLLBACK');

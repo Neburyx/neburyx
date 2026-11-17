@@ -179,3 +179,22 @@ describe('closing the sink', () => {
     expect(ended()).toBe(1);
   });
 });
+
+describe('the transaction a caller hands the audit sink', () => {
+  it('is where the row is inserted, with the same statement and values, and the sink\'s own pool is not used', async () => {
+    const { mounted, calls } = rig();
+    const inside: Call[] = [];
+    await mounted.sink.record(EVENT, { transaction: { query: (text, values) => (inside.push({ text, values: values ?? [] }), Promise.resolve()) } });
+    expect(calls).toEqual([]);
+    expect(inside).toHaveLength(1);
+    expect(inside[0]?.text).toContain('INSERT INTO audit_events');
+    expect(inside[0]?.values.slice(0, 5)).toEqual([NEW_ID, EVENT.actorId, 'investigator', 'graph.expand', 'success']);
+  });
+
+  it('fails with the fixed code and no driver text when the transaction cannot take the row', async () => {
+    const { mounted } = rig();
+    const failure = mounted.sink.record(EVENT, { transaction: { query: () => Promise.reject(new Error('relation "audit_events" CANARY')) } });
+    await expect(failure).rejects.toMatchObject({ code: 'AUDIT_WRITE_FAILED' });
+    await expect(failure).rejects.not.toThrow('CANARY');
+  });
+});

@@ -1,4 +1,4 @@
-import type { ReadyChecks, ReadyResponse, SourceReachability } from '@neburyx/contracts';
+import type { AuditCounts, ReadyChecks, ReadyResponse, SourceReachability } from '@neburyx/contracts';
 
 export const READINESS_LIMIT_KEY = 'NEBURYX_READINESS_LIMIT_MS';
 /** A load balancer needs a dead database reported in seconds, so the default stays short; a database name that takes longer to resolve than this is looked up once at start and not per probe. */
@@ -22,10 +22,10 @@ export function probeStepMs(limitMs: number): number {
   return Math.max(MIN_PROBE_STEP_MS, limitMs - PROBE_QUERY_RESERVE_MS);
 }
 
-/** The status depends on the checks only; the source counts are information beside them. */
-export function readinessResponse(checks: ReadyChecks, sources: SourceReachability): { readonly statusCode: 200 | 503; readonly body: ReadyResponse } {
+/** The status depends on the checks only; the source counts and the audit counts are information beside them. */
+export function readinessResponse(checks: ReadyChecks, sources: SourceReachability, audit: AuditCounts): { readonly statusCode: 200 | 503; readonly body: ReadyResponse } {
   const ready = Object.values(checks).every((state) => state === 'ok');
-  return { statusCode: ready ? 200 : 503, body: { status: ready ? 'ready' : 'not_ready', checks, sources } };
+  return { statusCode: ready ? 200 : 503, body: { status: ready ? 'ready' : 'not_ready', checks, sources, audit } };
 }
 
 export interface ReadinessSteps {

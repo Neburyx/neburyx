@@ -175,14 +175,14 @@ describe('copy to notes', () => {
     await expect(call(h.request(sealed()))).rejects.toBe(failure);
   });
 
-  it('writes an audit event with the run and the counts and no text, and fails closed when it cannot', async () => {
+  it('writes an audit event with the run and the counts and no text, and still answers the copy when it cannot be written', async () => {
     const h = rig();
     await call(h.request(sealed()));
     expect(h.events).toHaveLength(1);
     expect(h.events[0]).toMatchObject({ action: 'ai.case-summary.copied', result: 'success', sourceId: 'demo', detail: { notes: { runId: RUN, copied: 1, notCopied: 1, alreadyCopied: false } } });
     expect(JSON.stringify(h.events[0])).not.toContain('linked to the same');
     const down = rig({ failAudit: true });
-    await expect(call(down.request(sealed()))).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    expect(await call(down.request(sealed()))).toMatchObject({ copied: 1, notCopied: 1, alreadyCopied: false });
   });
 
   it('stores nothing when a summary is only generated: the route is the only writer', () => {

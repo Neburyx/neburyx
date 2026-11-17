@@ -1,12 +1,14 @@
 import { fileURLToPath } from 'node:url';
-import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
 import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, type AskConfiguration } from './configure.js';
 import { createAskClassifier } from './classify/classifier.js';
 import { createAskContinueRoute, createAskQuestionRoute } from './questions/question-routes.js';
 import { createPgRunStore } from './questions/pg-run-store.js';
+import { queuedRunStore } from './questions/queued-run-store.js';
 import type { RunStore } from './questions/run-store.js';
+import { queuedSummaryRunStore } from './case-summary/queued-run-store.js';
 import { createPgSummaryRunStore, type SummaryRunStore } from './case-summary/run-store.js';
 import { createCaseSummarizer } from './case-summary/summarizer.js';
 import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
@@ -110,6 +112,9 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let provider: ProviderConfiguration | undefined;
   let environment: Readonly<Record<string, string | undefined>> = {};
   let mounted: MountedAuditSink | undefined;
+  let queuedAudit: AuditSink | undefined;
+  let recordQueue: RecordQueue | undefined;
+  const auditOf = (): AuditSink | undefined => queuedAudit ?? mounted?.sink;
   let logger: ExtensionLogger | undefined;
   let folder: AskFolder | undefined;
   let instructions: SummaryInstructions | undefined;
@@ -124,15 +129,15 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   const summaryModelOf = (): AuditedModelCall | undefined => {
     if (provider === undefined || mounted === undefined || summarySettings === undefined) return undefined;
     const own = summaryProviderConfiguration(provider, summarySettings);
-    return createAuditedModelCall({ provider: createAnthropicProvider({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }) }), configuration: own, sink: mounted.sink });
+    return createAuditedModelCall({ provider: createAnthropicProvider({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }) }), configuration: own, sink: queuedAudit ?? mounted.sink });
   };
   const caseSummarizer = (): CaseSummarizer | undefined =>
-    !features.summary || summarySettings === undefined || instructions === undefined ? undefined : createCaseSummarizer({ settings: summarySettings, instructions, checks, onCheckRefused: (reason) => logger?.warn({ event: 'summary.check_refused', reason }, 'a check of a summary reply could not run'), model: summaryModelOf, audit: () => mounted?.sink, tokenKeys: () => tokenKeys, runs: () => summaryRuns, availability: () => summaryAvailability({ askConfigured: provider !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }), ...(options.now === undefined ? {} : { now: options.now }) });
+    !features.summary || summarySettings === undefined || instructions === undefined ? undefined : createCaseSummarizer({ settings: summarySettings, instructions, checks, onCheckRefused: (reason) => logger?.warn({ event: 'summary.check_refused', reason }, 'a check of a summary reply could not run'), model: summaryModelOf, audit: auditOf, tokenKeys: () => tokenKeys, runs: () => summaryRuns, availability: () => summaryAvailability({ askConfigured: provider !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }), ...(options.now === undefined ? {} : { now: options.now }) });
   const askClassifier = (): AskClassifier | undefined => {
     const model = modelOf();
     return !features.ask || model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
   };
-  const modelOf = (): AuditedModelCall | undefined => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink }));
+  const modelOf = (): AuditedModelCall | undefined => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: queuedAudit ?? mounted.sink }));
   const guarded = [
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
@@ -203,16 +208,22 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       tokenKeys = readKeys;
       return providerConfigured.outcome;
     },
-    auditSink: () => mounted?.sink,
+    auditSink: auditOf,
+    attachAudit(sink) {
+      queuedAudit = sink;
+    },
+    attachRecordQueue(queue) {
+      recordQueue = queue;
+    },
     model: modelOf,
     aiAvailability: () => ({ ask: { available: features.ask && askClassifier() !== undefined }, summary: { available: features.summary && caseSummarizer()?.availability().available === true }, assistant: { available: false } }),
     createAuditSink(context) {
       const audit = createAuditSink(context);
       mounted = audit;
       const store = features.ask ? (options.runStore ?? createPgRunStore)(context) : undefined;
-      runs = store;
+      runs = store === undefined ? undefined : queuedRunStore(store, () => recordQueue);
       const summaryStore = features.summary ? (options.summaryRunStore ?? createPgSummaryRunStore)(context) : undefined;
-      summaryRuns = summaryStore;
+      summaryRuns = summaryStore === undefined ? undefined : queuedSummaryRunStore(summaryStore, () => recordQueue);
       if (summaryStore !== undefined) {
         const removeOld = (): void => {
           if (summarySettings === undefined) return;

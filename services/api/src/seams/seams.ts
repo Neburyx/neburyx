@@ -76,10 +76,17 @@ export type { AskClassifier, CaseSummarizer } from '@neburyx/contracts';
 
 export interface Seams {
   readonly policy: PolicyProvider;
+  /** Where an ordinary event goes: a writer that records an event does not wait for it to be stored and does not handle its failure, because this member queues the event and never throws. */
   readonly audit: AuditSink;
+  /** Where an event of a privileged action goes: written directly and awaited, so the caller sees a failure. Absent, the `audit` member is used, which is right only for a seam that has no queue. */
+  readonly privilegedAudit?: AuditSink;
   readonly coordinator: Coordinator;
   /** Where Ask classifies a question; absent, the application uses the Community default, which says Ask is unavailable. */
   readonly askClassifier?: AskClassifier;
   /** Where the case summary is drafted; absent, the application uses the Community default, which says the summary is unavailable. */
   readonly caseSummarizer?: CaseSummarizer;
+}
+
+export function privilegedAuditOf(seams: Pick<Seams, 'audit' | 'privilegedAudit'>): AuditSink {
+  return seams.privilegedAudit ?? seams.audit;
 }

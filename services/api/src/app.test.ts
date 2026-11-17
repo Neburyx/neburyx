@@ -116,7 +116,7 @@ describe('GET /readyz', () => {
   it('answers 200 ready when every check is ok', async () => {
     const response = await (await app()).inject({ method: 'GET', url: '/readyz' });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
+    expect(response.json()).toEqual({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 }, audit: { written: 0, failed: 0, dropped: 0, queued: 0 } });
   });
 
   it('answers 503 not_ready when the database check is not ok', async () => {
@@ -124,7 +124,15 @@ describe('GET /readyz', () => {
     const server = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: down });
     const response = await server.inject({ method: 'GET', url: '/readyz' });
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } });
+    expect(response.json()).toEqual({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 }, audit: { written: 0, failed: 0, dropped: 0, queued: 0 } });
+  });
+
+  it('reports the audit counts of this process beside the checks, and counts of a sink that loses every event do not change the status', async () => {
+    const counts = { written: 2, failed: 7, dropped: 11, queued: 3 };
+    const server = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), auditCounts: () => counts });
+    const response = await server.inject({ method: 'GET', url: '/readyz' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: 'ready', audit: counts });
   });
 
   it.each(['POST', 'PUT', 'PATCH', 'DELETE'] as const)('answers %s like any other unmatched path', async (method) => {

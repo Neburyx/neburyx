@@ -67,7 +67,7 @@ The in-memory store's clock advances one second a delete, so no purge date is ev
 | An expired export loses its file and is answered as unknown | `src/export.test.ts` | is cleared by the expiry task, which removes its file and marks its row expired |
 | The same on real Postgres | `src/pg-export.integration.test.ts` | writes a row and a file for each export, and past its expiry the task removes the file |
 | A deleted investigation's export is not found, and comes back when restored | `src/export.test.ts` | is not found while the investigation is deleted, keeps its file |
-| The purge removes the rows and the files of its exports | `src/pg-export.integration.test.ts` | the purge removes their rows and their files with the investigation |
+| The purge removes the rows of its exports, and the cleanup removes their files after | `src/pg-export.integration.test.ts` | the purge removes their rows with the investigation and the cleanup removes their files after |
 | Only the requester downloads | `../../services/api/src/exports/export-download.test.ts` | with one body for an unknown export |
 | A changed access refuses the download | `../../services/api/src/exports/export-download.test.ts` | refuses with ACCESS_DENIED when the source is no longer authorized |
 | Every route of the save families has a case | `src/routes.test.ts` | names each route a case drives or lists it with a reason |

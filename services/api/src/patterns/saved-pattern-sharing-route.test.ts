@@ -279,15 +279,15 @@ describe('copying a pattern', () => {
     expect(a.store.patternRows.filter((row) => row.ownerId === OTHER_IDENTITY.principal.id)).toHaveLength(PATTERN_LIMITS.patternsPerSource);
   });
 
-  it('refuses with AUDIT_UNAVAILABLE and keeps no copy when the event cannot be written', async () => {
+  it('keeps the copy and answers 201 when the history cannot take the events', async () => {
     const store = memoryStoreWith({ failPatternEvent: true });
     const original = { id: '0192f000-0000-7000-8000-0000000000aa', ownerId: '0192f000-0000-7000-8000-0000000000bb', sourceId: 'demo', name: 'Ring', kind: 'definition' as const, presetId: null, templateId: null, templateVersion: null, params: null, definition: DEFINITION, askForStartingEntity: true, anchorEntityType: null, anchorStableId: null, visibility: 'shared' as const, lastRunAt: null, createdAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z', version: 2 };
     store.patternRows.push(original);
     const b = await patternApp({ sharing: store, identity: OTHER_IDENTITY });
-    expect(codeOf(await send(b, 'POST', `/v1/patterns/${original.id}/copy`))).toBe('AUDIT_UNAVAILABLE');
-    expect(store.patternRows).toEqual([original]);
+    expect((await send(b, 'POST', `/v1/patterns/${original.id}/copy`)).statusCode).toBe(201);
+    expect(store.patternRows).toHaveLength(2);
     expect(store.patternEvents).toEqual([]);
-    expect(b.audit.events).toEqual([]);
+    expect(b.audit.events.map((event) => event.action)).toEqual(['pattern.copy', 'pattern.copy']);
   });
 });
 

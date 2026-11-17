@@ -16,7 +16,7 @@ export interface ExtensionRequest {
   /** Whether the preview switch is on for this process, as decided at start-up; a route group that is not on refuses its calls. */
   readonly previewOn: boolean;
   readonly traceId: string;
-  /** The application's audit sink as it is: a failed write rejects, so a call that must fail closed can. */
+  /** The application's queued audit member: recording returns at once and does not report a failed write, which the application counts and logs. */
   readonly audit: AuditSink;
   /** The body of a `POST` route, already parsed by the route's request schema. */
   readonly body?: unknown;
@@ -148,12 +148,27 @@ export interface ExtensionLogger {
   readonly info?: (fields: Readonly<Record<string, unknown>>, message: string) => void;
 }
 
+/** One write to a store of the extension. Only its ids are logged when it fails, never what it writes. It is written once or, after a failed try, again, and it can be lost on a stop or a full queue, so it must be safe to write twice. */
+export interface RecordJob {
+  readonly ids: Readonly<Record<string, string>>;
+  write(signal?: AbortSignal): Promise<void>;
+}
+
+export interface RecordQueue {
+  /** Takes the job and returns at once; it never throws. */
+  enqueue(job: RecordJob): void;
+}
+
 export interface ProfileExtension {
   readonly name: string;
   readonly routeGroups: readonly ExtensionRouteGroup[];
   readonly migrationsDirectory?: string;
   /** Hands the extension the API's own logger, before `configure` is called. */
   readonly attachLogger?: (logger: ExtensionLogger) => void;
+  /** Hands the extension the audit sink of the application's queue, built after the store's sink: the events of the extension's own writers (its model calls, its summary) go through it and never wait for the store. Absent, they go to the mounted sink. */
+  readonly attachAudit?: (sink: AuditSink) => void;
+  /** Hands the extension the queue its stored run records are written through: a record is queued and written after the call that made it has gone on, so no call waits for its record. Absent, the extension writes its records itself. */
+  readonly attachRecordQueue?: (queue: RecordQueue) => void;
   /** The classifier of the extension, once it can classify (the model is configured, the audit sink is mounted and the folder is loaded); a classifier given to the application through its seams wins over it, and the Community default is used when there is none. */
   readonly askClassifier?: () => AskClassifier | undefined;
   /** The summarizer of the extension, once it can draft; a summarizer given to the application through its seams wins over it, and the Community default is used when there is none. */

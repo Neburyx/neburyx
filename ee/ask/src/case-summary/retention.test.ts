@@ -48,8 +48,10 @@ describe('the removal of old case summary records', () => {
     const store = createMemorySummaryRunStore();
     const cutoff = NOW - 30 * DAY;
     const base = { actorId: 'a', sourceId: 's', traceId: 't', settings: {} };
-    const before = await store.begin({ ...base, startedAt: new Date(cutoff - 1) });
-    const at = await store.begin({ ...base, startedAt: new Date(cutoff) });
+    const before = '00000000-0000-7000-8000-000000000001';
+    const at = '00000000-0000-7000-8000-000000000002';
+    await store.begin({ ...base, id: before, startedAt: new Date(cutoff - 1) });
+    await store.begin({ ...base, id: at, startedAt: new Date(cutoff) });
     const { sink } = await mounted({}, store);
     await vi.advanceTimersByTimeAsync(0);
     expect(store.runs.map((run) => run.id)).toEqual([at]);

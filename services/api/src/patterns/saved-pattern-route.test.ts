@@ -112,13 +112,13 @@ describe('POST /v1/patterns, a definition', () => {
     await context.app.close();
   });
 
-  it('refuses the change with AUDIT_UNAVAILABLE and keeps no row, no event and no seam call when the event cannot be written', async () => {
+  it('keeps the pattern and answers 201 when the history cannot take the event, and still passes the audit event on', async () => {
     const context = await patternApp({ failPatternEvent: true });
     const response = await save(context, definitionBody());
-    expect(response.statusCode).toBe(503);
-    expect(codeOf(response)).toBe('AUDIT_UNAVAILABLE');
-    expect(context.store.patternRows).toEqual([]);
-    expect(context.audit.events).toEqual([]);
+    expect(response.statusCode).toBe(201);
+    expect(context.store.patternRows).toHaveLength(1);
+    expect(context.store.patternEvents).toEqual([]);
+    expect(context.audit.events.map((event) => event.action)).toEqual(['pattern.save']);
     await context.app.close();
   });
 });

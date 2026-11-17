@@ -114,10 +114,10 @@ describe('the drafting loop', () => {
     expect(requests).toHaveLength(1);
   });
 
-  it('fails closed when the audit event of a call cannot be written', async () => {
+  it('drafts the summary when the audit event of a call cannot be written', async () => {
     const provider: ModelProvider = { complete: async (request) => ({ ...ok(GOOD), prompt: promptRecordOf(request) }) };
     const call = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => Promise.reject(new Error('down')) } });
-    await expect(run(call)).rejects.toBeInstanceOf(AuditUnavailableError);
+    expect(await run(call)).toMatchObject({ status: 'drafted' });
   });
 
   it('records one event per call and none holds the instructions, the text sent or a reply', async () => {

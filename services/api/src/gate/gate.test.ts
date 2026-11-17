@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { queuedAudit } from '../testing/queued-audit.js';
+import { describe, expect, it, vi } from 'vitest';
 import { AppError } from '../errors.js';
 import type { AuditEvent, AuditSink, PolicyProvider } from '../seams/seams.js';
 import {
@@ -126,27 +127,33 @@ describe('a failure at any stage', () => {
   });
 });
 
-describe('an audit sink that rejects', () => {
+describe('an audit sink that rejects, behind the queue', () => {
   const rejecting = (): AuditSink & { calls: number } => {
     const sink = { calls: 0, record: () => (sink.calls++, Promise.reject(new Error('audit store down'))) };
     return sink;
   };
 
-  it('does not change a successful page, is tried once, and logs without event data', async () => {
-    const audit = rejecting();
-    const { gate, logs } = harness({ seams: { audit } });
+  it('does not change a successful page, is tried once, and the queue counts the failure and logs it without event data', async () => {
+    const sink = rejecting();
+    const lines: Record<string, unknown>[] = [];
+    const queued = queuedAudit(sink, (fields) => void lines.push(fields));
+    const { gate } = harness({ seams: { audit: queued.audit } });
     const page = await gate.run(gateRequest());
     expect(page.items).toHaveLength(10);
-    expect(audit.calls).toBe(1);
-    expect(logs.map((entry) => entry.fields)).toEqual([{ event: 'gate.audit_failed' }]);
+    await vi.waitFor(() => expect(queued.counts().failed).toBe(1));
+    expect(sink.calls).toBe(1);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({ event: 'audit.event_failed' });
+    expect(JSON.stringify(lines)).not.toContain('audit store down');
   });
 
-  it('does not change the original error of an earlier stage, is tried once, and logs without event data', async () => {
-    const audit = rejecting();
-    const { gate, logs } = harness({ seams: { audit, policy: denyingPolicy } });
+  it('does not change the original error of an earlier stage, and is tried once', async () => {
+    const sink = rejecting();
+    const queued = queuedAudit(sink);
+    const { gate } = harness({ seams: { audit: queued.audit, policy: denyingPolicy } });
     await expect(gate.run(gateRequest())).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
-    expect(audit.calls).toBe(1);
-    expect(logs.map((entry) => entry.fields)).toEqual([{ event: 'gate.audit_failed' }]);
+    await vi.waitFor(() => expect(queued.counts().failed).toBe(1));
+    expect(sink.calls).toBe(1);
   });
 });
 

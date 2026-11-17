@@ -101,9 +101,9 @@ describe('the classifier of Ask', () => {
     expect(await classifier.classify(input({ question: '😀'.repeat(1000) }), SIGNAL)).toEqual({ ok: false, cause: 'no-intent' });
   });
 
-  it('rejects when the audit cannot be written, and answers nothing', async () => {
-    const { classifier } = rig(ok('{"intent":"byId","entities":{}}'), { failure: new Error('sink down') });
-    await expect(classifier.classify(input(), SIGNAL)).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+  it('keeps the classification when the audit event cannot be written', async () => {
+    const { classifier } = rig(ok('{"intent":"byId","entities":{"id":"A-1"}}'), { failure: new Error('sink down') });
+    expect(await classifier.classify(input(), SIGNAL)).toEqual({ ok: true, intent: 'byId', entities: { id: 'A-1' } });
   });
 
   it('passes the abort signal to the provider, and a provider that fails on the abort is a model-failed with its event', async () => {

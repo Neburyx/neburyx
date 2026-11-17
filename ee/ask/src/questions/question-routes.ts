@@ -30,7 +30,7 @@ import {
   type ExtensionRoute,
 } from '@neburyx/contracts';
 import { gateClientOf, type GateClient } from '@neburyx/ee-ai-runtime';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
 import { summarizeRun } from './run-summary.js';
@@ -59,7 +59,6 @@ type Entities = AskEntities;
 type Capabilities = { readonly askRunner: NonNullable<GateClient['runner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<GateClient['sourceReadable']> };
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
-const unavailableAudit = (): ExtensionRefusal => new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
 
 function capabilitiesOf(request: ExtensionRequest): Capabilities {
   const { runner, sourceReadable } = gateClientOf(request);
@@ -90,18 +89,14 @@ async function writeEvent(request: ExtensionRequest, action: string, result: Aud
     ...(detail.intent === undefined ? {} : { resourceType: 'ask-intent', resourceRef: detail.intent }),
     detail: { askRun: detail },
   };
-  try {
-    await request.audit.record(event);
-  } catch {
-    // the answer is withheld: nothing is shown that is not on the record
-    throw unavailableAudit();
-  }
+  // the application queues the event and counts and logs its own failures; a failure here does not withhold the answer
+  await request.audit.record(event).catch(() => undefined);
 }
 
-async function writeRow(runs: RunStore | undefined, logger: ExtensionLogger | undefined, row: Parameters<RunStore['record']>[0]): Promise<void> {
+async function writeRow(runs: RunStore | undefined, logger: ExtensionLogger | undefined, row: Omit<Parameters<RunStore['record']>[0], 'id'>): Promise<void> {
   if (runs === undefined) return;
   try {
-    await runs.record(row);
+    await runs.record({ id: randomUUID(), ...row });
   } catch {
     try {
       logger?.warn({ event: RUN_NOT_RECORDED_EVENT }, 'the row of a run of Ask could not be written');
@@ -309,7 +304,8 @@ export function createAskQuestionRoute(options: QuestionRouteOptions): Extension
       try {
         classified = await classifier.classify({ sourceId: body.sourceId, question: body.question, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, request.signal);
       } catch (error) {
-        if (error instanceof AuditUnavailableError) throw unavailableAudit();
+        // the model returned a prompt other than the one sent, so nothing of the call is kept: the one case in which a classification is withheld
+        if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
         throw error;
       }
       if (!classified.ok) {

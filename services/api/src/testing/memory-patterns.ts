@@ -4,6 +4,7 @@ import { patternNameKey } from '../db/patterns-repository.js';
 import { uuidv7 } from '../identity/uuid.js';
 import { AppError } from '../errors.js';
 import { PATTERN_AUDIT_ACTIONS, type PatternEvent } from '../patterns/pattern-events.js';
+import { MEMORY_TRANSACTION } from './memory-transaction.js';
 
 export interface MemoryPatternOptions {
   /** A write of an event fails, as a failed insert does: the change is refused with `AUDIT_UNAVAILABLE`, nothing is kept and the seam is not called. */
@@ -44,20 +45,19 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
   };
 
   /** The events of one change are written with its rows, and the seam is called after, as the transaction helper does. */
+  const insertEvent = (event: PatternEvent): Promise<void> => {
+    if (options.failPatternEvent === true) return Promise.reject(new Error('the history store is down'));
+    if (!patternEvents.some((held) => held.id === event.id)) patternEvents.push(event);
+    return Promise.resolve();
+  };
+
   async function commit(events: readonly PatternEvent[], context: PatternWriteContext, apply: () => void): Promise<void> {
-    if (options.failPatternEvent === true) throw new AppError('AUDIT_UNAVAILABLE');
     names.set(context.principal.id, context.principal.displayName);
     apply();
-    patternEvents.push(...events);
-    let rejected = false;
     for (const event of events) {
-      await context.audit
-        .record({ actorId: context.principal.id, actorRole: context.principal.role, action: PATTERN_AUDIT_ACTIONS[event.action], result: 'success', sourceId: event.sourceId, resourceType: 'pattern', resourceRef: event.patternId, traceId: context.traceId })
-        .catch(() => {
-          rejected = true;
-        });
+      await (context.history ?? { record: (held: PatternEvent) => insertEvent(held).catch(() => undefined) }).record(event);
+      await context.audit.record({ actorId: context.principal.id, actorRole: context.principal.role, action: PATTERN_AUDIT_ACTIONS[event.action], result: 'success', sourceId: event.sourceId, resourceType: 'pattern', resourceRef: event.patternId, traceId: context.traceId });
     }
-    if (rejected) throw new AppError('INTERNAL_ERROR');
   }
 
   /** Whether a pattern of the person on the source, not deleted and not the one given, already holds the name as the store compares names. */
@@ -97,12 +97,13 @@ export function memoryPatterns(options: MemoryPatternOptions = {}): MemoryPatter
       await commit([{ id: uuidv7(), sourceId: row.sourceId, patternId: row.id, actorId: ownerId, action: 'saved', version: 1 }], context, () => void patternRows.push(row));
       return { outcome: 'saved', row };
     },
+    insertPatternEvent: insertEvent,
     async purgeExpiredPatterns(beforeDelete) {
       const due = [...deleted].filter(([, when]) => Date.parse(when.purgeAfter) <= Date.now());
       for (const [id] of due) {
         const row = patternRows.find((held) => held.id === id);
         if (row === undefined) continue;
-        await beforeDelete({ id, sourceId: row.sourceId });
+        await beforeDelete({ id, sourceId: row.sourceId }, MEMORY_TRANSACTION);
         patternRows.splice(patternRows.indexOf(row), 1);
         deleted.delete(id);
       }

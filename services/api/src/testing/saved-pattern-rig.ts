@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs';
 import { afterAll } from 'vitest';
-import type { AuditEvent, AuditSink, ProfileExtension } from '@neburyx/contracts';
+import type { AuditCounts, AuditEvent, AuditSink, ProfileExtension } from '@neburyx/contracts';
+import type { PatternHistory } from '../patterns/pattern-events.js';
 import { buildApp } from '../app.js';
 import { createLogger } from '../logger.js';
 import type { Identity } from '../identity/identity.js';
@@ -82,6 +83,9 @@ export interface PatternAppOptions extends MemoryAppStoreOptions {
   readonly previewOn?: boolean;
   /** The lines the application's logger writes go here, when a test scans them. */
   readonly logLines?: string[];
+  /** Where the events of the history go, and what `/readyz` counts of them. */
+  readonly patternHistory?: PatternHistory;
+  readonly auditCounts?: () => AuditCounts;
 }
 
 export async function patternApp(options: PatternAppOptions = {}) {
@@ -100,7 +104,7 @@ export async function patternApp(options: PatternAppOptions = {}) {
   );
   const seams: Seams = { ...communitySeams(), audit: audit.sink, ...(options.deny === true ? { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } } : {}) };
   const parts = testSourceGate(mapping, { executor });
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void options.logLines?.push(line) }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, referenceKeys: TEST_KEYS, ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }), ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void options.logLines?.push(line) }), store, mapping, gate: parts.gate, seams, catalog: parts.catalog, ...(options.patternHistory === undefined ? {} : { patternHistory: options.patternHistory }), ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }), referenceKeys: TEST_KEYS, ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }), ...(options.cursors === undefined ? {} : { cursors: options.cursors }), ...(options.probes === undefined ? {} : { templateProbes: options.probes }), ...(options.now === undefined ? {} : { templateRunClock: options.now }), ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }) });
   return { app, store, audit, executor };
 }
 

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { type CaseSummarizer, type CreateExportResponse, type ExportFormat, type ExportRecord, type ExportRequest, type ExportSummary, type GraphEdge, type GraphNode } from '@neburyx/contracts';
+import { type AuditTransaction, type CaseSummarizer, type CreateExportResponse, type ExportFormat, type ExportRecord, type ExportRequest, type ExportSummary, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import type { ExportRow, ExportStore } from '../db/exports-repository.js';
 import type { InvestigationStore } from '../db/investigations-repository.js';
 import { AppError } from '../errors.js';
@@ -32,7 +32,10 @@ interface Deps {
   readonly access: SourceAccess;
   readonly policy: PolicyProvider;
   readonly policyVersion: (sourceId: string) => string;
+  /** Where the events of the export and the download go: written directly, in the change's transaction where there is one, and a failure fails the call. */
   readonly audit: AuditSink;
+  /** Where the events of a refusal go: queued, and never failing the refusal. */
+  readonly refusalAudit: AuditSink;
   readonly logger: { warn(fields: object, message: string): void };
   /** The installed case summarizer, as the extension routes get it; read when a request carries a token. */
   readonly summarizer?: () => CaseSummarizer;
@@ -82,22 +85,20 @@ export function createExportService(deps: Deps): ExportService {
   const now = deps.clock ?? (() => new Date());
 
   /** A failing audit sink fails the call closed: nothing is kept or handed out that the audit does not know of. */
-  async function record(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly action: string; readonly detail: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly summary?: { readonly runId: string; readonly kept: number; readonly dropped: number } } }): Promise<void> {
+  async function record(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string; readonly action: string; readonly detail: { readonly format: 'json' | 'csv' | 'png'; readonly entities?: number; readonly relationships?: number; readonly maskedFields?: number; readonly summary?: { readonly runId: string; readonly kept: number; readonly dropped: number } } }, transaction?: AuditTransaction): Promise<void> {
     try {
-      await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: call.action, result: 'success', sourceId: call.sourceId, traceId: call.traceId, detail: { export: call.detail } });
+      await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: call.action, result: 'success', sourceId: call.sourceId, traceId: call.traceId, detail: { export: call.detail } }, transaction === undefined ? undefined : { transaction });
     } catch {
       deps.logger.warn({ event: 'export.audit_failed', action: call.action }, 'export audit write failed');
       throw new AppError('INTERNAL_ERROR');
     }
   }
 
-  /** A refused download deletes the file, expires the export and is audited; the refusal stands whether or not the audit write succeeds, since nothing is handed out either way. */
+  /** A refused download deletes the file, expires the export and is audited through the queue; the refusal stands whatever becomes of the event, since nothing is handed out either way. */
   async function refuseDownload(call: { readonly traceId: string; readonly principal: Principal }, row: ExportRow & { readonly storageKey: string; readonly format: 'json' | 'csv' }, sourceId: string, reason: 'access-changed' | 'export-source-changed'): Promise<never> {
     await deps.files.remove(row.storageKey).catch(() => undefined);
     await deps.store.expireExport(row.id);
-    await deps.audit
-      .record({ actorId: call.principal.id, actorRole: call.principal.role, action: EXPORT_DOWNLOAD_AUDIT_ACTION, result: 'refused', sourceId, traceId: call.traceId, detail: { export: { format: row.format, refusal: reason } } })
-      .catch(() => deps.logger.warn({ event: 'export.audit_failed', action: EXPORT_DOWNLOAD_AUDIT_ACTION }, 'export audit write failed'));
+    await deps.refusalAudit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: EXPORT_DOWNLOAD_AUDIT_ACTION, result: 'refused', sourceId, traceId: call.traceId, detail: { export: { format: row.format, refusal: reason } } });
     throw new AppError('ACCESS_DENIED', { reason });
   }
 
@@ -141,10 +142,8 @@ export function createExportService(deps: Deps): ExportService {
         try {
           included = renderSummary(call, sourceId, read);
         } catch (error) {
-          // the refusal stands whether or not the audit write succeeds, and says nothing of which check failed
-          await deps.audit
-            .record({ actorId: call.principal.id, actorRole: call.principal.role, action: EXPORT_CREATE_AUDIT_ACTION, result: 'refused', sourceId, traceId: call.traceId, detail: { export: { format, refusal: 'summary-refused' } } })
-            .catch(() => deps.logger.warn({ event: 'export.audit_failed', action: EXPORT_CREATE_AUDIT_ACTION }, 'export audit write failed'));
+          // the refusal says nothing of which check failed
+          await deps.refusalAudit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: EXPORT_CREATE_AUDIT_ACTION, result: 'refused', sourceId, traceId: call.traceId, detail: { export: { format, refusal: 'summary-refused' } } });
           throw error;
         }
       }
@@ -157,8 +156,9 @@ export function createExportService(deps: Deps): ExportService {
         if (call.signal?.aborted === true) throw new Error('cancelled');
         const written = await deps.files.write(id, bytes);
         storageKey = written.storageKey;
-        await deps.store.completeExport(id, { filename: exportFilename(format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: read.maskedFields > 0, maskedFieldCount: read.maskedFields });
-        await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields, ...(included === undefined ? {} : { summary: { runId: included.runId, kept: included.kept, dropped: included.dropped } }) } });
+        await deps.store.completeExport(id, { filename: exportFilename(format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: read.maskedFields > 0, maskedFieldCount: read.maskedFields }, (transaction) =>
+          record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields, ...(included === undefined ? {} : { summary: { runId: included.runId, kept: included.kept, dropped: included.dropped } }) } }, transaction),
+        );
       } catch (error) {
         await discard(id, storageKey, 'EXPORT_FAILED');
         if (error instanceof AppError) throw error;

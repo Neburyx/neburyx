@@ -1,3 +1,4 @@
+import type { AuditTransaction } from '@neburyx/contracts';
 import type pg from 'pg';
 import { inTransaction } from './investigations-repository.js';
 
@@ -72,20 +73,28 @@ interface IdempotencyKeyCall {
 export interface ExportStore {
   /** Inserts a `pending` row whose expiry is the database's now plus the retention days. */
   insertExport(input: NewExport): Promise<ExportRow>;
-  completeExport(id: string, ready: ReadyExport): Promise<void>;
-  failExport(id: string, errorCode: string): Promise<void>;
+  /** Marks the export ready; `beforeCommit` runs inside the same transaction, so a throw leaves the export as it was. */
+  completeExport(id: string, ready: ReadyExport, beforeCommit?: (transaction: AuditTransaction) => Promise<void>): Promise<void>;
+  /** Sets the row `failed` and clears its storage key; `whileHeld` runs first with the row locked, and a row that is gone or no longer `pending` is left alone (answers `false`). */
+  failExport(id: string, errorCode: string, whileHeld?: () => Promise<void>): Promise<boolean>;
   /** The requester's own export; another person's is `undefined`, as an unknown ID is. */
   readExport(id: string, requestedBy: string): Promise<ExportWithInvestigation | undefined>;
-  /** Sets the row `expired` and clears its storage key. */
-  expireExport(id: string): Promise<void>;
+  /** Sets the row `expired` and clears its storage key; `whileHeld` runs first with the row locked, so a purge that is deleting the row waits for it, and a row that is gone or no longer `ready` or `pending` is left alone (answers `false`). */
+  expireExport(id: string, whileHeld?: () => Promise<void>): Promise<boolean>;
   /** The `ready` exports whose expiry has passed by the database's clock. */
   listExpiredExports(): Promise<readonly ExpiredExport[]>;
   /** The `pending` rows older than `olderThanMs`. */
   listStalePendingExports(olderThanMs: number): Promise<readonly string[]>;
   /** Every storage key a row names, so a file no row names can be told. */
   listStorageKeys(): Promise<readonly string[]>;
-  /** The storage keys a file of an investigation can have: the ID of each of its exports, whether or not the row names the file yet (a call killed after the file was written leaves a pending row), for its purge. */
-  exportFileKeys(investigationId: string): Promise<readonly string[]>;
+  /** Records, through the transaction of a purge, the file key of each export of the investigation (the ID of each: a file can exist before its row names it), so the files are removed after the purge commits. */
+  recordFileCleanup(investigationId: string, transaction: AuditTransaction): Promise<void>;
+  /** The next `limit` keys of files a purge left to remove, in key order, after the key given. */
+  fileCleanupKeys(after: string | undefined, limit: number): Promise<readonly string[]>;
+  /** Which of these file names wait for their cleanup. */
+  fileCleanupAmong(keys: readonly string[]): Promise<readonly string[]>;
+  /** Forgets a key whose file is gone. */
+  forgetFileCleanup(storageKey: string): Promise<void>;
   startIdempotent(call: IdempotencyKeyCall): Promise<IdempotencyStart>;
   finishIdempotent(userId: string, key: string, statusCode: number, response: unknown): Promise<void>;
   /** Forgets a key whose first call ended in a server error, so a retry runs again. */
@@ -142,6 +151,17 @@ const IDEMPOTENCY_WINDOW = `interval '24 hours'`;
 /** A call that has not answered by now was killed with its process, so its key is free again. */
 const ABANDONED_CALL_MS = 15 * 60_000;
 
+/** Locks one export in a state the caller names, runs the work, and applies the change, in one transaction: a purge deleting the row waits, and a row another path already took is left alone. */
+async function changeHeldExport(pool: pg.Pool, id: string, states: readonly string[], change: string, parameters: readonly unknown[], whileHeld?: () => Promise<void>): Promise<boolean> {
+  return inTransaction(pool, async (client) => {
+    const held = await client.query(`SELECT 1 FROM exports WHERE id = $1 AND status = ANY($2::text[]) FOR UPDATE SKIP LOCKED`, [id, states]);
+    if ((held.rowCount ?? 0) === 0) return false;
+    await whileHeld?.();
+    await client.query(change, [...parameters]);
+    return true;
+  });
+}
+
 export function createExportStore(pool: pg.Pool): ExportStore {
   return {
     async insertExport(input) {
@@ -156,15 +176,23 @@ export function createExportStore(pool: pg.Pool): ExportStore {
       return rowOf(record);
     },
 
-    async completeExport(id, ready) {
-      await pool.query(
-        `UPDATE exports SET status = 'ready', filename = $2, storage_key = $3, size_bytes = $4, sha256 = $5, masked = $6, masked_field_count = $7, error_code = NULL WHERE id = $1`,
-        [id, ready.filename, ready.storageKey, ready.sizeBytes, ready.sha256, ready.masked, ready.maskedFieldCount],
-      );
+    async completeExport(id, ready, beforeCommit) {
+      await inTransaction(pool, async (client) => {
+        await client.query(
+          `UPDATE exports SET status = 'ready', filename = $2, storage_key = $3, size_bytes = $4, sha256 = $5, masked = $6, masked_field_count = $7, error_code = NULL WHERE id = $1`,
+          [id, ready.filename, ready.storageKey, ready.sizeBytes, ready.sha256, ready.masked, ready.maskedFieldCount],
+        );
+        await beforeCommit?.(client);
+      });
     },
 
-    async failExport(id, errorCode) {
-      await pool.query(`UPDATE exports SET status = 'failed', storage_key = NULL, error_code = $2 WHERE id = $1`, [id, errorCode]);
+    failExport: async (id, errorCode, whileHeld) => {
+      const change = `UPDATE exports SET status = 'failed', storage_key = NULL, error_code = $2 WHERE id = $1`;
+      if (whileHeld === undefined) {
+        await pool.query(change, [id, errorCode]);
+        return true;
+      }
+      return changeHeldExport(pool, id, ['pending'], change, [id, errorCode], whileHeld);
     },
 
     async readExport(id, requestedBy) {
@@ -183,9 +211,7 @@ export function createExportStore(pool: pg.Pool): ExportStore {
       };
     },
 
-    async expireExport(id) {
-      await pool.query(`UPDATE exports SET status = 'expired', storage_key = NULL WHERE id = $1 AND status IN ('ready', 'pending')`, [id]);
-    },
+    expireExport: (id, whileHeld) => changeHeldExport(pool, id, ['ready', 'pending'], `UPDATE exports SET status = 'expired', storage_key = NULL WHERE id = $1`, [id], whileHeld),
 
     async listExpiredExports() {
       const result = await pool.query<{ id: string; storage_key: string | null }>(`SELECT id, storage_key FROM exports WHERE status = 'ready' AND expires_at <= now() ORDER BY expires_at, id`);
@@ -202,9 +228,24 @@ export function createExportStore(pool: pg.Pool): ExportStore {
       return result.rows.map((row) => row.storage_key);
     },
 
-    async exportFileKeys(investigationId) {
-      const result = await pool.query<{ id: string }>(`SELECT id FROM exports WHERE investigation_id = $1`, [investigationId]);
-      return result.rows.map((row) => row.id);
+    async recordFileCleanup(investigationId, transaction) {
+      // every row, whatever its state: a removal that failed and was passed over leaves a file behind an expired or failed row, and removing a file that is gone is nothing. The lock makes a running expiry finish first.
+      await transaction.query(`INSERT INTO file_cleanup (storage_key) SELECT held.id FROM (SELECT id::text AS id FROM exports WHERE investigation_id = $1 FOR UPDATE) AS held ON CONFLICT DO NOTHING`, [investigationId]);
+    },
+
+    async fileCleanupKeys(after, limit) {
+      const result = await pool.query<{ storage_key: string }>(`SELECT storage_key FROM file_cleanup WHERE ($1::text IS NULL OR storage_key > $1) ORDER BY storage_key LIMIT $2`, [after ?? null, limit]);
+      return result.rows.map((row) => row.storage_key);
+    },
+
+    async fileCleanupAmong(keys) {
+      if (keys.length === 0) return [];
+      const result = await pool.query<{ storage_key: string }>(`SELECT storage_key FROM file_cleanup WHERE storage_key = ANY($1::text[])`, [keys]);
+      return result.rows.map((row) => row.storage_key);
+    },
+
+    async forgetFileCleanup(storageKey) {
+      await pool.query(`DELETE FROM file_cleanup WHERE storage_key = $1`, [storageKey]);
     },
 
     async startIdempotent(call) {

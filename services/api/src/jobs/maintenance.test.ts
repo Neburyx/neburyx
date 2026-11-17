@@ -1,4 +1,5 @@
 import { idleExportDeps } from '../testing/export-deps.js';
+import { MEMORY_TRANSACTION } from '../testing/memory-transaction.js';
 import { describe, expect, it } from 'vitest';
 import { createLogger } from '../logger.js';
 import type { AuditEvent } from '../seams/seams.js';
@@ -15,9 +16,9 @@ function depsWith(purge: MaintenanceDeps['store']['purgeExpiredInvestigations'],
 }
 
 describe('the shipped maintenance tasks', () => {
-  it('hold the two purges and the export expiry, once each, with a daily schedule that is a valid cron expression', () => {
+  it('hold the two purges, the removal of purged files and the export expiry, once each, with a schedule that is a valid cron expression', () => {
     const tasks = maintenanceTasks(depsWith(() => Promise.resolve(0)));
-    expect(tasks.map((task) => [task.name, task.schedule])).toEqual([['purge-deleted-investigations', '17 3 * * *'], ['purge-deleted-patterns', '29 3 * * *'], ['expire-exports', '41 3 * * *']]);
+    expect(tasks.map((task) => [task.name, task.schedule])).toEqual([['purge-deleted-investigations', '17 3 * * *'], ['remove-purged-files', '*/10 * * * *'], ['purge-deleted-patterns', '29 3 * * *'], ['expire-exports', '41 3 * * *']]);
     expect(() => validateTasks(tasks)).not.toThrow();
   });
 
@@ -34,8 +35,8 @@ describe('purgeDeletedInvestigations', () => {
     const audited: AuditEvent[] = [];
     const lines: string[] = [];
     const count = await purgeDeletedInvestigations(depsWith(async (beforeDelete) => {
-      await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000c1', sourceId: 'demo' });
-      await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000c2', sourceId: 'demo' });
+      await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000c1', sourceId: 'demo' }, MEMORY_TRANSACTION);
+      await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000c2', sourceId: 'demo' }, MEMORY_TRANSACTION);
       return 2;
     }, audited, lines));
     expect(count).toBe(2);
@@ -46,7 +47,7 @@ describe('purgeDeletedInvestigations', () => {
   });
 
   it('raises when the audit sink rejects an event, so the runner retries the task', async () => {
-    const deps: MaintenanceDeps = { ...idleExportDeps(), store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: 'x', sourceId: 'demo' }); return 1; } }, audit: { record: () => Promise.reject(new Error('the sink is down')) }, logger: createLogger({ write: () => undefined }) };
+    const deps: MaintenanceDeps = { ...idleExportDeps(), store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: 'x', sourceId: 'demo' }, MEMORY_TRANSACTION); return 1; } }, audit: { record: () => Promise.reject(new Error('the sink is down')) }, logger: createLogger({ write: () => undefined }) };
     await expect(purgeDeletedInvestigations(deps)).rejects.toThrow('the sink is down');
   });
 });
@@ -60,8 +61,8 @@ describe('purgeDeletedPatterns', () => {
       store: {
         purgeExpiredInvestigations: () => Promise.resolve(0),
         purgeExpiredPatterns: async (beforeDelete) => {
-          await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000d1', sourceId: 'demo' });
-          await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000d2', sourceId: 'demo' });
+          await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000d1', sourceId: 'demo' }, MEMORY_TRANSACTION);
+          await beforeDelete({ id: '0192f000-0000-7000-8000-0000000000d2', sourceId: 'demo' }, MEMORY_TRANSACTION);
           return 2;
         },
       },
@@ -77,7 +78,7 @@ describe('purgeDeletedPatterns', () => {
   it('raises when the audit sink rejects an event, so the runner retries the task', async () => {
     const deps: MaintenanceDeps = {
       ...depsWith(() => Promise.resolve(0)),
-      store: { purgeExpiredInvestigations: () => Promise.resolve(0), purgeExpiredPatterns: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }), 1) },
+      store: { purgeExpiredInvestigations: () => Promise.resolve(0), purgeExpiredPatterns: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }, MEMORY_TRANSACTION), 1) },
       audit: { record: () => Promise.reject(new Error('the sink is down')) },
     };
     await expect(purgeDeletedPatterns(deps)).rejects.toThrow('the sink is down');

@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import type { AuditEvent, AuditSinkContext, MountedAuditSink } from '@neburyx/contracts';
 import pino from 'pino';
 import { stringify } from 'yaml';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
+import { AUDIT_WRITE_TIMEOUT_BOUNDS } from '../audit/settings.js';
 import { STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS } from '../app-store.js';
 import { CONNECTION_TIMEOUT_MS, POOL_SIZE } from '../db/pool.js';
 import { createSourceGate, type SourceGateOptions } from '../gate/source-gate.js';
@@ -25,6 +26,7 @@ writeFileSync(previewFile, stringify({ sources: [], ai: { preview: true } }));
 const plainFile = join(folder, 'plain.yaml');
 writeFileSync(plainFile, stringify({ sources: [] }));
 
+const DEFAULT_AUDIT_WRITE_TIMEOUT_MS = AUDIT_WRITE_TIMEOUT_BOUNDS.default;
 const DATABASE_URL = 'postgres://app_user@db.example.test:5432/neburyx';
 const EVENT: AuditEvent = { actorId: 'a', actorRole: 'viewer', action: 'graph.expand', result: 'success', traceId: 't' };
 
@@ -68,12 +70,12 @@ describe('the audit sink of the preview in a start', () => {
       databaseUrl: DATABASE_URL,
       poolSize: POOL_SIZE,
       connectionTimeoutMs: CONNECTION_TIMEOUT_MS,
-      statementTimeoutMs: STORE_STATEMENT_TIMEOUT_MS,
-      queryTimeoutMs: STORE_QUERY_TIMEOUT_MS,
+      statementTimeoutMs: Math.min(STORE_STATEMENT_TIMEOUT_MS, DEFAULT_AUDIT_WRITE_TIMEOUT_MS),
+      queryTimeoutMs: Math.min(STORE_QUERY_TIMEOUT_MS, DEFAULT_AUDIT_WRITE_TIMEOUT_MS),
     });
     expect(uuidv7).toBe(contexts[0]?.newId);
     await seams[0]?.audit.record(EVENT);
-    expect(recorded).toEqual([EVENT]);
+    await vi.waitFor(() => expect(recorded).toEqual([EVENT]));
     await result.app.close();
   });
 

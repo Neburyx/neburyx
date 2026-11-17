@@ -54,10 +54,5 @@ export function createCoverageService(deps: CoverageDeps): CoverageService {
 }
 
 async function recordRead(deps: CoverageDeps, call: CoverageCall): Promise<void> {
-  try {
-    await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: degreePreviewBoundedTemplate.auditAction, result: 'success', sourceId: call.sourceId, traceId: call.traceId });
-  } catch {
-    // the answer does not depend on the audit write, as for a read through the gate; the log line carries no event data
-    deps.logger.warn({ event: 'coverage.audit_failed' }, 'coverage audit write failed');
-  }
+  await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: degreePreviewBoundedTemplate.auditAction, result: 'success', sourceId: call.sourceId, traceId: call.traceId });
 }

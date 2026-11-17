@@ -2,6 +2,7 @@ import { isIP } from 'node:net';
 import { isAbsolute, resolve } from 'node:path';
 import { z } from 'zod';
 import { MAX_READINESS_LIMIT_MS, MIN_READINESS_LIMIT_MS, parseReadinessLimit } from './health/readiness.js';
+import { AUDIT_QUEUE_SIZE_BOUNDS, AUDIT_RETRY_LIMIT_BOUNDS, AUDIT_RETRY_WAIT_BOUNDS, AUDIT_SINK_NAMES, AUDIT_WRITE_TIMEOUT_BOUNDS, parseAuditNumber, parseAuditSinks } from './audit/settings.js';
 import { MAX_CONNECT_TIMEOUT_MS, MIN_CONNECT_TIMEOUT_MS, parseConnectTimeout } from './db/connect-timeout.js';
 
 export const DEFAULT_HOST = '127.0.0.1';
@@ -28,6 +29,11 @@ const keys = {
   connectTimeoutMs: 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS',
   readinessLimitMs: 'NEBURYX_READINESS_LIMIT_MS',
   dev: 'NEBURYX_DEV',
+  auditQueueSize: 'NEBURYX_AUDIT_QUEUE_SIZE',
+  auditRetryLimit: 'NEBURYX_AUDIT_RETRY_LIMIT',
+  auditRetryWaitMs: 'NEBURYX_AUDIT_RETRY_WAIT_MS',
+  auditWriteTimeoutMs: 'NEBURYX_AUDIT_WRITE_TIMEOUT_MS',
+  auditSinks: 'NEBURYX_AUDIT_SINKS',
 } as const;
 
 function isPostgresUrl(value: string): boolean {
@@ -73,6 +79,16 @@ const configSchema = z.object({
   readinessLimitMs: z.number().int().min(MIN_READINESS_LIMIT_MS).max(MAX_READINESS_LIMIT_MS),
   /** Dev mode: the mapping file is read again when it is saved. Only `1` turns it on; unset or empty leaves it off. */
   dev: z.boolean(),
+  /** How many audit events one sink's queue holds before it drops new ones. */
+  auditQueueSize: z.number().int().min(AUDIT_QUEUE_SIZE_BOUNDS.min).max(AUDIT_QUEUE_SIZE_BOUNDS.max),
+  /** How many times a failed audit write is tried again. */
+  auditRetryLimit: z.number().int().min(AUDIT_RETRY_LIMIT_BOUNDS.min).max(AUDIT_RETRY_LIMIT_BOUNDS.max),
+  /** The wait before the first retry of an audit write, doubled for each later one. */
+  auditRetryWaitMs: z.number().int().min(AUDIT_RETRY_WAIT_BOUNDS.min).max(AUDIT_RETRY_WAIT_BOUNDS.max),
+  /** Where ordinary audit events go: the built-in store, JSON lines on standard output, or both. */
+  auditSinks: z.array(z.enum(AUDIT_SINK_NAMES)).min(1),
+  /** How long one attempt to write an audit event may take. */
+  auditWriteTimeoutMs: z.number().int().min(AUDIT_WRITE_TIMEOUT_BOUNDS.min).max(AUDIT_WRITE_TIMEOUT_BOUNDS.max),
   /** The key that signs page cursors; absent, the API makes one of its own for the process. */
   cursorKey: z
     .string()
@@ -116,12 +132,17 @@ export function parseConfig(
     connectTimeoutMs: parseConnectTimeout(env[keys.connectTimeoutMs]),
     readinessLimitMs: parseReadinessLimit(env[keys.readinessLimitMs]),
     dev: parseDev(env[keys.dev]),
+    auditQueueSize: parseAuditNumber(env[keys.auditQueueSize], AUDIT_QUEUE_SIZE_BOUNDS),
+    auditRetryLimit: parseAuditNumber(env[keys.auditRetryLimit], AUDIT_RETRY_LIMIT_BOUNDS),
+    auditRetryWaitMs: parseAuditNumber(env[keys.auditRetryWaitMs], AUDIT_RETRY_WAIT_BOUNDS),
+    auditWriteTimeoutMs: parseAuditNumber(env[keys.auditWriteTimeoutMs], AUDIT_WRITE_TIMEOUT_BOUNDS),
+    auditSinks: parseAuditSinks(env[keys.auditSinks]),
   });
   if (result.success) return result.data;
 
   const failed = result.error.issues.flatMap((issue) => {
     const field = issue.path[0];
-    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' || field === 'connectTimeoutMs' || field === 'readinessLimitMs' || field === 'dev' ? [keys[field]] : [];
+    return field === 'host' || field === 'port' || field === 'webRoot' || field === 'databaseUrl' || field === 'mappingPath' || field === 'cursorKey' || field === 'exportDirectory' || field === 'connectTimeoutMs' || field === 'readinessLimitMs' || field === 'dev' || field === 'auditQueueSize' || field === 'auditRetryLimit' || field === 'auditRetryWaitMs' || field === 'auditWriteTimeoutMs' || field === 'auditSinks' ? [keys[field]] : [];
   });
   throw new ConfigError([...new Set(failed)]);
 }

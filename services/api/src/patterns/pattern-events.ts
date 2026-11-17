@@ -5,8 +5,8 @@ import type { Principal } from '../seams/seams.js';
 
 /**
  * The history of a pattern, in two records.
- * `pattern_events` is the pattern's own history. It is written in every edition, inside the transaction of the change, so a change that cannot be recorded is refused with `AUDIT_UNAVAILABLE`.
- * After the commit each event is also passed to the `AuditSink` seam. In Community that keeps nothing; in Enterprise the sink records it in `audit_events`, the second record.
+ * `pattern_events` is the pattern's own history. It is written in every edition, after the commit of the change, through a queue, so a store that cannot take an event never refuses or undoes a change.
+ * Each event is also passed to the `AuditSink` seam. In Community that keeps nothing; in Enterprise the sink records it in `audit_events`, the second record.
  * An event holds ids, an action and a version, never a definition or a property value.
  */
 
@@ -39,31 +39,45 @@ export function isPatternEventAction(value: unknown): value is PatternEventActio
 }
 
 /**
- * Inserts one event with the caller's open client, in the caller's transaction, and opens none of its own.
- * An action outside the list is a bug in the caller and throws a `TypeError` before any SQL is sent. A failed insert throws `AUDIT_UNAVAILABLE` with no details, so the change in the same transaction rolls back.
+ * Inserts one event of the pattern's history through a pool, with the time limit of the queue if it gives one (set on the statement at the server), outside the change's transaction. An event is inserted once whatever the number of tries: its id is fixed when the change is made, and a second insert of the same id writes nothing.
+ * An action outside the list is a bug in the caller and throws a `TypeError` before any SQL is sent.
  */
-export async function recordPatternEvent(client: Pick<pg.PoolClient, 'query'>, event: PatternEvent): Promise<void> {
+const INSERT_EVENT = 'INSERT INTO pattern_events (id, source_id, pattern_id, actor_id, action, pattern_version) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING';
+
+export async function insertPatternEvent(pool: Pick<pg.Pool, 'query' | 'connect'>, event: PatternEvent, timeoutMs?: number): Promise<void> {
   if (!isPatternEventAction(event.action)) {
     const length = typeof event.action === 'string' ? (event.action as string).length : 0;
     throw new TypeError(`a pattern event action must be one of the listed actions (the given one has ${length} characters)`);
   }
-  try {
-    await client.query('INSERT INTO pattern_events (id, source_id, pattern_id, actor_id, action, pattern_version) VALUES ($1, $2, $3, $4, $5, $6)', [
-      event.id,
-      event.sourceId,
-      event.patternId,
-      event.actorId,
-      event.action,
-      event.version,
-    ]);
-  } catch {
-    throw new AppError('AUDIT_UNAVAILABLE');
+  const values = [event.id, event.sourceId, event.patternId, event.actorId, event.action, event.version];
+  if (timeoutMs === undefined) {
+    await pool.query(INSERT_EVENT, values);
+    return;
   }
+  // the server ends the statement at the limit, so the write is over when the queue stops waiting for it and the next event is not written before it
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT set_config('statement_timeout', $1, true)`, [String(Math.trunc(timeoutMs))]);
+    await client.query(INSERT_EVENT, values);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Where a pattern's history events are handed to be written; recording one never waits and never throws. */
+export interface PatternHistory {
+  record(event: PatternEvent): Promise<void>;
 }
 
 export interface PatternTransactionDeps {
   readonly pool: pg.Pool;
   readonly audit: AuditSink;
+  readonly history: PatternHistory;
   /** Makes the version 7 uuid of an event. */
   readonly newId: () => string;
 }
@@ -82,14 +96,13 @@ export interface PatternEventInput {
 
 export interface PatternTransaction {
   readonly client: pg.PoolClient;
-  /** Records an event for the person who made the change, in this transaction. */
+  /** Notes an event of the change; it is handed to the history and to the audit seam after the commit. */
   record(input: PatternEventInput): Promise<void>;
 }
 
 /**
- * Runs the change of a pattern and its events as one transaction, and only after the commit passes each event, in the order recorded, to the audit seam.
- * A failed event write or a failed change rolls everything back and makes no seam call, also when the work caught the error: a failed event write is refused after the work returns, and a commit that did not commit is an error.
- * Interim rule for a sink that rejects (the final rule is set with the Enterprise audit log), taken from how a committed investigation change behaves: the commit stands, every event is still passed on, and the call throws `INTERNAL_ERROR`.
+ * Runs the change of a pattern as one transaction and, after the commit, hands each event it noted, in the order noted, to the pattern's history and to the audit seam.
+ * Both hand-overs are queued and never fail or wait, so a store that cannot take an event leaves a committed change as it is. A change that fails, or a commit that did not commit, hands over nothing.
  */
 export async function inPatternTransaction<T>(deps: PatternTransactionDeps, context: PatternTransactionContext, work: (transaction: PatternTransaction) => Promise<T>): Promise<T> {
   const recorded: PatternEvent[] = [];
@@ -97,23 +110,16 @@ export async function inPatternTransaction<T>(deps: PatternTransactionDeps, cont
   let result: T;
   try {
     await client.query('BEGIN');
-    let writeFailed = false;
     result = await work({
       client,
-      async record(input) {
+      record(input) {
         const event: PatternEvent = { id: deps.newId(), actorId: context.principal.id, ...input };
-        try {
-          await recordPatternEvent(client, event);
-        } catch (error) {
-          writeFailed = true;
-          throw error;
-        }
+        if (!isPatternEventAction(event.action)) throw new TypeError('a pattern event action must be one of the listed actions');
         recorded.push(event);
+        return Promise.resolve();
       },
     });
-    // a change whose event could not be written is refused even when the work caught that error
-    if (writeFailed) throw new AppError('AUDIT_UNAVAILABLE');
-    // Postgres answers COMMIT of a transaction that failed with the command tag ROLLBACK and no error, so the tag is checked: nothing committed means no success and no seam call
+    // Postgres answers COMMIT of a transaction that failed with the command tag ROLLBACK and no error, so the tag is checked: nothing committed means no success and no hand-over
     const committed = await client.query('COMMIT');
     if (committed.command !== 'COMMIT') throw new AppError('INTERNAL_ERROR');
   } catch (error) {
@@ -122,24 +128,19 @@ export async function inPatternTransaction<T>(deps: PatternTransactionDeps, cont
   } finally {
     client.release();
   }
-  let rejected = false;
   for (const event of recorded) {
-    await deps.audit
-      .record({
-        actorId: context.principal.id,
-        actorRole: context.principal.role,
-        action: PATTERN_AUDIT_ACTIONS[event.action],
-        result: 'success',
-        sourceId: event.sourceId,
-        resourceType: 'pattern',
-        resourceRef: event.patternId,
-        traceId: context.traceId,
-      })
-      .catch(() => {
-        rejected = true;
-      });
+    await deps.history.record(event);
+    await deps.audit.record({
+      actorId: context.principal.id,
+      actorRole: context.principal.role,
+      action: PATTERN_AUDIT_ACTIONS[event.action],
+      result: 'success',
+      sourceId: event.sourceId,
+      resourceType: 'pattern',
+      resourceRef: event.patternId,
+      traceId: context.traceId,
+    });
   }
-  if (rejected) throw new AppError('INTERNAL_ERROR');
   return result;
 }
 

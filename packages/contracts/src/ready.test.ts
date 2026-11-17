@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { readyResponseSchema } from './ready.js';
 
 describe('readyResponseSchema', () => {
+  const audit = { written: 3, failed: 1, dropped: 0, queued: 2 };
   it('accepts a ready and a not ready answer', () => {
-    expect(readyResponseSchema.safeParse({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 1, unreachable: 0, unknown: 0 } }).success).toBe(true);
-    expect(readyResponseSchema.safeParse({ status: 'not_ready', checks: { database: 'ok', migrations: 'pending' }, sources: { reachable: 0, unreachable: 2, unknown: 1 } }).success).toBe(true);
-    expect(readyResponseSchema.safeParse({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } }).success).toBe(true);
+    expect(readyResponseSchema.safeParse({ status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 1, unreachable: 0, unknown: 0 }, audit }).success).toBe(true);
+    expect(readyResponseSchema.safeParse({ status: 'not_ready', checks: { database: 'ok', migrations: 'pending' }, sources: { reachable: 0, unreachable: 2, unknown: 1 }, audit }).success).toBe(true);
+    expect(readyResponseSchema.safeParse({ status: 'not_ready', checks: { database: 'unreachable', migrations: 'unknown' }, sources: { reachable: 0, unreachable: 0, unknown: 0 }, audit }).success).toBe(true);
   });
 
   const sources = { reachable: 1, unreachable: 0, unknown: 0 };
@@ -24,6 +25,16 @@ describe('readyResponseSchema', () => {
     ['a missing count', { status: 'ready', checks, sources: { reachable: 1, unreachable: 0 } }],
     ['a source count inside the checks', { status: 'ready', checks: { ...checks, sources: 'ok' }, sources }],
   ])('rejects %s', (_name, value) => {
-    expect(readyResponseSchema.safeParse(value).success).toBe(false);
+    expect(readyResponseSchema.safeParse({ audit, ...value }).success).toBe(false);
+  });
+
+  it.each([
+    ['no audit member', {}],
+    ['a negative audit count', { audit: { ...audit, failed: -1 } }],
+    ['an audit count that is not whole', { audit: { ...audit, dropped: 1.5 } }],
+    ['a missing audit count', { audit: { written: 1, failed: 0, dropped: 0 } }],
+    ['a field in the audit block it does not define', { audit: { ...audit, sink: 'stdout' } }],
+  ])('rejects %s', (_name, extra) => {
+    expect(readyResponseSchema.safeParse({ status: 'ready', checks, sources, ...extra }).success).toBe(false);
   });
 });

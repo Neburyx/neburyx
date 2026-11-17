@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { MEMORY_TRANSACTION } from '../testing/memory-transaction.js';
 import { rmSync } from 'node:fs';
 import { exportSchema } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
-import { expireExports, purgeDeletedInvestigations } from '../jobs/maintenance.js';
+import { expireExports, purgeDeletedInvestigations, removePurgedFiles, type MaintenanceDeps } from '../jobs/maintenance.js';
 import { createLogger } from '../logger.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import { el, exportWebRoot, idsOf, startExportRig, type ExportRig } from '../testing/export-rig.js';
@@ -406,30 +407,113 @@ describe('the expiry task', () => {
   });
 });
 
+const purgeOf = (rig: ExportRig, investigationId: string, audit?: MaintenanceDeps['audit']): MaintenanceDeps => ({
+  ...maintenance(rig),
+  ...(audit === undefined ? {} : { audit }),
+  store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: investigationId, sourceId: 'demo' }, MEMORY_TRANSACTION), 1) },
+});
+
 describe('the purge of an investigation', () => {
-  it('deletes its export files before the investigation goes, and a file already gone is not an error', async () => {
+  it('records the keys of its export files in the purge and leaves the files until the cleanup task removes them, and a file already gone is not an error', async () => {
     const rig = await startExportRig();
     const { investigation } = await ready(rig);
     await ready(rig);
-    const key = String(rig.store.exports.rows[0]?.storageKey);
-    await rig.files.remove(key);
-    let order = '';
-    const purged = await purgeDeletedInvestigations({
-      ...maintenance(rig),
-      store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); order = `${(await rig.files.list()).length}`; return 1; } },
-    });
-    expect(purged).toBe(1);
-    expect(order).toBe('1');
+    const gone = String(rig.store.exports.rows[0]?.storageKey);
+    await rig.files.remove(gone);
+    expect(await purgeDeletedInvestigations(purgeOf(rig, investigation.id))).toBe(1);
+    expect(rig.store.exports.cleanup).toEqual([gone]);
+    expect(await rig.files.list()).toHaveLength(1);
+    expect(await removePurgedFiles(maintenance(rig))).toBe(1);
+    expect(rig.store.exports.cleanup).toEqual([]);
+    expect(await rig.files.list()).toHaveLength(1);
     await rig.stop();
   });
 
-  it('stops that investigation\'s purge and reports it when a file cannot be deleted', async () => {
+  it('removes nothing and records no key when the audit event cannot be written', async () => {
     const rig = await startExportRig();
     const { investigation } = await ready(rig);
-    const failing = { ...rig.files, remove: () => Promise.reject(new Error('locked')) };
-    await expect(
-      purgeDeletedInvestigations({ ...maintenance(rig), files: failing, store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } }),
-    ).rejects.toThrow('locked');
+    await expect(purgeDeletedInvestigations(purgeOf(rig, investigation.id, { record: () => Promise.reject(new Error('the sink is down')) }))).rejects.toThrow('the sink is down');
+    expect(rig.store.exports.cleanup).toEqual([]);
+    expect(await rig.files.list()).toHaveLength(1);
+    await removePurgedFiles(maintenance(rig));
+    expect(await rig.files.list()).toHaveLength(1);
+    await rig.stop();
+  });
+
+  it('leaves the keys after a crash between the purge and the removal, and the next run finishes them', async () => {
+    const rig = await startExportRig();
+    const { investigation } = await ready(rig);
+    await purgeDeletedInvestigations(purgeOf(rig, investigation.id));
+    expect(rig.store.exports.cleanup).toHaveLength(1);
+    expect(await rig.files.list()).toHaveLength(1);
+    expect(await removePurgedFiles(maintenance(rig))).toBe(1);
+    expect(await rig.files.list()).toEqual([]);
+    await rig.stop();
+  });
+
+  it('changes nothing when the cleanup task runs again', async () => {
+    const rig = await startExportRig();
+    const { investigation } = await ready(rig);
+    await purgeDeletedInvestigations(purgeOf(rig, investigation.id));
+    await removePurgedFiles(maintenance(rig));
+    expect(await removePurgedFiles(maintenance(rig))).toBe(0);
+    expect(rig.store.exports.cleanup).toEqual([]);
+    await rig.stop();
+  });
+
+  it('keeps the key of a file that cannot be removed, removes the others, and raises so the runner tries again', async () => {
+    const rig = await startExportRig();
+    const { investigation } = await ready(rig);
+    await ready(rig);
+    await purgeDeletedInvestigations(purgeOf(rig, investigation.id));
+    const [stuck] = rig.store.exports.cleanup;
+    const failing = { ...rig.files, remove: (key: string) => (key === stuck ? Promise.reject(new Error('locked')) : rig.files.remove(key)) };
+    await expect(removePurgedFiles({ ...maintenance(rig), files: failing })).rejects.toThrow('locked');
+    expect(rig.store.exports.cleanup).toEqual([stuck]);
+    expect(await removePurgedFiles(maintenance(rig))).toBe(1);
+    expect(rig.store.exports.cleanup).toEqual([]);
+    await rig.stop();
+  });
+
+  it('does not count a file that waits for its cleanup as a file no export names, so the expiry job and the cleanup task never act on one file', async () => {
+    const rig = await startExportRig();
+    const { investigation } = await ready(rig);
+    await purgeDeletedInvestigations(purgeOf(rig, investigation.id));
+    rig.store.exports.rows.splice(0, rig.store.exports.rows.length);
+    expect((await expireExports(maintenance(rig))).unnamedFiles).toBe(0);
+    expect(await rig.files.list()).toHaveLength(1);
+    await removePurgedFiles(maintenance(rig));
+    expect((await expireExports(maintenance(rig))).unnamedFiles).toBe(0);
+    await rig.stop();
+  });
+});
+
+describe('the expiry job and the purge of the same export, in memory', () => {
+  it('records the key of an export that is expired or failed too, so a file whose removal failed and was passed over is still removed after the purge', async () => {
+    const rig = await startExportRig();
+    const { investigation } = await ready(rig);
+    const [row] = rig.store.exports.rows;
+    expect(await rig.files.list()).toHaveLength(1);
+    // the export service swallows a failed removal and then marks the row; the file is still there
+    await rig.store.exports.expireExport(String(row?.id));
+    expect(rig.store.exports.rows[0]?.status).toBe('expired');
+    await purgeDeletedInvestigations(purgeOf(rig, investigation.id));
+    expect(rig.store.exports.cleanup).toEqual([String(row?.id)]);
+    expect(await removePurgedFiles(maintenance(rig))).toBe(1);
+    expect(await rig.files.list()).toEqual([]);
+    await rig.stop();
+  });
+
+  it('works a backlog of cleanup keys in batches, passes the key that cannot be removed, and removes the rest', async () => {
+    const rig = await startExportRig();
+    const keys = Array.from({ length: 250 }, (_unused, index) => `0192f000-0000-7000-8000-${String(index).padStart(12, '0')}`);
+    rig.store.exports.cleanup.push(...keys);
+    const first = keys[3] ?? '';
+    const calls: string[] = [];
+    const files = { ...rig.files, remove: (name: string) => (calls.push(name), name === first ? Promise.reject(new Error('locked')) : rig.files.remove(name)) };
+    await expect(removePurgedFiles({ ...maintenance(rig), files })).rejects.toThrow('locked');
+    expect(calls).toHaveLength(250);
+    expect(rig.store.exports.cleanup).toEqual([first]);
     await rig.stop();
   });
 });
@@ -503,7 +587,8 @@ describe('calls that were killed, and the codes a retry meets', () => {
     const second = '44444444-4444-4444-8444-444444444444';
     await rig.store.insertExport({ id: second, investigationId: investigation.id, requestedBy: principal, policyVersion: 'none', sourceIdentityHash: 'x', format: 'json', retentionDays: 7 });
     await rig.files.write(second, Buffer.from('x'));
-    await purgeDeletedInvestigations({ ...maintenance(rig), store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => { await beforeDelete({ id: investigation.id, sourceId: 'demo' }); return 1; } } });
+    await purgeDeletedInvestigations(purgeOf(rig, investigation.id));
+    await removePurgedFiles(maintenance(rig));
     expect(await rig.files.list()).toEqual([]);
     await rig.stop();
   });

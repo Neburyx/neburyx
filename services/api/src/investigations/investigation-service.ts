@@ -1,4 +1,4 @@
-import { AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type AiNotesAppended, type AiNotesEntryInput, type AiNotesRead, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
+import { type AuditTransaction, AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, DEFAULT_INVESTIGATION_LIST_LIMIT, MAX_DRAFT_DOCUMENT_BYTES, MAX_INVESTIGATION_LIST_LIMIT, investigationResponseSchema, layoutDocumentSchema, MAX_TITLE_LENGTH, queryContextDocumentSchema, type AiNotesAppended, type AiNotesEntryInput, type AiNotesRead, type GraphNode, type Investigation, type InvestigationListResponse, type DraftWriteRequest, type DraftWriteResponse, type InvestigationResponse, type InvestigationSourceState, type MappingChange, type ReferenceOpenRequest, type OpenDraft, type OpenInvestigationResponse, type RenameResponse, type StatusChangeResponse, type DeleteInvestigationResponse, type Investigation as InvestigationShown } from '@neburyx/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../errors.js';
@@ -165,9 +165,9 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     return { created, body: answerOf(shown(deps.mapping, deps.references, row), created, entity, await draftOf(row, call.principal.id)) };
   }
 
-  /** The event is recorded before the commit, so a sink that cannot take it stops the write and nothing is left behind. */
-  const recordInTransaction = (event: Parameters<AuditSink['record']>[0]): Promise<void> =>
-    deps.audit.record(event).catch(() => {
+  /** The event is inserted through the change's own transaction, so a sink that cannot take it rolls the change back and a rollback leaves no event. */
+  const recordInTransaction = (event: Parameters<AuditSink['record']>[0], transaction: AuditTransaction): Promise<void> =>
+    deps.audit.record(event, { transaction }).catch(() => {
       throw new AppError('INTERNAL_ERROR');
     });
 
@@ -375,7 +375,13 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       const event = { actorId: principal.id, actorRole: principal.role, action: auditActionOf(status), traceId };
       let result;
       try {
-        result = await deps.store.changeInvestigationStatus({ investigationId: id, ownerId: principal.id, expectedVersion, status });
+        result = await deps.store.changeInvestigationStatus({
+          investigationId: id,
+          ownerId: principal.id,
+          expectedVersion,
+          status,
+          beforeCommit: (row, transaction) => recordInTransaction({ ...event, result: 'success', sourceId: row.sourceId }, transaction),
+        });
       } catch (error) {
         // the write failed, so the event says so; a sink that cannot take it must not hide the failure of the write
         await deps.audit.record({ ...event, result: 'failed' }).catch(() => undefined);
@@ -384,12 +390,6 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
       if (result.outcome === 'not-allowed') throw new AppError('CONFLICT', { reason: 'status-change-not-allowed' });
-      if (result.outcome === 'changed') {
-        // recorded after the commit, so it never says success for a change that was not made
-        await deps.audit.record({ ...event, result: 'success', sourceId: result.row.sourceId }).catch(() => {
-          throw new AppError('INTERNAL_ERROR');
-        });
-      }
       return { investigation: { ...shown(deps.mapping, deps.references, result.row), closedAt: result.row.closedAt, archivedAt: result.row.archivedAt } };
     },
     async read({ id, principal }) {
@@ -403,7 +403,7 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
         ownerId: principal.id,
         expectedVersion,
         retentionDays: retentionOf(deps.mapping).deletedInvestigationsDays,
-        beforeCommit: (row) => recordInTransaction({ actorId: principal.id, actorRole: principal.role, action: 'investigation.delete', traceId, result: 'success', sourceId: row.sourceId }),
+        beforeCommit: (row, transaction) => recordInTransaction({ actorId: principal.id, actorRole: principal.role, action: 'investigation.delete', traceId, result: 'success', sourceId: row.sourceId }, transaction),
       });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
@@ -415,7 +415,7 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
         investigationId: id,
         ownerId: principal.id,
         expectedVersion,
-        beforeCommit: (row) => recordInTransaction({ actorId: principal.id, actorRole: principal.role, action: 'investigation.restore', traceId, result: 'success', sourceId: row.sourceId }),
+        beforeCommit: (row, transaction) => recordInTransaction({ actorId: principal.id, actorRole: principal.role, action: 'investigation.restore', traceId, result: 'success', sourceId: row.sourceId }, transaction),
       });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');

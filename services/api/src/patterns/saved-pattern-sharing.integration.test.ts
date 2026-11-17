@@ -99,14 +99,13 @@ describe('sharing in Postgres', () => {
     expect((await readPatternEvents(context.pool, { patternId: row.id })).map((event) => [event.action, event.version])).toEqual([['saved', 1], ['shared', 2], ['unshared', 3]]);
   });
 
-  it('refuses a share with AUDIT_UNAVAILABLE and leaves the row as it was when the event cannot be written', async () => {
+  it('shares the pattern when the history cannot take the event', async () => {
     const context = await started();
     const row = await saveFor(context, context.a);
     await rows(context.seeded.database.ownerUrl, `CREATE FUNCTION refuse_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'no'; END $$`);
     await rows(context.seeded.database.ownerUrl, `CREATE TRIGGER refuse_event BEFORE INSERT ON pattern_events FOR EACH ROW EXECUTE FUNCTION refuse_event()`);
-    const failure = await shareAs(context, context.a, row, 'shared').catch((error: unknown) => error);
-    expect(failure).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await rows(context.seeded.database.ownerUrl, `SELECT visibility, version FROM saved_patterns WHERE id = $1`, [row.id])).toEqual([{ visibility: 'private', version: 1 }]);
+    expect(await shareAs(context, context.a, row, 'shared')).toMatchObject({ outcome: 'changed' });
+    expect(await rows(context.seeded.database.ownerUrl, `SELECT visibility, version FROM saved_patterns WHERE id = $1`, [row.id])).toEqual([{ visibility: 'shared', version: 2 }]);
   });
 
   it('changes and deletes nothing for another person, whatever the version, even for a shared pattern', async () => {
@@ -237,15 +236,14 @@ describe('copying in Postgres', () => {
     expect(await rows(context.seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM saved_patterns WHERE owner_id = $1 AND source_id = $2`, [context.b.id, context.seeded.sourceId])).toEqual([{ n: PATTERN_LIMITS.patternsPerSource }]);
   });
 
-  it('refuses with AUDIT_UNAVAILABLE and keeps no copy and no event when an event cannot be written', async () => {
+  it('keeps the copy when the history cannot take the events', async () => {
     const context = await started();
     const original = await saveFor(context, context.a);
     await shareAs(context, context.a, original, 'shared');
     await rows(context.seeded.database.ownerUrl, `CREATE FUNCTION refuse_event() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'no'; END $$`);
     await rows(context.seeded.database.ownerUrl, `CREATE TRIGGER refuse_event BEFORE INSERT ON pattern_events FOR EACH ROW EXECUTE FUNCTION refuse_event()`);
-    const failure = await context.store.copyPattern({ originalId: original.id, nameOf: (name) => name, accept: () => true }, context.ctx(context.b)).catch((error: unknown) => error);
-    expect(failure).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await rows(context.seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM saved_patterns`)).toEqual([{ n: 1 }]);
+    expect(await context.store.copyPattern({ originalId: original.id, nameOf: (name) => name, accept: () => true }, context.ctx(context.b))).toMatchObject({ outcome: 'copied' });
+    expect(await rows(context.seeded.database.ownerUrl, `SELECT count(*)::int AS n FROM saved_patterns`)).toEqual([{ n: 2 }]);
   });
 });
 

@@ -38,13 +38,12 @@ describe('the pg summary run store', () => {
     expect(errors).toEqual([CONTEXT.onConnectionError]);
   });
 
-  it('writes the run row with a new id and answers the id', async () => {
+  it('writes the run row with the id it carries, and none for an id it already holds', async () => {
     const { store, calls } = rig();
-    const id = await store.begin({ actorId: ACTOR, investigationId: INVESTIGATION, sourceId: 'demo', traceId: 't1', startedAt: AT, settings: { model: 'm', maxCalls: 5 } });
-    expect(id).toBe(NEW_ID);
+    await store.begin({ id: NEW_ID, actorId: ACTOR, investigationId: INVESTIGATION, sourceId: 'demo', traceId: 't1', startedAt: AT, settings: { model: 'm', maxCalls: 5 } });
     expect(calls).toEqual([
       {
-        text: 'INSERT INTO summary_runs (id, actor_id, investigation_id, source_id, trace_id, started_at, settings) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        text: 'INSERT INTO summary_runs (id, actor_id, investigation_id, source_id, trace_id, started_at, settings) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING',
         values: [NEW_ID, ACTOR, INVESTIGATION, 'demo', 't1', AT, '{"model":"m","maxCalls":5}'],
       },
     ]);
@@ -52,7 +51,7 @@ describe('the pg summary run store', () => {
 
   it('writes a null investigation where the request names none', async () => {
     const { store, calls } = rig();
-    await store.begin({ actorId: ACTOR, sourceId: 'demo', traceId: 't1', startedAt: AT, settings: {} });
+    await store.begin({ id: NEW_ID, actorId: ACTOR, sourceId: 'demo', traceId: 't1', startedAt: AT, settings: {} });
     expect(calls[0]?.values[2]).toBeNull();
   });
 
@@ -76,7 +75,7 @@ describe('the pg summary run store', () => {
   });
 
   it.each([
-    ['begin', (store: ReturnType<typeof rig>['store']) => store.begin({ actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} })],
+    ['begin', (store: ReturnType<typeof rig>['store']) => store.begin({ id: NEW_ID, actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} })],
     ['beginCall', (store: ReturnType<typeof rig>['store']) => store.beginCall({ runId: NEW_ID, number: 1, startedAt: AT, instructionsSha256: 'a', instructionsText: 'i', valuesText: 'v' })],
     ['endCall', (store: ReturnType<typeof rig>['store']) => store.endCall({ runId: NEW_ID, number: 1, status: 'answered', durationMs: 1 })],
     ['finish', (store: ReturnType<typeof rig>['store']) => store.finish(NEW_ID, 'ok', 1, AT)],
@@ -92,7 +91,6 @@ describe('the pg summary run store', () => {
   it.each([
     ['endCall', (store: ReturnType<typeof rig>['store']) => store.endCall({ runId: NEW_ID, number: 1, status: 'answered', durationMs: 1 })],
     ['finish', (store: ReturnType<typeof rig>['store']) => store.finish(NEW_ID, 'ok', 1, AT)],
-    ['begin', (store: ReturnType<typeof rig>['store']) => store.begin({ actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} })],
   ])('throws the fixed error when %s changed no row', async (_name, run) => {
     const { store } = rig(undefined, 0);
     await expect(run(store)).rejects.toBeInstanceOf(SummaryRunStoreError);
@@ -109,8 +107,10 @@ describe('the pg summary run store', () => {
 describe('the memory summary run store', () => {
   it('keeps the records and removes by the start, keeping a run that started at the moment', async () => {
     const store = createMemorySummaryRunStore();
-    const old = await store.begin({ actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: new Date(AT.getTime() - 1), settings: {} });
-    const equal = await store.begin({ actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} });
+    const old = '00000000-0000-7000-8000-000000000001';
+    const equal = '00000000-0000-7000-8000-000000000002';
+    await store.begin({ id: old, actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: new Date(AT.getTime() - 1), settings: {} });
+    await store.begin({ id: equal, actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} });
     expect(await store.removeStartedBefore(AT)).toBe(1);
     expect(store.runs.map((run) => run.id)).toEqual([equal]);
     expect(store.runs.map((run) => run.id)).not.toContain(old);
@@ -118,7 +118,8 @@ describe('the memory summary run store', () => {
 
   it('fails at the step it is told to', async () => {
     const store = createMemorySummaryRunStore({ failOn: 'finish' });
-    const id = await store.begin({ actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} });
+    const id = '00000000-0000-7000-8000-000000000001';
+    await store.begin({ id, actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} });
     await expect(store.finish(id, 'ok', 1, AT)).rejects.toBeInstanceOf(SummaryRunStoreError);
   });
 });

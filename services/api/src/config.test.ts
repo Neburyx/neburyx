@@ -61,6 +61,11 @@ describe('parseConfig', () => {
       connectTimeoutMs: 10_000,
       readinessLimitMs: 2000,
       dev: false,
+      auditQueueSize: 1000,
+      auditRetryLimit: 3,
+      auditRetryWaitMs: 500,
+      auditWriteTimeoutMs: 5000,
+      auditSinks: ['postgres'],
     });
   });
 
@@ -176,5 +181,42 @@ describe('the readiness limit', () => {
     const failure = (): unknown => parseConfig({ ...database, NEBURYX_READINESS_LIMIT_MS: value }, defaults);
     expect(failure).toThrow('invalid configuration: NEBURYX_READINESS_LIMIT_MS');
     expect(failure).not.toThrow(value);
+  });
+});
+
+describe('the audit settings', () => {
+  it('take their defaults and the values that are set', () => {
+    const config = parseConfig({ ...database }, defaults);
+    expect([config.auditQueueSize, config.auditRetryLimit, config.auditRetryWaitMs, config.auditWriteTimeoutMs]).toEqual([1000, 3, 500, 5000]);
+    const set = parseConfig({ ...database, NEBURYX_AUDIT_QUEUE_SIZE: '50', NEBURYX_AUDIT_RETRY_LIMIT: '0', NEBURYX_AUDIT_RETRY_WAIT_MS: '20', NEBURYX_AUDIT_WRITE_TIMEOUT_MS: '250' }, defaults);
+    expect([set.auditQueueSize, set.auditRetryLimit, set.auditRetryWaitMs, set.auditWriteTimeoutMs]).toEqual([50, 0, 20, 250]);
+  });
+
+  it.each([
+    ['NEBURYX_AUDIT_QUEUE_SIZE', ['0', '100001', 'many', '2.5', '-1']],
+    ['NEBURYX_AUDIT_RETRY_LIMIT', ['11', 'x', '-1']],
+    ['NEBURYX_AUDIT_RETRY_WAIT_MS', ['9', '60001', 'x']],
+    ['NEBURYX_AUDIT_WRITE_TIMEOUT_MS', ['99', '60001', 'x']],
+  ])('refuses %s outside its ceiling or not a whole number, naming only the key', (key, values) => {
+    for (const value of values) {
+      const failure = (): unknown => parseConfig({ ...database, [key]: value }, defaults);
+      expect(failure).toThrow(`invalid configuration: ${key}`);
+      expect(failure).not.toThrow(`: ${value}`);
+    }
+  });
+});
+
+describe('the audit sinks setting', () => {
+  it('is the built-in store by default and takes a list of known sinks', () => {
+    expect(parseConfig({ ...database }, defaults).auditSinks).toEqual(['postgres']);
+    expect(parseConfig({ ...database, NEBURYX_AUDIT_SINKS: '' }, defaults).auditSinks).toEqual(['postgres']);
+    expect(parseConfig({ ...database, NEBURYX_AUDIT_SINKS: 'stdout' }, defaults).auditSinks).toEqual(['stdout']);
+    expect(parseConfig({ ...database, NEBURYX_AUDIT_SINKS: 'postgres, stdout' }, defaults).auditSinks).toEqual(['postgres', 'stdout']);
+  });
+
+  it.each(['file', 'Stdout', 'postgres,postgres', 'stdout,', ',', 'syslog,stdout'])('refuses %j naming only the key', (value) => {
+    const failure = (): unknown => parseConfig({ ...database, NEBURYX_AUDIT_SINKS: value }, defaults);
+    expect(failure).toThrow('invalid configuration: NEBURYX_AUDIT_SINKS');
+    expect(failure).not.toThrow(`: ${value}`);
   });
 });

@@ -236,6 +236,7 @@ describe('the summary of an export is never less masked than the file', () => {
       policy: { authorizeSource: () => Promise.resolve({ allowed: true }) },
       policyVersion: () => 'none',
       audit: { record: () => Promise.resolve() },
+      refusalAudit: { record: () => Promise.resolve() },
       logger: { warn: () => undefined },
       summarizer: () => summarizer(),
       previewOn: true,

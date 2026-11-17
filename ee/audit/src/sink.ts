@@ -46,7 +46,7 @@ function valuesOf(event: AuditEvent, context: AuditSinkContext, detail: string |
   ];
 }
 
-/** Records audit events in `audit_events` through the application's own database login; it reads no source and logs nothing. */
+/** Records audit events in `audit_events` through the application's own database login, or through the transaction a caller hands it so the event commits with the caller's change; it reads no source and logs nothing. */
 export function createAuditSink(context: AuditSinkContext, deps: AuditSinkDeps = defaultDeps): MountedAuditSink {
   const pool = deps.createPool({
     connectionString: context.databaseUrl,
@@ -61,7 +61,7 @@ export function createAuditSink(context: AuditSinkContext, deps: AuditSinkDeps =
 
   return {
     sink: {
-      async record(event) {
+      async record(event, options) {
         let detail: string | null = null;
         if (event.detail !== undefined) {
           const parsed = auditDetailSchema.safeParse(event.detail);
@@ -69,7 +69,7 @@ export function createAuditSink(context: AuditSinkContext, deps: AuditSinkDeps =
           detail = JSON.stringify(parsed.data);
         }
         try {
-          await pool.query(INSERT, valuesOf(event, context, detail));
+          await (options?.transaction ?? pool).query(INSERT, valuesOf(event, context, detail));
         } catch {
           // the driver's error can hold the failing row, so only a fixed code leaves the sink
           throw new AuditSinkError('AUDIT_WRITE_FAILED');

@@ -33,6 +33,7 @@ describe('GET /readyz', () => {
       status: 'ready',
       checks: { database: 'ok', migrations: 'ok' },
       sources: { reachable: 1, unreachable: 1, unknown: 1 },
+      audit: { written: 0, failed: 0, dropped: 0, queued: 0 },
     });
     await app.close();
   });

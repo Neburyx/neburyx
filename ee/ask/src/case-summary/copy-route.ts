@@ -74,8 +74,9 @@ export function createCopyToNotesRoute(options: { readonly tokenKeys: () => Toke
       } catch (error) {
         throw normalised(error);
       }
-      try {
-        await request.audit.record({
+      // the notes are stored: the event is queued by the application, which counts and logs a failure of it, and the copy is answered
+      await request.audit
+        .record({
           actorId: request.principalId,
           actorRole: role,
           action: COPY_CLOSING_ACTION,
@@ -84,10 +85,8 @@ export function createCopyToNotesRoute(options: { readonly tokenKeys: () => Toke
           ...auditInvestigationOf(investigation.id),
           detail: { notes: { runId: payload.runId, copied: answer.copied, notCopied: answer.notCopied, alreadyCopied: answer.alreadyCopied } },
           traceId: request.traceId,
-        });
-      } catch {
-        throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
-      }
+        })
+        .catch(() => undefined);
       return answer;
     },
   };

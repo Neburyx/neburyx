@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, aiStatusResponseSchema, preferencesResponseSchema, preferencesWriteRequestSchema, deleteInvestigationResponseSchema, deleteViewRequestSchema, pathsRequestSchema, pathsResponseSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, createExportResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type AuditCounts, type ErrorCode, type ProfileExtension, aiStatusResponseSchema, preferencesResponseSchema, preferencesWriteRequestSchema, deleteInvestigationResponseSchema, deleteViewRequestSchema, pathsRequestSchema, pathsResponseSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, createExportResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -27,6 +27,7 @@ import { createTemplateListService } from './graph/template-list-service.js';
 import { createPatternPreviewService } from './patterns/preview-service.js';
 import { createPatternRunService } from './patterns/run-service.js';
 import { createPatternValidateService } from './patterns/validate-service.js';
+import type { PatternHistory } from './patterns/pattern-events.js';
 import { createSavedPatternService } from './patterns/saved-pattern-service.js';
 import { createSavedPatternRunService } from './patterns/saved-run-service.js';
 import { createPathsService } from './graph/paths-service.js';
@@ -65,7 +66,7 @@ import { createAskRunnerFactory } from './ask/ask-runner.js';
 import { createSigner, deriveSigningKey } from './ask/signing-key.js';
 import { COMMUNITY_POLICY_VERSION } from './investigations/draft.js';
 import { mountExtensionRoutes, type ExtensionMount } from './profile/mount.js';
-import type { AuditSink, Seams } from './seams/seams.js';
+import { privilegedAuditOf, type AuditSink, type Seams } from './seams/seams.js';
 import type { RegisteredRoute } from './permissions.js';
 import { allUnknown, type ReachabilityView } from './source-ping/cache.js';
 import type { SourceTester } from './source-test/tester.js';
@@ -78,6 +79,10 @@ export interface AppOptions {
   readonly seams?: Seams | undefined;
   /** Whether the routes of the extension answer, which they are told; absent, they are told they are off. */
   readonly previewOn?: boolean | undefined;
+  /** Where the events of the pattern history are handed to be written; absent, the store writes each at once and an event it cannot write is dropped. */
+  readonly patternHistory?: PatternHistory;
+  /** What `/readyz` reports of the audit writers of this process; absent, all zero. */
+  readonly auditCounts?: () => AuditCounts;
   /** Where the events of the extension's own routes are written; absent, the gate's audit of the seams. */
   readonly extensionAudit?: AuditSink | undefined;
   /** The edition `GET /v1/me` reports; absent, `enterprise` when an extension is given and `community` otherwise. */
@@ -131,6 +136,8 @@ const ifMatchSchema = z.string().regex(/^"[1-9][0-9]{0,9}"$/).transform((tag) =>
 const DRAFT_BODY_LIMIT = 2 * MAX_DRAFT_DOCUMENT_BYTES + 4096;
 /** An export names the items it holds by reference, in a body of at most one megabyte. */
 const EXPORT_BODY_LIMIT = 1_048_576;
+const NO_AUDIT_COUNTS = (): AuditCounts => ({ written: 0, failed: 0, dropped: 0, queued: 0 });
+
 const PROBE_PATHS: ReadonlySet<string> = new Set(['/healthz', '/readyz']);
 const TRACE_HEADER = 'x-trace-id';
 const UNMATCHED_ROUTE = 'unmatched';
@@ -355,7 +362,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const reachability = options.reachability ?? allUnknown(options.mapping?.sources.length ?? 0);
 
   app.get('/readyz', { config: { permission: 'public' } }, async (_request, reply) => {
-    const { statusCode, body } = readinessResponse(await options.store.readiness(), reachability.counts());
+    const { statusCode, body } = readinessResponse(await options.store.readiness(), reachability.counts(), (options.auditCounts ?? NO_AUDIT_COUNTS)());
     return reply.code(statusCode).send(readyResponseSchema.parse(body));
   });
 
@@ -648,7 +655,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         access,
         policy: seams.policy,
         policyVersion,
-        audit: auditSink,
+        audit: privilegedAuditOf(seams),
+        refusalAudit: seams.audit,
         logger: options.logger,
         // the installed summarizer as the extension routes get it: the seams' own first, then the extension's, then the Community one
         summarizer: () => (seams.caseSummarizer !== undefined && seams.caseSummarizer !== communityCaseSummarizer ? seams.caseSummarizer : (options.extension?.caseSummarizer?.() ?? communityCaseSummarizer)),
@@ -714,7 +722,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
 
     const storedReferences = createStoredReferences(mapping, referenceKeys);
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });
-    const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: auditSink });
+    const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: privilegedAuditOf(options.seams ?? communitySeams()) });
     elementReaders.current = (context) => createElementsReader({ shownReader: summaryShownReader, investigations, access, ...context });
     investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
     investigationSources.current = ({ principal }) => async (investigationId) => (await investigations.read({ id: investigationId, principal })).investigation.sourceId;
@@ -789,7 +797,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return reply.header('etag', `"${answer.investigation.version}"`).send(investigationResponseSchema.parse(answer));
     });
 
-    const savedPatterns = createSavedPatternService({ store: options.store, mapping, access, references: storedReferences, audit: auditSink, cursors: listCursors });
+    const patternHistory: PatternHistory = options.patternHistory ?? { record: (event) => options.store.insertPatternEvent(event).catch(() => undefined) };
+    const savedPatterns = createSavedPatternService({ store: options.store, mapping, access, references: storedReferences, audit: auditSink, history: patternHistory, cursors: listCursors });
     app.get('/v1/patterns', { config: { permission: 'principal' } }, async (request) => {
       const query = patternListQuerySchema.safeParse(request.query);
       if (!query.success || (request.body !== undefined && request.body !== null)) throw new AppError('INVALID_REQUEST');

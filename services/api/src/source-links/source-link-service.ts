@@ -71,12 +71,7 @@ export function createSourceLinkService(deps: Deps): SourceLinkService {
   async function recordFailure(request: SourceLinkRequest, error: unknown, sourceId: string, detail: AuditEvent['detail']): Promise<void> {
     const result = resultOf(error);
     if (result === undefined) return;
-    try {
-      await deps.audit.record(event(request, result, sourceId, detail));
-    } catch {
-      // the answer does not depend on the audit write of a refusal; the log line carries no event data
-      deps.logger.warn({ event: 'source_link.audit_failed' }, 'audit write failed');
-    }
+    await deps.audit.record(event(request, result, sourceId, detail));
   }
 
   async function entityAddress(request: SourceLinkRequest, ref: Extract<SourceLinkRef, { form: 'entity' }>['ref']): Promise<string> {
@@ -117,12 +112,7 @@ export function createSourceLinkService(deps: Deps): SourceLinkService {
         await recordFailure(request, error, sourceId, detail);
         throw error;
       }
-      try {
-        await deps.audit.record(event(request, 'success', sourceId, detail));
-      } catch {
-        // no audit, no redirect: the audit is the reason the link goes through the app
-        throw new AppError('INTERNAL_ERROR');
-      }
+      await deps.audit.record(event(request, 'success', sourceId, detail));
       return address;
     },
   };

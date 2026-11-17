@@ -2,7 +2,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { expireExports, purgeDeletedInvestigations } from '../../../services/api/src/jobs/maintenance.js';
+import { expireExports, purgeDeletedInvestigations, removePurgedFiles } from '../../../services/api/src/jobs/maintenance.js';
 import { createLogger } from '../../../services/api/src/logger.js';
 import { identityHashOf } from '../../../services/api/src/registry/identity-hash.js';
 import { reportFromServer } from '../../../services/api/src/source-test/report.js';
@@ -66,7 +66,7 @@ describe('exports on real Postgres', () => {
     expect(await expireExports(maintenance(suite))).toMatchObject({ expired: 0 });
   });
 
-  it('keeps the exports of a deleted investigation, brings the same files back when it is restored, and the purge removes their rows and their files with the investigation', async () => {
+  it('keeps the exports of a deleted investigation, brings the same files back when it is restored, and the purge removes their rows with the investigation and the cleanup removes their files after', async () => {
     suite = await startPgSuite(postgres);
     const { tab, id } = await reopened(suite);
     const kept = await made(tab, id, 'json', viewRequest(tab, 'json'));
@@ -90,6 +90,8 @@ describe('exports on real Postgres', () => {
     expect(again).toMatchObject({ ok: true });
     await suite.sql(`UPDATE investigations SET purge_after = now() - interval '1 second' WHERE id = $1`, [id]);
     expect(await purgeDeletedInvestigations(maintenance(suite))).toBe(1);
+    expect(files(suite)).toHaveLength(2);
+    expect(await removePurgedFiles(maintenance(suite))).toBe(2);
     expect(files(suite)).toEqual([]);
     expect(await exportRows(suite)).toEqual([]);
     expect(await tab.client.downloadExport(kept.record.id)).toMatchObject(NOT_FOUND);

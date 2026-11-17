@@ -1,5 +1,6 @@
 import type { ExportRow, ExportStore, ExportWithInvestigation, IdempotencyStart } from '../db/exports-repository.js';
 import type { InvestigationRow } from '../db/investigations-repository.js';
+import { MEMORY_TRANSACTION } from './memory-transaction.js';
 
 const DAY_MS = 86_400_000;
 const IDEMPOTENCY_MS = DAY_MS;
@@ -19,6 +20,8 @@ interface KeyEntry {
 export interface MemoryExports extends ExportStore {
   readonly rows: ExportRow[];
   readonly keys: KeyEntry[];
+  /** The file keys a purge left to remove. */
+  readonly cleanup: string[];
   /** The clock of the store, in milliseconds: it moves with the clock the store was given, and a test moves it further by setting it. */
   readonly clock: { now: number };
 }
@@ -26,6 +29,7 @@ export interface MemoryExports extends ExportStore {
 export function memoryExports(deps: { readonly investigations: readonly InvestigationRow[]; readonly isDeleted: (id: string) => boolean; readonly now?: () => number }): MemoryExports {
   const rows: ExportRow[] = [];
   const keys: KeyEntry[] = [];
+  const cleanup: string[] = [];
   const started = Date.now();
   const base = (): number => deps.now?.() ?? started;
   let moved = 0;
@@ -46,6 +50,7 @@ export function memoryExports(deps: { readonly investigations: readonly Investig
   return {
     rows,
     keys,
+    cleanup,
     clock,
     insertExport: (input) => {
       const row: ExportRow = {
@@ -70,13 +75,17 @@ export function memoryExports(deps: { readonly investigations: readonly Investig
       rows.push(row);
       return Promise.resolve(row);
     },
-    completeExport: (id, ready) => {
+    completeExport: async (id, ready, beforeCommit) => {
+      await beforeCommit?.(MEMORY_TRANSACTION);
       replace(id, { status: 'ready', ...ready, errorCode: null });
-      return Promise.resolve();
     },
-    failExport: (id, errorCode) => {
+    failExport: async (id, errorCode, whileHeld) => {
+      const held = rows.find((row) => row.id === id);
+      if (held === undefined) return false;
+      if (whileHeld !== undefined && held.status !== 'pending') return false;
+      await whileHeld?.();
       replace(id, { status: 'failed', storageKey: null, errorCode });
-      return Promise.resolve();
+      return true;
     },
     readExport: (id, requestedBy) => {
       const row = rows.find((candidate) => candidate.id === id && candidate.requestedBy === requestedBy);
@@ -89,15 +98,33 @@ export function memoryExports(deps: { readonly investigations: readonly Investig
       };
       return Promise.resolve(answer);
     },
-    expireExport: (id) => {
+    expireExport: async (id, whileHeld) => {
       const held = rows.find((row) => row.id === id);
-      if (held?.status === 'ready' || held?.status === 'pending') replace(id, { status: 'expired', storageKey: null });
-      return Promise.resolve();
+      if (held?.status !== 'ready' && held?.status !== 'pending') return false;
+      await whileHeld?.();
+      replace(id, { status: 'expired', storageKey: null });
+      return true;
     },
     listExpiredExports: () => Promise.resolve(rows.filter((row) => row.status === 'ready' && Date.parse(row.expiresAt) <= clock.now).map((row) => ({ id: row.id, storageKey: row.storageKey }))),
     listStalePendingExports: (olderThanMs) => Promise.resolve(rows.filter((row) => row.status === 'pending' && Date.parse(row.createdAt) <= clock.now - olderThanMs).map((row) => row.id)),
     listStorageKeys: () => Promise.resolve(rows.flatMap((row) => (row.storageKey === null ? [] : [row.storageKey]))),
-    exportFileKeys: (investigationId) => Promise.resolve(rows.flatMap((row) => (row.investigationId === investigationId ? [row.id] : []))),
+    recordFileCleanup: (investigationId) => {
+      for (const row of rows) if (row.investigationId === investigationId && !cleanup.includes(row.id)) cleanup.push(row.id);
+      return Promise.resolve();
+    },
+    fileCleanupKeys: (after, limit) =>
+      Promise.resolve(
+        [...cleanup]
+          .sort()
+          .filter((key) => after === undefined || key > after)
+          .slice(0, limit),
+      ),
+    fileCleanupAmong: (keys) => Promise.resolve(keys.filter((key) => cleanup.includes(key))),
+    forgetFileCleanup: (storageKey) => {
+      const at = cleanup.indexOf(storageKey);
+      if (at >= 0) cleanup.splice(at, 1);
+      return Promise.resolve();
+    },
     startIdempotent: (call) => {
       const index = keys.findIndex((entry) => entry.userId === call.userId && entry.key === call.key);
       const held = keys[index];

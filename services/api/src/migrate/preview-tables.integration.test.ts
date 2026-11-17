@@ -235,8 +235,13 @@ describe('the summary_runs and summary_run_calls tables of the preview', () => {
     const store = createPgSummaryRunStore(contextOf(database));
     try {
       const startedAt = new Date('2026-10-01T00:00:00Z');
-      const id = await store.begin({ ...BASE, startedAt });
+      const id = randomUUID();
+      await store.begin({ ...BASE, id, startedAt });
+      await store.begin({ ...BASE, id, startedAt });
+      expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM summary_runs WHERE id = $1', [id])).toEqual([{ n: 1 }]);
       await store.beginCall(call(id, 1));
+      await store.beginCall(call(id, 1));
+      expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM summary_run_calls WHERE run_id = $1', [id])).toEqual([{ n: 1 }]);
       expect(await rows(database.ownerUrl, 'SELECT status, reply_text FROM summary_run_calls WHERE run_id = $1', [id])).toEqual([{ status: null, reply_text: null }]);
       await store.endCall({ runId: id, number: 1, status: 'refused', replyText: 'REPLY', tokensIn: 5, tokensOut: 2, durationMs: 40 });
       await store.finish(id, 'failed', 1, new Date());
@@ -305,13 +310,16 @@ describe('the summary_runs and summary_run_calls tables of the preview', () => {
     }
   });
 
-  it('answers a fixed error when the write fails: a second call with the same number', async () => {
+  it('writes a call once however often it is written, and answers a fixed error when a write fails: the end of a call that was never started', async () => {
     const database = await migratedWithPreview();
     const store = createPgSummaryRunStore(contextOf(database));
     try {
-      const id = await store.begin({ ...BASE, startedAt: new Date() });
+      const id = randomUUID();
+      await store.begin({ ...BASE, id, startedAt: new Date() });
       await store.beginCall(call(id, 1));
-      await expect(store.beginCall(call(id, 1))).rejects.toMatchObject({ code: 'SUMMARY_RUN_WRITE_FAILED' });
+      await expect(store.beginCall(call(id, 1))).resolves.toBeUndefined();
+      expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM summary_run_calls WHERE run_id = $1', [id])).toEqual([{ n: 1 }]);
+      await expect(store.endCall({ runId: randomUUID(), number: 1, status: 'answered', durationMs: 1 })).rejects.toMatchObject({ code: 'SUMMARY_RUN_WRITE_FAILED' });
     } finally {
       await store.close();
     }

@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { patternRunResponseSchema } from '@neburyx/contracts';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { createLogger } from '../logger.js';
@@ -8,6 +8,8 @@ import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
 import { DERIVED_RULE } from '../testing/derived-fixtures.js';
 import { memoryAppStore } from '../testing/app-store.js';
+import { createAuditQueue } from '../audit/queue.js';
+import { queuedAudit } from '../testing/queued-audit.js';
 import { TestExecutor } from '../testing/gate.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
 import { PATTERN_ENTITIES, PATTERN_RELATIONSHIPS, noMatchRow, oneStepRow, patternMappingOf } from '../testing/pattern-fixtures.js';
@@ -25,6 +27,7 @@ interface Options {
   readonly deny?: boolean;
   readonly authorize?: () => boolean;
   readonly policyVersion?: () => string;
+  readonly audit?: Seams['audit'];
 }
 
 async function started(options: Options = {}) {
@@ -35,8 +38,9 @@ async function started(options: Options = {}) {
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), base));
   const defaults = communitySeams();
   const policy: Seams['policy'] = options.deny === true ? { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } : options.authorize === undefined ? defaults.policy : { authorizeSource: () => Promise.resolve(options.authorize?.() === true ? { allowed: true } : { allowed: false, reason: 'withdrawn' }) };
-  const seams = { ...defaults, policy };
-  const parts = testSourceGate(mapping, { executor, seams: { policy, coordinator: defaults.coordinator, audit: defaults.audit } });
+  const audit = options.audit ?? defaults.audit;
+  const seams = { ...defaults, policy, audit };
+  const parts = testSourceGate(mapping, { executor, seams: { policy, coordinator: defaults.coordinator, audit } });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, seams, ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }), templateRunClock: () => new Date('2026-03-10T12:00:00.000Z') });
   return { app, executor };
 }
@@ -269,3 +273,40 @@ describe('a pattern run whose estimate cannot be read', () => {
   });
 });
 
+describe('POST /v1/patterns/run with the audit store held or down', () => {
+  it('answers the run before the held store is released, and the event of the run reaches it after', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const written: string[] = [];
+    const queued = queuedAudit({ record: async (event) => (await held, void written.push(event.action)) });
+    const { app } = await started({ rows: [oneStepRow('W-1', 'W-2')], audit: queued.audit });
+    const response = await post(app, request());
+    expect(response.statusCode).toBe(200);
+    expect(patternRunResponseSchema.parse(response.json())).toMatchObject({ status: 'ok' });
+    expect(written).toEqual([]);
+    release();
+    await vi.waitFor(() => expect(written).toContain('pattern.run'));
+    await app.close();
+  });
+
+  it('answers every run when the audit queue is full, drops the events it cannot take, and counts the drops', async () => {
+    const lines: Record<string, unknown>[] = [];
+    const queue = createAuditQueue({ sinks: [{ name: 'postgres', sink: { record: () => new Promise<void>(() => undefined) } }], settings: { queueSize: 1, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 60_000 }, logger: { warn: (fields) => void lines.push(fields) } });
+    const { app } = await started({ rows: [oneStepRow('W-1', 'W-2')], audit: queue.sink });
+    for (let index = 0; index < 3; index += 1) expect((await post(app, request())).statusCode).toBe(200);
+    expect(queue.counts()).toMatchObject({ queued: 1 });
+    expect(queue.counts().dropped).toBeGreaterThan(1);
+    expect(JSON.stringify(lines)).not.toMatch(/W-1|W-2/);
+    await app.close();
+  });
+
+  it('answers the run when the store fails every write, and counts the failures', async () => {
+    const queued = queuedAudit({ record: () => Promise.reject(new Error('the audit store is down')) });
+    const { app } = await started({ rows: [oneStepRow('W-1', 'W-2')], audit: queued.audit });
+    expect((await post(app, request())).statusCode).toBe(200);
+    await vi.waitFor(() => expect(queued.counts().failed).toBeGreaterThan(0));
+    await app.close();
+  });
+});

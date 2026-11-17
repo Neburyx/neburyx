@@ -27,7 +27,7 @@ interface Rig {
   readonly route: ExtensionRoute;
   readonly continueRoute: ExtensionRoute;
   readonly events: AuditEvent[];
-  readonly rows: RunRecord[];
+  readonly rows: Omit<RunRecord, 'id'>[];
   readonly runs: { asked: unknown; options: unknown; mask: boolean }[];
   readonly classified: unknown[];
   readonly signals: AbortSignal[];
@@ -38,12 +38,18 @@ interface Rig {
 async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskRun; sink?: 'fails'; readable?: boolean } = {}): Promise<Rig> {
   const folder: AskFolder | undefined = await loadAskFolder({ folder: makeAskFolder([SOURCE], options.intents), sourceIds: [SOURCE] }).then((loaded) => (loaded.ok ? loaded.folder : undefined));
   const events: AuditEvent[] = [];
-  const rows: RunRecord[] = [];
+  const rows: Omit<RunRecord, 'id'>[] = [];
   const runs: Rig['runs'] = [];
   const classified: unknown[] = [];
   const signals: AbortSignal[] = [];
   const logs: Rig['logs'] = [];
-  const runStore: RunStore = { record: async (row) => void rows.push(row) };
+  /** The rows without their ids, which the route draws at random and the store keeps for a retry. */
+  const runStore: RunStore = {
+    record: async ({ id, ...row }) => {
+      expect(id).toMatch(/^[0-9a-f-]{36}$/);
+      rows.push(row);
+    },
+  };
   const routeOptions: QuestionRouteOptions = {
     folder: () => folder,
     runs: () => runStore,
@@ -221,10 +227,10 @@ describe('what comes before a question is classified', () => {
     expect(await refusalOf(route.handler(request(ASK, { [name]: undefined })))).toMatchObject({ code: 'ASK_UNSUPPORTED' });
   });
 
-  it('withholds the answer when the event cannot be written', async () => {
+  it('answers the question when its event cannot be written, and still writes the run record', async () => {
     const { route, request, rows } = await rig({ sink: 'fails' });
-    expect(await refusalOf(route.handler(request(ASK)))).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(rows).toEqual([]);
+    expect(await route.handler(request(ASK))).toHaveProperty('answered');
+    expect(rows).toHaveLength(1);
   });
 
   it('hands the abort signal of the request to the classifier', async () => {
@@ -319,10 +325,10 @@ describe('a run that fails without being refused by the gate', () => {
     expect(JSON.stringify([rigged.events, rigged.rows])).not.toContain('SECRET-ID');
   });
 
-  it('keeps the audit failure as the failure of the call when the event cannot be written', async () => {
+  it('keeps the failure of the run as the failure of the call when the event cannot be written either', async () => {
     const rigged = await rig({ sink: 'fails', run: failing('INTERNAL_ERROR') });
-    expect(await refusalOf(rigged.route.handler(rigged.request(ASK)))).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(rigged.rows).toEqual([]);
+    await expect(rigged.route.handler(rigged.request(ASK))).rejects.toThrow('SENTINEL-DRIVER-TEXT');
+    expect(rigged.rows).toHaveLength(1);
   });
 
   it('records a failed continue as ask.continue', async () => {

@@ -146,14 +146,14 @@ describe('PUT /v1/patterns/{id}', () => {
     await second.app.close();
   });
 
-  it('answers AUDIT_UNAVAILABLE and leaves the row and its version as they were when the event cannot be written', async () => {
+  it('keeps the change and answers 200 with the next version when the history cannot take the event', async () => {
     const context = await patternApp();
     const pattern = await saved(context);
     const failing = await patternApp({ sharing: { ...context.store, ...(await failingStore(context)) } });
     const response = await change(failing, pattern.id, { expectedVersion: 1, name: 'x' });
-    expect(response.statusCode).toBe(503);
-    expect(codeOf(response)).toBe('AUDIT_UNAVAILABLE');
-    expect(context.store.patternRows[0]).toMatchObject({ name: expect.stringMatching(/^Ring \d+$/), version: 1 });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ name: 'x', version: 2 });
+    expect(failing.audit.events.map((event) => event.action)).toEqual(['pattern.change']);
     await context.app.close();
     await failing.app.close();
   });
@@ -212,14 +212,13 @@ describe('DELETE /v1/patterns/{id}', () => {
     await context.app.close();
   });
 
-  it('answers AUDIT_UNAVAILABLE and does not delete the pattern when the event cannot be written', async () => {
+  it('deletes the pattern and answers 200 when the history cannot take the event', async () => {
     const context = await patternApp();
     const pattern = await saved(context);
     const failing = await patternApp({ sharing: { ...context.store, ...(await failingStore(context)) } });
     const response = await remove(failing, pattern.id);
-    expect(response.statusCode).toBe(503);
-    expect(codeOf(response)).toBe('AUDIT_UNAVAILABLE');
-    expect(context.store.deletedPatterns.size).toBe(0);
+    expect(response.statusCode).toBe(200);
+    expect(failing.audit.events.map((event) => event.action)).toEqual(['pattern.delete']);
     await context.app.close();
     await failing.app.close();
   });

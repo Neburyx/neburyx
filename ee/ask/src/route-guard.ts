@@ -10,14 +10,9 @@ function guardedRoute(route: ExtensionRoute, enabled: () => boolean): ExtensionR
       if (request.previewOn && enabled()) return route.handler(request);
       const reason = enabled() ? 'no-provider' : 'ai-off';
       const event: AuditEvent = { actorId: request.principalId, actorRole: request.principalRole, action: ROUTE_REFUSED_ACTION, result: 'refused', traceId: request.traceId, detail: { reason } };
-      let audited = true;
-      try {
-        await request.audit.record(event);
-      } catch {
-        // the refusal does not depend on its own audit event; the mount logs that it was not written
-        audited = false;
-      }
-      throw new ExtensionRefusal({ code: 'ACCESS_DENIED', reason: 'ai-off', audited });
+      // the application queues the event and counts its own failures; the refusal does not depend on it
+      await request.audit.record(event).catch(() => undefined);
+      throw new ExtensionRefusal({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: true });
     },
   };
 }

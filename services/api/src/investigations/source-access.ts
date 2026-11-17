@@ -28,12 +28,7 @@ export interface SourceAccess {
 
 export function createSourceAccess(deps: { readonly mapping: MappingModel; readonly seams: Pick<Seams, 'policy' | 'audit'>; readonly logger: Pick<FastifyBaseLogger, 'warn'> & Partial<Pick<FastifyBaseLogger, 'info'>>; readonly limiter?: RequestLimiter }): SourceAccess {
   async function recordDenied(call: SourceAccessCall, configured: boolean): Promise<void> {
-    try {
-      await deps.seams.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: call.auditAction ?? ENTITY_LOAD_AUDIT_ACTION, result: 'denied', ...(configured ? { sourceId: call.sourceId } : {}), traceId: call.traceId });
-    } catch {
-      // the answer does not depend on the audit write, as for a read through the gate; the log line carries no event data
-      deps.logger.warn({ event: 'source_access.audit_failed' }, 'audit write failed');
-    }
+    await deps.seams.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: call.auditAction ?? ENTITY_LOAD_AUDIT_ACTION, result: 'denied', ...(configured ? { sourceId: call.sourceId } : {}), traceId: call.traceId });
   }
 
   function admit(call: { readonly traceId: string; readonly principal: Principal; readonly sourceId: string }): void {

@@ -36,15 +36,15 @@ describe('the pg run store', () => {
     expect(errors).toEqual([CONTEXT.onConnectionError]);
   });
 
-  it('inserts one row with a new id, the actor, the intent, the outcome, the count and the time', async () => {
+  it('inserts one row with the id of the run, the actor, the intent, the outcome, the count and the time, and none for an id it already holds', async () => {
     const { store, calls } = rig();
-    await store.record({ actorId: ACTOR, intent: 'entity', outcome: 'partial', rowCount: 4, elapsedMs: 150 });
-    expect(calls).toEqual([{ text: 'INSERT INTO ask_runs (id, actor_id, intent, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5, $6)', values: [NEW_ID, ACTOR, 'entity', 'partial', 4, 150] }]);
+    await store.record({ id: NEW_ID, actorId: ACTOR, intent: 'entity', outcome: 'partial', rowCount: 4, elapsedMs: 150 });
+    expect(calls).toEqual([{ text: 'INSERT INTO ask_runs (id, actor_id, intent, outcome, row_count, elapsed_ms) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING', values: [NEW_ID, ACTOR, 'entity', 'partial', 4, 150] }]);
   });
 
   it('throws a fixed error that holds nothing of the driver on a failure', async () => {
     const { store } = rig(new Error(`insert into ask_runs failed for actor ${ACTOR}: password authentication failed`));
-    const failure: unknown = await store.record({ actorId: ACTOR, intent: 'entity', outcome: 'complete', rowCount: 1, elapsedMs: 1 }).catch((error: unknown) => error);
+    const failure: unknown = await store.record({ id: NEW_ID, actorId: ACTOR, intent: 'entity', outcome: 'complete', rowCount: 1, elapsedMs: 1 }).catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(RunStoreError);
     expect(failure).toMatchObject({ code: 'RUN_WRITE_FAILED', message: 'the Ask run could not be written' });
     expect(String((failure as Error).message)).not.toMatch(/password|ask_runs|actor/);

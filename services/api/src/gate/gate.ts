@@ -189,14 +189,8 @@ async function recordAudit(deps: GateDeps, request: GateRequest, progress: Progr
     traceId: request.traceId,
     ...detailOf(progress, failure),
   };
-  try {
-    await deps.seams.audit.record(event);
-    deps.observer?.stage('audit', 'ok');
-  } catch {
-    // the response does not depend on the audit write for a read; the log line carries no event data
-    deps.observer?.stage('audit', 'failed');
-    deps.logger.warn({ event: 'gate.audit_failed' }, 'gate audit write failed');
-  }
+  await deps.seams.audit.record(event);
+  deps.observer?.stage('audit', 'ok');
 }
 
 function asAppError(deps: GateDeps, error: unknown, stage: GateStage): AppError | RequestCancelled {

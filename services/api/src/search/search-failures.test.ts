@@ -1,4 +1,5 @@
 import { searchResultSchema } from '@neburyx/contracts';
+import { queuedAudit } from '../testing/queued-audit.js';
 import { describe, expect, it } from 'vitest';
 import { communitySeams } from '../seams/community-seams.js';
 import type { Seams } from '../seams/seams.js';
@@ -106,7 +107,7 @@ describe('a search that fails', () => {
     await expect(parts.gate.run(refused)).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
     expect(parts.events).toEqual([expect.objectContaining({ action: 'entity.search', result: 'refused' })]);
     await parts.app.close();
-    const failing: Seams['audit'] = { record: () => Promise.reject(new Error('the audit store is down')) };
+    const failing: Seams['audit'] = queuedAudit({ record: () => Promise.reject(new Error('the audit store is down')) }).audit;
     const still = await startSearchApp({ audit: failing });
     const response = await postSearch(still.app, { sourceId: 'demo', text: 'W-001' });
     expect(response.statusCode).toBe(200);

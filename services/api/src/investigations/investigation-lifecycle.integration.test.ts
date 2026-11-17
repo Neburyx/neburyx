@@ -108,12 +108,12 @@ describe('the status of an investigation against Postgres', () => {
     await app.close();
   });
 
-  it('records the event after the commit: a sink that rejects it leaves the committed change and answers INTERNAL_ERROR', async () => {
+  it('records the event in the transaction of the change: a sink that rejects it rolls the change back and answers INTERNAL_ERROR', async () => {
     const { app, status, row } = await running({ record: () => Promise.reject(new Error('sink down')) });
     const response = await status('closed', 1);
     expect(response.statusCode).toBe(500);
     expect(response.json()).toMatchObject({ error: { code: 'INTERNAL_ERROR' } });
-    expect(await row()).toMatchObject({ status: 'closed', version: 2 });
+    expect(await row()).toMatchObject({ status: 'open', version: 1 });
     await app.close();
   });
 

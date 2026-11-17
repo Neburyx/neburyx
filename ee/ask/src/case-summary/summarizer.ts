@@ -1,5 +1,5 @@
 import { renderForExport } from './export-render.js';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
 import { AuditUnavailableError, JUDGE_MODULE, createCheckRunner, parseJudged, type AuditedModelCall, type CheckedText, type CheckRunner, type HeavyCheck, type JudgeInput, type Judged } from '@neburyx/ee-ai-runtime';
 import { canonicalText } from '../questions/canonical.js';
@@ -11,7 +11,7 @@ import type { SummaryInstructions } from './instructions.js';
 import { storableMarkOf, templatesOf } from './notes-convert.js';
 import { NOTES_WORD_LIST_VERSION } from './notes-words.js';
 import { prepareSummary } from './prepare.js';
-import { SummaryRunStoreError, type SummaryRunStore } from './run-store.js';
+import type { SummaryRunStore } from './run-store.js';
 import type { SummaryAvailability, SummarySettings } from './settings.js';
 import { sealToken } from './token.js';
 import type { TokenKeys } from './token-keys.js';
@@ -92,20 +92,18 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
     }
   };
   type Who = { readonly actorId: string; readonly actorRole: CaseSummaryInput['actorRole']; readonly traceId: string; readonly request: CaseSummaryInput['request'] };
-  /** Writes the run row of a click and answers what ends it: the run row first, then the closing event; every failure of either is `AuditUnavailableError`. */
+  /** Queues the run row of a click, with an id made here before any call, and answers what ends it: the run row first, then the closing event. The records are written after the click has gone on, and a failure to write one never fails the click. */
   async function openRun(input: Who) {
     const runs = options.runs();
     if (runs === undefined) throw new AuditUnavailableError();
-    const stored = async <T>(work: () => Promise<T>): Promise<T> => {
-      try {
-        return await work();
-      } catch (error) {
-        if (error instanceof SummaryRunStoreError) throw new AuditUnavailableError();
-        throw error;
-      }
+    // the application queues the writes and counts and logs a failure of one; a store used without a queue that fails does not fail the click
+    const stored = async (work: () => Promise<void>): Promise<void> => {
+      await work().catch(() => undefined);
     };
-    const runId = await stored(() =>
+    const runId = randomUUID();
+    await stored(() =>
       runs.begin({
+        id: runId,
         actorId: input.actorId,
         ...auditInvestigationOf(input.request.investigationId),
         sourceId: input.request.sourceId,
@@ -129,13 +127,12 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         outcome,
         ...(checked === undefined ? {} : { sentencesKept: checked.kept, sentencesRemoved: checked.removed }),
       };
-      try {
-        await sink.record({ actorId: input.actorId, actorRole: input.actorRole, action: SUMMARY_CLOSING_ACTION, result, sourceId: input.request.sourceId, ...auditInvestigationOf(input.request.investigationId), traceId: input.traceId, detail: { summary: detail } });
-      } catch {
-        throw new AuditUnavailableError();
-      }
+      await sink
+        .record({ actorId: input.actorId, actorRole: input.actorRole, action: SUMMARY_CLOSING_ACTION, result, sourceId: input.request.sourceId, ...auditInvestigationOf(input.request.investigationId), traceId: input.traceId, detail: { summary: detail } })
+        // the sink queues the event and counts and logs a failure of it; the click does not depend on it
+        .catch(() => undefined);
     };
-    /** The run row ends with the outcome before the closing event says it; if the event then cannot be written the row says so, and the click fails closed. */
+    /** The run row ends with the outcome before the closing event says it. */
     const finalize = (calls: number, outcome: string): Promise<void> => stored(() => runs.finish(runId, outcome, calls, new Date((options.now ?? Date.now)())));
     /** `cancelled` says whether the client has given up: a click it gave up ends `cancelled`, before or after its row is written, whatever the draft was. */
     const write = async (calls: number, outcome: CaseSummaryAuditDetail['outcome'], result: AuditResult, checked?: Checked, cancelled?: () => boolean): Promise<void> => {
@@ -147,12 +144,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
       if (cancelled?.() === true) return cancel();
       await finalize(calls, outcome);
       if (cancelled?.() === true) return cancel();
-      try {
-        await publish(calls, outcome, result, checked);
-      } catch (error) {
-        await finalize(calls, 'auditFailed').catch(() => undefined);
-        throw error;
-      }
+      await publish(calls, outcome, result, checked);
     };
     return { runId, runs, stored, finalize, publish, write };
   }

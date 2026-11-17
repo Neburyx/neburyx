@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { retentionOf } from '../mapping/retention.js';
 import { DEFAULT_PATTERN_LIST_LIMIT, MAX_PATTERN_LIST_LIMIT, PATTERN_LIMITS, patternDefinitionSchema, type AuditSink, type ChangePatternRequest, type DeletePatternResponse, type ListedPattern, type PatternAvailability, type PatternDefinition, type PatternListResponse, type SavedPattern, type SavePatternRequest } from '@neburyx/contracts';
 import type { ListedPatternRow, NewPattern, PatternChange, PatternRow, PatternStore } from '../db/patterns-repository.js';
+import type { PatternHistory } from './pattern-events.js';
 import { AppError } from '../errors.js';
 import type { CursorBinding, CursorCodec } from '../gate/cursor/codec.js';
 import { COMMUNITY_POLICY_VERSION } from '../investigations/draft.js';
@@ -118,7 +119,7 @@ function storedHoldsPersonalCondition(row: PatternRow, source: SourceModel): boo
   return !parsed.success || holdsPersonalCondition(parsed.data, source);
 }
 
-export function createSavedPatternService(deps: { readonly store: PatternStore; readonly mapping: MappingModel; readonly access: SourceAccess; readonly references: StoredReferences; readonly audit: AuditSink; readonly cursors: CursorCodec }): SavedPatternService {
+export function createSavedPatternService(deps: { readonly store: PatternStore; readonly mapping: MappingModel; readonly access: SourceAccess; readonly references: StoredReferences; readonly audit: AuditSink; readonly history: PatternHistory; readonly cursors: CursorCodec }): SavedPatternService {
   function sourceOf(sourceId: string): SourceModel {
     const source = deps.mapping.sources.find((candidate) => candidate.id === sourceId);
     if (source === undefined) throw new AppError('NOT_FOUND');
@@ -228,7 +229,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       // the version is looked at before what the request holds, as for an investigation
       if (row.version !== request.expectedVersion) throw new AppError('CONFLICT');
       const changes = changeOf(row, source, request);
-      const result = await deps.store.changePattern({ id, ownerId: principal.id, expectedVersion: request.expectedVersion, ...changes }, { principal, traceId, audit: deps.audit });
+      const result = await deps.store.changePattern({ id, ownerId: principal.id, expectedVersion: request.expectedVersion, ...changes }, { principal, traceId, audit: deps.audit, history: deps.history });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
       if (result.outcome === 'name-taken') throw new AppError('CONFLICT', { reason: 'pattern-name-taken' });
@@ -240,7 +241,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       if (row === undefined) throw new AppError('NOT_FOUND');
       await deps.access.require({ traceId, principal, sourceId: row.sourceId, auditAction: PATTERN_DELETE_AUDIT_ACTION });
       if (row.ownerId !== principal.id) throw new AppError('ACCESS_DENIED');
-      const result = await deps.store.deletePattern({ id, ownerId: principal.id, expectedVersion, retentionDays: retentionOf(deps.mapping).deletedInvestigationsDays }, { principal, traceId, audit: deps.audit });
+      const result = await deps.store.deletePattern({ id, ownerId: principal.id, expectedVersion, retentionDays: retentionOf(deps.mapping).deletedInvestigationsDays }, { principal, traceId, audit: deps.audit, history: deps.history });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'conflict') throw new AppError('CONFLICT');
       return { id: result.row.id, version: result.row.version, deletedAt: result.deletedAt, purgeAfter: result.purgeAfter };
@@ -265,7 +266,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       if (row === undefined) throw new AppError('NOT_FOUND');
       await deps.access.require({ traceId, principal, sourceId: row.sourceId, auditAction: PATTERN_COPY_AUDIT_ACTION });
       const source = sourceOf(row.sourceId);
-      const result = await deps.store.copyPattern({ originalId: id, nameOf: copyNameOf, accept: (original) => !storedHoldsPersonalCondition(original, source) }, { principal, traceId, audit: deps.audit });
+      const result = await deps.store.copyPattern({ originalId: id, nameOf: copyNameOf, accept: (original) => !storedHoldsPersonalCondition(original, source) }, { principal, traceId, audit: deps.audit, history: deps.history });
       if (result.outcome === 'not-found') throw new AppError('NOT_FOUND');
       if (result.outcome === 'refused') throw new AppError('INVALID_REQUEST', { reason: 'pattern-personal-condition' });
       if (result.outcome === 'limit') throw new AppError('INVALID_REQUEST', { reason: 'pattern-limit' });
@@ -276,7 +277,7 @@ export function createSavedPatternService(deps: { readonly store: PatternStore; 
       await deps.access.require({ traceId, principal, sourceId: request.sourceId, auditAction: PATTERN_SAVE_AUDIT_ACTION });
       const source = sourceOf(request.sourceId);
       const pattern = request.kind === 'definition' ? definitionOf(request, source) : presetRunOf(request, source);
-      const result = await deps.store.savePattern(pattern, { principal, traceId, audit: deps.audit });
+      const result = await deps.store.savePattern(pattern, { principal, traceId, audit: deps.audit, history: deps.history });
       if (result.outcome === 'limit') throw new AppError('INVALID_REQUEST', { reason: 'pattern-limit' });
       if (result.outcome === 'name-taken') throw new AppError('CONFLICT', { reason: 'pattern-name-taken' });
       return shownPattern(deps.references, result.row);

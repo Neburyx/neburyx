@@ -10,6 +10,7 @@ import { validatedDraft, type DeleteResult, type RestoreResult, type CreatedInve
 import type { ViewDeleteResult, ViewListResult, ViewRenameResult, ViewRestoreResult, ViewSaveResult } from '../db/views-repository.js';
 import type { SourceModel } from '../mapping/model.js';
 import { memoryExports, type MemoryExports } from './memory-exports.js';
+import { MEMORY_TRANSACTION } from './memory-transaction.js';
 import { memoryPatterns, type MemoryPatternOptions, type MemoryPatterns } from './memory-patterns.js';
 import { decideSourceState, type StoredCheck } from '../source-state/decide.js';
 
@@ -266,6 +267,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const timeOf = (rule: 'keep' | 'now' | 'clear', kept: string | null) => (rule === 'keep' ? kept : rule === 'now' ? now : null);
       if (options.failStatusChange === true) throw new Error('the status could not be written');
       const row: InvestigationRow = { ...held, status: change.status, closedAt: timeOf(plan.closedAt, held.closedAt), archivedAt: timeOf(plan.archivedAt, held.archivedAt), version: held.version + 1 };
+      await change.beforeCommit(row, MEMORY_TRANSACTION);
       investigations[investigations.indexOf(held)] = row;
       return { outcome: 'changed', row };
     },
@@ -364,7 +366,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
     purgeExpiredInvestigations: async (beforeDelete) => {
       const expired = investigations.filter((row) => (deletedAt.get(row.id)?.purgeAfter ?? '9999') <= new Date(Date.UTC(2026, 10, 7, 12, 0, deletions)).toISOString());
       for (const row of expired) {
-        await beforeDelete({ id: row.id, sourceId: row.sourceId });
+        await beforeDelete({ id: row.id, sourceId: row.sourceId }, MEMORY_TRANSACTION);
         investigations.splice(investigations.indexOf(row), 1);
         deletedAt.delete(row.id);
         drafts.splice(0, drafts.length, ...drafts.filter((draft) => draft.investigationId !== row.id));
@@ -401,7 +403,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
       const at = new Date(Date.UTC(2026, 10, 7, 12, 0, deletions++));
       const row = { ...held, version: held.version + 1 };
-      await change.beforeCommit(row);
+      await change.beforeCommit(row, MEMORY_TRANSACTION);
       const purgeAfter = new Date(at.getTime() + change.retentionDays * 86_400_000);
       investigations[investigations.indexOf(held)] = row;
       deletedAt.set(held.id, { deletedAt: at.toISOString(), purgeAfter: purgeAfter.toISOString() });
@@ -413,7 +415,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       if (held === undefined || marks === undefined || marks.purgeAfter <= new Date(Date.UTC(2026, 10, 7, 12, 0, deletions)).toISOString()) return { outcome: 'not-found' };
       if (held.version !== change.expectedVersion) return { outcome: 'conflict' };
       const row = { ...held, version: held.version + 1 };
-      await change.beforeCommit(row);
+      await change.beforeCommit(row, MEMORY_TRANSACTION);
       investigations[investigations.indexOf(held)] = row;
       deletedAt.delete(held.id);
       return { outcome: 'restored', row };

@@ -1,4 +1,4 @@
-import { layoutDocumentSchema, queryContextDocumentSchema, storedAiNotesSchema, type AiNotesEntryInput, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
+import { layoutDocumentSchema, queryContextDocumentSchema, storedAiNotesSchema, type AiNotesEntryInput, type AuditTransaction, type InvestigationSave, type LayoutDocument, type QueryContextDocument } from '@neburyx/contracts';
 import type pg from 'pg';
 import { readOnlyStatusOf, type ReadOnlyStatus } from '../investigations/read-only.js';
 import { lockLiveInvestigation } from './locks.js';
@@ -103,6 +103,8 @@ export interface TitleChange extends InvestigationChange {
 
 export interface StatusChange extends InvestigationChange {
   readonly status: InvestigationRow['status'];
+  /** Runs inside the transaction before it commits, with the row as changed; a throw rolls the change back. */
+  readonly beforeCommit: (row: InvestigationRow, transaction: AuditTransaction) => Promise<void>;
 }
 
 /** `unchanged` is a change to what the investigation already has: nothing was written and `row` is as stored. */
@@ -113,11 +115,11 @@ export type StatusChangeResult = { readonly outcome: 'changed' | 'unchanged'; re
 export interface DeleteChange extends InvestigationChange {
   readonly retentionDays: number;
   /** Runs inside the transaction before it commits, with the row as deleted; a throw rolls the delete back. */
-  readonly beforeCommit: (row: InvestigationRow) => Promise<void>;
+  readonly beforeCommit: (row: InvestigationRow, transaction: AuditTransaction) => Promise<void>;
 }
 
 export interface RestoreChange extends InvestigationChange {
-  readonly beforeCommit: (row: InvestigationRow) => Promise<void>;
+  readonly beforeCommit: (row: InvestigationRow, transaction: AuditTransaction) => Promise<void>;
 }
 
 /** `deletedAt` and `purgeAfter` are the database's times of the delete and of the last moment it can be restored. */
@@ -244,7 +246,7 @@ export interface InvestigationStore {
   /** Clears the deletion in one statement, guarded by the row being deleted, not yet past `purge_after` by the database's clock, and `expectedVersion`; the purge's own predicate is the opposite, so one of the two takes the row. */
   restoreInvestigation(change: RestoreChange): Promise<RestoreResult>;
   /** Deletes the investigations whose purge date has passed, each in a transaction of its own that locks the row first (rows another transaction holds are left for the next run), with the views and the draft following by cascade. `beforeDelete` runs inside that transaction, so a throw keeps the investigation and stops the run. Answers how many were deleted. */
-  purgeExpiredInvestigations(beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<number>;
+  purgeExpiredInvestigations(beforeDelete: (purged: PurgedInvestigation, transaction: AuditTransaction) => Promise<void>): Promise<number>;
   /** Runs the reads of one list call at one snapshot; what they return is not changed by an investigation another call creates meanwhile. */
   readLibrary<T>(read: (reader: LibraryReader) => Promise<T>): Promise<T>;
 }
@@ -568,7 +570,9 @@ export async function changeInvestigationStatus(pool: pg.Pool, change: StatusCha
     );
     const [record] = updated.rows;
     if (record === undefined) throw new Error('the investigation was not returned after its status change');
-    return { outcome: 'changed', row: rowOf(record) };
+    const row = rowOf(record);
+    await change.beforeCommit(row, client);
+    return { outcome: 'changed', row };
   });
 }
 
@@ -586,7 +590,7 @@ export async function deleteInvestigation(pool: pg.Pool, change: DeleteChange): 
       return live.rowCount === 0 ? { outcome: 'not-found' } : { outcome: 'conflict' };
     }
     const row = rowOf(record);
-    await change.beforeCommit(row);
+    await change.beforeCommit(row, client);
     return { outcome: 'deleted', row, deletedAt: record.deleted_at.toISOString(), purgeAfter: record.purge_after.toISOString() };
   });
 }
@@ -605,7 +609,7 @@ export async function restoreInvestigation(pool: pg.Pool, change: RestoreChange)
       return restorable.rowCount === 0 ? { outcome: 'not-found' } : { outcome: 'conflict' };
     }
     const row = rowOf(record);
-    await change.beforeCommit(row);
+    await change.beforeCommit(row, client);
     return { outcome: 'restored', row };
   });
 }
@@ -742,20 +746,20 @@ async function countDeletedMatching(db: pg.Pool | pg.PoolClient, query: DeletedM
 
 const PURGE_PASS_SIZE = 100;
 
-async function purgeOne(pool: pg.Pool, beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<boolean> {
+async function purgeOne(pool: pg.Pool, beforeDelete: (purged: PurgedInvestigation, transaction: AuditTransaction) => Promise<void>): Promise<boolean> {
   return inTransaction(pool, async (client) => {
     const found = await client.query<{ id: string; source_id: string }>(
       `SELECT id, source_id FROM investigations WHERE deleted_at IS NOT NULL AND purge_after <= now() ORDER BY purge_after, id LIMIT 1 FOR UPDATE SKIP LOCKED`,
     );
     const [held] = found.rows;
     if (held === undefined) return false;
-    await beforeDelete({ id: held.id, sourceId: held.source_id });
+    await beforeDelete({ id: held.id, sourceId: held.source_id }, client);
     await client.query(`DELETE FROM investigations WHERE id = $1 AND deleted_at IS NOT NULL AND purge_after <= now()`, [held.id]);
     return true;
   });
 }
 
-export async function purgeExpiredInvestigations(pool: pg.Pool, beforeDelete: (purged: PurgedInvestigation) => Promise<void>): Promise<number> {
+export async function purgeExpiredInvestigations(pool: pg.Pool, beforeDelete: (purged: PurgedInvestigation, transaction: AuditTransaction) => Promise<void>): Promise<number> {
   let purged = 0;
   for (;;) {
     for (let inPass = 0; inPass < PURGE_PASS_SIZE; inPass += 1) {

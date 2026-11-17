@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { exportFileSchema, exportSchema, type CaseSummarizer } from '@neburyx/contracts';
 import { renderForExport, sealToken } from '@neburyx/ee-ask';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { expireExports, purgeDeletedInvestigations } from '../jobs/maintenance.js';
+import { expireExports, purgeDeletedInvestigations, removePurgedFiles } from '../jobs/maintenance.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
 import { rows } from '../testing/database.js';
@@ -199,17 +199,69 @@ describe('exports against Postgres', () => {
 });
 
 describe('the purge against Postgres', () => {
-  it('deletes the export files and rows of a purged investigation with it, and a failing file stops that purge', async () => {
+  it('deletes the export rows of a purged investigation with it and records their files, which the cleanup removes after, and a failing file keeps its key and fails the cleanup', async () => {
     const { rig, files, create, maintenance } = await running();
     const opened = await rig.open();
     const record = exportSchema.parse((await create(opened.investigation.id)).json());
     expect((await rig.removeInvestigation(opened.investigation.id, opened.investigation.version)).statusCode).toBe(200);
     await rows(rig.database.ownerUrl, `UPDATE investigations SET purge_after = now() - interval '1 second' WHERE id = $1`, [opened.investigation.id]);
-    await expect(purgeDeletedInvestigations({ ...maintenance, files: { ...files, remove: () => Promise.reject(new Error('locked')) } })).rejects.toThrow('locked');
-    expect(await rows(rig.database.ownerUrl, `SELECT 1 FROM investigations WHERE id = $1`, [opened.investigation.id])).toHaveLength(1);
-    expect(await files.list()).toHaveLength(1);
     expect(await purgeDeletedInvestigations(maintenance)).toBe(1);
-    expect(await files.list()).toEqual([]);
+    expect(await rows(rig.database.ownerUrl, `SELECT 1 FROM investigations WHERE id = $1`, [opened.investigation.id])).toEqual([]);
     expect(await rows(rig.database.ownerUrl, `SELECT 1 FROM exports WHERE id = $1`, [record.id])).toEqual([]);
+    expect(await files.list()).toHaveLength(1);
+    expect(await rows(rig.database.ownerUrl, `SELECT storage_key FROM file_cleanup`)).toEqual([{ storage_key: record.id }]);
+    await expect(removePurgedFiles({ ...maintenance, files: { ...files, remove: () => Promise.reject(new Error('locked')) } })).rejects.toThrow('locked');
+    expect(await files.list()).toHaveLength(1);
+    expect(await rows(rig.database.ownerUrl, `SELECT storage_key FROM file_cleanup`)).toHaveLength(1);
+    expect(await removePurgedFiles(maintenance)).toBe(1);
+    expect(await files.list()).toEqual([]);
+    expect(await rows(rig.database.ownerUrl, `SELECT storage_key FROM file_cleanup`)).toEqual([]);
+  });
+});
+
+const key = (index: number): string => `0192f000-0000-7000-8000-${String(index).padStart(12, '0')}`;
+
+describe('the expiry and the purge of the same export against Postgres', () => {
+  it('act on its file once between them: an expiry whose list is older than the purge finds the row gone and leaves the file to the cleanup', async () => {
+    const { rig, files, create, maintenance } = await running();
+    const opened = await rig.open();
+    const record = exportSchema.parse((await create(opened.investigation.id)).json());
+    await rows(rig.database.ownerUrl, `UPDATE exports SET expires_at = now() - interval '1 second' WHERE id = $1`, [record.id]);
+    const stale = await maintenance.exports.listExpiredExports();
+    expect(stale).toHaveLength(1);
+    expect((await rig.removeInvestigation(opened.investigation.id, opened.investigation.version)).statusCode).toBe(200);
+    await rows(rig.database.ownerUrl, `UPDATE investigations SET purge_after = now() - interval '1 second' WHERE id = $1`, [opened.investigation.id]);
+    await purgeDeletedInvestigations(maintenance);
+    const removed: string[] = [];
+    const hook = async (): Promise<void> => void removed.push('expiry');
+    for (const { id } of stale) expect(await maintenance.exports.expireExport(id, hook)).toBe(false);
+    expect(removed).toEqual([]);
+    expect(await files.list()).toHaveLength(1);
+    expect(await removePurgedFiles(maintenance)).toBe(1);
+    expect(await files.list()).toEqual([]);
+  });
+
+  it('records the key of an export that is already expired, so a file whose removal failed is still removed after the purge', async () => {
+    const { rig, files, create, maintenance } = await running();
+    const opened = await rig.open();
+    const record = exportSchema.parse((await create(opened.investigation.id)).json());
+    await rows(rig.database.ownerUrl, `UPDATE exports SET status = 'expired', storage_key = NULL WHERE id = $1`, [record.id]);
+    expect(await files.list()).toHaveLength(1);
+    expect((await rig.removeInvestigation(opened.investigation.id, opened.investigation.version)).statusCode).toBe(200);
+    await rows(rig.database.ownerUrl, `UPDATE investigations SET purge_after = now() - interval '1 second' WHERE id = $1`, [opened.investigation.id]);
+    await purgeDeletedInvestigations(maintenance);
+    expect(await rows(rig.database.ownerUrl, `SELECT storage_key FROM file_cleanup`)).toEqual([{ storage_key: record.id }]);
+    expect(await removePurgedFiles(maintenance)).toBe(1);
+    expect(await files.list()).toEqual([]);
+  });
+
+  it('works a cleanup backlog in batches against the real table, passing a key that cannot be removed', async () => {
+    const { rig, files, maintenance } = await running();
+    for (let index = 0; index < 250; index += 1) await rows(rig.database.ownerUrl, `INSERT INTO file_cleanup (storage_key) VALUES ($1)`, [key(index)]);
+    const calls: string[] = [];
+    const failing = { ...files, remove: (name: string) => (calls.push(name), name === key(3) ? Promise.reject(new Error('locked')) : files.remove(name)) };
+    await expect(removePurgedFiles({ ...maintenance, files: failing })).rejects.toThrow('locked');
+    expect(calls).toHaveLength(250);
+    expect(await rows(rig.database.ownerUrl, `SELECT storage_key FROM file_cleanup`)).toEqual([{ storage_key: key(3) }]);
   });
 });

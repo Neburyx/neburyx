@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { storedEdgeDetailSchema, edgeRefSegmentOf, errorResponseSchema, sourceLinkSegmentOf, type StoredEdgeRef } from '@neburyx/contracts';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { RequestCancelled } from '../errors.js';
@@ -10,6 +10,7 @@ import { deriveReferenceKeys } from '../reference/keys.js';
 import { createSourceAccess } from '../investigations/source-access.js';
 import { createSourceLinkService } from './source-link-service.js';
 import { makeToken } from '../reference/token.js';
+import { queuedAudit } from '../testing/queued-audit.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { memoryAppStore } from '../testing/app-store.js';
@@ -53,11 +54,13 @@ async function started(answer: Answer, options: { readonly auditFails?: boolean 
   const executor = new TestExecutor(withSchema(() => schemaAnswer(onlineIndexesOf(source)), (call) => Promise.resolve(typeof answer === 'function' ? answer(call) : answer)));
   const events: AuditEvent[] = [];
   const defaults = communitySeams();
-  const audit = { record: (event: AuditEvent) => (options.auditFails === true && event.action === 'source.link' && event.result === 'success' ? Promise.reject(new Error('sink down')) : Promise.resolve(void events.push(event))) };
+  const sink = { record: (event: AuditEvent) => (options.auditFails === true && event.action === 'source.link' && event.result === 'success' ? Promise.reject(new Error('sink down')) : Promise.resolve(void events.push(event))) };
+  const queued = queuedAudit(sink);
+  const audit = queued.audit;
   const parts = testSourceGate(mapping, { executor, referenceKeys: keys, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit } });
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store: memoryAppStore(), mapping, gate: parts.gate, referenceKeys: keys, seams: { policy: defaults.policy, coordinator: defaults.coordinator, audit } });
   const linkEvents = () => events.filter((event) => event.action === 'source.link');
-  return { app, executor, events, linkEvents };
+  return { app, executor, events, linkEvents, counts: queued.counts };
 }
 
 const entityUrl = (entityType: string, stableId: string, query = '') => `/v1/source-links/${encodeURIComponent(sourceLinkSegmentOf({ form: 'entity', ref: { sourceId: 'demo', entityType, stableId } }))}${query}`;
@@ -205,11 +208,12 @@ describe('GET /v1/source-links/{ref} for an entity', () => {
     await app.close();
   });
 
-  it('sends no redirect and answers INTERNAL_ERROR when the success event cannot be written', async () => {
-    const { app } = await started(widgetAnswer, { auditFails: true });
+  it('still redirects when the success event cannot be written: the event is queued, and its failure is counted', async () => {
+    const { app, counts } = await started(widgetAnswer, { auditFails: true });
     const response = await get(app, entityUrl('widget', 'W-1'));
-    expect(response.statusCode).toBe(500);
-    expect(response.headers['location']).toBeUndefined();
+    expect(response.statusCode).toBe(302);
+    expect(response.headers['location']).toBeDefined();
+    await vi.waitFor(() => expect(counts().failed).toBe(1));
     await app.close();
   });
 

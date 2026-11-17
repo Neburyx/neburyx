@@ -6,27 +6,24 @@ const SUMMARY_URL = '/v1/summary';
 
 type EarlyOutcome = 'tooLarge' | 'read-failed' | 'cancelled' | 'error' | 'unavailable';
 
-/**
- * Records the closing event of a click that ended in the route, before or around the summarizer. A refusal the route is about to give fails the click closed when the event cannot be written; a failure the route
- * is passing on keeps its own answer, whatever the sink does.
- */
-async function closeEarly(request: ExtensionRequest, role: 'administrator' | 'investigator', body: SummaryRequest, outcome: EarlyOutcome, failClosed: boolean): Promise<void> {
+/** Records the closing event of a click that ended in the route, before or around the summarizer. The event is queued: a refusal or a failure the route is passing on keeps its own answer, whatever becomes of the event. */
+async function closeEarly(request: ExtensionRequest, role: 'administrator' | 'investigator', body: SummaryRequest, outcome: EarlyOutcome): Promise<void> {
   const summarizer = request.caseSummarizer;
   if (summarizer.recordEarlyEnd !== undefined) {
-    // a summarizer that keeps a record of each click fails the click closed when it cannot be written, whatever ended it
     try {
       await summarizer.recordEarlyEnd({ actorId: request.principalId, actorRole: role, traceId: request.traceId, request: body, outcome });
-    } catch {
-      throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+    } catch (error) {
+      // only a summarizer with no store or no sink to record to says so: a record that cannot be written is queued, counted and logged, and never reaches here
+      if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+      throw error;
     }
     return;
   }
   const detail: CaseSummaryAuditDetail = { elements: elementCountOf(body), elementsSha256: elementsHashOf(body), calls: 0, outcome };
-  try {
-    await request.audit.record({ actorId: request.principalId, actorRole: role, action: SUMMARY_CLOSING_ACTION, result: outcome === 'tooLarge' ? 'refused' : 'failed', sourceId: body.sourceId, ...auditInvestigationOf(body.investigationId), traceId: request.traceId, detail: { summary: detail } });
-  } catch {
-    if (failClosed) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
-  }
+  // the application queues the event and counts and logs its own failures
+  await request.audit
+    .record({ actorId: request.principalId, actorRole: role, action: SUMMARY_CLOSING_ACTION, result: outcome === 'tooLarge' ? 'refused' : 'failed', sourceId: body.sourceId, ...auditInvestigationOf(body.investigationId), traceId: request.traceId, detail: { summary: detail } })
+    .catch(() => undefined);
 }
 
 /** Drafts the summary of the view the request names, through the application's `CaseSummarizer`; the Community default and a summarizer that is not available both answer that the feature is not in this edition. */
@@ -59,13 +56,13 @@ export function createSummaryRoute(): ExtensionRoute {
       const { caseSummarizer } = request;
       const body = summaryRequestSchema.parse(request.body);
       if (!caseSummarizer.availability().available) {
-        await closeEarly(request, role, body, 'unavailable', true);
+        await closeEarly(request, role, body, 'unavailable');
         throw new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
       }
       const refs = { entities: body.entities, edges: body.edges, aggregates: body.aggregates, derived: body.derived };
       const elements = refs.entities.length + refs.edges.length + refs.aggregates.length + refs.derived.length;
       if (elements > caseSummarizer.maxElements) {
-        await closeEarly(request, role, body, 'tooLarge', true);
+        await closeEarly(request, role, body, 'tooLarge');
         return { status: 'tooLarge', limit: 'elements', elements, cap: caseSummarizer.maxElements };
       }
       const { readElements } = gateClientOf(request);
@@ -74,7 +71,7 @@ export function createSummaryRoute(): ExtensionRoute {
       try {
         reading = await readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true }, refs);
       } catch (error) {
-        await closeEarly(request, role, body, request.signal.aborted ? 'cancelled' : 'read-failed', false);
+        await closeEarly(request, role, body, request.signal.aborted ? 'cancelled' : 'read-failed');
         throw error;
       }
       try {
@@ -82,7 +79,7 @@ export function createSummaryRoute(): ExtensionRoute {
       } catch (error) {
         if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
         if (error instanceof SummaryHandled) throw error.handled;
-        await closeEarly(request, role, body, request.signal.aborted ? 'cancelled' : 'error', false);
+        await closeEarly(request, role, body, request.signal.aborted ? 'cancelled' : 'error');
         throw error;
       }
     },

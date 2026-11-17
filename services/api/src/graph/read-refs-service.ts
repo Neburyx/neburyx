@@ -197,11 +197,6 @@ export function createReadRefsService(deps: ReadRefsDeps): ReadRefsService {
 }
 
 async function recordRead(deps: ReadRefsDeps, call: ReadRefsCall, [nodes, edges, missing]: readonly [number, number, number]): Promise<void> {
-  try {
-    await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: READ_REFS_AUDIT_ACTION, result: 'success', sourceId: call.request.sourceId, traceId: call.traceId, detail: { counts: { nodes, edges, missing } } });
-  } catch {
-    // the answer does not depend on the audit write, as for a read through the gate; the log line carries no event data
-    deps.logger.warn({ event: 'read_refs.audit_failed' }, 'read by references audit write failed');
-  }
+  await deps.audit.record({ actorId: call.principal.id, actorRole: call.principal.role, action: READ_REFS_AUDIT_ACTION, result: 'success', sourceId: call.request.sourceId, traceId: call.traceId, detail: { counts: { nodes, edges, missing } } });
 }
 

@@ -81,13 +81,13 @@ describe('the maintenance tasks at start', () => {
     return { seen, startJobRunner };
   };
 
-  it('hands the runner the two purges and the export expiry with their daily schedules when no task list is injected', async () => {
+  it('hands the runner the two purges, the removal of purged files and the export expiry with their schedules when no task list is injected', async () => {
     const { seen, startJobRunner } = runnerSeen();
     const run = io({ startJobRunner });
     delete (run.io as { tasks?: unknown }).tasks;
     const result = await start(DATABASE_ENV, run.io);
     expect(result.exitCode).toBe(0);
-    expect(seen).toEqual([{ tasks: [{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }, { name: 'purge-deleted-patterns', schedule: '29 3 * * *' }, { name: 'expire-exports', schedule: '41 3 * * *' }] }]);
+    expect(seen).toEqual([{ tasks: [{ name: 'purge-deleted-investigations', schedule: '17 3 * * *' }, { name: 'remove-purged-files', schedule: '*/10 * * * *' }, { name: 'purge-deleted-patterns', schedule: '29 3 * * *' }, { name: 'expire-exports', schedule: '41 3 * * *' }] }]);
     if ('app' in result) await result.app.close();
   });
 
@@ -540,9 +540,96 @@ describe('the enterprise extension at start', () => {
         expect(result.exitCode).toBe(0);
         if (result.exitCode !== 0) return;
         expect((await result.app.inject({ url: '/v1/probe-audit' })).statusCode).toBe(200);
-        expect(events).toEqual(['probe.event']);
+        await vi.waitFor(() => expect(events).toEqual(['probe.event']));
         expect(rig.seams[0]?.audit).not.toBe(mounted.sink);
         await result.app.close();
+      });
+
+      it('queues the events of the extension\'s own routes: the route is answered before a held sink is released, and refuses a bad audit setting at start-up', async () => {
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const events: string[] = [];
+        const mounted = { sink: { record: async (event: { readonly action: string }) => (await held, void events.push(event.action)) }, close: async () => undefined };
+        const probe: ExtensionRoute = { method: 'GET', url: '/v1/probe-audit', permission: 'principal', responseSchema: z.unknown(), handler: async (request) => (await request.audit.record({ actorId: request.principalId, actorRole: request.principalRole, action: 'probe.event', result: 'success', traceId: request.traceId }), 'ok') };
+        const rig = withCalls({ ...extensionWith(probe), createAuditSink: () => mounted });
+        const result = await start(KEY_ONLY, rig.io);
+        expect(result.exitCode).toBe(0);
+        if (result.exitCode !== 0) return;
+        expect((await result.app.inject({ url: '/v1/probe-audit' })).statusCode).toBe(200);
+        expect(events).toEqual([]);
+        release();
+        await vi.waitFor(() => expect(events).toEqual(['probe.event']));
+        await result.app.close();
+        const refused = withCalls();
+        const refusal = await start({ ...KEY_ONLY, NEBURYX_AUDIT_QUEUE_SIZE: '0' }, refused.io);
+        expect(refusal.exitCode).not.toBe(0);
+        expect(refused.errors.join('\n')).toContain('NEBURYX_AUDIT_QUEUE_SIZE');
+      });
+
+      it('hands the extension the queued audit sink and a queue for its run records, which writes a record after the caller has gone on and counts it in /readyz', async () => {
+        let queue: { enqueue(job: { ids: Record<string, string>; write(): Promise<void> }): void } | undefined;
+        let handed: unknown;
+        const mounted = { sink: { record: async () => undefined }, close: async () => undefined };
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const written: string[] = [];
+        const rig = withCalls({
+          createAuditSink: () => mounted,
+          attachAudit: (sink) => {
+            handed = sink;
+          },
+          attachRecordQueue: (attached) => {
+            queue = attached;
+          },
+        });
+        const result = await start(KEY_ONLY, rig.io);
+        expect(result.exitCode).toBe(0);
+        if (result.exitCode !== 0) return;
+        expect(handed).toBeDefined();
+        expect(handed).not.toBe(mounted.sink);
+        queue?.enqueue({ ids: { runId: 'r-1' }, write: async () => (await held, void written.push('r-1')) });
+        expect(written).toEqual([]);
+        expect((await result.app.inject({ url: '/readyz' })).json().audit).toMatchObject({ queued: 1 });
+        release();
+        await vi.waitFor(() => expect(written).toEqual(['r-1']));
+        await vi.waitFor(async () => expect((await result.app.inject({ url: '/readyz' })).json().audit).toMatchObject({ written: 1, queued: 0 }));
+        await result.app.close();
+      });
+
+      it('keeps the stored run records off stdout when stdout is a sink: they go to their own store through their own queue, and neither their text nor their failure text reaches stdout or a log line', async () => {
+        const written: string[] = [];
+        const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((text: string, done?: (error?: Error | null) => void) => (written.push(String(text)), done?.(null), true)) as never);
+        try {
+          let queue: { enqueue(job: { ids: Record<string, string>; write(): Promise<void> }): void } | undefined;
+          const mounted = { sink: { record: async () => undefined }, close: async () => undefined };
+          const rig = withCalls({ createAuditSink: () => mounted, attachRecordQueue: (attached) => void (queue = attached) });
+          const result = await start({ ...KEY_ONLY, NEBURYX_AUDIT_SINKS: 'stdout', NEBURYX_AUDIT_RETRY_LIMIT: '0' }, rig.io);
+          expect(result.exitCode).toBe(0);
+          if (result.exitCode !== 0) return;
+          queue?.enqueue({ ids: { runId: 'r-1' }, write: async () => Promise.reject(new Error('CANARY-RUN-TEXT')) });
+          await vi.waitFor(async () => expect((await result.app.inject({ url: '/readyz' })).json().audit).toMatchObject({ failed: 1 }));
+          expect(written.join('')).not.toContain('CANARY-RUN-TEXT');
+          expect(rig.errors.join('')).not.toContain('CANARY-RUN-TEXT');
+          await result.app.close();
+        } finally {
+          spy.mockRestore();
+        }
+      });
+
+      it('gives the store of the audit events and run records the write limit of the queue as its own statement and query time limit, and the pattern history the same', async () => {
+        const seen: { statementTimeoutMs: number; queryTimeoutMs: number }[] = [];
+        const mounted = { sink: { record: async () => undefined }, close: async () => undefined };
+        const rig = withCalls({
+          createAuditSink: (context) => (seen.push({ statementTimeoutMs: context.statementTimeoutMs, queryTimeoutMs: context.queryTimeoutMs }), mounted),
+        });
+        const result = await start({ ...KEY_ONLY, NEBURYX_AUDIT_WRITE_TIMEOUT_MS: '250' }, rig.io);
+        expect(result.exitCode).toBe(0);
+        expect(seen).toEqual([{ statementTimeoutMs: 250, queryTimeoutMs: 250 }]);
+        if (result.exitCode === 0) await result.app.close();
       });
 
       it('counts a key file as a provider', async () => {
@@ -589,7 +676,7 @@ describe('the enterprise extension at start', () => {
         const result = await start({ ...CONFIGURED, ...KEY_ONLY, NEBURYX_SUMMARY_ENABLED: 'off' }, rig.io);
         expect(result.exitCode).toBe(0);
         expect(rig.configured).toEqual([{ features: { ask: true, summary: false, assistant: true } }]);
-        expect(rig.seams[0]?.audit).toBe(rig.mounted.sink);
+        expect(rig.seams[0]?.audit).not.toBe(rig.mounted.sink);
         if (result.exitCode === 0) {
           expect((await result.app.inject({ method: 'GET', url: '/v1/me' })).json().edition).toBe('enterprise');
           await result.app.close();

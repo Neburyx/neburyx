@@ -9,8 +9,9 @@ import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { redactItems } from '../gate/redact/index.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
+import { queuedAudit } from './queued-audit.js';
 import { communitySeams } from '../seams/community-seams.js';
-import type { AuditEvent, Seams } from '../seams/seams.js';
+import type { AuditEvent, AuditSink, Seams } from '../seams/seams.js';
 import { memoryAppStore } from './app-store.js';
 import { hidingRedact } from './derived-fixtures.js';
 import { TEST_REFERENCE_KEYS, TestExecutor } from './gate.js';
@@ -55,6 +56,8 @@ export interface ExportRigOptions {
   /** The stable ID of an entity the person may read but not export. */
   readonly unexportableNode?: string;
   readonly failAudit?: (action: string) => boolean;
+  /** The application's audit member is the sink itself and not the queue in front of it: for the tests of the enterprise routes whose own handling of a failed event is rewritten with the queue. */
+  readonly directAudit?: boolean;
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
   /** The extension and the switch of the application under test, and the summarizer its seams hold. */
   readonly extension?: ProfileExtension;
@@ -100,17 +103,20 @@ export async function startExportRig(options: ExportRigOptions = {}) {
     ),
   );
   const events: AuditEvent[] = [];
+  const stored: AuditSink = {
+    record: (event) => {
+      if (options.failAudit?.(event.action) === true) return Promise.reject(new Error('the sink is down'));
+      events.push(event);
+      return Promise.resolve();
+    },
+  };
+  const queued = queuedAudit(stored);
   const defaults = communitySeams();
-  const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit'> = {
+  const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit' | 'privilegedAudit'> = {
     policy: { authorizeSource: () => Promise.resolve(options.deny?.() === true ? { allowed: false, reason: 'no' } : { allowed: true }) },
     coordinator: defaults.coordinator,
-    audit: {
-      record: (event) => {
-        if (options.failAudit?.(event.action) === true) return Promise.reject(new Error('the sink is down'));
-        events.push(event);
-        return Promise.resolve();
-      },
-    },
+    audit: options.directAudit === true ? stored : queued.audit,
+    privilegedAudit: stored,
   };
   const forbidExport = (items: readonly Record<string, unknown>[], context: Parameters<typeof redactItems>[1]) =>
     redactItems(

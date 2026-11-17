@@ -196,8 +196,21 @@ export interface AuditEvent {
   readonly detail?: AuditDetail;
 }
 
+/** A database transaction a privileged event is inserted through, so it commits or rolls back with the change it records. */
+export interface AuditTransaction {
+  query(text: string, values?: readonly unknown[]): Promise<unknown>;
+}
+
+/** What a caller may hand a sink beside the event. */
+export interface AuditWriteOptions {
+  /** Aborted when the writer stops waiting for the write; a sink ends the statement it started. */
+  readonly signal?: AbortSignal;
+  /** The transaction of the change the event records; a sink that stores events inserts through it and not through a connection of its own. */
+  readonly transaction?: AuditTransaction;
+}
+
 export interface AuditSink {
-  record(event: AuditEvent): Promise<void>;
+  record(event: AuditEvent, options?: AuditWriteOptions): Promise<void>;
 }
 
 /** What the preview's audit sink is given when it is built: the application's own database login and the limits that login's pool keeps, so the sink repeats no number of its own. */

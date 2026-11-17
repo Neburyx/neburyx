@@ -36,7 +36,9 @@ const NEXT_MIGRATION = String(
 ).padStart(4, '0');
 const EARLY_MIGRATION = '0000-sorts-before-every-applied-migration';
 
-const READY = { status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } };
+const READY = { status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 }, audit: { written: 0, failed: 0, dropped: 0, queued: 0 } };
+/** The body the image before the audit counts answers; a rollback to it keeps the rest. */
+const READY_BEFORE_AUDIT = { status: 'ready', checks: { database: 'ok', migrations: 'ok' }, sources: { reachable: 0, unreachable: 0, unknown: 0 } };
 
 beforeAll(async () => {
   if (images.built) await dockerStream(['build', '-f', 'deploy/docker/Dockerfile', '-t', `${IMAGE}:${TAG}`, '.'], repository);
@@ -178,7 +180,7 @@ describe('a rollback by one image tag', () => {
 
     expect(await imageOf(stack, 'migrate')).toBe(`${IMAGE}:${TAG}`);
     expect(await imageOf(stack, 'api')).toBe(`${IMAGE}:${TAG}`);
-    expect(await readyz(stack)).toEqual({ status: 200, body: READY });
+    expect(await readyz(stack)).toEqual({ status: 200, body: expect.objectContaining(READY_BEFORE_AUDIT) });
     expect((await stack.compose(['logs', '--no-log-prefix', 'migrate'])).stdout).toContain('nothing to apply');
     expect((await stack.psql('SELECT count(*) FROM newer_marker')).stdout.trim()).toBe('1');
     expect(await localUser(stack)).toBe(before);

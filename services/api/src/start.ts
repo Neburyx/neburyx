@@ -2,9 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { accessSync, constants, existsSync, statSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigureSourceBudgets, MountedAuditSink, ProfileExtension } from '@neburyx/contracts';
+import type { ConfigureSourceBudgets, MountedAuditSink, ProfileExtension, RecordJob } from '@neburyx/contracts';
 import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { buildApp } from './app.js';
+import type { AuditQueue } from './audit/queue.js';
+import { combinedCounts, stopQueues, wireAudit } from './audit/wiring.js';
+import { createEventQueue, type EventQueue } from './audit/queue.js';
+import { PATTERN_AUDIT_ACTIONS, type PatternEvent } from './patterns/pattern-events.js';
+import { AUDIT_STOP_LIMIT_MS, auditSettingsOf } from './audit/settings.js';
 import { ConfigError, parseConfig } from './config.js';
 import { deriveSigningKey } from './ask/signing-key.js';
 import { createCursorCodec } from './gate/cursor/codec.js';
@@ -25,6 +30,7 @@ import { uuidv7 } from './identity/uuid.js';
 import { extensionWanted, readAiEnablement } from './profile/ai-enablement.js';
 import { readAiSlotShare } from './seams/ai-share.js';
 import { communitySeams } from './seams/community-seams.js';
+import { privilegedAuditOf } from './seams/seams.js';
 import { fileQueryDepsOf } from './gate/file-query.js';
 import { createSourceGate, type SourceGate, type SourceGateOptions } from './gate/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
@@ -222,6 +228,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let pingSchedule: PingSchedule | undefined;
   let firstContact: FirstContact | undefined;
   let mountedAudit: MountedAuditSink | undefined;
+  let auditQueue: AuditQueue | undefined;
+  let historyQueue: EventQueue<PatternEvent> | undefined;
+  let recordQueue: EventQueue<RecordJob> | undefined;
   let devReloader: DevReloader | undefined;
   try {
     const addresses = createAddressCache();
@@ -255,12 +264,33 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       poolSize: POOL_SIZE,
       connectionTimeoutMs: config.connectTimeoutMs,
       connectionStream: lookupStream(addresses),
-      statementTimeoutMs: STORE_STATEMENT_TIMEOUT_MS,
-      queryTimeoutMs: STORE_QUERY_TIMEOUT_MS,
+      // the store ends a write at the limit the queue gives it, so the write is over when the queue stops waiting for it
+      statementTimeoutMs: Math.min(STORE_STATEMENT_TIMEOUT_MS, config.auditWriteTimeoutMs),
+      queryTimeoutMs: Math.min(STORE_QUERY_TIMEOUT_MS, config.auditWriteTimeoutMs),
       newId: uuidv7,
       onConnectionError: () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
     });
-    const seams = mountedAudit === undefined || decision.state !== 'on' ? community : { ...community, audit: mountedAudit.sink };
+    const audit = wireAudit({ sinkNames: config.auditSinks, mounted: mountedAudit, storeInUse: decision.state === 'on', settings: auditSettingsOf(config), logger: io.logger });
+    auditQueue = audit.queue;
+    if (auditQueue !== undefined) extension?.attachAudit?.(auditQueue.sink);
+    // the history of the patterns is written in every edition, through a queue of its own
+    historyQueue = createEventQueue<PatternEvent>({
+      sinks: [{ name: 'pattern-history', sink: { record: (event) => openedStore.insertPatternEvent(event, config.auditWriteTimeoutMs) } }],
+      idFields: (event) => ({ action: PATTERN_AUDIT_ACTIONS[event.action], actorId: event.actorId, sourceId: event.sourceId }),
+      settings: auditSettingsOf(config),
+      logger: io.logger,
+    });
+    // the stored run records of the extension are written through a queue of their own
+    const records = createEventQueue<RecordJob>({
+      sinks: [{ name: 'run-records', sink: { record: (job, options) => job.write(options?.signal) } }],
+      idFields: (job) => job.ids,
+      settings: auditSettingsOf(config),
+      logger: io.logger,
+    });
+    recordQueue = records;
+    extension?.attachRecordQueue?.({ enqueue: (job) => void records.sink.record(job) });
+    const queues = [auditQueue, historyQueue, recordQueue].flatMap((queue) => (queue === undefined ? [] : [queue.counts]));
+    const seams = { ...community, ...(audit.audit === undefined ? {} : { audit: audit.audit }), privilegedAudit: audit.privilegedAudit };
     sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys, ...(extension?.askFolder === undefined ? {} : { fileQueries: fileQueryDepsOf(() => extension?.askFolder?.()) }) });
     const initialGate = sourceGate;
     // in dev mode the mapping and the gate can be replaced by a reload, so what the app, the checks and the ping hold is a live mapping and a switchable gate; otherwise it is the model and the gate made here
@@ -273,7 +303,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     seedFromStartup(reachability, results);
     const problem = (io.startupProblem ?? startupProblem)(results);
     if (problem !== undefined) throw new StartupStop(problem);
-    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: seams.audit, logger: io.logger });
+    const tasks = io.tasks ?? maintenanceTasks({ store: openedStore, exports: openedStore, files: exportFiles, audit: privilegedAuditOf(seams), logger: io.logger });
     validateTasks(tasks);
     jobs = await (io.startJobRunner ?? startJobRunner)(
       config.databaseUrl,
@@ -295,7 +325,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       seams,
       extension,
       previewOn: extension !== undefined,
-      ...(mountedAudit === undefined ? {} : { extensionAudit: mountedAudit.sink }),
+      ...(auditQueue === undefined ? {} : { extensionAudit: auditQueue.sink }),
+      patternHistory: historyQueue.sink,
+      auditCounts: () => combinedCounts(queues),
       edition: decision.state === 'on' ? 'enterprise' : 'community',
       referenceKeys,
       cursors,
@@ -317,6 +349,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       },
       closeSources: async () => {
         await gate.close();
+        await stopQueues([auditQueue, historyQueue, recordQueue], AUDIT_STOP_LIMIT_MS);
         await mountedAudit?.close();
       },
     });
@@ -372,6 +405,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     else {
       await jobs?.stop();
       await sourceGate?.close();
+      await stopQueues([auditQueue, historyQueue, recordQueue], AUDIT_STOP_LIMIT_MS);
       await mountedAudit?.close();
       await store?.close();
     }

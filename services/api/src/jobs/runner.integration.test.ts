@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { MEMORY_TRANSACTION } from '../testing/memory-transaction.js';
 import { rmSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -109,7 +110,7 @@ describe('the job runner of the API', () => {
     const logger = createLogger({ write: (chunk: string) => lines.push(chunk) });
     const tasks = maintenanceTasks({
       ...idleExportDeps(),
-      store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }), ++purged) },
+      store: { purgeExpiredPatterns: () => Promise.resolve(0), purgeExpiredInvestigations: async (beforeDelete) => (await beforeDelete({ id: 'x', sourceId: 'demo' }, MEMORY_TRANSACTION), ++purged) },
       audit: { record: () => (++sinkCalls === 1 ? Promise.reject(new Error('the sink is down')) : Promise.resolve()) },
       logger,
     });

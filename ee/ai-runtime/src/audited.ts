@@ -98,13 +98,17 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     };
   }
 
-  /** Records the event, or throws the one error that says it could not be: whatever the detail or the sink did, nothing of the call leaves with it. */
+  /** Hands the event to the sink, which queues it: the answer of the provider does not wait for the store and is not discarded when the event cannot be written. An event that cannot be built is the only failure that withholds the answer. */
   async function record(context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): Promise<void> {
+    let event: AuditEvent;
     try {
-      await sink.record(eventOf(context, prompt, outcome));
+      event = eventOf(context, prompt, outcome);
     } catch {
+      // an event that cannot be built from the call is a fault of the call itself: nothing of it leaves
       throw new AuditUnavailableError();
     }
+    // the sink queues the event and counts and logs its own failures; a failure here does not discard the answer
+    await sink.record(event).catch(() => undefined);
   }
 
   async function call(request: ModelRequest, context: AuditedCallContext, signal: AbortSignal): Promise<ModelAnswer> {

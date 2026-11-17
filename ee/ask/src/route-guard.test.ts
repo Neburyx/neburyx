@@ -70,11 +70,11 @@ describe('the route-group hook with the preview off', () => {
     expect(Object.keys(events[0] ?? {}).sort()).toEqual(['action', 'actorId', 'actorRole', 'detail', 'result', 'traceId']);
   });
 
-  it('still refuses, with the audited mark false, and runs no handler when the audit write fails', async () => {
+  it('still refuses, and runs no handler, when the audit handle fails: the refusal does not depend on its event', async () => {
     const { guarded, calls, provider } = await groupOf();
     const { request } = requestOf({ previewOn: false, record: async () => Promise.reject(new Error('down')) });
     const thrown = await refusalOf(Promise.resolve(guarded.routes[0]?.handler(request)));
-    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: false });
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: true });
     expect(calls).toEqual([]);
     expect(provider.calls).toHaveLength(0);
   });

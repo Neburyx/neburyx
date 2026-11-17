@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs';
 import { summaryResponseSchema, type CaseSummarizer, type CaseSummaryInput, type CaseSummaryOutcome } from '@neburyx/contracts';
-import { buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, createMemorySummaryRunStore, openToken, promptRecordOf, type ModelProvider, type ModelRequest } from '@neburyx/ee-ask';
+import { AuditUnavailableError, buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, createMemorySummaryRunStore, openToken, promptRecordOf, type ModelProvider, type ModelRequest } from '@neburyx/ee-ask';
 import { afterAll, describe, expect, it } from 'vitest';
 import { LOCAL_IDENTITY } from '../testing/app-store.js';
 import { el, exportWebRoot, linkRef, startExportRig, type ExportRigOptions } from '../testing/export-rig.js';
@@ -23,6 +23,7 @@ async function appOf(options: Options = {}) {
   const role = options.role ?? 'investigator';
   const rig = await startExportRig({
     ...options,
+    ...(options.failAudit === undefined ? {} : { directAudit: true }),
     extension: createEnterpriseExtension(),
     ...(options.summarizer === undefined ? {} : { caseSummarizer: options.summarizer }),
     principal: () => ({ role: options.roleNow?.() ?? role, ...(options.principalId === undefined ? {} : { id: options.principalId() }) }),
@@ -339,11 +340,11 @@ describe('POST /v1/summary and its closing event', () => {
     await rig.rig.stop();
   });
 
-  it('fails closed with AUDIT_UNAVAILABLE when the closing event of a refusal cannot be written', async () => {
+  it('gives the answer of a refusal when its closing event cannot be written: the event is queued and never withholds it', async () => {
     const rig = await appOf({ summarizer: stubSummarizer(undefined, [], true, 1), failAudit: (action) => action === 'ai.case-summary.closed' });
     const answer = await post(rig);
-    expect(answer.statusCode).toBe(503);
-    expect(answer.json().error).toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    expect(answer.statusCode).toBe(200);
+    expect(answer.json()).toMatchObject({ status: 'tooLarge', limit: 'elements' });
     await rig.rig.stop();
   });
 });
@@ -494,7 +495,7 @@ describe('POST /v1/summary and a source that changed', () => {
 describe('POST /v1/summary and the closing event of a click that fails', () => {
   const closing = (rig: Rig) => rig.events.filter((event) => event.action === 'ai.case-summary.closed');
 
-  it('records a failed read through the summarizer, and fails closed with AUDIT_UNAVAILABLE instead of the gate error when that record cannot be written', async () => {
+  it('records a failed read through the summarizer, and answers AUDIT_UNAVAILABLE instead of the gate error only when the summarizer has nowhere to record to', async () => {
     const down = (call: { templateId: string }) => (call.templateId === 'entity-load-many' ? ({ status: 'unavailable', reason: 'unreachable' } as const) : undefined);
     const ended: string[] = [];
     const recording: CaseSummarizer = { ...stubSummarizer(undefined, []), recordEarlyEnd: async (end) => void ended.push(end.outcome) };
@@ -502,7 +503,7 @@ describe('POST /v1/summary and the closing event of a click that fails', () => {
     expect((await post(ok)).statusCode).toBe(503);
     expect(ended).toEqual(['read-failed']);
     await ok.rig.stop();
-    const failing: CaseSummarizer = { ...stubSummarizer(undefined, []), recordEarlyEnd: async () => Promise.reject(new Error('down')) };
+    const failing: CaseSummarizer = { ...stubSummarizer(undefined, []), recordEarlyEnd: async () => Promise.reject(new AuditUnavailableError()) };
     const refused = await appOf({ summarizer: failing, answer: down });
     const answer = await post(refused);
     expect(answer.statusCode).toBe(503);
@@ -616,7 +617,7 @@ describe('POST /v1/summary and its coverage line, through the shown reader of th
     await rig.rig.stop();
   });
 
-  it('records a click that ends in the route before any call through the summarizer, and fails closed when that record cannot be written', async () => {
+  it('records a click that ends in the route before any call through the summarizer, and answers AUDIT_UNAVAILABLE only when the summarizer has nowhere to record to', async () => {
     const ended: string[] = [];
     const base = stubSummarizer(undefined, [], true, 1);
     const summarizer: CaseSummarizer = { ...base, recordEarlyEnd: async (end) => void ended.push(end.outcome) };
@@ -626,7 +627,7 @@ describe('POST /v1/summary and its coverage line, through the shown reader of th
     expect(ended).toEqual(['tooLarge']);
     expect(rig.events.filter((event) => event.action === 'ai.case-summary.closed')).toHaveLength(0);
     await rig.rig.stop();
-    const failing: CaseSummarizer = { ...base, recordEarlyEnd: async () => Promise.reject(new Error('down')) };
+    const failing: CaseSummarizer = { ...base, recordEarlyEnd: async () => Promise.reject(new AuditUnavailableError()) };
     const refused = await appOf({ summarizer: failing });
     const closed = await post(refused);
     expect(closed.statusCode).toBe(503);

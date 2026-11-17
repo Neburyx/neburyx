@@ -12,7 +12,7 @@ afterAll(() => rmSync(exportWebRoot, { recursive: true, force: true }));
 const EMPTY = { nodes: [], edges: [], omitted: false, unresolved: false, unresolvedCount: 0, maskedFields: 0, uncounted: 0, notRetrieved: { value: 0, quality: 'exact' as const, scope: 'not yet retrieved' } };
 const request: ExportRequest = { kind: 'view', format: 'json', entities: [], edges: [], aggregates: [], derived: [] };
 
-async function service(read: ShownReader['read']) {
+async function service(read: ShownReader['read'], audit: { record(event: { action: string; result: string }): Promise<void> } = { record: () => Promise.resolve() }, refusalAudit: { record(event: { action: string; result: string }): Promise<void> } = { record: () => Promise.resolve() }) {
   const rig = await startExportRig();
   const opened = await rig.open();
   const exports = createExportService({
@@ -23,7 +23,8 @@ async function service(read: ShownReader['read']) {
     access: { require: () => Promise.resolve(), admit: () => undefined, readable: () => Promise.resolve([]) },
     policy: { authorizeSource: () => Promise.resolve({ allowed: true }) },
     policyVersion: () => 'none',
-    audit: { record: () => Promise.resolve() },
+    audit,
+    refusalAudit,
     logger: { warn: () => undefined },
   });
   return { exports, rig, id: opened.id };
@@ -68,6 +69,25 @@ describe('an export of an investigation whose source changed', () => {
     expect(rig.store.exports.rows).toEqual([]);
     expect(await rig.files.list()).toEqual([]);
     expect(rig.executor.calls.length).toBe(readsBefore);
+    await rig.stop();
+  });
+});
+
+describe('the path of the events of an export', () => {
+  it('writes the event of a created export through the direct member and none through the queued one, and the event of a refusal the other way round', async () => {
+    const direct: string[] = [];
+    const queued: string[] = [];
+    const { exports, rig, id } = await service(
+      () => Promise.resolve(EMPTY),
+      { record: (event) => (direct.push(`${event.action}:${event.result}`), Promise.resolve()) },
+      { record: (event) => (queued.push(`${event.action}:${event.result}`), Promise.resolve()) },
+    );
+    await exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request });
+    expect(direct).toEqual(['export.create:success']);
+    expect(queued).toEqual([]);
+    await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request: { ...request, summaryToken: 'not-a-token' } })).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
+    expect(direct).toEqual(['export.create:success']);
+    expect(queued).toEqual(['export.create:refused']);
     await rig.stop();
   });
 });

@@ -3,7 +3,7 @@
 Several checks run with the unit tests (`pnpm test`, and so in CI) and fail the build when code breaks a structural rule.
 The first lives in `tools/workspace-checks/src/architecture/` and reports the file, line and import that breaks the
 rule. The second, [no domain words in code](#no-domain-words-in-code), lives in `tools/workspace-checks/src/domain-words/`
-and reports the file, line and word. The [web client rules](#the-web-client) are a third group, in the same folder as the first. A fourth, [test containers](#test-containers), reports a container started without the retry helper. A fifth, [pattern events](#pattern-events), reports a statement that changes or removes one.
+and reports the file, line and word. The [web client rules](#the-web-client) are a third group, in the same folder as the first. A fourth, [test containers](#test-containers), reports a container started without the retry helper. A fifth, [pattern events](#pattern-events), reports a statement that changes or removes one. A sixth, [audit routing](#audit-routing), reports an audit event or sink that is not accounted for.
 
 ## No way around the gate
 
@@ -196,3 +196,17 @@ error (three attempts in all) and removes the containers of a failed attempt fir
 The `pattern_events` table is append-only: the database refuses an update, a delete and a truncate (the application role has no right to them, and a trigger stops the owner), and no code may try one.
 The check (`tools/workspace-checks/src/architecture/pattern-events.ts`) reads every source file under `services/`, `apps/`, `packages/`, `tools/` and `ee/` and reports the file and line of an `UPDATE`, a `DELETE FROM` or a `TRUNCATE` of that table, written in any case, with or without the `public` schema or quotes.
 Test files and `services/api/src/testing/` are not read, because they prove that the table refuses these statements; the migration is SQL and is not read. A statement assembled from fragments is for review.
+
+## Audit routing
+
+An ordinary audit event is queued and never fails or delays a request; the event of a privileged action is written directly, through the transaction of its change. [Audit events](audit-events.md) lists every event, which path writes it and why.
+The check (`tools/workspace-checks/src/architecture/audit-routing.ts`) reads every source file under `services/`, `ee/` and `packages/`, test files and `services/api/src/testing/` apart, and reports the file and line of:
+
+- an audit sink or a queue built (`createAuditSink`, `createStdoutSink`, `createAuditQueue`, `createEventQueue`) anywhere but the audit module, the start-up module and the extension's delegated factory;
+- any use of the sink the store mounted (`mounted.sink`), called or only named, outside the wiring, the start-up module and the extension's factory, so an alias cannot hide a call and an event goes through the queued or the privileged member of the seams and never to the store's sink directly;
+- an event named in code (an `action:` or `auditAction:` of a literal such as `export.create`, a constant ending in `ACTION`, the pattern event table, the status change function) that has no row in `docs/audit-events.md`, or that is written in a file the row does not name;
+- a row for an event that is no longer written in the file it names; a privileged row whose writer records through a call on the audit handle that does not pass `{ transaction }` as its options (a call on `refusalAudit` and a call that records `result: 'failed'` are not the privileged success), or, for a writer with no such call, with no file beside it that passes one; and a row about refusals (the table has a result column, so a refused export is queued and a made one is privileged) whose writer has no `refusalAudit.record(` call.
+
+Which handle a call site holds is not read from the text: the wiring matrix, the export path test and the Postgres tests prove it.
+
+An event assembled from fragments is for review.

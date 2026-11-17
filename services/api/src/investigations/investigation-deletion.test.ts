@@ -45,10 +45,10 @@ interface Rig {
   readonly audited: AuditEvent[];
 }
 
-async function started(store: MemoryAppStore, audit?: AuditSink, appMapping = mapping): Promise<Rig> {
+async function started(store: MemoryAppStore, audit?: AuditSink, appMapping = mapping, privilegedAudit?: AuditSink): Promise<Rig> {
   const audited: AuditEvent[] = [];
   const sink: AuditSink = audit ?? { record: (event) => { audited.push(event); return Promise.resolve(); } };
-  const seams = { ...communitySeams(), audit: sink };
+  const seams = { ...communitySeams(), audit: sink, ...(privilegedAudit === undefined ? {} : { privilegedAudit }) };
   const app = await buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping: appMapping, gate: testSourceGate(appMapping, { referenceKeys: TEST_REFERENCE_KEYS }).gate, referenceKeys: TEST_REFERENCE_KEYS, seams });
   return { app, store, audited };
 }
@@ -281,5 +281,23 @@ describe('GET /v1/investigations?deleted=true', () => {
     expect((await list(ordinary, '')).statusCode).toBe(200);
     await rig.app.close();
     await ordinary.app.close();
+  });
+});
+
+describe('the audit member a deletion uses', () => {
+  it('writes its event to the privileged member, awaited, and not to the queued one', async () => {
+    const queued: string[] = [];
+    const direct: string[] = [];
+    const rig = await started(seeded(), { record: (event) => (queued.push(event.action), Promise.resolve()) }, mapping, { record: (event) => (direct.push(event.action), Promise.resolve()) });
+    expect((await remove(rig)).statusCode).toBe(200);
+    expect(direct).toEqual(['investigation.delete']);
+    expect(queued).toEqual([]);
+    await rig.app.close();
+  });
+
+  it('fails the deletion when the privileged member fails, as before', async () => {
+    const rig = await started(seeded(), { record: () => Promise.resolve() }, mapping, { record: () => Promise.reject(new Error('down')) });
+    expect((await remove(rig)).statusCode).toBe(500);
+    await rig.app.close();
   });
 });

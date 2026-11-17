@@ -1,10 +1,11 @@
 import { rmSync } from 'node:fs';
 import { coverageResponseSchema, type CoverageEntity } from '@neburyx/contracts';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
+import { queuedAudit } from '../testing/queued-audit.js';
 import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent, Seams } from '../seams/seams.js';
 import { createUsabilityRecord, type VerdictCheck } from '../source-test/usability.js';
@@ -58,10 +59,11 @@ async function started(options: Options = {}) {
   const logged: string[] = [];
   const defaults = communitySeams();
   let admissions = 0;
+  const queued = queuedAudit({ record: (event) => (events.push(event), options.auditFails === true && event.action === AUDIT_ACTION && event.traceId !== undefined && events.filter((seen) => seen.action === AUDIT_ACTION).length > 1 ? Promise.reject(new Error('down')) : Promise.resolve()) });
   const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit'> = {
     policy: { authorizeSource: (request) => (options.deny?.() === true ? Promise.resolve({ allowed: false, reason: 'no' }) : defaults.policy.authorizeSource(request)) },
     coordinator: { acquireRead: (request) => ((admissions += 1), defaults.coordinator.acquireRead(request)) },
-    audit: { record: (event) => (events.push(event), options.auditFails === true && event.action === AUDIT_ACTION && event.traceId !== undefined && events.filter((seen) => seen.action === AUDIT_ACTION).length > 1 ? Promise.reject(new Error('down')) : Promise.resolve()) },
+    audit: queued.audit,
   };
   const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => {
     const pair = counts[String(call.parameters['stableId'])] ?? [0, 0];
@@ -76,7 +78,7 @@ async function started(options: Options = {}) {
   const preview = (stableId: string, mask = false) => app.inject({ method: 'POST', url: '/v1/graph/preview-expansion', payload: { sourceId: 'alpha', ref: { entityType: 'person', stableId }, mask } });
   const coverage = (payload: object) => app.inject({ method: 'POST', url: '/v1/graph/coverage', payload });
   const coverageEvents = () => events.filter((event) => event.action === AUDIT_ACTION);
-  return { app, record, executor, events, logged, admissions: () => admissions, preview, coverage, coverageEvents };
+  return { app, record, executor, events, logged, admissions: () => admissions, preview, coverage, coverageEvents, queued };
 }
 
 const unknown = { notRetrieved: { quality: 'unknown', scope: 'not yet retrieved' }, uncounted: 1 };
@@ -152,13 +154,12 @@ describe('POST /v1/graph/coverage', () => {
   });
 
   it('still answers, and logs a warning with no event data, when the audit write fails', async () => {
-    const { app, logged, preview, coverage } = await started({ auditFails: true });
+    const { app, logged, preview, coverage, queued } = await started({ auditFails: true });
     await preview('P-1');
     const response = await coverage({ sourceId: 'alpha', entities: [entity('P-1')] });
     expect(response.statusCode).toBe(200);
-    const warning = logged.find((line) => line.includes('coverage.audit_failed'));
-    expect(warning).toBeDefined();
-    expect(warning).not.toMatch(/P-1|actorId/);
+    await vi.waitFor(() => expect(queued.counts().failed).toBe(1));
+    expect(logged.join('')).not.toMatch(/P-1|actorId/);
     await app.close();
   });
 
