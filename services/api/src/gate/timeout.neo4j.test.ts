@@ -7,13 +7,15 @@ import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js'
 import { mappingOf, sourceWith } from '../testing/gate-fixtures.js';
 import { gateRequest, testCatalog, testTemplate } from '../testing/gate.js';
 import { envFor, NEO4J_ENV_PASSWORD, NEO4J_ENV_USER, pollUntil, runAll, seedItems, SLOW_READ, startNeo4j, transactionIsListed, type RunningNeo4j } from '../testing/neo4j-server.js';
+import { ceilingOf, serverLag, timeWarmRead, timeOvershoot } from '../testing/read-latency.js';
 import { assembleGate } from './assemble.js';
 import type { Gate } from './types.js';
 
 const BUDGET_MS = 1000;
-const CEILING_MS = 2000;
 const POLL_MS = 25;
+const figures = { read: 0, lagMs: 0, via: '' };
 
+let ceilingMs = 0;
 let server: RunningNeo4j;
 let executor: Neo4jExecutor;
 let gate: Gate;
@@ -53,6 +55,15 @@ beforeAll(async () => {
     },
   };
   ({ gate } = assembleGate({ mapping, seams: { policy: seams.policy, coordinator, audit: seams.audit }, executor, logger: { warn: () => undefined }, catalog }));
+  figures.read = await timeWarmRead(() => gate.run(gateRequest({ sourceId: 'alpha', templateId: 'quick-read', params: {}, limit: 1 })));
+  const lag = await serverLag(server.admin, () => timeOvershoot(BUDGET_MS, () => gate.run(gateRequest({ sourceId: 'alpha', templateId: 'slow-read', params: {}, limit: 1 }))));
+  figures.lagMs = lag.lagMs;
+  figures.via = lag.via;
+  ceilingMs = ceilingOf(BUDGET_MS, lag.lagMs, figures.read);
+  // the timed read took a lease of its own; the case counts the leases of the forced read
+  expect(await pollUntil(() => Promise.resolve(leases.released === leases.taken), 5000, POLL_MS)).toBe(true);
+  leases.taken = 0;
+  leases.released = 0;
 });
 
 afterAll(async () => {
@@ -70,14 +81,15 @@ describe('a read forced past a 1 s budget, through the gate and the real adapter
     expect(await pollUntil(() => transactionIsListed(server, traceId), BUDGET_MS - 200, POLL_MS)).toBe(true);
     const error = await answer;
     const elapsed = Date.now() - started;
+    await annotate(`observed: answered ${elapsed} ms after the call for a ${BUDGET_MS} ms budget (ceiling ${ceilingMs} ms: ordinary read ${figures.read} ms, server lag ${figures.lagMs} ms from the ${figures.via})`);
+    expect(elapsed).toBeGreaterThanOrEqual(BUDGET_MS);
+    expect(elapsed).toBeLessThan(ceilingMs);
     expect(error).toBeInstanceOf(AppError);
     expect(error).toMatchObject({ code: 'QUERY_TIMEOUT', details: { timeoutMs: BUDGET_MS } });
-    expect(elapsed).toBeGreaterThanOrEqual(BUDGET_MS);
-    expect(elapsed).toBeLessThan(CEILING_MS);
     const answered = Date.now();
     expect(await pollUntil(async () => !(await transactionIsListed(server, traceId)), BUDGET_MS, POLL_MS)).toBe(true);
     const gone = Date.now() - answered;
-    await annotate(`observed: answered ${elapsed} ms after the call for a ${BUDGET_MS} ms budget; the transaction was first seen gone ${gone} ms after the answer (polled every ${POLL_MS} ms)`);
+    await annotate(`observed: the transaction was first seen gone ${gone} ms after the answer (polled every ${POLL_MS} ms)`);
     expect(leases.taken).toBe(1);
     await expect.poll(() => leases.released).toBe(1);
   });

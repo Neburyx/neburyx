@@ -1,16 +1,36 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { EXPAND_NEIGHBORS_ID } from '../../../services/api/src/gate/templates/expand-neighbors.js';
 import { pollUntil, transactionIsListed } from '../../../services/api/src/testing/neo4j-server.js';
+import { ceilingOf, serverLag, timeWarmRead, timeOvershoot } from '../../../services/api/src/testing/read-latency.js';
 import { leftoversOf, startNeo4jRig, type Neo4jRig } from './neo4j-rig.js';
 import { personalise } from './rig.js';
 
 const BUDGET_MS = 1000;
 let rig: Neo4jRig;
+let ceilingMs = 0;
+let ceilingNote = '';
+const expandOnce = () => rig.client.expandNeighbors({ sourceId: rig.hub.sourceId, ref: { entityType: rig.hub.entityType, stableId: rig.hub.stableId }, neighborTypes: ['leaf'], direction: 'both' });
 
 /** A rig of its own for each case; the outage case keeps the product's default budget, since a budget chosen to force a timeout is not the one an outage case should be read under. */
 function ownRig(timeoutMs: number | undefined, size: number): void {
   beforeAll(async () => {
     rig = await startNeo4jRig({ size, timeoutMs });
+    // an ordinary read and the lag of the server set the ceiling of a forced timeout; the outage case forces none and counts its own requests
+    if (timeoutMs !== undefined) {
+      const read = await timeWarmRead(expandOnce);
+      const lag = await serverLag(rig.server.admin, async () => {
+        rig.slow(true);
+        try {
+          return await timeOvershoot(timeoutMs, expandOnce);
+        } finally {
+          rig.slow(false);
+        }
+      });
+      // the timed reads' slots are released before the case counts its own
+      expect(await pollUntil(() => Promise.resolve(rig.slots.inspect().sources.size === 0), 5000, 25)).toBe(true);
+      ceilingMs = ceilingOf(timeoutMs, lag.lagMs, read);
+      ceilingNote = `ceiling ${ceilingMs} ms: ordinary read ${read} ms, server lag ${lag.lagMs} ms from the ${lag.via}`;
+    }
   }, 600_000);
 
   afterAll(async () => {
@@ -55,8 +75,13 @@ describe('a read forced past a 1,000 ms budget, through the API and the real ada
     rig.slow(true);
     personalise(rig);
     const before = rig.snapshot();
+    const started = Date.now();
     const asked = rig.expand.expand(rig.hub, ['leaf']);
     expect(await asked).toBe('failed');
+    const elapsed = Date.now() - started;
+    await annotate(`the forced read was answered in ${elapsed} ms (${ceilingNote})`);
+    expect(elapsed).toBeGreaterThanOrEqual(BUDGET_MS);
+    expect(elapsed).toBeLessThan(ceilingMs);
     expect(last()).toMatchObject({ status: 504, body: { error: { code: 'QUERY_TIMEOUT', retryable: true, details: { timeoutMs: BUDGET_MS } } } });
     expect(rig.snapshot()).toBe(before);
     expect(await pollUntil(async () => !(await transactionIsListed(rig.server, traceOfRead())), BUDGET_MS, 25)).toBe(true);
