@@ -34,11 +34,11 @@ describe('the Help item', () => {
 });
 
 describe('the Help menu', () => {
-  it('lists the five items in the order of the design, with the divider before the Enterprise item and the shortcut key on the first', async () => {
+  it('lists the six items in the order of the design, with the divider before the Enterprise item and the shortcut key on the first', async () => {
     renderApp('/', ready());
     await userEvent.click(helpButton());
     const menu = screen.getByRole('menu', { name: 'Help' });
-    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Keyboard shortcuts⌘/', 'Documentation↗', 'Quickstart: the demo case↗', 'Talk to us about Enterprise↗', 'Report a problem↗']);
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Take the tour', 'Keyboard shortcuts⌘/', 'Documentation↗', 'Quickstart: the demo case↗', 'Talk to us about Enterprise↗', 'Report a problem↗']);
     expect(helpButton().getAttribute('aria-expanded')).toBe('true');
     const separators = within(menu).getAllByRole('separator');
     expect(separators).toHaveLength(1);
@@ -114,8 +114,8 @@ describe('the Help menu', () => {
     expect({ target: link.getAttribute('target'), rel: link.getAttribute('rel') }).toEqual(expected);
   });
 
-  it('shows what its list holds: a sixth item gives six items', async () => {
-    const sixth: HelpItem = { kind: 'link', id: 'extra', label: 'Take the tour', href: 'https://example.com/tour' };
+  it('shows what its list holds: a seventh item gives seven items', async () => {
+    const sixth: HelpItem = { kind: 'link', id: 'extra', label: 'Seventh', href: 'https://example.com/tour' };
     render(
       <ClientStateProvider state={createClientState()}>
         <KeyBindingsProvider registry={builtInKeyBindings()}>
@@ -124,7 +124,7 @@ describe('the Help menu', () => {
       </ClientStateProvider>,
     );
     await userEvent.click(helpButton());
-    expect(screen.getAllByRole('menuitem')).toHaveLength(6);
+    expect(screen.getAllByRole('menuitem')).toHaveLength(7);
   });
 });
 
@@ -152,21 +152,24 @@ describe('the Help menu by keyboard', () => {
 
   it('moves with the arrows, wrapping at the ends, and with Home and End', async () => {
     await opened('{Enter}');
+    expect(focusedName()).toBe('Take the tour');
+    await userEvent.keyboard('{ArrowDown}');
+    expect(focusedName()).toBe('Keyboard shortcuts⌘/');
     await userEvent.keyboard('{ArrowDown}');
     expect(focusedName()).toBe('Documentation↗');
     await userEvent.keyboard('{End}');
     expect(focusedName()).toBe('Report a problem↗');
     await userEvent.keyboard('{ArrowDown}');
-    expect(focusedName()).toBe('Keyboard shortcuts⌘/');
+    expect(focusedName()).toBe('Take the tour');
     await userEvent.keyboard('{ArrowUp}');
     expect(focusedName()).toBe('Report a problem↗');
     await userEvent.keyboard('{Home}');
-    expect(focusedName()).toBe('Keyboard shortcuts⌘/');
+    expect(focusedName()).toBe('Take the tour');
   });
 
   it('follows a link with Enter and closes', async () => {
     await opened('{Enter}');
-    await userEvent.keyboard('{ArrowDown}');
+    await userEvent.keyboard('{ArrowDown}{ArrowDown}');
     const link = screen.getByRole('menuitem', { name: /^Documentation/ });
     const clicked: string[] = [];
     link.addEventListener('click', (event) => {

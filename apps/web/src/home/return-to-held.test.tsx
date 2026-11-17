@@ -20,6 +20,8 @@ function recording(client: ApiClient) {
   const calls: string[] = [];
   const wrapped: ApiClient = {
     getMe: (signal) => (calls.push('getMe'), client.getMe(signal)),
+    getPreferences: (signal) => client.getPreferences(signal),
+    putPreferences: (body, signal) => client.putPreferences(body, signal),
     getSources: (signal) => (calls.push('getSources'), client.getSources(signal)),
     getProfile: (sourceId, signal) => (calls.push(`getProfile ${sourceId}`), client.getProfile(sourceId, signal)),
     listTemplates: (sourceId, signal) => (calls.push('listTemplates'), client.listTemplates(sourceId, signal)),

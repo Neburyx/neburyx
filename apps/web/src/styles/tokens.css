@@ -190,4 +190,12 @@
   --view-note-height: 72px;
   --views-panel-width: 390px;
   --views-panel-top: 56px;
+
+  --layer-tour: 30;
+  --color-tour-dim: rgba(20, 23, 33, 0.5);
+  --tour-popover-width: 340px;
+  --tour-spot-border: 2px;
+  --tour-spot-radius: 12px;
+  --tour-dot-size: 6px;
+  --tour-waiting-bottom: 24px;
 }

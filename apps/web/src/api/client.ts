@@ -23,6 +23,9 @@ import {
   ownedViewListResponseSchema,
   investigationResponseSchema,
   meResponseSchema,
+  preferencesResponseSchema,
+  type PreferencesResponse,
+  type PreferencesWriteRequest,
   nodeSchema,
   openInvestigationResponseSchema,
   pathSegmentOf,
@@ -156,6 +159,8 @@ export interface InvestigationPageQuery {
 
 export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
+  getPreferences(signal?: AbortSignal): Promise<ApiResult<PreferencesResponse>>;
+  putPreferences(body: PreferencesWriteRequest, signal?: AbortSignal): Promise<ApiResult<PreferencesResponse>>;
   getSources(signal?: AbortSignal): Promise<ApiResult<SourcesResponse>>;
   getProfile(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceProfile>>;
   /** The built-in templates and the presets of a source, with each template's parameter schema; reads no source. The answer names the source asked for, or it is a `SCHEMA_MISMATCH`. */
@@ -349,6 +354,8 @@ async function download(fetcher: Fetcher, path: string, signal: AbortSignal | un
 export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input, init)): ApiClient {
   return {
     getMe: (signal) => request(fetcher, '/v1/me', meResponseSchema, signal),
+    getPreferences: (signal) => request(fetcher, '/v1/me/preferences', preferencesResponseSchema, signal),
+    putPreferences: (body, signal) => request(fetcher, '/v1/me/preferences', preferencesResponseSchema, signal, 'PUT', body),
     getSources: (signal) => request(fetcher, '/v1/sources', sourcesResponseSchema, signal),
     getProfile: (sourceId, signal) => request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/profile`, sourceProfileSchema, signal),
     listTemplates: async (sourceId, signal) => {

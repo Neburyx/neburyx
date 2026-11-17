@@ -70,6 +70,7 @@ import './styles/views.css';
 import './styles/investigations.css';
 import './styles/ask.css';
 import './styles/summary.css';
+import './styles/tour.css';
 
 const root = document.getElementById('root');
 if (root === null) throw new Error('the page has no #root element');

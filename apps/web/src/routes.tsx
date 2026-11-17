@@ -43,6 +43,7 @@ import { DeepLinkPage } from './investigations/deep-link-page.js';
 import { ExploreInvestigation } from './investigations/explore-investigation.js';
 import { BareExplore } from './workspace/bare-explore.js';
 import { ShortcutSheet } from './workspace/shortcut-sheet.js';
+import { TourHost } from './tour/tour-host.js';
 
 function NotFound() {
   return (
@@ -139,6 +140,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
                   <ExcerptsProvider excerpts={excerpts}>
                     <SearchShortcut />
                     <ShortcutSheet />
+                    <TourHost />
                     <LeaveGuard />
                     <RecentProvider recent={recent}>
                       <Outlet />

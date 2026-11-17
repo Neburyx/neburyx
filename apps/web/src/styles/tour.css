@@ -1,0 +1,97 @@
+.tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--layer-tour);
+  pointer-events: none;
+}
+
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  background: var(--color-tour-dim);
+}
+
+.tour-spot {
+  position: absolute;
+  border: var(--tour-spot-border) solid var(--color-accent);
+  border-radius: var(--tour-spot-radius);
+  box-shadow: 0 0 0 100vmax var(--color-tour-dim);
+}
+
+.tour-popover {
+  position: absolute;
+  box-sizing: border-box;
+  width: var(--tour-popover-width);
+  max-width: calc(100% - var(--space-16));
+  padding: var(--space-16);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-flyout);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-floating);
+  pointer-events: auto;
+}
+
+.tour-step {
+  margin: 0 0 var(--space-4);
+  color: var(--color-accent);
+  font-size: var(--font-size-caption);
+  font-weight: 600;
+}
+
+.tour-title {
+  margin: 0 0 var(--space-8);
+  font-size: var(--font-size-title);
+  color: var(--color-text-strong);
+}
+
+.tour-body {
+  margin: 0 0 var(--space-16);
+  color: var(--color-text-muted);
+}
+
+.tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.tour-dots {
+  display: flex;
+  gap: var(--space-6);
+}
+
+.tour-dot {
+  width: var(--tour-dot-size);
+  height: var(--tour-dot-size);
+  border-radius: 50%;
+  background: var(--color-border);
+}
+
+.tour-dot-on {
+  background: var(--color-accent);
+}
+
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.tour-waiting {
+  position: fixed;
+  left: 50%;
+  bottom: var(--tour-waiting-bottom);
+  z-index: var(--layer-tour);
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+  padding: var(--space-10) var(--space-16);
+  transform: translateX(-50%);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-flyout);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-floating);
+}
