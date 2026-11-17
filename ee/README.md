@@ -11,15 +11,15 @@ Modules now:
 
 | Folder | What it is |
 |---|---|
-| `ask/` | `@neburyx/ee-ask`: the enterprise extension (`createEnterpriseExtension`); the AI route group, with `GET /v1/ai/status`, `POST /v1/ask` (a question) and `POST /v1/ask/continue` (one more bounded page of a result stopped as heavy); the provider interface (`ModelProvider`, whose request is a prompt id and version, the fixed instructions and the values) and the audited model call; the loader of the Ask folder (`<folder>/<source id>/classification.md` and `intents.json`, read and checked at start-up); the classifier, which sends the source's `classification.md` and the question to the model and reads its reply strictly; the server-built cited answer; and `configure`, which checks the AI settings of the environment at start-up (the mapping file holds only `ai.preview`) |
-| `migrations/` | SQL migrations of the `ee/` tables, applied by `neburyx migrate` only when the preview is switched on: `0001-audit-events.sql`, `0002-ask-runs.sql`, `0003-ask-plans.sql`, `0004-drop-ask-plans.sql` and `0005-ask-runs-intent.sql` (see its [README](migrations/README.md)) |
+| `ask/` | `@neburyx/ee-ask`: the enterprise extension (`createEnterpriseExtension`); the AI route group, with `POST /v1/ask` (a question) and `POST /v1/ask/continue` (one more bounded page of a result stopped as heavy); the provider interface (`ModelProvider`, whose request is a prompt id and version, the fixed instructions and the values) and the audited model call; the loader of the Ask folder (`<folder>/<source id>/classification.md` and `intents.json`, read and checked at start-up); the classifier, which sends the source's `classification.md` and the question to the model and reads its reply strictly; the server-built cited answer; and `configure`, which checks the AI settings of the environment at start-up (the mapping file holds only `ai.preview`) |
+| `migrations/` | SQL migrations of the `ee/` tables, applied by `neburyx migrate` only where the AI extension is loaded (a provider key is set, or the older preview switch is on): `0001-audit-events.sql`, `0002-ask-runs.sql`, `0003-ask-plans.sql`, `0004-drop-ask-plans.sql` and `0005-ask-runs-intent.sql` (see its [README](migrations/README.md)) |
 
 How an extension registers: Community code defines a registry and a contract (`ProfileExtension`, in `packages/contracts`) and never imports `ee/`. The image's entry script registers a loader for the extension; Community loads it only when the switch is on, mounts its route groups with the permission each route declares, and applies its migrations folder.
 
 Rules:
 
 - **Community code never imports from `ee/`.** `ee/` plugs in through the interfaces that Community code defines.
-- **One image.** `ee/` is built into the same image as the rest. Its code path is off unless both the start-up variable `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set; a start with only one of them is refused with a clear message.
+- **One image.** `ee/` is built into the same image as the rest. Its AI code path runs where an AI provider key is set and the feature is on (`NEBURYX_ASK_ENABLED`, `NEBURYX_SUMMARY_ENABLED` and `NEBURYX_ASSISTANT_ENABLED` turn a feature off); the older pair, the start-up variable `NEBURYX_PROFILE=enterprise` with `ai.preview: true` in `neburyx.yaml`, still decides the edition and the enterprise audit, and a start with only one of them is refused with a clear message.
 - **The switch is a safety rail, not a lock.** The code is open, so whoever runs a deployment can set both parts. The switch keeps AI features from reaching a source by accident.
 - No customer-specific code, no real data, no credentials.
 

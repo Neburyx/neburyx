@@ -73,7 +73,7 @@ describe('POST /v1/summary', () => {
     const rig = await appOf({ summarizer: stubSummarizer(undefined, calls), previewOn: false });
     const answer = await post(rig);
     expect(answer.statusCode).toBe(403);
-    expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', details: { reason: 'ai-preview-off' } });
+    expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', details: { reason: 'ai-off' } });
     expect(calls).toEqual([]);
     expect(rig.events.filter((event) => event.action === 'ai.route_refused')).toHaveLength(1);
     await rig.rig.stop();

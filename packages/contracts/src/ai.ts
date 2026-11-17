@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-export const aiStatusResponseSchema = z.strictObject({ preview: z.literal(true) });
+const featureAvailabilitySchema = z.strictObject({ available: z.boolean() });
+
+/** Which AI features can be used now: a provider is configured, the feature is on and what it needs is in place. */
+export const aiStatusResponseSchema = z.strictObject({ ask: featureAvailabilitySchema, summary: featureAvailabilitySchema, assistant: featureAvailabilitySchema });
 
 export type AiStatusResponse = z.infer<typeof aiStatusResponseSchema>;
 

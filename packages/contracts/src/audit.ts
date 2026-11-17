@@ -124,9 +124,12 @@ export const notesAuditDetailSchema = z.strictObject({ runId: z.uuid().optional(
 
 export type NotesAuditDetail = z.infer<typeof notesAuditDetailSchema>;
 
+/** Why a call to an AI route was refused, as the event `ai.route_refused` records it: the feature is switched off, or the routes are mounted while no AI provider is configured. */
+const AI_ROUTE_REFUSAL_REASONS = ['ai-off', 'no-provider'] as const;
+
 /** The per-action fields of an audit event, one shape at a time: every shape holds counts and codes only. */
 export const auditDetailSchema = z.union([
-  z.strictObject({ reason: z.enum(['cancelled', 'timeout']) }),
+  z.strictObject({ reason: z.enum(['cancelled', 'timeout', ...AI_ROUTE_REFUSAL_REASONS]) }),
   z.strictObject({ target: z.enum(['entity', 'evidence']), type: z.string() }),
   z.strictObject({ counts: z.strictObject({ nodes: wholeCount, edges: wholeCount, missing: wholeCount }) }),
   z.strictObject({
@@ -148,7 +151,7 @@ export const auditDetailSchema = z.union([
 ]);
 
 export type AuditDetail =
-  | { readonly reason: 'cancelled' | 'timeout'; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
+  | { readonly reason: 'cancelled' | 'timeout' | (typeof AI_ROUTE_REFUSAL_REASONS)[number]; readonly target?: never; readonly type?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
   | { readonly target: 'entity' | 'evidence'; readonly type: string; readonly reason?: never; readonly counts?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** How many items a read by references returned and could not find: counts only, never a value or an ID. */
   | { readonly counts: Readonly<Record<'nodes' | 'edges' | 'missing', number>>; readonly reason?: never; readonly target?: never; readonly type?: never; readonly export?: never; readonly ai?: never; readonly fileQuery?: never; readonly askRun?: never }

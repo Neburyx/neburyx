@@ -17,12 +17,12 @@ button.header-ai {
   cursor: pointer;
 }
 
-button.header-ai-unlocked {
+button.header-ai-available {
   color: var(--color-accent);
 }
 
-button.header-ai-locked {
-  color: var(--color-text);
+button.header-ai-unavailable {
+  color: var(--color-text-muted);
 }
 
 button.header-ai:hover {

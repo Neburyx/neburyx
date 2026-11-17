@@ -178,8 +178,8 @@ describe('the demo stack', () => {
 
   it('shows both demo sources as connected and synthetic', sourcesAreConnected);
 
-  it('answers the AI status route with 404, since the preview is off unless the override is added and the AI paths then do not exist', async () => {
-    expect((await fetch(`${stack.url}/v1/ai/status`)).status).toBe(404);
+  it('answers the AI status route with no feature available, since no provider key is given unless the override is added', async () => {
+    expect(await (await fetch(`${stack.url}/v1/ai/status`)).json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
   });
 
   it('finishes the config container and both loaders with exit code 0 before the api container starts', async () => {

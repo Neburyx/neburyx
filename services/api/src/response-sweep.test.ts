@@ -109,6 +109,7 @@ const NOT_SWEPT_HERE: Readonly<Record<string, string>> = {
   'GET /v1/me': 'answers the person, not an element of the source',
   'GET /v1/me/preferences': 'answers the person\'s display settings, not an element of the source',
   'PUT /v1/me/preferences': 'stores the person\'s display settings, not an element of the source',
+  'GET /v1/ai/status': 'answers which AI features are available, not an element of the source',
   'GET /v1/sources': 'answers the registry of sources, not an element of one',
   'GET /v1/sources/:id/profile': 'answers the mapping profile, not an element',
   'POST /v1/sources/:id/test': 'answers the report of the source test, not an element',

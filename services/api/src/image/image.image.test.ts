@@ -211,10 +211,10 @@ describe('the enterprise code in the one image', () => {
     expect(JSON.parse(await dockerOk(['inspect', '--format', '{{json .Config.Entrypoint}}', TAG]))).toEqual(['node', 'entrypoint.mjs']);
   });
 
-  it('starts as Community with no profile: no AI route, community edition, and the extension is never loaded', async () => {
+  it('starts as Community with no profile and no provider key: no feature available, community edition, and the extension is never loaded', async () => {
     const database = await migratedDatabase();
     const api = await startApi(database);
-    expect((await fetch(`${api.url}/v1/ai/status`)).status).toBe(404);
+    expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
     expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'community' });
     const logs = await docker(['logs', api.name]);
     expect(logs.stdout + logs.stderr).not.toContain('profile.extension_loaded');
@@ -227,7 +227,7 @@ describe('the enterprise code in the one image', () => {
     expect(migrated.code, migrated.stderr).toBe(0);
     expect(await rows(database.ownerUrl, `SELECT to_regclass('public.kysely_migration_ee') IS NOT NULL AS found`)).toEqual([{ found: true }]);
     const api = await startWith(database, [...withMapping(file, 'enterprise'), ...ASK_ENV]);
-    expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ preview: true });
+    expect(await (await fetch(`${api.url}/v1/ai/status`)).json()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: false } });
     expect(await (await fetch(`${api.url}/v1/me`)).json()).toMatchObject({ edition: 'enterprise' });
     const logs = await docker(['logs', api.name]);
     expect(logs.stdout + logs.stderr).toContain('profile.extension_loaded');

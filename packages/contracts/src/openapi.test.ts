@@ -39,12 +39,15 @@ describe('buildOpenApiDocument', () => {
     expect(text).toContain('Export again to get a file that matches your current access.');
   });
 
-  it('lists the reason of a call to an AI route while the preview is off, and declares it on the status route', () => {
+  it('lists the reason of a call to an AI route of a feature that is off, and answers the status route with its 200 only', () => {
     const document = buildOpenApiDocument();
     const text = JSON.stringify(document.components.schemas.ErrorResponse);
-    expect(text).toContain('"ai-preview-off"');
-    expect(text).toContain('The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock.');
-    expect(document.paths['/v1/ai/status']).toMatchObject({ get: { responses: { '200': expect.anything(), '403': expect.anything(), '404': expect.anything() } } });
+    expect(text).toContain('"ai-off"');
+    expect(text).toContain('This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.');
+    const status = JSON.stringify(document.paths['/v1/ai/status']);
+    expect(status).toContain('"200"');
+    expect(status).not.toContain('"403"');
+    expect(status).not.toContain('"404"');
   });
 
   it('describes the two routes of a question and their schemas, and none of the old plan, run, edit and cancel routes', () => {

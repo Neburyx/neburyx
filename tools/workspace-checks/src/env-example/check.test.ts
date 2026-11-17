@@ -11,10 +11,10 @@ function root(example: string, files: Record<string, string>): string {
 }
 
 describe('the API variables against .env.example in this repository', () => {
-  it('agree, and are the fifteen the API reads', () => {
+  it('agree, and are the twenty the API reads', () => {
     expect(checkEnvExample(repoRoot)).toEqual([]);
     const names = [...new Set(readsOf(repoRoot).flatMap((entry) => (entry.name === undefined ? [] : [entry.name])))].sort();
-    expect(names).toEqual(['DATABASE_APP_ROLE', 'DATABASE_MIGRATION_URL', 'DATABASE_URL', 'NEBURYX_AI_MAX_SLOT_SHARE', 'NEBURYX_CONFIG', 'NEBURYX_CONTAINER', 'NEBURYX_CURSOR_KEY', 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS', 'NEBURYX_DEV', 'NEBURYX_EXPORT_DIR', 'NEBURYX_HOST', 'NEBURYX_PORT', 'NEBURYX_PROFILE', 'NEBURYX_READINESS_LIMIT_MS', 'NEBURYX_WEB_ROOT']);
+    expect(names).toEqual(['DATABASE_APP_ROLE', 'DATABASE_MIGRATION_URL', 'DATABASE_URL', 'NEBURYX_AI_MAX_SLOT_SHARE', 'NEBURYX_ASK_API_KEY', 'NEBURYX_ASK_API_KEY_FILE', 'NEBURYX_ASK_ENABLED', 'NEBURYX_ASSISTANT_ENABLED', 'NEBURYX_CONFIG', 'NEBURYX_CONTAINER', 'NEBURYX_CURSOR_KEY', 'NEBURYX_DATABASE_CONNECT_TIMEOUT_MS', 'NEBURYX_DEV', 'NEBURYX_EXPORT_DIR', 'NEBURYX_HOST', 'NEBURYX_PORT', 'NEBURYX_PROFILE', 'NEBURYX_READINESS_LIMIT_MS', 'NEBURYX_SUMMARY_ENABLED', 'NEBURYX_WEB_ROOT']);
   });
 
   it('keep the secrets without a value', () => {

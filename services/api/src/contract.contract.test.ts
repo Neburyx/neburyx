@@ -37,6 +37,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
       '/readyz': committed.paths['/readyz'],
       '/v1/me': committed.paths['/v1/me'],
       '/v1/me/preferences': committed.paths['/v1/me/preferences'],
+      '/v1/ai/status': committed.paths['/v1/ai/status'],
       '/v1/sources': committed.paths['/v1/sources'],
       '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'],
       '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'],
@@ -62,6 +63,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
         MeResponse: committed.components.schemas['MeResponse'],
         PreferencesResponse: committed.components.schemas['PreferencesResponse'],
         PreferencesWriteRequest: committed.components.schemas['PreferencesWriteRequest'],
+        AiStatusResponse: committed.components.schemas['AiStatusResponse'],
         ReadyResponse: committed.components.schemas['ReadyResponse'],
         SourcesResponse: committed.components.schemas['SourcesResponse'],
         SourceProfile: committed.components.schemas['SourceProfile'],
@@ -368,7 +370,7 @@ describe('a document the check cannot trust', () => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
     const empty = parseDocument({
-      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/me/preferences': committed.paths['/v1/me/preferences'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'], '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'] },
+      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/ai/status': committed.paths['/v1/ai/status'], '/v1/me/preferences': committed.paths['/v1/me/preferences'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'], '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'] },
       components: {
         schemas: {
           ErrorResponse: committed.components.schemas['ErrorResponse'],
@@ -376,6 +378,7 @@ describe('a document the check cannot trust', () => {
           MeResponse: committed.components.schemas['MeResponse'],
           PreferencesResponse: committed.components.schemas['PreferencesResponse'],
           PreferencesWriteRequest: committed.components.schemas['PreferencesWriteRequest'],
+          AiStatusResponse: committed.components.schemas['AiStatusResponse'],
           ReadyResponse: committed.components.schemas['ReadyResponse'],
           SourcesResponse: committed.components.schemas['SourcesResponse'],
           SourceProfile: committed.components.schemas['SourceProfile'],

@@ -1,5 +1,5 @@
 import { z, type ZodType } from 'zod';
-import type { AiSettings } from './ai.js';
+import type { AiSettings, AiStatusResponse } from './ai.js';
 import type { AskFolder } from './ask-folder.js';
 import type { ReadRefsRequest } from './read-refs.js';
 import type { AiNotesCapability } from './ai-notes.js';
@@ -102,6 +102,8 @@ export interface ExtensionRoute {
   /** Required for a `POST` route and refused on a `GET` route: the strict schema of the body. */
   readonly requestSchema?: ZodType;
   readonly responseSchema: ZodType;
+  /** False when the feature of the route is switched off: the application then reads nothing of the request, as with the switch off, and the handler gives the refusal. Absent, the route is live. */
+  readonly active?: () => boolean;
   /** A route a retry could repeat: the application requires an `Idempotency-Key`, runs the handler once per person and key, and replays its answer; `sourceOf` names the source the request is about. */
   readonly idempotent?: {
     readonly sourceOf: (body: unknown) => string;
@@ -127,6 +129,8 @@ export interface ConfigureSourceBudgets {
 /** What the application tells the extension when it configures it: the ids of the sources of the mapping file and, for each, the budgets its files are checked against. */
 export interface ConfigureContext {
   readonly sourceIds: readonly string[];
+  /** Which AI features are on, as the application decided from the environment; absent, all are on. */
+  readonly features?: { readonly ask: boolean; readonly summary: boolean; readonly assistant: boolean };
   readonly budgets?: Readonly<Record<string, ConfigureSourceBudgets>>;
 }
 
@@ -159,6 +163,8 @@ export interface ProfileExtension {
   readonly configure?: (settings: AiSettings, env: Readonly<Record<string, string | undefined>>, context: ConfigureContext) => Promise<ConfigureOutcome>;
   /** The audit sink that replaces the Community one, which keeps nothing; given the application's own database login and its limits. */
   readonly createAuditSink?: (context: AuditSinkContext) => MountedAuditSink;
+  /** Which AI features can be used now, as `GET /v1/ai/status` says; absent, none can. */
+  readonly aiAvailability?: () => AiStatusResponse;
 }
 
 const EXTENSION_REFUSAL_NAME = 'ExtensionRefusal';
@@ -167,7 +173,7 @@ const named = z.literal(EXTENSION_REFUSAL_NAME);
 /** A key a refusal of this code never carries: absent or undefined, so a value of it is not recognised. */
 const none = z.undefined().optional();
 
-const previewOffRefusalSchema = z.object({ name: named, code: z.literal('ACCESS_DENIED'), reason: z.literal('ai-preview-off'), audited: z.boolean() });
+const aiOffRefusalSchema = z.object({ name: named, code: z.literal('ACCESS_DENIED'), reason: z.literal('ai-off'), audited: z.boolean() });
 const notInThisEditionRefusalSchema = z.object({ name: named, code: z.literal('ASK_UNSUPPORTED'), reason: z.literal('not-in-this-edition') });
 
 const notFoundRefusalSchema = z.object({ name: named, code: z.literal('NOT_FOUND') });
@@ -189,7 +195,7 @@ const PATTERN_CONFLICT_REASONS = ['pattern-changed', 'pattern-unavailable'] as c
 const conflictRefusalSchema = z.object({ name: named, code: z.literal('CONFLICT'), reason: z.enum(PATTERN_CONFLICT_REASONS) });
 
 const refusalSchemas = [
-  previewOffRefusalSchema,
+  aiOffRefusalSchema,
   notInThisEditionRefusalSchema,
   notFoundRefusalSchema,
   invalidRequestRefusalSchema,

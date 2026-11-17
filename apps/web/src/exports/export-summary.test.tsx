@@ -4,7 +4,7 @@ import { SUMMARY_TOKEN_LIFETIME_MS, type ExportRecord, type ExportRequest } from
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ApiFailure, ApiResult, DownloadedFile } from '../api/client.js';
 import { ID } from '../lifecycle/harness.js';
-import { me } from '../test-utils.js';
+import { aiStatus, me } from '../test-utils.js';
 import { createShellData, type ShellData } from '../shell/shell-data.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { createStore, type ReadableStore } from '../state/store.js';
@@ -18,9 +18,9 @@ const ok = <T,>(value: T): Promise<ApiResult<T>> => Promise.resolve({ ok: true, 
 const denied: ApiFailure = { code: 'ACCESS_DENIED', message: 'The AI case summary could not be included, so nothing was exported.', retryable: false, traceId: 'tr-1', details: { reason: 'summary-refused' } };
 const revoked: ApiFailure = { code: 'ACCESS_DENIED', message: 'You do not have access to do this.', retryable: false, traceId: 'tr-1' };
 
-const enterprise = (edition: 'enterprise' | 'community'): ReadableStore<ShellData> => {
-  const store = createShellData({ getMe: () => ok(me({ edition })), getSources: () => ok({ sources: [] }) } as never);
-  return { getState: () => ({ ...store.getState(), me: { phase: 'ready', data: me({ edition }) } }), subscribe: store.subscribe };
+const summaryStatus = (summary: 'available' | 'unavailable'): ReadableStore<ShellData> => {
+  const store = createShellData({ getMe: () => ok(me()), getAiStatus: () => ok(aiStatus({ summary: summary === 'available' })), getSources: () => ok({ sources: [] }) } as never);
+  return { getState: () => ({ ...store.getState(), me: { phase: 'ready', data: me() }, aiStatus: { phase: 'ready', data: aiStatus({ summary: summary === 'available' }) } }), subscribe: store.subscribe };
 };
 
 const response = { status: 'ok', sentences: [{ text: 'The record is listed.', cites: ['n1'], storable: false }], citations: [], coverage: { retrieval: 'r', summary: 's' }, removedCount: 0, sent: 'x', model: 'm', calls: 1, summaryToken: 'sealed-token' } as unknown as DraftResponse;
@@ -37,7 +37,7 @@ function withDraft(draft: SummaryDraft | undefined, id: string = ID): { readonly
   return { state, session };
 }
 
-async function opened(state: ClientState, edition: 'enterprise' | 'community', calls: { created?: (request: ExportRequest) => Promise<ApiResult<unknown>> } = {}) {
+async function opened(state: ClientState, summary: 'available' | 'unavailable', calls: { created?: (request: ExportRequest) => Promise<ApiResult<unknown>> } = {}) {
   const requests: ExportRequest[] = [];
   const rendered = renderExport(
     state,
@@ -49,7 +49,7 @@ async function opened(state: ClientState, edition: 'enterprise' | 'community', c
       downloadExport: () => ok(FILE),
     },
     undefined,
-    enterprise(edition),
+    summaryStatus(summary),
   );
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: 'Export' }));
@@ -61,7 +61,7 @@ afterEach(() => vi.useRealTimers());
 describe('Include AI case summary in the Export dialog', () => {
   it('is offered, off, for an unedited draft that has not run out, and turning it on sends the token with a JSON or CSV export', async () => {
     const { state } = withDraft(draftOf(Date.now()));
-    const { box, user, requests } = await opened(state, 'enterprise');
+    const { box, user, requests } = await opened(state, 'available');
     const option = box.getByRole('checkbox', { name: 'Include AI case summary' }) as HTMLInputElement;
     expect(option.checked).toBe(false);
     expect(option.disabled).toBe(false);
@@ -72,7 +72,7 @@ describe('Include AI case summary in the Export dialog', () => {
 
   it('sends no token when the option is off, for each format', async () => {
     const { state } = withDraft(draftOf(Date.now()));
-    const { box, user, requests } = await opened(state, 'enterprise');
+    const { box, user, requests } = await opened(state, 'available');
     await user.click(box.getByRole('button', { name: 'Download JSON' }));
     expect(requests[0]).not.toHaveProperty('summaryToken');
   });
@@ -86,7 +86,7 @@ describe('Include AI case summary in the Export dialog', () => {
     ];
     for (const [name, make, reason] of cases) {
       const { state } = make();
-      const { box, user, requests } = await opened(state, 'enterprise');
+      const { box, user, requests } = await opened(state, 'available');
       const option = box.getByRole('checkbox', { name: 'Include AI case summary' }) as HTMLInputElement;
       expect(option.disabled, name).toBe(true);
       expect(box.getByText(reason), name).toBeTruthy();
@@ -96,7 +96,7 @@ describe('Include AI case summary in the Export dialog', () => {
       cleanup();
     }
     const { state } = withDraft(draftOf(Date.now()));
-    const { box, user } = await opened(state, 'enterprise');
+    const { box, user } = await opened(state, 'available');
     await user.click(box.getByRole('checkbox', { name: 'Include AI case summary' }));
     await user.click(box.getByRole('radio', { name: 'PNG' }));
     expect((box.getByRole('checkbox', { name: 'Include AI case summary' }) as HTMLInputElement).disabled).toBe(true);
@@ -105,14 +105,14 @@ describe('Include AI case summary in the Export dialog', () => {
 
   it('shows no option in Community', async () => {
     const { state } = withDraft(draftOf(Date.now()));
-    const { box } = await opened(state, 'community');
+    const { box } = await opened(state, 'unavailable');
     expect(box.queryByRole('checkbox', { name: 'Include AI case summary' })).toBeNull();
   });
 
   it('says when the server refuses the token that nothing was exported, turns the option off and exports without it on the next try', async () => {
     const { state } = withDraft(draftOf(Date.now()));
     let attempt = 0;
-    const { box, user, requests } = await opened(state, 'enterprise', { created: () => (attempt++ === 0 ? Promise.resolve({ ok: false, failure: denied }) : ok(RECORD)) });
+    const { box, user, requests } = await opened(state, 'available', { created: () => (attempt++ === 0 ? Promise.resolve({ ok: false, failure: denied }) : ok(RECORD)) });
     await user.click(box.getByRole('checkbox', { name: 'Include AI case summary' }));
     await user.click(box.getByRole('button', { name: 'Download JSON' }));
     expect(await box.findByText('The summary could not be included, so nothing was exported. You can export without it.')).toBeTruthy();
@@ -124,7 +124,7 @@ describe('Include AI case summary in the Export dialog', () => {
 
   it('does not blame the summary for a refusal of access that has no such reason, and keeps the option as it was', async () => {
     const { state } = withDraft(draftOf(Date.now()));
-    const { box, user } = await opened(state, 'enterprise', { created: () => Promise.resolve({ ok: false, failure: revoked }) });
+    const { box, user } = await opened(state, 'available', { created: () => Promise.resolve({ ok: false, failure: revoked }) });
     await user.click(box.getByRole('checkbox', { name: 'Include AI case summary' }));
     await user.click(box.getByRole('button', { name: 'Download JSON' }));
     expect(await box.findByRole('button', { name: 'Try again' })).toBeTruthy();
@@ -135,7 +135,7 @@ describe('Include AI case summary in the Export dialog', () => {
   it('turns the option off at the moment the token runs out while the dialog is open', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { state } = withDraft(draftOf(Date.now() - SUMMARY_TOKEN_LIFETIME_MS + 2000));
-    const { box } = await opened(state, 'enterprise');
+    const { box } = await opened(state, 'available');
     expect((box.getByRole('checkbox', { name: 'Include AI case summary' }) as HTMLInputElement).disabled).toBe(false);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);

@@ -44,13 +44,28 @@ export const STORE_QUERY_TIMEOUT_MS = 15_000;
 
 export interface AppStoreOptions {
   readonly migrationsDirectory: string;
-  /** The migrations of the preview, which count for readiness only when the preview is on. */
+  /** The migrations of the extension, which count for readiness only when the extension is loaded. */
   readonly previewMigrationsDirectory?: string;
+  /** Told once each time the migrations are found pending after being found applied (or never checked), so that the cause can be logged without a line for every probe. */
+  readonly onMigrationsPending?: () => void;
   readonly connectionTimeoutMs?: number;
   /** How long `readiness()` waits; absent, the default. */
   readonly readinessLimitMs?: number;
   /** Shared by the store's pools; absent, the store makes its own. */
   readonly addresses?: AddressCache;
+}
+
+/** Calls `onPending` when the outcome turns to `pending` and not again until it has been something else; the outcome is returned as it came. */
+export function pendingReporter(onPending: (() => void) | undefined): (outcome: ReadyChecks['migrations']) => ReadyChecks['migrations'] {
+  let reported = false;
+  return (outcome) => {
+    if (outcome !== 'pending') reported = false;
+    else if (!reported) {
+      reported = true;
+      onPending?.();
+    }
+    return outcome;
+  };
 }
 
 export function createAppStore(url: string, onConnectionError: () => void, options: AppStoreOptions): AppStore {
@@ -65,7 +80,13 @@ export function createAppStore(url: string, onConnectionError: () => void, optio
   const probeStep = probeStepMs(readinessLimitMs);
   const probes = createPool(url, onConnectionError, { addresses, max: 2, connectionTimeoutMs: probeStep, statementTimeoutMs: probeStep, queryTimeoutMs: probeStep });
 
+  const reportPending = pendingReporter(options.onMigrationsPending);
+
   async function shippedMigrations(): Promise<ReadyChecks['migrations']> {
+    return reportPending(await migrationsOutcome());
+  }
+
+  async function migrationsOutcome(): Promise<ReadyChecks['migrations']> {
     const shipped = await migrationFileNames(options.migrationsDirectory).catch(() => undefined);
     if (shipped === undefined) return 'unknown';
     if (options.previewMigrationsDirectory === undefined) return checkMigrations(probes, shipped);

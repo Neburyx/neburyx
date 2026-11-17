@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router';
 import type { ApiClient } from '../api/client.js';
 import { useBanner } from '../banner/banner-context.js';
 import { useAiActions } from '../ai/ai-actions.js';
-import { useEnterpriseWhenProvided } from '../shell/shell-data.js';
+import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
 import { useClientState } from '../state/context.js';
 import { isSourceChanged, type InvestigationStatus } from '../state/investigation-state.js';
 import { useStoreSelector } from '../state/store.js';
@@ -39,11 +39,11 @@ export function InvestigationMenu({ client }: { readonly client: ApiClient }) {
     wasOpen.current = dialogOpen;
   }, [dialogOpen]);
 
-  const enterprise = useEnterpriseWhenProvided();
+  const summaryAvailable = useAiAvailabilityWhenProvided('summary') === 'available';
   const notesHandler = useStoreSelector(useAiActions().view, (handlers) => handlers.get('notes'));
   if (status === undefined) return null;
   const notesItem: ActionMenuItem | undefined =
-    enterprise && notesHandler !== undefined
+    summaryAvailable && notesHandler !== undefined
       ? {
           id: 'ai-notes',
           label: 'AI notes',

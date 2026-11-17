@@ -29,7 +29,7 @@ export const isContinueInvalid = (failure: ApiFailure): boolean => failure.code 
 
 /** A failure of an Ask call in words: the product's own failure words, with the ones about Ask not being there put as one sentence that offers no retry, and the failures only Ask has in its own words. */
 export function askFailureWords(failure: ApiFailure, source: string): FailureWords {
-  if (failure.code === 'ASK_UNSUPPORTED' || (failure.code === 'ACCESS_DENIED' && reasonOf(failure) === 'ai-preview-off')) return { text: UNAVAILABLE };
+  if (failure.code === 'ASK_UNSUPPORTED' || (failure.code === 'ACCESS_DENIED' && reasonOf(failure) === 'ai-off')) return { text: UNAVAILABLE };
   if (isContinueInvalid(failure)) return { text: ASK_COPY.continueInvalid };
   if (failure.code === 'INVALID_REQUEST') {
     const reason = reasonOf(failure);

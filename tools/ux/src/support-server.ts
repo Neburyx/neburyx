@@ -915,6 +915,7 @@ function api(path: string, options: SupportServerOptions, response: ServerRespon
   const profiles = profilesOf(options);
   if (path === '/healthz' || path === '/readyz') return json(response, 200, { status: 'ok' });
   if (path === '/v1/me') return json(response, 200, me(profiles.map((profile) => profile.sourceId)));
+  if (path === '/v1/ai/status') return json(response, 200, { ask: { available: false }, summary: { available: false }, assistant: { available: false } });
   const profile = profiles.find((candidate) => path === `/v1/sources/${encodeURIComponent(candidate.sourceId)}/profile`);
   if (profile !== undefined) return json(response, 200, profile);
   json(response, 404, { error: { code: 'NOT_FOUND' } });

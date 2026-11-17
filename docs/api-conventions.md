@@ -133,13 +133,13 @@ A read that needs several indexes that are not online names the least recoverabl
 
 A reason of `SOURCE_UNAVAILABLE` is not valid on `CONFLICT`, and a reason of `CONFLICT` is not valid on `SOURCE_UNAVAILABLE`.
 
-## A call to an AI route while the preview is off
+## A call to an AI route of a feature that is off
 
-With neither part of the preview switch set, the enterprise code is not loaded and a path under `/v1/ai` is an unknown route: `404`, as for any path the API does not have, and nothing is audited. If a loaded extension is ever told that the preview is not on, the AI route group refuses each call as a second check: `ACCESS_DENIED` (403) with `details.reason`, and the refusal is audited (action `ai.route_refused`, result `refused`; the event holds no value, source or request text).
+With no AI provider configured (and the older preview switch not set), the AI extension is not loaded and a path under `/v1/ask`, `/v1/summary` or `/v1/investigations/:id/draft/ai-notes` that belongs to it is an unknown route: `404`, as for any path the API does not have, and nothing is audited. `GET /v1/ai/status` is always there and says which features are available. When the extension is loaded and a feature is switched off (`NEBURYX_ASK_ENABLED`, `NEBURYX_SUMMARY_ENABLED`), each call to a route of that feature is refused before its body is read: `ACCESS_DENIED` (403) with `details.reason`, and the refusal is audited (action `ai.route_refused`, result `refused`, with the detail `reason`: `ai-off` when the feature is switched off, `no-provider` when the routes are mounted while no AI provider is configured; the event holds no value, source or request text).
 
 | `details.reason` | `message` | `retryable` |
 |---|---|---|
-| `ai-preview-off` | The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock. | `false` |
+| `ai-off` | This AI feature is not available in this release yet: it is switched off, or no AI provider is configured. | `false` |
 
 ## Field limits
 
@@ -255,7 +255,7 @@ A call to the model of the Enterprise and AI preview is recorded in the audit ta
 
 ## Asking a question
 
-Two routes answer a question, both with the AI preview on (see [Switch the AI preview on](ai-preview.md)). With the preview off, and the enterprise code loaded, both answer `403` (`ACCESS_DENIED`, reason `ai-preview-off`). Both declare `principal`.
+Two routes answer a question, both when an AI provider is configured and Ask is on (see [Switch the AI features on](ai-preview.md)). With Ask switched off, both answer `403` (`ACCESS_DENIED`, reason `ai-off`). Both declare `principal`.
 
 **`POST /v1/ask`** takes `{ sourceId, question, mask? }`. `question` is text that is not blank, at most 1,000 characters. In this order the route checks that the caller may read the source (a source that is not configured, or not the caller's, is `NOT_FOUND`, before any model call), classifies the question with the source's Ask folder, binds the entities to the intent's parameters, runs the intent through the gate (read-only, bounded, as the person's own reads, with `mask` as the person chose it) and builds the answer. An intent is either a built-in template or a file query of the source's Ask folder; a file query runs through the gate as the manual route for it does, with the entities as its values only, and its audit event holds the SHA-256 of the query's text (`querySha256`). A file query that returns no node and no relationship answers `nothing-found`, as a template that finds nothing does. The gate's own refusals of a file query keep their codes (`INVALID_REQUEST` with a `file-query-*` reason), and an intent whose entities do not fit its template's parameters is the cause `invalid-inputs`. A value the template accepts but the source's own checks refuse, such as an unknown entity type or a limit over the maximum page, is `ASK_INTENT_INVALID` (422).
 

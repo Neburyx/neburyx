@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
+import { aiDecisionEnvironment, apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
 
 const developer = { PATH: '/bin', HOME: '/home/dev', TMPDIR: '/tmp', NODE_ENV: 'development', LANG: 'C', AWS_SECRET_ACCESS_KEY: 'a developer secret', DATABASE_URL: 'postgres://elsewhere', NEBURYX_DB_ADMIN_PASSWORD: 'inherited' };
 const cursorKey = Buffer.alloc(32, 3).toString('base64');
@@ -83,5 +83,11 @@ describe('the environments of the children', () => {
     ['soon', 10_000],
   ])('count the connect limit %j as %i ms for the wait', (value, expected) => {
     expect(connectLimitMs({ NEBURYX_DATABASE_CONNECT_TIMEOUT_MS: value })).toBe(expected);
+  });
+
+  it('give migrate and the API the same inputs for the AI decision: the key or its file and the three on/off settings, and no other Ask setting', () => {
+    const shell = { NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_API_KEY_FILE: '/f', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'on', NEBURYX_ASSISTANT_ENABLED: 'off', NEBURYX_ASK_MAX_TOKENS: '9' };
+    expect(aiDecisionEnvironment(shell)).toEqual({ NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_API_KEY_FILE: '/f', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'on', NEBURYX_ASSISTANT_ENABLED: 'off' });
+    expect(askEnvironment(shell)).toMatchObject({ NEBURYX_ASSISTANT_ENABLED: 'off', NEBURYX_ASK_MAX_TOKENS: '9' });
   });
 });

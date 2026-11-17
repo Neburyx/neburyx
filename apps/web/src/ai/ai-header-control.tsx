@@ -1,18 +1,9 @@
-import { useEffect, useState } from 'react';
-import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
+import { useEffect, useId, useState } from 'react';
+import { useAiAvailabilityWhenProvided, type AiFeature } from '../shell/shell-data.js';
 import { useClientStateWhenProvided } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useAiActions, type AiActionName } from './ai-actions.js';
-import { AI_LABELS, LOCKED_REASON, lockedName, notAvailableText } from './copy.js';
-
-function Padlock() {
-  return (
-    <svg aria-hidden="true" className="header-ai-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
-      <rect x="2.5" y="5.5" width="7" height="5" rx="1" />
-      <path d="M4 5.5V4a2 2 0 0 1 4 0v1.5" />
-    </svg>
-  );
-}
+import { AI_LABELS, UNAVAILABLE_REASON, notAvailableText } from './copy.js';
 
 function Sparkle() {
   return (
@@ -36,33 +27,38 @@ function usePanelOpen(action: AiActionName): boolean {
   return open;
 }
 
-/** The Ask or Summarize control of the header: locked unless `GET /v1/me` says the edition is enterprise, and nothing while that answer is not here. Activating it never sends a request: it runs the handler a feature registered, or says it is not available yet. */
+const FEATURE_OF: Readonly<Record<AiActionName, AiFeature>> = { ask: 'ask', summarize: 'summary', notes: 'summary' };
+
+/** The Ask or Summarize control of the header bar: the available one when the status of the AI features says the feature is, dimmed with the reason when it says no or its read failed, and nothing while that answer is not here. Activating it never sends a request: it runs the handler registered for the action. */
 export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
-  const shell = useShellData();
+  const availability = useAiAvailabilityWhenProvided(FEATURE_OF[action]);
   const handlers = useAiActions();
   const handler = useStoreSelector(handlers.view, (held) => held.get(action));
   const [note, setNote] = useState<string | undefined>(undefined);
   const panelOpen = usePanelOpen(action);
-  const me = answeredData(shell.me);
-  if (me === undefined && retainedFailure(shell.me) === undefined) return null;
+  const reasonId = useId();
+  if (availability === 'pending') return null;
   const label = AI_LABELS[action];
-  if (me?.edition !== 'enterprise') {
+  if (availability === 'unavailable') {
     return (
       <span className="header-ai-wrap" onBlur={() => setNote(undefined)} onKeyDown={(event) => (event.key === 'Escape' ? setNote(undefined) : undefined)}>
         <button
           type="button"
-          className="header-ai header-ai-locked"
+          className="header-ai header-ai-unavailable"
           aria-disabled="true"
-          aria-label={lockedName(action)}
-          title={LOCKED_REASON}
+          aria-describedby={reasonId}
+          title={UNAVAILABLE_REASON}
           onClick={(event) => {
             event.preventDefault();
-            setNote(LOCKED_REASON);
+            setNote(UNAVAILABLE_REASON);
           }}
         >
-          <Padlock />
+          <Sparkle />
           {label}
         </button>
+        <span id={reasonId} className="visually-hidden">
+          {UNAVAILABLE_REASON}
+        </span>
         <span role="status" className={note === undefined ? 'visually-hidden' : 'header-ai-note'}>
           {note ?? ''}
         </span>
@@ -79,7 +75,7 @@ export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
   };
   return (
     <span className="header-ai-wrap" onBlur={() => setNote(undefined)} onKeyDown={(event) => (event.key === 'Escape' ? setNote(undefined) : undefined)}>
-      <button type="button" className={panelOpen ? 'header-ai header-ai-unlocked header-ai-active' : 'header-ai header-ai-unlocked'} aria-expanded={panelOpen} onClick={run}>
+      <button type="button" className={panelOpen ? 'header-ai header-ai-available header-ai-active' : 'header-ai header-ai-available'} aria-expanded={panelOpen} onClick={run}>
         <Sparkle />
         {label}
       </button>

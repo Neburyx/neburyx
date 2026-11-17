@@ -54,7 +54,7 @@ You set the tag `local` as `NEBURYX_TAG` in the next section. Each version you b
 
    To fill it in by hand instead of the command above, run `cp .env.example .env` and `chmod 600 .env`, then make the values with `openssl rand -hex 24` (run it three times, one for each password; letters and digits only, because the passwords are put into connection strings) and `openssl rand -base64 32` (the cursor key). Set `NEBURYX_TAG=local` as well, if that is the tag you built.
 
-   The cursor key signs the cursors of paged lists. Keep the same key across restarts: with it, a page that a person has open can still load its next page after the API restarts; without it, that page says "Start again", and, with the AI preview on, the keyed hashes of the parameters in the audit events of Ask runs differ from one start to the next, so two runs of one question cannot be matched across a restart. Never commit it.
+   The cursor key signs the cursors of paged lists. Keep the same key across restarts: with it, a page that a person has open can still load its next page after the API restarts; without it, that page says "Start again", and, with the AI features on, the keyed hashes of the parameters in the audit events of Ask runs differ from one start to the next, so two runs of one question cannot be matched across a restart. Never commit it.
 
 3. Start it:
 
@@ -217,7 +217,7 @@ Each version you build has its own tag. To upgrade, build the new tag, keep the 
 docker compose up --wait
 ```
 
-The database migrations run before the API starts. With the AI preview switched on, they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service reads the same mapping and `NEBURYX_PROFILE` as the `api` service, both set in `.env` and in the mapping, so with only one of the two switch settings `migrate` stops first and says which is missing (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI preview on](ai-preview.md) says how to set the preview up.
+The database migrations run before the API starts. Where an AI provider key is set (or the older preview switch is on), they include the enterprise migrations, which are applied last and recorded in their own history; the `migrate` service reads the same provider key, on/off settings, mapping and `NEBURYX_PROFILE` as the `api` service, so with only one of the two older switch settings `migrate` stops first and says which is missing (see [the compose README](../deploy/compose/README.md)). If an enterprise migration fails, the others of that run stay applied. [Switch the AI features on](ai-preview.md) says how to set them up.
 
 ## Roll back by one tag
 

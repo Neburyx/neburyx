@@ -22,6 +22,7 @@ import { createAppStore, STORE_QUERY_TIMEOUT_MS, STORE_STATEMENT_TIMEOUT_MS, typ
 import { createAddressCache, lookupStream } from './db/lookup.js';
 import { POOL_SIZE } from './db/pool.js';
 import { uuidv7 } from './identity/uuid.js';
+import { extensionWanted, readAiEnablement } from './profile/ai-enablement.js';
 import { readAiSlotShare } from './seams/ai-share.js';
 import { communitySeams } from './seams/community-seams.js';
 import { fileQueryDepsOf } from './gate/file-query.js';
@@ -154,10 +155,21 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     return { exitCode: 1 };
   }
 
+  const enabling = readAiEnablement(env);
+  if (!enabling.ok) {
+    for (const problem of enabling.problems) io.stderr.write(`invalid configuration: ${problem}\n`);
+    return { exitCode: 1 };
+  }
+  const { enablement } = enabling;
+  const loader = io.extensionLoader ?? registeredExtensionLoader();
+  if (decision.state !== 'on' && extensionWanted(enablement, false) && loader === undefined) {
+    io.stderr.write('invalid configuration: an AI provider key is set but this build has no AI code\n');
+    return { exitCode: 1 };
+  }
   let extension: ProfileExtension | undefined;
   let aiShare: number | undefined;
-  if (decision.state === 'on') {
-    const loaded = await loadProfileExtension(io.extensionLoader ?? registeredExtensionLoader());
+  if (extensionWanted(enablement, decision.state === 'on')) {
+    const loaded = await loadProfileExtension(loader);
     if (!loaded.ok) {
       if (loaded.cause !== undefined) io.logger.error({ event: 'profile.extension_load_failed', cause: loaded.cause }, 'enterprise extension could not be loaded');
       io.stderr.write(`${loaded.message}\n`);
@@ -175,7 +187,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     if (extension.configure !== undefined) {
       let outcome;
       try {
-        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id), budgets: configureBudgets(mapping.sources) });
+        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id), budgets: configureBudgets(mapping.sources), features: { ask: enablement.ask, summary: enablement.summary, assistant: enablement.providerConfigured && enablement.assistant } });
       } catch (error) {
         io.logger.error({ event: 'profile.extension_configure_failed', cause: causeOf(error) }, 'enterprise extension could not be configured');
         io.stderr.write(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);
@@ -213,7 +225,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
   let devReloader: DevReloader | undefined;
   try {
     const addresses = createAddressCache();
-    const openStore = io.openStore ?? ((url, report, directory, preview) => createAppStore(url, report, { migrationsDirectory: directory, connectionTimeoutMs: config.connectTimeoutMs, readinessLimitMs: config.readinessLimitMs, addresses, ...(preview === undefined ? {} : { previewMigrationsDirectory: preview }) }));
+    const openStore = io.openStore ?? ((url, report, directory, preview) => createAppStore(url, report, { migrationsDirectory: directory, connectionTimeoutMs: config.connectTimeoutMs, readinessLimitMs: config.readinessLimitMs, addresses, ...(preview === undefined ? {} : { previewMigrationsDirectory: preview, onMigrationsPending: () => io.logger.warn({ event: 'migrations.extension_pending' }, 'the migrations of the AI extension are not applied to this database; run neburyx migrate with the same environment') }) }));
     store = openStore(
       config.databaseUrl,
       () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
@@ -248,7 +260,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       newId: uuidv7,
       onConnectionError: () => io.logger.warn({ event: 'database.connection_error' }, 'database connection error'),
     });
-    const seams = mountedAudit === undefined ? community : { ...community, audit: mountedAudit.sink };
+    const seams = mountedAudit === undefined || decision.state !== 'on' ? community : { ...community, audit: mountedAudit.sink };
     sourceGate = (io.openSourceGate ?? createSourceGate)({ mapping, env, seams, logger: io.logger, cursors, referenceKeys, ...(extension?.askFolder === undefined ? {} : { fileQueries: fileQueryDepsOf(() => extension?.askFolder?.()) }) });
     const initialGate = sourceGate;
     // in dev mode the mapping and the gate can be replaced by a reload, so what the app, the checks and the ping hold is a live mapping and a switchable gate; otherwise it is the model and the gate made here
@@ -282,7 +294,9 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
       catalog: gate.catalog,
       seams,
       extension,
-      previewOn: decision.state === 'on',
+      previewOn: extension !== undefined,
+      ...(mountedAudit === undefined ? {} : { extensionAudit: mountedAudit.sink }),
+      edition: decision.state === 'on' ? 'enterprise' : 'community',
       referenceKeys,
       cursors,
       signingKey: deriveSigningKey(cursorKeyMaterial),

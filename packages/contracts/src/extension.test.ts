@@ -2,12 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { ACCESS_DENIED_ENTRIES, ASK_UNSUPPORTED_ENTRIES } from './error-table.js';
 import { ExtensionRefusal, parseExtensionRefusal, type ExtensionRequest } from './extension.js';
 
-const fields = { code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true } as const;
+const fields = { code: 'ACCESS_DENIED', reason: 'ai-off', audited: true } as const;
 
-describe('the sentence of a call to an AI route while the preview is off', () => {
-  it('says the preview is not switched on and that the switch is a safety rail, not a lock, and cannot be retried', () => {
-    expect(ACCESS_DENIED_ENTRIES['ai-preview-off']).toEqual({
-      message: 'The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock.',
+describe('the sentence of a call to an AI route of a feature that is off', () => {
+  it('says the feature is not available in this release yet, and cannot be retried', () => {
+    expect(ACCESS_DENIED_ENTRIES['ai-off']).toEqual({
+      message: 'This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.',
       retryable: false,
     });
   });
@@ -23,7 +23,7 @@ describe('a refusal of an extension', () => {
     const refusal = new ExtensionRefusal({ ...fields, audited: false });
     expect(refusal).toBeInstanceOf(Error);
     expect(refusal.name).toBe('ExtensionRefusal');
-    expect([refusal.code, refusal.reason, refusal.audited, refusal.message]).toEqual(['ACCESS_DENIED', 'ai-preview-off', false, '']);
+    expect([refusal.code, refusal.reason, refusal.audited, refusal.message]).toEqual(['ACCESS_DENIED', 'ai-off', false, '']);
   });
 
   it('names no other code or reason', () => {
@@ -61,7 +61,7 @@ describe('recognising a refusal by its shape', () => {
   it.each([
     ['another code', { name: 'ExtensionRefusal', ...fields, code: 'CONFLICT' }],
     ['another reason', { name: 'ExtensionRefusal', ...fields, reason: 'access-changed' }],
-    ['no audited mark', { name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-preview-off' }],
+    ['no audited mark', { name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-off' }],
     ['an audited mark that is not a boolean', { name: 'ExtensionRefusal', ...fields, audited: 'yes' }],
     ['another name', { name: 'Error', ...fields }],
     ['an ordinary error', new Error('boom')],
@@ -106,7 +106,7 @@ describe('the refusal of an Ask call that cannot be answered here', () => {
     const thrown = new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
     expect([thrown.code, thrown.reason, thrown.audited]).toEqual(['ASK_UNSUPPORTED', 'not-in-this-edition', undefined]);
     expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
-    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'ASK_UNSUPPORTED', reason: 'ai-preview-off' })).toBeUndefined();
+    expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'ASK_UNSUPPORTED', reason: 'ai-off' })).toBeUndefined();
     expect(parseExtensionRefusal({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'not-in-this-edition', audited: true })).toBeUndefined();
   });
 
@@ -169,7 +169,7 @@ describe('the refusals of a read of the gate and of a run', () => {
     expect(parseExtensionRefusal({ name: 'ExtensionRefusal', ...held })).toBeUndefined();
   });
 
-  it('keeps an access refusal that has no reason apart from the one that says the preview is off', () => {
+  it('keeps an access refusal that has no reason apart from the one that says the feature is off', () => {
     const plain = new ExtensionRefusal({ code: 'ACCESS_DENIED' });
     expect(parseExtensionRefusal(plain)).toEqual({ code: 'ACCESS_DENIED' });
     expect(plain.reason).toBeUndefined();

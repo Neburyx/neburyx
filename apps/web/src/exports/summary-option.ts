@@ -1,6 +1,6 @@
 import { SUMMARY_TOKEN_LIFETIME_MS } from '@neburyx/contracts';
 import { useEffect, useRef, useState } from 'react';
-import { useEnterpriseWhenProvided } from '../shell/shell-data.js';
+import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
 import { useClientState } from '../state/context.js';
 import { createStore, useStoreSelector } from '../state/store.js';
 import { editedOf } from '../summary/summary-model.js';
@@ -18,7 +18,7 @@ export type SummaryOption = { readonly kind: 'hidden' } | { readonly kind: 'disa
  */
 export function useSummaryOption(format: PictureFormat, now: () => number = Date.now): SummaryOption {
   const state = useClientState();
-  const enterprise = useEnterpriseWhenProvided();
+  const available = useAiAvailabilityWhenProvided('summary') === 'available';
   const session = useStoreSelector(summarySessionOf(state) ?? NO_SESSION, (held) => held);
   const investigationId = useStoreSelector(state.investigation, (held) => held.id);
   const arrivedAt = session.draft?.arrivedAt;
@@ -32,7 +32,7 @@ export function useSummaryOption(format: PictureFormat, now: () => number = Date
     const timer = setTimeout(() => tick((count) => count + 1), left + 5);
     return () => clearTimeout(timer);
   }, [arrivedAt]);
-  if (!enterprise) return { kind: 'hidden' };
+  if (!available) return { kind: 'hidden' };
   const { draft } = session;
   if (draft === undefined || session.investigationId !== investigationId || investigationId === null) return { kind: 'disabled', reason: SUMMARY_NO_DRAFT };
   if (format === 'png') return { kind: 'disabled', reason: SUMMARY_NOT_FOR_PICTURE };

@@ -93,7 +93,7 @@ Each table lists every key the product accepts at that level. "Required" means t
 |---|---|---|
 | `sources` | yes | The list of sources. The product reads every source in the file |
 | `retention` | no | How long deleted investigations and export files are kept. It belongs to the deployment, not to a source |
-| `ai` | no | The switch of the AI preview, which is off unless the deployment also sets `NEBURYX_PROFILE=enterprise` |
+| `ai` | no | The older switch of the AI preview, which decides the Enterprise edition and audit together with `NEBURYX_PROFILE=enterprise`; the AI features do not need it |
 
 ### Retention
 
@@ -107,14 +107,14 @@ The `retention` block is optional, and so is each key in it. Each is a whole num
 
 ### The ai section
 
-The `ai` block is optional and holds one key. It belongs to the deployment, not to a source. The AI features are off unless the deployment also sets the environment variable `NEBURYX_PROFILE=enterprise` and `preview: true` here; the server refuses to start when only one of the two is set.
+The `ai` block is optional and holds one key. It belongs to the deployment, not to a source. The AI features (Ask, the AI case summary, the assistant) start wherever an AI provider key is set and do not need this block; `preview: true` together with the environment variable `NEBURYX_PROFILE=enterprise` is the older switch, which still decides the edition and the enterprise audit; the server refuses to start when only one of the two is set.
 
 <!-- keys: ai -->
 | Key | Required | What it does |
 |---|---|---|
-| `preview` | no | `true` switches the AI preview on, together with `NEBURYX_PROFILE=enterprise` |
+| `preview` | no | `true` is the older switch of the AI preview, together with `NEBURYX_PROFILE=enterprise` |
 
-Everything else about Ask (the provider, the model, the key, the limits, prompt caching and the folder of intents) is set in the environment, not in the mapping file. A mapping file that still has one of the old keys (`provider`, `model`, `key`, `effort`, `timeout_ms`, `max_retries`, `max_tokens`, `cache`) is refused at start, and the message names the variable that replaces it. The variables, the folder and the upgrade are in [Switch the AI preview on](ai-preview.md).
+Everything else about Ask (the provider, the model, the key, the limits, prompt caching and the folder of intents) is set in the environment, not in the mapping file. A mapping file that still has one of the old keys (`provider`, `model`, `key`, `effort`, `timeout_ms`, `max_retries`, `max_tokens`, `cache`) is refused at start, and the message names the variable that replaces it. The variables, the folder and the upgrade are in [Switch the AI features on](ai-preview.md).
 
 ### A source
 

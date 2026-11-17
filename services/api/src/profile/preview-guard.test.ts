@@ -1,7 +1,8 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { aiStatusResponseSchema, type AuditEvent, type ProfileExtension } from '@neburyx/contracts';
+import { type AuditEvent, type ProfileExtension } from '@neburyx/contracts';
+import { z } from 'zod';
 import { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from '@neburyx/ee-ask';
 import pino from 'pino';
 import { stringify } from 'yaml';
@@ -21,11 +22,12 @@ const exportDirectory = makeExportDirectory();
 const folder = mkdtempSync(join(tmpdir(), 'preview-guard-'));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
 
+const PROBE_SCHEMA = z.strictObject({ preview: z.literal(true) });
 const PROBE_URL = '/v1/ai/probe';
 const mappingOf = (source: Record<string, unknown>) => parseMapping(fileOf(baseSource(source)), 'neburyx.yaml');
 
 function probeOf(calls: string[]): ProfileExtension {
-  return { name: 'probe', routeGroups: [guardAiRouteGroup({ routes: [{ method: 'GET', url: PROBE_URL, permission: 'principal', responseSchema: aiStatusResponseSchema, handler: async () => (calls.push('provider'), { preview: true }) }] })] };
+  return { name: 'probe', routeGroups: [guardAiRouteGroup({ routes: [{ method: 'GET', url: PROBE_URL, permission: 'principal', responseSchema: PROBE_SCHEMA, handler: async () => (calls.push('provider'), { preview: true }) }] })] };
 }
 
 async function appOf(options: { readonly previewOn: boolean; readonly source: Record<string, unknown> }) {
@@ -55,18 +57,18 @@ describe('a call to an AI route of a loaded extension whose preview is reported 
     const { app, calls, events } = await appOf({ previewOn: false, source: { id: 'real-source' } });
     const answer = await app.inject({ url: PROBE_URL });
     expect(answer.statusCode).toBe(403);
-    expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', retryable: false, details: { reason: 'ai-preview-off' }, traceId: answer.headers['x-trace-id'] });
+    expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', retryable: false, details: { reason: 'ai-off' }, traceId: answer.headers['x-trace-id'] });
     expect(calls).toEqual([]);
     expect(events).toHaveLength(1);
     await app.close();
   });
 
-  it('records an event that holds the fixed keys only: no value, no source, no request text', async () => {
+  it('records an event that holds the fixed keys and the reason only: no value, no source, no request text', async () => {
     const { app, events } = await appOf({ previewOn: false, source: { id: 'real-source' } });
     await app.inject({ url: `${PROBE_URL}?question=who+is+Jane+Doe&source=real-source` });
     const [event] = events;
-    expect(Object.keys(event ?? {}).sort()).toEqual(['action', 'actorId', 'actorRole', 'result', 'traceId']);
-    expect([event?.action, event?.result]).toEqual([ROUTE_REFUSED_ACTION, 'refused']);
+    expect(Object.keys(event ?? {}).sort()).toEqual(['action', 'actorId', 'actorRole', 'detail', 'result', 'traceId']);
+    expect([event?.action, event?.result, event?.detail]).toEqual([ROUTE_REFUSED_ACTION, 'refused', { reason: 'no-provider' }]);
     expect(JSON.stringify(event)).not.toMatch(/real-source|Jane|question/);
     await app.close();
   });
@@ -77,7 +79,7 @@ describe('a Community start', () => {
   const plainFile = join(folder, 'plain.yaml');
   writeFileSync(plainFile, stringify({ sources: [] }));
 
-  it('answers an AI path with the unknown-route 404 and registers none under /v1/ai', async () => {
+  it('answers an AI path with the unknown-route 404 and registers none under /v1/ai but the status', async () => {
     const io: StartIo = {
       stderr: { write: () => true },
       logger: pino({ level: 'silent' }),
@@ -93,7 +95,7 @@ describe('a Community start', () => {
     if (result.exitCode !== 0) return;
     const answer = await result.app.inject({ url: PROBE_URL });
     expect(answer.statusCode).toBe(404);
-    expect(registeredRoutesOf(result.app).filter((route) => route.url.startsWith('/v1/ai'))).toEqual([]);
+    expect(registeredRoutesOf(result.app).filter((route) => route.url.startsWith('/v1/ai')).map((route) => route.url)).toEqual(['/v1/ai/status']);
     await result.app.close();
   });
 
@@ -102,7 +104,7 @@ describe('a Community start', () => {
     const seams: Seams = { ...communitySeams(), audit: { record: async (event) => void events.push(event) } };
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), seams, mapping: mappingOf({ id: 'real-source' }) });
     expect((await app.inject({ url: PROBE_URL })).statusCode).toBe(404);
-    expect((await app.inject({ url: '/v1/ai/status' })).statusCode).toBe(404);
+    expect((await app.inject({ url: '/v1/ai/status' })).json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
     expect(events).toEqual([]);
     await app.close();
   });

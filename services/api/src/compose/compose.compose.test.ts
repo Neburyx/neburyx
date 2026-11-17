@@ -208,6 +208,27 @@ describe('the mapping and the source login', () => {
     expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).toContain('NEBURYX_READINESS_LIMIT_MS');
   });
 
+  it('starts the AI extension with only a provider key in source.env: the migrate service applies the extension migrations, the stack is ready and reports the Community edition', async () => {
+    await withSourceEnv('NEBURYX_ASK_API_KEY=not-a-real-key\n', async () => {
+      const stack = await newStack({ settings: { NEBURYX_ASK_ENABLED: 'off' } });
+      const up = await stack.up();
+      const logs = up.code === 0 ? '' : (await stack.compose(['logs', '--no-log-prefix', 'migrate', 'api'])).stdout;
+      expect(up.code, logs).toBe(0);
+      const tables = await stack.psql("select count(*) from information_schema.tables where table_name = 'summary_runs'");
+      expect(tables.stdout.trim()).toBe('1');
+      const me = (await (await fetch(`${stack.url}/v1/me`)).json()) as { edition: string };
+      expect(me.edition).toBe('community');
+      expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).not.toContain('not-a-real-key');
+    });
+  });
+
+  it('applies no extension migration when no provider key is given', async () => {
+    const stack = await newStack();
+    expect((await stack.up()).code).toBe(0);
+    const tables = await stack.psql("select count(*) from information_schema.tables where table_name = 'summary_runs'");
+    expect(tables.stdout.trim()).toBe('0');
+  });
+
   it('starts without a source.env, and logs that the source has no credentials without logging a value', async () => {
     expect(existsSync(SOURCE_ENV_FILE)).toBe(false);
     const stack = await newStack({ mapping: { text: SOURCE_MAPPING } });

@@ -38,7 +38,7 @@ tagged **[W2]** (the second wave) or **[Later]**.
 | ADR-06 | REST for commands. v0.1 runs interactive calls synchronously, with a server timeout and client abort. A durable job table with SSE progress comes later, for long paths and exports **[Later]**. | Simple first; jobs stay auditable once added |
 | ADR-07 | **Ask is intent-bound**: the LLM classifies a question into an intent of the operator's Ask folder (a built-in template or a parameterised read-only file query) and names its entities, and never writes Cypher. The intent runs through the gate with the entities as parameters only; a question Ask cannot answer gets a fixed sentence. The conversational assistant (§9.6) is not built; its design is decided again when it is | Safety, auditability and citations by construction |
 | ADR-08 | LLM provider is pluggable and customer-chosen; no data goes to a model unless the policy allows it | Regulated buyers must control where data goes |
-| ADR-09 | Open core in one repo and one image: Community and the `ee/` directory are both under Apache-2.0. The public image compiles `ee/` in; its code path is off unless both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set. These switches are safety rails, not a lock. | One repo, one CI, solo-maintainable |
+| ADR-09 | Open core in one repo and one image: Community and the `ee/` directory are both under Apache-2.0. The public image compiles `ee/` in; the AI code path runs when a provider key is set and the feature is on (each AI feature has an off setting); `NEBURYX_PROFILE=enterprise` with `ai.preview: true` in `neburyx.yaml` still decides the rest of the Enterprise scope. These settings are safety rails, not a lock. | One repo, one CI, solo-maintainable |
 | ADR-10 | Schema mapping is **declarative YAML**, a strict YAML 1.2 subset (see §5), validated at startup and by `test-source` | Onboarding without code |
 | ADR-11 | **AI output is a reviewable draft**: Ask's model receives the question as typed, the source's `classification.md` and the person's own saved-pattern catalog, and nothing is withheld; Ask's answer is built by the server from the result and cited. For the case summary (not built), what it sends, its checks on the way out (structural citation check, numeric check), its prompt and that it is never auto-saved or exported are the design before the rebuild of Ask, decided again when it is built. | Gen-AI value without a black box or a data leak |
 | ADR-12 | **Valkey in the Enterprise profile, for coordination only** (2026-10-30). It holds concurrency leases, rate-limit counters, circuit-breaker state, login challenges and sign-in throttles, all with expiries. It **never holds customer data**, query results or PII, and nothing in it needs a backup. Community keeps the same state in process memory. The result cache stays per process in both editions (§3). | Several API copies must share per-user and per-source read limits (§14). Holding a Postgres connection for up to 10 s per Neo4j read does not scale to hundreds of reads in flight. Valkey is the BSD-licensed Linux Foundation fork of Redis, offered as a managed service by AWS and Google Cloud; elsewhere the customer runs it with a replica and failover |
@@ -112,7 +112,7 @@ services/api/src/
   jobs/          graphile-worker tasks, job table, SSE, cancellation
   diagnostics/   /healthz, diagnostics bundle (redacted)
   db/            Kysely schema types, SQL migrations, repositories
-ee/              (Enterprise scope; Apache-2.0 like Community; off unless the preview switch is set)
+ee/              (Enterprise scope; Apache-2.0 like Community; the AI code runs where a provider is configured)
   auth/          OIDC, local accounts with TOTP, sessions, roles, source grants
   policy/        authorization + PII redaction applied inside gate/
   audit/         append-only audit events + minimal viewer API
@@ -126,14 +126,18 @@ and `Coordinator`, whose Community default is in-memory and whose Enterprise imp
 each with a no-op or single-user default. This keeps the line between editions obvious, and keeps Community fully usable
 by itself.
 
-**The preview switch is a safety rail.** `ee/` is open source and ships in the one public image. Its code path
-runs only when both `NEBURYX_PROFILE=enterprise` and `ai.preview: true` in `neburyx.yaml` are set; a start with only
-one of them is refused with a clear message. With an open licence, nothing stops a person who controls the deployment
-from setting both, so the switches guard against AI features reaching real data by accident, not against a determined
-operator. With the switch off the AI paths are unknown routes (404) and nothing is audited; the AI route group also
-refuses a call (`ACCESS_DENIED`, reason `ai-preview-off`) and audits the refusal if a loaded extension is ever told the
-preview is not on. The AI route group works on any source (accepted 2026-11-12); what protects real data is the request data rules
-(§9.4) and the audit of every model call.
+**The AI features start where a provider is configured.** `ee/` is open source and ships in the one public image. Its
+AI code (Ask, the AI case summary and the assistant) is loaded when an AI provider key is set and at least one of Ask
+and the summary is on; each feature has an off setting (`NEBURYX_ASK_ENABLED`, `NEBURYX_SUMMARY_ENABLED`,
+`NEBURYX_ASSISTANT_ENABLED`), and no profile or mapping switch decides it. With no provider configured nothing of the
+AI code runs and its paths are unknown routes (404); `GET /v1/ai/status` always says which features are available. A
+route of a feature that is switched off refuses a call (`ACCESS_DENIED`, reason `ai-off`) and audits the refusal. The
+older switch, `NEBURYX_PROFILE=enterprise` with `ai.preview: true` in `neburyx.yaml` (a start with only one of them is
+refused with a clear message), still decides the edition `GET /v1/me` reports and the enterprise audit events of
+every read. With an open licence, nothing stops a person who controls the deployment from setting any of these, so they
+guard against AI features reaching real data by accident, not against a determined operator. The AI route group works
+on any source (accepted 2026-11-12); what protects real data is the request data rules (§9.4) and the audit of every
+model call.
 
 **Client state is kept in four partitions:**
 
@@ -627,7 +631,7 @@ policy, citations and an audit trail.
 
 ### 9.1 State of Ask in this build
 
-With the AI preview on, `POST /v1/ask` answers a question for template intents, and `POST /v1/ask/continue` gives one more bounded page of a result that was stopped as heavy. The earlier design (a typed question, a stored plan, a preview and a confirmation) is gone. A question goes through these steps in order:
+With a provider configured and Ask on, `POST /v1/ask` answers a question for template intents, and `POST /v1/ask/continue` gives one more bounded page of a result that was stopped as heavy. The earlier design (a typed question, a stored plan, a preview and a confirmation) is gone. A question goes through these steps in order:
 
 1. **Source check.** The caller must be allowed to read the source; a source that is not configured or not theirs is `NOT_FOUND` before any model call.
 2. **Folder.** The source's Ask folder (`classification.md`, `intents.json`) is read once at start-up and checked.

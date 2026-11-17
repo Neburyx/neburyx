@@ -94,7 +94,7 @@ export function settledOf(result: ApiResult<SummaryResponse>): { readonly draft:
 
 function outcomeOfFailure(failure: ApiFailure): SummaryOutcome {
   const reason = reasonOf(failure);
-  if (failure.code === 'ASK_UNSUPPORTED' || (failure.code === 'ACCESS_DENIED' && reason === 'ai-preview-off')) return { kind: 'unavailable' };
+  if (failure.code === 'ASK_UNSUPPORTED' || (failure.code === 'ACCESS_DENIED' && reason === 'ai-off')) return { kind: 'unavailable' };
   if ((failure.code === 'CONFLICT' && reason === 'source-changed') || failure.code === 'ABORTED') return { kind: 'source-changed' };
   return { kind: 'request-failed', failure };
 }

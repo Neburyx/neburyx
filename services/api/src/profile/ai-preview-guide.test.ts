@@ -71,6 +71,12 @@ describe('the example of the AI settings in the AI preview guide', () => {
     }
   });
 
+  it('says the controls follow the status of the AI features, with the sentence of a dimmed control, and holds no padlock or Enterprise lock', () => {
+    expect(GUIDE).toContain('Not available: AI is switched off, or no AI provider is configured.');
+    expect(GUIDE).not.toContain('Enterprise capability, locked');
+    expect(GUIDE).not.toMatch(/ai-preview-off/);
+  });
+
   it('names none of the removed settings or flow', () => {
     expect(GUIDE).not.toMatch(/pii_override|piiPropertiesSent|instructionsSha256|ai\.prompts|ai\.properties|\/v1\/ask\/(plan|run|edit|cancel)/);
   });

@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { MeResponse, SourcesResponse } from '@neburyx/contracts';
+import type { AiStatusResponse, MeResponse, SourcesResponse } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { createRequestStore } from '../api/request-store.js';
 import type { RequestState } from '../api/use-request.js';
@@ -7,6 +7,7 @@ import { createStore, useStoreSelector, type ReadableStore } from '../state/stor
 
 export interface ShellData {
   readonly me: RequestState<MeResponse>;
+  readonly aiStatus: RequestState<AiStatusResponse>;
   readonly sources: RequestState<SourcesResponse>;
   readonly reload: () => void;
   readonly reloadSources: () => void;
@@ -15,14 +16,17 @@ export interface ShellData {
 /** Reads the principal and the configured sources once, when it is created, outside React; every part of the shell reads these answers. */
 export function createShellData(client: ApiClient): ReadableStore<ShellData> {
   const me = createRequestStore((signal) => client.getMe(signal));
+  const aiStatus = createRequestStore((signal) => client.getAiStatus(signal));
   const sources = createRequestStore((signal) => client.getSources(signal));
   const reload = (): void => {
     me.reload();
+    aiStatus.reload();
     sources.reload();
   };
-  const combine = (): ShellData => ({ me: me.getState(), sources: sources.getState(), reload, reloadSources: sources.reload });
+  const combine = (): ShellData => ({ me: me.getState(), aiStatus: aiStatus.getState(), sources: sources.getState(), reload, reloadSources: sources.reload });
   const store = createStore(combine());
   me.subscribe(() => store.setState(combine()));
+  aiStatus.subscribe(() => store.setState(combine()));
   sources.subscribe(() => store.setState(combine()));
   return store;
 }
@@ -52,10 +56,21 @@ export function usePrincipalIdWhenProvided(): string | undefined {
   return principal;
 }
 
-/** Whether `GET /v1/me` says the edition is enterprise; false while that answer is not here and on a page without shell data. */
-export function useEnterpriseWhenProvided(): boolean {
+export type AiFeature = 'ask' | 'summary';
+
+/** What the status of the AI features says of one feature: `pending` while the answer is not here, `unavailable` when it says no or the read failed, and on a page without shell data. */
+export type AiAvailability = 'pending' | 'available' | 'unavailable';
+
+function aiAvailabilityOf(data: ShellData | undefined, feature: AiFeature): AiAvailability {
+  if (data === undefined) return 'unavailable';
+  const status = answeredData(data.aiStatus);
+  if (status === undefined) return retainedFailure(data.aiStatus) === undefined ? 'pending' : 'unavailable';
+  return status[feature].available ? 'available' : 'unavailable';
+}
+
+export function useAiAvailabilityWhenProvided(feature: AiFeature): AiAvailability {
   const store = useContext(ShellDataContext);
-  return useStoreSelector<ShellData | undefined, boolean>(store ?? NO_ONE, (data) => (data === undefined ? false : answeredData(data.me)?.edition === 'enterprise'));
+  return useStoreSelector<ShellData | undefined, AiAvailability>(store ?? NO_ONE, (data) => aiAvailabilityOf(data, feature));
 }
 
 export function answeredData<T>(state: RequestState<T>): T | undefined {

@@ -1,4 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ExtensionRefusal, type AuditEvent, type AuditSink, type ExtensionRequest } from '@neburyx/contracts';
 import type * as WorkerThreads from 'node:worker_threads';
 import { JUDGE_MODULE, createCheckRunner, judgeSentences, parseJudged } from '@neburyx/ee-ai-runtime';
@@ -51,7 +54,7 @@ afterEach(() => {
 });
 
 /** The AI resources of an extension: the pools of the two run stores, the timer of the removal of old summary records and the model clients made. */
-function counted(features?: { ask?: boolean; summary?: boolean }) {
+function counted(features?: { ask?: boolean; summary?: boolean; assistant?: boolean }) {
   const pools = { ask: 0, summary: 0 };
   const extension = createEnterpriseExtension({
     ...(features === undefined ? {} : { features }),
@@ -126,6 +129,14 @@ describe('the AI code before and after it is asked to start', () => {
     expect(extension.summarySettings()).toBeUndefined();
   });
 
+  it('takes the features the application decided from the context of configure, over the ones it was created with', async () => {
+    const { extension, pools } = counted();
+    expect((await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key' }, { ...CONTEXT, features: { ask: false, summary: true, assistant: true } }))?.ok).toBe(true);
+    extension.createAuditSink?.(SINK_CONTEXT);
+    expect(pools).toEqual({ ask: 0, summary: 1 });
+    expect(extension.askFolder()).toBeUndefined();
+  });
+
   it('needs no provider setting and opens nothing with both features off', async () => {
     const { extension, pools } = counted({ ask: false, summary: false });
     expect((await extension.configure?.({ preview: true }, {}, CONTEXT))?.ok).toBe(true);
@@ -144,22 +155,68 @@ describe('a route of a feature that is switched off', () => {
   it('refuses a question with the refusal of the preview switch and records it, while a summary route is not refused for that reason', async () => {
     const extension = createEnterpriseExtension({ features: { ask: false } });
     const events: AuditEvent[] = [];
-    await expect(routeOf(extension, '/v1/ask')?.handler(requestOf(events)) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
+    await expect(routeOf(extension, '/v1/ask')?.handler(requestOf(events)) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: true });
     expect(events).toHaveLength(1);
     const summary = await (routeOf(extension, '/v1/summary')?.handler(requestOf(events)) ?? Promise.resolve()).catch((error: unknown) => error);
-    expect(summary instanceof ExtensionRefusal && summary.reason === 'ai-preview-off').toBe(false);
+    expect(summary instanceof ExtensionRefusal && summary.reason === 'ai-off').toBe(false);
   });
 
   it('refuses a summary with the same refusal while a question is not refused for that reason', async () => {
     const extension = createEnterpriseExtension({ features: { summary: false } });
     const events: AuditEvent[] = [];
-    await expect(routeOf(extension, '/v1/summary')?.handler(requestOf(events)) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-preview-off' });
+    await expect(routeOf(extension, '/v1/summary')?.handler(requestOf(events)) ?? Promise.resolve()).rejects.toMatchObject({ code: 'ACCESS_DENIED', reason: 'ai-off' });
     const ask = await (routeOf(extension, '/v1/ask')?.handler(requestOf(events)) ?? Promise.resolve()).catch((error: unknown) => error);
-    expect(ask instanceof ExtensionRefusal && ask.reason === 'ai-preview-off').toBe(false);
+    expect(ask instanceof ExtensionRefusal && ask.reason === 'ai-off').toBe(false);
   });
 
-  it('leaves the status route open whichever feature is off', async () => {
-    const extension = createEnterpriseExtension({ features: { ask: false, summary: false } });
-    expect(await routeOf(extension, '/v1/ai/status')?.handler(requestOf([]))).toEqual({ preview: true });
+  it('says which features can be used: none before the extension is mounted, Ask once its folder and sink are in, the summary only with its token key, and never the assistant', async () => {
+    const { extension } = counted();
+    expect(extension.aiAvailability?.()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
+    await extension.configure?.({ preview: true }, ENV, CONTEXT);
+    extension.createAuditSink?.(SINK_CONTEXT);
+    expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: false } });
+  });
+
+  it('says the summary is available once its token key file is set', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'idle-token-key-'));
+    try {
+      const path = join(directory, 'key');
+      writeFileSync(path, 'ab'.repeat(32), { mode: 0o600 });
+      const { extension } = counted();
+      await extension.configure?.({ preview: true }, { ...ENV, NEBURYX_SUMMARY_TOKEN_KEY_FILE: path }, CONTEXT);
+      extension.createAuditSink?.(SINK_CONTEXT);
+      expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: true }, assistant: { available: false } });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('says a feature that is off is not available whatever else is in place', async () => {
+    const { extension } = counted({ ask: false });
+    await extension.configure?.({ preview: true }, ENV, CONTEXT);
+    extension.createAuditSink?.(SINK_CONTEXT);
+    expect(extension.aiAvailability?.().ask).toEqual({ available: false });
+  });
+
+  it('reads the assistant settings and instructions at configure, and holds them frozen with the hash', async () => {
+    const { extension } = counted();
+    expect((await extension.configure?.({ preview: true }, ENV, CONTEXT))?.ok).toBe(true);
+    expect(extension.assistantSettings()).toMatchObject({ maxSteps: 4, contextTurns: 3 });
+    expect(Object.isFrozen(extension.assistantSettings())).toBe(true);
+    expect(extension.assistantInstructions()?.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('stops configure naming an assistant setting that is bad, and never its value, and reads none with the assistant off', async () => {
+    const bad = { ...ENV, NEBURYX_ASSISTANT_MAX_STEPS: 'SENTINEL-STEPS', NEBURYX_ASSISTANT_PROMPT_FILE: '/not/there.md' };
+    const on = counted();
+    const outcome = await on.extension.configure?.({ preview: true }, bad, CONTEXT);
+    expect(outcome?.ok).toBe(false);
+    const problems = outcome?.ok === false ? outcome.problems.join(' ') : '';
+    expect(problems).toContain('NEBURYX_ASSISTANT_MAX_STEPS');
+    expect(problems).toContain('NEBURYX_ASSISTANT_PROMPT_FILE');
+    expect(problems).not.toContain('SENTINEL');
+    const off = counted({ assistant: false });
+    expect((await off.extension.configure?.({ preview: true }, bad, CONTEXT))?.ok).toBe(true);
+    expect([off.extension.assistantSettings(), off.extension.assistantInstructions()]).toEqual([undefined, undefined]);
   });
 });

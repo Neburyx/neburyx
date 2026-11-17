@@ -1,15 +1,22 @@
-# Switch the AI preview on
+# Switch the AI features on
 
-The AI preview is the Enterprise and AI part of the product. It is off in a normal install and works only when **both** of these are set:
+Ask, the AI case summary and the investigation assistant are on wherever an AI provider is configured. They need no profile and no switch in the mapping file: give the API a provider key (see [The key file](#the-key-file)) and the features that can run start. Each has a setting that turns it off.
 
-- the environment variable `NEBURYX_PROFILE=enterprise`, on the `api` service and on the `migrate` service;
-- `ai.preview: true` in the mapping file (`neburyx.yaml`).
+| Variable | What it does |
+|---|---|
+| `NEBURYX_ASK_ENABLED` | `off` turns Ask off; `on`, empty or unset leaves it on |
+| `NEBURYX_SUMMARY_ENABLED` | `off` turns the AI case summary off; `on`, empty or unset leaves it on |
+| `NEBURYX_ASSISTANT_ENABLED` | `off` turns the assistant off; `on`, empty or unset leaves it on |
 
-With only one of the two, the `api` and `migrate` commands stop and say which is missing. The switch is a safety rail against reaching AI features by accident, not a lock: whoever runs the deployment can set both.
+These three are read only when a provider key (`NEBURYX_ASK_API_KEY` or `NEBURYX_ASK_API_KEY_FILE`) is set; a value that is neither `on` nor `off` stops the start and names the variable, never the value. With no provider key none of the AI features is available and nothing of them runs. With a key and Ask and the summary both off, the AI code is not loaded.
+
+Ask needs its folder of intents (`NEBURYX_ASK_MAPPING_FOLDER`, see [The Ask folder](#the-ask-folder)): with Ask on and a key set but no folder, the start stops and names the setting. Set `NEBURYX_ASK_ENABLED=off` for a deployment that wants only the summary. The summary also needs its token key file before it is available (see [`GET /v1/ai/status`](#checking-it)).
+
+**The older switch.** `NEBURYX_PROFILE=enterprise` together with `ai.preview: true` in the mapping file still means what it meant beyond these three features: the edition `GET /v1/me` reports and the enterprise audit events of every read. With only one of the two, the `api` and `migrate` commands stop and say which is missing. It no longer decides whether Ask, the summary or the assistant is available.
 
 ## What to set in the mapping file
 
-The `ai` block of the mapping file holds one key, `preview`. It is described in the [mapping guide](mapping-guide.md#the-ai-section).
+The `ai` block of the mapping file holds one key, `preview`, the older switch above; the AI features do not need it. It is described in the [mapping guide](mapping-guide.md#the-ai-section).
 
 ```yaml
 ai:
@@ -22,7 +29,7 @@ Everything else about Ask is set in the environment of the API process. The mapp
 
 ## What to set in the environment
 
-With the preview on, the API reads these variables. An empty value counts as not set.
+When a provider key is set, the API reads these variables. An empty value counts as not set.
 
 | Variable | What to give |
 |---|---|
@@ -39,7 +46,7 @@ With the preview on, the API reads these variables. An empty value counts as not
 | `NEBURYX_AI_CACHE_TTL` | `5m` or `1h`. The default is `5m` |
 | `NEBURYX_AI_MAX_SLOT_SHARE` | The most of each pool of read slots, a source's and a person's, that AI reads may hold together: a number above 0 and up to 1. The default is 0.5, which leaves manual exploration at least half. An AI read over its share waits, and never holds up a manual read |
 
-The defaults are hypotheses that will change with measurement. A value that is set and not accepted stops the start and names the variable, never the value. The variables are checked only when the preview is on.
+The defaults are hypotheses that will change with measurement. A value that is set and not accepted stops the start and names the variable, never the value. The variables are checked only when an AI provider key is set.
 
 In Docker Compose, put the settings in `.env`: the compose file passes the provider, model, effort and limit variables, and the cache variables, to the `api` service, and sets the folder to `/etc/neburyx/ask`. The key is not in `.env`; see [The key file](#the-key-file). With `pnpm dev`, see [Running it with `pnpm dev`](#running-it-with-pnpm-dev).
 
@@ -74,7 +81,7 @@ The folder named by `NEBURYX_ASK_MAPPING_FOLDER` holds what Ask knows about each
 
 A template intent has `parameters`, `template` (one of the nine built-in template ids) and `settings` instead of `query`. An intent has exactly one of `query` and `template`. Values reach the source only as parameters, never as query text. The intent name `saved-pattern` is reserved.
 
-A source without a subfolder has no Ask. In a container the API runs as the `node` user (uid 1000), so the mounted folder and every file in it must be readable by that user (for example `chmod -R a+rX config/ask`, or owned by uid 1000); a folder that user cannot read stops the start, and on Linux a folder made by another user with mode 0700 is such a folder. Anything else in the folder stops the start: a subfolder that is not a configured source, a link, or any other file (names that start with a dot are ignored). With no source configured the folder only has to exist. With the AI preview on, the folder must exist: in Docker Compose that is `config/ask/` next to your mapping file (empty is fine with no source; with sources configured it needs a subfolder for at least one of them). A link is refused even inside the folder, so a Kubernetes ConfigMap volume, which mounts its files as links, cannot be used directly: copy the files into the folder (for example from an init step).
+A source without a subfolder has no Ask. In a container the API runs as the `node` user (uid 1000), so the mounted folder and every file in it must be readable by that user (for example `chmod -R a+rX config/ask`, or owned by uid 1000); a folder that user cannot read stops the start, and on Linux a folder made by another user with mode 0700 is such a folder. Anything else in the folder stops the start: a subfolder that is not a configured source, a link, or any other file (names that start with a dot are ignored). With no source configured the folder only has to exist. With Ask on and a provider key set, the folder must exist: in Docker Compose that is `config/ask/` next to your mapping file (empty is fine with no source; with sources configured it needs a subfolder for at least one of them). A link is refused even inside the folder, so a Kubernetes ConfigMap volume, which mounts its files as links, cannot be used directly: copy the files into the folder (for example from an init step).
 
 The folder is read once at start-up; a change needs a restart. The start-up checks each query and stops, naming the intent and the clause but never the query text, when:
 
@@ -134,7 +141,7 @@ A name that is not an intent of the folder is refused as an unknown intent, and 
 
 ### What a question does
 
-With the preview on, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with one call to the model (below), binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops before reading it, with a count that is a lower bound at the source's `heavy_op_threshold` (never an estimate of the full size), no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
+With Ask available, a question goes to `POST /v1/ask` ([Asking a question](api-conventions.md#asking-a-question)). Ask checks that the person may read the source, classifies the question with one call to the model (below), binds the entities the model found to the intent's parameters, and runs a template intent or a file query of the folder through the same gate as every other read: read-only, bounded, with the person's own access and masking. The answer is built by the server from the result and cites the elements it lists. A result that is larger than the source allows without being asked stops before reading it, with a count that is a lower bound at the source's `heavy_op_threshold` (never an estimate of the full size), no rows and a token to continue (`POST /v1/ask/continue`, valid for 15 minutes, and only while the intent is unchanged); the page comes from the Continue route.
 
 A question that cannot be answered gets one fixed sentence for its cause, never text from the model. An intent with a `query` is checked at start-up as above and run by the same route through the gate: the entities are the query's parameters and reach it only as parameters, the read is bounded by the source's limits and its result must be nodes and relationships of the source's mapping (the rules the gate applies are in the architecture notes). The answer lists what the query returned, with a count labelled as a lower bound when the read was cut.
 
@@ -189,17 +196,39 @@ A prefix shorter than the model's minimum is not cached, and no error is raised.
 
 The audit event of a model call carries `tokensIn` and `tokensOut`, and also `cacheReadTokens` (tokens read from the cache) and `cacheWriteTokens` (tokens written to it), each a number or `unknown` when the provider does not state it. `tokensIn` counts only the input tokens after the cached part, so the total input of a call is `tokensIn` plus the two cache figures. The audit holds the model, the prompt's id and version and the SHA-256 of its fixed instructions, never a value of a question or the text of an answer.
 
+## The assistant
+
+The assistant's settings are read when a provider key is set and the assistant is on; a value that is not a whole number in its range stops the start and names the variable, never the value. The defaults and ceilings are hypotheses to be measured, except the timeout of a call, the calls, the words of a message and the turns of context, which are given.
+
+| Variable | Default | Ceiling |
+|---|---|---|
+| `NEBURYX_ASSISTANT_MODEL` | `claude-sonnet-5-5` | |
+| `NEBURYX_ASSISTANT_TIMEOUT_MS` (one model call) | 60000 | 600000, and not above the total |
+| `NEBURYX_ASSISTANT_TOTAL_TIMEOUT_MS` (a whole turn) | 180000 | 600000 |
+| `NEBURYX_ASSISTANT_MAX_CALLS` (model calls a turn) | 5 | 10 |
+| `NEBURYX_ASSISTANT_MAX_STEPS` (reads a turn) | 4 | 8 |
+| `NEBURYX_ASSISTANT_MAX_ROWS` (rows read a turn) | the source's own page limit times the steps | an operator may only lower it |
+| `NEBURYX_ASSISTANT_CONTEXT_TURNS` (earlier turns the router sees) | 3 | 6 |
+| `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` | 1000 | 3000 |
+| `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS` | 25000 | 100000 |
+| `NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS` | 4000 | 32000 |
+| `NEBURYX_ASSISTANT_PROMPT_FILE` | the file shipped with the product | |
+
+`NEBURYX_ASSISTANT_PROMPT_FILE` names an absolute path to a file that replaces the router's instructions (at most as large as a classification file of the Ask folder). The reply format is added by the product after the file's text and cannot be changed by it, and the hash of the instructions used is kept with them. No setting raises a limit or budget of a source.
+
 ## Checking it
 
-With the switch on, `GET /v1/ai/status` answers `{ "preview": true }`. With the switch off the AI paths do not exist: `/v1/ai/status` and every other path under `/v1/ai` answer 404 and nothing is audited. The `/v1/ai` route group also refuses a call as a second check, with `ACCESS_DENIED` and the reason `ai-preview-off`, and audits the refusal, if a loaded extension is ever told that the preview is not on. The switch is a safety rail set by whoever runs the deployment, not a lock; what protects real data is the rules for what a model request may carry and the audit of every model call.
+`GET /v1/ai/status` is always there. It answers `{ "ask": { "available": … }, "summary": { "available": … }, "assistant": { "available": … } }`, with `true` for a feature that can be used now: a provider is configured, the feature is on and what it needs is in place (for Ask, its folder is loaded; for the summary, its token key file is set). With no provider configured, all three are `false`. The assistant is `false` until it is built.
 
-When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` with `{ "preview": true }`, and `GET /v1/me` reports the edition as `enterprise`.
+A route of a feature that is switched off answers `ACCESS_DENIED` with the reason `ai-off` and the sentence "This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.", audits the refusal, and reads nothing of the request. With no provider configured the AI routes do not exist and answer 404.
+
+When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` as above. `GET /v1/me` reports the edition as `enterprise` only when the older switch is on.
 
 How well Ask classifies is measured by `pnpm ask-eval --packs domain-packs --replay tools/ask-eval/data/replay.json --baseline tools/ask-eval/data/baseline.json`, which scores a committed recording of the model's replies to the demo packs' questions with no model call (see [`tools/ask-eval`](../tools/ask-eval/README.md) for recording a live run). The safety rules of Ask are tested by `pnpm test` in [`tools/ask-safety-suite`](../tools/ask-safety-suite/README.md), and its one read-transaction case by `pnpm test:neo4j` against a Neo4j Enterprise server you own.
 
 ## What you see in the app
 
-The header of the workspace shows **Ask** and **Summarize**. In a build without the preview (`GET /v1/me` does not report the edition as `enterprise`), both show a padlock and are locked: pressing one says "Enterprise capability, locked" and opens nothing. With the preview on, both show a sparkle. Summarize only says that it is not available in this release yet. **Ask** opens and closes the Ask panel beside the canvas; it is answered by the API routes described under [The Ask folder](#the-ask-folder).
+The header bar of the workspace shows **Ask** and **Summarize**. While `GET /v1/ai/status` has not answered, nothing is drawn for them. When it says a feature is available, its control is the available one (a sparkle in the accent colour). When it says it is not, or the status could not be read, the control is dimmed: it stays reachable by keyboard, pressing it says "Not available: AI is switched off, or no AI provider is configured." and opens nothing. There is no padlock and the edition does not decide it. Summarize, the "Include AI case summary" option of the export dialog and the "AI notes" item of the investigation menu follow the summary's availability. **Ask** opens and closes the Ask panel beside the canvas; it is answered by the API routes described under [The Ask folder](#the-ask-folder).
 
 ### Asking
 
@@ -254,7 +283,7 @@ Ask's settings moved from the `ai` block of the mapping file to the environment.
 | `ai.max_tokens` | `NEBURYX_ASK_MAX_TOKENS` |
 | `ai.cache` | `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL` |
 
-Remove the keys from the mapping file, leaving `ai: preview: true`, and set the variables. `NEBURYX_ASK_MAPPING_FOLDER` is new and required.
+Remove the keys from the mapping file (leaving `ai: preview: true` only if you also want the older switch, which now decides the edition and the enterprise audit of reads), and set the variables. `NEBURYX_ASK_MAPPING_FOLDER` is new and required.
 
 The `/v1/ask` and `/v1/ask/continue` routes are back and answer questions for template intents and file queries (see [The Ask folder](#the-ask-folder)). The settings for prompt files, property lists and the PII override are gone too (a mapping file that still has one is refused at start; remove it).
 
@@ -262,12 +291,11 @@ The database migration of an earlier change drops the table `ask_plans` and the 
 
 ## Running it with `pnpm dev`
 
-`pnpm dev` loads the enterprise code when `NEBURYX_PROFILE=enterprise` is set in your shell and `ai.preview: true` is in the mapping file the settings file names ([Run it locally](run-locally.md)). The migrate step then applies the migrations of the preview too.
+`pnpm dev` loads the enterprise code when a provider key is set in your shell (`NEBURYX_ASK_API_KEY` or `NEBURYX_ASK_API_KEY_FILE`), or, as before, when `NEBURYX_PROFILE=enterprise` is set and `ai.preview: true` is in the mapping file the settings file names ([Run it locally](run-locally.md)). The migrate step then applies the migrations of the AI extension too, from the same variables.
 
-The `NEBURYX_ASK_*` variables, `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL` are passed from your shell to the API process only, not to the migrate step or the web dev server, and never from the env file the settings name, which refuses `NEBURYX_*` names. Set them in your shell before `pnpm dev`, with `NEBURYX_ASK_MAPPING_FOLDER` pointing to a local folder, for example:
+The `NEBURYX_ASK_*` variables, `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL` are passed from your shell to the API process only, and the provider key variables and the three on/off settings also to the migrate step, never to the web dev server, and never from the env file the settings name, which refuses `NEBURYX_*` names. Set them in your shell before `pnpm dev`, with `NEBURYX_ASK_MAPPING_FOLDER` pointing to a local folder, for example:
 
 ```bash
-export NEBURYX_PROFILE=enterprise
 export NEBURYX_ASK_API_KEY_FILE=$HOME/.neburyx/anthropic.key
 export NEBURYX_ASK_MAPPING_FOLDER=$HOME/.neburyx/ask
 pnpm dev

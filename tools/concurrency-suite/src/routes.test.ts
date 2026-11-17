@@ -43,6 +43,7 @@ const ELSEWHERE: Readonly<Record<string, string>> = {
   'POST /v1/investigations/:id/draft/ai-notes': 'reads no source: it opens a token and writes to the application database, and takes no read slot',
   'GET /v1/investigations/:id/draft/ai-notes': 'counted once for the whole read, by the access check of the elements reader; its inner reads count no further (`countRate: false`), and the slot is the gate\'s; an empty list reads no source',
   'GET /v1/me': 'reads no source',
+  'GET /v1/ai/status': 'reads no source',
   'GET /v1/sources': 'reads no source',
   'GET /v1/sources/:id/profile': 'reads no source',
   'GET /v1/templates': 'reads no source',

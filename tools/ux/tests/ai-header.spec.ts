@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { canvasOf } from './support/workspace.ts';
 
-const AI_PATH = /\/v1\/(ai|ask|assistant|summary)(\/|$|\?)/;
+const AI_PATH = /\/v1\/(ask|assistant|summary)(\/|$|\?)/;
 
 const header = (page: Page) => page.getByRole('banner', { name: 'Investigation' });
 const control = (page: Page, label: 'Ask' | 'Summarize') => header(page).getByRole('button', { name: new RegExp(`^${label}`) });
@@ -15,11 +15,10 @@ async function openWorkspace(page: Page): Promise<void> {
   await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
 }
 
-async function answerAsEnterprise(page: Page): Promise<void> {
-  await page.route((url) => url.pathname === '/v1/me', async (route) => {
-    const answer = await route.fetch();
-    await route.fulfill({ response: answer, json: { ...(await answer.json()), edition: 'enterprise' } });
-  });
+const REASON = 'Not available: AI is switched off, or no AI provider is configured.';
+
+async function answerAsAvailable(page: Page): Promise<void> {
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: false } } }));
 }
 
 function countAiRequests(page: Page): string[] {
@@ -31,22 +30,23 @@ function countAiRequests(page: Page): string[] {
 }
 
 test.describe('Ask and Summarize in the workspace header', () => {
-  test('are locked for a community build, with a padlock and no pill, and the same after a reload', async ({ page }) => {
+  test('are dimmed with the reason when the status says no feature is available, with no padlock and no pill, and the same after a reload', async ({ page }) => {
     await openWorkspace(page);
     await expect(control(page, 'Summarize')).toHaveAttribute('aria-disabled', 'true');
-    await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize, Enterprise capability, locked');
-    await expect(control(page, 'Summarize')).toHaveAttribute('title', 'Enterprise capability, locked');
-    await expect(control(page, 'Summarize').locator('svg rect')).toHaveCount(1);
+    await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize');
+    await expect(control(page, 'Summarize')).toHaveAccessibleDescription(REASON);
+    await expect(control(page, 'Summarize')).toHaveAttribute('title', REASON);
+    await expect(control(page, 'Summarize').locator('svg rect')).toHaveCount(0);
     await expect(control(page, 'Ask')).toHaveAttribute('aria-disabled', 'true');
-    await expect(control(page, 'Ask')).toHaveAccessibleName('Ask, Enterprise capability, locked');
+    await expect(control(page, 'Ask')).toHaveAccessibleName('Ask');
     await expect(header(page).getByText('Enterprise', { exact: true })).toHaveCount(0);
     await page.reload();
     await expect(control(page, 'Summarize')).toHaveAttribute('aria-disabled', 'true');
     await expect(control(page, 'Ask')).toHaveAttribute('aria-disabled', 'true');
   });
 
-  test('are unlocked for an enterprise build, and the same after a reload', async ({ page }) => {
-    await answerAsEnterprise(page);
+  test('are available when the status says so, in the Community edition, and the same after a reload', async ({ page }) => {
+    await answerAsAvailable(page);
     await openWorkspace(page);
     await expect(control(page, 'Summarize')).toHaveAccessibleName('Summarize');
     await expect(control(page, 'Summarize')).not.toHaveAttribute('aria-disabled', 'true');
@@ -59,7 +59,7 @@ test.describe('Ask and Summarize in the workspace header', () => {
 
   test('sits beside the source status and Views without the header scrolling sideways, in both states', async ({ page }) => {
     for (const enterprise of [false, true]) {
-      if (enterprise) await answerAsEnterprise(page);
+      if (enterprise) await answerAsAvailable(page);
       await openWorkspace(page);
       await expect(control(page, 'Summarize')).toBeVisible();
       await expect(control(page, 'Ask')).toBeVisible();
@@ -76,7 +76,7 @@ test.describe('Ask and Summarize in the workspace header', () => {
     }
   });
 
-  test('send no request to an AI path when Summarize is activated by click, Enter or Space while locked', async ({ page }) => {
+  test('send no request to an AI path when Summarize is activated by click, Enter or Space while dimmed', async ({ page }) => {
     const seen = countAiRequests(page);
     await openWorkspace(page);
     await control(page, 'Summarize').click({ force: true });
@@ -89,8 +89,8 @@ test.describe('Ask and Summarize in the workspace header', () => {
     expect(seen).toEqual([]);
   });
 
-  test('open the summary panel when Summarize is activated in an enterprise build, and close it with a second activation', async ({ page }) => {
-    await answerAsEnterprise(page);
+  test('open the summary panel when Summarize is activated while the summary is available, and close it with a second activation', async ({ page }) => {
+    await answerAsAvailable(page);
     await page.route((url) => url.pathname === '/v1/summary', (route) => route.fulfill({ status: 422, json: { error: { code: 'ASK_UNSUPPORTED', message: 'Ask is not available in this edition.', retryable: false, traceId: 'trace-1', details: { reason: 'not-in-this-edition' } } } }));
     await openWorkspace(page);
     await control(page, 'Summarize').click();

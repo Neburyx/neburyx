@@ -21,10 +21,7 @@ const header = (page: Page) => page.getByRole('banner', { name: 'Investigation' 
 const panel = (page: Page) => page.locator('.ask-panel');
 
 async function openWorkspace(page: Page): Promise<void> {
-  await page.route((url) => url.pathname === '/v1/me', async (route) => {
-    const answer = await route.fetch();
-    await route.fulfill({ response: answer, json: { ...(await answer.json()), edition: 'enterprise' } });
-  });
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: false } } }));
   await page.goto('/dev/open-entity');
   await page.getByRole('button', { name: 'banking-demo' }).click();
   const form = page.getByRole('form', { name: 'Open an entity' });
@@ -150,7 +147,7 @@ test.describe('the Ask panel', () => {
     expect(left && right && left.x + left.width <= right.x).toBe(true);
   });
 
-  test('is locked in a community build and opens no panel', async ({ page }) => {
+  test('is dimmed when the status says Ask is not available, and opens no panel', async ({ page }) => {
     await page.goto('/dev/open-entity');
     await page.getByRole('button', { name: 'banking-demo' }).click();
     const form = page.getByRole('form', { name: 'Open an entity' });

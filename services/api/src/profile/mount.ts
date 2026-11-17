@@ -57,8 +57,9 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
         handler: async (request, replyOut) => {
           const { principal } = await store.current();
           let body: unknown;
-          // with the switch off the route group refuses before it reads the body, so a refusal is audited whatever the body is
-          if (route.requestSchema !== undefined && mount.previewOn) {
+          const live = mount.previewOn && route.active?.() !== false;
+          // with the switch off, or the feature of the route off, the route group refuses before it reads the body, so a refusal is audited whatever the body is
+          if (route.requestSchema !== undefined && live) {
             const parsedBody = route.requestSchema.safeParse(request.body);
             if (!parsedBody.success) throw new AppError('INVALID_REQUEST');
             body = parsedBody.data;
@@ -66,7 +67,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           let params: unknown;
           let queryValues: unknown;
           let investigation: { readonly id: string; readonly sourceId: string } | undefined;
-          if (mount.previewOn) {
+          if (live) {
             if (route.params !== undefined) {
               const parsedParams = route.params.safeParse(request.params);
               if (!parsedParams.success) throw new AppError('INVALID_REQUEST');
@@ -102,7 +103,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             return {
               principalId: principal.id,
               principalRole: principal.role,
-              previewOn: mount.previewOn,
+              previewOn: live,
               traceId: request.id,
               audit: mount.audit,
               askClassifier: mount.askClassifier !== communityAskClassifier ? mount.askClassifier : (extension.askClassifier?.() ?? mount.askClassifier),
@@ -149,7 +150,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           return parsed.data;
           };
           const { idempotency } = mount;
-          if (route.idempotent === undefined || idempotency === undefined || !mount.previewOn) return produce();
+          if (route.idempotent === undefined || idempotency === undefined || !live) return produce();
           const queryAt = request.url.indexOf('?');
           if (queryAt >= 0) throw new AppError('INVALID_REQUEST');
           const path = request.url;

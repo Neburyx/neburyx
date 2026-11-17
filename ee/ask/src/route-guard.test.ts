@@ -57,24 +57,24 @@ describe('the route-group hook with the preview off', () => {
     const { request } = requestOf({ previewOn: false });
     const thrown = await refusalOf(Promise.resolve(guarded.routes[0]?.handler(request)));
     expect(thrown).toBeInstanceOf(ExtensionRefusal);
-    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true });
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: true });
     expect(calls).toEqual([]);
     expect(provider.calls).toHaveLength(0);
   });
 
-  it('records one refusal event first, with the actor and trace and no source, resource or detail', async () => {
+  it('records one refusal event first, with the actor, the trace and the reason no-provider, and no source or resource', async () => {
     const { guarded } = await groupOf();
     const { request, events } = requestOf({ previewOn: false });
     await refusalOf(Promise.resolve(guarded.routes[0]?.handler(request)));
-    expect(events).toEqual([{ actorId: 'principal-1', actorRole: 'investigator', action: ROUTE_REFUSED_ACTION, result: 'refused', traceId: 'tr-1' }]);
-    expect(Object.keys(events[0] ?? {}).sort()).toEqual(['action', 'actorId', 'actorRole', 'result', 'traceId']);
+    expect(events).toEqual([{ actorId: 'principal-1', actorRole: 'investigator', action: ROUTE_REFUSED_ACTION, result: 'refused', traceId: 'tr-1', detail: { reason: 'no-provider' } }]);
+    expect(Object.keys(events[0] ?? {}).sort()).toEqual(['action', 'actorId', 'actorRole', 'detail', 'result', 'traceId']);
   });
 
   it('still refuses, with the audited mark false, and runs no handler when the audit write fails', async () => {
     const { guarded, calls, provider } = await groupOf();
     const { request } = requestOf({ previewOn: false, record: async () => Promise.reject(new Error('down')) });
     const thrown = await refusalOf(Promise.resolve(guarded.routes[0]?.handler(request)));
-    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: false });
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: false });
     expect(calls).toEqual([]);
     expect(provider.calls).toHaveLength(0);
   });
@@ -82,7 +82,7 @@ describe('the route-group hook with the preview off', () => {
   it('refuses every route of the group, one event for each call', async () => {
     const { guarded } = await groupOf();
     const { request, events } = requestOf({ previewOn: false });
-    for (const route of guarded.routes) expect(parseExtensionRefusal(await refusalOf(Promise.resolve(route.handler(request))))).toMatchObject({ reason: 'ai-preview-off' });
+    for (const route of guarded.routes) expect(parseExtensionRefusal(await refusalOf(Promise.resolve(route.handler(request))))).toMatchObject({ reason: 'ai-off' });
     expect(events).toHaveLength(2);
   });
 });
@@ -91,5 +91,25 @@ describe('a group passed to the hook', () => {
   it('keeps the routes in their order with their method, URL, permission and schema', async () => {
     const { guarded } = await groupOf();
     expect(guarded.routes.map((route) => [route.method, route.url, route.permission])).toEqual([['GET', '/v1/ai/probe', 'principal'], ['GET', '/v1/ai/other', 'principal']]);
+  });
+});
+
+describe('the reason a refusal records', () => {
+  it('is ai-off when the feature of the group is switched off, and no-provider when the routes are not on', async () => {
+    const group = guardAiRouteGroup({ routes: [{ method: 'GET', url: '/v1/ai/probe', permission: 'principal', responseSchema: aiStatusResponseSchema, handler: async () => 'ok' }] }, () => false);
+    const off = requestOf({ previewOn: true });
+    await refusalOf(Promise.resolve(group.routes[0]?.handler(off.request)));
+    expect(off.events.map((event) => event.detail)).toEqual([{ reason: 'ai-off' }]);
+    const notOn = requestOf({ previewOn: false });
+    await refusalOf(Promise.resolve(group.routes[0]?.handler(notOn.request)));
+    expect(notOn.events.map((event) => event.detail)).toEqual([{ reason: 'ai-off' }]);
+  });
+
+  it('is no-provider when the routes are not on and the feature is, and the answer is the same refusal either way', async () => {
+    const group = guardAiRouteGroup({ routes: [{ method: 'GET', url: '/v1/ai/probe', permission: 'principal', responseSchema: aiStatusResponseSchema, handler: async () => 'ok' }] });
+    const { request, events } = requestOf({ previewOn: false });
+    const thrown = await refusalOf(Promise.resolve(group.routes[0]?.handler(request)));
+    expect(events.map((event) => event.detail)).toEqual([{ reason: 'no-provider' }]);
+    expect(parseExtensionRefusal(thrown)).toEqual({ code: 'ACCESS_DENIED', reason: 'ai-off', audited: true });
   });
 });

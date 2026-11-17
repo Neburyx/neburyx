@@ -7,7 +7,7 @@ describe('the failures of an Ask call, in words', () => {
   it.each([
     ['ASK_UNSUPPORTED', undefined, 'Ask is not available right now.', undefined],
     ['ASK_UNSUPPORTED', { reason: 'not-in-this-edition' }, 'Ask is not available right now.', undefined],
-    ['ACCESS_DENIED', { reason: 'ai-preview-off' }, 'Ask is not available right now.', undefined],
+    ['ACCESS_DENIED', { reason: 'ai-off' }, 'Ask is not available right now.', undefined],
     ['INVALID_REQUEST', { reason: 'continue-invalid' }, 'This stop has expired, or the graph or your access changed. Ask the question again.', undefined],
     ['INVALID_REQUEST', { reason: 'file-query-text' }, 'The query behind this question is not allowed to run.', undefined],
     ['INVALID_REQUEST', { reason: 'file-query-intent' }, 'This question has no query for this source.', undefined],

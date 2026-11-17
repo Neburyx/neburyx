@@ -38,7 +38,7 @@ async function started(extension: ProfileExtension, options: { readonly previewO
   return { app, lines, events };
 }
 
-const REFUSAL = { code: 'ACCESS_DENIED', reason: 'ai-preview-off', audited: true } as const;
+const REFUSAL = { code: 'ACCESS_DENIED', reason: 'ai-off', audited: true } as const;
 
 describe('what the mount gives an extension handler', () => {
   it('gives the five fields: the principal, its role, the switch, the trace ID and the application sink', async () => {
@@ -111,10 +111,10 @@ describe('what the mount answers to a refusal', () => {
     expect(answer.json()).toEqual({
       error: {
         code: 'ACCESS_DENIED',
-        message: 'The AI preview is not switched on for this deployment. The switch is a safety rail that whoever runs the deployment sets, not a lock.',
+        message: 'This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.',
         retryable: false,
         traceId: answer.headers['x-trace-id'],
-        details: { reason: 'ai-preview-off' },
+        details: { reason: 'ai-off' },
       },
     });
     await app.close();
@@ -124,7 +124,7 @@ describe('what the mount answers to a refusal', () => {
     ['an ordinary error', () => new Error('secret detail of the failure')],
     ['a refusal with another code', () => ({ name: 'ExtensionRefusal', ...REFUSAL, code: 'CONFLICT' })],
     ['a refusal with another reason', () => ({ name: 'ExtensionRefusal', ...REFUSAL, reason: 'access-changed' })],
-    ['a refusal without the audited mark', () => ({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-preview-off' })],
+    ['a refusal without the audited mark', () => ({ name: 'ExtensionRefusal', code: 'ACCESS_DENIED', reason: 'ai-off' })],
     ['an unknown code', () => ({ name: 'ExtensionRefusal', code: 'TEAPOT' })],
     ['a reason of another code', () => ({ name: 'ExtensionRefusal', code: 'SOURCE_UNAVAILABLE', reason: 'unknown-reason' })],
     ['a conflict with a reason that is not a plan one', () => ({ name: 'ExtensionRefusal', code: 'CONFLICT', reason: 'source-changed' })],
@@ -171,6 +171,19 @@ describe('a POST route of an extension', () => {
     expect(answer.statusCode).toBe(200);
     expect(seen).toMatchObject({ body: { message: 'hello' } });
     expect(seen?.askClassifier.availability()).toEqual({ available: false, reason: 'not_in_this_edition' });
+    await app.close();
+  });
+
+  it('reads nothing of the request of a route whose feature is off: an invalid body reaches the handler as it is, and the handler is told the route is off', async () => {
+    const seen: { readonly previewOn: boolean; readonly hasBody: boolean }[] = [];
+    const extension: ProfileExtension = {
+      name: 'probe',
+      routeGroups: [{ routes: [{ method: 'POST', url: URL_OF_ROUTE, permission: 'principal', requestSchema: BODY_SCHEMA, responseSchema: z.unknown(), active: () => false, handler: async (request) => (seen.push({ previewOn: request.previewOn, hasBody: 'body' in request }), 'ok') }] }],
+    };
+    const { app } = await started(extension, { previewOn: true });
+    const answer = await app.inject({ method: 'POST', url: URL_OF_ROUTE, payload: { message: 42, secret: 'SENTINEL-VALUE' } });
+    expect(answer.statusCode).toBe(200);
+    expect(seen).toEqual([{ previewOn: false, hasBody: false }]);
     await app.close();
   });
 

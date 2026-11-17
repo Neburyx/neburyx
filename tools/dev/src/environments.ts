@@ -25,6 +25,9 @@ const ASK_VARIABLES = [
   'NEBURYX_ASK_MAX_TOKENS',
 ] as const;
 
+/** What decides whether the AI extension is loaded besides the mapping: the key (or its file) and the three on/off settings. The migrate step and the API both read them, so that both reach the same decision. */
+const AI_DECISION_VARIABLES = ['NEBURYX_ASK_API_KEY', 'NEBURYX_ASK_API_KEY_FILE', 'NEBURYX_ASK_ENABLED', 'NEBURYX_SUMMARY_ENABLED', 'NEBURYX_ASSISTANT_ENABLED'] as const;
+
 const SUMMARY_VARIABLES = [
   'NEBURYX_SUMMARY_MODEL',
   'NEBURYX_SUMMARY_TOKEN_KEY_FILE',
@@ -73,7 +76,11 @@ export function cacheEnvironment(source: Source): Environment {
 
 /** The settings of Ask the developer may set in the shell; only the API reads them, so the migrate step and the web server are not given them, and the mapping's env file never carries them. */
 export function askEnvironment(source: Source): Environment {
-  return pick(source, ASK_VARIABLES);
+  return { ...pick(source, ASK_VARIABLES), ...aiDecisionEnvironment(source) };
+}
+
+export function aiDecisionEnvironment(source: Source): Environment {
+  return pick(source, AI_DECISION_VARIABLES);
 }
 
 /** The settings of the case summary the developer may set in the shell; only the API reads them, so the migrate step and the web server are not given them. */

@@ -125,7 +125,11 @@ describe('pnpm dev', () => {
     await up(run.deps);
     expect(run.supervision()?.api.env).toMatchObject({ NEBURYX_ASK_API_KEY: 'ask-key-value', NEBURYX_ASK_MAPPING_FOLDER: '/ask', NEBURYX_ASK_EFFORT: 'high' });
     expect(JSON.stringify(run.supervision()?.api.env)).not.toContain('not passed');
-    for (const call of run.calls) expect(JSON.stringify(call.options.env)).not.toContain('NEBURYX_ASK_');
+    const migrating = run.calls.filter((call) => call.args.includes('migrate'));
+    expect(migrating).toHaveLength(1);
+    expect(migrating[0]?.options.env).toMatchObject({ NEBURYX_ASK_API_KEY: 'ask-key-value' });
+    expect(Object.keys(migrating[0]?.options.env ?? {}).filter((name) => name.startsWith('NEBURYX_ASK_'))).toEqual(['NEBURYX_ASK_API_KEY']);
+    for (const call of run.calls.filter((other) => !other.args.includes('migrate'))) expect(JSON.stringify(call.options.env)).not.toContain('NEBURYX_ASK_');
     expect(JSON.stringify(run.supervision()?.children.map((child) => child.env))).not.toContain('NEBURYX_ASK_');
     const plain = rig();
     await up(plain.deps);

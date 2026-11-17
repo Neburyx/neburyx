@@ -171,12 +171,10 @@ export function buildOpenApiDocument(
       '/v1/ai/status': {
         get: {
           operationId: 'getAiStatus',
-          summary: 'Whether the AI preview is switched on',
-          description: 'Present only when the deployment has switched the AI preview on (the environment variable NEBURYX_PROFILE=enterprise together with ai.preview: true in the mapping file); otherwise this path answers 404.',
+          summary: 'Which AI features can be used now',
+          description: 'Always present. Each feature (Ask, the AI case summary, the assistant) is available when an AI provider is configured, the feature is on and what it needs is in place; with no provider configured none is.',
           responses: {
-            '200': { description: 'The preview is on', content: jsonBody('AiStatusResponse') },
-            '403': { description: 'The route group was called while the preview is not switched on: ACCESS_DENIED with the reason ai-preview-off', content: jsonBody('ErrorResponse') },
-            '404': { description: 'The AI preview is not switched on', content: jsonBody('ErrorResponse') },
+            '200': { description: 'Whether each feature is available', content: jsonBody('AiStatusResponse') },
           },
         },
       },
@@ -190,7 +188,7 @@ export function buildOpenApiDocument(
           responses: {
             '200': { description: 'The answered question, or the refusal of it with its cause', content: jsonBody('AskAnswer') },
             '400': { description: 'The body is not valid (the question is blank or too long, or a field is unknown), or the gate refused the file query: INVALID_REQUEST with a file-query-* reason', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The route group was called while the preview is not switched on: ACCESS_DENIED with the reason ai-preview-off', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The feature of the route group is switched off: ACCESS_DENIED with the reason ai-off', content: jsonBody('ErrorResponse') },
             '404': { description: 'The source is not configured or not the caller\'s: NOT_FOUND', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON: UNSUPPORTED_MEDIA_TYPE', content: jsonBody('ErrorResponse') },
             '422': { description: 'Ask is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), a value the template accepts is refused by the source\'s own checks (ASK_INTENT_INVALID), or the read would exceed its budget (QUERY_BUDGET_EXCEEDED)', content: jsonBody('ErrorResponse') },
@@ -211,7 +209,7 @@ export function buildOpenApiDocument(
           responses: {
             '200': { description: 'The page that was read, summarized', content: jsonBody('AskAnswer') },
             '400': { description: 'The body is not valid, or the token is not valid for this person, source, intent, entities and mask, has expired, or is for an intent the folder no longer holds or has changed: INVALID_REQUEST with the reason continue-invalid', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The route group was called while the preview is not switched on: ACCESS_DENIED with the reason ai-preview-off', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The feature of the route group is switched off: ACCESS_DENIED with the reason ai-off', content: jsonBody('ErrorResponse') },
             '404': { description: 'The source is not configured or not the caller\'s: NOT_FOUND', content: jsonBody('ErrorResponse') },
             '422': { description: 'Ask is not available here (ASK_UNSUPPORTED with the reason not-in-this-edition), a value the template accepts is refused by the source\'s own checks (ASK_INTENT_INVALID), or the read would exceed its budget (QUERY_BUDGET_EXCEEDED)', content: jsonBody('ErrorResponse') },
             '429': { description: 'The person has asked too often: RATE_LIMITED', content: jsonBody('ErrorResponse') },
@@ -232,7 +230,7 @@ export function buildOpenApiDocument(
           responses: {
             '200': { description: 'The draft (status ok, with the sentences, the text sent, the model, the calls made and a sealed summaryToken), a view over the element cap or the size guard (tooLarge), the time limit reached (timeLimit), or a failure to draft with a fixed kind (failed). With the header Idempotent-Replay: true when it is the first answer again', content: jsonBody('SummaryResponse') },
             '400': { description: 'The body is not valid, the request has a query string, or the idempotency key is missing or malformed: INVALID_REQUEST', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The route group was called while the preview is not switched on (ACCESS_DENIED with the reason ai-preview-off), the person is a viewer, or a replay is no longer authorized (ACCESS_DENIED)', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The feature of the route group is switched off (ACCESS_DENIED with the reason ai-off), the person is a viewer, or a replay is no longer authorized (ACCESS_DENIED)', content: jsonBody('ErrorResponse') },
             '404': { description: 'The source or the investigation is not configured or not the caller\'s: NOT_FOUND', content: jsonBody('ErrorResponse') },
             '409': { description: 'The idempotency key was used with another request, the first call is still running, or the policy changed since the first call (CONFLICT); or the source was re-pointed or removed since the investigation was made (CONFLICT with the reason source-changed)', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON: UNSUPPORTED_MEDIA_TYPE', content: jsonBody('ErrorResponse') },
@@ -249,13 +247,13 @@ export function buildOpenApiDocument(
           operationId: 'copySummaryToNotes',
           summary: 'Copy the storable sentences of a summary into the notes of a view',
           description:
-            'Present only when the deployment has switched the AI preview on; otherwise this path answers 404 (not mounted) or 403 (ACCESS_DENIED with the reason ai-preview-off). Takes the sealed summaryToken of a draft and the version of the draft the caller read, and appends to the AI notes of the caller\'s own draft the sentences the token says are storable (listed words and placeholders only, never a name, an id or a number), once for each token: a token already copied stores nothing and answers alreadyCopied. The token must be the caller\'s, for this investigation, within 30 minutes, from the policy version and the word list version in force; any other is ACCESS_DENIED, as is an investigation the caller may not write. A stale version is CONFLICTED_VIEW_VERSION; a full list or an entry over its bounds is INVALID_REQUEST with the reason ai-notes-full or ai-notes-entry-too-large. The audit event holds the run and counts, never a sentence.',
+            'Present only when an AI provider is configured (or the deployment has switched the AI preview on); otherwise this path answers 404 (not mounted), or 403 (ACCESS_DENIED with the reason ai-off) when the feature is switched off. Takes the sealed summaryToken of a draft and the version of the draft the caller read, and appends to the AI notes of the caller\'s own draft the sentences the token says are storable (listed words and placeholders only, never a name, an id or a number), once for each token: a token already copied stores nothing and answers alreadyCopied. The token must be the caller\'s, for this investigation, within 30 minutes, from the policy version and the word list version in force; any other is ACCESS_DENIED, as is an investigation the caller may not write. A stale version is CONFLICTED_VIEW_VERSION; a full list or an entry over its bounds is INVALID_REQUEST with the reason ai-notes-full or ai-notes-entry-too-large. The audit event holds the run and counts, never a sentence.',
           parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
           requestBody: { required: true, content: jsonBody('CopyToNotesRequest') },
           responses: {
             '200': { description: 'How many sentences were copied and how many were not, whether the token had been copied before, and the draft\'s current version and save state', content: jsonBody('CopyToNotesResponse') },
             '400': { description: 'The body is not valid, a list or an entry is over its bounds (INVALID_REQUEST with the reason ai-notes-full or ai-notes-entry-too-large)', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The preview is off, the token is not valid for this person, investigation and moment, or the caller may not write the investigation: ACCESS_DENIED', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The feature is switched off, the token is not valid for this person, investigation and moment, or the caller may not write the investigation: ACCESS_DENIED', content: jsonBody('ErrorResponse') },
             '404': { description: 'The route is not mounted in this build: NOT_FOUND', content: jsonBody('ErrorResponse') },
             '409': { description: 'The version is not the draft\'s: CONFLICTED_VIEW_VERSION', content: jsonBody('ErrorResponse') },
             '415': { description: 'The body is not JSON: UNSUPPORTED_MEDIA_TYPE', content: jsonBody('ErrorResponse') },
@@ -267,7 +265,7 @@ export function buildOpenApiDocument(
           operationId: 'readAiNotes',
           summary: 'The AI notes of a view, rebuilt from the viewer\'s own access',
           description:
-            'Present only when the deployment has switched the AI preview on; otherwise this path answers 404 (not mounted) or 403 (ACCESS_DENIED with the reason ai-preview-off). Reads the AI notes stored with the caller\'s own draft and rebuilds each entry through the gate for the signed-in person, in one batch: names and titles as they are shown to them (with their masking, the mask query parameter), member counts with their own quality label, times as they read them; a sentence that cites or names something the person cannot see, or whose count is not known to them, is left out without a message. The coverage line is built for the person and never stored. An entry over the bounds of an entry is not read and is named in skipped.',
+            'Present only when an AI provider is configured (or the deployment has switched the AI preview on); otherwise this path answers 404 (not mounted), or 403 (ACCESS_DENIED with the reason ai-off) when the feature is switched off. Reads the AI notes stored with the caller\'s own draft and rebuilds each entry through the gate for the signed-in person, in one batch: names and titles as they are shown to them (with their masking, the mask query parameter), member counts with their own quality label, times as they read them; a sentence that cites or names something the person cannot see, or whose count is not known to them, is left out without a message. The coverage line is built for the person and never stored. An entry over the bounds of an entry is not read and is named in skipped.',
           parameters: [
             { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
             { name: 'mask', in: 'query', required: true, schema: { type: 'string', enum: ['true', 'false'] } },
@@ -275,7 +273,7 @@ export function buildOpenApiDocument(
           responses: {
             '200': { description: 'The entries, rebuilt, and any entry that was not read', content: jsonBody('AiNotesResponse') },
             '400': { description: 'The mask is not true or false: INVALID_REQUEST', content: jsonBody('ErrorResponse') },
-            '403': { description: 'The preview is off: ACCESS_DENIED with the reason ai-preview-off', content: jsonBody('ErrorResponse') },
+            '403': { description: 'The feature is switched off: ACCESS_DENIED with the reason ai-off', content: jsonBody('ErrorResponse') },
             '404': { description: 'The investigation is not the caller\'s, the source is not configured or not readable by the caller, or the route is not mounted in this build: NOT_FOUND', content: jsonBody('ErrorResponse') },
             '409': { description: 'The investigation\'s source was re-pointed or removed since the investigation was made: CONFLICT with the reason source-changed', content: jsonBody('ErrorResponse') },
             '422': { description: 'The notes are not available in this build: ASK_UNSUPPORTED, or the re-read went over a budget of the source: QUERY_BUDGET_EXCEEDED', content: jsonBody('ErrorResponse') },

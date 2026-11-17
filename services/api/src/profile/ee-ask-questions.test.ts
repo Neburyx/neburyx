@@ -11,8 +11,8 @@ afterAll(removeAskFolders);
 const INTENTS = { widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } } };
 const post = (app: Awaited<ReturnType<typeof startSearchApp>>['app'], url: string, payload: unknown) => app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
 
-async function started(classification: AskClassification, options: { readonly previewOn?: boolean; readonly sourceIds?: readonly string[] } = {}) {
-  const extension = createEnterpriseExtension();
+async function started(classification: AskClassification, options: { readonly previewOn?: boolean; readonly sourceIds?: readonly string[]; readonly features?: { ask?: boolean; summary?: boolean } } = {}) {
+  const extension = createEnterpriseExtension(options.features === undefined ? {} : { features: options.features });
   const folder = makeAskFolder(['demo'], INTENTS);
   const configured = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: folder }, { sourceIds: options.sourceIds ?? ['demo'] });
   expect(configured?.ok).toBe(true);
@@ -35,6 +35,19 @@ describe('a question through the real mount of the enterprise extension', () => 
     const questionEvents = events.filter((event) => event.action === 'ask.question');
     expect(questionEvents).toHaveLength(1);
     expect(JSON.stringify(questionEvents)).not.toMatch(/W-001|Show widget/);
+    await app.close();
+  });
+
+  it('refuses a question when Ask is off with ai-off and one refusal event, reading no body and making no model call, while the summary route is not refused for that reason', async () => {
+    const { app, events, asked } = await started({ ok: true, intent: 'widgetById', entities: { id: 'W-001' } }, { features: { ask: false } });
+    const answer = await post(app, '/v1/ask', { notAField: 'SENTINEL-VALUE' });
+    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-off' }]);
+    expect(asked).toEqual([]);
+    expect(events.map((event) => event.action)).toEqual(['ai.route_refused']);
+    const continued = await post(app, '/v1/ask/continue', {});
+    expect(continued.json().error.details).toEqual({ reason: 'ai-off' });
+    const summary = await post(app, '/v1/summary', {});
+    expect(summary.json().error.details).not.toEqual({ reason: 'ai-off' });
     await app.close();
   });
 

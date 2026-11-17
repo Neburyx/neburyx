@@ -122,7 +122,7 @@ describe('the summary panel: one click to a draft', () => {
 
   it.each([
     ['ASK_UNSUPPORTED', { reason: 'not-in-this-edition' }],
-    ['ACCESS_DENIED', { reason: 'ai-preview-off' }],
+    ['ACCESS_DENIED', { reason: 'ai-off' }],
   ])('says the summary is unavailable and offers no Try again: %s', async (code, details) => {
     const h = harness(async () => ({ ok: false, failure: failure(code, details) }));
     render(h.tree(true));

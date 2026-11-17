@@ -3,7 +3,7 @@ import { WALK_SENTENCE } from './canvas/graph-canvas.js';
 import { render } from '@testing-library/react';
 import { useMemo } from 'react';
 import { vi } from 'vitest';
-import type { MeResponse, SourceProfile, SourceSummary, SourceTestReport } from '@neburyx/contracts';
+import type { AiStatusResponse, MeResponse, SourceProfile, SourceSummary, SourceTestReport } from '@neburyx/contracts';
 import { MemoryRouter, RouterProvider, createMemoryRouter } from 'react-router';
 import type { ApiClient } from './api/client.js';
 import { fakeClient } from './api/fake-client.js';
@@ -66,10 +66,18 @@ export function testReport(sourceId: string, overrides: Partial<SourceTestReport
   };
 }
 
-export function clientWith(parts: { readonly me?: MeResponse; readonly sources?: readonly SourceSummary[] }): ApiClient {
+/** What the status of the AI features says when a test gives none: nothing available. */
+export const AI_STATUS_NONE: AiStatusResponse = { ask: { available: false }, summary: { available: false }, assistant: { available: false } };
+
+export function aiStatus(available: { readonly ask?: boolean; readonly summary?: boolean }): AiStatusResponse {
+  return { ask: { available: available.ask === true }, summary: { available: available.summary === true }, assistant: { available: false } };
+}
+
+export function clientWith(parts: { readonly me?: MeResponse; readonly sources?: readonly SourceSummary[]; readonly aiStatus?: AiStatusResponse }): ApiClient {
   return fakeClient({
     getProfile: async (sourceId) => ({ ok: true, value: testProfile(sourceId) }),
     getMe: async () => (parts.me === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: parts.me }),
+    getAiStatus: async () => (parts.aiStatus === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: parts.aiStatus }),
     getSources: async () => (parts.sources === undefined ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : { ok: true, value: { items: [...parts.sources], nextCursor: null } }),
   });
 }

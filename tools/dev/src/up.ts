@@ -1,7 +1,7 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadDevConfig } from './config.js';
-import { apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, PROFILE_VARIABLE, summaryEnvironment, webEnvironment } from './environments.js';
+import { aiDecisionEnvironment, apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, PROFILE_VARIABLE, summaryEnvironment, webEnvironment } from './environments.js';
 import type { Run } from './exec.js';
 import { externalDatabase } from './external.js';
 import type { Files } from './files.js';
@@ -62,7 +62,7 @@ export async function up(deps: Dependencies): Promise<number> {
     for (const build of BUILDS) await step(`building ${build.name}`, 'pnpm', ['--filter', build.filter, 'build']);
     const profile = deps.env[PROFILE_VARIABLE];
     const entry = join(deps.root, ENTRY_SCRIPT);
-    await step('migrating the database', deps.nodePath, [entry, join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment(withLimits, database.migrationUrl, database.appRole, profile === undefined || profile === '' ? undefined : { profile, mappingPath: own.mappingPath }));
+    await step('migrating the database', deps.nodePath, [entry, join(deps.root, 'services/api/dist/cli.js'), 'migrate'], migrationEnvironment({ ...withLimits, ...aiDecisionEnvironment(deps.env) }, database.migrationUrl, database.appRole, profile === undefined || profile === '' ? undefined : { profile, mappingPath: own.mappingPath }));
 
     const apiPort = await deps.freePort();
     const webPort = await deps.freePort();

@@ -9,6 +9,9 @@ const closed = await closedSetOf(rig);
 /** Routes of the API that the closed set does not build, each with the reason. Every other route under /v1 must be requested by the builder of the closed set. */
 export const NOT_IN_THE_CLOSED_SET: Readonly<Record<string, string>> = {
   'GET /v1/me': 'reads no source',
+  'GET /v1/ai/status': 'reads no source',
+  'GET /v1/me/preferences': 'reads no source',
+  'PUT /v1/me/preferences': 'reads no source',
   'GET /v1/sources': 'reads no source: the registry',
   'GET /v1/sources/:id/profile': 'reads no source: the stored profile',
   'POST /v1/sources/:id/test': 'runs the source tester, which does not go through the gate templates',

@@ -1,7 +1,7 @@
 import { createServer, type Server, type Socket } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import { IdentityStartError } from './identity/errors.js';
-import { createAppStore } from './app-store.js';
+import { createAppStore, pendingReporter } from './app-store.js';
 
 const servers: Server[] = [];
 const sockets: Socket[] = [];
@@ -73,5 +73,25 @@ describe('the readiness limit of the store', () => {
     const tookMs = Date.now() - started;
     await store.close();
     expect(tookMs).toBeLessThan(900);
+  });
+});
+
+describe('the report of pending migrations', () => {
+  it('tells once when the outcome turns pending, not for every probe, and again after it has been ok', () => {
+    const told: number[] = [];
+    const report = pendingReporter(() => told.push(told.length + 1));
+    expect([report('pending'), report('pending'), report('pending')]).toEqual(['pending', 'pending', 'pending']);
+    expect(told).toEqual([1]);
+    expect(report('ok')).toBe('ok');
+    report('pending');
+    expect(told).toEqual([1, 2]);
+  });
+
+  it('returns the outcome as it came, tells nothing for ok or unknown, and works with no listener', () => {
+    const told: string[] = [];
+    const report = pendingReporter(() => told.push('x'));
+    expect([report('ok'), report('unknown')]).toEqual(['ok', 'unknown']);
+    expect(told).toEqual([]);
+    expect(pendingReporter(undefined)('pending')).toBe('pending');
   });
 });

@@ -785,7 +785,7 @@ describe('the Sources page', () => {
       await user.click(within(detail).getByRole('button', { name: 'Test source' }));
       await within(detail).findByRole('alert');
       expect(asked.some((path) => path.includes('diagnostics'))).toBe(false);
-      expect(asked.filter((path) => path !== '/v1/me' && path !== '/v1/sources' && !path.endsWith('/profile') && !path.endsWith('/test'))).toEqual([]);
+      expect(asked.filter((path) => path !== '/v1/me' && path !== '/v1/ai/status' && path !== '/v1/sources' && !path.endsWith('/profile') && !path.endsWith('/test'))).toEqual([]);
     });
 
     it('is skipped by Tab: the next stop after Test source is not the bundle button', async () => {

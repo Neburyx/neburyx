@@ -17,7 +17,7 @@ import { createNeo4jExecutor } from './sources/executor.js';
 import { fakeDrivers } from './testing/fake-source-driver.js';
 import { mappingOf, sourceWith } from './testing/gate-fixtures.js';
 import { LOCAL_PRINCIPAL, TestExecutor } from './testing/gate.js';
-import { fileOf } from './testing/mapping.js';
+import { baseSource, fileOf } from './testing/mapping.js';
 import { fittingSchemaAnswer, SERVER_ROW, serverExecutor } from './testing/source-tester.js';
 import { testSourceGate } from './testing/source-gate.js';
 import { SourceGateError } from './gate/allowlist.js';
@@ -389,7 +389,7 @@ describe('the enterprise extension at start', () => {
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['configure', 'open-store']);
-      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [], budgets: {} } }]);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [], budgets: {}, features: { ask: true, summary: true, assistant: false } } }]);
       if (result.exitCode === 0) await result.app.close();
     });
 
@@ -455,14 +455,146 @@ describe('the enterprise extension at start', () => {
       if (result.exitCode === 0) await result.app.close();
     });
 
-    it('never loads the extension or calls configure when the switch is off, whatever Ask variables the environment has', async () => {
-      const offWithKeys = join(folder, 'off-with-keys.yaml');
-      writeFileSync(offWithKeys, stringify({ sources: [], ai: { preview: false } }));
+    it('never loads the extension or calls configure when the switch is off and no provider key is given, whatever other Ask variables the environment has', async () => {
+      const offWithFolder = join(folder, 'off-with-folder.yaml');
+      writeFileSync(offWithFolder, stringify({ sources: [], ai: { preview: false } }));
       const rig = configuring(async () => ({ ok: true }));
-      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: offWithKeys, NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder-not-read' }, rig.io);
+      const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: offWithFolder, NEBURYX_ASK_MAPPING_FOLDER: '/tmp/ask-folder-not-read', NEBURYX_ASK_ENABLED: 'SENTINEL' }, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['open-store']);
       if (result.exitCode === 0) await result.app.close();
+    });
+
+    describe('where a provider is configured', () => {
+      const KEY_ONLY = { ...DATABASE_ENV, NEBURYX_ASK_API_KEY: 'not-a-real-key' };
+
+      function withCalls(extra: Partial<ProfileExtension> = {}) {
+        const calls: string[] = [];
+        const configured: { features?: { ask: boolean; summary: boolean; assistant: boolean } }[] = [];
+        const mounted = { sink: { record: async () => undefined }, close: async () => undefined };
+        const extension: ProfileExtension = {
+          ...extensionWith(route()),
+          configure: async (_settings, _env, context) => (calls.push('configure'), configured.push({ ...(context.features === undefined ? {} : { features: context.features }) }), { ok: true }),
+          createAuditSink: () => (calls.push('sink'), mounted),
+          ...extra,
+        };
+        const base = io({ portOverride: 0, extensionLoader: { load: async () => (calls.push('load'), extension) } });
+        const seams: SourceGateOptions['seams'][] = [];
+        const openSourceGate = (options: SourceGateOptions): SourceGate => {
+          seams.push(options.seams);
+          return createSourceGate(options);
+        };
+        return { io: { ...base.io, openSourceGate }, calls, configured, seams, mounted, errors: base.errors };
+      }
+
+      it('loads, configures and mounts the extension with a key alone, with both features on, and reports the Community edition', async () => {
+        const rig = withCalls();
+        const result = await start(KEY_ONLY, rig.io);
+        expect(result.exitCode).toBe(0);
+        expect(rig.calls).toEqual(['load', 'configure', 'sink']);
+        expect(rig.configured).toEqual([{ features: { ask: true, summary: true, assistant: true } }]);
+        expect(rig.seams[0]?.audit).not.toBe(rig.mounted.sink);
+        if (result.exitCode === 0) {
+          const me = await result.app.inject({ method: 'GET', url: '/v1/me' });
+          expect(me.json().edition).toBe('community');
+          await result.app.close();
+        }
+      });
+
+      it('answers the question and the summary routes of the real extension, refusing neither as a preview that is off', async () => {
+        const { createEnterpriseExtension } = await import('@neburyx/ee-ask');
+        const { makeAskFolder, removeAskFolders } = await import('./testing/ask-folder.js');
+        const { createMemorySummaryRunStore } = await import('@neburyx/ee-ask');
+        const extension = createEnterpriseExtension({ runStore: () => ({ record: async () => undefined, close: async () => undefined }), summaryRunStore: () => createMemorySummaryRunStore() });
+        const base = io({ portOverride: 0, extensionLoader: { load: async () => extension } });
+        const config = join(folder, 'one-source.yaml');
+        writeFileSync(config, fileOf(baseSource({ id: 'alpha' })));
+        const result = await start({ ...DATABASE_ENV, NEBURYX_CONFIG: config, NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['alpha']) }, base.io);
+        expect(base.errors.join('')).toBe('');
+        expect(result.exitCode).toBe(0);
+        if (result.exitCode !== 0) return;
+        const post = (url: string, payload: unknown) => result.app.inject({ method: 'POST', url, payload: JSON.stringify(payload), headers: { 'content-type': 'application/json' } });
+        const ask = await post('/v1/ask', { sourceId: 'nowhere', question: 'anything' });
+        expect([ask.statusCode, ask.json().error.code]).toEqual([404, 'NOT_FOUND']);
+        const summary = await post('/v1/summary', {});
+        expect(summary.statusCode).toBe(400);
+        expect(JSON.stringify([ask.json(), summary.json()])).not.toContain('ai-off');
+        await result.app.close();
+        removeAskFolders();
+      });
+
+      it('tells the extension the assistant is off when no provider is configured, so its settings are not read, with the old switch on', async () => {
+        const rig = withCalls();
+        const result = await start({ ...CONFIGURED, NEBURYX_ASSISTANT_MAX_CALLS: 'SENTINEL-CALLS' }, rig.io);
+        expect(result.exitCode).toBe(0);
+        expect(rig.configured).toEqual([{ features: { ask: true, summary: true, assistant: false } }]);
+        if (result.exitCode === 0) await result.app.close();
+      });
+
+      it('writes the events of the extension\'s own routes to its sink with a key alone, and the gate\'s audit stays the Community one', async () => {
+        const events: string[] = [];
+        const mounted = { sink: { record: async (event: { readonly action: string }) => void events.push(event.action) }, close: async () => undefined };
+        const probe: ExtensionRoute = { method: 'GET', url: '/v1/probe-audit', permission: 'principal', responseSchema: z.unknown(), handler: async (request) => (await request.audit.record({ actorId: request.principalId, actorRole: request.principalRole, action: 'probe.event', result: 'success', traceId: request.traceId }), 'ok') };
+        const rig = withCalls({ ...extensionWith(probe), createAuditSink: () => mounted });
+        const result = await start(KEY_ONLY, rig.io);
+        expect(result.exitCode).toBe(0);
+        if (result.exitCode !== 0) return;
+        expect((await result.app.inject({ url: '/v1/probe-audit' })).statusCode).toBe(200);
+        expect(events).toEqual(['probe.event']);
+        expect(rig.seams[0]?.audit).not.toBe(mounted.sink);
+        await result.app.close();
+      });
+
+      it('counts a key file as a provider', async () => {
+        const rig = withCalls();
+        const result = await start({ ...DATABASE_ENV, NEBURYX_ASK_API_KEY_FILE: '/run/not-read' }, rig.io);
+        expect(result.exitCode).toBe(0);
+        expect(rig.calls).toContain('load');
+        if (result.exitCode === 0) await result.app.close();
+      });
+
+      it('hands the extension the features that are off, and loads nothing with both off', async () => {
+        const askOff = withCalls();
+        const first = await start({ ...KEY_ONLY, NEBURYX_ASK_ENABLED: 'off' }, askOff.io);
+        expect(first.exitCode).toBe(0);
+        expect(askOff.configured).toEqual([{ features: { ask: false, summary: true, assistant: true } }]);
+        if (first.exitCode === 0) await first.app.close();
+        const bothOff = withCalls();
+        const second = await start({ ...KEY_ONLY, NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off' }, bothOff.io);
+        expect(second.exitCode).toBe(0);
+        expect(bothOff.calls).toEqual([]);
+        if (second.exitCode === 0) await second.app.close();
+      });
+
+      it('stops at a bad flag value naming the setting and never the value, and ignores it with no provider', async () => {
+        const rig = withCalls();
+        expect(await start({ ...KEY_ONLY, NEBURYX_SUMMARY_ENABLED: 'SENTINEL-FLAG' }, rig.io)).toEqual({ exitCode: 1 });
+        expect(rig.errors.join('')).toBe('invalid configuration: NEBURYX_SUMMARY_ENABLED must be on or off\n');
+        expect(rig.calls).toEqual([]);
+        const none = withCalls();
+        const result = await start({ ...DATABASE_ENV, NEBURYX_SUMMARY_ENABLED: 'SENTINEL-FLAG' }, none.io);
+        expect(result.exitCode).toBe(0);
+        expect(none.calls).toEqual([]);
+        if (result.exitCode === 0) await result.app.close();
+      });
+
+      it('stops when a key is set and the build carries no AI code', async () => {
+        const base = io({ portOverride: 0, extensionLoader: undefined });
+        expect(await start(KEY_ONLY, base.io)).toEqual({ exitCode: 1 });
+        expect(base.errors.join('')).toBe('invalid configuration: an AI provider key is set but this build has no AI code\n');
+      });
+
+      it('leaves the old switch as it was beside a key: the Enterprise edition and the enterprise audit, and a feature still turns off', async () => {
+        const rig = withCalls();
+        const result = await start({ ...CONFIGURED, ...KEY_ONLY, NEBURYX_SUMMARY_ENABLED: 'off' }, rig.io);
+        expect(result.exitCode).toBe(0);
+        expect(rig.configured).toEqual([{ features: { ask: true, summary: false, assistant: true } }]);
+        expect(rig.seams[0]?.audit).toBe(rig.mounted.sink);
+        if (result.exitCode === 0) {
+          expect((await result.app.inject({ method: 'GET', url: '/v1/me' })).json().edition).toBe('enterprise');
+          await result.app.close();
+        }
+      });
     });
 
     it('loads no extension and creates no AI resource in the Community profile, with or without an ai section', async () => {

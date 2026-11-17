@@ -1,3 +1,4 @@
+import { extensionWanted, readAiEnablement } from '../profile/ai-enablement.js';
 import { resolve } from 'node:path';
 import { ConfigError } from '../config.js';
 import { unreachableMessage } from '../db/connect-timeout.js';
@@ -52,8 +53,13 @@ export async function runMigrateCommand(env: Readonly<Record<string, string | un
     return 1;
   }
 
+  const enabling = readAiEnablement(env);
+  if (!enabling.ok) {
+    for (const problem of enabling.problems) io.stderr.write(`invalid configuration: ${problem}\n`);
+    return 1;
+  }
   let eeDirectory: string | undefined;
-  if (decision.state === 'on') {
+  if (extensionWanted(enabling.enablement, decision.state === 'on')) {
     const loaded = await loadProfileExtension(io.extensionLoader ?? registeredExtensionLoader());
     if (!loaded.ok) {
       io.stderr.write(`${loaded.message}\n`);

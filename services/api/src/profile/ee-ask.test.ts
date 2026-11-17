@@ -52,21 +52,22 @@ const startIo = (): StartIo => ({
 });
 
 describe('the real enterprise extension in a start', () => {
-  it('answers 404 and registers no route under /v1/ai when the switch is off', async () => {
+  it('answers the status with every feature unavailable, and registers no other route under /v1/ai, when the switch is off', async () => {
     const result = await start({ DATABASE_URL, NEBURYX_CONFIG: plainFile }, startIo());
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
-    expect((await result.app.inject({ url: '/v1/ai/status' })).statusCode).toBe(404);
-    expect(registeredRoutesOf(result.app).filter((route) => route.url.startsWith('/v1/ai'))).toEqual([]);
+    const answer = await result.app.inject({ url: '/v1/ai/status' });
+    expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: false }, summary: { available: false }, assistant: { available: false } }]);
+    expect(registeredRoutesOf(result.app).filter((route) => route.url.startsWith('/v1/ai')).map((route) => route.url)).toEqual(['/v1/ai/status']);
     await result.app.close();
   });
 
-  it('answers 200 with the status and declares the principal permission when the switch is on', async () => {
+  it('answers 200 with the status, Ask available and the summary not until its key is set, and declares the principal permission when the switch is on', async () => {
     const result = await start({ DATABASE_URL, NEBURYX_CONFIG: previewFile, NEBURYX_PROFILE: 'enterprise', ...ASK_ENV }, startIo());
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const answer = await result.app.inject({ url: '/v1/ai/status' });
-    expect([answer.statusCode, answer.json()]).toEqual([200, { preview: true }]);
+    expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: true }, summary: { available: false }, assistant: { available: false } }]);
     expect(registeredRoutesOf(result.app).find((route) => route.url === '/v1/ai/status')).toMatchObject({ method: 'GET', permission: 'principal' });
     expect(routesWithoutPermission(registeredRoutesOf(result.app))).toEqual([]);
     await result.app.close();
@@ -111,13 +112,6 @@ describe('the real enterprise extension in a start', () => {
     const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension(), previewOn });
     const failures = await checkOperations(app, loadCommittedDocument(), {});
     expect(failures.filter((failure) => failure.route.includes('/v1/ai/status'))).toEqual([]);
-    await app.close();
-  });
-
-  it('answers the status route with the 403 of a refusal when the app is told the preview is off', async () => {
-    const app = await buildApp({ webRoot, logger: pino({ level: 'silent' }), store: memoryAppStore(), extension: createEnterpriseExtension(), previewOn: false });
-    const answer = await app.inject({ url: '/v1/ai/status' });
-    expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-preview-off' }]);
     await app.close();
   });
 });

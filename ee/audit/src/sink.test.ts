@@ -69,6 +69,14 @@ describe('recording the closing event of a case summary', () => {
     expect(calls[0]?.values[10]).toBe(JSON.stringify({ summary }));
   });
 
+  it.each(['ai-off', 'no-provider'] as const)('stores the reason %s of a refused call to an AI route as JSON, and refuses any other reason', async (reason) => {
+    const { mounted, calls } = rig();
+    await mounted.sink.record({ ...EVENT, action: 'ai.route_refused', result: 'refused', detail: { reason } });
+    expect(calls[0]?.values[10]).toBe(JSON.stringify({ reason }));
+    // @ts-expect-error a reason that is not one of the closed set
+    await expect(mounted.sink.record({ ...EVENT, action: 'ai.route_refused', result: 'refused', detail: { reason: 'free text' } })).rejects.toBeDefined();
+  });
+
   it('stores the counts of the sentences kept and removed with the outcome partial', async () => {
     const { mounted, calls } = rig();
     await mounted.sink.record({ ...EVENT, action: 'ai.case-summary.closed', detail: { summary: checked } });

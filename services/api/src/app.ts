@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Socket } from 'node:net';
 import fastifyStatic from '@fastify/static';
-import { type ErrorCode, type ProfileExtension, preferencesResponseSchema, preferencesWriteRequestSchema, deleteInvestigationResponseSchema, deleteViewRequestSchema, pathsRequestSchema, pathsResponseSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, createExportResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
+import { type ErrorCode, type ProfileExtension, aiStatusResponseSchema, preferencesResponseSchema, preferencesWriteRequestSchema, deleteInvestigationResponseSchema, deleteViewRequestSchema, pathsRequestSchema, pathsResponseSchema, deleteViewResponseSchema, restoreInvestigationRequestSchema, MAX_DRAFT_DOCUMENT_BYTES, readRefsRequestSchema, readRefsResponseSchema, exportRequestSchema, exportSchema, createExportResponseSchema, draftWriteRequestSchema, draftWriteResponseSchema, renameRequestSchema, renameResponseSchema, statusChangeRequestSchema, statusChangeResponseSchema, derivedNeighborsRequestSchema, derivedNeighborsResponseSchema, templateListQuerySchema, patternValidateRequestSchema, patternRunRequestSchema, patternRunResponseSchema, savedPatternRunRequestSchema, savedPatternRunResponseSchema, patternPreviewResponseSchema, patternValidateResponseSchema, savePatternRequestSchema, savedPatternSchema, patternListQuerySchema, patternListResponseSchema, changePatternRequestSchema, deletePatternResponseSchema, templateListResponseSchema, templateRunRequestSchema, templateRunResponseSchema, coverageRequestSchema, coverageResponseSchema, degreePreviewRequestSchema, edgeDetailSchema, edgePathSchema, entityLookupRequestSchema, degreePreviewSchema, entityPathSchema, entityQuerySchema, expandRequestSchema, expandResponseSchema, healthResponseSchema, investigationListQuerySchema, investigationListResponseSchema, investigationResponseSchema, meResponseSchema, nodeSchema, parseEdgeRefSegment, parseSourceLinkSegment, sourceLinkPathSchema, sourceLinkQuerySchema, openInvestigationRequestSchema, openInvestigationResponseSchema, readyResponseSchema, searchMoreRequestSchema, searchMoreResultSchema, searchRequestSchema, searchResultSchema, sourceProfileSchema, sourceTestReportSchema, sourcesResponseSchema, renameViewRequestSchema, restoreViewResponseSchema, saveViewRequestSchema, saveViewResponseSchema, viewListQuerySchema, viewListResponseSchema, ownedViewListResponseSchema, namedViewSchema } from '@neburyx/contracts';
 import { z } from 'zod';
 import Fastify, {
   type FastifyBaseLogger,
@@ -65,7 +65,7 @@ import { createAskRunnerFactory } from './ask/ask-runner.js';
 import { createSigner, deriveSigningKey } from './ask/signing-key.js';
 import { COMMUNITY_POLICY_VERSION } from './investigations/draft.js';
 import { mountExtensionRoutes, type ExtensionMount } from './profile/mount.js';
-import type { Seams } from './seams/seams.js';
+import type { AuditSink, Seams } from './seams/seams.js';
 import type { RegisteredRoute } from './permissions.js';
 import { allUnknown, type ReachabilityView } from './source-ping/cache.js';
 import type { SourceTester } from './source-test/tester.js';
@@ -76,8 +76,12 @@ export interface AppOptions {
   readonly store: AppStore;
   readonly jobs?: JobRunner | undefined;
   readonly seams?: Seams | undefined;
-  /** Whether the preview switch is on, which the routes of an extension are told; absent, they are told it is off. */
+  /** Whether the routes of the extension answer, which they are told; absent, they are told they are off. */
   readonly previewOn?: boolean | undefined;
+  /** Where the events of the extension's own routes are written; absent, the gate's audit of the seams. */
+  readonly extensionAudit?: AuditSink | undefined;
+  /** The edition `GET /v1/me` reports; absent, `enterprise` when an extension is given and `community` otherwise. */
+  readonly edition?: 'community' | 'enterprise' | undefined;
   readonly mapping?: MappingModel | undefined;
   readonly sourceTester?: SourceTester | undefined;
   readonly gate?: Gate | undefined;
@@ -363,7 +367,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.get('/v1/me', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => {
     const [identity, rows] = await Promise.all([options.store.current(), options.store.listSources()]);
     const sources = summariesOf(rows, mapping, undefined, options.referenceKeys).map((source) => ({ sourceId: source.id, viewSensitive: true, synthetic: source.synthetic }));
-    return meResponseSchema.parse({ ...identity, edition: options.extension === undefined ? 'community' : 'enterprise', sources });
+    return meResponseSchema.parse({ ...identity, edition: options.edition ?? (options.extension === undefined ? 'community' : 'enterprise'), sources });
   });
 
   app.get('/v1/me/preferences', { exposeHeadRoute: false, config: { permission: 'principal' } }, async (request) => {
@@ -378,6 +382,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const identity = await options.store.current();
     return preferencesResponseSchema.parse({ preferences: await options.store.writePreferences(identity.principal.id, body.data.preferences) });
   });
+  app.get('/v1/ai/status', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => aiStatusResponseSchema.parse(options.extension?.aiAvailability?.() ?? { ask: { available: false }, summary: { available: false }, assistant: { available: false } }));
 
   const fallbackKeyMaterial = randomBytes(32);
   const askRunners: { current?: NonNullable<ExtensionMount['askRunnerFor']> } = {};
@@ -391,7 +396,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   if (options.extension !== undefined) {
     mountExtensionRoutes(app, options.extension, options.store, {
       previewOn: options.previewOn === true,
-      audit: (options.seams ?? communitySeams()).audit,
+      audit: options.extensionAudit ?? (options.seams ?? communitySeams()).audit,
       askClassifier: (options.seams ?? communitySeams()).askClassifier ?? communityAskClassifier,
       caseSummarizer: (options.seams ?? communitySeams()).caseSummarizer ?? communityCaseSummarizer,
       idempotency: {

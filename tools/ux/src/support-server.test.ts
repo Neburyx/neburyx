@@ -120,6 +120,7 @@ describe('the support server', () => {
   it('answers the reads the pages make with synthetic bodies that name one source', async () => {
     const base = await start();
     expect(await (await fetch(`${base}/v1/me`)).json()).toMatchObject({ edition: 'community', identityMode: 'none', principal: { role: 'administrator' } });
+    expect(await (await fetch(`${base}/v1/ai/status`)).json()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
     expect(await (await fetch(`${base}/v1/sources`)).json()).toMatchObject({ items: [{ id: 'demo', synthetic: true, readOnly: true, state: 'connected' }], nextCursor: null });
     expect(await (await fetch(`${base}/v1/sources/demo/profile`)).json()).toEqual({ sourceId: 'demo' });
     expect((await fetch(`${base}/healthz`)).status).toBe(200);

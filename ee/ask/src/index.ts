@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { SUMMARY_DEFAULTS, aiStatusResponseSchema, type AskClassifier, type ConfigureOutcome, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
+import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension } from '@neburyx/contracts';
 import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, type AskConfiguration } from './configure.js';
@@ -19,6 +19,9 @@ import { loadSummaryInstructions } from './case-summary/load-instructions.js';
 import type { SummaryInstructions } from './case-summary/instructions.js';
 import { readSummarySettings, summaryAvailability, type SummaryAvailability, type SummarySettings } from './case-summary/settings.js';
 import { loadAskFolder } from './folder/load.js';
+import type { AssistantInstructions } from './assistant/instructions.js';
+import { loadAssistantInstructions } from './assistant/load-instructions.js';
+import { readAssistantSettings, type AssistantSettings } from './assistant/settings.js';
 import { guardAiRouteGroup } from './route-guard.js';
 
 /** @public Used by the audited-call integration test of `services/api`, which needs the real audit sink of the application and a real Postgres, so it cannot go through `createEnterpriseExtension()`. */
@@ -52,7 +55,6 @@ export type { ModelAnswer, ModelProvider } from '@neburyx/ee-ai-runtime';
 /** @public The type of a request to the model: the audited-call integration test of `services/api` builds one, and the application of `services/api` is what gives it a real audit sink. */
 export type { ModelRequest } from '@neburyx/ee-ai-runtime';
 
-const AI_STATUS_URL = '/v1/ai/status';
 const MILLISECONDS_A_DAY = 24 * 60 * 60 * 1000;
 /** How often the removal of old case summary records runs (the retention is in days, so an hour is fine). */
 const RETENTION_INTERVAL_MS = 60 * 60 * 1000;
@@ -65,6 +67,10 @@ export interface EnterpriseExtension extends ProfileExtension {
   readonly askFolder: () => AskFolder | undefined;
   /** The instructions of a summary call, built at start-up; undefined before `configure` accepted them. */
   readonly summaryInstructions: () => SummaryInstructions | undefined;
+  /** The assistant's settings read at start-up; undefined before `configure` accepted them and while the assistant is off. */
+  readonly assistantSettings: () => AssistantSettings | undefined;
+  /** The assistant's instructions, with their hash; undefined before `configure` accepted them and while the assistant is off. */
+  readonly assistantInstructions: () => AssistantInstructions | undefined;
   /** The summary settings read at start-up; undefined before `configure` accepted them. */
   readonly summarySettings: () => SummarySettings | undefined;
   /** Whether a summary can be drafted now: Ask is configured and the settings, with a size guard, are in. */
@@ -89,6 +95,8 @@ interface EnterpriseExtensionOptions {
   readonly retentionIntervalMs?: number;
   /** Only a test sets this, to a folder that stands in for the summary files shipped with the product. */
   readonly shippedSummaryDirectory?: string;
+  /** Only a test sets this, to a folder that stands in for the assistant file shipped with the product. */
+  readonly shippedAssistantDirectory?: string;
   /** Only a test sets this, to a store that opens no connection; the run store otherwise writes `ask_runs` on a pool of its own. */
   readonly runStore?: (context: AuditSinkContext) => RunStore & { close(): Promise<void> };
   /** The features that are off; each is on unless named. Only a test sets this until the settings that turn a feature off exist. */
@@ -96,7 +104,7 @@ interface EnterpriseExtensionOptions {
 }
 
 export function createEnterpriseExtension(options: EnterpriseExtensionOptions = {}): EnterpriseExtension {
-  const features = featureSwitches(options.features);
+  let features = featureSwitches(options.features);
   const checks = createCheckRunner();
   let configuration: AskConfiguration | undefined;
   let provider: ProviderConfiguration | undefined;
@@ -106,6 +114,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let folder: AskFolder | undefined;
   let instructions: SummaryInstructions | undefined;
   let summarySettings: SummarySettings | undefined;
+  let assistantSettings: AssistantSettings | undefined;
+  let assistantInstructions: AssistantInstructions | undefined;
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
   let retentionTimer: ReturnType<typeof setInterval> | undefined;
@@ -124,17 +134,6 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   };
   const modelOf = (): AuditedModelCall | undefined => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: mounted.sink }));
   const guarded = [
-    guardAiRouteGroup({
-      routes: [
-        {
-          method: 'GET',
-          url: AI_STATUS_URL,
-          permission: 'principal',
-          responseSchema: aiStatusResponseSchema,
-          handler: async () => ({ preview: true }),
-        },
-      ],
-    }),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -151,13 +150,22 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     askFolder: () => folder,
     summaryInstructions: () => instructions,
     summarySettings: () => summarySettings,
+    assistantSettings: () => assistantSettings,
+    assistantInstructions: () => assistantInstructions,
     summaryAvailability: () => summaryAvailability({ askConfigured: configuration !== undefined && instructions !== undefined, settings: summarySettings, tokenKeyConfigured: tokenKeys !== undefined }),
     askClassifier,
     caseSummarizer,
     async configure(_settings, env, context) {
       environment = env;
+      if (context.features !== undefined) features = featureSwitches(context.features);
       const askConfigured = features.ask ? await configureAsk(env) : undefined;
       const providerConfigured = askConfigured ?? (features.summary ? await configureProvider(env) : undefined);
+      assistantSettings = undefined;
+      assistantInstructions = undefined;
+      const assistant = features.assistant ? readAssistantSettings(env) : undefined;
+      const assistantPrompt = features.assistant ? await loadAssistantInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
+      const assistantProblems = [...(assistant?.ok === false ? assistant.problems : []), ...(assistantPrompt?.ok === false ? assistantPrompt.problems : [])];
+      if (assistantProblems.length > 0) return { ok: false, problems: assistantProblems };
       if (providerConfigured === undefined) return { ok: true };
       configuration = askConfigured?.configuration;
       provider = providerConfigured.configuration;
@@ -187,6 +195,8 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         readKeys = keys.keys;
         readInstructions = summary.instructions;
       }
+      assistantSettings = assistant?.ok === true ? assistant.settings : undefined;
+      assistantInstructions = assistantPrompt?.ok === true ? assistantPrompt.instructions : undefined;
       folder = loadedFolder;
       instructions = readInstructions;
       summarySettings = readSettings;
@@ -195,6 +205,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     },
     auditSink: () => mounted?.sink,
     model: modelOf,
+    aiAvailability: () => ({ ask: { available: features.ask && askClassifier() !== undefined }, summary: { available: features.summary && caseSummarizer()?.availability().available === true }, assistant: { available: false } }),
     createAuditSink(context) {
       const audit = createAuditSink(context);
       mounted = audit;

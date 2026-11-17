@@ -22,6 +22,7 @@ import {
   investigationListResponseSchema,
   ownedViewListResponseSchema,
   investigationResponseSchema,
+  aiStatusResponseSchema,
   meResponseSchema,
   preferencesResponseSchema,
   type PreferencesResponse,
@@ -105,6 +106,7 @@ import {
   type Investigation,
   type InvestigationListResponse,
   type InvestigationResponse,
+  type AiStatusResponse,
   type MeResponse,
   type OpenInvestigationRequest,
   type OpenInvestigationResponse,
@@ -161,6 +163,8 @@ export interface ApiClient {
   getMe(signal?: AbortSignal): Promise<ApiResult<MeResponse>>;
   getPreferences(signal?: AbortSignal): Promise<ApiResult<PreferencesResponse>>;
   putPreferences(body: PreferencesWriteRequest, signal?: AbortSignal): Promise<ApiResult<PreferencesResponse>>;
+  /** Which AI features can be used now; reads no source. */
+  getAiStatus(signal?: AbortSignal): Promise<ApiResult<AiStatusResponse>>;
   getSources(signal?: AbortSignal): Promise<ApiResult<SourcesResponse>>;
   getProfile(sourceId: string, signal?: AbortSignal): Promise<ApiResult<SourceProfile>>;
   /** The built-in templates and the presets of a source, with each template's parameter schema; reads no source. The answer names the source asked for, or it is a `SCHEMA_MISMATCH`. */
@@ -356,6 +360,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     getMe: (signal) => request(fetcher, '/v1/me', meResponseSchema, signal),
     getPreferences: (signal) => request(fetcher, '/v1/me/preferences', preferencesResponseSchema, signal),
     putPreferences: (body, signal) => request(fetcher, '/v1/me/preferences', preferencesResponseSchema, signal, 'PUT', body),
+    getAiStatus: (signal) => request(fetcher, '/v1/ai/status', aiStatusResponseSchema, signal),
     getSources: (signal) => request(fetcher, '/v1/sources', sourcesResponseSchema, signal),
     getProfile: (sourceId, signal) => request(fetcher, `/v1/sources/${encodeURIComponent(sourceId)}/profile`, sourceProfileSchema, signal),
     listTemplates: async (sourceId, signal) => {

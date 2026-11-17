@@ -22,10 +22,7 @@ const header = (page: Page) => page.getByRole('banner', { name: 'Investigation' 
 const panel = (page: Page) => page.locator('.summary-panel');
 
 async function openWorkspace(page: Page): Promise<void> {
-  await page.route((url) => url.pathname === '/v1/me', async (route) => {
-    const answer = await route.fetch();
-    await route.fulfill({ response: answer, json: { ...(await answer.json()), edition: 'enterprise' } });
-  });
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant: { available: false } } }));
   await page.goto('/dev/open-entity');
   await page.getByRole('button', { name: 'banking-demo' }).click();
   const form = page.getByRole('form', { name: 'Open an entity' });

@@ -82,6 +82,8 @@ describe('the AI fields of an audit event', () => {
 describe('the detail of an audit event', () => {
   it.each([
     { reason: 'cancelled' },
+    { reason: 'ai-off' },
+    { reason: 'no-provider' },
     { target: 'entity', type: 'person' },
     { counts: { nodes: 2, edges: 1, missing: 0 } },
     { export: { format: 'csv', entities: 3, maskedFields: 1 } },
@@ -95,6 +97,7 @@ describe('the detail of an audit event', () => {
     { text: 'x' },
     { reason: 'cancelled', prompt: 'x' },
     { reason: 'other' },
+    { reason: 'ai-off', text: 'x' },
     { counts: { nodes: 1.5, edges: 1, missing: 0 } },
     { counts: { nodes: -1, edges: 1, missing: 0 } },
     { export: { format: 'csv', fileName: 'a.csv' } },
