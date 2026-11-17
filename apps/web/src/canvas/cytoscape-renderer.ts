@@ -176,8 +176,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   let surfaced = false;
   /** The canvas size the pan was last set for; a change of size moves the pan by half the difference, so what was at the centre stays there. */
   let sizeShown: Size | undefined;
-  /** The camera a restore or a change of canvas size left. It is not reported, so opening an investigation, in a window of any size, does not write its draft and conflict with another window that has it open; the next change the person makes reports the camera with the size it is drawn at. */
-  let moved: { readonly zoom: number; readonly x: number; readonly y: number } | undefined;
+  /** True while the renderer itself moves the camera (a restore, keeping the centre when the canvas changes size): such a move queues no report, so opening an investigation, in a window of any size, does not write its draft and conflict with another window that has it open; only a pan, a zoom or a fit reports, with the size the canvas is drawn at. */
+  let automatic = false;
   let flushViewport: (() => void) | undefined;
   let lastSource: string | null | undefined;
   // The entity being dragged, where it was at the grab, and whether the drag was interrupted: a cancelled drag keeps putting the entity back until the library sees the release.
@@ -330,13 +330,22 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     return size.width > 0 && size.height > 0 ? { canvas: size } : {};
   };
 
+  const automatically = (move: () => void): void => {
+    automatic = true;
+    try {
+      move();
+    } finally {
+      automatic = false;
+    }
+  };
+
   const showViewport = (cy: Core, viewport: Viewport, restored = false): void => {
     const size = sizeOf(cy);
-    const queued = pendingReport !== undefined;
     const shift = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
-    cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + shift.x, y: viewport.y + shift.y } });
-    moved = restored && !queued ? { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y } : undefined;
+    const show = (): void => cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + shift.x, y: viewport.y + shift.y } });
+    if (restored) automatically(show);
+    else show();
     sizeShown = size.width > 0 && size.height > 0 ? size : viewport.canvas;
   };
 
@@ -350,9 +359,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     if (size.width === sizeShown.width && size.height === sizeShown.height) return;
     const before = sizeShown;
     sizeShown = size;
-    const queued = pendingReport !== undefined;
-    cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 });
-    moved = queued ? undefined : { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
+    automatically(() => cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 }));
   };
 
   const fitEntities = (cy: Core, entitiesOnly = false): void => {
@@ -411,16 +418,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       onDragCancelled = events.dragCancelled;
       const created = cytoscape({ container, headless: container === undefined, styleEnabled: true, style: STYLE, layout: { name: 'preset' }, minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX, ...POINTER });
       const report = (): void => {
-        if (core !== created) return;
-        const { x, y } = created.pan();
-        const zoom = created.zoom();
-        if (moved !== undefined && moved.zoom === zoom && moved.x === x && moved.y === y) return;
-        moved = undefined;
-        events.viewport({ zoom, x, y, ...canvasOf(created) });
+        if (core === created) events.viewport({ zoom: created.zoom(), x: created.pan().x, y: created.pan().y, ...canvasOf(created) });
       };
       created.on('viewport', () => {
         created.minZoom(Math.min(ZOOM_MIN, created.zoom()));
-        if (pendingReport !== undefined) return;
+        if (automatic || pendingReport !== undefined) return;
         tickets += 1;
         const ticket = tickets;
         pendingReport = ticket;

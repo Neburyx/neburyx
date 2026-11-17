@@ -1298,6 +1298,21 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     expect(reports).toEqual([{ zoom: 1, x: core.pan().x, y: core.pan().y, canvas: { width: 1000, height: 800 } }]);
   });
 
+  it('reports nothing for a restore followed by a resize, or by two resizes, before the frame that would report', () => {
+    const frames: Array<() => void> = [];
+    const reports: Viewport[] = [];
+    const events: CanvasEvents = { ...NO_EVENTS, viewport: (viewport) => void reports.push(viewport) };
+    let size = { width: 968, height: 720 };
+    const { container, core } = inContainer((callback) => void frames.push(callback), () => size, { zoom: 1, x: 484, y: 360, canvas: { width: 968, height: 720 } }, events);
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    size = { width: 1000, height: 800 };
+    sizes.resize(container, 1000, 800);
+    frames.splice(0).forEach((frame) => frame());
+    expect(reports).toEqual([]);
+    expect(core.pan()).toEqual({ x: 484 + 16, y: 360 + 40 });
+  });
+
   it('reports a pan of the person that was queued before a resize, with the size the canvas is drawn at after it', () => {
     const frames: Array<() => void> = [];
     const reports: Viewport[] = [];
