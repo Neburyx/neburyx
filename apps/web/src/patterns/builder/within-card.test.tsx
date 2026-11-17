@@ -49,4 +49,14 @@ describe('the step card of an order with a delay, as the frames draw it', () => 
     const order = breakText({ kind: 'no-time', step: 1, part: 'link', types: ['r-3'] }, nameOf);
     expect(order).toBe('Step 2: “after the previous step” needs a time in the mapping. r-3 has none.');
   });
+
+  it('says the fallback words as the frames do: the property after the delay and not accented, and no parenthetical when the mapping has no time', () => {
+    const timedLines = draftWords(timed, draftOf({ hours: 24 }), nameOf, [], []);
+    expect(timedLines[2]).toMatchObject({ text: 'Step 2: follow r-3 forward to n-c, after the previous step, within 24 hours (by when)', phrases: ['after the previous step, within 24 hours'] });
+    const draft = draftOf({ hours: 24 });
+    const untimedLines = draftWords(base, draft, nameOf, breaksOf(base, draft, false), []);
+    expect(untimedLines[2]).toMatchObject({ text: 'Step 2: follow r-3 forward to n-c, after the previous step, within 24 hours', phrases: ['after the previous step, within 24 hours'] });
+    const plain = draftWords(base, { anchorType: 'n-a', steps: [draft.steps[0] ?? { relationshipTypes: [] }, { ...(draft.steps[1] ?? { relationshipTypes: [] }), within: undefined }] }, nameOf, [], []);
+    expect(plain[2]?.text).toBe('Step 2: follow r-3 forward to n-c, after the previous step (no time in the mapping)');
+  });
 });
