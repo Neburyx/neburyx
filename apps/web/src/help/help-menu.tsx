@@ -2,6 +2,7 @@ import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from
 import { useClientState } from '../state/context.js';
 import { useKeyBindings } from '../workspace/key-binding-registry.js';
 import type { HelpItem } from './help-items.js';
+import { opensInNewTab } from './links.js';
 
 const HELP_BUTTON_LABEL = 'Help';
 const EXTERNAL_MARK = '↗';
@@ -75,7 +76,7 @@ export function HelpMenu({ items }: { readonly items: readonly HelpItem[] }) {
             <Fragment key={item.id}>
               {item.dividerBefore === true ? <div role="separator" className="menu-separator" /> : null}
               {item.kind === 'link' ? (
-                <a role="menuitem" className="menu-row" href={item.href} target="_blank" rel="noopener noreferrer" onClick={close}>
+                <a role="menuitem" className="menu-row" href={item.href} {...(opensInNewTab(item.href) ? { target: '_blank', rel: 'noopener noreferrer' } : {})} onClick={close}>
                   <span className="menu-label">{item.label}</span>
                   <span className="menu-hint" aria-hidden="true">
                     {EXTERNAL_MARK}

@@ -96,6 +96,24 @@ describe('the Help menu', () => {
     expect(box).toHaveProperty('value', 'ACC-1');
   });
 
+  it.each([
+    ['an https address', 'https://example.test/inquiries', { target: '_blank', rel: 'noopener noreferrer' }],
+    ['a mailto address', 'mailto:inquiries@example.test', { target: null, rel: null }],
+  ])('opens an Enterprise item holding %s the way its shape needs', async (_name, href, expected) => {
+    const item: HelpItem = { kind: 'link', id: 'enterprise', label: 'Talk to us about Enterprise', href };
+    render(
+      <ClientStateProvider state={createClientState()}>
+        <KeyBindingsProvider registry={builtInKeyBindings()}>
+          <HelpMenu items={[item]} />
+        </KeyBindingsProvider>
+      </ClientStateProvider>,
+    );
+    await userEvent.click(helpButton());
+    const link = screen.getByRole('menuitem', { name: /^Talk to us about Enterprise/ });
+    expect(link.getAttribute('href')).toBe(href);
+    expect({ target: link.getAttribute('target'), rel: link.getAttribute('rel') }).toEqual(expected);
+  });
+
   it('shows what its list holds: a sixth item gives six items', async () => {
     const sixth: HelpItem = { kind: 'link', id: 'extra', label: 'Take the tour', href: 'https://example.com/tour' };
     render(
