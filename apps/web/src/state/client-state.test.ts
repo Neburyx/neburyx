@@ -217,6 +217,17 @@ describe('the pointer tool and the viewport', () => {
     }
     expect(state.presentation.view.getState()).toBe(before);
   });
+
+  it('keeps the size of the canvas a viewport was taken at, and refuses a size that is not a positive number', () => {
+    const state = createClientState();
+    state.presentation.setViewport({ zoom: 1, x: 2, y: 3, canvas: { width: 968, height: 720 } });
+    expect(state.presentation.view.getState().viewport).toEqual({ zoom: 1, x: 2, y: 3, canvas: { width: 968, height: 720 } });
+    const before = state.presentation.view.getState();
+    for (const canvas of [{ width: 0, height: 720 }, { width: 968, height: -1 }, { width: Number.NaN, height: 720 }]) {
+      expect(() => state.presentation.setViewport({ zoom: 1, x: 2, y: 3, canvas })).toThrow(expect.objectContaining({ code: 'INVALID_VIEWPORT' }));
+    }
+    expect(state.presentation.view.getState()).toBe(before);
+  });
 });
 
 describe('the relationships a loaded graph can draw', () => {

@@ -174,6 +174,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   let tool: PointerTool = 'select';
   let teardown: (() => void) | undefined;
   let surfaced = false;
+  /** The canvas size the pan was last set for; a change of size moves the pan by half the difference, so what was at the centre stays there. */
+  let sizeShown: Size | undefined;
   let flushViewport: (() => void) | undefined;
   let lastSource: string | null | undefined;
   // The entity being dragged, where it was at the grab, and whether the drag was interrupted: a cancelled drag keeps putting the entity back until the library sees the release.
@@ -321,9 +323,25 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   };
   const sizeOf = (cy: Core): Size => options.canvasSize?.() ?? (surfaced ? { width: cy.width(), height: cy.height() } : { width: 0, height: 0 });
 
+  const canvasOf = (cy: Core): Pick<Viewport, 'canvas'> => {
+    const size = sizeOf(cy);
+    return size.width > 0 && size.height > 0 ? { canvas: size } : {};
+  };
+
   const showViewport = (cy: Core, viewport: Viewport): void => {
+    const size = sizeOf(cy);
+    const moved = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
-    cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x, y: viewport.y } });
+    cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + moved.x, y: viewport.y + moved.y } });
+    if (size.width > 0 && size.height > 0) sizeShown = size;
+  };
+
+  const keepCentre = (cy: Core): void => {
+    const size = sizeOf(cy);
+    if (sizeShown === undefined || size.width <= 0 || size.height <= 0 || (size.width === sizeShown.width && size.height === sizeShown.height)) return;
+    const before = sizeShown;
+    sizeShown = size;
+    cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 });
   };
 
   const fitEntities = (cy: Core, entitiesOnly = false): void => {
@@ -382,7 +400,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       onDragCancelled = events.dragCancelled;
       const created = cytoscape({ container, headless: container === undefined, styleEnabled: true, style: STYLE, layout: { name: 'preset' }, minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX, ...POINTER });
       const report = (): void => {
-        if (core === created) events.viewport({ zoom: created.zoom(), x: created.pan().x, y: created.pan().y });
+        if (core === created) events.viewport({ zoom: created.zoom(), x: created.pan().x, y: created.pan().y, ...canvasOf(created) });
       };
       created.on('viewport', () => {
         created.minZoom(Math.min(ZOOM_MIN, created.zoom()));
@@ -584,6 +602,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       const stopFollowing = container === undefined ? undefined : followSize(container, () => {
         if (core === created) {
           created.resize();
+          keepCentre(created);
           dropTip();
         }
       });
@@ -613,11 +632,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       reportFailure = events.failed;
       options.onCore?.(created);
       core = created;
+      surfaced = container !== undefined;
       if (viewport !== undefined) showViewport(created, viewport);
       fitted = viewport !== undefined;
       fits = 0;
       paints = container !== undefined || options.paintCaption !== undefined;
-      surfaced = container !== undefined;
     },
     draw(scene: Scene, restore?: Viewport) {
       if (snapshotting) {
@@ -789,7 +808,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     },
     viewport() {
       const cy = requireCore();
-      return { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
+      return { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y, ...canvasOf(cy) };
     },
     placeLive(positions) {
       const cy = requireCore();

@@ -1,6 +1,7 @@
 import type { GraphEdge } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
+import type { PresentationSnapshot } from '../state/presentation-state.js';
 import { elementKey } from '../state/keys.js';
 import { deriveLoadedGraph } from '../state/loaded-graph.js';
 import { key, ref, result } from '../state/test-data.js';
@@ -18,6 +19,13 @@ function loaded(nodes: readonly string[], edges: ReadonlyArray<readonly [string,
 }
 
 describe('the draft as it is written', () => {
+  it('writes the size of the canvas beside the viewport when there is one, and no size when there is none', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const write = (viewport: PresentationSnapshot['viewport']) => draftOf({ nodeRefs, graph, presentation: { ...PRESENTATION, viewport }, notes: null, kept: NOTHING_KEPT }).layout.viewport;
+    expect(write({ zoom: 1, x: 2, y: 3, canvas: { width: 968, height: 720 } })).toEqual({ zoom: 1, x: 2, y: 3, canvas: { width: 968, height: 720 } });
+    expect(write({ zoom: 1, x: 2, y: 3 })).toEqual({ zoom: 1, x: 2, y: 3 });
+  });
+
   it('holds each loaded entity once with its position, pin and hidden mark, and the viewport and layout name', () => {
     const { graph, nodeRefs } = loaded(['A', 'B']);
     const [first, second] = nodeRefs;

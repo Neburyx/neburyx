@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { investigationResponseSchema, edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema } from './investigations.js';
+import { investigationResponseSchema, edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema, layoutDocumentSchema } from './investigations.js';
 
 const investigation = {
   id: '0192f000-0000-7000-8000-0000000000a1',
@@ -209,5 +209,26 @@ describe('the answer to reading an investigation', () => {
     ['an unsaved state with a time', { investigation, draft, save: { state: 'unsaved', savedAt: '2026-11-08T09:30:00.000Z' } }],
   ])('refuses %s', (_name, body) => {
     expect(investigationResponseSchema.safeParse(body).success).toBe(false);
+  });
+});
+
+describe('the viewport of a layout document', () => {
+  const layout = { schemaVersion: 1, layout: 'force', nodes: [], edges: [], groups: [] };
+
+  it('takes a viewport with no canvas size, as a draft stored before the size was kept', () => {
+    expect(layoutDocumentSchema.parse({ ...layout, viewport: { zoom: 1, x: 2, y: 3 } }).viewport).toEqual({ zoom: 1, x: 2, y: 3 });
+  });
+
+  it('takes a viewport with the size of the canvas it was taken at, and keeps it', () => {
+    expect(layoutDocumentSchema.parse({ ...layout, viewport: { zoom: 1, x: 2, y: 3, canvas: { width: 968, height: 720 } } }).viewport?.canvas).toEqual({ width: 968, height: 720 });
+  });
+
+  it.each([
+    ['a canvas with no height', { width: 968 }],
+    ['a canvas of no width', { width: 0, height: 720 }],
+    ['a negative height', { width: 968, height: -1 }],
+    ['a canvas with a field of its own kind', { width: 968, height: 720, depth: 1 }],
+  ])('refuses %s', (_name, canvas) => {
+    expect(layoutDocumentSchema.safeParse({ ...layout, viewport: { zoom: 1, x: 2, y: 3, canvas } }).success).toBe(false);
   });
 });

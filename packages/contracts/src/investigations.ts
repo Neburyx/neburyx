@@ -133,7 +133,7 @@ const layoutEdgeSchema = z.strictObject({ ...edgeFields, hidden: z.boolean() }).
 
 export const layoutDocumentSchema = z.strictObject({
   schemaVersion: z.literal(1),
-  viewport: z.strictObject({ zoom: z.number(), x: z.number(), y: z.number() }).optional(),
+  viewport: z.strictObject({ zoom: z.number(), x: z.number(), y: z.number(), canvas: z.strictObject({ width: z.number().positive(), height: z.number().positive() }).optional() }).optional(),
   layout: text,
   nodes: z.array(refEntry.extend({ x: z.number().optional(), y: z.number().optional(), pinned: z.boolean(), hidden: z.boolean(), groupId: text.nullable() })),
   edges: z.array(layoutEdgeSchema),

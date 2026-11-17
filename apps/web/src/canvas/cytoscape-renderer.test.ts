@@ -124,7 +124,7 @@ describe('the drawing of an investigation that was set aside and comes back', ()
     renderer.draw(second);
     const fitsBefore = renderer.inspect().fits;
     renderer.draw(first, held);
-    expect(renderer.viewport()).toEqual(held);
+    expect(renderer.viewport()).toMatchObject(held);
     expect(renderer.inspect().fits).toBe(fitsBefore);
   });
 
@@ -133,7 +133,7 @@ describe('the drawing of an investigation that was set aside and comes back', ()
     renderer.draw({ ...first, source: 'same' });
     renderer.draw({ ...second, source: 'same' });
     renderer.draw({ ...first, source: 'same' }, held);
-    expect(renderer.viewport()).toEqual(held);
+    expect(renderer.viewport()).toMatchObject(held);
   });
 
   it('fits a drawing that has no viewport to come back to', () => {
@@ -676,7 +676,7 @@ describe('the viewport the Cytoscape renderer reports', () => {
     renderer.draw(of('two', ['x', 'y']));
     frames.splice(0).forEach((frame) => frame());
     expect(reports).toHaveLength(1);
-    expect(reports[0]).toEqual({ zoom: renderer.inspect().viewport.zoom, x: renderer.inspect().viewport.x, y: renderer.inspect().viewport.y });
+    expect(reports[0]).toEqual({ zoom: renderer.inspect().viewport.zoom, x: renderer.inspect().viewport.x, y: renderer.inspect().viewport.y, canvas: { width: 800, height: 600 } });
   });
 
   it('does not flush the view of a source that was left when the renderer is disposed', () => {
@@ -1226,6 +1226,27 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     if (core === undefined) throw new Error('the renderer made no core');
     return { renderer, container, core };
   }
+
+  it('keeps what was at the centre of the canvas at its centre when the container changes size', () => {
+    let size = { width: 968, height: 720 };
+    const { container, core } = inContainer(undefined, () => size);
+    const before = { ...core.pan() };
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    expect(core.pan()).toEqual({ x: before.x + 128, y: before.y + 16 });
+    size = { width: 968, height: 720 };
+    sizes.resize(container, 968, 720);
+    expect(core.pan()).toEqual(before);
+  });
+
+  it('leaves the pan alone when the container reports no size', () => {
+    let size = { width: 968, height: 720 };
+    const { container, core } = inContainer(undefined, () => size);
+    const before = { ...core.pan() };
+    size = { width: 0, height: 0 };
+    sizes.resize(container, 0, 0);
+    expect(core.pan()).toEqual(before);
+  });
 
   it('says where an entity, a relationship and the canvas are on the page, by the browser window, and nothing for an item that is not drawn', () => {
     const { renderer, container, core } = inContainer();
@@ -1777,5 +1798,38 @@ describe('the live positions and drag reports of the Cytoscape renderer', () => 
     renderer.draw(two());
     renderer.placeLive(new Map([['a', { x: 5, y: 5 }]]));
     expect(() => renderer.dispose()).not.toThrow();
+  });
+});
+
+describe('a viewport restored at another canvas size', () => {
+  const SMALL = { width: 968, height: 720 };
+  const LARGE = { width: 1224, height: 752 };
+
+  function mountedAt(size: { width: number; height: number }, viewport: Viewport | undefined) {
+    const renderer = createCytoscapeRenderer({ nextFrame: (callback) => callback(), canvasSize: () => size });
+    renderer.mount(undefined, NO_EVENTS, viewport);
+    return renderer;
+  }
+
+  it('opens a viewport that holds no canvas size, as a draft from before the size was kept, exactly where it was stored', () => {
+    const renderer = mountedAt(LARGE, { zoom: 1, x: 484, y: 360 });
+    expect(renderer.viewport()).toEqual({ zoom: 1, x: 484, y: 360, canvas: LARGE });
+  });
+
+  it('keeps the entity at the centre when the draft taken at 1,024 by 768 opens at 1,280 by 800, and the other way round', () => {
+    const renderer = mountedAt(LARGE, { zoom: 1, x: SMALL.width / 2, y: SMALL.height / 2, canvas: SMALL });
+    expect(renderer.viewport()).toMatchObject({ zoom: 1, x: LARGE.width / 2, y: LARGE.height / 2 });
+    const back = mountedAt(SMALL, { zoom: 1, x: LARGE.width / 2, y: LARGE.height / 2, canvas: LARGE });
+    expect(back.viewport()).toMatchObject({ zoom: 1, x: SMALL.width / 2, y: SMALL.height / 2 });
+  });
+
+  it('changes nothing when the canvas is the size it was stored at, and reports the size it is drawn at', () => {
+    const renderer = mountedAt(SMALL, { zoom: 2, x: 10, y: 20, canvas: SMALL });
+    expect(renderer.viewport()).toEqual({ zoom: 2, x: 10, y: 20, canvas: SMALL });
+  });
+
+  it('shows a viewport that holds a size as it is stored when the canvas cannot say its size', () => {
+    const renderer = mountedAt({ width: 0, height: 0 }, { zoom: 1, x: 484, y: 360, canvas: SMALL });
+    expect(renderer.viewport()).toEqual({ zoom: 1, x: 484, y: 360 });
   });
 });

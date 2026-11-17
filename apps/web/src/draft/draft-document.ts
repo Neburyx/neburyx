@@ -104,7 +104,7 @@ export function draftOf(inputs: DraftInputs): DraftWriteRequest {
   const mapped: Partial<MappedTypes> = presentation.mappedTypes ?? {};
   const layout: LayoutDocument = {
     schemaVersion: SCHEMA_VERSION,
-    ...(presentation.viewport === undefined ? {} : { viewport: { zoom: presentation.viewport.zoom, x: presentation.viewport.x, y: presentation.viewport.y } }),
+    ...(presentation.viewport === undefined ? {} : { viewport: { zoom: presentation.viewport.zoom, x: presentation.viewport.x, y: presentation.viewport.y, ...(presentation.viewport.canvas === undefined ? {} : { canvas: { width: presentation.viewport.canvas.width, height: presentation.viewport.canvas.height } }) } }),
     layout: inputs.carried?.layout !== undefined && presentation.layout === inputs.carried.layout.shown ? inputs.carried.layout.stored : presentation.layout,
     nodes: allNodes,
     edges: allEdges.map((edge) => ({ ...edge, hidden: inputs.carried?.hiddenEdges.has(edgeIdentity(edge)) ?? false })),

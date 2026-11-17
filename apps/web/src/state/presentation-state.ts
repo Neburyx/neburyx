@@ -14,6 +14,8 @@ export interface Viewport {
   readonly zoom: number;
   readonly x: number;
   readonly y: number;
+  /** The size of the canvas the camera was taken at, when it was known; a reopen at another size moves the pan by half the difference. */
+  readonly canvas?: { readonly width: number; readonly height: number };
 }
 
 /** Select is the default; Pan moves the view on a drag everywhere on empty canvas; Box select draws a box on a drag. Not saved with a view. */
@@ -608,6 +610,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setViewport(viewport) {
       if (![viewport.zoom, viewport.x, viewport.y].every(Number.isFinite)) throw new StateError('INVALID_VIEWPORT');
+      if (viewport.canvas !== undefined && ![viewport.canvas.width, viewport.canvas.height].every((side) => Number.isFinite(side) && side > 0)) throw new StateError('INVALID_VIEWPORT');
       store.setState({ ...store.getState(), viewport });
     },
     prune() {
