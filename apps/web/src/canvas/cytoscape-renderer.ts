@@ -176,6 +176,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   let surfaced = false;
   /** The canvas size the pan was last set for; a change of size moves the pan by half the difference, so what was at the centre stays there. */
   let sizeShown: Size | undefined;
+  /** The camera a change of canvas size made. It is not reported, so a window of another size does not write the draft of an investigation that is open in another window; the next change the person makes reports the camera with the size it is drawn at. */
+  let moved: { readonly zoom: number; readonly x: number; readonly y: number } | undefined;
   let flushViewport: (() => void) | undefined;
   let lastSource: string | null | undefined;
   // The entity being dragged, where it was at the grab, and whether the drag was interrupted: a cancelled drag keeps putting the entity back until the library sees the release.
@@ -330,9 +332,10 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
 
   const showViewport = (cy: Core, viewport: Viewport): void => {
     const size = sizeOf(cy);
-    const moved = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
+    const shift = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
-    cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + moved.x, y: viewport.y + moved.y } });
+    cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + shift.x, y: viewport.y + shift.y } });
+    moved = shift.x === 0 && shift.y === 0 ? undefined : { zoom: viewport.zoom, x: viewport.x + shift.x, y: viewport.y + shift.y };
     sizeShown = size.width > 0 && size.height > 0 ? size : viewport.canvas;
   };
 
@@ -347,6 +350,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     const before = sizeShown;
     sizeShown = size;
     cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 });
+    moved = { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
   };
 
   const fitEntities = (cy: Core, entitiesOnly = false): void => {
@@ -405,7 +409,12 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       onDragCancelled = events.dragCancelled;
       const created = cytoscape({ container, headless: container === undefined, styleEnabled: true, style: STYLE, layout: { name: 'preset' }, minZoom: ZOOM_MIN, maxZoom: ZOOM_MAX, ...POINTER });
       const report = (): void => {
-        if (core === created) events.viewport({ zoom: created.zoom(), x: created.pan().x, y: created.pan().y, ...canvasOf(created) });
+        if (core !== created) return;
+        const { x, y } = created.pan();
+        const zoom = created.zoom();
+        if (moved !== undefined && moved.zoom === zoom && moved.x === x && moved.y === y) return;
+        moved = undefined;
+        events.viewport({ zoom, x, y, ...canvasOf(created) });
       };
       created.on('viewport', () => {
         created.minZoom(Math.min(ZOOM_MIN, created.zoom()));

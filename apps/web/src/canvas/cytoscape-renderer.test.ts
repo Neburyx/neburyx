@@ -1215,14 +1215,14 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     restoreCanvas();
   });
 
-  function inContainer(nextFrame: (callback: () => void) => void = () => undefined, canvasSize?: () => { width: number; height: number }, viewport: Viewport = { zoom: 1.5, x: -20, y: 30 }) {
+  function inContainer(nextFrame: (callback: () => void) => void = () => undefined, canvasSize?: () => { width: number; height: number }, viewport: Viewport = { zoom: 1.5, x: -20, y: 30 }, events: CanvasEvents = NO_EVENTS) {
     let core: Core | undefined;
     const renderer = createCytoscapeRenderer({ nextFrame, onCore: (made) => void (core = made), ...(canvasSize === undefined ? {} : { canvasSize }) });
     const container = document.createElement('div');
     document.body.append(container);
     sizes.resize(container, 1000, 800);
     made.push(renderer);
-    renderer.mount(container, NO_EVENTS, viewport);
+    renderer.mount(container, events, viewport);
     if (core === undefined) throw new Error('the renderer made no core');
     return { renderer, container, core };
   }
@@ -1279,6 +1279,23 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     size = { width: 1000, height: 800 };
     sizes.resize(container, 1000, 800);
     expect(core.pan()).toEqual({ x: 10 - 112, y: 20 + 24 });
+  });
+
+  it('does not report the camera a change of canvas size made, so no other window is written to, and reports the next change of the person with the size it is drawn at', () => {
+    const frames: Array<() => void> = [];
+    const reports: Viewport[] = [];
+    const events: CanvasEvents = { ...NO_EVENTS, viewport: (viewport) => void reports.push(viewport) };
+    let size = { width: 1224, height: 752 };
+    const { container, core } = inContainer((callback) => void frames.push(callback), () => size, { zoom: 1, x: 484, y: 360, canvas: { width: 968, height: 720 } }, events);
+    frames.splice(0).forEach((frame) => frame());
+    expect(core.pan()).toEqual({ x: 612, y: 376 });
+    size = { width: 1000, height: 800 };
+    sizes.resize(container, 1000, 800);
+    frames.splice(0).forEach((frame) => frame());
+    expect(reports).toEqual([]);
+    core.panBy({ x: 5, y: 0 });
+    frames.splice(0).forEach((frame) => frame());
+    expect(reports).toEqual([{ zoom: 1, x: core.pan().x, y: core.pan().y, canvas: { width: 1000, height: 800 } }]);
   });
 
   it('leaves the pan alone when the container reports no size', () => {
