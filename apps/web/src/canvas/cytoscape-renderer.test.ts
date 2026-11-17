@@ -1298,6 +1298,41 @@ describe('the Cytoscape renderer in a container whose size changes', () => {
     expect(reports).toEqual([{ zoom: 1, x: core.pan().x, y: core.pan().y, canvas: { width: 1000, height: 800 } }]);
   });
 
+  it('reports a pan of the person that was queued before a resize, with the size the canvas is drawn at after it', () => {
+    const frames: Array<() => void> = [];
+    const reports: Viewport[] = [];
+    const events: CanvasEvents = { ...NO_EVENTS, viewport: (viewport) => void reports.push(viewport) };
+    let size = { width: 968, height: 720 };
+    const { container, core } = inContainer((callback) => void frames.push(callback), () => size, { zoom: 1, x: 484, y: 360, canvas: { width: 968, height: 720 } }, events);
+    frames.splice(0).forEach((frame) => frame());
+    expect(reports).toEqual([]);
+    core.panBy({ x: 5, y: 0 });
+    size = { width: 1224, height: 752 };
+    sizes.resize(container, 1224, 752);
+    frames.splice(0).forEach((frame) => frame());
+    expect(reports).toEqual([{ zoom: 1, x: core.pan().x, y: core.pan().y, canvas: { width: 1224, height: 752 } }]);
+  });
+
+  it('writes nothing when a draft stored without a canvas size is opened, in two windows, and reports the first change of the person', () => {
+    const legacy: Viewport = { zoom: 1, x: 484, y: 360 };
+    const open = () => {
+      const frames: Array<() => void> = [];
+      const reports: Viewport[] = [];
+      const events: CanvasEvents = { ...NO_EVENTS, viewport: (viewport) => void reports.push(viewport) };
+      const opened = inContainer((callback) => void frames.push(callback), () => ({ width: 968, height: 720 }), legacy, events);
+      frames.splice(0).forEach((frame) => frame());
+      return { ...opened, frames, reports };
+    };
+    const first = open();
+    const second = open();
+    expect(first.reports).toEqual([]);
+    expect(second.reports).toEqual([]);
+    second.core.panBy({ x: 5, y: 0 });
+    second.frames.splice(0).forEach((frame) => frame());
+    expect(second.reports).toEqual([{ zoom: 1, x: 489, y: 360, canvas: { width: 968, height: 720 } }]);
+    expect(first.reports).toEqual([]);
+  });
+
   it('leaves the pan alone when the container reports no size', () => {
     let size = { width: 968, height: 720 };
     const { container, core } = inContainer(undefined, () => size);

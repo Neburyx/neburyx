@@ -176,7 +176,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   let surfaced = false;
   /** The canvas size the pan was last set for; a change of size moves the pan by half the difference, so what was at the centre stays there. */
   let sizeShown: Size | undefined;
-  /** The camera a change of canvas size made. It is not reported, so a window of another size does not write the draft of an investigation that is open in another window; the next change the person makes reports the camera with the size it is drawn at. */
+  /** The camera a restore or a change of canvas size left. It is not reported, so opening an investigation, in a window of any size, does not write its draft and conflict with another window that has it open; the next change the person makes reports the camera with the size it is drawn at. */
   let moved: { readonly zoom: number; readonly x: number; readonly y: number } | undefined;
   let flushViewport: (() => void) | undefined;
   let lastSource: string | null | undefined;
@@ -330,12 +330,13 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     return size.width > 0 && size.height > 0 ? { canvas: size } : {};
   };
 
-  const showViewport = (cy: Core, viewport: Viewport): void => {
+  const showViewport = (cy: Core, viewport: Viewport, restored = false): void => {
     const size = sizeOf(cy);
+    const queued = pendingReport !== undefined;
     const shift = viewport.canvas !== undefined && size.width > 0 && size.height > 0 ? { x: (size.width - viewport.canvas.width) / 2, y: (size.height - viewport.canvas.height) / 2 } : { x: 0, y: 0 };
     cy.minZoom(Math.min(ZOOM_MIN, viewport.zoom));
     cy.viewport({ zoom: viewport.zoom, pan: { x: viewport.x + shift.x, y: viewport.y + shift.y } });
-    moved = shift.x === 0 && shift.y === 0 ? undefined : { zoom: viewport.zoom, x: viewport.x + shift.x, y: viewport.y + shift.y };
+    moved = restored && !queued ? { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y } : undefined;
     sizeShown = size.width > 0 && size.height > 0 ? size : viewport.canvas;
   };
 
@@ -349,8 +350,9 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
     if (size.width === sizeShown.width && size.height === sizeShown.height) return;
     const before = sizeShown;
     sizeShown = size;
+    const queued = pendingReport !== undefined;
     cy.panBy({ x: (size.width - before.width) / 2, y: (size.height - before.height) / 2 });
-    moved = { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
+    moved = queued ? undefined : { zoom: cy.zoom(), x: cy.pan().x, y: cy.pan().y };
   };
 
   const fitEntities = (cy: Core, entitiesOnly = false): void => {
@@ -647,7 +649,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       options.onCore?.(created);
       core = created;
       surfaced = container !== undefined;
-      if (viewport !== undefined) showViewport(created, viewport);
+      if (viewport !== undefined) showViewport(created, viewport, true);
       fitted = viewport !== undefined;
       fits = 0;
       paints = container !== undefined || options.paintCaption !== undefined;
@@ -737,7 +739,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       syncFar(cy, true);
       const replaced = hadEntities && scene.entities.length > 0 && retained === 0;
       if (scene.view === 'fit' && scene.entities.length > 0 && (!fitted || replaced)) {
-        if (restore !== undefined && (anotherSource || replaced)) showViewport(cy, restore);
+        if (restore !== undefined && (anotherSource || replaced)) showViewport(cy, restore, true);
         else {
           fitEntities(cy);
           fits += 1;
@@ -747,7 +749,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
       if (scene.entities.length > 0) fitted = true;
     },
     show(viewport) {
-      showViewport(requireCore(), viewport);
+      showViewport(requireCore(), viewport, true);
     },
     fit(entitiesOnly) {
       const cy = requireCore();

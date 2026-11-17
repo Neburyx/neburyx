@@ -2,6 +2,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { canvasOf, openWithDraft, positions, storedMatchesDrawn } from './support/workspace.ts';
 
 const IDS = ['AC-1', 'AC-2', 'AC-3'];
+const SETTLE_MS = 3_000;
 const region = (page: Page) => page.getByRole('region', { name: 'Request status' });
 const storedVersion = async (page: Page, id: string) => ((await (await page.request.get(`/v1/investigations/${id}`)).json()) as { draft: { version: number } }).draft.version;
 
@@ -46,6 +47,32 @@ async function withTwoTabs(page: Page, browser: Browser, run: (first: Page, seco
     await other.context().close();
   }
 }
+
+test.describe('an investigation opened in two windows', () => {
+  test('is not written by either window when its draft holds a camera with no canvas size, and a change of the person is written', async ({ page, browser }) => {
+    const id = await openWithDraft(page, IDS, (index) => ({ x: index * 100, y: index * 50 }));
+    const stored = (await (await page.request.get(`/v1/investigations/${id}`)).json()) as { draft: { version: number; layout: object; queryContext: object; notes: string | null } };
+    const written = await page.request.put(`/v1/investigations/${id}/draft`, {
+      headers: { 'If-Match': `"${stored.draft.version}"` },
+      data: { layout: { ...stored.draft.layout, viewport: { zoom: 1, x: 200, y: 150 } }, queryContext: stored.draft.queryContext, notes: stored.draft.notes },
+    });
+    expect(written.status()).toBe(200);
+    const version = await storedVersion(page, id);
+    await page.reload();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', String(IDS.length));
+    const other = await secondTab(browser, page, id);
+    try {
+      await page.waitForTimeout(SETTLE_MS);
+      expect(await storedVersion(page, id)).toBe(version);
+      await expect(region(page)).toHaveCount(0);
+      await expect(region(other)).toHaveCount(0);
+      await nudge(other);
+      await expect.poll(() => storedVersion(other, id), { message: 'the change of the person was written', timeout: 20_000 }).toBeGreaterThan(version);
+    } finally {
+      await other.context().close();
+    }
+  });
+});
 
 test.describe('an investigation changed in another tab', () => {
   test('shows the banner in the second tab with its words and a Reload that has no dismiss, keeps its canvas, and Reload shows the first tab\'s change', async ({ page, browser }) => {
