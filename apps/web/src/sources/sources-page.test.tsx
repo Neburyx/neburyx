@@ -837,6 +837,10 @@ describe('the Enterprise link on the Sources page', () => {
     };
     const beacon = vi.fn(() => true);
     const opened = vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation((_method, url) => void asked.push(String(url)));
+    const direct = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      asked.push(String(input instanceof Request ? input.url : input));
+      return new Response('{}');
+    });
     Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: beacon });
     try {
       const user = userEvent.setup();
@@ -857,6 +861,7 @@ describe('the Enterprise link on the Sources page', () => {
       expect(beacon).not.toHaveBeenCalled();
     } finally {
       opened.mockRestore();
+      direct.mockRestore();
       Reflect.deleteProperty(navigator, 'sendBeacon');
     }
   });
