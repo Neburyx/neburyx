@@ -6,6 +6,7 @@ import {
   tokenCount,
   type AssistantTurnAnswer,
   type AssistantTurnAuditDetail,
+  type AssistantThreadTurnWrite,
   type AuditEvent,
   type AuditResult,
   type ExtensionLogger,
@@ -13,6 +14,7 @@ import {
 } from '@neburyx/contracts';
 import type { ModelAnswer } from '@neburyx/ee-ai-runtime';
 import { createTurnRun, type CallRecord, type TurnRun, type TurnRunDeps } from './turn-run.js';
+import { openTurnThread, type TurnThread, type TurnThreadDeps } from './turn-thread.js';
 
 export const TURN_CLOSED_ACTION = 'assistant.turn.closed';
 const TURN_EVENT_NOT_BUILT = 'assistant-turn-event-not-built';
@@ -24,7 +26,12 @@ type Usage = { readonly kind: 'known'; readonly inputTokens: number; readonly ou
 interface TurnNotes {
   /** Opens the turn's run when the turn passes its first checks. */
   readonly open: (started: { readonly sourceId: string; readonly investigationId: string }) => TurnRun;
+  readonly openThread: (started: { readonly investigationId: string }) => Promise<TurnThread | undefined>;
   run?: TurnRun;
+  thread?: TurnThread;
+  questionHash?: string;
+  entities?: AssistantThreadTurnWrite['entities'];
+  citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   started?: { readonly sourceId: string; readonly investigationId: string };
   calls: number;
   modelRef?: string;
@@ -54,6 +61,8 @@ export interface TurnNote {
   readonly route?: Route;
   readonly answered?: boolean;
   readonly citedElements?: number;
+  /** The things the accepted answer cited, which the thread keeps as references; their number is `citedElements` unless that is given. */
+  readonly citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   readonly cause?: string;
 }
 
@@ -62,18 +71,25 @@ export function noteTurn(change: TurnNote): void {
   note((notes) => {
     if (change.route !== undefined) notes.route = change.route;
     if (change.answered !== undefined) notes.answered = change.answered;
+    if (change.citedRefs !== undefined) {
+      notes.citedRefs = change.citedRefs;
+      notes.citedElements ??= change.citedRefs.length;
+    }
     if (change.citedElements !== undefined) notes.citedElements = change.citedElements;
     if (change.cause !== undefined) notes.cause = change.cause;
   });
 }
 
-/** The turn passed the checks that come before it: from here on it ends in a closing event. */
-export const noteTurnStarted = (started: { readonly sourceId: string; readonly investigationId: string }): void =>
-  note((notes) => {
-    notes.started = started;
-    notes.steps = 0;
-    notes.run = notes.open(started);
-  });
+/** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
+export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string }): Promise<void> => {
+  const notes = scope.getStore();
+  if (notes === undefined) return;
+  notes.started = { sourceId: started.sourceId, investigationId: started.investigationId };
+  notes.steps = 0;
+  notes.run = notes.open(notes.started);
+  if (started.questionHash !== undefined) notes.questionHash = started.questionHash;
+  notes.thread = await notes.openThread(notes.started);
+};
 
 /** The id of the run of the turn that is running, for the events it writes; absent outside a turn and before the turn started. */
 export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;
@@ -109,11 +125,12 @@ export const noteModelAnswer = (answer: { readonly model?: string; readonly usag
   });
 
 /** An intent is about to run: the template, if it has one, the keyed hash of its parameters, the one read it makes and the route it was on. */
-export const noteRun = (run: { readonly intent: string; readonly templateId?: TurnNotes['templateId']; readonly paramsHash: string }): void =>
+export const noteRun = (run: { readonly intent: string; readonly templateId?: TurnNotes['templateId']; readonly paramsHash: string; readonly entities?: AssistantThreadTurnWrite['entities'] }): void =>
   note((notes) => {
     notes.intent = run.intent;
     if (run.templateId !== undefined) notes.templateId = run.templateId;
     notes.paramsHash = run.paramsHash;
+    if (run.entities !== undefined) notes.entities = run.entities;
     notes.steps = 1;
     notes.route = 'ask';
   });
@@ -207,6 +224,36 @@ function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { reado
   return request.signal.aborted ? { ...ending, outcome: 'cancelled', result: 'failed' } : ending;
 }
 
+/** The things an accepted Ask answer cited, as references: the element or relationship of each citation of its summary. */
+function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): AssistantThreadTurnWrite['citationRefs'] {
+  if (notes.citedRefs !== undefined) return notes.citedRefs;
+  if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answered' in outcome.answer.answer)) return [];
+  return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
+}
+
+/** A turn that ended answered or refused on a route is kept in the thread as references and metadata; a turn that failed, was cancelled or was not let through leaves nothing. */
+function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
+  const route = ending.route ?? notes.route;
+  if (notes.thread === undefined || route === undefined || (ending.outcome !== 'answered' && ending.outcome !== 'refused')) return;
+  const known = notes.usage?.kind === 'known' ? notes.usage : undefined;
+  const intent = ending.intent ?? notes.intent;
+  notes.thread.write({
+    route,
+    outcome: ending.outcome,
+    ...(ending.cause === undefined ? {} : { cause: ending.cause }),
+    questionHash: notes.questionHash ?? '',
+    ...(intent === undefined ? {} : { intent }),
+    ...(notes.templateId === undefined ? {} : { templateId: notes.templateId }),
+    entities: notes.entities ?? [],
+    citationRefs: citationRefsOf(notes, outcome),
+    steps: notes.steps ?? 0,
+    ...(notes.calls === 0 || notes.modelRef === undefined ? {} : { modelRef: notes.modelRef }),
+    ...(notes.calls === 0 || notes.promptVersion === undefined ? {} : { promptVersion: notes.promptVersion }),
+    ...(known === undefined || notes.calls === 0 ? {} : { tokensIn: known.inputTokens, tokensOut: known.outputTokens }),
+    ...(notes.run === undefined ? {} : { runId: notes.run.id }),
+  });
+}
+
 function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
   const { started } = notes;
   if (started === undefined) return;
@@ -218,6 +265,7 @@ function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, n
   }
   // the run row ends with the turn's outcome before the closing event says it
   notes.run?.finish(ending?.outcome ?? 'failed', notes.calls);
+  if (ending !== undefined) storeThread(notes, ending, outcome);
   let event: AuditEvent;
   try {
     if (ending === undefined) throw new Error('the turn has no ending');
@@ -244,13 +292,16 @@ export interface TurnAuditOptions {
   readonly runs?: TurnRunDeps['runs'];
   readonly settings?: TurnRunDeps['settings'];
   readonly now?: () => number;
+  readonly threads?: TurnThreadDeps['threads'];
+  readonly records?: TurnThreadDeps['queue'];
 }
 
 /** Wraps the handler of a turn: one closing event when the turn that passed its first checks ends, whatever the end. The handler's answer or failure goes on as it was. */
 export function withTurnAudit(options: TurnAuditOptions, handler: (request: ExtensionRequest) => Promise<AssistantTurnAnswer>): (request: ExtensionRequest) => Promise<AssistantTurnAnswer> {
   const runDeps: TurnRunDeps = { runs: options.runs ?? (() => undefined), settings: options.settings ?? (() => undefined), now: options.now ?? Date.now, logger: options.logger };
+  const threadDeps: TurnThreadDeps = { threads: options.threads ?? (() => undefined), queue: options.records ?? (() => undefined), now: options.now ?? Date.now, logger: options.logger };
   return async (request) => {
-    const notes: TurnNotes = { calls: 0, open: (started) => createTurnRun(runDeps, request, started) };
+    const notes: TurnNotes = { calls: 0, open: (started) => createTurnRun(runDeps, request, started), openThread: (started) => openTurnThread(threadDeps, request, started) };
     let answer: AssistantTurnAnswer;
     try {
       answer = await scope.run(notes, () => handler(request));

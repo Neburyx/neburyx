@@ -10,7 +10,7 @@ const settingsOf = (env: Record<string, string | undefined> = {}) => {
 
 describe('the assistant settings by environment', () => {
   it('have the default of each setting when none is given', () => {
-    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000, runRetentionDays: 30 });
+    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
   });
 
   it('take a value of every setting, and treat an empty value as not given', () => {
@@ -26,8 +26,9 @@ describe('the assistant settings by environment', () => {
       [ASSISTANT_VARIABLES.maxInputTokens]: '10000',
       [ASSISTANT_VARIABLES.maxOutputTokens]: '2000',
       [ASSISTANT_VARIABLES.runRetentionDays]: '7',
+      [ASSISTANT_VARIABLES.threadReadTurns]: '20',
     });
-    expect(settings).toEqual({ model: 'claude-haiku-5-5', timeoutMs: 30_000, totalTimeoutMs: 90_000, maxCalls: 3, maxSteps: 2, maxRows: 40, contextTurns: 5, maxMessageWords: 500, maxInputTokens: 10_000, maxOutputTokens: 2000, runRetentionDays: 7 });
+    expect(settings).toEqual({ model: 'claude-haiku-5-5', timeoutMs: 30_000, totalTimeoutMs: 90_000, maxCalls: 3, maxSteps: 2, maxRows: 40, contextTurns: 5, maxMessageWords: 500, maxInputTokens: 10_000, maxOutputTokens: 2000, runRetentionDays: 7, threadRetention: 'close', threadReadTurns: 20 });
     expect(settingsOf({ [ASSISTANT_VARIABLES.maxCalls]: '' }).maxCalls).toBe(5);
   });
 
@@ -96,5 +97,32 @@ describe('the retention of the stored turn runs', () => {
   it.each(['0', '-1', '1.5', '30d', 'abc', '99999999999999999999'])('stops the start for %s and names the setting, not the value', (value) => {
     const result = read({ [ASSISTANT_VARIABLES.runRetentionDays]: value });
     expect(result).toEqual({ ok: false, problems: [`${ASSISTANT_VARIABLES.runRetentionDays} must be a positive whole number`] });
+  });
+});
+
+describe('the retention of the threads', () => {
+  it('is `close` when not given, and when given as close', () => {
+    expect(settingsOf().threadRetention).toBe('close');
+    expect(settingsOf({ [ASSISTANT_VARIABLES.threadRetention]: 'close' }).threadRetention).toBe('close');
+    expect(settingsOf({ [ASSISTANT_VARIABLES.threadRetention]: '' }).threadRetention).toBe('close');
+  });
+
+  it.each(['keep', 'forever', '30', 'Close', 'close '])('stops the start for %s and names the setting, not the value', (value) => {
+    expect(read({ [ASSISTANT_VARIABLES.threadRetention]: value })).toEqual({ ok: false, problems: [`${ASSISTANT_VARIABLES.threadRetention} must be close`] });
+  });
+});
+
+describe('how many turns of a thread one read gives', () => {
+  it('is 100 when not given, and a whole number from 1 to 500 when given', () => {
+    expect(settingsOf().threadReadTurns).toBe(100);
+    expect(settingsOf({ [ASSISTANT_VARIABLES.threadReadTurns]: '1' }).threadReadTurns).toBe(1);
+    expect(settingsOf({ [ASSISTANT_VARIABLES.threadReadTurns]: '500' }).threadReadTurns).toBe(500);
+  });
+
+  it.each(['0', '501', '-1', '1.5', 'many'])('stops the start for %s and names the setting, not the value', (value) => {
+    const result = read({ [ASSISTANT_VARIABLES.threadReadTurns]: value });
+    expect(result.ok).toBe(false);
+    expect(JSON.stringify(result)).toContain(ASSISTANT_VARIABLES.threadReadTurns);
+    expect(JSON.stringify(result)).not.toContain(`"${value}"`);
   });
 });

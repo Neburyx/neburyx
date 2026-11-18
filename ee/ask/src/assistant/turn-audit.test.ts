@@ -198,7 +198,7 @@ describe('the closing event of the other outcomes', () => {
     const wrapped = withTurnAudit(
       { logger: () => undefined },
       async () => {
-        noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
+        await noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         noteTurn({ route: 'view', answered: true, citedElements: 3 });
         return PLACEHOLDER;
       },
@@ -356,7 +356,7 @@ describe('turns that overlap', () => {
     const r = await rig({ reply: SHARED });
     await run(r);
     noteTurn({ route: 'view', answered: true, citedElements: 9, cause: 'leaked' });
-    noteTurnStarted({ sourceId: 'leaked', investigationId: 'leaked' });
+    await noteTurnStarted({ sourceId: 'leaked', investigationId: 'leaked' });
     const next = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}') });
     await run(next);
     expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '1', instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10, runId: expect.stringMatching(UUID) });
@@ -377,7 +377,7 @@ describe('the closing event that cannot be built or written', () => {
     const wrapped = withTurnAudit(
       { logger: () => ({ warn: (fields) => void logs.push(fields) }) },
       async () => {
-        noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
+        await noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         return broken;
       },
     );
@@ -394,7 +394,7 @@ describe('the closing event that cannot be built or written', () => {
     const wrapped = withTurnAudit(
       { logger: () => ({ warn: (fields) => void logs.push(fields) }) },
       async () => {
-        noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
+        await noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         noteTurn({ route: 'view', cause: 'a sentence that is text, not a code' });
         return PLACEHOLDER;
       },
@@ -410,7 +410,7 @@ describe('the closing event that cannot be built or written', () => {
     const wrapped = withTurnAudit(
       { logger: () => ({ warn: (fields) => void logs.push(fields) }) },
       async () => {
-        noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
+        await noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         noteTurn({ route: 'view', cause: 'a sentence that is text, not a code' });
         return PLACEHOLDER;
       },

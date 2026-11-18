@@ -4,6 +4,7 @@ import type { ApiFailure } from '../api/client.js';
 import type { AddedOutcome } from '../patterns/add-to-graph.js';
 import type { Answered, Refused } from '../ask/ask-session.js';
 import { createStore, type Store } from '../state/store.js';
+import { NO_STORED_THREAD, type StoredThreadState } from './stored-thread-state.js';
 
 export type Retry =
   | { readonly kind: 'message'; readonly text: string }
@@ -54,6 +55,8 @@ const EMPTY_ASSISTANT_SESSION: AssistantSessionState = { investigationId: null, 
 
 export interface AssistantSession {
   readonly store: Store<AssistantSessionState>;
+  /** What the server kept of this person's thread of the investigation, read once for each epoch; cleared with the thread. */
+  readonly stored: Store<StoredThreadState>;
   /** The requests that are out; ending them is how a clearing keeps their answers from coming back. */
   readonly open: Set<AbortController>;
   /** Clears the thread and every request that is out, and starts the next epoch. */
@@ -62,13 +65,16 @@ export interface AssistantSession {
 
 export function createAssistantSession(): AssistantSession {
   const store = createStore<AssistantSessionState>(EMPTY_ASSISTANT_SESSION);
+  const stored = createStore<StoredThreadState>(NO_STORED_THREAD);
   const open = new Set<AbortController>();
   return {
     store,
+    stored,
     open,
     clear(next) {
       for (const controller of open) controller.abort();
       open.clear();
+      stored.setState(NO_STORED_THREAD);
       const held = store.getState();
       store.setState({ ...EMPTY_ASSISTANT_SESSION, investigationId: held.investigationId, principalId: held.principalId, mask: held.mask, epoch: held.epoch + 1, ...next });
     },

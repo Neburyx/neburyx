@@ -39,6 +39,7 @@ function fixtureDocument(extraPaths: Record<string, unknown>): ReturnType<typeof
       '/v1/me/preferences': committed.paths['/v1/me/preferences'],
       '/v1/ai/status': committed.paths['/v1/ai/status'],
       '/v1/assistant/turns': committed.paths['/v1/assistant/turns'],
+      '/v1/assistant/investigations/{id}/thread': committed.paths['/v1/assistant/investigations/{id}/thread'],
       '/v1/sources': committed.paths['/v1/sources'],
       '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'],
       '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'],
@@ -371,7 +372,7 @@ describe('a document the check cannot trust', () => {
       instance.get('/v1/test/from-plugin', async () => ({ name: 'x' }));
     });
     const empty = parseDocument({
-      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/ai/status': committed.paths['/v1/ai/status'], '/v1/assistant/turns': committed.paths['/v1/assistant/turns'], '/v1/me/preferences': committed.paths['/v1/me/preferences'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'], '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'] },
+      paths: { '/healthz': committed.paths['/healthz'], '/readyz': committed.paths['/readyz'], '/v1/me': committed.paths['/v1/me'], '/v1/ai/status': committed.paths['/v1/ai/status'], '/v1/assistant/turns': committed.paths['/v1/assistant/turns'], '/v1/assistant/investigations/{id}/thread': committed.paths['/v1/assistant/investigations/{id}/thread'], '/v1/me/preferences': committed.paths['/v1/me/preferences'], '/v1/sources': committed.paths['/v1/sources'], '/v1/sources/{id}/profile': committed.paths['/v1/sources/{id}/profile'], '/v1/sources/{id}/test': committed.paths['/v1/sources/{id}/test'] },
       components: {
         schemas: {
           ErrorResponse: committed.components.schemas['ErrorResponse'],

@@ -2,8 +2,8 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
-import { assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
-import { createEnterpriseExtension, createMemoryAssistantRunStore } from '@neburyx/ee-ask';
+import { assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
@@ -14,6 +14,7 @@ import { exportWebRoot, startExportRig } from '../testing/export-rig.js';
 import { plainNode, plainRelationship } from '../testing/normalize-fixtures.js';
 
 type AssistantRunStore = ReturnType<typeof createMemoryAssistantRunStore>;
+type AssistantThreadStore = ReturnType<typeof createMemoryAssistantThreadStore>;
 
 afterAll(() => {
   rmSync(exportWebRoot, { recursive: true, force: true });
@@ -46,18 +47,18 @@ const ENV = { NEBURYX_ASK_API_KEY: 'a-test-key' };
 const INTENTS = { widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } }, queryById: { parameters: ['id'], query: 'MATCH (n:Widget {widgetId: $id}) RETURN n' }, sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } } };
 const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, labels: ['Widget'], properties: { widgetId: id, ownerName: 'Ana Silva' } });
 
-async function assistantRig(options: { reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+async function assistantRig(options: { reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
-  const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, ...(options.runStore === undefined ? {} : { assistantRunStore: () => options.runStore as AssistantRunStore }) });
+  const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore() });
   const features = options.features ?? { ask: false, summary: false, assistant: true };
   const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
   const armed = { open: false };
-  const sinkOpened = options.runStore === undefined ? undefined : extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined });
+  const sinkOpened = options.runStore === undefined && options.threadStore === undefined ? undefined : extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined });
   if (options.recordQueue !== undefined) extension.attachRecordQueue?.(options.recordQueue);
   extension.attachAudit?.(options.modelAudit ?? { record: async (event) => void events.push(event) });
-  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }), ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
+  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, ...(options.logLines === undefined ? {} : { logLines: options.logLines }), ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() }) }), ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }), ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
   const investigation = await rig.open();
   armed.open = true;
   const body = { sourceId: 'demo', investigationId: investigation.id, message: 'Is this person guilty?', viewElementKeys: [] };
@@ -566,6 +567,143 @@ describe('the stored runs of a turn in the running application', () => {
     await vi.waitFor(() => expect(records.queue.counts().dropped).toBeGreaterThan(0));
     expect((await readyz(rig)).audit.dropped).toBe(records.queue.counts().dropped);
     expect(JSON.stringify(records.logs)).not.toContain(CANARY);
+    await rig.stop();
+  });
+});
+
+describe('the thread of an investigation in the running application', () => {
+  const CANARY = 'CANARY-MESSAGE-7';
+  const ASK = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
+  const SETTINGS = { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 };
+  const FIRST = '0192f000-0000-7000-8000-000000000001';
+  const SECOND = '0192f000-0000-7000-8000-000000000002';
+  let current = FIRST;
+
+  const recordsOver = (size = SETTINGS.queueSize, write: (job: RecordJob) => Promise<void> = (job) => job.write()) => {
+    const logs: Record<string, unknown>[] = [];
+    const queue = createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => write(job) } }], idFields: (job) => job.ids, settings: { ...SETTINGS, queueSize: size }, logger: { warn: (fields) => void logs.push(fields) } });
+    return { queue, logs, attached: { enqueue: (job: RecordJob) => void queue.sink.record(job) } satisfies RecordQueue, auditCounts: () => queue.counts() };
+  };
+  type ThreadRig = Awaited<ReturnType<typeof assistantRig>>;
+  const readThread = (rig: ThreadRig, id = rig.body.investigationId) => rig.rig.app.inject({ method: 'GET', url: `/v1/assistant/investigations/${id}/thread` });
+  const send = (rig: ThreadRig, message = `Show ${CANARY} W-1`) => rig.post({ ...rig.body, message, viewElementKeys: ['key-canary-9'] });
+
+  it('keeps an answered turn and a refused turn, answers them back to their person as kinds and counts, and holds no text of the message, the value or the reply', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    expect((await send(rig)).statusCode).toBe(200);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const answer = await readThread(rig);
+    expect(answer.statusCode).toBe(200);
+    expect(assistantThreadResponseSchema.parse(answer.json())).toMatchObject({ turns: [{ seq: 1, route: 'ask', outcome: 'answered', intent: 'widgetById', citedElements: expect.any(Number), steps: 1 }], previousThreadClearedAt: null });
+    for (const canary of [CANARY, 'key-canary-9', 'Ana Silva', 'Choose the intent that answers the question']) expect(answer.body, canary).not.toContain(canary);
+    expect(answer.body).not.toMatch(/questionHash|runId|tokens|stableId|W-1/);
+    const rows = JSON.stringify([...threads.threads.values()].flatMap((thread) => thread.turns));
+    for (const canary of [CANARY, 'key-canary-9', 'Choose the intent that answers the question']) expect(rows, canary).not.toContain(canary);
+    const logs = JSON.stringify([records.logs, rig.events, rig.rig.events]);
+    expect(logs).not.toContain(CANARY);
+    await rig.stop();
+  });
+
+  it('answers a person only their own thread, NOT_FOUND for an investigation that is not theirs or does not exist, and the same for a thread of nobody', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    await send(rig);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    current = SECOND;
+    const other = await readThread(rig);
+    expect(other.statusCode).toBe(404);
+    expect(other.json().error).toMatchObject({ code: 'NOT_FOUND' });
+    expect((await readThread(rig, '01939999-0000-7000-8000-0000000000ff')).statusCode).toBe(404);
+    current = FIRST;
+    expect(assistantThreadResponseSchema.parse((await readThread(rig)).json()).turns).toHaveLength(1);
+    await rig.stop();
+  });
+
+  it('says that the thread was cleared when the investigation was closed and reopened, and starts a new thread empty', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    await send(rig);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    threads.clear(rig.body.investigationId);
+    threads.reopen(rig.body.investigationId);
+    const read = assistantThreadResponseSchema.parse((await readThread(rig)).json());
+    expect(read.turns).toEqual([]);
+    expect(read.previousThreadClearedAt).toMatch(/^\d{4}-/);
+    await rig.stop();
+  });
+
+  it('answers 403 with the reason ai-off when the assistant is off, and reads nothing', async () => {
+    const rig = await assistantRig({ features: { ask: true, summary: false, assistant: false } });
+    const answer = await readThread(rig);
+    expect(answer.statusCode).toBe(403);
+    expect(answer.json().error).toMatchObject({ code: 'ACCESS_DENIED', details: { reason: 'ai-off' } });
+    await rig.stop();
+  });
+
+  it('answers INTERNAL_ERROR with no text of the failure when the store cannot read, and logs a fixed line', async () => {
+    current = FIRST;
+    const lines: string[] = [];
+    const rig = await assistantRig({ reply: ASK, threadStore: createMemoryAssistantThreadStore({ failOn: 'read' }), principalId: () => current, logLines: lines });
+    const answer = await readThread(rig);
+    expect(answer.statusCode).toBe(500);
+    expect(answer.json().error).toMatchObject({ code: 'INTERNAL_ERROR' });
+    expect(answer.body).not.toMatch(/the thread of an investigation could not be read|ASSISTANT_THREAD|SELECT/);
+    expect(lines.filter((line) => line.includes('extension.handler_failed'))).toHaveLength(1);
+    expect(lines.join('')).not.toMatch(/the thread of an investigation could not be read|ASSISTANT_THREAD|SELECT/);
+    await rig.stop();
+  });
+
+  it.each([
+    ['a store that fails every write', () => createMemoryAssistantThreadStore({ failOn: 'append' })],
+    ['a store whose epoch cannot be read', () => createMemoryAssistantThreadStore({ failOn: 'epoch' })],
+  ])('answers a turn as before, counts the failed thread write in the health probe by turn id and step, and logs no text, for %s', async (_name, makeStore) => {
+    current = FIRST;
+    const plain = await assistantRig({ reply: ASK, principalId: () => current });
+    const baseline = await send(plain);
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: makeStore(), recordQueue: records.attached, auditCounts: records.auditCounts, principalId: () => current });
+    const answer = await send(rig);
+    expect(answer.json()).toEqual(baseline.json());
+    await vi.waitFor(() => expect(records.queue.counts().failed).toBe(1));
+    const ready = (await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json();
+    expect(ready.audit.failed).toBe(1);
+    expect(records.logs.every((line) => line['event'] === 'audit.event_failed' && typeof line['turnId'] === 'string' && typeof line['step'] === 'string')).toBe(true);
+    expect(JSON.stringify(records.logs)).not.toContain(CANARY);
+    expect([...rig.events, ...rig.rig.events].filter((event) => event.action === 'assistant.turn.closed')).toHaveLength(1);
+    await rig.stop();
+    await plain.stop();
+  });
+
+  it('answers a turn at once while the store of the threads never answers: the write reaches the store, stays queued and is counted as queued in the health probe', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const reached = { append: 0 };
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: { ...threads, append: () => (reached.append++, new Promise(() => undefined)) }, recordQueue: records.attached, auditCounts: records.auditCounts, principalId: () => current });
+    const answer = await send(rig);
+    expect(answer.statusCode).toBe(200);
+    await vi.waitFor(() => expect(reached.append).toBe(1));
+    await vi.waitFor(async () => expect((await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json().audit.queued).toBeGreaterThan(0));
+    expect(records.queue.counts()).toMatchObject({ failed: 0, dropped: 0 });
+    await rig.stop();
+  });
+
+  it('drops what the record queue cannot hold, counted in the health probe', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver(0);
+    const rig = await assistantRig({ reply: ASK, threadStore: { ...threads, append: () => new Promise(() => undefined) }, recordQueue: records.attached, auditCounts: records.auditCounts, principalId: () => current });
+    const answer = await send(rig);
+    expect(answer.statusCode).toBe(200);
+    await vi.waitFor(() => expect(records.queue.counts().dropped).toBeGreaterThan(0));
+    expect((await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json().audit.dropped).toBe(records.queue.counts().dropped);
     await rig.stop();
   });
 });

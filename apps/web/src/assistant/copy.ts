@@ -42,7 +42,18 @@ export const ASSISTANT_COPY = {
   steps: 'Steps',
   coverage: 'Server-authored coverage',
   accessLost: 'You no longer have access to this investigation, so the thread was cleared.',
-  maskingCleared: 'Masking changed, so this answer is cleared. Ask again to see it.',
+  maskingTitle: 'Masking changed',
+  maskingBody: 'The text of this thread was cleared. Ask again.',
+  maskingNote: 'Answers now follow the new masking. Also shown when policy or your access changes.',
+  standing: 'The thread is cleared when the investigation closes.',
+  newThreadTitle: 'New thread',
+  newThreadBody: 'This is a new thread. The previous thread was cleared when the investigation closed.',
+  newThreadNote: 'Your graph, notes and saved views are unchanged.',
+  storedHeading: 'Earlier in this thread',
+  storedLoading: 'Reading the earlier turns…',
+  storedFailed: 'The earlier turns of this thread could not be read.',
+  storedAnswered: 'Answered',
+  storedRefused: 'Refused',
   sourceChanged: 'The source changed, so messages are paused.',
   thread: 'Conversation',
   you: 'You',
@@ -67,3 +78,7 @@ export function unavailableSentence(kind: AssistantFailureKind, readStarted: boo
   if (kind === 'rate-limit') return 'You have asked too often. The read may have started.';
   return 'The read did not finish. It may have started.';
 }
+
+export const sourcesText = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'source' : 'sources'}`;
+export const earlierText = (count: number): string => `${count.toLocaleString('en-US')} earlier ${count === 1 ? 'turn is' : 'turns are'} not shown.`;
+export const causeText = (cause: string): string => `${cause.charAt(0).toUpperCase()}${cause.slice(1).replace(/-/g, ' ')}`;

@@ -12,7 +12,7 @@ describe('the enterprise extension', () => {
     const extension = createEnterpriseExtension();
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
-    expect((group?.routes ?? []).map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/assistant/turns', 'principal'], ['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal'], ['POST', '/v1/investigations/:id/draft/ai-notes', 'principal'], ['GET', '/v1/investigations/:id/draft/ai-notes', 'principal']]);
+    expect((group?.routes ?? []).map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['GET', '/v1/assistant/investigations/:id/thread', 'principal'], ['POST', '/v1/assistant/turns', 'principal'], ['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal'], ['POST', '/v1/investigations/:id/draft/ai-notes', 'principal'], ['GET', '/v1/investigations/:id/draft/ai-notes', 'principal']]);
   });
 
   it('refuses the first route of its group when the request reports the routes off, and records the refusal', async () => {

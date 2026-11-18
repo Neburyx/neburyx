@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type ConfigureWarning, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
+import { SUMMARY_DEFAULTS, THREAD_READ_TURNS_DEFAULT, type AskClassifier, type ConfigureOutcome, type ConfigureWarning, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
 import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, optionalFolderChoice, type AskConfiguration } from './configure.js';
@@ -12,6 +12,8 @@ import { queuedSummaryRunStore } from './case-summary/queued-run-store.js';
 import { createPgSummaryRunStore, type SummaryRunStore } from './case-summary/run-store.js';
 import { queuedAssistantRunStore } from './assistant/queued-run-store.js';
 import { createPgAssistantRunStore, type AssistantRunStore } from './assistant/run-store.js';
+import { createPgAssistantThreadStore, type AssistantThreadStore } from './assistant/thread-store.js';
+import { createAssistantThreadRoute } from './assistant/thread-route.js';
 import { createCaseSummarizer } from './case-summary/summarizer.js';
 import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
 import { readTokenKeys } from './case-summary/token-keys.js';
@@ -47,6 +49,8 @@ export { createCaseSummarizer } from './case-summary/summarizer.js';
 export { createMemorySummaryRunStore, createPgSummaryRunStore } from './case-summary/run-store.js';
 /** @public Test hooks, as for the summary: the services/api tests build the assistant with the in-memory store, and the integration test runs the real store on a Postgres. */
 export { createMemoryAssistantRunStore, createPgAssistantRunStore } from './assistant/run-store.js';
+/** @public Test hooks for the threads of the assistant: the services/api tests run the real store on a Postgres and build the assistant with the in-memory one. */
+export { createMemoryAssistantThreadStore, createPgAssistantThreadStore, type AssistantThreadStore } from './assistant/thread-store.js';
 /** @public The instructions of that test. */
 export { buildSummaryInstructions } from './case-summary/instructions.js';
 /** @public Opens a summary token for the copy to notes and the export that follow, and for the tests of the token. */
@@ -102,6 +106,8 @@ interface EnterpriseExtensionOptions {
   readonly summaryRunStore?: (context: AuditSinkContext) => SummaryRunStore;
   /** Only a test sets this: the store of the assistant turns' records. */
   readonly assistantRunStore?: (context: AuditSinkContext) => AssistantRunStore;
+  /** Only a test sets this: the store of the assistant's threads. */
+  readonly assistantThreadStore?: (context: AuditSinkContext) => AssistantThreadStore;
   /** Only a test sets this: how often the removal of old records runs, in milliseconds. */
   readonly retentionIntervalMs?: number;
   /** Only a test sets this, to a folder that stands in for the summary files shipped with the product. */
@@ -133,6 +139,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
   let assistantRuns: AssistantRunStore | undefined;
+  let assistantThreads: AssistantThreadStore | undefined;
   let retentionTimer: ReturnType<typeof setInterval> | undefined;
   let runs: RunStore | undefined;
   const reportFailure = createFailureReporter(() => logger);
@@ -160,7 +167,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantTurnRoute({ router: assistantRouter, runs: () => assistantRuns, runSettings: () => assistantSettings, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -253,6 +260,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       summaryRuns = summaryStore === undefined ? undefined : queuedSummaryRunStore(summaryStore, () => recordQueue);
       const assistantStore = features.assistant ? (options.assistantRunStore ?? createPgAssistantRunStore)(context) : undefined;
       assistantRuns = assistantStore === undefined ? undefined : queuedAssistantRunStore(assistantStore, () => recordQueue);
+      assistantThreads = features.assistant ? (options.assistantThreadStore ?? createPgAssistantThreadStore)(context) : undefined;
       const removals: (() => void)[] = [];
       if (summaryStore !== undefined) {
         removals.push(() => {
@@ -281,7 +289,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       return {
         sink: audit.sink,
         close: () =>
-          (closing ??= (retentionTimer === undefined ? undefined : clearInterval(retentionTimer), Promise.allSettled([audit.close(), store?.close(), summaryStore?.close(), assistantStore?.close()]).then((results) => {
+          (closing ??= (retentionTimer === undefined ? undefined : clearInterval(retentionTimer), Promise.allSettled([audit.close(), store?.close(), summaryStore?.close(), assistantStore?.close(), assistantThreads?.close()]).then((results) => {
             const failed = results.find((result) => result.status === 'rejected');
             if (failed?.status === 'rejected') throw failed.reason;
           }))),

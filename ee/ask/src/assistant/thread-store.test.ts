@@ -1,0 +1,198 @@
+import { type AssistantThreadTurnWrite, type AuditSinkContext } from '@neburyx/contracts';
+import { describe, expect, it } from 'vitest';
+import { AssistantThreadStoreError, createMemoryAssistantThreadStore, createPgAssistantThreadStore, type ThreadClient, type ThreadPool } from './thread-store.js';
+
+const CONTEXT: AuditSinkContext = { databaseUrl: 'postgres://app@db.example.test/neburyx', poolSize: 1, connectionTimeoutMs: 1000, statementTimeoutMs: 1000, queryTimeoutMs: 1000, newId: () => '00000000-0000-7000-8000-000000000000', onConnectionError: () => undefined };
+const INVESTIGATION = '0192f000-0000-7000-8000-0000000000a1';
+const OWNER = '0192f000-0000-7000-8000-000000000001';
+const OTHER = '0192f000-0000-7000-8000-000000000002';
+const HASH = 'a'.repeat(64);
+
+const turn = (over: Partial<AssistantThreadTurnWrite> = {}): AssistantThreadTurnWrite => ({
+  id: crypto.randomUUID(),
+  investigationId: INVESTIGATION,
+  userId: OWNER,
+  at: new Date('2026-11-18T10:00:00Z'),
+  route: 'ask',
+  outcome: 'answered',
+  questionHash: HASH,
+  entities: [],
+  citationRefs: [],
+  steps: 1,
+  ...over,
+});
+
+interface Script {
+  readonly status?: string;
+  readonly epoch?: number;
+  readonly exists?: boolean;
+  readonly failAt?: RegExp;
+  readonly inserted?: number;
+  readonly turns?: readonly Record<string, unknown>[];
+  readonly total?: number;
+  readonly cleared?: Date;
+  readonly hasThread?: boolean;
+}
+
+function pool(script: Script = {}) {
+  const statements: string[] = [];
+  const released = { count: 0 };
+  const client: ThreadClient = {
+    async query(text) {
+      statements.push(text);
+      if (script.failAt?.test(text) === true) throw new Error('DRIVER-TEXT canary-secret-7f3 INSERT INTO ...');
+      if (/FOR SHARE/.test(text)) return { rows: script.status === 'none' ? [] : [{ status: script.status ?? 'open', deleted: false }] };
+      if (/FROM assistant_investigation_epochs/.test(text)) return { rows: script.epoch === undefined ? [] : [{ epoch: script.epoch }] };
+      if (/SELECT 1 FROM assistant_turns/.test(text)) return { rows: script.exists === true ? [{ '?column?': 1 }] : [] };
+      if (/INSERT INTO assistant_threads/.test(text)) return { rows: [{ id: 'thread-1' }] };
+      if (/MAX\(seq\)/.test(text)) return { rows: [{ seq: 3 }] };
+      if (/INSERT INTO assistant_turns/.test(text)) return { rows: [], rowCount: script.inserted ?? 1 };
+      if (/ORDER BY t.seq DESC/.test(text)) return { rows: script.turns ?? [] };
+      if (/count\(\*\)::int/.test(text)) return { rows: [{ n: script.total ?? script.turns?.length ?? 0 }] };
+      if (/SELECT 1 FROM assistant_threads/.test(text)) return { rows: script.hasThread === false ? [] : [{ '?column?': 1 }] };
+      if (/FROM assistant_thread_clears/.test(text)) return { rows: script.cleared === undefined ? [] : [{ cleared_at: script.cleared }] };
+      return { rows: [], rowCount: 0 };
+    },
+    release: () => void (released.count += 1),
+  };
+  const held: ThreadPool = { connect: async () => client, end: async () => undefined, on: () => undefined };
+  return { held, statements, released };
+}
+
+describe('the Postgres store of the threads', () => {
+  it('writes a turn in one transaction: the investigation is locked first, the epoch is checked, the thread is created or locked, the sequence follows it', async () => {
+    const { held, statements, released } = pool({ epoch: 2 });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    expect(await store.append(turn(), 2)).toBe('stored');
+    expect(statements.map((text) => text.split(' ').slice(0, 4).join(' '))).toEqual(['BEGIN', 'SELECT status, deleted_at IS', 'SELECT epoch FROM assistant_investigation_epochs', 'SELECT 1 FROM assistant_turns', 'INSERT INTO assistant_threads (id,', 'SELECT COALESCE(MAX(seq), 0) +', 'INSERT INTO assistant_turns (id,', 'COMMIT']);
+    expect(statements[1]).toContain('FOR SHARE');
+    expect(statements[4]).toContain('ON CONFLICT (investigation_id, user_id) DO UPDATE SET last_turn_at = GREATEST');
+    expect(statements[6]).toContain('ON CONFLICT (id) DO NOTHING');
+    expect(released.count).toBe(1);
+  });
+
+  it.each([
+    ['a closed investigation', { status: 'closed', epoch: 0 }, 0],
+    ['an investigation that is not there', { status: 'none', epoch: 0 }, 0],
+    ['another epoch', { status: 'open', epoch: 1 }, 0],
+  ] as const)('refuses a turn for %s, rolls back and writes nothing', async (_name, script, epoch) => {
+    const { held, statements } = pool(script);
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    expect(await store.append(turn(), epoch)).toBe('refused');
+    expect(statements.at(-1)).toBe('ROLLBACK');
+    expect(statements.some((text) => /INSERT INTO assistant_(threads|turns)/.test(text))).toBe(false);
+  });
+
+  it('answers duplicate, with nothing written, for a turn that is already there and for one whose insert took no row', async () => {
+    const there = pool({ exists: true });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => there.held }).append(turn(), 0)).toBe('duplicate');
+    expect(there.statements.some((text) => /INSERT INTO assistant_/.test(text))).toBe(false);
+    const raced = pool({ inserted: 0 });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => raced.held }).append(turn(), 0)).toBe('duplicate');
+  });
+
+  it('answers the fixed error, with no driver text, for a failing statement, rolls the transaction back and releases the connection', async () => {
+    const { held, statements, released } = pool({ failAt: /MAX\(seq\)/ });
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    const error = await store.append(turn(), 0).then(() => undefined, (failure: unknown) => failure);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(JSON.stringify([(error as Error).message, (error as Error & { code: string }).code])).not.toMatch(/DRIVER-TEXT|canary-secret-7f3/);
+    expect(statements.at(-1)).toBe('ROLLBACK');
+    expect(released.count).toBe(1);
+  });
+
+  it('answers the fixed error when no connection can be made, and refuses a turn the schema does not accept before any statement', async () => {
+    const down: ThreadPool = { connect: () => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.1')), end: async () => undefined, on: () => undefined };
+    await expect(createPgAssistantThreadStore(CONTEXT, { createPool: () => down }).epoch(INVESTIGATION)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+    const { held, statements } = pool();
+    await expect(createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).append({ ...turn(), questionHash: 'not-a-hash' }, 0)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+    expect(statements).toEqual([]);
+  });
+
+  it('reads the epoch as 0 when the investigation was never cleared', async () => {
+    const { held } = pool();
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).epoch(INVESTIGATION)).toBe(0);
+    const cleared = pool({ epoch: 4 });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => cleared.held }).epoch(INVESTIGATION)).toBe(4);
+  });
+
+  it('closes its pool once', async () => {
+    let ended = 0;
+    const counted: ThreadPool = { connect: async () => pool().held.connect(), end: async () => void (ended += 1), on: () => undefined };
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => counted });
+    await store.close();
+    await store.close();
+    expect(ended).toBe(1);
+  });
+});
+
+describe('the read of the Postgres store', () => {
+  const row = (seq: number) => ({ seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: 'widgetById', steps: 1, cited: 2 });
+
+  it('reads in one repeatable-read, read-only transaction, the newest turns first so the oldest are the ones left out, and answers them oldest first with how many are not shown', async () => {
+    const { held, statements, released } = pool({ turns: [row(7), row(6)], total: 7 });
+    const answer = await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).read(INVESTIGATION, OWNER, 100);
+    expect(statements[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    expect(statements.at(-1)).toBe('COMMIT');
+    expect(statements.slice(1, -1).every((text) => text.startsWith('SELECT'))).toBe(true);
+    expect(statements[1]).toContain('ORDER BY t.seq DESC LIMIT $3');
+    expect(answer).toEqual({ turns: [expect.objectContaining({ seq: 6 }), expect.objectContaining({ seq: 7, intent: 'widgetById', citedElements: 2 })], earlierTurns: 5, previousThreadClearedAt: null });
+    expect(released.count).toBe(1);
+  });
+
+  it('says when the person’s thread was cleared only when they have no thread since, and rolls back and answers the fixed error when a read fails', async () => {
+    const cleared = pool({ turns: [], hasThread: false, cleared: new Date('2026-11-18T12:00:00Z') });
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => cleared.held }).read(INVESTIGATION, OWNER, 100)).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
+    const since = pool({ turns: [row(1)], hasThread: true, cleared: new Date('2026-11-18T12:00:00Z') });
+    expect((await createPgAssistantThreadStore(CONTEXT, { createPool: () => since.held }).read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).toBeNull();
+    const failing = pool({ failAt: /count\(\*\)/ });
+    await expect(createPgAssistantThreadStore(CONTEXT, { createPool: () => failing.held }).read(INVESTIGATION, OWNER, 100)).rejects.toBeInstanceOf(AssistantThreadStoreError);
+    expect(failing.statements.at(-1)).toBe('ROLLBACK');
+  });
+});
+
+describe('the memory store of the threads', () => {
+  it('appends in order, per person, writes a turn once, and reads only the caller’s own thread', async () => {
+    const store = createMemoryAssistantThreadStore();
+    const first = turn();
+    expect(await store.append(first, 0)).toBe('stored');
+    expect(await store.append(first, 0)).toBe('duplicate');
+    expect(await store.append(turn({ route: 'refuse', outcome: 'refused', cause: 'verdict' }), 0)).toBe('stored');
+    expect(await store.append(turn({ userId: OTHER }), 0)).toBe('stored');
+    expect((await store.read(INVESTIGATION, OWNER, 100)).turns.map((held) => [held.seq, held.route])).toEqual([[1, 'ask'], [2, 'refuse']]);
+    expect((await store.read(INVESTIGATION, OTHER, 100)).turns).toHaveLength(1);
+  });
+
+  it('clears like the trigger, moves the epoch, refuses a turn of the old epoch after a reopen, and says when the person’s thread was cleared', async () => {
+    const store = createMemoryAssistantThreadStore({ now: () => new Date('2026-11-18T12:00:00Z') });
+    await store.append(turn(), 0);
+    store.clear(INVESTIGATION);
+    expect(await store.epoch(INVESTIGATION)).toBe(1);
+    expect(await store.append(turn(), 0)).toBe('refused');
+    store.reopen(INVESTIGATION);
+    expect(await store.append(turn(), 0)).toBe('refused');
+    expect(await store.read(INVESTIGATION, OWNER, 100)).toEqual({ turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
+    expect((await store.read(INVESTIGATION, OTHER, 100)).previousThreadClearedAt).toBeNull();
+    expect(await store.append(turn(), 1)).toBe('stored');
+    expect((await store.read(INVESTIGATION, OWNER, 100)).previousThreadClearedAt).toBeNull();
+  });
+
+  it('gives the newest turns up to the bound, in order, and counts the older ones it leaves out, trimming nothing it keeps', async () => {
+    const store = createMemoryAssistantThreadStore();
+    for (let index = 0; index < 10; index += 1) await store.append(turn(), 0);
+    const answer = await store.read(INVESTIGATION, OWNER, 7);
+    expect(answer.turns).toHaveLength(7);
+    expect([answer.turns[0]?.seq, answer.turns.at(-1)?.seq, answer.earlierTurns]).toEqual([4, 10, 3]);
+    expect(store.threads.get(`${INVESTIGATION}:${OWNER}`)?.turns).toHaveLength(10);
+    expect((await store.read(INVESTIGATION, OWNER, 500)).earlierTurns).toBe(0);
+  });
+
+  it('refuses a turn the schema does not accept and fails at the step it is told to', async () => {
+    await expect(createMemoryAssistantThreadStore().append({ ...turn(), questionHash: 'x' }, 0)).rejects.toThrow();
+    for (const step of ['epoch', 'append', 'read'] as const) {
+      const failing = createMemoryAssistantThreadStore({ failOn: step });
+      const work = step === 'epoch' ? failing.epoch(INVESTIGATION) : step === 'append' ? failing.append(turn(), 0) : failing.read(INVESTIGATION, OWNER, 100);
+      await expect(work).rejects.toBeInstanceOf(AssistantThreadStoreError);
+    }
+  });
+});

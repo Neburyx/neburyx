@@ -21,6 +21,7 @@ import {
   type AskRunAuditDetail,
   type AskRun,
   type AskRunInput,
+  type AssistantThreadTurnWrite,
   type AskRunResult,
   type AuditEvent,
   type AuditResult,
@@ -140,6 +141,8 @@ interface Prepared {
   readonly templateId: AskRunAuditDetail['templateId'];
   readonly definition: string;
   readonly entities: Entities;
+  /** The element each parameter of the intent resolved to, found where the intent's settings place the parameter; a value that did not resolve to an element has none. */
+  readonly bindings?: AssistantThreadTurnWrite['entities'];
   readonly patternName?: string;
 }
 
@@ -173,7 +176,7 @@ async function prepareFolderIntent(run: Execution): Promise<Prepared | AskAnswer
   }
   const bound = bindTemplateIntent({ template: found.template as Parameters<typeof bindTemplateIntent>[0]['template'], parameters: found.parameters, settings: found.settings }, entities);
   if (!bound.ok) return refusedBinding(run, base, bound);
-  return { base, input: { templateId: bound.template, params: bound.params }, params: bound.params, templateId: bound.template, definition: definitionOf(found), entities };
+  return { base, input: { templateId: bound.template, params: bound.params }, params: bound.params, templateId: bound.template, definition: definitionOf(found), entities, bindings: bindingsOf(sourceId, found.settings, bound.params) };
 }
 
 /** Binds the entities of the intent `saved-pattern`: the key of a pattern of this question's catalog (or, on a continue, the id of the pattern the route found), and the anchor when the pattern asks for one. */
@@ -215,8 +218,36 @@ async function prepareSavedPattern(run: Execution): Promise<Prepared | AskAnswer
     templateId: SAVED_PATTERN_TEMPLATE_ID,
     definition: patternDefinitionOf(offer),
     entities: { pattern: offer.id, ...(anchor === undefined ? {} : { anchor }) },
+    bindings: asked && anchor !== undefined ? [{ role: 'anchor', ref: { sourceId: run.sourceId, entityType: offer.projection.anchorType, stableId: anchor } }] : [],
     patternName: offer.name,
   };
+}
+
+const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * The elements the parameters of a template intent resolved to: the settings of the intent place a parameter as `{ entityType, stableId: '$role' }`, and the bound parameters hold the entity of the same place, so each
+ * role gets the element of its own place (both ends of a path, and equal values of two roles, each keep their own).
+ */
+function bindingsOf(sourceId: string, settings: unknown, params: unknown): AssistantThreadTurnWrite['entities'] {
+  const found: AssistantThreadTurnWrite['entities'] = [];
+  const walk = (setting: unknown, bound: unknown): void => {
+    if (Array.isArray(setting) && Array.isArray(bound)) {
+      setting.forEach((entry, index) => walk(entry, bound[index]));
+      return;
+    }
+    if (!isRecord(setting) || !isRecord(bound)) return;
+    const placed = setting['stableId'];
+    const entityType = bound['entityType'];
+    const stableId = bound['stableId'];
+    if (typeof placed === 'string' && placed.startsWith('$') && typeof entityType === 'string' && typeof stableId === 'string') {
+      found.push({ role: placed.slice(1), ref: { sourceId, entityType, stableId } });
+      return;
+    }
+    for (const name of Object.keys(setting)) walk(setting[name], bound[name]);
+  };
+  walk(settings, params);
+  return found;
 }
 
 /** Runs one intent of a source that the caller may read: binds the entities, runs it through the gate, and writes the event, the row and the summary in that order. */
@@ -228,7 +259,7 @@ export async function execute(run: Execution): Promise<AskAnswer> {
   const { base, input, params, templateId, entities } = prepared;
   const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
   const started = (options.now ?? Date.now)();
-  noteRun({ intent: name, ...(templateId === undefined ? {} : { templateId }), paramsHash });
+  noteRun({ intent: name, ...(templateId === undefined ? {} : { templateId }), paramsHash, entities: prepared.bindings ?? [] });
   let outcome: AskRun;
   try {
     outcome = await capabilities.askRunner({ sourceId, mask: run.mask }).run(input, run.continuing ? { continue: true } : undefined);

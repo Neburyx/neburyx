@@ -59,7 +59,9 @@ import {
   type AskQuestionRequest,
   askAnswerSchema,
   assistantTurnAnswerSchema,
+  assistantThreadResponseSchema,
   type AssistantTurnAnswer,
+  type AssistantThreadResponse,
   type AssistantTurnRequest,
   type SummaryRequest,
   type SummaryResponse,
@@ -203,6 +205,8 @@ export interface ApiClient {
   /** Reads the next page of an answer that stopped as heavy, with the token that answer carried; the model is not called. */
   askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal): Promise<ApiResult<AssistantTurnAnswer>>;
+  /** The caller's own thread of an investigation as the kind and end of each turn (no text), and when their previous thread was cleared. */
+  assistantThread(investigationId: string, signal?: AbortSignal): Promise<ApiResult<AssistantThreadResponse>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
@@ -385,6 +389,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
     assistantTurn: (body, signal) => request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body),
+    assistantThread: (investigationId, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),
     summarize: (body, key, signal) => request(fetcher, '/v1/summary', summaryResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),

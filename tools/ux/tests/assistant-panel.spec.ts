@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AskAnswer, type AssistantTurnAnswer } from '@neburyx/contracts';
+import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AskAnswer, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
 import { canvasOf } from './support/workspace.ts';
 
 const accountOf = (sourceId: string) => ({ ref: { sourceId, entityType: 'account', stableId: 'AC-2' }, display: { title: 'Account AC-2', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
@@ -22,7 +22,11 @@ const inAsk = (answer: AskAnswer): AssistantTurnAnswer => ({ status: 'answered',
 const REFUSE: AssistantTurnAnswer = { status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict };
 const VIEW: AssistantTurnAnswer = { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
 
-async function openWorkspace(page: Page, assistant: { available: false } | { available: true; messageWords: number } = { available: true, messageWords: 1000 }): Promise<void> {
+type StoredThread = AssistantThreadResponse;
+const NO_THREAD: StoredThread = { turns: [], earlierTurns: 0, previousThreadClearedAt: null };
+
+async function openWorkspace(page: Page, assistant: { available: false } | { available: true; messageWords: number } = { available: true, messageWords: 1000 }, thread: StoredThread = NO_THREAD): Promise<void> {
+  await page.route((url) => /^\/v1\/assistant\/investigations\/[^/]+\/thread$/.test(url.pathname), (route) => route.fulfill({ json: thread }));
   await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant } }));
   await page.goto('/dev/open-entity');
   await page.getByRole('button', { name: 'banking-demo' }).click();
@@ -56,6 +60,23 @@ async function open(page: Page): Promise<void> {
 }
 
 test.describe('the Assistant panel', () => {
+  test('shows the standing note under the input, the turns the server kept as compact rows above the live thread, and the new-thread card for a cleared one', async ({ page }) => {
+    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 2, steps: 1 }, { seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null });
+    await open(page);
+    await expect(panel(page).getByText('The thread is cleared when the investigation closes.')).toBeVisible();
+    await expect(panel(page).getByRole('heading', { name: 'Earlier in this thread' })).toBeVisible();
+    await expect(panel(page).getByRole('listitem', { name: 'Read from the source, Answered' })).toContainText('shared-devices');
+    await expect(panel(page).getByRole('listitem', { name: 'Refused, Refused' })).toContainText('Verdict');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  test('shows the new-thread card of an investigation that was closed and reopened', async ({ page }) => {
+    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [], earlierTurns: 0, previousThreadClearedAt: '2026-11-18T12:00:00.000Z' });
+    await open(page);
+    await expect(panel(page).getByText('This is a new thread. The previous thread was cleared when the investigation closed.')).toBeVisible();
+    await expect(panel(page).getByText('Your graph, notes and saved views are unchanged.')).toBeVisible();
+  });
+
   test('opens from the header with no lock, closes with Escape and gives the focus back, keeps the message while closed, and never scrolls the page sideways', async ({ page }) => {
     await openWorkspace(page);
     await answerWith(page, REFUSE);

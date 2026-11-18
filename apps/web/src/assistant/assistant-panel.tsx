@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
 import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, wordsText } from './copy.js';
+import { MaskingCard, NewThreadCard, StandingNote, StoredTurns } from './thread-notices.js';
+import { useStoredThread } from './stored-thread.js';
 import { TurnView } from './turn-cards.js';
 import { useAssistant } from './use-assistant.js';
 
@@ -51,16 +53,21 @@ function NotAvailable() {
 export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const model = useAssistant();
   const availability = useAiAvailabilityWhenProvided('assistant');
-  const available = availability === 'available';
-  const unavailable = availability === 'unavailable';
+  const stored = useStoredThread(availability === 'available');
+  const off = stored.kind === 'off';
+  const available = availability === 'available' && !off;
+  const unavailable = availability === 'unavailable' || off;
   const field = useRef<HTMLTextAreaElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const { turns, notice, input } = model.state;
+  const storedTurns = stored.kind === 'ready' ? stored.thread.turns : [];
+  const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   useEffect(() => {
     if (model.focus.target === 'input') field.current?.focus();
     else body.current?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`)?.focus();
   }, [model.focus]);
+  const canSend = model.canSend && available;
   const limit = model.limit;
   const announced = pending ? ASSISTANT_COPY.working : '';
   const close = (): void => {
@@ -101,7 +108,11 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
         {announced}
       </p>
       <div className="ask-body assistant-body" ref={body}>
-        {unavailable ? <NotAvailable /> : turns.length === 0 ? <Intro /> : null}
+        {unavailable ? <NotAvailable /> : showNewThread ? <NewThreadCard /> : null}
+        {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}
+        {!unavailable && stored.kind === 'failed' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.storedFailed}</p> : null}
+        {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} /> : null}
+        {unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread ? null : <Intro />}
         {!unavailable && turns.length > 0 ? (
           <ol className="assistant-thread" aria-label={ASSISTANT_COPY.thread}>
             {turns.map((turn) => (
@@ -110,14 +121,14 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           </ol>
         ) : null}
         {notice?.kind === 'access-lost' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.accessLost}</p> : null}
-        {notice?.kind === 'masking-cleared' ? <p className="ask-note">{ASSISTANT_COPY.maskingCleared}</p> : null}
+        {notice?.kind === 'masking-cleared' ? <MaskingCard /> : null}
         {model.viewTooLarge || notice?.kind === 'view-too-large' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.viewTooLarge}</p> : null}
       </div>
       <form
         className="ask-form"
         onSubmit={(event) => {
           event.preventDefault();
-          if (model.canSend) model.send();
+          if (canSend) model.send();
         }}
       >
         <label htmlFor="assistant-message" className="visually-hidden">
@@ -138,7 +149,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
               event.preventDefault();
-              if (model.canSend) model.send();
+              if (canSend) model.send();
             }
           }}
         />
@@ -151,13 +162,14 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           <span id="assistant-counter" className={tooLongNotice === undefined ? 'ask-counter' : 'ask-counter ask-counter-limit'} aria-label={limit === undefined ? undefined : wordsSpoken(model.words, limit)}>
             {limit === undefined ? '' : wordsText(model.words, limit)}
           </span>
-          <button type="submit" className="ask-send" disabled={!model.canSend}>
+          <button type="submit" className="ask-send" disabled={!canSend}>
             {ASSISTANT_COPY.send} <span aria-hidden="true">▸</span>
           </button>
         </div>
         <p id="assistant-keys" className="ask-keys">
           {unavailable ? ASSISTANT_COPY.unavailableSend : tooLongNotice !== undefined ? TOO_LONG_NOTE : limit === undefined ? '' : hintText(limit)}
         </p>
+        {unavailable ? null : <StandingNote />}
         {model.sourceChanged ? <p className="ask-note">{ASSISTANT_COPY.sourceChanged}</p> : null}
       </form>
     </div>

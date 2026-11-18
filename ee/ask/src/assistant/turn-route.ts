@@ -16,15 +16,18 @@ import {
   type ExtensionLogger,
   type ExtensionRequest,
   type ExtensionRoute,
+  type RecordQueue,
 } from '@neburyx/contracts';
 import { AuditUnavailableError, gateClientOf, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog } from '../patterns/index.js';
 import { coverageOf } from './coverage.js';
 import { summarizeRun } from '../questions/run-summary.js';
 import { capabilitiesOf, definitionOf, execute, patternDefinitionOf, patternOf, refusal, writeEvent, type Execution } from '../questions/question-routes.js';
+import { canonicalText } from '../questions/canonical.js';
 import { verifyContinueToken } from '../questions/continue-token.js';
 import type { RouterInput, RouterOutcome } from './router.js';
 import type { AssistantRunStore } from './run-store.js';
+import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
 import { noteTurnStarted, withTurnAudit } from './turn-audit.js';
 import { countWords } from './words.js';
@@ -42,8 +45,14 @@ export interface TurnRouteOptions {
   /** The store of the records of the turns' model calls; absent, nothing is recorded. */
   readonly runs?: () => AssistantRunStore | undefined;
   readonly runSettings?: () => AssistantSettings | undefined;
+  /** The store of the threads and the queue of the records its writes go through; absent, no thread is kept. */
+  readonly threads?: () => AssistantThreadStore | undefined;
+  readonly records?: () => RecordQueue | undefined;
   readonly now?: () => number;
 }
+
+/** The keyed hash of what the person typed, made with the application's signing key, so a short message cannot be confirmed by guessing; absent when the application has no key. */
+const hashOf = (request: ExtensionRequest, parts: readonly unknown[]): { readonly questionHash?: string } => (request.signText === undefined ? {} : { questionHash: request.signText(canonicalText(parts)) });
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
 
@@ -116,7 +125,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     permission: 'principal',
     requestSchema: assistantTurnRequestSchema,
     responseSchema: assistantTurnAnswerSchema,
-    handler: withTurnAudit({ logger: options.logger, ...(options.runs === undefined ? {} : { runs: options.runs }), ...(options.runSettings === undefined ? {} : { settings: options.runSettings }), ...(options.now === undefined ? {} : { now: options.now }) }, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
+    handler: withTurnAudit({ logger: options.logger, ...(options.runs === undefined ? {} : { runs: options.runs }), ...(options.runSettings === undefined ? {} : { settings: options.runSettings }), ...(options.threads === undefined ? {} : { threads: options.threads }), ...(options.records === undefined ? {} : { records: options.records }), ...(options.now === undefined ? {} : { now: options.now }) }, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
       const { sourceReadable, investigationReadable, patterns } = gateClientOf(request);
       const router = options.router();
       if (sourceReadable === undefined || investigationReadable === undefined || router === undefined) throw unsupported();
@@ -124,13 +133,13 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       await sourceReadable(body.sourceId);
       await investigationReadable(body.investigationId, body.sourceId);
       if ('continue' in body) {
-        noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId });
+        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-continue', 1, body.continue.intent]) });
         return continueTurn(request, body, body.continue);
       }
       const { message } = body;
       const words = countWords(message);
       if (words === 0) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'empty-message' });
-      noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId });
+      await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-question', 1, message]) });
       const limit = options.maxMessageWords();
       if (limit === undefined) throw unsupported();
       if (words > limit) return { status: 'too-long', words, limit };

@@ -233,14 +233,16 @@ describe('the Assistant thread: clearing', () => {
     return { ...h, stop };
   }
 
-  it('clears the thread and shows the sentence of the Ask panel when the masking changes', async () => {
+  it('clears the thread and shows the masking card of frame AS9 when the masking changes', async () => {
     const h = bound(async () => ok(REFUSE));
     render(h.tree());
     await typeAndSend('first');
     await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
     act(() => h.state.setMask(true));
     expect(screen.queryByText('first')).toBeNull();
-    expect(screen.getByText(ASSISTANT_COPY.maskingCleared)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.maskingTitle)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.maskingBody)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.maskingNote)).toBeTruthy();
     h.stop();
   });
 

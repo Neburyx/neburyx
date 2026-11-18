@@ -216,8 +216,8 @@ describe('the mapping and the source login', () => {
       const up = await stack.up();
       const logs = up.code === 0 ? '' : (await stack.compose(['logs', '--no-log-prefix', 'migrate', 'api'])).stdout;
       expect(up.code, logs).toBe(0);
-      const tables = await stack.psql("select count(*) from information_schema.tables where table_name in ('summary_runs', 'assistant_runs')");
-      expect(tables.stdout.trim()).toBe('2');
+      const tables = await stack.psql("select count(*) from information_schema.tables where table_name in ('summary_runs', 'assistant_runs', 'assistant_threads', 'assistant_turns', 'assistant_investigation_epochs', 'assistant_thread_clears')");
+      expect(tables.stdout.trim()).toBe('6');
       const me = (await (await fetch(`${stack.url}/v1/me`)).json()) as { edition: string };
       expect(me.edition).toBe('community');
       expect((await stack.compose(['logs', '--no-log-prefix', 'api'])).stdout).not.toContain('not-a-real-key');
@@ -227,7 +227,7 @@ describe('the mapping and the source login', () => {
   it('applies no extension migration when no provider key is given', async () => {
     const stack = await newStack();
     expect((await stack.up()).code).toBe(0);
-    const tables = await stack.psql("select count(*) from information_schema.tables where table_name in ('summary_runs', 'assistant_runs')");
+    const tables = await stack.psql("select count(*) from information_schema.tables where table_name in ('summary_runs', 'assistant_runs', 'assistant_threads', 'assistant_turns', 'assistant_investigation_epochs', 'assistant_thread_clears')");
     expect(tables.stdout.trim()).toBe('0');
   });
 

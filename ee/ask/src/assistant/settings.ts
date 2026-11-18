@@ -1,4 +1,4 @@
-import { AI_LIMITS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
+import { AI_LIMITS, SUMMARY_DEFAULTS, THREAD_READ_TURNS_CEILING, THREAD_READ_TURNS_DEFAULT } from '@neburyx/contracts';
 import { given, integerChoice, type Env } from '@neburyx/ee-ai-runtime';
 
 export const ASSISTANT_VARIABLES = {
@@ -13,6 +13,8 @@ export const ASSISTANT_VARIABLES = {
   maxInputTokens: 'NEBURYX_ASSISTANT_MAX_INPUT_TOKENS',
   maxOutputTokens: 'NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS',
   runRetentionDays: 'NEBURYX_ASSISTANT_RUN_RETENTION_DAYS',
+  threadRetention: 'NEBURYX_ASSISTANT_THREAD_RETENTION',
+  threadReadTurns: 'NEBURYX_ASSISTANT_THREAD_READ_TURNS',
 } as const;
 
 /** Defaults and ceilings are hypotheses to be measured, except the timeout of a call, the calls, the words of a message and the turns of context, which are given. */
@@ -58,6 +60,10 @@ export interface AssistantSettings {
   readonly maxOutputTokens: number;
   /** How many days the stored records of the turns' model calls are kept. */
   readonly runRetentionDays: number;
+  /** When a thread is cleared: `close`, when its investigation is closed, archived or deleted. The only value there is; keeping a thread longer, with or without text, is later. */
+  readonly threadRetention: 'close';
+  /** How many of the most recent turns of a thread one read gives; nothing stored is trimmed. */
+  readonly threadReadTurns: number;
 }
 
 export type AssistantSettingsRead = { readonly ok: true; readonly settings: AssistantSettings } | { readonly ok: false; readonly problems: readonly string[] };
@@ -90,12 +96,15 @@ export function readAssistantSettings(env: Env): AssistantSettingsRead {
   const maxInputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxInputTokens, RANGES.maxInputTokens, DEFAULTS.maxInputTokens, problems);
   const maxOutputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxOutputTokens, RANGES.maxOutputTokens, DEFAULTS.maxOutputTokens, problems);
   const runRetentionDays = positiveWholeNumber(env, ASSISTANT_VARIABLES.runRetentionDays, DEFAULTS.runRetentionDays, problems);
+  const threadReadTurns = wholeNumber(env, ASSISTANT_VARIABLES.threadReadTurns, { min: 1, max: THREAD_READ_TURNS_CEILING }, THREAD_READ_TURNS_DEFAULT, problems);
+  const retention = given(env, ASSISTANT_VARIABLES.threadRetention);
+  if (retention !== undefined && retention !== 'close') problems.push(`${ASSISTANT_VARIABLES.threadRetention} must be close`);
   const rows = given(env, ASSISTANT_VARIABLES.maxRows);
   const maxRows = rows === undefined ? undefined : /^\d+$/.test(rows) && Number(rows) >= 1 && Number.isSafeInteger(Number(rows)) ? Number(rows) : undefined;
   if (rows !== undefined && maxRows === undefined) problems.push(`${ASSISTANT_VARIABLES.maxRows} must be a positive whole number`);
   if (timeoutMs > totalTimeoutMs) problems.push(`${ASSISTANT_VARIABLES.timeoutMs} must not be above ${ASSISTANT_VARIABLES.totalTimeoutMs}`);
   if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, settings: Object.freeze({ model, timeoutMs, totalTimeoutMs, maxCalls, maxSteps, ...(maxRows === undefined ? {} : { maxRows }), contextTurns, maxMessageWords, maxInputTokens, maxOutputTokens, runRetentionDays }) };
+  return { ok: true, settings: Object.freeze({ model, timeoutMs, totalTimeoutMs, maxCalls, maxSteps, ...(maxRows === undefined ? {} : { maxRows }), contextTurns, maxMessageWords, maxInputTokens, maxOutputTokens, runRetentionDays, threadRetention: 'close' as const, threadReadTurns }) };
 }
 
 /** The rows a turn may read from a source: the source's own page limit times the steps, or less when the operator set a lower figure. */

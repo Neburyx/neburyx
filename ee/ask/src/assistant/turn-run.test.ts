@@ -273,7 +273,7 @@ describe('the records of the other ends of a turn', () => {
     const wrapped = withTurnAudit(
       { logger: () => undefined, runs: () => store, settings: () => undefined, now: () => 1 },
       async () => {
-        noteTurnStarted({ sourceId: 'demo', investigationId: INVESTIGATION });
+        await noteTurnStarted({ sourceId: 'demo', investigationId: INVESTIGATION });
         noteTurn({ route: 'view', cause: 'a sentence that is text, not a code' });
         return PLACEHOLDER;
       },

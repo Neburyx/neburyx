@@ -22,9 +22,20 @@ export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, se
       remove = undefined;
     }
   };
+  let status = state.investigation.getState().record?.status;
   const syncThread = (): void => {
     const held = session.store.getState();
     const investigation = state.investigation.getState();
+    // a closed, archived or reopened investigation starts a new thread: the server cleared its own, and what the panel holds goes with it
+    const now = investigation.record?.status;
+    if (now !== status) {
+      const changed = status !== undefined && now !== undefined;
+      status = now;
+      if (changed && held.investigationId === investigation.id) {
+        session.clear({});
+        return;
+      }
+    }
     const mask = state.mask.getState();
     if (held.investigationId !== investigation.id) {
       session.clear({ investigationId: investigation.id, mask });
@@ -34,7 +45,7 @@ export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, se
       session.clear({ mask, notice: held.turns.length === 0 ? undefined : { kind: 'masking-cleared' } });
       return;
     }
-    if (isSourceChanged(investigation.record?.sourceState) && held.turns.length > 0) session.clear({ notice: { kind: 'source-changed' } });
+    if (isSourceChanged(investigation.record?.sourceState) && (held.turns.length > 0 || session.stored.getState().kind !== 'idle')) session.clear(held.turns.length > 0 ? { notice: { kind: 'source-changed' } } : {});
   };
   const stops = [state.presentation.view.subscribe(syncPanel), state.investigation.subscribe(syncThread), state.mask.subscribe(syncThread)];
   const unregister = registerAiAction('assistant', () => state.presentation.setAssistantOpen(!state.presentation.view.getState().assistantOpen));

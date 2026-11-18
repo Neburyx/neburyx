@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, type AssistantThreadResponse, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
 import { fakeClient } from '../api/fake-client.js';
 import type { ApiResult } from '../api/client.js';
 import { ApiClientProvider } from '../api/client-context.js';
@@ -19,17 +19,25 @@ export const VIEW: AssistantTurnAnswer = { status: 'not-answered', route: 'view'
 
 export type TurnCall = (request: AssistantTurnRequest, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantTurnAnswer>>;
 
-export function harness(turn: TurnCall, limit: number | null = 1000) {
+export type ThreadCall = (investigationId: string, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadResponse>>;
+const EMPTY_THREAD: ThreadCall = async () => ({ ok: true, value: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
+
+export function harness(turn: TurnCall, limit: number | null = 1000, thread: ThreadCall = EMPTY_THREAD) {
   const state = createClientState();
   state.bindSource('a');
   state.show({ id: 'inv-1', sourceId: 'a', record: RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
   const session = createAssistantSession();
   const tools = createToolRegistry();
   const sent: AssistantTurnRequest[] = [];
+  const reads: string[] = [];
   const client = fakeClient({
     assistantTurn: async (request, signal) => {
       sent.push(request);
       return turn(request, signal);
+    },
+    assistantThread: async (investigationId, signal) => {
+      reads.push(investigationId);
+      return thread(investigationId, signal);
     },
   });
   const status = aiStatus(limit === null ? {} : { assistant: limit });
@@ -45,7 +53,7 @@ export function harness(turn: TurnCall, limit: number | null = 1000) {
       </ClientStateProvider>
     </ApiClientProvider>
   );
-  return { tree, sent, session, state, shell };
+  return { tree, sent, reads, session, state, shell };
 }
 
 export const typeAndSend = async (text: string) => {
