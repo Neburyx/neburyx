@@ -91,7 +91,28 @@ function hasReadableIndex(webRoot: string): boolean {
   }
 }
 
-function describeStartFailure(error: unknown): string {
+type FailureCategory = 'database-connection' | 'timeout' | 'unknown';
+
+const CONNECTION_FAILURE = /connection terminated|connection (refused|reset)|server closed the connection|timeout exceeded when trying to connect|database system is (starting up|shutting down)|too many clients/i;
+const TIMEOUT_FAILURE = /time(d)? ?out|aborted/i;
+const SAFE_CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,59}$/;
+
+/** What kind of failure an error without a code is, from its class and its message; the message is read to choose and never shown, since a connection string or a value can be in it. */
+function categoryOf(error: object): FailureCategory {
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : '';
+  const message = 'message' in error && typeof error.message === 'string' ? error.message : '';
+  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout';
+  if (CONNECTION_FAILURE.test(message)) return 'database-connection';
+  return TIMEOUT_FAILURE.test(message) ? 'timeout' : 'unknown';
+}
+
+/** The class name of the error when it is a plain identifier, so it names no value. */
+function classNameOf(error: object): string {
+  const name = error.constructor?.name;
+  return typeof name === 'string' && SAFE_CLASS_NAME.test(name) ? name : 'unnamed';
+}
+
+export function describeStartFailure(error: unknown): string {
   const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
   switch (code) {
     case 'EADDRINUSE':
@@ -106,7 +127,8 @@ function describeStartFailure(error: unknown): string {
     case 'EAI_AGAIN':
       return 'NEBURYX_HOST is not an address of this machine';
     default:
-      return typeof code === 'string' ? `start-up failed (${code})` : 'start-up failed';
+      if (typeof code === 'string') return `start-up failed (${code})`;
+      return typeof error === 'object' && error !== null ? `start-up failed (${classNameOf(error)}, ${categoryOf(error)})` : 'start-up failed (unknown)';
   }
 }
 

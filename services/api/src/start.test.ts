@@ -27,7 +27,7 @@ import { READINESS_LIMIT_MS } from './health/readiness.js';
 import { SHUTDOWN_TIMES } from './serve.js';
 import { createSourceTester } from './source-test/tester.js';
 import { createSigner, deriveSigningKey } from './ask/signing-key.js';
-import { configureBudgets, start, type StartIo } from './start.js';
+import { configureBudgets, describeStartFailure, start, type StartIo } from './start.js';
 import { registeredRoutesOf } from './app.js';
 import { routesWithoutPermission } from './permissions.js';
 import { clearRegisteredExtension, EXTENSION_CONFIGURE_FAILED_MESSAGE, EXTENSION_LOAD_FAILED_MESSAGE, EXTENSION_LOGGER_FAILED_MESSAGE, NO_EXTENSION_MESSAGE, type ExtensionLoader } from './profile/extension.js';
@@ -1184,7 +1184,7 @@ describe('the startup check in start', () => {
     const run = io({ ...parts.io, openStore: () => ({ ...failing, close: () => (parts.closed.push('store'), failing.close()) }) });
     const result = await start(ENV, run.io);
     expect(result.exitCode).toBe(1);
-    expect(run.errors.join('')).toBe('start-up failed\n');
+    expect(run.errors.join('')).toMatch(/^start-up failed \([A-Za-z]+, (database-connection|timeout|unknown)\)\n$/);
     expect(parts.closed).toEqual(['gate', 'store']);
   });
 });
@@ -1485,3 +1485,35 @@ describe('the cursor key at start', () => {
   });
 });
 
+
+describe('the words for a start-up failure without a code', () => {
+  class PoolError extends Error {}
+
+  it('names the class and a database connection failure, never the message', () => {
+    for (const message of ['Connection terminated unexpectedly', 'timeout exceeded when trying to connect', 'the database system is starting up']) {
+      const words = describeStartFailure(new PoolError(`${message} postgres://app:SECRET@db/x`));
+      expect(words).toBe('start-up failed (PoolError, database-connection)');
+      expect(words).not.toContain('SECRET');
+    }
+  });
+
+  it('names the class and a timeout, from the class or the message', () => {
+    expect(describeStartFailure(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe('start-up failed (Error, timeout)');
+    expect(describeStartFailure(new PoolError('the operation timed out SECRET'))).toBe('start-up failed (PoolError, timeout)');
+  });
+
+  it('names the class and an unknown error for anything else, and an unnamed class and a value that is not an error as such', () => {
+    const words = describeStartFailure(new PoolError('something SECRET broke'));
+    expect(words).toBe('start-up failed (PoolError, unknown)');
+    expect(words).not.toContain('SECRET');
+    const anonymous = new (class {})();
+    expect(describeStartFailure(anonymous)).toBe('start-up failed (unnamed, unknown)');
+    expect(describeStartFailure('SECRET text')).toBe('start-up failed (unknown)');
+    expect(describeStartFailure(undefined)).toBe('start-up failed (unknown)');
+  });
+
+  it('keeps the words that name a code', () => {
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'EADDRINUSE' }))).toBe('NEBURYX_PORT is already in use');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'XX000' }))).toBe('start-up failed (XX000)');
+  });
+});
