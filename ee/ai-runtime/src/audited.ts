@@ -36,6 +36,8 @@ export interface AuditedModelOptions {
 }
 
 export interface AuditedModelCall {
+  /** The configured model, the reference a failed or refused call is recorded under. */
+  readonly modelRef: string;
   readonly call: (request: ModelRequest, context: AuditedCallContext, signal: AbortSignal) => Promise<ModelAnswer>;
   /**
    * The same call as a provider, for one context. Unlike a bare provider it can reject with `AuditUnavailableError` (the event could not be written, or the answer's prompt differs from the one sent),
@@ -145,5 +147,5 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     }
   }
 
-  return { call, asProvider: (context) => ({ complete: (request, signal) => call(request, context, signal) }) };
+  return { modelRef: configuration.model, call, asProvider: (context) => ({ complete: (request, signal) => call(request, context, signal) }) };
 }

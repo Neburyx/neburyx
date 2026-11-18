@@ -34,6 +34,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
 import { summarizeRun } from './run-summary.js';
+import { noteRun } from '../assistant/turn-audit.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
 import { canonicalText } from './canonical.js';
 import { issueContinueToken, verifyContinueToken } from './continue-token.js';
@@ -226,6 +227,7 @@ export async function execute(run: Execution): Promise<AskAnswer> {
   const { base, input, params, templateId, entities } = prepared;
   const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
   const started = (options.now ?? Date.now)();
+  noteRun({ intent: name, ...(templateId === undefined ? {} : { templateId }), paramsHash });
   let outcome: AskRun;
   try {
     outcome = await capabilities.askRunner({ sourceId, mask: run.mask }).run(input, run.continuing ? { continue: true } : undefined);

@@ -24,6 +24,7 @@ import { summarizeRun } from '../questions/run-summary.js';
 import { capabilitiesOf, definitionOf, execute, patternDefinitionOf, patternOf, refusal, writeEvent, type Execution } from '../questions/question-routes.js';
 import { verifyContinueToken } from '../questions/continue-token.js';
 import type { RouterInput, RouterOutcome } from './router.js';
+import { noteTurnStarted, withTurnAudit } from './turn-audit.js';
 import { countWords } from './words.js';
 
 const TURNS_URL = '/v1/assistant/turns';
@@ -110,17 +111,21 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     permission: 'principal',
     requestSchema: assistantTurnRequestSchema,
     responseSchema: assistantTurnAnswerSchema,
-    async handler(request: ExtensionRequest): Promise<AssistantTurnAnswer> {
+    handler: withTurnAudit(options.logger, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
       const { sourceReadable, investigationReadable, patterns } = gateClientOf(request);
       const router = options.router();
       if (sourceReadable === undefined || investigationReadable === undefined || router === undefined) throw unsupported();
       const body = assistantTurnRequestSchema.parse(request.body);
       await sourceReadable(body.sourceId);
       await investigationReadable(body.investigationId, body.sourceId);
-      if ('continue' in body) return continueTurn(request, body, body.continue);
+      if ('continue' in body) {
+        noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId });
+        return continueTurn(request, body, body.continue);
+      }
       const { message } = body;
       const words = countWords(message);
       if (words === 0) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'empty-message' });
+      noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId });
       const limit = options.maxMessageWords();
       if (limit === undefined) throw unsupported();
       if (words > limit) return { status: 'too-long', words, limit };
@@ -157,6 +162,6 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           return unreachable;
         }
       }
-    },
+    }),
   };
 }

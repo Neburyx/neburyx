@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { assistantTurnAnswerSchema, type AuditEvent, type AuditSink } from '@neburyx/contracts';
 import { createEnterpriseExtension } from '@neburyx/ee-ask';
 import fc from 'fast-check';
@@ -23,13 +23,14 @@ interface Stub {
   readonly bodies: string[];
 }
 
-async function modelStub(reply: string | (() => string)): Promise<Stub> {
+async function modelStub(reply: string | (() => string), hang = false): Promise<Stub> {
   const bodies: string[] = [];
   const server = createServer((request, response) => {
     let body = '';
     request.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')));
     request.on('end', () => {
       bodies.push(body);
+      if (hang) return;
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: typeof reply === 'string' ? reply : reply() }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 } }));
     });
@@ -42,20 +43,23 @@ const ENV = { NEBURYX_ASK_API_KEY: 'a-test-key' };
 const INTENTS = { widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } }, queryById: { parameters: ['id'], query: 'MATCH (n:Widget {widgetId: $id}) RETURN n' }, sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } } };
 const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, labels: ['Widget'], properties: { widgetId: id, ownerName: 'Ana Silva' } });
 
-async function assistantRig(options: { reply?: string | (() => string); features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | undefined } = {}) {
-  const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}');
+async function assistantRig(options: { reply?: string | (() => string); hang?: boolean; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+  const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url });
   const features = options.features ?? { ask: false, summary: false, assistant: true };
   const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
+  const armed = { open: false };
   extension.attachAudit?.(options.modelAudit ?? { record: async (event) => void events.push(event) });
-  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : options.answer?.(call)) }) });
+  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
   const investigation = await rig.open();
+  armed.open = true;
   const body = { sourceId: 'demo', investigationId: investigation.id, message: 'Is this person guilty?', viewElementKeys: [] };
   const post = (payload: unknown = body) => rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: payload as object });
   const stop = async (): Promise<void> => {
     await rig.stop();
+    stub.server.closeAllConnections();
     await new Promise<void>((resolve) => stub.server.close(() => resolve()));
   };
   return { post, body, stub, events, rig, stop, extension };
@@ -279,6 +283,130 @@ describe('a turn when the audit store is down, blocked or full, through the queu
     expect(blocked.queue.counts().dropped).toBeGreaterThan(0);
     expect(JSON.stringify(blocked.logs)).not.toContain(SENTINEL);
     await rig.stop();
+  });
+});
+
+describe('the closing event of a turn in the running application', () => {
+  const CANARY = 'CANARY-MESSAGE-7';
+  const REPLY_CANARY = 'REPLY-CANARY';
+  const closed = (events: AuditEvent[]) => events.filter((event) => event.action === 'assistant.turn.closed');
+  type Rig = Awaited<ReturnType<typeof assistantRig>>;
+  const everything = (rig: Rig): AuditEvent[] => [...rig.events, ...rig.rig.events];
+  const routerPrompt = readFileSync(new URL('../../../../ee/ask/prompts/assistant-router.md', import.meta.url), 'utf8').split('\n').find((line) => line.startsWith('You help')) ?? '';
+  const timedOut = (call: ExecuteCall): ExecuteOutcome | undefined => (call.templateId === 'entity-load' ? { status: 'timeout' } : undefined);
+
+  const outcomes: { name: string; reply: string; options?: Partial<Parameters<typeof assistantRig>[0]>; body?: (rig: Rig) => object; closing: Record<string, unknown> }[] = [
+    { name: 'answered', reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}', closing: { route: 'ask', outcome: 'answered', intent: 'widgetById', templateId: 'entity', steps: 1, modelCalls: 1 } },
+    { name: 'refused', reply: '{"route":"refuse","cause":"verdict"}', closing: { route: 'refuse', outcome: 'refused', cause: 'verdict', modelCalls: 1 } },
+    { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, closing: { route: 'refuse', outcome: 'refused', cause: 'unplaced', modelCalls: 1 } },
+    { name: 'view', reply: '{"route":"view"}', closing: { route: 'view', outcome: 'refused', cause: 'not-answered', modelCalls: 1 } },
+    { name: 'too-long', reply: '{"route":"view"}', body: (rig) => ({ ...rig.body, message: Array.from({ length: 1001 }, () => CANARY).join(' ') }), closing: { outcome: 'refused', cause: 'too-long', modelCalls: 0 } },
+    { name: 'continue-invalid', reply: '{"route":"view"}', body: (rig) => ({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: ['key-canary-9'], continue: { intent: 'widgetById', entities: { id: 'W-1' }, continueToken: `${'1'.repeat(13)}.${'a'.repeat(64)}` } }), closing: { outcome: 'refused', cause: 'continue-invalid', modelCalls: 0 } },
+    { name: 'failed', reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}', options: { answer: timedOut }, closing: { route: 'ask', outcome: 'failed', intent: 'widgetById', steps: 1, modelCalls: 1 } },
+  ];
+
+  async function turn(item: (typeof outcomes)[number], rigOptions: Partial<Parameters<typeof assistantRig>[0]> = {}) {
+    const rig = await assistantRig({ reply: item.reply, ...item.options, ...rigOptions });
+    const body = item.body?.(rig) ?? { ...rig.body, message: `Show ${CANARY} W-1`, viewElementKeys: ['key-canary-9'] };
+    const answer = await rig.post(body);
+    return { rig, answer };
+  }
+
+  it.each(outcomes)('is written once for the $name turn, with the fields of its end and no canary of the message, a value, the instructions, a reply or the answer', async (item) => {
+    const { rig, answer } = await turn(item);
+    expect(answer.statusCode).toBe(200);
+    await vi.waitFor(() => expect(closed(everything(rig))).toHaveLength(1));
+    const [event] = closed(everything(rig));
+    expect(event).toMatchObject({ sourceId: 'demo', investigationId: rig.body.investigationId, detail: { turn: item.closing } });
+    const text = JSON.stringify(everything(rig));
+    for (const canary of [CANARY, 'W-1', 'key-canary-9', REPLY_CANARY, 'Choose the intent that answers the question', routerPrompt, 'Ana Silva']) expect(text, canary).not.toContain(canary);
+    for (const sentence of JSON.stringify(answer.json()).match(/"text":"([^"]+)"/g) ?? []) expect(text).not.toContain(sentence.slice(8, -1));
+    if (item.name === 'answered') {
+      expect(event).toMatchObject({ result: 'success', detail: { turn: { modelRef: 'claude-sonnet-5-5', promptId: 'assistant.route', tokensIn: 10, tokensOut: 5 } } });
+      expect(JSON.stringify(answer.json())).toContain('Ana Silva');
+    }
+    await rig.stop();
+  });
+
+  const LEAK_CANARIES = [CANARY, 'W-1', 'key-canary-9', REPLY_CANARY, 'Choose the intent that answers the question', routerPrompt, 'Ana Silva'];
+  const leaks = (text: string, label: string): void => {
+    for (const canary of LEAK_CANARIES) expect(text, `${label}: ${canary}`).not.toContain(canary);
+  };
+
+  /** A turn the client gives up while its model call (`model`) or its read (`read`) is pending, ended by an abort of the real connection. */
+  async function cancelledTurn(kind: 'model' | 'read', rigOptions: Partial<Parameters<typeof assistantRig>[0]> = {}) {
+    const reads = { pending: 0 };
+    const rig = await assistantRig({
+      reply: kind === 'model' ? '{"route":"view"}' : '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}',
+      ...(kind === 'model' ? { hang: true } : { answer: (call: ExecuteCall) => (call.templateId === 'entity-load' ? new Promise<ExecuteOutcome>((resolve) => { reads.pending += 1; call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' })); }) : undefined) }),
+      ...rigOptions,
+    });
+    const address = await rig.rig.app.listen({ host: '127.0.0.1', port: 0 });
+    const controller = new AbortController();
+    const sent = fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...rig.body, message: `Show ${CANARY} W-1`, viewElementKeys: ['key-canary-9'] }), signal: controller.signal }).catch(() => undefined);
+    await vi.waitFor(() => expect(kind === 'model' ? rig.stub.bodies.length : reads.pending).toBeGreaterThan(0));
+    controller.abort();
+    await sent;
+    return rig;
+  }
+
+  it.each([
+    ['model', { route: undefined, intent: undefined, steps: 0, modelCalls: 1, promptId: 'assistant.route' }],
+    ['read', { route: 'ask', intent: 'widgetById', steps: 1, modelCalls: 1, promptId: 'assistant.route' }],
+  ] as const)('is written once, as cancelled, when the client gives up a turn whose %s is pending, with no canary', async (kind, fields) => {
+    const rig = await cancelledTurn(kind);
+    await vi.waitFor(() => expect(closed(everything(rig))).toHaveLength(1));
+    const [event] = closed(everything(rig));
+    expect(event).toMatchObject({ result: 'failed', detail: { turn: { outcome: 'cancelled', ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) } } });
+    leaks(JSON.stringify(everything(rig)), kind);
+    await rig.stop();
+  });
+
+  const stores = [
+    ['a store that rejects every write', () => ({ record: () => Promise.reject(new Error('the store is down')) }), 100],
+    ['a store that never answers, under a queue of one place', () => ({ record: () => new Promise<void>(() => undefined) }), 1],
+  ] as const;
+
+  const queueOver = (makeStore: () => AuditSink, size: number) => {
+    const logs: Record<string, unknown>[] = [];
+    const queue = createAuditQueue({ sinks: [{ name: 'test', sink: makeStore() }], settings: { queueSize: size, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: (fields) => void logs.push(fields) } });
+    return { queue, logs };
+  };
+
+  const diagnosed = (logs: Record<string, unknown>[], label: string): void => {
+    expect(logs.some((line) => line['action'] === 'assistant.turn.closed' && (line['event'] === 'audit.event_failed' || line['event'] === 'audit.event_dropped')), label).toBe(true);
+    leaks(JSON.stringify(logs), label);
+    for (const line of logs) expect(Object.keys(line).every((key) => ['event', 'sink', 'action', 'result', 'traceId', 'actorId', 'sourceId', 'investigationId'].includes(key)), label).toBe(true);
+  };
+
+  it.each(stores)('gives the same answer for each outcome through the queue of the application over %s, and counts and logs the closing event that fails or is dropped, ids only', async (_name, makeStore, size) => {
+    for (const item of outcomes) {
+      const baseline = await turn(item);
+      const { queue, logs } = queueOver(makeStore, size);
+      const { rig, answer } = await turn(item, { requestAudit: queue.sink, modelAudit: queue.sink });
+      expect(answer.statusCode, item.name).toBe(baseline.answer.statusCode);
+      expect(answer.json(), item.name).toEqual(baseline.answer.json());
+      await vi.waitFor(() => expect(logs.some((line) => line['action'] === 'assistant.turn.closed'), item.name).toBe(true));
+      expect(queue.counts().failed + queue.counts().dropped, item.name).toBeGreaterThan(0);
+      diagnosed(logs, item.name);
+      await rig.stop();
+      await baseline.rig.stop();
+    }
+  });
+
+  it.each(stores)('ends a cancelled turn, model call or read, the same way through the queue over %s, and counts and logs its closing event, ids only', async (_name, makeStore, size) => {
+    for (const kind of ['model', 'read'] as const) {
+      const baseline = await cancelledTurn(kind);
+      await vi.waitFor(() => expect(closed(everything(baseline))).toHaveLength(1));
+      const { queue, logs } = queueOver(makeStore, size);
+      const rig = await cancelledTurn(kind, { requestAudit: queue.sink, modelAudit: queue.sink });
+      await vi.waitFor(() => expect(logs.some((line) => line['action'] === 'assistant.turn.closed'), kind).toBe(true));
+      expect(queue.counts().failed + queue.counts().dropped, kind).toBeGreaterThan(0);
+      diagnosed(logs, kind);
+      expect(closed(everything(rig))).toHaveLength(0);
+      await rig.stop();
+      await baseline.stop();
+    }
   });
 });
 

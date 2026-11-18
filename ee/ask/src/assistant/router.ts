@@ -1,6 +1,7 @@
 import { ASK_SAVED_PATTERN_NOTE, readAssistantRoute, type AskFolder, type AssistantRouterReply } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { estimateTokens } from '../case-summary/assemble.js';
+import { noteModelAnswer, noteModelCall } from './turn-audit.js';
 import { buildAssistantInstructions, type AssistantInstructions } from './instructions.js';
 
 export const ROUTER_PROMPT_ID = 'assistant.route';
@@ -50,6 +51,7 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
     const values = valuesOf(input);
     if (estimateTokens(instructions.text, values) > options.maxInputTokens()) return { status: 'too-large' };
     let answer;
+    noteModelCall({ modelRef: options.model.modelRef, promptId: ROUTER_PROMPT_ID, promptVersion: ROUTER_PROMPT_VERSION, instructionsSha256: instructions.sha256 });
     try {
       answer = await options.model.call(
         { promptId: ROUTER_PROMPT_ID, version: ROUTER_PROMPT_VERSION, instructions: instructions.text, values },
@@ -61,6 +63,7 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
       if (error instanceof AuditUnavailableError) throw error;
       return { status: 'failed', code: 'unreachable' };
     }
+    noteModelAnswer({ ...(answer.status === 'ok' ? { model: answer.model } : {}), ...(answer.usage === undefined ? {} : { usage: answer.usage }) });
     if (answer.status === 'refused') return { status: 'failed', code: 'refused' };
     if (answer.status === 'failed') return { status: 'failed', code: answer.code };
     const read = readAssistantRoute(answer.text);

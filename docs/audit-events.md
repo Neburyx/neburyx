@@ -17,6 +17,7 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `assistant.ask` | any | queued | `ee/ask/src/assistant/turn-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.continue` | any | queued | `ee/ask/src/assistant/turn-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.route` | any | queued | `ee/ask/src/assistant/router.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
+| `assistant.turn.closed` | any | queued | `ee/ask/src/assistant/turn-audit.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.classify` | any | queued | `ee/ask/src/classify/classifier.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.continue` | any | queued | `ee/ask/src/questions/question-routes.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.file_query` | any | queued | `services/api/src/gate/templates/file-query.ts` | A read or a system read: the response does not depend on its event, which is queued. |
@@ -76,6 +77,10 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `source.schema_tokens` | any | queued | `services/api/src/gate/templates/schema-tokens.ts` | A read or a system read: the response does not depend on its event, which is queued. |
 | `source.stable_id_duplicates` | any | queued | `services/api/src/gate/templates/stable-id-duplicates.ts` | A read or a system read: the response does not depend on its event, which is queued. |
 | `source.test` | any | queued | `services/api/src/app.ts` | A read or a system read: the response does not depend on its event, which is queued. |
+
+## The end of an assistant turn
+
+Each assistant turn that passes its first checks (the person may read the source and the investigation, the message is not empty) ends in one `assistant.turn.closed` event, whatever the end. Its detail holds the route (`ask`, `view` or `refuse`; absent when no route was reached), the outcome (`answered`, `refused`, `failed` or `cancelled`), a cause or failure kind as a code, the intent and template, the keyed hash of the parameters, the number of reads and of model calls, the number of elements its accepted summary cited, the model reference, prompt id and version, the instructions hash and the tokens of the router call; never a message, a reply, a value or an instruction. A count the turn does not have is absent, never 0. The result is `success` for an answered turn (`partial` for a partial result or a heavy stop), `refused` for a refused one, `failed` for a failed or cancelled one. The model call keeps its own `assistant.route` event. If the closing event cannot be built it is logged by the ids of the turn and not queued; the answer is the same either way.
 
 ## Not events
 

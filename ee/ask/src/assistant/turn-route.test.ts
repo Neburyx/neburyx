@@ -70,8 +70,9 @@ describe('an assistant turn: what the router is sent', () => {
     expect(call?.values).toContain('n1\nn2');
     expect(call?.values).toContain(ASK_SAVED_PATTERN_NOTE);
     expect(call?.values).not.toContain('SENTINEL-CLASSIFICATION');
-    expect(events).toHaveLength(1);
-    const event = events[0];
+    const routed = events.filter((candidate) => candidate.action === ROUTER_AUDIT_ACTION);
+    expect(routed).toHaveLength(1);
+    const event = routed[0];
     expect(event?.action).toBe(ROUTER_AUDIT_ACTION);
     expect(event?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '1', promptSha256: createHash('sha256').update(call?.instructions ?? '', 'utf8').digest('hex') } });
     expect(JSON.stringify(event)).not.toContain('SENTINEL-MESSAGE');
@@ -148,8 +149,9 @@ describe('an assistant turn: replies that are not a route, and failures', () => 
     for (const reply of [ok('{"route":"view"}'), ok('nonsense'), { kind: 'refused' } as const, { kind: 'failed', code: 'timeout' } as const]) {
       const { route, request, events } = await rig({ reply });
       await route.handler(request());
-      expect(events).toHaveLength(1);
-      expect(events[0]?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '1' } });
+      const routed = events.filter((candidate) => candidate.action === ROUTER_AUDIT_ACTION);
+      expect(routed).toHaveLength(1);
+      expect(routed[0]?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '1' } });
     }
   });
 });

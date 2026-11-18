@@ -59,6 +59,8 @@ export interface ExportRigOptions {
   readonly failAudit?: (action: string) => boolean;
   /** The application's audit member is the sink itself and not the queue in front of it: for the tests of the enterprise routes whose own handling of a failed event is rewritten with the queue. */
   readonly directAudit?: boolean;
+  /** The application's audit member, for a test that builds the queue over its own store; takes the place of the queue the rig builds. */
+  readonly auditMember?: AuditSink;
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
   /** The stored file queries of an Ask folder, so the gate runs them. */
   readonly fileQueries?: FileQueryDeps;
@@ -118,7 +120,7 @@ export async function startExportRig(options: ExportRigOptions = {}) {
   const seams: Pick<Seams, 'policy' | 'coordinator' | 'audit' | 'privilegedAudit'> = {
     policy: { authorizeSource: () => Promise.resolve(options.deny?.() === true ? { allowed: false, reason: 'no' } : { allowed: true }) },
     coordinator: defaults.coordinator,
-    audit: options.directAudit === true ? stored : queued.audit,
+    audit: options.auditMember ?? (options.directAudit === true ? stored : queued.audit),
     privilegedAudit: stored,
   };
   const forbidExport = (items: readonly Record<string, unknown>[], context: Parameters<typeof redactItems>[1]) =>

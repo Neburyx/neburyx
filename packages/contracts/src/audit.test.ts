@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { aiAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount, type AiAuditDetail, type AuditDetail, type AuditEvent, type TokenCount } from './audit.js';
+import { aiAuditDetailSchema, assistantTurnAuditDetailSchema, auditDetailSchema, isTokenCount, parseAiAuditDetail, parseAuditDetail, tokenCount, type AiAuditDetail, type AuditDetail, type AuditEvent, type TokenCount } from './audit.js';
 
 const SHA = 'a'.repeat(64);
 
@@ -187,5 +187,39 @@ describe('the case summary audit detail', () => {
     ['a model reference with a space', { ...detail, modelRef: 'a model name' }],
   ])('refuses %s', (_name, value) => {
     expect(auditDetailSchema.safeParse({ summary: value }).success).toBe(false);
+  });
+});
+
+describe('the closing event of an assistant turn', () => {
+  const MINIMAL = { outcome: 'refused', modelCalls: 0 };
+  const FULL = { route: 'ask', outcome: 'answered', intent: 'widgetById', templateId: 'entity', paramsHash: SHA, steps: 1, citedElements: 2, modelCalls: 1, modelRef: 'model-a', promptId: 'assistant.route', promptVersion: '1', instructionsSha256: SHA, tokensIn: 20, tokensOut: 'unknown', runId: '01939999-0000-7000-8000-0000000000ff' };
+  const parses = (turn: unknown): boolean => auditDetailSchema.safeParse({ turn }).success;
+
+  it('takes the minimal and the full shape', () => {
+    expect(parses(MINIMAL)).toBe(true);
+    expect(parses(FULL)).toBe(true);
+    expect(parseAuditDetail({ turn: FULL })).toEqual({ turn: FULL });
+  });
+
+  it.each([
+    ['no outcome', { modelCalls: 0 }],
+    ['no count of calls', { outcome: 'answered' }],
+    ['an unknown outcome', { ...MINIMAL, outcome: 'done' }],
+    ['a further member', { ...MINIMAL, message: 'x' }],
+    ['a free string as a cause', { ...MINIMAL, cause: 'a sentence with spaces' }],
+    ['a fractional count', { ...MINIMAL, citedElements: 1.5 }],
+    ['a negative count', { ...MINIMAL, steps: -1 }],
+    ['a plain decimal token count', { ...MINIMAL, tokensIn: 1.5 }],
+    ['a malformed hash', { ...MINIMAL, paramsHash: 'abc' }],
+    ['a malformed instructions hash', { ...MINIMAL, instructionsSha256: 'A'.repeat(64) }],
+    ['a malformed run id', { ...MINIMAL, runId: 'run-1' }],
+    ['a template that is not in the catalog', { ...MINIMAL, templateId: 'free-text' }],
+  ])('refuses %s', (_name, turn) => {
+    expect(parses(turn)).toBe(false);
+  });
+
+  it('keeps unknown tokens and an absent count absent', () => {
+    expect(parseAuditDetail({ turn: { ...MINIMAL, tokensIn: 'unknown' } })).toEqual({ turn: { ...MINIMAL, tokensIn: 'unknown' } });
+    expect(Object.keys(assistantTurnAuditDetailSchema.parse(MINIMAL))).toEqual(['outcome', 'modelCalls']);
   });
 });

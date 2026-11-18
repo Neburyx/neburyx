@@ -124,6 +124,36 @@ export const notesAuditDetailSchema = z.strictObject({ runId: z.uuid().optional(
 
 export type NotesAuditDetail = z.infer<typeof notesAuditDetailSchema>;
 
+/** How an assistant turn ended, as its closing audit event records it. */
+export const ASSISTANT_TURN_OUTCOMES = ['answered', 'refused', 'failed', 'cancelled'] as const;
+export type AssistantTurnOutcome = (typeof ASSISTANT_TURN_OUTCOMES)[number];
+
+/**
+ * What an assistant turn leaves in its closing audit event: the route, how it ended, the intent or template, the keyed hash of the parameters (the one Ask makes), how many reads and model calls it made, the number of
+ * elements its accepted summary cited, the model and prompt of the router call, its tokens and the record of its calls; never a message, a reply, a value or an instruction. A count the turn does not have is absent, never 0.
+ */
+export const assistantTurnAuditDetailSchema = z.strictObject({
+  route: z.enum(['ask', 'view', 'refuse']).optional(),
+  outcome: z.enum(ASSISTANT_TURN_OUTCOMES),
+  cause: label.optional(),
+  failureKind: label.optional(),
+  intent: label.optional(),
+  templateId: z.enum([...ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]).optional(),
+  paramsHash: sha256Hex.optional(),
+  steps: wholeCount.optional(),
+  citedElements: wholeCount.optional(),
+  modelCalls: wholeCount,
+  modelRef: label.optional(),
+  promptId: label.optional(),
+  promptVersion: label.optional(),
+  instructionsSha256: sha256Hex.optional(),
+  tokensIn: tokensSchema.optional(),
+  tokensOut: tokensSchema.optional(),
+  runId: z.uuid().optional(),
+});
+
+export type AssistantTurnAuditDetail = z.infer<typeof assistantTurnAuditDetailSchema>;
+
 /** Why a call to an AI route was refused, as the event `ai.route_refused` records it: the feature is switched off, or the routes are mounted while no AI provider is configured. */
 const AI_ROUTE_REFUSAL_REASONS = ['ai-off', 'no-provider'] as const;
 
@@ -147,6 +177,7 @@ export const auditDetailSchema = z.union([
   z.strictObject({ askRun: askRunAuditDetailSchema }),
   z.strictObject({ summary: caseSummaryAuditDetailSchema }),
   z.strictObject({ notes: notesAuditDetailSchema }),
+  z.strictObject({ turn: assistantTurnAuditDetailSchema }),
   z.strictObject({ fileQuery: z.strictObject({ intent: z.string().regex(ASK_INTENT_NAME).optional(), queryHash: z.string().regex(/^[0-9a-f]{64}$/).optional() }), reason: z.enum(['cancelled', 'timeout']).optional() }),
 ]);
 
@@ -172,6 +203,8 @@ export type AuditDetail =
   /** What a question of Ask was: the intent, the outcome or cause, and hashes and counts only. */
   | { readonly askRun: AskRunAuditDetail; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never }
 
+  /** How an assistant turn ended: the route, outcome, hashes and counts only. */
+  | { readonly turn: AssistantTurnAuditDetail; readonly summary?: never; readonly notes?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What a Copy to notes was: the run, and counts. */
   | { readonly notes: NotesAuditDetail; readonly summary?: never; readonly ai?: never; readonly counts?: never; readonly export?: never; readonly reason?: never; readonly target?: never; readonly type?: never; readonly fileQuery?: never; readonly askRun?: never }
   /** What a click of the case summary was: counts, hashes, the model and prompt used and the outcome. */
