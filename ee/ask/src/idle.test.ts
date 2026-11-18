@@ -209,6 +209,24 @@ describe('a route of a feature that is switched off', () => {
     expect((await on.extension.configure?.({ preview: true }, missing, CONTEXT))?.ok).toBe(false);
   });
 
+  it.each([
+    ['a folder whose intents file is not JSON', { text: 'not json at all SENTINEL-CONTENT' }],
+    ['a folder with a query that writes', { text: JSON.stringify({ wipe: { parameters: [], query: "MATCH (n) WHERE n.x = 'SENTINEL-CONTENT' DETACH DELETE n" } }) }],
+  ])('treats %s as unusable: Ask off starts the assistant without a folder and a warning that holds no content, Ask on refuses the start', async (_name, content) => {
+    const folder = makeAskFolder(CONTEXT.sourceIds);
+    writeFileSync(join(folder, 'source-a', 'intents.json'), content.text);
+    const env = { ...ENV, NEBURYX_ASK_MAPPING_FOLDER: folder };
+    const off = counted({ ask: false, summary: false });
+    const outcome = await off.extension.configure?.({ preview: true }, env, CONTEXT);
+    expect(outcome).toEqual({ ok: true, warnings: [{ event: 'assistant.ask_folder_unavailable', message: expect.any(String) }] });
+    expect(JSON.stringify(outcome)).not.toContain('SENTINEL-CONTENT');
+    expect(off.extension.askFolder()).toBeUndefined();
+    const on = counted({ summary: false });
+    const refused = await on.extension.configure?.({ preview: true }, env, CONTEXT);
+    expect(refused?.ok).toBe(false);
+    expect(on.extension.askFolder()).toBeUndefined();
+  });
+
   it('reads the assistant settings and instructions at configure, and holds them frozen with the hash', async () => {
     const { extension } = counted();
     expect((await extension.configure?.({ preview: true }, ENV, CONTEXT))?.ok).toBe(true);
