@@ -1488,32 +1488,51 @@ describe('the cursor key at start', () => {
 
 describe('the words for a start-up failure without a code', () => {
   class PoolError extends Error {}
+  class TimeoutError extends Error {}
+  class AbortError extends Error {}
 
-  it('names the class and a database connection failure, never the message', () => {
+  it('names the nearest known class and a database connection failure, never the message', () => {
     for (const message of ['Connection terminated unexpectedly', 'timeout exceeded when trying to connect', 'the database system is starting up']) {
       const words = describeStartFailure(new PoolError(`${message} postgres://app:SECRET@db/x`));
-      expect(words).toBe('start-up failed (PoolError, database-connection)');
+      expect(words).toBe('start-up failed (Error, database-connection)');
       expect(words).not.toContain('SECRET');
     }
   });
 
-  it('names the class and a timeout, from the class or the message', () => {
-    expect(describeStartFailure(Object.assign(new Error('x'), { name: 'TimeoutError' }))).toBe('start-up failed (Error, timeout)');
-    expect(describeStartFailure(new PoolError('the operation timed out SECRET'))).toBe('start-up failed (PoolError, timeout)');
+  it('names a timeout from the class of the error, whatever its message, and from the message', () => {
+    expect(describeStartFailure(new TimeoutError('neutral'))).toBe('start-up failed (TimeoutError, timeout)');
+    expect(describeStartFailure(new AbortError('neutral'))).toBe('start-up failed (AbortError, timeout)');
+    expect(describeStartFailure(new PoolError('the operation timed out SECRET'))).toBe('start-up failed (Error, timeout)');
   });
 
-  it('names the class and an unknown error for anything else, and an unnamed class and a value that is not an error as such', () => {
+  it('names an unknown error for anything else, with a class that is not a known one called other, and no value as such', () => {
     const words = describeStartFailure(new PoolError('something SECRET broke'));
-    expect(words).toBe('start-up failed (PoolError, unknown)');
+    expect(words).toBe('start-up failed (Error, unknown)');
     expect(words).not.toContain('SECRET');
-    const anonymous = new (class {})();
-    expect(describeStartFailure(anonymous)).toBe('start-up failed (unnamed, unknown)');
+    expect(describeStartFailure(new (class {})())).toBe('start-up failed (other, unknown)');
     expect(describeStartFailure('SECRET text')).toBe('start-up failed (unknown)');
     expect(describeStartFailure(undefined)).toBe('start-up failed (unknown)');
+  });
+
+  it('never prints the name a class gives itself, nor a code that is not a state or a system error number', () => {
+    const named = Object.create({ constructor: { name: 'SYNTHETIC_SECRET' } });
+    expect(describeStartFailure(named)).toBe('start-up failed (other, unknown)');
+    class SYNTHETIC_SECRET extends Error {}
+    expect(describeStartFailure(new SYNTHETIC_SECRET('x'))).toBe('start-up failed (Error, unknown)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'postgres://app:SECRET@db/x' }))).toBe('start-up failed (unrecognized code)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'SYNTHETIC_SECRET' }))).toBe('start-up failed (unrecognized code)');
   });
 
   it('keeps the words that name a code', () => {
     expect(describeStartFailure(Object.assign(new Error('x'), { code: 'EADDRINUSE' }))).toBe('NEBURYX_PORT is already in use');
     expect(describeStartFailure(Object.assign(new Error('x'), { code: 'XX000' }))).toBe('start-up failed (XX000)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'ECONNREFUSED' }))).toBe('start-up failed (ECONNREFUSED)');
+  });
+
+  it('does not throw, and prints nothing of the error, when looking at it throws', () => {
+    const getters = { get code(): string { throw new Error('SECRET code'); }, get message(): string { throw new Error('SECRET message'); }, get constructor(): never { throw new Error('SECRET constructor'); } };
+    expect(describeStartFailure(getters)).toBe('start-up failed (other, unknown)');
+    const trapped = new Proxy({}, { getPrototypeOf: () => { throw new Error('SECRET prototype'); }, getOwnPropertyDescriptor: () => { throw new Error('SECRET descriptor'); } });
+    expect(describeStartFailure(trapped)).toBe('start-up failed');
   });
 });

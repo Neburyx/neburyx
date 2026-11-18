@@ -95,25 +95,39 @@ type FailureCategory = 'database-connection' | 'timeout' | 'unknown';
 
 const CONNECTION_FAILURE = /connection terminated|connection (refused|reset)|server closed the connection|timeout exceeded when trying to connect|database system is (starting up|shutting down)|too many clients/i;
 const TIMEOUT_FAILURE = /time(d)? ?out|aborted/i;
-const SAFE_CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,59}$/;
+/** The classes a start-up error may be named by; any other class is called `other`, since a class name is the code's to choose and could hold anything. */
+const KNOWN_CLASSES: ReadonlySet<string> = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'AggregateError', 'TimeoutError', 'AbortError', 'DatabaseError']);
+/** A database error state (five characters) or a system error number: the only codes that are shown. */
+const SHOWN_CODE = /^([0-9A-Z]{5}|E[A-Z]{2,20})$/;
+const MAX_PROTOTYPES = 10;
 
-/** What kind of failure an error without a code is, from its class and its message; the message is read to choose and never shown, since a connection string or a value can be in it. */
-function categoryOf(error: object): FailureCategory {
-  const name = 'name' in error && typeof error.name === 'string' ? error.name : '';
-  const message = 'message' in error && typeof error.message === 'string' ? error.message : '';
-  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout';
+/** The names of the classes of an error, nearest first, read without running any getter or trap of the error that could throw or hold a value. */
+function classNamesOf(error: object): string[] {
+  const names: string[] = [];
+  let prototype: object | null = error;
+  for (let depth = 0; depth < MAX_PROTOTYPES; depth += 1) {
+    prototype = Object.getPrototypeOf(prototype);
+    if (prototype === null) break;
+    const constructor: unknown = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value;
+    const name: unknown = typeof constructor === 'function' ? Object.getOwnPropertyDescriptor(constructor, 'name')?.value : undefined;
+    if (typeof name === 'string') names.push(name);
+  }
+  return names;
+}
+
+/** What kind of failure an error without a code is, from its classes and its message; the message is read to choose and never shown, since a connection string or a value can be in it. */
+function categoryOf(names: readonly string[], message: string): FailureCategory {
+  if (names.includes('TimeoutError') || names.includes('AbortError')) return 'timeout';
   if (CONNECTION_FAILURE.test(message)) return 'database-connection';
   return TIMEOUT_FAILURE.test(message) ? 'timeout' : 'unknown';
 }
 
-/** The class name of the error when it is a plain identifier, so it names no value. */
-function classNameOf(error: object): string {
-  const name = error.constructor?.name;
-  return typeof name === 'string' && SAFE_CLASS_NAME.test(name) ? name : 'unnamed';
+function descriptorValue(error: object, key: string): unknown {
+  return Object.getOwnPropertyDescriptor(error, key)?.value;
 }
 
-export function describeStartFailure(error: unknown): string {
-  const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+function describeStartFailureOf(error: unknown): string {
+  const code = typeof error === 'object' && error !== null ? descriptorValue(error, 'code') : undefined;
   switch (code) {
     case 'EADDRINUSE':
       return 'NEBURYX_PORT is already in use';
@@ -127,8 +141,23 @@ export function describeStartFailure(error: unknown): string {
     case 'EAI_AGAIN':
       return 'NEBURYX_HOST is not an address of this machine';
     default:
-      if (typeof code === 'string') return `start-up failed (${code})`;
-      return typeof error === 'object' && error !== null ? `start-up failed (${classNameOf(error)}, ${categoryOf(error)})` : 'start-up failed (unknown)';
+      if (typeof code === 'string') return SHOWN_CODE.test(code) ? `start-up failed (${code})` : 'start-up failed (unrecognized code)';
+      if (typeof error !== 'object' || error === null) return 'start-up failed (unknown)';
+      {
+        const names = classNamesOf(error);
+        const message = descriptorValue(error, 'message');
+        const label = names.find((name) => KNOWN_CLASSES.has(name)) ?? 'other';
+        return `start-up failed (${label}, ${categoryOf(names, typeof message === 'string' ? message : '')})`;
+      }
+  }
+}
+
+/** The words for a start-up failure. Looking at an error must never throw or print a value of it, so the words come only from fixed labels, and a failure to look is the plain words. */
+export function describeStartFailure(error: unknown): string {
+  try {
+    return describeStartFailureOf(error);
+  } catch {
+    return 'start-up failed';
   }
 }
 
