@@ -1521,11 +1521,14 @@ describe('the words for a start-up failure without a code', () => {
     expect(describeStartFailure(new SYNTHETIC_SECRET('x'))).toBe('start-up failed (Error, unknown)');
     expect(describeStartFailure(Object.assign(new Error('x'), { code: 'postgres://app:SECRET@db/x' }))).toBe('start-up failed (unrecognized code)');
     expect(describeStartFailure(Object.assign(new Error('x'), { code: 'SYNTHETIC_SECRET' }))).toBe('start-up failed (unrecognized code)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'TOKEN' }))).toBe('start-up failed (unrecognized code)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'ESECRET' }))).toBe('start-up failed (unrecognized code)');
   });
 
   it('keeps the words that name a code', () => {
     expect(describeStartFailure(Object.assign(new Error('x'), { code: 'EADDRINUSE' }))).toBe('NEBURYX_PORT is already in use');
-    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'XX000' }))).toBe('start-up failed (XX000)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: '57P03' }))).toBe('start-up failed (57P03)');
+    expect(describeStartFailure(Object.assign(new Error('x'), { code: 'XX000' }))).toBe('start-up failed (unrecognized code)');
     expect(describeStartFailure(Object.assign(new Error('x'), { code: 'ECONNREFUSED' }))).toBe('start-up failed (ECONNREFUSED)');
   });
 

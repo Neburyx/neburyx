@@ -97,11 +97,11 @@ const CONNECTION_FAILURE = /connection terminated|connection (refused|reset)|ser
 const TIMEOUT_FAILURE = /time(d)? ?out|aborted/i;
 /** The classes a start-up error may be named by; any other class is called `other`, since a class name is the code's to choose and could hold anything. */
 const KNOWN_CLASSES: ReadonlySet<string> = new Set(['Error', 'TypeError', 'RangeError', 'SyntaxError', 'ReferenceError', 'AggregateError', 'TimeoutError', 'AbortError', 'DatabaseError']);
-/** A database error state (five characters) or a system error number: the only codes that are shown. */
-const SHOWN_CODE = /^([0-9A-Z]{5}|E[A-Z]{2,20})$/;
+/** The only codes that are shown: system error numbers of a lost or refused connection and database states of a connection, a login or a missing database; any other code is called unrecognized, since a code is the error's own text. */
+const SHOWN_CODES: ReadonlySet<string> = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'ECONNABORTED', 'EHOSTUNREACH', 'ENETUNREACH', '57P03', '53300', '08000', '08001', '08003', '08004', '08006', '28000', '28P01', '3D000', '42501']);
 const MAX_PROTOTYPES = 10;
 
-/** The names of the classes of an error, nearest first, read without running any getter or trap of the error that could throw or hold a value. */
+/** The names of the classes of an error, nearest first, read from property descriptors so that no accessor of the error runs; a proxy's trap may still throw, which the caller catches. */
 function classNamesOf(error: object): string[] {
   const names: string[] = [];
   let prototype: object | null = error;
@@ -141,7 +141,7 @@ function describeStartFailureOf(error: unknown): string {
     case 'EAI_AGAIN':
       return 'NEBURYX_HOST is not an address of this machine';
     default:
-      if (typeof code === 'string') return SHOWN_CODE.test(code) ? `start-up failed (${code})` : 'start-up failed (unrecognized code)';
+      if (typeof code === 'string') return SHOWN_CODES.has(code) ? `start-up failed (${code})` : 'start-up failed (unrecognized code)';
       if (typeof error !== 'object' || error === null) return 'start-up failed (unknown)';
       {
         const names = classNamesOf(error);
