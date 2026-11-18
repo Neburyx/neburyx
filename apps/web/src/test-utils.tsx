@@ -69,8 +69,8 @@ export function testReport(sourceId: string, overrides: Partial<SourceTestReport
 /** What the status of the AI features says when a test gives none: nothing available. */
 export const AI_STATUS_NONE: AiStatusResponse = { ask: { available: false }, summary: { available: false }, assistant: { available: false } };
 
-export function aiStatus(available: { readonly ask?: boolean; readonly summary?: boolean }): AiStatusResponse {
-  return { ask: { available: available.ask === true }, summary: { available: available.summary === true }, assistant: { available: false } };
+export function aiStatus(available: { readonly ask?: boolean; readonly summary?: boolean; readonly assistant?: number }): AiStatusResponse {
+  return { ask: { available: available.ask === true }, summary: { available: available.summary === true }, assistant: available.assistant === undefined ? { available: false } : { available: true, messageWords: available.assistant } };
 }
 
 export function clientWith(parts: { readonly me?: MeResponse; readonly sources?: readonly SourceSummary[]; readonly aiStatus?: AiStatusResponse }): ApiClient {

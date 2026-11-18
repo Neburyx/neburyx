@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
 import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
-import { configureAsk, type AskConfiguration } from './configure.js';
+import { configureAsk, optionalFolderChoice, type AskConfiguration } from './configure.js';
 import { createAskClassifier } from './classify/classifier.js';
 import { createAskContinueRoute, createAskQuestionRoute } from './questions/question-routes.js';
 import { createPgRunStore } from './questions/pg-run-store.js';
@@ -25,6 +25,9 @@ import type { AssistantInstructions } from './assistant/instructions.js';
 import { loadAssistantInstructions } from './assistant/load-instructions.js';
 import { readAssistantSettings, type AssistantSettings } from './assistant/settings.js';
 import { guardAiRouteGroup } from './route-guard.js';
+import { assistantProviderConfiguration } from './assistant/provider-configuration.js';
+import { createAssistantRouter } from './assistant/router.js';
+import { createAssistantTurnRoute } from './assistant/turn-route.js';
 
 /** @public Used by the audited-call integration test of `services/api`, which needs the real audit sink of the application and a real Postgres, so it cannot go through `createEnterpriseExtension()`. */
 export { AuditUnavailableError, createAuditedModelCall } from '@neburyx/ee-ai-runtime';
@@ -138,7 +141,19 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     return !features.ask || model === undefined || folder === undefined ? undefined : createAskClassifier({ model, folder: () => folder });
   };
   const modelOf = (): AuditedModelCall | undefined => (configuration === undefined || mounted === undefined ? undefined : createAuditedModelCall({ provider: createAnthropicProvider({ configuration, env: environment, baseUrl: options.modelBaseUrl, onFailure: reportFailure }), configuration, sink: queuedAudit ?? mounted.sink }));
+  const assistantModelOf = (): AuditedModelCall | undefined => {
+    const sink = auditOf();
+    if (provider === undefined || sink === undefined || assistantSettings === undefined) return undefined;
+    const own = assistantProviderConfiguration(provider, assistantSettings);
+    return createAuditedModelCall({ provider: createAnthropicProvider({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }) }), configuration: own, sink });
+  };
+  const assistantRouter = (): ReturnType<typeof createAssistantRouter> | undefined => {
+    const model = assistantModelOf();
+    const settings = assistantSettings;
+    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens });
+  };
   const guarded = [
+    guardAiRouteGroup({ routes: [createAssistantTurnRoute({ router: assistantRouter, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -164,7 +179,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       environment = env;
       if (context.features !== undefined) features = featureSwitches(context.features);
       const askConfigured = features.ask ? await configureAsk(env) : undefined;
-      const providerConfigured = askConfigured ?? (features.summary ? await configureProvider(env) : undefined);
+      const providerConfigured = askConfigured ?? (features.summary || features.assistant ? await configureProvider(env) : undefined);
       assistantSettings = undefined;
       assistantInstructions = undefined;
       const assistant = features.assistant ? readAssistantSettings(env) : undefined;
@@ -181,8 +196,11 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         return { ok: false, problems };
       };
       let loadedFolder: AskFolder | undefined;
-      if (askConfigured?.configuration !== undefined) {
-        const loaded = await loadAskFolder({ folder: askConfigured.configuration.mappingFolder, sourceIds: context.sourceIds, ...(context.budgets === undefined ? {} : { budgets: context.budgets }) });
+      // the assistant's `ask` route reads the folder of intents when there is one; with Ask off the folder is optional
+      const folderChoice = askConfigured?.configuration === undefined ? (features.assistant ? optionalFolderChoice(env) : undefined) : { folder: askConfigured.configuration.mappingFolder, problems: [] };
+      if (folderChoice !== undefined && folderChoice.problems.length > 0) return refuse(folderChoice.problems);
+      if (folderChoice?.folder !== undefined) {
+        const loaded = await loadAskFolder({ folder: folderChoice.folder, sourceIds: context.sourceIds, ...(context.budgets === undefined ? {} : { budgets: context.budgets }) });
         if (!loaded.ok) return refuse(loaded.problems);
         loadedFolder = loaded.folder;
       }
@@ -216,7 +234,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       recordQueue = queue;
     },
     model: modelOf,
-    aiAvailability: () => ({ ask: { available: features.ask && askClassifier() !== undefined }, summary: { available: features.summary && caseSummarizer()?.availability().available === true }, assistant: { available: false } }),
+    aiAvailability: () => ({ ask: { available: features.ask && askClassifier() !== undefined }, summary: { available: features.summary && caseSummarizer()?.availability().available === true }, assistant: assistantRouter() !== undefined && assistantSettings !== undefined ? { available: true, messageWords: assistantSettings.maxMessageWords } : { available: false } }),
     createAuditSink(context) {
       const audit = createAuditSink(context);
       mounted = audit;

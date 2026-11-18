@@ -59,6 +59,8 @@ describe('the real enterprise extension in a start', () => {
     const answer = await result.app.inject({ url: '/v1/ai/status' });
     expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: false }, summary: { available: false }, assistant: { available: false } }]);
     expect(registeredRoutesOf(result.app).filter((route) => route.url.startsWith('/v1/ai')).map((route) => route.url)).toEqual(['/v1/ai/status']);
+    const assistant = await result.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: {} });
+    expect([assistant.statusCode, assistant.json().error.code, assistant.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-off' }]);
     await result.app.close();
   });
 
@@ -67,7 +69,7 @@ describe('the real enterprise extension in a start', () => {
     expect(result.exitCode).toBe(0);
     if (result.exitCode !== 0) return;
     const answer = await result.app.inject({ url: '/v1/ai/status' });
-    expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: true }, summary: { available: false }, assistant: { available: false } }]);
+    expect([answer.statusCode, answer.json()]).toEqual([200, { ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000 } }]);
     expect(registeredRoutesOf(result.app).find((route) => route.url === '/v1/ai/status')).toMatchObject({ method: 'GET', permission: 'principal' });
     expect(routesWithoutPermission(registeredRoutesOf(result.app))).toEqual([]);
     await result.app.close();

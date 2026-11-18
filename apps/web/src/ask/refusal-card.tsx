@@ -1,5 +1,5 @@
 import { ASK_REFUSAL_SENTENCES } from '@neburyx/contracts';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useClientState } from '../state/context.js';
 import { useTools } from '../workspace/tool-registry.js';
 import { ASK_COPY } from './copy.js';
@@ -21,6 +21,7 @@ export function RefusalCard({ refused, question }: { readonly refused: Refused; 
   const state = useClientState();
   const tools = useTools();
   const [hint, setHint] = useState(false);
+  const titleId = useId();
   const paths = tools.find((tool) => tool.id === 'paths');
   const run = (chip: RefusalChip): void => {
     if (chip === 'expand') {
@@ -43,9 +44,9 @@ export function RefusalCard({ refused, question }: { readonly refused: Refused; 
       : [];
   const advice = hintOf(refused.cause);
   return (
-    <section className="ask-refusal" aria-labelledby="ask-refusal-title" role="alert">
+    <section className="ask-refusal" aria-labelledby={titleId} role="alert">
       <div className="ask-refusal-head">
-        <h3 id="ask-refusal-title" tabIndex={-1} data-ask-focus="title">
+        <h3 id={titleId} tabIndex={-1} data-ask-focus="title">
           {ASK_COPY.refusalTitle}
         </h3>
         <span className="ask-tag ask-tag-cause">{causeTag(refused.cause)}</span>

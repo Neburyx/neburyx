@@ -5,6 +5,7 @@ import type { Inspector } from './inspector.js';
 import { INSPECTOR_PANEL_ID, INSPECTOR_PANEL_TOP, INSPECTOR_PANEL_WIDTH } from './inspector-layout.js';
 import { inspectedKey } from './inspected.js';
 import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/panel-layout.js';
+import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDTH } from '../assistant/panel-layout.js';
 import { SUMMARY_PANEL_ID, SUMMARY_PANEL_WIDTH } from '../summary/panel-layout.js';
 import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-limits.js';
 
@@ -12,7 +13,7 @@ import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-
 function insetOf(state: ClientState): number {
   const view = state.presentation.view.getState();
   // held to the limits the panel is drawn with, so a stored width below the least is not trusted
-  const beside = view.askOpen ? { id: ASK_PANEL_ID, width: ASK_PANEL_WIDTH } : view.summaryOpen ? { id: SUMMARY_PANEL_ID, width: SUMMARY_PANEL_WIDTH } : undefined;
+  const beside = view.askOpen ? { id: ASK_PANEL_ID, width: ASK_PANEL_WIDTH } : view.assistantOpen ? { id: ASSISTANT_PANEL_ID, width: ASSISTANT_PANEL_WIDTH } : view.summaryOpen ? { id: SUMMARY_PANEL_ID, width: SUMMARY_PANEL_WIDTH } : undefined;
   return beside === undefined ? PANEL_GAP : PANEL_GAP + Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, view.panelSizes.get(beside.id) ?? beside.width)) + PANEL_GAP;
 }
 

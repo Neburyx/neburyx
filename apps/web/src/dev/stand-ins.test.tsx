@@ -14,7 +14,7 @@ import { createClientState } from '../state/client-state.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
 import { markStandInKey, registerFixtureControls, registerStandInActions, registerStandInMenuItems, registerStandInPanels, registerStandInTools, registerStandIns, STAND_IN_MARKER } from './stand-ins.js';
 
-const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'summarize' && name !== 'tool-strip' && name !== 'toggles');
+const BUILT_LATER: readonly SlotName[] = SLOT_NAMES.filter((name) => name !== 'ask' && name !== 'assistant' && name !== 'summarize' && name !== 'tool-strip' && name !== 'toggles');
 
 describe('the slot stand-ins', () => {
   it('fill every slot whose occupant is not built, and not Ask, Summarize or the tool strip', () => {

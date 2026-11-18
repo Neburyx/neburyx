@@ -42,9 +42,10 @@ describe('whether the extension is loaded', () => {
     expect(extensionWanted({ ...on, summary: false }, false)).toBe(true);
   });
 
-  it('is not loaded with no provider, or with Ask and the summary both off, whatever the assistant holds', () => {
+  it('is loaded for the assistant alone, and not loaded with no provider or with all three off', () => {
     expect(extensionWanted({ ...on, providerConfigured: false }, false)).toBe(false);
-    expect(extensionWanted({ ...on, ask: false, summary: false }, false)).toBe(false);
+    expect(extensionWanted({ ...on, ask: false, summary: false }, false)).toBe(true);
+    expect(extensionWanted({ ...on, ask: false, summary: false, assistant: false }, false)).toBe(false);
   });
 
   it('is loaded when the old switch is on, whatever else holds', () => {

@@ -391,6 +391,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   });
   app.get('/v1/ai/status', { exposeHeadRoute: false, config: { permission: 'principal' } }, async () => aiStatusResponseSchema.parse(options.extension?.aiAvailability?.() ?? { ask: { available: false }, summary: { available: false }, assistant: { available: false } }));
 
+  // the assistant answers that it is not available while no AI code is loaded (no provider, or every AI feature off); with the code loaded its own route answers
+  if (options.extension === undefined) {
+    app.post('/v1/assistant/turns', { config: { permission: 'principal' } }, async () => {
+      throw new AppError('ACCESS_DENIED', { reason: 'ai-off' });
+    });
+  }
+
   const fallbackKeyMaterial = randomBytes(32);
   const askRunners: { current?: NonNullable<ExtensionMount['askRunnerFor']> } = {};
   const askSourceChecks: { current?: NonNullable<ExtensionMount['askSourceReadableFor']> } = {};

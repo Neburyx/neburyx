@@ -27,7 +27,7 @@ export function readAiEnablement(env: Env): AiEnablementRead {
   return problems.length > 0 ? { ok: false, problems } : { ok: true, enablement };
 }
 
-/** Whether the enterprise extension is loaded: the old switch is on, or a provider is configured and Ask or the summary is on. The assistant alone loads nothing until it is built. */
+/** Whether the enterprise extension is loaded: the old switch is on, or a provider is configured and Ask, the summary or the assistant is on. */
 export function extensionWanted(enablement: AiEnablement, oldSwitchOn: boolean): boolean {
-  return oldSwitchOn || (enablement.providerConfigured && (enablement.ask || enablement.summary));
+  return oldSwitchOn || (enablement.providerConfigured && (enablement.ask || enablement.summary || enablement.assistant));
 }

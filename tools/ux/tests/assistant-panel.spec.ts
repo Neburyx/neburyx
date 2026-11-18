@@ -1,0 +1,148 @@
+import { expect, test, type Page } from '@playwright/test';
+import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AskAnswer, type AssistantTurnAnswer } from '@neburyx/contracts';
+import { canvasOf } from './support/workspace.ts';
+
+const accountOf = (sourceId: string) => ({ ref: { sourceId, entityType: 'account', stableId: 'AC-2' }, display: { title: 'Account AC-2', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+const TOKEN = `${'1'.repeat(10)}.${'a'.repeat(64)}`;
+
+const answeredFor = (sourceId: string): AskAnswer => askAnswerSchema.parse({ answered: { intent: 'find-account', entities: { account: 'AC-2' }, outcome: 'complete', result: { templateId: 'entity', result: accountOf(sourceId) } } });
+
+const heavyFor = (_sourceId: string): AskAnswer =>
+  askAnswerSchema.parse({ answered: { intent: 'shared-devices', entities: { account: 'AC-1' }, outcome: 'partial', continueToken: TOKEN, result: { templateId: 'shared-attribute', result: { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', presetId: 'shared-devices', estimate: { value: 500, quality: 'lowerBound', scope: 'matches' }, threshold: 500, continueLimit: 25, notices: [], warnings: [] } } } });
+
+const summarizedFor = (sourceId: string): AskAnswer => {
+  const ref = { sourceId, entityType: 'account', stableId: 'AC-1' };
+  const node = { ...accountOf(sourceId), ref, display: { title: 'Account AC-1', type: 'account' } };
+  return askAnswerSchema.parse({ answered: { intent: 'find-account', entities: { account: 'AC-1' }, outcome: 'complete', result: { templateId: 'entity', result: node }, summary: { sentences: [{ text: 'AC-1 is an account.', cites: ['n1'] }], citations: [{ key: 'n1', element: ref, type: 'account', title: 'Account AC-1' }] } } });
+};
+
+const header = (page: Page) => page.getByRole('banner', { name: 'Investigation' });
+const panel = (page: Page) => page.locator('.assistant-panel');
+const inAsk = (answer: AskAnswer): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer });
+const REFUSE: AssistantTurnAnswer = { status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict };
+const VIEW: AssistantTurnAnswer = { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
+
+async function openWorkspace(page: Page, assistant: { available: false } | { available: true; messageWords: number } = { available: true, messageWords: 1000 }): Promise<void> {
+  await page.route((url) => url.pathname === '/v1/ai/status', (route) => route.fulfill({ json: { ask: { available: true }, summary: { available: true }, assistant } }));
+  await page.goto('/dev/open-entity');
+  await page.getByRole('button', { name: 'banking-demo' }).click();
+  const form = page.getByRole('form', { name: 'Open an entity' });
+  await form.getByLabel('Stable ID').fill('AC-1');
+  await form.getByRole('button', { name: 'Open' }).click();
+  await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
+}
+
+interface Sent {
+  message?: string;
+  sourceId: string;
+  investigationId: string;
+  viewElementKeys: string[];
+  continue?: { intent: string; entities: Record<string, string>; continueToken: string };
+}
+
+async function answerWith(page: Page, answer: AssistantTurnAnswer | ((body: Sent) => AssistantTurnAnswer)): Promise<Sent[]> {
+  const sent: Sent[] = [];
+  await page.route((url) => url.pathname === '/v1/assistant/turns', async (route) => {
+    const body = route.request().postDataJSON() as Sent;
+    sent.push(body);
+    await route.fulfill({ json: typeof answer === 'function' ? answer(body) : answer });
+  });
+  return sent;
+}
+
+async function open(page: Page): Promise<void> {
+  await header(page).getByRole('button', { name: 'Assistant' }).click();
+  await expect(panel(page)).toBeVisible();
+}
+
+test.describe('the Assistant panel', () => {
+  test('opens from the header with no lock, closes with Escape and gives the focus back, keeps the message while closed, and never scrolls the page sideways', async ({ page }) => {
+    await openWorkspace(page);
+    await answerWith(page, REFUSE);
+    await expect(header(page).getByRole('button', { name: 'Assistant' })).not.toHaveAttribute('aria-disabled', 'true');
+    await open(page);
+    await expect(page.getByRole('heading', { name: 'Assistant', level: 2 })).toBeVisible();
+    await expect(panel(page).getByText('0 / 1,000 words')).toBeVisible();
+    await page.getByLabel('Your message').fill('is this guilty');
+    await page.keyboard.press('Escape');
+    await expect(panel(page)).toHaveCount(0);
+    await expect(header(page).getByRole('button', { name: 'Assistant' })).toBeFocused();
+    await open(page);
+    await expect(page.getByLabel('Your message')).toHaveValue('is this guilty');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  test('sends a message with Enter, shows the refusal turn with its tag and fixed sentence, and a view turn as not answered', async ({ page }) => {
+    await openWorkspace(page);
+    const sent = await answerWith(page, (body) => (body.message === 'what is this?' ? VIEW : REFUSE));
+    await open(page);
+    await page.getByLabel('Your message').fill('is this guilty?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    await expect(panel(page).locator('.assistant-tag', { hasText: 'Refused' })).toBeVisible();
+    await page.getByLabel('Your message').fill('what is this?');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Not answered' })).toBeFocused();
+    await expect(panel(page).getByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeVisible();
+    expect(sent.map((body) => body.message)).toEqual(['is this guilty?', 'what is this?']);
+    expect(sent[0]).toMatchObject({ sourceId: 'banking-demo', viewElementKeys: expect.any(Array) });
+  });
+
+  test('shows the answer of the ask route with its sources, and a heavy stop that continues with the kept token', async ({ page }) => {
+    await openWorkspace(page);
+    const sent = await answerWith(page, (body) => (body.continue === undefined ? inAsk(heavyFor('banking-demo')) : inAsk(answeredFor('banking-demo'))));
+    await open(page);
+    await page.getByLabel('Your message').fill('shared devices?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText('This read would be very large, so the assistant stopped before reading it. At least this many match.')).toBeVisible();
+    await expect(panel(page).getByText('≥ 500 matches')).toBeVisible();
+    await panel(page).getByRole('button', { name: 'Continue' }).click();
+    await expect(panel(page).getByRole('heading', { name: 'Answer ready' })).toBeVisible();
+    expect(sent[1]).toMatchObject({ continue: { intent: 'shared-devices', entities: { account: 'AC-1' }, continueToken: TOKEN } });
+    expect(sent[1]?.message).toBeUndefined();
+    await expect(panel(page).getByText('Read from the source')).toBeVisible();
+  });
+
+  test('refuses a message over the limit before anything is sent, shows a failure card with Try again and keeps the message', async ({ page }) => {
+    await openWorkspace(page, { available: true, messageWords: 3 });
+    let failing = true;
+    const sent = await answerWith(page, REFUSE);
+    await page.unroute((url) => url.pathname === '/v1/assistant/turns');
+    await page.route((url) => url.pathname === '/v1/assistant/turns', async (route) => {
+      sent.push(route.request().postDataJSON() as Sent);
+      await (failing ? route.fulfill({ status: 503, json: { error: { code: 'SOURCE_BUSY', message: ERROR_TABLE.SOURCE_BUSY.message, retryable: ERROR_TABLE.SOURCE_BUSY.retryable, traceId: 'tr-ux' } } }) : route.fulfill({ json: REFUSE }));
+    });
+    await open(page);
+    await page.getByLabel('Your message').fill('a b c d');
+    await expect(panel(page).getByText('Your message is 4 words. The limit is 3. Shorten it and send again.')).toBeVisible();
+    await expect(panel(page).getByRole('button', { name: /Send/ })).toBeDisabled();
+    expect(sent).toHaveLength(0);
+    await page.getByLabel('Your message').fill('a b c');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('heading', { name: 'Service unavailable' })).toBeVisible();
+    await expect(page.getByLabel('Your message')).toHaveValue('a b c');
+    failing = false;
+    await panel(page).getByRole('button', { name: 'Try again' }).click();
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    expect(sent.map((body) => body.message)).toEqual(['a b c', 'a b c']);
+  });
+
+  test('says it is not available when the status says so, with the input off and nothing requested', async ({ page }) => {
+    await openWorkspace(page, { available: false });
+    const sent = await answerWith(page, REFUSE);
+    await header(page).getByRole('button', { name: 'Assistant' }).click({ force: true });
+    await expect(panel(page).getByText('The assistant is not available because AI is switched off, or no AI provider is configured for this deployment.')).toBeVisible();
+    await expect(page.getByLabel('Your message')).toBeDisabled();
+    expect(sent).toHaveLength(0);
+  });
+
+  test('fits a laptop viewport of 1280 pixels: the panel is inside the window and the page does not scroll sideways', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openWorkspace(page);
+    await answerWith(page, REFUSE);
+    await open(page);
+    const box = await panel(page).boundingBox();
+    expect(box !== null && box.x + box.width <= 1280).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+});

@@ -18,7 +18,7 @@ export const ASK_REFUSAL_SENTENCES: Readonly<Record<AskRefusalCause, string>> = 
 };
 
 /** A reply longer than this is not read: a reply of the form is far shorter (20 entities of 256 characters and their keys), and a text written with escapes beyond this size is refused as one that does not fit. */
-const REPLY_MAX_CHARACTERS = 100_000;
+export const REPLY_MAX_CHARACTERS = 100_000;
 
 const CONTROL = /[\u0000-\u001F\u007F]/;
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
@@ -30,7 +30,7 @@ export type ReadClassification =
 const bad: ReadClassification = { ok: false, cause: 'bad-reply' };
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-function entitiesOf(value: unknown): AskEntities | undefined {
+export function entitiesOf(value: unknown): AskEntities | undefined {
   if (!isRecord(value)) return undefined;
   const keys = Object.keys(value);
   if (keys.length > ASK_FOLDER_LIMITS.parameters) return undefined;

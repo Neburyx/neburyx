@@ -9,6 +9,7 @@ export function HeaderBar() {
       <div className="header-actions">
         <HeaderSource />
         <Slot name="ask" />
+        <Slot name="assistant" />
         <Slot name="summarize" />
         <Slot name="views" />
         <Slot name="export" />

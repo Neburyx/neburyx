@@ -183,6 +183,10 @@ export { fileQueryResultSchema } from './file-query.js';
 export type { FileQueryResult } from './file-query.js';
 export { bindQueryIntent, bindTemplateIntent, checkTemplateSettings, placeholderNames } from './ask-bind.js';
 export type { AskTemplateId, BindResult } from './ask-bind.js';
+export { readAssistantRoute } from './assistant-route.js';
+export type { AssistantRouterReply, ReadAssistantRoute } from './assistant-route.js';
+export { ASSISTANT_CONTINUE_INVALID_SENTENCE, ASSISTANT_FAILURE_KINDS, ASSISTANT_TOO_LARGE_SENTENCE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_VIEW_KEYS_MAX, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+export type { AssistantFailureKind, AssistantRefusalCause, AssistantTurnAnswer, AssistantTurnRequest } from './assistant-turn.js';
 export { ASK_CONTINUE_LABEL, ASK_CONTINUE_LIFETIME_MS, ASK_CONTINUE_TOKEN_PATTERN, ASK_RUN_PARAMS_LABEL, askAnswerSchema, askContinueRequestSchema, askEntitiesSchema, askQuestionRequestSchema } from './ask-question.js';
 export type { AskAnswer, AskContinueRequest, AskQuestionRequest } from './ask-question.js';
 

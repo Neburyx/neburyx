@@ -137,8 +137,8 @@ describe('the AI code before and after it is asked to start', () => {
     expect(extension.askFolder()).toBeUndefined();
   });
 
-  it('needs no provider setting and opens nothing with both features off', async () => {
-    const { extension, pools } = counted({ ask: false, summary: false });
+  it('needs no provider setting and opens nothing with all three features off', async () => {
+    const { extension, pools } = counted({ ask: false, summary: false, assistant: false });
     expect((await extension.configure?.({ preview: true }, {}, CONTEXT))?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
     expect(pools).toEqual({ ask: 0, summary: 0 });
@@ -169,12 +169,12 @@ describe('a route of a feature that is switched off', () => {
     expect(ask instanceof ExtensionRefusal && ask.reason === 'ai-off').toBe(false);
   });
 
-  it('says which features can be used: none before the extension is mounted, Ask once its folder and sink are in, the summary only with its token key, and never the assistant', async () => {
+  it('says which features can be used: none before the extension is mounted, Ask once its folder and sink are in, the summary only with its token key, and the assistant once its model and sink are in', async () => {
     const { extension } = counted();
     expect(extension.aiAvailability?.()).toEqual({ ask: { available: false }, summary: { available: false }, assistant: { available: false } });
     await extension.configure?.({ preview: true }, ENV, CONTEXT);
     extension.createAuditSink?.(SINK_CONTEXT);
-    expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: false } });
+    expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: false }, assistant: { available: true, messageWords: 1000 } });
   });
 
   it('says the summary is available once its token key file is set', async () => {
@@ -185,7 +185,7 @@ describe('a route of a feature that is switched off', () => {
       const { extension } = counted();
       await extension.configure?.({ preview: true }, { ...ENV, NEBURYX_SUMMARY_TOKEN_KEY_FILE: path }, CONTEXT);
       extension.createAuditSink?.(SINK_CONTEXT);
-      expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: true }, assistant: { available: false } });
+      expect(extension.aiAvailability?.()).toEqual({ ask: { available: true }, summary: { available: true }, assistant: { available: true, messageWords: 1000 } });
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

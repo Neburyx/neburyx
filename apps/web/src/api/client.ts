@@ -58,6 +58,9 @@ import {
   type AskContinueRequest,
   type AskQuestionRequest,
   askAnswerSchema,
+  assistantTurnAnswerSchema,
+  type AssistantTurnAnswer,
+  type AssistantTurnRequest,
   type SummaryRequest,
   type SummaryResponse,
   summaryResponseSchema,
@@ -199,6 +202,7 @@ export interface ApiClient {
   ask(request: AskQuestionRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   /** Reads the next page of an answer that stopped as heavy, with the token that answer carried; the model is not called. */
   askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
+  assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal): Promise<ApiResult<AssistantTurnAnswer>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
@@ -380,6 +384,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
     ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
+    assistantTurn: (body, signal) => request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),
     summarize: (body, key, signal) => request(fetcher, '/v1/summary', summaryResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),

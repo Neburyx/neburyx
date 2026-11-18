@@ -640,17 +640,30 @@ describe('the enterprise extension at start', () => {
         if (result.exitCode === 0) await result.app.close();
       });
 
-      it('hands the extension the features that are off, and loads nothing with both off', async () => {
+      it('loads the extension for the assistant alone, with no Enterprise profile and no preview switch', async () => {
+        const rig = withCalls();
+        const result = await start({ ...KEY_ONLY, NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off' }, rig.io);
+        expect(result.exitCode).toBe(0);
+        expect(rig.calls).toEqual(['load', 'configure', 'sink']);
+        expect(rig.configured).toEqual([{ features: { ask: false, summary: false, assistant: true } }]);
+        if (result.exitCode === 0) await result.app.close();
+      });
+
+      it('hands the extension the features that are off, and loads nothing with all three off', async () => {
         const askOff = withCalls();
         const first = await start({ ...KEY_ONLY, NEBURYX_ASK_ENABLED: 'off' }, askOff.io);
         expect(first.exitCode).toBe(0);
         expect(askOff.configured).toEqual([{ features: { ask: false, summary: true, assistant: true } }]);
         if (first.exitCode === 0) await first.app.close();
         const bothOff = withCalls();
-        const second = await start({ ...KEY_ONLY, NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off' }, bothOff.io);
+        const second = await start({ ...KEY_ONLY, NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off', NEBURYX_ASSISTANT_ENABLED: 'off' }, bothOff.io);
         expect(second.exitCode).toBe(0);
         expect(bothOff.calls).toEqual([]);
-        if (second.exitCode === 0) await second.app.close();
+        if (second.exitCode === 0) {
+          const answer = await second.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: {} });
+          expect([answer.statusCode, answer.json().error.code, answer.json().error.details]).toEqual([403, 'ACCESS_DENIED', { reason: 'ai-off' }]);
+          await second.app.close();
+        }
       });
 
       it('stops at a bad flag value naming the setting and never the value, and ignores it with no provider', async () => {

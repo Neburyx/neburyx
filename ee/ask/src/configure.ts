@@ -8,6 +8,11 @@ export interface AskConfiguration extends ProviderConfiguration {
 
 const FOLDER_VARIABLE = 'NEBURYX_ASK_MAPPING_FOLDER';
 
+/** The folder of the intents where Ask is off: the assistant's `ask` route reads it when it is given, and runs without it when it is not. */
+export function optionalFolderChoice(env: Env): { readonly folder?: string; readonly problems: readonly string[] } {
+  return given(env, FOLDER_VARIABLE) === undefined ? { problems: [] } : folderChoice(env);
+}
+
 export type Configuration = { readonly outcome: ConfigureOutcome; readonly configuration?: AskConfiguration };
 
 function folderChoice(env: Env): { readonly folder?: string; readonly problems: readonly string[] } {

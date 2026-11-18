@@ -8,11 +8,11 @@ import { createEnterpriseExtension } from './index.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 describe('the enterprise extension', () => {
-  it('has one route group of the routes of a question and of a summary, and none for the status, which is the application\'s own', () => {
+  it('has one route group of the routes of a turn, a question and a summary, and none for the status, which is the application\'s own', () => {
     const extension = createEnterpriseExtension();
     const [group, ...others] = extension.routeGroups;
     expect(others).toEqual([]);
-    expect((group?.routes ?? []).map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal'], ['POST', '/v1/investigations/:id/draft/ai-notes', 'principal'], ['GET', '/v1/investigations/:id/draft/ai-notes', 'principal']]);
+    expect((group?.routes ?? []).map((entry) => [entry.method, entry.url, entry.permission])).toEqual([['POST', '/v1/assistant/turns', 'principal'], ['POST', '/v1/ask', 'principal'], ['POST', '/v1/ask/continue', 'principal'], ['POST', '/v1/summary', 'principal'], ['POST', '/v1/investigations/:id/draft/ai-notes', 'principal'], ['GET', '/v1/investigations/:id/draft/ai-notes', 'principal']]);
   });
 
   it('refuses the first route of its group when the request reports the routes off, and records the refusal', async () => {

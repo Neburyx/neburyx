@@ -5,6 +5,14 @@ import { useStoreSelector } from '../state/store.js';
 import { useAiActions, type AiActionName } from './ai-actions.js';
 import { AI_LABELS, UNAVAILABLE_REASON, notAvailableText } from './copy.js';
 
+function Chat() {
+  return (
+    <svg aria-hidden="true" className="header-ai-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+      <path d="M1.5 2h9v6h-5L3 10.5V8H1.5z" />
+    </svg>
+  );
+}
+
 function Sparkle() {
   return (
     <svg aria-hidden="true" className="header-ai-icon" viewBox="0 0 12 12" fill="currentColor">
@@ -20,14 +28,17 @@ function usePanelOpen(action: AiActionName): boolean {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (state === undefined) return undefined;
-    const read = (): void => setOpen(action === 'ask' ? state.presentation.view.getState().askOpen : state.presentation.view.getState().summaryOpen);
+    const read = (): void => {
+      const view = state.presentation.view.getState();
+      setOpen(action === 'ask' ? view.askOpen : action === 'assistant' ? view.assistantOpen : view.summaryOpen);
+    };
     read();
     return state.presentation.view.subscribe(read);
   }, [state, action]);
   return open;
 }
 
-const FEATURE_OF: Readonly<Record<AiActionName, AiFeature>> = { ask: 'ask', summarize: 'summary', notes: 'summary' };
+const FEATURE_OF: Readonly<Record<AiActionName, AiFeature>> = { ask: 'ask', assistant: 'assistant', summarize: 'summary', notes: 'summary' };
 
 /** The Ask or Summarize control of the header bar: the available one when the status of the AI features says the feature is, dimmed with the reason when it says no or its read failed, and nothing while that answer is not here. Activating it never sends a request: it runs the handler registered for the action. */
 export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
@@ -50,10 +61,14 @@ export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
           title={UNAVAILABLE_REASON}
           onClick={(event) => {
             event.preventDefault();
+            if (action === 'assistant' && handler !== undefined) {
+              handler();
+              return;
+            }
             setNote(UNAVAILABLE_REASON);
           }}
         >
-          <Sparkle />
+          {action === 'assistant' ? <Chat /> : <Sparkle />}
           {label}
         </button>
         <span id={reasonId} className="visually-hidden">
@@ -76,7 +91,7 @@ export function AiHeaderControl({ action }: { readonly action: AiActionName }) {
   return (
     <span className="header-ai-wrap" onBlur={() => setNote(undefined)} onKeyDown={(event) => (event.key === 'Escape' ? setNote(undefined) : undefined)}>
       <button type="button" className={panelOpen ? 'header-ai header-ai-available header-ai-active' : 'header-ai header-ai-available'} aria-expanded={panelOpen} onClick={run}>
-        <Sparkle />
+        {action === 'assistant' ? <Chat /> : <Sparkle />}
         {label}
       </button>
       <span role="status" className={note === undefined ? 'visually-hidden' : 'header-ai-note'}>

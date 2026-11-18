@@ -403,6 +403,95 @@
         }
       }
     },
+    "/v1/assistant/turns": {
+      "post": {
+        "operationId": "assistantTurn",
+        "summary": "Send one message to the investigation assistant",
+        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Takes a message as typed and the keys of the elements in view, checks that the investigation is the caller's and belongs to the source, and answers in exactly one route (view, ask or refuse). A refusal carries a fixed sentence chosen by the server; no word of the model is returned.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantTurnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The turn: a refusal with its cause and fixed sentence; the not-answered turn of the view route; the answer of the ask route (Ask's answer, with a step and a coverage line for a result that was read); unavailable, too-large, too-long or continue-invalid, each with nothing sent or read as it says",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTurnAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not one of the two forms (a message, or a continue), or a message holds white space only: INVALID_REQUEST",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The assistant is switched off or no AI provider is configured (ACCESS_DENIED with the reason ai-off)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The source or the investigation is not configured or not the caller's: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not JSON: UNSUPPORTED_MEDIA_TYPE",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The person has asked too often: RATE_LIMITED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/summary": {
       "post": {
         "operationId": "summarizeView",
@@ -5338,16 +5427,40 @@
             "additionalProperties": false
           },
           "assistant": {
-            "type": "object",
-            "properties": {
-              "available": {
-                "type": "boolean"
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean",
+                    "const": false
+                  }
+                },
+                "required": [
+                  "available"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "available": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "messageWords": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "available",
+                  "messageWords"
+                ],
+                "additionalProperties": false
               }
-            },
-            "required": [
-              "available"
-            ],
-            "additionalProperties": false
+            ]
           }
         },
         "required": [
@@ -6078,6 +6191,313 @@
             },
             "required": [
               "refused"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "AssistantTurnRequest": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "investigationId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mask": {
+                "type": "boolean"
+              },
+              "viewElementKeys": {
+                "maxItems": 300,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "sourceId",
+              "investigationId",
+              "viewElementKeys",
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "investigationId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mask": {
+                "type": "boolean"
+              },
+              "viewElementKeys": {
+                "maxItems": 300,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "continue": {
+                "type": "object",
+                "properties": {
+                  "intent": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+                  },
+                  "entities": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "continueToken": {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,16}\\.[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "intent",
+                  "entities",
+                  "continueToken"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "sourceId",
+              "investigationId",
+              "viewElementKeys",
+              "continue"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "AssistantTurnAnswer": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "answered"
+              },
+              "route": {
+                "type": "string",
+                "const": "refuse"
+              },
+              "cause": {
+                "type": "string",
+                "enum": [
+                  "verdict",
+                  "raw-query",
+                  "other-source",
+                  "unplaced"
+                ]
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "route",
+              "cause",
+              "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "not-answered"
+              },
+              "route": {
+                "type": "string",
+                "const": "view"
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "route",
+              "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "unavailable"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "service",
+                  "source-unavailable",
+                  "busy",
+                  "timeout",
+                  "rate-limit"
+                ]
+              },
+              "readStarted": {
+                "type": "boolean"
+              },
+              "retryAfterSeconds": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "status",
+              "kind",
+              "readStarted"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "too-large"
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "answered"
+              },
+              "route": {
+                "type": "string",
+                "const": "ask"
+              },
+              "answer": {
+                "$ref": "#/components/schemas/AskAnswer"
+              },
+              "step": {
+                "type": "object",
+                "properties": {
+                  "intent": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "rows": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "complete",
+                      "partial"
+                    ]
+                  }
+                },
+                "required": [
+                  "intent",
+                  "rows",
+                  "outcome"
+                ],
+                "additionalProperties": false
+              },
+              "coverage": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "route",
+              "answer"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "continue-invalid"
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "too-long"
+              },
+              "words": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "limit": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "status",
+              "words",
+              "limit"
             ],
             "additionalProperties": false
           }

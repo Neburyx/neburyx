@@ -7,6 +7,7 @@ export const BENCHMARK = 'benchmark';
 export const WIDTH_DEPENDENT: readonly string[] = [
   'ai-header.spec.ts',
   'ask-panel.spec.ts',
+  'assistant-panel.spec.ts',
   'compare.spec.ts',
   'evidence.spec.ts',
   'first-run.spec.ts',

@@ -127,10 +127,11 @@ each with a no-op or single-user default. This keeps the line between editions o
 by itself.
 
 **The AI features start where a provider is configured.** `ee/` is open source and ships in the one public image. Its
-AI code (Ask, the AI case summary and the assistant) is loaded when an AI provider key is set and at least one of Ask
-and the summary is on; each feature has an off setting (`NEBURYX_ASK_ENABLED`, `NEBURYX_SUMMARY_ENABLED`,
+AI code (Ask, the AI case summary and the assistant) is loaded when an AI provider key is set and at least one of Ask,
+the summary and the assistant is on; each feature has an off setting (`NEBURYX_ASK_ENABLED`, `NEBURYX_SUMMARY_ENABLED`,
 `NEBURYX_ASSISTANT_ENABLED`), and no profile or mapping switch decides it. With no provider configured nothing of the
-AI code runs and its paths are unknown routes (404); `GET /v1/ai/status` always says which features are available. A
+AI code runs and the paths of Ask and the summary are unknown routes (404), while `POST /v1/assistant/turns` is answered by the
+application itself with `403` and the reason `ai-off`; `GET /v1/ai/status` always says which features are available. A
 route of a feature that is switched off refuses a call (`ACCESS_DENIED`, reason `ai-off`) and audits the refusal. The
 older switch, `NEBURYX_PROFILE=enterprise` with `ai.preview: true` in `neburyx.yaml` (a start with only one of them is
 refused with a clear message), still decides the edition `GET /v1/me` reports and the enterprise audit events of
@@ -1058,7 +1059,7 @@ normalized errors. The OpenAPI document is generated from the code and published
 | `GET /v1/diagnostics/bundle` | Redacted diagnostics zip **[Later]** | C |
 | `POST /v1/summary` | AI case summary: re-read the view's elements through the gate, de-identify, draft, check, return the sentences (each with `storable`) and a sealed `summaryToken` **[W2]** | E |
 | `POST /v1/investigations/{id}/draft/ai-notes` | Copy to notes: `{summaryToken, version}` (the draft's ETag). Re-checks the caller's write right and policy version, refuses a property-values token, appends the storable sentences once per token, returns `{copied, notCopied, alreadyCopied}` (§9.5 rule 8) **[W2]** | E |
-| `POST /v1/assistant/turns` | Assistant: route a message to answer-from-view, a plan, or a refusal **[W2]** | E |
+| `POST /v1/assistant/turns` | Assistant: one message is placed in one route by one audited model call: `view` (a fixed not-answered turn until the cited view answer is built), `ask` or `refuse` (a fixed sentence by cause); a message of at most `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` words (default 1,000) | C |
 | `POST /v1/investigations/{id}/evidence-packs` · `GET /v1/evidence-packs/{id}` | Evidence packs **[Later]** | E |
 | `GET /v1/admin/audit` · `POST /v1/admin/audit/exports` | Audit search, bounded · audit CSV export (event metadata only; itself audited) | E |
 | `GET/PUT /v1/admin/policies/limits` | Source limits per source: current values, product ceilings and version history (versioned rows in `source_limits`, audited) | E |

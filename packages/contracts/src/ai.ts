@@ -3,7 +3,13 @@ import { z } from 'zod';
 const featureAvailabilitySchema = z.strictObject({ available: z.boolean() });
 
 /** Which AI features can be used now: a provider is configured, the feature is on and what it needs is in place. */
-export const aiStatusResponseSchema = z.strictObject({ ask: featureAvailabilitySchema, summary: featureAvailabilitySchema, assistant: featureAvailabilitySchema });
+const assistantAvailabilitySchema = z.union([
+  z.strictObject({ available: z.literal(false) }),
+  /** `messageWords` is the effective limit of a message, so the panel counts against the server's own figure. */
+  z.strictObject({ available: z.literal(true), messageWords: z.number().int().positive() }),
+]);
+
+export const aiStatusResponseSchema = z.strictObject({ ask: featureAvailabilitySchema, summary: featureAvailabilitySchema, assistant: assistantAvailabilitySchema });
 
 export type AiStatusResponse = z.infer<typeof aiStatusResponseSchema>;
 

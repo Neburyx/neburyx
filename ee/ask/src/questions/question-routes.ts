@@ -56,21 +56,21 @@ export interface QuestionRouteOptions {
 }
 
 type Entities = AskEntities;
-type Capabilities = { readonly askRunner: NonNullable<GateClient['runner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<GateClient['sourceReadable']> };
+export type Capabilities = { readonly askRunner: NonNullable<GateClient['runner']>; readonly signText: NonNullable<ExtensionRequest['signText']>; readonly askSourceReadable: NonNullable<GateClient['sourceReadable']> };
 
 const unsupported = (): ExtensionRefusal => new ExtensionRefusal({ code: 'ASK_UNSUPPORTED', reason: 'not-in-this-edition' });
 
-function capabilitiesOf(request: ExtensionRequest): Capabilities {
+export function capabilitiesOf(request: ExtensionRequest): Capabilities {
   const { runner, sourceReadable } = gateClientOf(request);
   const { signText } = request;
   if (runner === undefined || signText === undefined || sourceReadable === undefined) throw unsupported();
   return { askRunner: runner, signText, askSourceReadable: sourceReadable };
 }
 
-const refusal = (cause: AskRefusalCause, more: Partial<Extract<AskAnswer, { refused: unknown }>['refused']> = {}): AskAnswer => ({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause], ...more } });
+export const refusal = (cause: AskRefusalCause, more: Partial<Extract<AskAnswer, { refused: unknown }>['refused']> = {}): AskAnswer => ({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause], ...more } });
 
 /** A fingerprint of what an intent runs: its kind, template and settings or the hash of its query, and its parameters; a token issued for another definition does not continue this one. */
-const definitionOf = (found: AskIntent): string =>
+export const definitionOf = (found: AskIntent): string =>
   createHash('sha256')
     .update(canonicalText(found.kind === 'query' ? ['query', found.query.sha256, found.parameters] : ['template', found.template, found.settings, found.parameters]))
     .digest('hex');
@@ -78,7 +78,7 @@ const definitionOf = (found: AskIntent): string =>
 /** The code of a refusal as an audit cause: lower case with dashes. */
 const causeOfCode = (code: string): NonNullable<AskRunAuditDetail['cause']> => code.toLowerCase().replace(/_/g, '-') as NonNullable<AskRunAuditDetail['cause']>;
 
-async function writeEvent(request: ExtensionRequest, action: string, result: AuditResult, sourceId: string | undefined, detail: AskRunAuditDetail): Promise<void> {
+export async function writeEvent(request: ExtensionRequest, action: string, result: AuditResult, sourceId: string | undefined, detail: AskRunAuditDetail): Promise<void> {
   const event: AuditEvent = {
     actorId: request.principalId,
     actorRole: request.principalRole,
@@ -112,7 +112,7 @@ interface PatternContext {
   readonly listing: AskPatternListing;
 }
 
-interface Execution {
+export interface Execution {
   readonly request: ExtensionRequest;
   readonly capabilities: Capabilities;
   readonly options: QuestionRouteOptions;
@@ -122,6 +122,8 @@ interface Execution {
   readonly entities: Entities;
   readonly continuing: boolean;
   readonly action: string;
+  /** Of a run for a thread: the investigation, which a continue token binds. */
+  readonly investigationId?: string;
   /** Of a question: the saved patterns the classifier was shown. */
   readonly patterns?: PatternContext;
   /** Of a continue of a saved pattern: the pattern the route found by its id. */
@@ -142,7 +144,7 @@ interface Prepared {
 const PATTERN_ID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A fingerprint of the pattern a token was issued for: its id and its version, so an edited pattern is not continued by an old token. */
-const patternDefinitionOf = (offer: AskPatternOffer): string => createHash('sha256').update(canonicalText([ASK_SAVED_PATTERN_INTENT, offer.id, offer.version])).digest('hex');
+export const patternDefinitionOf = (offer: AskPatternOffer): string => createHash('sha256').update(canonicalText([ASK_SAVED_PATTERN_INTENT, offer.id, offer.version])).digest('hex');
 
 /** The answer for entities that are not the intent's parameters (or do not fit the template): nothing runs, and the event holds the cause. */
 async function refusedBinding(run: Execution, base: AskRunAuditDetail, bound: { readonly cause: AskRefusalCause; readonly parameters: readonly string[]; readonly found: readonly string[]; readonly missing: readonly string[]; readonly extra: readonly string[] }): Promise<AskAnswer> {
@@ -216,7 +218,7 @@ async function prepareSavedPattern(run: Execution): Promise<Prepared | AskAnswer
 }
 
 /** Runs one intent of a source that the caller may read: binds the entities, runs it through the gate, and writes the event, the row and the summary in that order. */
-async function execute(run: Execution): Promise<AskAnswer> {
+export async function execute(run: Execution): Promise<AskAnswer> {
   const { request, capabilities, options, sourceId, intent: name } = run;
   const logger = options.logger();
   const prepared = run.intent === ASK_SAVED_PATTERN_INTENT ? await prepareSavedPattern(run) : await prepareFolderIntent(run);
@@ -251,7 +253,7 @@ async function execute(run: Execution): Promise<AskAnswer> {
   await writeEvent(request, run.action, answerOutcome === 'partial' ? 'partial' : 'success', sourceId, { ...base, outcome: answerOutcome, ...(templateId === undefined ? {} : { templateId }), paramsHash, rowCount });
   if (!heavy) await writeRow(options.runs(), logger, { actorId: request.principalId, intent: name, outcome: answerOutcome, rowCount, elapsedMs });
   const summary = heavy ? undefined : result.templateId === 'file-query' ? summaryOfFileQuery(result.result, sourceId, logger) : summaryOfRun(result, { sourceId, params }, logger);
-  const continueToken = heavy ? issueContinueToken(capabilities.signText, { principalId: request.principalId, sourceId, intent: name, definition: prepared.definition, entities, mask: run.mask }, (options.now ?? Date.now)()) : undefined;
+  const continueToken = heavy ? issueContinueToken(capabilities.signText, { principalId: request.principalId, sourceId, intent: name, definition: prepared.definition, entities, mask: run.mask, ...(run.investigationId === undefined ? {} : { investigationId: run.investigationId }) }, (options.now ?? Date.now)()) : undefined;
   return { answered: { intent: name, entities, outcome: answerOutcome, result, ...(summary === undefined ? {} : { summary }), ...(continueToken === undefined ? {} : { continueToken }), ...(prepared.patternName === undefined ? {} : { patternName: prepared.patternName }) } };
 }
 
@@ -319,7 +321,7 @@ export function createAskQuestionRoute(options: QuestionRouteOptions): Extension
 }
 
 /** The saved pattern a continue names by its id, as the application offers it to the caller; anything that is not that, a refusal of the application included, is undefined. */
-async function patternOf(find: NonNullable<GateClient['findPattern']>, sourceId: string, entities: Entities): Promise<AskPatternOffer | undefined> {
+export async function patternOf(find: NonNullable<GateClient['findPattern']>, sourceId: string, entities: Entities): Promise<AskPatternOffer | undefined> {
   const id = entities['pattern'];
   if (id === undefined || !PATTERN_ID_TEXT.test(id)) return undefined;
   try {

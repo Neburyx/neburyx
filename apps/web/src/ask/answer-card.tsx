@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { Fragment, useId, useState, type ReactNode } from 'react';
 import { ASK_SAVED_PATTERN_INTENT, isPathSentence, pathSentenceStart, type AskSummary, AskSummaryCitation, Count } from '@neburyx/contracts';
 import { heldKeysOf } from '../api/merge-into-loaded.js';
 import type { AddedOutcome } from '../patterns/add-to-graph.js';
@@ -200,9 +200,10 @@ export function AnswerCard({ answer, added, canAdd, onAdd }: AnswerCardProps) {
   const [note, setNote] = useState('');
   const view = resultView(answer.result);
   const cites = useCitations(answer.summary, answer, added !== undefined, setNote);
+  const titleId = useId();
   return (
-    <section className="ask-card" aria-labelledby="ask-answer-title">
-      <h3 id="ask-answer-title" className="visually-hidden" tabIndex={-1} data-ask-focus="title">
+    <section className="ask-card" aria-labelledby={titleId}>
+      <h3 id={titleId} className="visually-hidden" tabIndex={-1} data-ask-focus="title">
         {ASK_COPY.ready}
       </h3>
       <Understood answer={answer} />
@@ -273,11 +274,12 @@ export function AnswerCard({ answer, added, canAdd, onAdd }: AnswerCardProps) {
 }
 
 /** A result that would read more than the source allows without being asked: the estimate, and Continue. Nothing was read. */
-export function HeavyCard({ answer, onContinue }: { readonly answer: Answered; readonly onContinue: () => void }) {
+export function HeavyCard({ answer, onContinue, body = ASK_COPY.heavyBody, note = ASK_COPY.heavyNote }: { readonly answer: Answered; readonly onContinue: () => void; readonly body?: string; readonly note?: string }) {
   const view = resultView(answer.result);
+  const titleId = useId();
   return (
-    <section className="ask-card" aria-labelledby="ask-heavy-title">
-      <h3 id="ask-heavy-title" className="visually-hidden" tabIndex={-1} data-ask-focus="title">
+    <section className="ask-card" aria-labelledby={titleId}>
+      <h3 id={titleId} className="visually-hidden" tabIndex={-1} data-ask-focus="title">
         {ASK_COPY.stopped}
       </h3>
       <Understood answer={answer} />
@@ -288,11 +290,11 @@ export function HeavyCard({ answer, onContinue }: { readonly answer: Answered; r
             <span className="ask-heavy-tag">{QUALITY_WORDS[view.count.count.quality]}</span>
           </div>
         )}
-        <p>{ASK_COPY.heavyBody}</p>
+        <p>{body}</p>
         <button type="button" className="ask-continue" onClick={onContinue}>
           {ASK_COPY.continue}
         </button>
-        <p>{ASK_COPY.heavyNote}</p>
+        <p>{note}</p>
       </div>
     </section>
   );

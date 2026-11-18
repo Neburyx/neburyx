@@ -56,7 +56,7 @@ export function usePrincipalIdWhenProvided(): string | undefined {
   return principal;
 }
 
-export type AiFeature = 'ask' | 'summary';
+export type AiFeature = 'ask' | 'summary' | 'assistant';
 
 /** What the status of the AI features says of one feature: `pending` while the answer is not here, `unavailable` when it says no or the read failed, and on a page without shell data. */
 export type AiAvailability = 'pending' | 'available' | 'unavailable';
@@ -71,6 +71,15 @@ function aiAvailabilityOf(data: ShellData | undefined, feature: AiFeature): AiAv
 export function useAiAvailabilityWhenProvided(feature: AiFeature): AiAvailability {
   const store = useContext(ShellDataContext);
   return useStoreSelector<ShellData | undefined, AiAvailability>(store ?? NO_ONE, (data) => aiAvailabilityOf(data, feature));
+}
+
+/** The words a message may hold, from the status of the AI features; nothing while the assistant is not available or the status is not here. */
+export function useAssistantWordLimitWhenProvided(): number | undefined {
+  const store = useContext(ShellDataContext);
+  return useStoreSelector<ShellData | undefined, number | undefined>(store ?? NO_ONE, (data) => {
+    const status = data === undefined ? undefined : answeredData(data.aiStatus);
+    return status?.assistant.available === true ? status.assistant.messageWords : undefined;
+  });
 }
 
 export function answeredData<T>(state: RequestState<T>): T | undefined {

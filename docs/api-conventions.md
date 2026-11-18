@@ -141,6 +141,22 @@ With no AI provider configured (and the older preview switch not set), the AI ex
 |---|---|---|
 | `ai-off` | This AI feature is not available in this release yet: it is switched off, or no AI provider is configured. | `false` |
 
+## An assistant turn
+
+`POST /v1/assistant/turns` takes either `{ sourceId, investigationId, message, viewElementKeys, mask? }` or `{ sourceId, investigationId, continue: { intent, entities, continueToken }, viewElementKeys, mask? }`: one of the two, never both (the published schema has the two forms). `viewElementKeys` holds at most 300 keys. It always answers `200` with one body, or an error of the table:
+
+| Answer | When |
+|---|---|
+| `{ status: "answered", route: "refuse", cause, sentence }` | the router refused (`verdict`, `raw-query`, `other-source`) or its reply was not a route (`unplaced`); the sentence is fixed and never the model's |
+| `{ status: "not-answered", route: "view", sentence }` | the router placed the message on the view; the cited answer from the view is not built yet |
+| `{ status: "answered", route: "ask", answer }` | the router placed it on an intent of the source's Ask folder; `answer` is the body `POST /v1/ask` answers (a result with its cited summary, a heavy stop with its token, or a refusal with its cause) |
+| `{ status: "unavailable", kind, readStarted, retryAfterSeconds? }` | the model's service or the source failed; `readStarted` is false when no read began; `retryAfterSeconds` only when a wait is known |
+| `{ status: "too-large", sentence }` | the message and the view are over the input guard; nothing was sent |
+| `{ status: "too-long", words, limit }` | the message is over the word limit; nothing was sent and nothing was read |
+| `{ status: "continue-invalid", sentence }` | a continue whose token is expired, altered, another person's, another investigation's, or whose intent, entities, masking or definition changed |
+
+A heavy stop carries a `continueToken`: a signature over the person, the source, the investigation, the intent, a fingerprint of the intent's definition, the entities and the masking choice, valid 15 minutes and usable more than once. A continue reads one bounded first page with no model call. Errors: `ACCESS_DENIED` with the reason `ai-off` (the assistant is off, with no provider, or with every AI feature off), `NOT_FOUND` (the source or the investigation is not the caller's, or the investigation is not of that source), `INVALID_REQUEST` (a body that is not one of the two forms, or a message of white space only), `AUDIT_UNAVAILABLE` (only for a model answer that does not match what was sent), `RATE_LIMITED`, and the refusals of the gate that an intent run gives as `POST /v1/ask` gives them (for example `QUERY_BUDGET_EXCEEDED` or `INVALID_REQUEST` with the reason `file-query-result`).
+
 ## Field limits
 
 Every request is checked against a strict schema: unknown fields are rejected, and a violation is `INVALID_REQUEST`.

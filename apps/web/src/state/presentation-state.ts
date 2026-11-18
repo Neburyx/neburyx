@@ -108,6 +108,8 @@ export interface PresentationState {
   readonly pathsFocus: PathsFocus | undefined;
   /** Whether the Ask panel is open: it is a panel of its own, and opening it closes the summary panel. */
   readonly askOpen: boolean;
+  /** Whether the assistant panel is open: a panel of its own, beside the Ask and summary panels, of which only one is open at a time. */
+  readonly assistantOpen: boolean;
   /** Whether the AI case summary panel is open: a panel of its own, and opening it closes the Ask panel. */
   readonly summaryOpen: boolean;
   /** The summary panel was opened to read the AI notes of the view, so it makes no draft by itself. */
@@ -180,6 +182,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   pathsHandover: undefined,
   pathsFocus: undefined,
   askOpen: false,
+  assistantOpen: false,
   summaryOpen: false,
   summaryNotesOnly: false,
   summaryNotesRequests: 0,
@@ -250,6 +253,7 @@ export interface PresentationActions {
   requestPathsFocus(target: 'from' | 'list'): void;
   clearPathsFocus(): void;
   setAskOpen(open: boolean): void;
+  setAssistantOpen(open: boolean): void;
   setSummaryOpen(open: boolean): void;
   /** Opens the summary panel for the AI notes alone: no draft is made until the person asks for one. */
   openSummaryNotes(): void;
@@ -514,10 +518,10 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setSummaryOpen(summaryOpen) {
       if (store.getState().summaryOpen === summaryOpen && !store.getState().summaryNotesOnly) return;
-      store.setState({ ...store.getState(), summaryOpen, summaryNotesOnly: false });
+      store.setState({ ...store.getState(), summaryOpen, summaryNotesOnly: false, ...(summaryOpen ? { assistantOpen: false } : {}) });
     },
     openSummaryNotes() {
-      store.setState({ ...store.getState(), summaryOpen: true, summaryNotesOnly: true, summaryNotesRequests: store.getState().summaryNotesRequests + 1 });
+      store.setState({ ...store.getState(), summaryOpen: true, assistantOpen: false, summaryNotesOnly: true, summaryNotesRequests: store.getState().summaryNotesRequests + 1 });
     },
     setSummaryNotesOnly(summaryNotesOnly) {
       if (store.getState().summaryNotesOnly === summaryNotesOnly) return;
@@ -525,7 +529,11 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setAskOpen(askOpen) {
       if (store.getState().askOpen === askOpen) return;
-      store.setState({ ...store.getState(), askOpen });
+      store.setState({ ...store.getState(), askOpen, ...(askOpen ? { assistantOpen: false } : {}) });
+    },
+    setAssistantOpen(assistantOpen) {
+      if (store.getState().assistantOpen === assistantOpen) return;
+      store.setState({ ...store.getState(), assistantOpen, ...(assistantOpen ? { askOpen: false, summaryOpen: false, summaryNotesOnly: false } : {}) });
     },
     setPatternsPreset(patternsPreset) {
       if (store.getState().patternsPreset === patternsPreset) return;
@@ -642,8 +650,8 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, assistantOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, assistantOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes });
     },
   };
 }

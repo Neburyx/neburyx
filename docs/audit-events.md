@@ -14,6 +14,9 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `ai.case-summary.copied` | any | queued | `ee/ask/src/case-summary/copy-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ai.case-summary.read` | any | queued | `services/api/src/graph/elements-reader.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ai.route_refused` | any | queued | `ee/ask/src/route-guard.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
+| `assistant.ask` | any | queued | `ee/ask/src/assistant/turn-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
+| `assistant.continue` | any | queued | `ee/ask/src/assistant/turn-route.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
+| `assistant.route` | any | queued | `ee/ask/src/assistant/router.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.classify` | any | queued | `ee/ask/src/classify/classifier.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.continue` | any | queued | `ee/ask/src/questions/question-routes.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.file_query` | any | queued | `services/api/src/gate/templates/file-query.ts` | A read or a system read: the response does not depend on its event, which is queued. |

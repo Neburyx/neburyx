@@ -216,11 +216,22 @@ The assistant's settings are read when a provider key is set and the assistant i
 
 `NEBURYX_ASSISTANT_PROMPT_FILE` names an absolute path to a file that replaces the router's instructions (at most as large as a classification file of the Ask folder). The reply format is added by the product after the file's text and cannot be changed by it, and the hash of the instructions used is kept with them. No setting raises a limit or budget of a source.
 
+### A turn
+
+`POST /v1/assistant/turns` takes a message (`{ sourceId, investigationId, message, viewElementKeys, mask? }`) or the continue of a heavy stop (`continue: { intent, entities, continueToken }` in place of `message`), never both; `viewElementKeys` names at most 300 elements of the view, never their content. The server checks that the investigation is the caller's and belongs to the source before any model call, refuses a message over `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` words, and makes one audited call of the router, whose reply must be exactly one fixed form. The answer is one of:
+
+- a refusal with a cause (`verdict`, `raw-query`, `other-source`, `unplaced`) and a fixed sentence the server chooses, never a word of the model; a reply that is not a route is `unplaced` and nothing is run;
+- `not-answered` for the view route, until the cited answer from the view is built;
+- `answered` on the `ask` route: the same answer `POST /v1/ask` gives for an intent of the source's Ask folder (a result with its cited summary and sources, a heavy stop with its token, or one of Ask's refusals), plus, for a result that was read, a `step` (the intent, the number of elements it lists, whether it is complete) and a `coverage` line the server writes (how much is shown, how much is not yet retrieved, with the quality of the count);
+- `unavailable` when the model's service or the source fails (`kind`, and whether a read had started); `too-large` when the message and the view are over `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS`; `too-long` over the word limit; `continue-invalid` for a continue whose token is expired, altered, another person's, another investigation's or for a changed intent, entities, masking or definition.
+
+A heavy stop carries a token that binds the person, the source, the investigation, the intent and its definition, the entities and the masking, valid 15 minutes; a continue with it reads one bounded first page and calls no model, and works while Ask itself is off. With no AI provider configured, or every AI feature off, the endpoint (which the application answers itself then) answers `403` with the reason `ai-off`, as it does when only the assistant is off. The errors are listed in [the API conventions](api-conventions.md#an-assistant-turn).
+
 ## Checking it
 
-`GET /v1/ai/status` is always there. It answers `{ "ask": { "available": … }, "summary": { "available": … }, "assistant": { "available": … } }`, with `true` for a feature that can be used now: a provider is configured, the feature is on and what it needs is in place (for Ask, its folder is loaded; for the summary, its token key file is set). With no provider configured, all three are `false`. The assistant is `false` until it is built.
+`GET /v1/ai/status` is always there. It answers `{ "ask": { "available": … }, "summary": { "available": … }, "assistant": { "available": … } }`, with `true` for a feature that can be used now: a provider is configured, the feature is on and what it needs is in place (for Ask, its folder is loaded; for the summary, its token key file is set). With no provider configured, all three are `false`. The assistant's entry also carries `messageWords`, the effective limit of a message, when it is `true`.
 
-A route of a feature that is switched off answers `ACCESS_DENIED` with the reason `ai-off` and the sentence "This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.", audits the refusal, and reads nothing of the request. With no provider configured the AI routes do not exist and answer 404.
+A route of a feature that is switched off answers `ACCESS_DENIED` with the reason `ai-off` and the sentence "This AI feature is not available in this release yet: it is switched off, or no AI provider is configured.", audits the refusal, and reads nothing of the request. With no provider configured the AI routes of Ask and the summary do not exist and answer 404; the assistant's endpoint, `POST /v1/assistant/turns`, is answered by the application itself with `403` and the reason `ai-off`.
 
 When the API starts with a problem in these settings, it writes one line for each problem, naming the setting, and exits 1. The start-up warnings name the setting too. A start that succeeds answers `GET /v1/ai/status` as above. `GET /v1/me` reports the edition as `enterprise` only when the older switch is on.
 

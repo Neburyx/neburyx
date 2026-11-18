@@ -39,10 +39,12 @@ describe('the migrate command and the AI extension', () => {
     expect(applied.calls).toEqual([{ eeDirectory: EE_FOLDER }]);
   });
 
-  it('applies none with no provider, with Ask and the summary both off, or with only the assistant on', async () => {
+  it('applies none with no provider or with all three features off, and applies them for the assistant alone', async () => {
     expect((await run({})).loaded).toBe(0);
-    expect((await run({ NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off' })).loaded).toBe(0);
+    expect((await run({ NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off', NEBURYX_ASSISTANT_ENABLED: 'off' })).loaded).toBe(0);
     expect(applied.calls).toEqual([{}, {}]);
+    expect((await run({ NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'off' })).loaded).toBe(1);
+    expect(applied.calls).toEqual([{}, {}, { eeDirectory: EE_FOLDER }]);
   });
 
   it('applies the extension migrations as before with the old switch on, key or no key', async () => {

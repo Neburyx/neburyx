@@ -16,6 +16,7 @@ import { memoryAppStore } from './app-store.js';
 import { hidingRedact } from './derived-fixtures.js';
 import { TEST_REFERENCE_KEYS, TestExecutor } from './gate.js';
 import { baseSource, fileOf } from './mapping.js';
+import type { FileQueryDeps } from '../gate/file-query.js';
 import { plainNode, plainRelationship } from './normalize-fixtures.js';
 import { onlineIndexesOf, schemaAnswer, withSchema } from './search-fixtures.js';
 import { testSourceGate } from './source-gate.js';
@@ -59,6 +60,8 @@ export interface ExportRigOptions {
   /** The application's audit member is the sink itself and not the queue in front of it: for the tests of the enterprise routes whose own handling of a failed event is rewritten with the queue. */
   readonly directAudit?: boolean;
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
+  /** The stored file queries of an Ask folder, so the gate runs them. */
+  readonly fileQueries?: FileQueryDeps;
   /** The extension and the switch of the application under test, and the summarizer its seams hold. */
   readonly extension?: ProfileExtension;
   readonly previewOn?: boolean;
@@ -127,7 +130,7 @@ export async function startExportRig(options: ExportRigOptions = {}) {
       context,
     );
   const redact = options.hideNode !== undefined ? hidingRedact(options.hideNode, redactItems) : options.unexportableNode !== undefined ? forbidExport : undefined;
-  const parts = testSourceGate(mapping, { executor, seams, referenceKeys: TEST_REFERENCE_KEYS, ...(redact === undefined ? {} : { redact }) });
+  const parts = testSourceGate(mapping, { executor, seams, referenceKeys: TEST_REFERENCE_KEYS, ...(redact === undefined ? {} : { redact }), ...(options.fileQueries === undefined ? {} : { fileQueries: options.fileQueries }) });
   const directory = join(mkdtempSync(join(tmpdir(), 'nbx-export-rig-')), 'exports');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const files = createExportFileStore(directory);

@@ -1,7 +1,10 @@
 import { rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { edgeRefSegmentOf, sourceLinkSegmentOf, type CaseSummarizer, type ProfileExtension } from '@neburyx/contracts';
-import { createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, createSummaryRoute, guardAiRouteGroup } from '@neburyx/ee-ask';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -20,7 +23,10 @@ import { testSourceGate } from '../testing/source-gate.js';
 import { makeWebRoot } from '../testing/web-root.js';
 
 const webRoot = makeWebRoot();
-afterAll(() => rmSync(webRoot, { recursive: true, force: true }));
+afterAll(() => {
+  rmSync(webRoot, { recursive: true, force: true });
+  removeAskFolders();
+});
 
 const mapping = parseMapping(
   fileOf(
@@ -74,7 +80,7 @@ const ROUTES: readonly { readonly name: string; readonly route: string; readonly
 ];
 
 /** Every data read waits until its call's signal aborts, as the adapter ends a cancelled read; the schema read answers at once. */
-async function listening() {
+async function listening(extension: ProfileExtension = SUMMARY_EXTENSION) {
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has no source');
   const mode = { answering: false };
@@ -89,7 +95,7 @@ async function listening() {
   const seams = { policy: defaults.policy, coordinator: defaults.coordinator, audit: { record: (event: AuditEvent) => (events.push(event), Promise.resolve()) } };
   const parts = testSourceGate(mapping, { executor, seams });
   const lines: string[] = [];
-  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store: memoryAppStore(), mapping, gate: parts.gate, seams: { ...seams, caseSummarizer: SUMMARIZER }, extension: SUMMARY_EXTENSION, previewOn: true });
+  const app = await buildApp({ webRoot, logger: createLogger({ write: (line: string) => void lines.push(line) }), store: memoryAppStore(), mapping, gate: parts.gate, seams: { ...seams, caseSummarizer: SUMMARIZER }, extension, previewOn: true });
   await app.listen({ port: 0, host: '127.0.0.1' });
   return { app, executor, events, lines, mode };
 }
@@ -322,5 +328,50 @@ describe('the source test and the graph coverage routes', () => {
     expect(executor.calls).toEqual([]);
     await other.close();
     await app.close();
+  });
+});
+
+async function routerStub(reply: string): Promise<Server> {
+  const server = createServer((request, response) => {
+    request.resume();
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: reply }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return server;
+}
+
+describe('an assistant turn that runs an intent, when the client closes the connection', () => {
+  it('stops the read of the intent and starts no further read', async () => {
+    const stub = await routerStub('{"route":"ask","intent":"hubById","entities":{"id":"H-1"}}');
+    const extension = createEnterpriseExtension({ modelBaseUrl: `http://127.0.0.1:${(stub.address() as AddressInfo).port}` });
+    const folder = makeAskFolder(['demo'], { hubById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'hub', stableId: '$id' } } } });
+    expect(await extension.configure?.({}, { NEBURYX_ASK_API_KEY: 'a-test-key', NEBURYX_ASK_MAPPING_FOLDER: folder }, { sourceIds: ['demo'], features: { ask: false, summary: false, assistant: true } })).toEqual({ ok: true });
+    extension.attachAudit?.({ record: async () => undefined });
+    const { app, executor, events, mode } = await listening(extension);
+    const base = `http://127.0.0.1:${portOf(app)}`;
+    mode.answering = true;
+    const opened = await fetch(`${base}/v1/investigations`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceId: 'demo', entity: { sourceId: 'demo', ...ref } }) });
+    const { investigation } = (await opened.json()) as { investigation: { id: string } };
+    mode.answering = false;
+    const before = executor.calls.length;
+    const text = JSON.stringify({ sourceId: 'demo', investigationId: investigation.id, message: 'Show hub H-1', viewElementKeys: [] });
+    const request = httpRequest({ host: '127.0.0.1', port: portOf(app), path: '/v1/assistant/turns', method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) } });
+    request.on('error', () => undefined);
+    request.end(text);
+    const isData = (call: ExecuteCall): boolean => call.templateId !== 'schema-indexes';
+    await until(() => executor.calls.slice(before).some(isData));
+    const reading = executor.calls.slice(before).filter(isData);
+    request.destroy();
+    await until(() => reading.every((call) => call.signal?.aborted === true));
+    await until(() => events.some((event) => event.action === 'assistant.ask'));
+    expect(events.filter((event) => event.action === 'assistant.ask').map((event) => event.result)).toEqual(['failed']);
+    const readsAtCancel = executor.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(executor.calls).toHaveLength(readsAtCancel);
+    await app.close();
+    await new Promise<void>((resolve) => stub.close(() => resolve()));
   });
 });
