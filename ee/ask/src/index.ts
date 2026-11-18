@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
+import { SUMMARY_DEFAULTS, type AskClassifier, type ConfigureOutcome, type ConfigureWarning, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
 import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, optionalFolderChoice, type AskConfiguration } from './configure.js';
@@ -196,13 +196,15 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         return { ok: false, problems };
       };
       let loadedFolder: AskFolder | undefined;
+      const warnings: ConfigureWarning[] = [];
       // the assistant's `ask` route reads the folder of intents when there is one; with Ask off the folder is optional
       const folderChoice = askConfigured?.configuration === undefined ? (features.assistant ? optionalFolderChoice(env) : undefined) : { folder: askConfigured.configuration.mappingFolder, problems: [] };
       if (folderChoice !== undefined && folderChoice.problems.length > 0) return refuse(folderChoice.problems);
       if (folderChoice?.folder !== undefined) {
         const loaded = await loadAskFolder({ folder: folderChoice.folder, sourceIds: context.sourceIds, ...(context.budgets === undefined ? {} : { budgets: context.budgets }) });
-        if (!loaded.ok) return refuse(loaded.problems);
-        loadedFolder = loaded.folder;
+        if (loaded.ok) loadedFolder = loaded.folder;
+        else if (features.ask) return refuse(loaded.problems);
+        else warnings.push({ event: 'assistant.ask_folder_unavailable', message: 'the folder of Ask questions could not be used, so the assistant runs without it' });
       }
       let readSettings: SummarySettings | undefined;
       let readKeys: TokenKeys | undefined;
@@ -224,7 +226,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       instructions = readInstructions;
       summarySettings = readSettings;
       tokenKeys = readKeys;
-      return providerConfigured.outcome;
+      return warnings.length === 0 ? providerConfigured.outcome : { ok: true, warnings };
     },
     auditSink: auditOf,
     attachAudit(sink) {

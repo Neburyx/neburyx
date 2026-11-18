@@ -198,6 +198,17 @@ describe('a route of a feature that is switched off', () => {
     expect(extension.aiAvailability?.().ask).toEqual({ available: false });
   });
 
+  it('starts the assistant without the folder of Ask questions when Ask is off and the folder cannot be used, with a warning, and refuses the same folder when Ask is on', async () => {
+    const missing = { ...ENV, NEBURYX_ASK_MAPPING_FOLDER: '/not/there' };
+    const off = counted({ ask: false, summary: false });
+    const outcome = await off.extension.configure?.({ preview: true }, missing, CONTEXT);
+    expect(outcome).toEqual({ ok: true, warnings: [{ event: 'assistant.ask_folder_unavailable', message: expect.any(String) }] });
+    expect(off.extension.askFolder()).toBeUndefined();
+    expect(off.extension.assistantSettings()).toBeDefined();
+    const on = counted({ summary: false });
+    expect((await on.extension.configure?.({ preview: true }, missing, CONTEXT))?.ok).toBe(false);
+  });
+
   it('reads the assistant settings and instructions at configure, and holds them frozen with the hash', async () => {
     const { extension } = counted();
     expect((await extension.configure?.({ preview: true }, ENV, CONTEXT))?.ok).toBe(true);
