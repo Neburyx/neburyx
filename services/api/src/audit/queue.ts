@@ -22,8 +22,8 @@ interface AuditTimers {
 }
 
 export interface EventQueue<E> {
-  /** Takes an event and returns at once; it never throws and never waits for a sink. */
-  readonly sink: QueueSink<E>;
+  /** Takes an event and returns at once; it never throws and never waits for a sink. `failed` counts, as a failed event, one the caller could not build, and logs its ids. */
+  readonly sink: QueueSink<E> & { failed(event: E): void };
   counts(): AuditCounts;
   /** Waits up to `limitMs` for the queues to empty, then stops the writers and drops what is left. */
   stop(limitMs: number): Promise<void>;
@@ -208,6 +208,10 @@ export function createEventQueue<E>(options: EventQueueOptions<E>): EventQueue<E
           totals.dropped += 1;
         }
         return Promise.resolve();
+      },
+      failed(event) {
+        totals.failed += 1;
+        options.logger.warn({ event: 'audit.event_failed', sink: 'unbuilt', ...options.idFields(event) }, 'an audit event could not be built');
       },
     },
     counts: () => ({ ...totals, queued: writers.reduce((sum, writer) => sum + writer.queued(), 0) }),

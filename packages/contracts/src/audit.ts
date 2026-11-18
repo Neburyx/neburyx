@@ -244,6 +244,8 @@ export interface AuditWriteOptions {
 
 export interface AuditSink {
   record(event: AuditEvent, options?: AuditWriteOptions): Promise<void>;
+  /** Counts and logs, by its ids, an event the caller could not build; the queue of the application has it, a sink that stores events does not. */
+  failed?(event: AuditEvent): void;
 }
 
 /** What the preview's audit sink is given when it is built: the application's own database login and the limits that login's pool keeps, so the sink repeats no number of its own. */

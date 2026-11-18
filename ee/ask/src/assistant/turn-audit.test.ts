@@ -386,6 +386,23 @@ describe('the closing event that cannot be built or written', () => {
     expect(logs).toEqual([{ event: 'assistant-turn-event-not-built', action: TURN_CLOSED_ACTION, traceId: 'tr-1' }]);
   });
 
+  it('tells the audit member of the application, by ids only, that the event could not be built, and does not log it twice', async () => {
+    const r = await rig();
+    const failed: AuditEvent[] = [];
+    const logs: Record<string, unknown>[] = [];
+    const wrapped = withTurnAudit(
+      () => ({ warn: (fields) => void logs.push(fields) }),
+      async () => {
+        noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
+        noteTurn({ route: 'view', cause: 'a sentence that is text, not a code' });
+        return PLACEHOLDER;
+      },
+    );
+    expect(await wrapped({ ...r.request(), audit: { record: () => Promise.resolve(), failed: (event) => void failed.push(event) } })).toBe(PLACEHOLDER);
+    expect(failed).toEqual([{ actorId: 'p-1', actorRole: 'investigator', action: TURN_CLOSED_ACTION, result: 'failed', sourceId: 'demo', investigationId: 'inv-1', traceId: 'tr-1' }]);
+    expect(logs).toHaveLength(0);
+  });
+
   it('queues no event for a detail that holds text, answers as before and logs the ids only', async () => {
     const r = await rig();
     const logs: Record<string, unknown>[] = [];

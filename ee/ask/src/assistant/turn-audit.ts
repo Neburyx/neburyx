@@ -186,14 +186,15 @@ function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, n
   try {
     let ending: Ending = 'answer' in outcome ? endingOf(notes, outcome.answer) : endingOfError(outcome.error);
     if (request.signal.aborted) ending = { ...ending, outcome: 'cancelled', result: 'failed' };
-    // a detail the contract does not accept (a free string, a bad count) throws here: it is logged by the ids of the turn and never queued
+    // a detail the contract does not accept (a free string, a bad count) throws here: it is never queued
     event = closingEvent(request, started, ending.result, detailOf(notes, ending));
   } catch {
-    // an event that cannot be built is logged by its ids and never changes the turn's answer
+    // an event that cannot be built is counted as failed and logged by its ids where the application can, and never changes the turn's answer
     try {
-      logger?.warn({ event: TURN_EVENT_NOT_BUILT, action: TURN_CLOSED_ACTION, traceId: request.traceId }, 'the closing event of an assistant turn could not be built');
+      if (request.audit.failed === undefined) logger?.warn({ event: TURN_EVENT_NOT_BUILT, action: TURN_CLOSED_ACTION, traceId: request.traceId }, 'the closing event of an assistant turn could not be built');
+      else request.audit.failed({ actorId: request.principalId, actorRole: request.principalRole, action: TURN_CLOSED_ACTION, result: 'failed', sourceId: started.sourceId, investigationId: started.investigationId, traceId: request.traceId });
     } catch {
-      // a logger that fails changes nothing
+      // a logger or a counter that fails changes nothing
     }
     return;
   }

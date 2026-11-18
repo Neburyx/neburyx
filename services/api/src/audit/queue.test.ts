@@ -108,6 +108,18 @@ describe('the audit queue', () => {
     expect(JSON.stringify(lines)).not.toContain('CANARY');
   });
 
+  it('counts an event the caller could not build as failed, logs its id fields and no detail, and writes nothing', async () => {
+    const { logger, lines } = logs();
+    const sink = recording();
+    const queue = createAuditQueue({ sinks: [{ name: 'postgres', sink: sink.sink }], settings: SETTINGS, logger });
+    queue.sink.failed(event('assistant.turn.closed', { result: 'failed', sourceId: 's-1', investigationId: 'i-1', resourceRef: 'CANARY-REF' }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(sink.started).toHaveLength(0);
+    expect(queue.counts()).toEqual({ written: 0, failed: 1, dropped: 0, queued: 0 });
+    expect(lines).toEqual([{ event: 'audit.event_failed', sink: 'unbuilt', action: 'assistant.turn.closed', result: 'failed', traceId: 'tr-1', actorId: 'u-1', sourceId: 's-1', investigationId: 'i-1' }]);
+    expect(JSON.stringify(lines)).not.toContain('CANARY');
+  });
+
   it('drops a new event when the queue is full, returns at once, and counts the drop', async () => {
     const { logger, lines } = logs();
     const held = deferred();
