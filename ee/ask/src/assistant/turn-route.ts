@@ -201,11 +201,11 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           const { reply } = outcome;
           if (reply.route === 'refuse') return refused(reply.cause);
           if (reply.route === 'view') {
+            noteTurn({ route: 'view' });
             const answerView = options.viewAnswer?.();
             if (answerView === undefined || readElements === undefined) return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
             if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') throw new ExtensionRefusal({ code: 'ACCESS_DENIED' });
             const progress: ViewProgress = { calls: 0, read: 0, readStarted: false };
-            noteTurn({ route: 'view' });
             try {
               return viewTurn(await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: 1, startedAt, progress }));
             } catch (error) {

@@ -170,6 +170,49 @@ describe('the closing event of a view turn', () => {
   });
 });
 
+describe('the closing event of a view turn that ends early or on a call that throws', () => {
+  const closed = (t: Awaited<ReturnType<typeof rig>>): string[] => t.events.filter((event) => event.action === 'assistant.turn.closed').map((event) => JSON.stringify(event));
+
+  it('keeps the view route on the closing event of a turn the role refuses, with no read and no answer call', async () => {
+    const t = await rig({ view: good });
+    await refusalOf(t.route.handler(t.request(VIEW_BODY, { principalRole: 'viewer' })));
+    const events = closed(t);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toContain('"route":"view"');
+    expect(t.elementReads).toHaveLength(0);
+    expect(viewCalls(t)).toHaveLength(0);
+  });
+
+  it('reports unknown tokens, the answer prompt and the right count when the answer call throws before it returns', async () => {
+    const t = await rig({ view: good, viewProvider: () => Promise.reject(new Error('boom')) });
+    await answerOf(t.route.handler(t.request(VIEW_BODY)));
+    const [event] = closed(t);
+    expect(event).toContain('"modelCalls":2');
+    expect(event).toContain('"promptId":"assistant.view"');
+    expect(event).toContain('"tokensIn":"unknown"');
+    expect(event).toContain('"tokensOut":"unknown"');
+  });
+
+  it('reports the latest call, with unknown tokens, when the repeat throws after a first answer that had them', async () => {
+    let calls = 0;
+    let delegate: Awaited<ReturnType<typeof rig>>['fixture'] | undefined;
+    const t = await rig({
+      view: ok('free text'),
+      viewProvider: (request, signal) => {
+        calls += 1;
+        if (calls === 2) return Promise.reject(new Error('boom'));
+        if (delegate === undefined) throw new Error('the rig is not ready');
+        return delegate.complete(request, signal);
+      },
+    });
+    delegate = t.fixture;
+    await answerOf(t.route.handler(t.request(VIEW_BODY)));
+    const [event] = closed(t);
+    expect(event).toContain('"modelCalls":3');
+    expect(event).toContain('"tokensIn":"unknown"');
+  });
+});
+
 describe('the budget of the view answer', () => {
   it('makes one repeat with the fixed note after a reply that does not fit the format, and answers from the repeat', async () => {
     const t = await rig({ view: sequence(ok('free text'), good) });

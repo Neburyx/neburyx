@@ -113,6 +113,7 @@ export function startModelCall(call: { readonly modelRef: string; readonly promp
   notes.promptId = call.promptId;
   notes.promptVersion = String(call.promptVersion);
   notes.instructionsSha256 = call.instructionsSha256;
+  delete notes.usage;
   const record = notes.run?.startCall({ instructionsSha256: call.instructionsSha256, instructions: call.instructions, values: call.values }) ?? NO_CALL_RECORD;
   return { ...(notes.run === undefined ? {} : { runId: notes.run.id }), received: record.received, end: record.end };
 }
