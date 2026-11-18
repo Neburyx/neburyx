@@ -45,6 +45,24 @@ describe('the assistant turn request: a message or a continue', () => {
   });
 });
 
+describe('the assistant turn answer: the view route', () => {
+  const ref = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
+  const view = { status: 'answered', route: 'view', sentences: [{ text: 'Widget W-1 is here.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' }, model: 'claude-sonnet-5-5', calls: 2 };
+
+  it('accepts sentences with the citations they name, the model and the calls', () => {
+    expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
+  });
+
+  it('refuses no sentence, more than 12, no citation, a citation of no known form and an unknown member', () => {
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: Array.from({ length: 13 }, () => view.sentences[0]) }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [{ key: 'n1', kind: 'entity', ref: { nope: 1 } }] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, extra: 1 }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, calls: 0 }).success).toBe(false);
+  });
+});
+
 describe('the assistant turn answer: failures', () => {
   it('accepts unavailable of each kind with readStarted, a wait only when given, too-large and too-long', () => {
     for (const kind of ['service', 'timeout', 'rate-limit'] as const) expect(assistantTurnAnswerSchema.safeParse({ status: 'unavailable', kind, readStarted: false }).success).toBe(true);

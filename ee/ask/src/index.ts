@@ -31,6 +31,8 @@ import { readAssistantSettings, type AssistantSettings } from './assistant/setti
 import { guardAiRouteGroup } from './route-guard.js';
 import { assistantProviderConfiguration } from './assistant/provider-configuration.js';
 import { createAssistantRouter } from './assistant/router.js';
+import { createViewAnswer } from './assistant/view-answer.js';
+import { loadViewInstructions, type ViewInstructions } from './assistant/view-instructions.js';
 import { createAssistantTurnRoute } from './assistant/turn-route.js';
 
 /** @public Used by the audited-call integration test of `services/api`, which needs the real audit sink of the application and a real Postgres, so it cannot go through `createEnterpriseExtension()`. */
@@ -136,6 +138,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let summarySettings: SummarySettings | undefined;
   let assistantSettings: AssistantSettings | undefined;
   let assistantInstructions: AssistantInstructions | undefined;
+  let viewInstructions: ViewInstructions | undefined;
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
   let assistantRuns: AssistantRunStore | undefined;
@@ -161,13 +164,18 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     const own = assistantProviderConfiguration(provider, assistantSettings);
     return createAuditedModelCall({ provider: createAnthropicProvider({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }) }), configuration: own, sink });
   };
+  const assistantViewAnswer = (): ReturnType<typeof createViewAnswer> | undefined => {
+    const model = assistantModelOf();
+    const settings = assistantSettings;
+    return !features.assistant || model === undefined || settings === undefined || viewInstructions === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
+  };
   const assistantRouter = (): ReturnType<typeof createAssistantRouter> | undefined => {
     const model = assistantModelOf();
     const settings = assistantSettings;
     return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -196,9 +204,11 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       const providerConfigured = askConfigured ?? (features.summary || features.assistant ? await configureProvider(env) : undefined);
       assistantSettings = undefined;
       assistantInstructions = undefined;
+      viewInstructions = undefined;
       const assistant = features.assistant ? readAssistantSettings(env) : undefined;
       const assistantPrompt = features.assistant ? await loadAssistantInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
-      const assistantProblems = [...(assistant?.ok === false ? assistant.problems : []), ...(assistantPrompt?.ok === false ? assistantPrompt.problems : [])];
+      const viewPrompt = features.assistant ? await loadViewInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
+      const assistantProblems = [...(assistant?.ok === false ? assistant.problems : []), ...(assistantPrompt?.ok === false ? assistantPrompt.problems : []), ...(viewPrompt?.ok === false ? viewPrompt.problems : [])];
       if (assistantProblems.length > 0) return { ok: false, problems: assistantProblems };
       if (providerConfigured === undefined) return { ok: true };
       configuration = askConfigured?.configuration;
@@ -236,6 +246,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       }
       assistantSettings = assistant?.ok === true ? assistant.settings : undefined;
       assistantInstructions = assistantPrompt?.ok === true ? assistantPrompt.instructions : undefined;
+      viewInstructions = viewPrompt?.ok === true ? viewPrompt.instructions : undefined;
       folder = loadedFolder;
       instructions = readInstructions;
       summarySettings = readSettings;

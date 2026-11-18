@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { SUMMARY_DEFAULTS } from './ai.js';
 import { askAnswerSchema, askContinueRequestSchema } from './ask-question.js';
+import { edgeRefSchema, elementRefSchema } from './graph.js';
+import { summarySentenceSchema } from './summary.js';
 
 const text = z.string().min(1);
 
@@ -60,6 +62,17 @@ export const assistantTurnAnswerSchema = z.union([
     coverage: text.optional(),
   }),
   z.strictObject({ status: z.literal('continue-invalid'), sentence: text }),
+  /** The view route: sentences that each cite elements read again through the gate and kept by the checks, the citations they name, the model that wrote them and the calls the turn made. */
+  z.strictObject({
+    status: z.literal('answered'),
+    route: z.literal('view'),
+    sentences: z.array(summarySentenceSchema).min(1).max(12),
+    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) })).min(1),
+    /** The two lines of coverage the server writes: what was read and what is not yet retrieved, and how much of what was read the sentences cite. */
+    coverage: z.strictObject({ retrieval: text, summary: text }),
+    model: text,
+    calls: z.number().int().positive(),
+  }),
   /** A message over the limit of words: nothing was sent to a model and nothing was read. */
   z.strictObject({ status: z.literal('too-long'), words: z.number().int().positive(), limit: z.number().int().positive() }),
 ]);

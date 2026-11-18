@@ -12,7 +12,8 @@ import { drawnKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import type { Answered } from '../ask/ask-session.js';
-import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type Outcome, type Retry } from './assistant-session.js';
+import { citationEntries, type CitationEntry } from '../summary/summary-model.js';
+import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type Outcome, type Retry, type ViewAnswer } from './assistant-session.js';
 import { countWords } from './words.js';
 import { isAssistantOff } from './failure-kinds.js';
 
@@ -44,10 +45,11 @@ export interface AssistantModel {
   addToGraph(turnId: number): void;
 }
 
-function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number): Outcome | { readonly tooLong: { readonly words: number; readonly limit: number } } {
+function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entriesOf: (answer: ViewAnswer) => readonly CitationEntry[]): Outcome | { readonly tooLong: { readonly words: number; readonly limit: number } } {
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence };
+      if (answer.route === 'view') return { kind: 'view-answer', answer, entries: entriesOf(answer) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, step: answer.step, coverage: answer.coverage } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
@@ -137,7 +139,7 @@ export function useAssistant(): AssistantModel {
           setFocus(turnId);
           return;
         }
-        const outcome = outcomeOf(result.value, retry, Date.now());
+        const outcome = outcomeOf(result.value, retry, Date.now(), (answer) => citationEntries(answer, state.visibleGraph()));
         if ('tooLong' in outcome) {
           store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId), notice: { kind: 'too-long', ...outcome.tooLong } });
           if (retry.kind === 'message') restoreInput(retry.text);
@@ -149,7 +151,7 @@ export function useAssistant(): AssistantModel {
         setFocus(turnId);
       });
     },
-    [clear, client, open, restoreInput, setFocus, setOutcome, sourceId, store],
+    [clear, client, open, restoreInput, setFocus, setOutcome, sourceId, state, store],
   );
 
   const base = useCallback((): Pick<AssistantTurnRequest, 'sourceId' | 'investigationId' | 'viewElementKeys' | 'mask'> | undefined => {

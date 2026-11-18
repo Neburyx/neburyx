@@ -7,6 +7,7 @@ import {
   ExtensionRefusal,
   assistantTurnAnswerSchema,
   assistantTurnRequestSchema,
+  readViewKeys,
   type AskAnswer,
   type AskFolder,
   type AskPatternOffer,
@@ -29,8 +30,9 @@ import type { RouterInput, RouterOutcome } from './router.js';
 import type { AssistantRunStore } from './run-store.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
-import { noteTurnStarted, withTurnAudit } from './turn-audit.js';
+import { noteTurn, noteTurnStarted, withTurnAudit } from './turn-audit.js';
 import { countWords } from './words.js';
+import type { ViewInput, ViewOutcome, ViewProgress } from './view-answer.js';
 
 const TURNS_URL = '/v1/assistant/turns';
 const ASK_ACTION = 'assistant.ask';
@@ -41,6 +43,12 @@ export interface TurnRouteOptions {
   readonly maxMessageWords: () => number | undefined;
   readonly router: () => ((input: RouterInput, signal: AbortSignal) => Promise<RouterOutcome>) | undefined;
   readonly folder: () => AskFolder | undefined;
+  /** The time of a whole turn; the router and the answer are stopped when it is spent. */
+  readonly totalTimeoutMs?: () => number | undefined;
+  /** Only a test sets this, to end a turn by hand instead of by the clock. */
+  readonly turnDeadline?: (totalMs: number) => AbortSignal;
+  /** Answers from the elements in view; without it the view route gives the fixed sentence. */
+  readonly viewAnswer?: () => ((input: ViewInput) => Promise<ViewOutcome>) | undefined;
   readonly logger: () => ExtensionLogger | undefined;
   /** The store of the records of the turns' model calls; absent, nothing is recorded. */
   readonly runs?: () => AssistantRunStore | undefined;
@@ -83,6 +91,29 @@ const answeredAsk = (answer: AskAnswer): AssistantTurnAnswer => {
   const { rowCount } = summarizeRun(result);
   return { status: 'answered', route: 'ask', answer, step: { intent, rows: rowCount, outcome }, coverage: coverageOf(result) };
 };
+
+/** The answer of a turn for what the view answer came to; every exit has one. */
+function viewTurn(outcome: ViewOutcome): AssistantTurnAnswer {
+  switch (outcome.status) {
+    case 'answered':
+      return outcome.answer;
+    case 'unsupported':
+      return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
+    case 'invalid-keys':
+      throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'view-keys' });
+    case 'cancelled':
+      throw new Error('the request was cancelled');
+    case 'stopped':
+      if (outcome.because === 'input') return { status: 'too-large', sentence: ASSISTANT_TOO_LARGE_SENTENCE };
+      return { status: 'unavailable', kind: outcome.because === 'deadline' ? 'timeout' : 'service', readStarted: outcome.readStarted };
+    case 'failed':
+      return { status: 'unavailable', kind: outcome.kind, readStarted: outcome.readStarted };
+    default: {
+      const unreachable: never = outcome;
+      return unreachable;
+    }
+  }
+}
 
 async function runAndAnswer(run: Execution): Promise<AssistantTurnAnswer> {
   if (run.request.signal.aborted) throw new Error('the request was cancelled');
@@ -127,9 +158,12 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     requestSchema: assistantTurnRequestSchema,
     responseSchema: assistantTurnAnswerSchema,
     handler: withTurnAudit({ logger: options.logger, ...(options.runs === undefined ? {} : { runs: options.runs }), ...(options.runSettings === undefined ? {} : { settings: options.runSettings }), ...(options.threads === undefined ? {} : { threads: options.threads }), ...(options.records === undefined ? {} : { records: options.records }), ...(options.now === undefined ? {} : { now: options.now }) }, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
-      const { sourceReadable, investigationReadable, patterns } = gateClientOf(request);
+      const { sourceReadable, investigationReadable, patterns, readElements } = gateClientOf(request);
       const router = options.router();
       if (sourceReadable === undefined || investigationReadable === undefined || router === undefined) throw unsupported();
+      const startedAt = (options.now ?? Date.now)();
+      const total = options.totalTimeoutMs?.();
+      const deadline = total === undefined ? new AbortController().signal : (options.turnDeadline ?? AbortSignal.timeout)(total);
       const body = assistantTurnRequestSchema.parse(request.body);
       await sourceReadable(body.sourceId);
       await investigationReadable(body.investigationId, body.sourceId);
@@ -144,11 +178,13 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       const limit = options.maxMessageWords();
       if (limit === undefined) throw unsupported();
       if (words > limit) return { status: 'too-long', words, limit };
+      // the keys are the client's: they are read back into references before any model sees the message
+      if (options.viewAnswer?.() !== undefined && !readViewKeys(body.viewElementKeys, body.sourceId).ok) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'view-keys' });
       const listing = patterns === undefined ? undefined : await patterns(body.sourceId);
       const built = listing === undefined ? undefined : buildPatternCatalog(listing);
       let outcome: RouterOutcome;
       try {
-        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, request.signal);
+        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
       } catch (error) {
         // the model returned a prompt other than the one sent, so nothing of the call is kept
         if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
@@ -164,7 +200,22 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
         case 'routed': {
           const { reply } = outcome;
           if (reply.route === 'refuse') return refused(reply.cause);
-          if (reply.route === 'view') return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
+          if (reply.route === 'view') {
+            const answerView = options.viewAnswer?.();
+            if (answerView === undefined || readElements === undefined) return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
+            if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') throw new ExtensionRefusal({ code: 'ACCESS_DENIED' });
+            const progress: ViewProgress = { calls: 0, read: 0, readStarted: false };
+            noteTurn({ route: 'view' });
+            try {
+              return viewTurn(await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: 1, startedAt, progress }));
+            } catch (error) {
+              if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+              // the gate's own refusal of the read, with no partial answer; every other refusal goes on as the gate gave it
+              const unavailable = unavailableOf(error);
+              if (unavailable === undefined) throw error;
+              return unavailable;
+            }
+          }
           const capabilities = capabilitiesOf(request);
           if (options.folder()?.source(body.sourceId) === undefined) {
             await writeEvent(request, ASK_ACTION, 'refused', body.sourceId, { kind: 'template', outcome: 'refused', cause: 'no-ask-for-source' });

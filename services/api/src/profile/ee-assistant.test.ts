@@ -10,7 +10,7 @@ import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 import { createAuditQueue, createEventQueue } from '../audit/queue.js';
 import { fileQueryDepsOf } from '../gate/file-query.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
-import { exportWebRoot, startExportRig } from '../testing/export-rig.js';
+import { exportWebRoot, startExportRig, type ExportRigOptions } from '../testing/export-rig.js';
 import { plainNode, plainRelationship } from '../testing/normalize-fixtures.js';
 
 type AssistantRunStore = ReturnType<typeof createMemoryAssistantRunStore>;
@@ -43,11 +43,13 @@ async function modelStub(reply: string | (() => string), hang = false): Promise<
   return { server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, bodies };
 }
 
+/** A key of the view that is well formed and holds a canary, since a key that is not well formed is refused before any model sees the message. */
+const CANARY_KEY = JSON.stringify(['node', 'demo', 'widget', 'key-canary-9']);
 const ENV = { NEBURYX_ASK_API_KEY: 'a-test-key' };
 const INTENTS = { widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } }, queryById: { parameters: ['id'], query: 'MATCH (n:Widget {widgetId: $id}) RETURN n' }, sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } } };
 const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, labels: ['Widget'], properties: { widgetId: id, ownerName: 'Ana Silva' } });
 
-async function assistantRig(options: { reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+async function assistantRig(options: { principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore() });
   const features = options.features ?? { ask: false, summary: false, assistant: true };
@@ -58,7 +60,7 @@ async function assistantRig(options: { reply?: string | (() => string); hang?: b
   const sinkOpened = options.runStore === undefined && options.threadStore === undefined ? undefined : extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined });
   if (options.recordQueue !== undefined) extension.attachRecordQueue?.(options.recordQueue);
   extension.attachAudit?.(options.modelAudit ?? { record: async (event) => void events.push(event) });
-  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, ...(options.logLines === undefined ? {} : { logLines: options.logLines }), ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() }) }), ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }), ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
+  const rig = await startExportRig({ extension, links: ['L-1'], ...(options.principal === undefined ? {} : { principal: options.principal }), ...(options.unexportableNode === undefined ? {} : { unexportableNode: options.unexportableNode }), previewOn: true, directAudit: true, ...(options.logLines === undefined ? {} : { logLines: options.logLines }), ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() }) }), ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }), ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
   const investigation = await rig.open();
   armed.open = true;
   const body = { sourceId: 'demo', investigationId: investigation.id, message: 'Is this person guilty?', viewElementKeys: [] };
@@ -251,6 +253,58 @@ describe('the view route and a continue in the running application', () => {
     await rig.stop();
   });
 
+  it('answers the view route from the elements in view: two audited calls, the source read through the gate, and the values only in what the provider received', async () => {
+    const replies = ['{"route":"view"}', JSON.stringify({ sentences: [{ text: 'Widget W-1 is owned by Ana Silva.', cites: ['n1'] }] })];
+    const rig = await assistantRig({ reply: () => replies.shift() ?? '' });
+    const before = rig.rig.executor.calls.length;
+    const keys = ['W-1', 'W-2'].map((id) => JSON.stringify(['node', 'demo', 'widget', id]));
+    const answer = await rig.post({ ...rig.body, message: 'Who owns the first one?', viewElementKeys: keys });
+    expect(answer.statusCode).toBe(200);
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view', calls: 2, citations: [{ key: 'n1', kind: 'entity' }] });
+    expect(rig.rig.executor.calls.length).toBeGreaterThan(before);
+    expect(rig.stub.bodies).toHaveLength(2);
+    expect(rig.stub.bodies[0]).not.toContain('Ana Silva');
+    expect(rig.stub.bodies[1]).toContain('Ana Silva');
+    expect(rig.events.filter((event) => event.action === 'assistant.view')).not.toHaveLength(0);
+    expect(JSON.stringify(rig.events)).not.toContain('Ana Silva');
+    await rig.stop();
+  });
+
+  it('reads a stored relationship key with its ends and cites it, and refuses a key of another source before any model call', async () => {
+    const replies = ['{"route":"view"}', JSON.stringify({ sentences: [{ text: 'The widget W-1 is linked to a gadget.', cites: ['n1', 'e1'] }] })];
+    const rig = await assistantRig({ reply: () => replies.shift() ?? '' });
+    const widgetKey = JSON.stringify(['node', 'demo', 'widget', 'W-1']);
+    const linkKey = JSON.stringify(['edge', 'demo', 'stored', 'MADE_FROM', 'widget', 'gadget', 'L-1']);
+    const answer = await rig.post({ ...rig.body, message: 'What is W-1 linked to?', viewElementKeys: [widgetKey, linkKey] });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view', citations: expect.arrayContaining([expect.objectContaining({ key: 'e1', kind: 'relationship' })]) });
+    const before = rig.stub.bodies.length;
+    const foreign = await rig.post({ ...rig.body, message: 'What is W-1 linked to?', viewElementKeys: [JSON.stringify(['node', 'other', 'widget', 'W-1'])] });
+    expect(foreign.statusCode).toBe(400);
+    expect(foreign.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(JSON.stringify(foreign.json())).not.toContain('other');
+    expect(rig.stub.bodies).toHaveLength(before);
+    await rig.stop();
+  });
+
+  it('leaves an element the person may not export out of what the provider receives, and refuses a viewer before any read or answer call', async () => {
+    const replies = ['{"route":"view"}', JSON.stringify({ sentences: [{ text: 'Widget W-1 is in view.', cites: ['n1'] }] })];
+    const rig = await assistantRig({ reply: () => replies.shift() ?? '', unexportableNode: 'W-2' });
+    const keys = ['W-1', 'W-2'].map((id) => JSON.stringify(['node', 'demo', 'widget', id]));
+    const answer = await rig.post({ ...rig.body, message: 'What is in view?', viewElementKeys: keys });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view' });
+    expect(rig.stub.bodies[1]).toContain('W-1');
+    expect(rig.stub.bodies[1]).not.toContain('W-2');
+    await rig.stop();
+    const viewerReplies = ['{"route":"view"}'];
+    const viewer = await assistantRig({ reply: () => viewerReplies.shift() ?? '', principal: () => ({ role: 'viewer' }) });
+    const before = viewer.rig.executor.calls.length;
+    const denied = await viewer.post({ ...viewer.body, message: 'What is in view?', viewElementKeys: keys });
+    expect(denied.statusCode).toBe(403);
+    expect(viewer.rig.executor.calls).toHaveLength(before);
+    expect(viewer.stub.bodies).toHaveLength(1);
+    await viewer.stop();
+  });
+
   it('answers continue-invalid for a token the application did not issue, with no model call and no read, and audits the refusal', async () => {
     const rig = await assistantRig();
     const before = rig.rig.executor.calls.length;
@@ -312,13 +366,13 @@ describe('the closing event of a turn in the running application', () => {
     { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, closing: { route: 'refuse', outcome: 'refused', cause: 'unplaced', modelCalls: 1 } },
     { name: 'view', reply: '{"route":"view"}', closing: { route: 'view', outcome: 'refused', cause: 'not-answered', modelCalls: 1 } },
     { name: 'too-long', reply: '{"route":"view"}', body: (rig) => ({ ...rig.body, message: Array.from({ length: 1001 }, () => CANARY).join(' ') }), closing: { outcome: 'refused', cause: 'too-long', modelCalls: 0 } },
-    { name: 'continue-invalid', reply: '{"route":"view"}', body: (rig) => ({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: ['key-canary-9'], continue: { intent: 'widgetById', entities: { id: 'W-1' }, continueToken: `${'1'.repeat(13)}.${'a'.repeat(64)}` } }), closing: { outcome: 'refused', cause: 'continue-invalid', modelCalls: 0 } },
+    { name: 'continue-invalid', reply: '{"route":"view"}', body: (rig) => ({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [CANARY_KEY], continue: { intent: 'widgetById', entities: { id: 'W-1' }, continueToken: `${'1'.repeat(13)}.${'a'.repeat(64)}` } }), closing: { outcome: 'refused', cause: 'continue-invalid', modelCalls: 0 } },
     { name: 'failed', reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}', options: { answer: timedOut }, closing: { route: 'ask', outcome: 'failed', intent: 'widgetById', steps: 1, modelCalls: 1 } },
   ];
 
   async function turn(item: (typeof outcomes)[number], rigOptions: Partial<Parameters<typeof assistantRig>[0]> = {}) {
     const rig = await assistantRig({ reply: item.reply, ...item.options, ...rigOptions });
-    const body = item.body?.(rig) ?? { ...rig.body, message: `Show ${CANARY} W-1`, viewElementKeys: ['key-canary-9'] };
+    const body = item.body?.(rig) ?? { ...rig.body, message: `Show ${CANARY} W-1`, viewElementKeys: [CANARY_KEY] };
     const answer = await rig.post(body);
     return { rig, answer };
   }
@@ -358,7 +412,7 @@ describe('the closing event of a turn in the running application', () => {
     });
     const address = await rig.rig.app.listen({ host: '127.0.0.1', port: 0 });
     const controller = new AbortController();
-    const sent = fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...rig.body, message: `Show ${CANARY} W-1`, viewElementKeys: ['key-canary-9'] }), signal: controller.signal }).catch(() => undefined);
+    const sent = fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...rig.body, message: `Show ${CANARY} W-1`, viewElementKeys: [CANARY_KEY] }), signal: controller.signal }).catch(() => undefined);
     await vi.waitFor(() => expect(kind === 'model' ? rig.stub.bodies.length : reads.pending).toBeGreaterThan(0));
     controller.abort();
     await sent;
@@ -484,6 +538,48 @@ describe('the closing event of a turn in the running application', () => {
   });
 });
 
+describe('a view answer when the audit store fails or does not answer', () => {
+  const widgets = ['W-1', 'W-2'].map((id) => JSON.stringify(['node', 'demo', 'widget', id]));
+  const viewReplies = () => {
+    const replies = ['{"route":"view"}', JSON.stringify({ sentences: [{ text: 'Widget W-1 is in view.', cites: ['n1'] }] })];
+    return () => replies.shift() ?? '';
+  };
+  const queueOver = (store: AuditSink, size = 100) => createAuditQueue({ sinks: [{ name: 'test', sink: store }], settings: { queueSize: size, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: () => undefined } });
+
+  it('answers the same, at once, when the store fails every write, and counts the failures', async () => {
+    const down = queueOver({ record: () => Promise.reject(new Error('the store is down')) });
+    const rig = await assistantRig({ modelAudit: down.sink, reply: viewReplies() });
+    const answer = await rig.post({ ...rig.body, message: 'What is in view?', viewElementKeys: widgets });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view' });
+    await vi.waitFor(() => expect(down.counts().failed).toBeGreaterThan(0));
+    await rig.stop();
+  });
+
+  it('answers the same when the store never answers and the queue is full, and counts what was dropped, with text-free logs', async () => {
+    const logs: Record<string, unknown>[] = [];
+    const blocked = createAuditQueue({ sinks: [{ name: 'test', sink: { record: () => new Promise<void>(() => undefined) } }], settings: { queueSize: 1, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: (fields) => void logs.push(fields) } });
+    const rig = await assistantRig({ modelAudit: blocked.sink, reply: viewReplies() });
+    const answers = [];
+    for (let turn = 0; turn < 3; turn += 1) answers.push(await rig.post({ ...rig.body, message: 'What is in view SENTINEL-VIEW-TEXT?', viewElementKeys: widgets }));
+    expect(answers.map((answer) => answer.statusCode)).toEqual([200, 200, 200]);
+    expect(assistantTurnAnswerSchema.parse(answers[0]?.json())).toMatchObject({ status: 'answered', route: 'view' });
+    expect(blocked.counts().dropped).toBeGreaterThan(0);
+    expect(JSON.stringify(logs)).not.toContain('SENTINEL-VIEW-TEXT');
+    await rig.stop();
+  });
+
+  it('reads aggregate and derived relationship keys through the gate, which counts the two it cannot resolve in the coverage line', async () => {
+    const rig = await assistantRig({ reply: viewReplies() });
+    const widget = (id: string) => JSON.stringify(['node', 'demo', 'widget', id]);
+    const keys = [widget('W-1'), JSON.stringify(['edge', 'demo', 'aggregate', 'MADE_FROM', widget('W-1'), widget('W-2')]), JSON.stringify(['edge', 'demo', 'derived', 'rule-1', widget('W-1'), widget('W-2')])];
+    const answer = await rig.post({ ...rig.body, message: 'What is in view?', viewElementKeys: keys });
+    expect(answer.statusCode).toBe(200);
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ coverage: { retrieval: expect.stringContaining('2 references could not be read') } });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view' });
+    await rig.stop();
+  });
+});
+
 describe('POST /v1/assistant/turns when the assistant is off', () => {
   it('answers 403 with the reason ai-off, reads nothing of the body and calls no model', async () => {
     const rig = await assistantRig({ features: { ask: true, summary: false, assistant: false } });
@@ -522,7 +618,7 @@ describe('the stored runs of a turn in the running application', () => {
   async function turnWith(item: { reply: string; words?: number; options?: Partial<Parameters<typeof assistantRig>[0]> }, options: Partial<Parameters<typeof assistantRig>[0]> = {}) {
     const rig = await assistantRig({ reply: item.reply, ...item.options, ...options });
     const message = item.words !== undefined && item.words > 100 ? Array.from({ length: item.words }, () => CANARY).join(' ') : `Show ${CANARY} W-1`;
-    const answer = await rig.post({ ...rig.body, message, viewElementKeys: ['key-canary-9'] });
+    const answer = await rig.post({ ...rig.body, message, viewElementKeys: [CANARY_KEY] });
     return { rig, answer };
   }
   const readyz = async (rig: Awaited<ReturnType<typeof assistantRig>>) => (await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json();

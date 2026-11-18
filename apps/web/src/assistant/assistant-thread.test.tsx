@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { heavyRun, okRun } from '../patterns/patterns-kit.js';
 import { node as testNode, key as testKey } from '../state/test-data.js';
@@ -396,11 +396,12 @@ describe('the Assistant thread: what a review asked for', () => {
     expect(screen.queryByText(/Ask and Summarize/)).toBeNull();
   });
 
-  it('does not claim a citation check in the not-answered note of the view route', async () => {
+  it('shows the fixed sentence of the not-answered turn of the view route and no note that answers from the view are missing', async () => {
     const h = harness(async () => ok(VIEW));
     render(h.tree());
     await typeAndSend('what?');
-    expect(await screen.findByText(ASSISTANT_COPY.notAnsweredNote)).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeTruthy();
+    expect(screen.queryByText(/not available in this release/)).toBeNull();
     expect(screen.queryByText(/tied to an element/)).toBeNull();
   });
 });

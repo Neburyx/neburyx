@@ -51,4 +51,19 @@ describe('the reader of the elements of a view', () => {
     const read = createElementsReader({ shownReader: reader(() => Promise.reject(new RequestCancelled())), investigations: investigations(), access: access(), principal, traceId: 't', signal: controller.signal });
     await expect(read(scope, refs)).rejects.toBeInstanceOf(RequestCancelled);
   });
+
+  it('gives the shown reader a signal that aborts with the signal of the scope as well as with the request', async () => {
+    const seen: AbortSignal[] = [];
+    const shownReader = reader(async (call) => (call.signal === undefined ? undefined : seen.push(call.signal), { nodes: [], edges: [], omitted: false, unresolved: false, unresolvedCount: 0, maskedFields: 0, notRetrieved: EXACT, uncounted: 0 }));
+    const own = new AbortController();
+    const turn = new AbortController();
+    const read = createElementsReader({ shownReader, investigations: investigations(), access: access(), principal, traceId: 't', signal: own.signal });
+    await read({ ...scope, signal: turn.signal }, refs);
+    await read(scope, refs);
+    expect(seen.map((signal) => signal.aborted)).toEqual([false, false]);
+    turn.abort();
+    expect(seen.map((signal) => signal.aborted)).toEqual([true, false]);
+    own.abort();
+    expect(seen.map((signal) => signal.aborted)).toEqual([true, true]);
+  });
 });

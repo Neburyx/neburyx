@@ -183,6 +183,8 @@ export { fileQueryResultSchema } from './file-query.js';
 export type { FileQueryResult } from './file-query.js';
 export { bindQueryIntent, bindTemplateIntent, checkTemplateSettings, placeholderNames } from './ask-bind.js';
 export type { AskTemplateId, BindResult } from './ask-bind.js';
+export { readViewKeys } from './view-keys.js';
+export type { ReadViewKeys } from './view-keys.js';
 export { readAssistantRoute } from './assistant-route.js';
 export type { AssistantRouterReply, ReadAssistantRoute } from './assistant-route.js';
 export { ASSISTANT_CONTINUE_INVALID_SENTENCE, ASSISTANT_FAILURE_KINDS, ASSISTANT_TOO_LARGE_SENTENCE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_VIEW_KEYS_MAX, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';

@@ -216,8 +216,12 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_THREAD_RETENTION` (when a thread is cleared) | `close` | `close` is the only value: a thread is cleared when its investigation is closed, archived or deleted; any other value stops the start |
 | `NEBURYX_ASSISTANT_THREAD_READ_TURNS` (how many of the newest turns of a thread one read gives; nothing stored is trimmed) | 100 | 500 |
 | `NEBURYX_ASSISTANT_PROMPT_FILE` | the file shipped with the product | |
+| `NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` | `assistant-view.md`, shipped with the product | |
+| `NEBURYX_ASSISTANT_TYPOLOGY_FILE` | `aml-typologies.md`, shipped with the product | |
 
 `NEBURYX_ASSISTANT_PROMPT_FILE` names an absolute path to a file that replaces the router's instructions (at most as large as a classification file of the Ask folder). The reply format is added by the product after the file's text and cannot be changed by it, and the hash of the instructions used is kept with them. No setting raises a limit or budget of a source.
+
+`NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` and `NEBURYX_ASSISTANT_TYPOLOGY_FILE` do the same for the instructions of the answer from the view: each names an absolute path to a file that replaces the shipped prompt or the shipped typology text, within the same size limit, and the reply format is added after both and is fixed. A relative path, a missing, unreadable or oversized file stops the start and names the setting, never the path or the text. The answer from the view needs no setting or file of the case summary.
 
 ### What a turn stores
 
@@ -240,7 +244,7 @@ The thread's writes are queued like the model-call records, off the request path
 `POST /v1/assistant/turns` takes a message (`{ sourceId, investigationId, message, viewElementKeys, mask? }`) or the continue of a heavy stop (`continue: { intent, entities, continueToken }` in place of `message`), never both; `viewElementKeys` names at most 300 elements of the view, never their content. The server checks that the investigation is the caller's and belongs to the source before any model call, refuses a message over `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` words, and makes one audited call of the router, whose reply must be exactly one fixed form. The answer is one of:
 
 - a refusal with a cause (`verdict`, `raw-query`, `other-source`, `unplaced`) and a fixed sentence the server chooses, never a word of the model; a reply that is not a route is `unplaced` and nothing is run;
-- `not-answered` for the view route, until the cited answer from the view is built;
+- `answered` on the `view` route: sentences that each cite the elements of the view they rest on (`sentences`, `citations`, the model and the number of calls), written from the elements the server read again through the gate (never from content the browser sent) and kept only when every check passes; `not-answered` when no sentence survives or the view holds nothing readable;
 - `answered` on the `ask` route: the same answer `POST /v1/ask` gives for an intent of the source's Ask folder (a result with its cited summary and sources, a heavy stop with its token, or one of Ask's refusals), plus, for a result that was read, a `step` (the intent, the number of elements it lists, whether it is complete) and a `coverage` line the server writes (how much is shown, how much is not yet retrieved, with the quality of the count);
 - `unavailable` when the model's service or the source fails (`kind`, and whether a read had started); `too-large` when the message and the view are over `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS`; `too-long` over the word limit; `continue-invalid` for a continue whose token is expired, altered, another person's, another investigation's or for a changed intent, entities, masking or definition.
 

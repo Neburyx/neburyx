@@ -151,6 +151,7 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause };
+      if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
       if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
       return {
         route: 'ask',
@@ -163,7 +164,7 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
       if (notes.answered === true) return { route: 'view', outcome: 'answered', result: 'success', ...(notes.citedElements === undefined ? {} : { citedElements: notes.citedElements }) };
       return { route: 'view', outcome: 'refused', result: 'refused', cause: notes.cause ?? 'not-answered' };
     case 'unavailable':
-      return { ...(answer.readStarted ? { route: 'ask' as const } : {}), outcome: 'failed', result: 'failed', failureKind: answer.kind };
+      return { ...(notes.route === 'view' ? { route: 'view' as const } : answer.readStarted ? { route: 'ask' as const } : {}), outcome: 'failed', result: 'failed', failureKind: answer.kind };
     case 'too-large':
       return { outcome: 'refused', result: 'refused', cause: 'too-large' };
     case 'too-long':

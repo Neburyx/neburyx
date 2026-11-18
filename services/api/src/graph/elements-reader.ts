@@ -40,7 +40,7 @@ export function createElementsReader(deps: ElementsReaderDeps): (scope: Elements
   return async (scope, refs) => {
     await investigationOf(deps.investigations, deps.principal, scope.investigationId, scope.sourceId);
     await deps.access.require({ traceId: deps.traceId, principal: deps.principal, sourceId: scope.sourceId, auditAction: SUMMARY_READ_AUDIT_ACTION, rate: 'count' });
-    const read = await deps.shownReader.read({ traceId: deps.traceId, principal: deps.principal, sourceId: scope.sourceId, mask: scope.mask, signal: deps.signal, entities: refs.entities, edges: refs.edges, aggregates: refs.aggregates, derived: refs.derived });
+    const read = await deps.shownReader.read({ traceId: deps.traceId, principal: deps.principal, sourceId: scope.sourceId, mask: scope.mask, signal: scope.signal === undefined ? deps.signal : AbortSignal.any([deps.signal, scope.signal]), entities: refs.entities, edges: refs.edges, aggregates: refs.aggregates, derived: refs.derived });
     return { nodes: [...read.nodes], edges: [...read.edges], unresolved: read.unresolvedCount, omitted: read.omitted, notRetrieved: read.notRetrieved, uncounted: read.uncounted };
   };
 }

@@ -1,11 +1,10 @@
 import { renderForExport } from './export-render.js';
 import { createHash, randomUUID } from 'node:crypto';
 import type { AuditResult, AuditSink, CaseSummarizer, CaseSummaryAuditDetail, CaseSummaryInput, CaseSummaryOutcome, SummarySentence } from '@neburyx/contracts';
-import { AuditUnavailableError, JUDGE_MODULE, createCheckRunner, parseJudged, type AuditedModelCall, type CheckedText, type CheckRunner, type HeavyCheck, type JudgeInput, type Judged } from '@neburyx/ee-ai-runtime';
+import { AuditUnavailableError, createCheckRunner, type AuditedModelCall, type CheckRunner, type Judged } from '@neburyx/ee-ai-runtime';
 import { canonicalText } from '../questions/canonical.js';
-import type { AssembledText } from './assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from './coverage.js';
-import { judgeSentences } from './checks.js';
+import { checkedTextOf, judgeCheck } from './judge.js';
 import { draftSummary, type Checked } from './draft.js';
 import type { SummaryInstructions } from './instructions.js';
 import { storableMarkOf, templatesOf } from './notes-convert.js';
@@ -20,11 +19,6 @@ const SUMMARY_AUDIT_ACTION = 'ai.case-summary';
 
 /** The action of the closing event of a click: the one event that says how it ended, beside the event of each model call. */
 export const SUMMARY_CLOSING_ACTION = 'ai.case-summary.closed';
-
-const judgeCheck: HeavyCheck<JudgeInput, Judged> = { name: 'judge-sentences', inline: (input) => judgeSentences(input.sentences, input.text), module: JUDGE_MODULE, parse: parseJudged };
-
-/** What the checks read of the text, without the references each key stands for, which a worker thread would have to copy. */
-const checkedTextOf = (assembled: AssembledText): CheckedText => ({ text: assembled.text, keys: new Map([...assembled.keys.keys()].map((key) => [key, true] as const)), lines: assembled.lines, inexactCounts: assembled.inexactCounts, unknownCountKeys: assembled.unknownCountKeys });
 
 const PROMPT_ID = 'case-summary';
 const PROMPT_VERSION = '1';
@@ -202,6 +196,8 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         });
         if (drafted.status === 'timeLimit') return record({ status: 'timeLimit', calls: drafted.calls }, drafted.checked);
         if (drafted.status === 'failed') return record({ status: 'failed', kind: drafted.kind, calls: drafted.calls }, drafted.checked);
+        // the summary sets no limit on a submission here (its size is guarded before the first call), so the drafter cannot stop it for size
+        if (drafted.status === 'tooLarge') throw new Error('the draft of a summary was stopped for size');
         const coverage = { retrieval: retrievalLine(input.reading), summary: summaryLine(drafted.sentences, input.reading) };
         const checked = { kept: drafted.sentences.length, removed: drafted.removed };
         if (drafted.sentences.length === 0) return record({ status: 'unsupported', removedCount: drafted.removed, coverage, sent: prepared.assembled.text, model: settings.model, calls: drafted.calls }, checked);

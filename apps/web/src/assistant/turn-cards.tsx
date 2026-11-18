@@ -6,6 +6,7 @@ import { isAssistantOff } from './failure-kinds.js';
 import { rateLimitedSentence } from '../patterns/failure-words.js';
 import { ASSISTANT_COPY, unavailableSentence } from './copy.js';
 import type { Failure, Step, Turn } from './assistant-session.js';
+import { ViewAnswerCard } from './view-answer-card.js';
 
 export interface TurnActions {
   readonly sourceId: string;
@@ -147,7 +148,6 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
             {ASSISTANT_COPY.notAnswered}
           </h3>
           <p>{outcome.sentence}</p>
-          <p className="ask-note">{ASSISTANT_COPY.notAnsweredNote}</p>
         </section>
       );
     case 'answered':
@@ -158,6 +158,8 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <StepsAndCoverage step={outcome.step} coverage={outcome.coverage} />
         </>
       );
+    case 'view-answer':
+      return <ViewAnswerCard answer={outcome.answer} entries={outcome.entries} />;
     case 'ask-refused':
       return (
         <>

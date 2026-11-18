@@ -2,8 +2,8 @@ import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, type AskPatternOffer, type AskRun, type AskRunResult, type AuditEvent, type AuditSink, type ExtensionRequest, type ExtensionRoute, type RecordQueue } from '@neburyx/contracts';
-import { createAuditedModelCall } from '@neburyx/ee-ai-runtime';
-import { createFixtureProvider, replyKey, type FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
+import { createAuditedModelCall, createCheckRunner, type CheckRunner, type ModelProvider } from '@neburyx/ee-ai-runtime';
+import { createFixtureProvider, replyKey, type FixtureReply, type FixtureReplies } from '../../../ai-runtime/src/testing/fixture.js';
 import { loadAskFolder } from '../folder/load.js';
 import { buildAssistantInstructions } from '../assistant/instructions.js';
 import { ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION, createAssistantRouter } from '../assistant/router.js';
@@ -11,6 +11,8 @@ import { createAssistantTurnRoute } from '../assistant/turn-route.js';
 import type { AssistantRunStore } from '../assistant/run-store.js';
 import type { AssistantThreadStore } from '../assistant/thread-store.js';
 import { readAssistantSettings } from '../assistant/settings.js';
+import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
+import { buildSummaryInstructions } from '../case-summary/instructions.js';
 import { makeAskFolder } from './ask-folder.js';
 import { UNAVAILABLE_SUMMARIZER } from './case-summarizer.js';
 
@@ -19,12 +21,14 @@ const NOW = 1_800_000_000_000;
 const CLASSIFICATION = 'Choose the intent that answers the question. SENTINEL-CLASSIFICATION';
 const PROMPT = 'You route messages. SENTINEL-PROMPT';
 export const MESSAGE = 'Which accounts share a device with SENTINEL-MESSAGE?';
+export const VIEW_KEYS = [JSON.stringify(['node', SOURCE, 'widget', 'A-1']), JSON.stringify(['node', SOURCE, 'widget', 'A-2'])];
 export const BODY = { sourceId: SOURCE, investigationId: 'inv-1', message: MESSAGE, viewElementKeys: ['n1', 'n2'] };
+export const VIEW_BODY = { ...BODY, viewElementKeys: VIEW_KEYS };
 export const sign = (text: string): string => createHmac('sha256', 'a-test-key').update(text).digest('hex');
 export const ok = (text: string): FixtureReply => ({ kind: 'ok', text, usage: { kind: 'known', inputTokens: 20, outputTokens: 10 } });
 export const routeAsk = (intent: string, entities: Record<string, string>): FixtureReply => ok(JSON.stringify({ route: 'ask', intent, entities }));
 
-const node = (stableId: string) => ({ ref: { sourceId: SOURCE, entityType: 'widget', stableId }, display: { title: `Account ${stableId}`, type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+const node = (stableId: string, title = `Account ${stableId}`) => ({ ref: { sourceId: SOURCE, entityType: 'widget', stableId }, display: { title, type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
 export const okResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: 1, scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
 export const heavyResult = (): AskRunResult =>
@@ -45,6 +49,10 @@ export interface RigOptions {
   readonly readable?: 'source' | 'investigation' | 'both';
   readonly maxInputTokens?: number;
   readonly maxMessageWords?: number;
+  readonly maxCalls?: number;
+  /** The limit of the view answer alone; the router keeps its own. */
+  readonly viewMaxInputTokens?: number;
+  readonly totalTimeoutMs?: number;
   readonly patterns?: readonly AskPatternOffer[];
   readonly noFolder?: boolean;
   readonly intents?: unknown;
@@ -58,12 +66,31 @@ export interface RigOptions {
   /** The environment the assistant's settings are read from for the run record. */
   readonly settingsEnv?: Record<string, string>;
   readonly logs?: { readonly fields: Record<string, unknown>; readonly message: string }[];
+  /** The reply of the model to the view answer; its presence turns the view answer on, over the two elements `VIEW_KEYS` name. */
+  readonly view?: FixtureReplies[string];
+  readonly viewReadThrows?: Error;
+  /** The read of the elements never settles, as a source that does not answer. */
+  readonly viewReadHangs?: true;
+  /** The title of the first element of the view. */
+  readonly viewTitle?: string;
+  readonly checks?: CheckRunner;
+  /** Stands in for the model's service on the answer call, to throw or to wait for an abort. */
+  /** Called when the read of the elements begins. */
+  readonly onViewRead?: () => void;
+  readonly viewProvider?: ModelProvider['complete'];
+  /** The elements the stand-in of the gate reads for the view; two exportable ones when absent. */
+  readonly viewNodes?: readonly ReturnType<typeof node>[];
 }
 
 export interface Rig {
   readonly route: ExtensionRoute;
   readonly events: AuditEvent[];
   readonly reads: string[];
+  /** Ends the time of every turn at once. */
+  expire(): void;
+  /** The view answer alone, when `view` is given. */
+  readonly view: ReturnType<typeof createViewAnswer> | undefined;
+  readonly elementReads: { refs: unknown; mask: boolean; signal: AbortSignal | undefined }[];
   readonly runs: { asked: unknown; options: unknown; mask: boolean }[];
   readonly fixture: ReturnType<typeof createFixtureProvider>;
   readonly instructions: ReturnType<typeof buildAssistantInstructions>;
@@ -79,14 +106,19 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const events: AuditEvent[] = [];
   const reads: string[] = [];
   const runs: Rig['runs'] = [];
+  const elementReads: Rig['elementReads'] = [];
   const clock = { now: NOW };
   const sink: AuditSink = { record: (event) => (options.sink === 'fails' ? Promise.reject(new Error('down')) : (events.push(event), Promise.resolve())) };
-  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}') } });
-  const model = createAuditedModelCall({ provider: fixture, configuration: { model: 'configured-model' }, sink });
+  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view }) } });
+  const provider: ModelProvider = options.viewProvider === undefined ? fixture : { complete: (request, signal) => (request.promptId === VIEW_PROMPT_ID && options.viewProvider !== undefined ? options.viewProvider(request, signal) : fixture.complete(request, signal)) };
+  const model = createAuditedModelCall({ provider, configuration: { model: 'configured-model' }, sink });
+  const expiry = new AbortController();
   const instructions = buildAssistantInstructions(PROMPT);
   const router = createAssistantRouter({ model, folder: () => folder, instructions: () => instructions, maxInputTokens: () => options.maxInputTokens ?? 25_000 });
+  const viewInstructions = buildSummaryInstructions('You answer from the view. SENTINEL-VIEW-PROMPT', 'SENTINEL-TYPOLOGY');
+  const viewAnswer = options.view === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});
-  const route = createAssistantTurnRoute({ ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const route = createAssistantTurnRoute({ totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',
@@ -111,6 +143,13 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
           askPatterns: async () => ({ offers: options.patterns ?? [], cut: false }),
           askPatternFind: async (_sourceId: string, id: string) => options.patterns?.find((offer) => offer.id === id),
         }),
+    readElements: async (scope, refs) => {
+      elementReads.push({ refs, mask: scope.mask, signal: scope.signal });
+      options.onViewRead?.();
+      if (options.viewReadThrows !== undefined) throw options.viewReadThrows;
+      if (options.viewReadHangs === true) return new Promise<never>(() => undefined);
+      return { nodes: [...(options.viewNodes ?? [node('A-1', options.viewTitle), node('A-2')])], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
+    },
     askRunner: (scope) => ({
       run: async (asked, runOptions) => {
         runs.push({ asked, options: runOptions, mask: scope.mask });
@@ -121,7 +160,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
     body,
     ...over,
   });
-  return { route, events, reads, runs, fixture, instructions, clock, request };
+  return { route, expire: () => expiry.abort(), view: viewAnswer, events, reads, elementReads, runs, fixture, instructions, clock, request };
 }
 
 export const answerOf = async (promise: Promise<unknown>) => assistantTurnAnswerSchema.parse(await promise);

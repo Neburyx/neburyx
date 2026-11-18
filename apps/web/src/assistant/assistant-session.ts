@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
-import type { AssistantFailureKind, AssistantRefusalCause, AskAnswer } from '@neburyx/contracts';
+import type { AssistantFailureKind, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
+import type { CitationEntry } from '../summary/summary-model.js';
 import type { ApiFailure } from '../api/client.js';
 import type { AddedOutcome } from '../patterns/add-to-graph.js';
 import type { Answered, Refused } from '../ask/ask-session.js';
@@ -16,6 +17,8 @@ export type Failure =
   | { readonly kind: 'request'; readonly failure: ApiFailure; readonly until: number | undefined }
   | { readonly kind: 'continue-invalid' };
 
+export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; route: 'view' }>;
+
 export type Outcome =
   | { readonly kind: 'pending'; readonly call: 'message' }
   | { readonly kind: 'pending'; readonly call: 'continue'; readonly heavy: Answered; readonly token: string }
@@ -23,6 +26,7 @@ export type Outcome =
   | { readonly kind: 'refuse'; readonly cause: AssistantRefusalCause; readonly sentence: string }
   | { readonly kind: 'not-answered'; readonly sentence: string }
   | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly step: Step | undefined; readonly coverage: string | undefined }
+  | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[] }
   | { readonly kind: 'ask-refused'; readonly refused: Refused }
   | { readonly kind: 'heavy'; readonly answer: Answered; readonly token: string }
   | { readonly kind: 'failed'; readonly failure: Failure; readonly retry: Retry };

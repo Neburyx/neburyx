@@ -19,14 +19,15 @@ interface LoadOptions {
   readonly env?: Readonly<Record<string, string | undefined>>;
 }
 
-type TextRead = { readonly text: string } | string;
+export type TextRead = { readonly text: string } | string;
 
-async function textOf(env: LoadOptions['env'], setting: string, shippedPath: string, shippedLabel: string): Promise<TextRead> {
+/** One instruction text from the file the operator names or else the shipped one; an empty prompt file is refused. */
+export async function textOf(env: LoadOptions['env'], setting: string, shippedPath: string, shippedLabel: string, isPrompt: boolean = setting === PROMPT_SETTING): Promise<TextRead> {
   const replacement = env?.[setting];
   if (replacement === undefined || replacement === '') return readText(shippedPath, shippedLabel, ASK_FOLDER_LIMITS.classificationBytes);
   if (!replacement.startsWith('/')) return `${setting} must be an absolute path`;
   const read = await readText(replacement, setting, ASK_FOLDER_LIMITS.classificationBytes);
-  if (setting === PROMPT_SETTING && typeof read !== 'string' && read.text.trim() === '') return `${setting}: the file is empty; the prompt carries the rules the model must follow`;
+  if (isPrompt && typeof read !== 'string' && read.text.trim() === '') return `${setting}: the file is empty; the prompt carries the rules the model must follow`;
   return read;
 }
 

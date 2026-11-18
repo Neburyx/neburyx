@@ -63,6 +63,8 @@ export interface ElementsScope {
   readonly investigationId: string;
   readonly sourceId: string;
   readonly mask: boolean;
+  /** Ends the read when it aborts, besides the request's own signal; the read never outlives it. */
+  readonly signal?: AbortSignal;
 }
 
 /** The references of the elements of a view, of the four kinds a read by references takes, in any number. */

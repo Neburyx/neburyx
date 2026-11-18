@@ -235,4 +235,37 @@ test.describe('the Assistant panel', () => {
     }
     expect(await hint.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
+
+
+  for (const width of [1440, 1280]) {
+    test(`shows an answer from the view at ${width} pixels with its tags, markers, sources and the two lines of coverage, and selects the cited element`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+      const answer: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'view',
+        sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }],
+        citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+        coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
+        model: 'claude-sonnet-5-5',
+        calls: 2,
+      };
+      const sent = await answerWith(page, answer);
+      await open(page);
+      await page.getByLabel('Your message').fill('what is in view?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByText('AI-drafted')).toBeVisible();
+      await expect(panel(page).getByText('Model: claude-sonnet-5-5')).toBeVisible();
+      await expect(panel(page).getByText('Account AC-1 is in view.')).toBeVisible();
+      await expect(panel(page).getByText('Sources · 1')).toBeVisible();
+      await expect(panel(page).getByText('1 shown · 0 not yet retrieved (exact)')).toBeVisible();
+      await expect(panel(page).getByText('The draft cites 1 of the 1 shown elements.')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Answer from the view' })).toBeFocused();
+      await panel(page).getByRole('button', { name: /^Citation 1, / }).first().click();
+      expect(sent[0]?.viewElementKeys.length).toBeGreaterThan(0);
+      await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
+  }
 });

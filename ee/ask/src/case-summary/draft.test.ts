@@ -32,7 +32,7 @@ const run = (call: ReturnType<typeof scripted>['call'], extra: Partial<Parameter
 describe('the drafting loop', () => {
   it('returns the sentences of a reply that fits, in one call', async () => {
     const { call, requests } = scripted([ok(GOOD)]);
-    expect(await run(call)).toEqual({ status: 'drafted', sentences: [{ text: 'Two accounts share a device.', cites: ['n1', 'n2'] }], removed: 0, calls: 1 });
+    expect(await run(call)).toMatchObject({ status: 'drafted', sentences: [{ text: 'Two accounts share a device.', cites: ['n1', 'n2'] }], removed: 0, calls: 1, verdictFound: false });
     expect(requests).toEqual([{ promptId: 'case-summary', version: 1, instructions: 'INSTRUCTIONS', values: 'VALUES' }]);
   });
 
