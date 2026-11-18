@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openInvestigationResponseSchema, type CaseSummarizer, type ProfileExtension } from '@neburyx/contracts';
+import { openInvestigationResponseSchema, type AuditCounts, type CaseSummarizer, type ProfileExtension } from '@neburyx/contracts';
 import { stringify } from 'yaml';
 import { buildApp } from '../app.js';
 import { createExportFileStore } from '../exports/store.js';
@@ -61,6 +61,8 @@ export interface ExportRigOptions {
   readonly directAudit?: boolean;
   /** The application's audit member, for a test that builds the queue over its own store; takes the place of the queue the rig builds. */
   readonly auditMember?: AuditSink;
+  /** What `GET /readyz` counts of the queues the test builds itself. */
+  readonly auditCounts?: () => AuditCounts;
   readonly answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
   /** The stored file queries of an Ask folder, so the gate runs them. */
   readonly fileQueries?: FileQueryDeps;
@@ -156,6 +158,7 @@ export async function startExportRig(options: ExportRigOptions = {}) {
     exportFiles: files,
     ...(options.extension === undefined ? {} : { extension: options.extension, previewOn: options.previewOn ?? true }),
     ...(options.policyVersion === undefined ? {} : { policyVersion: options.policyVersion }),
+    ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }),
   });
   await store.syncSources(mapping.sources);
 

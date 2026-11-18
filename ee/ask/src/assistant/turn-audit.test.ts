@@ -12,6 +12,7 @@ afterAll(removeAskFolders);
 
 const SHARED = routeAsk('shared', { id: 'A-1' });
 const SHA = /^[0-9a-f]{64}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const PLACEHOLDER = { status: 'not-answered', route: 'view', sentence: 'placeholder' } as const satisfies AssistantTurnAnswer;
 
 const closing = (events: Rig['events']): AuditEvent[] => events.filter((event) => event.action === TURN_CLOSED_ACTION);
@@ -179,13 +180,13 @@ describe('the closing event of the other outcomes', () => {
   it('closes an over-long message, a message too large and a bad continue as refused with no model call and no router event', async () => {
     const long = await rig({ maxMessageWords: 2 });
     await run(long, { ...BODY, message: 'one two three' });
-    expect(turnOf(long.events).turn).toEqual({ outcome: 'refused', cause: 'too-long', steps: 0, modelCalls: 0 });
+    expect(turnOf(long.events).turn).toEqual({ outcome: 'refused', cause: 'too-long', steps: 0, modelCalls: 0, runId: expect.stringMatching(UUID) });
     const large = await rig({ maxInputTokens: 10 });
     await run(large);
-    expect(turnOf(large.events).turn).toEqual({ outcome: 'refused', cause: 'too-large', steps: 0, modelCalls: 0 });
+    expect(turnOf(large.events).turn).toEqual({ outcome: 'refused', cause: 'too-large', steps: 0, modelCalls: 0, runId: expect.stringMatching(UUID) });
     const bad = await rig();
     await run(bad, { sourceId: 'demo', investigationId: 'inv-1', viewElementKeys: [], continue: { intent: 'shared', entities: { id: 'A-1' }, continueToken: `1.${'a'.repeat(64)}` } });
-    expect(turnOf(bad.events).turn).toEqual({ outcome: 'refused', cause: 'continue-invalid', steps: 0, modelCalls: 0 });
+    expect(turnOf(bad.events).turn).toEqual({ outcome: 'refused', cause: 'continue-invalid', steps: 0, modelCalls: 0, runId: expect.stringMatching(UUID) });
     for (const r of [long, large, bad]) expect(r.events.filter((event) => event.action === ROUTER_AUDIT_ACTION)).toHaveLength(0);
   });
 
@@ -195,7 +196,7 @@ describe('the closing event of the other outcomes', () => {
     expect(turnOf(r.events).turn).toMatchObject({ route: 'view', outcome: 'refused', cause: 'not-answered' });
     const accepted = await rig();
     const wrapped = withTurnAudit(
-      () => undefined,
+      { logger: () => undefined },
       async () => {
         noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         noteTurn({ route: 'view', answered: true, citedElements: 3 });
@@ -358,7 +359,7 @@ describe('turns that overlap', () => {
     noteTurnStarted({ sourceId: 'leaked', investigationId: 'leaked' });
     const next = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}') });
     await run(next);
-    expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '1', instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10 });
+    expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '1', instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10, runId: expect.stringMatching(UUID) });
     expect(closing(next.events)[0]).toMatchObject({ sourceId: 'demo', investigationId: 'inv-1' });
     expect(closing(r.events)).toHaveLength(1);
   });
@@ -374,7 +375,7 @@ describe('the closing event that cannot be built or written', () => {
       },
     });
     const wrapped = withTurnAudit(
-      () => ({ warn: (fields) => void logs.push(fields) }),
+      { logger: () => ({ warn: (fields) => void logs.push(fields) }) },
       async () => {
         noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         return broken;
@@ -391,7 +392,7 @@ describe('the closing event that cannot be built or written', () => {
     const failed: AuditEvent[] = [];
     const logs: Record<string, unknown>[] = [];
     const wrapped = withTurnAudit(
-      () => ({ warn: (fields) => void logs.push(fields) }),
+      { logger: () => ({ warn: (fields) => void logs.push(fields) }) },
       async () => {
         noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         noteTurn({ route: 'view', cause: 'a sentence that is text, not a code' });
@@ -407,7 +408,7 @@ describe('the closing event that cannot be built or written', () => {
     const r = await rig();
     const logs: Record<string, unknown>[] = [];
     const wrapped = withTurnAudit(
-      () => ({ warn: (fields) => void logs.push(fields) }),
+      { logger: () => ({ warn: (fields) => void logs.push(fields) }) },
       async () => {
         noteTurnStarted({ sourceId: 'demo', investigationId: 'inv-1' });
         noteTurn({ route: 'view', cause: 'a sentence that is text, not a code' });

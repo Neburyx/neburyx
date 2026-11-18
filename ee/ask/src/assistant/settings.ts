@@ -12,6 +12,7 @@ export const ASSISTANT_VARIABLES = {
   maxMessageWords: 'NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS',
   maxInputTokens: 'NEBURYX_ASSISTANT_MAX_INPUT_TOKENS',
   maxOutputTokens: 'NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS',
+  runRetentionDays: 'NEBURYX_ASSISTANT_RUN_RETENTION_DAYS',
 } as const;
 
 /** Defaults and ceilings are hypotheses to be measured, except the timeout of a call, the calls, the words of a message and the turns of context, which are given. */
@@ -25,6 +26,7 @@ const DEFAULTS = {
   maxMessageWords: 1000,
   maxInputTokens: SUMMARY_DEFAULTS.maxInputTokens,
   maxOutputTokens: SUMMARY_DEFAULTS.maxOutputTokens,
+  runRetentionDays: SUMMARY_DEFAULTS.retentionDays,
 } as const;
 
 const RANGES = {
@@ -54,12 +56,25 @@ export interface AssistantSettings {
   readonly maxMessageWords: number;
   readonly maxInputTokens: number;
   readonly maxOutputTokens: number;
+  /** How many days the stored records of the turns' model calls are kept. */
+  readonly runRetentionDays: number;
 }
 
 export type AssistantSettingsRead = { readonly ok: true; readonly settings: AssistantSettings } | { readonly ok: false; readonly problems: readonly string[] };
 
 function wholeNumber(env: Env, name: string, range: { readonly min: number; readonly max: number }, fallback: number, problems: string[]): number {
   return integerChoice(env, name, range, fallback, problems);
+}
+
+function positiveWholeNumber(env: Env, name: string, fallback: number, problems: string[]): number {
+  const value = given(env, name);
+  if (value === undefined) return fallback;
+  const parsed = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    problems.push(`${name} must be a positive whole number`);
+    return fallback;
+  }
+  return parsed;
 }
 
 /** Reads the assistant's settings from the environment; a problem names the variable and the accepted range, never the value. The result is frozen. */
@@ -74,12 +89,13 @@ export function readAssistantSettings(env: Env): AssistantSettingsRead {
   const maxMessageWords = wholeNumber(env, ASSISTANT_VARIABLES.maxMessageWords, RANGES.maxMessageWords, DEFAULTS.maxMessageWords, problems);
   const maxInputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxInputTokens, RANGES.maxInputTokens, DEFAULTS.maxInputTokens, problems);
   const maxOutputTokens = wholeNumber(env, ASSISTANT_VARIABLES.maxOutputTokens, RANGES.maxOutputTokens, DEFAULTS.maxOutputTokens, problems);
+  const runRetentionDays = positiveWholeNumber(env, ASSISTANT_VARIABLES.runRetentionDays, DEFAULTS.runRetentionDays, problems);
   const rows = given(env, ASSISTANT_VARIABLES.maxRows);
   const maxRows = rows === undefined ? undefined : /^\d+$/.test(rows) && Number(rows) >= 1 && Number.isSafeInteger(Number(rows)) ? Number(rows) : undefined;
   if (rows !== undefined && maxRows === undefined) problems.push(`${ASSISTANT_VARIABLES.maxRows} must be a positive whole number`);
   if (timeoutMs > totalTimeoutMs) problems.push(`${ASSISTANT_VARIABLES.timeoutMs} must not be above ${ASSISTANT_VARIABLES.totalTimeoutMs}`);
   if (problems.length > 0) return { ok: false, problems };
-  return { ok: true, settings: Object.freeze({ model, timeoutMs, totalTimeoutMs, maxCalls, maxSteps, ...(maxRows === undefined ? {} : { maxRows }), contextTurns, maxMessageWords, maxInputTokens, maxOutputTokens }) };
+  return { ok: true, settings: Object.freeze({ model, timeoutMs, totalTimeoutMs, maxCalls, maxSteps, ...(maxRows === undefined ? {} : { maxRows }), contextTurns, maxMessageWords, maxInputTokens, maxOutputTokens, runRetentionDays }) };
 }
 
 /** The rows a turn may read from a source: the source's own page limit times the steps, or less when the operator set a lower figure. */

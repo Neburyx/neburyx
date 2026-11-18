@@ -34,7 +34,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
 import { summarizeRun } from './run-summary.js';
-import { noteRun } from '../assistant/turn-audit.js';
+import { currentRunId, noteRun } from '../assistant/turn-audit.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
 import { canonicalText } from './canonical.js';
 import { issueContinueToken, verifyContinueToken } from './continue-token.js';
@@ -80,6 +80,7 @@ export const definitionOf = (found: AskIntent): string =>
 const causeOfCode = (code: string): NonNullable<AskRunAuditDetail['cause']> => code.toLowerCase().replace(/_/g, '-') as NonNullable<AskRunAuditDetail['cause']>;
 
 export async function writeEvent(request: ExtensionRequest, action: string, result: AuditResult, sourceId: string | undefined, detail: AskRunAuditDetail): Promise<void> {
+  const runId = currentRunId();
   const event: AuditEvent = {
     actorId: request.principalId,
     actorRole: request.principalRole,
@@ -88,7 +89,7 @@ export async function writeEvent(request: ExtensionRequest, action: string, resu
     ...(sourceId === undefined ? {} : { sourceId }),
     traceId: request.traceId,
     ...(detail.intent === undefined ? {} : { resourceType: 'ask-intent', resourceRef: detail.intent }),
-    detail: { askRun: detail },
+    detail: { askRun: { ...detail, ...(runId === undefined ? {} : { runId }) } },
   };
   // the application queues the event and counts and logs its own failures; a failure here does not withhold the answer
   await request.audit.record(event).catch(() => undefined);

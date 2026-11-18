@@ -10,6 +10,8 @@ import { queuedRunStore } from './questions/queued-run-store.js';
 import type { RunStore } from './questions/run-store.js';
 import { queuedSummaryRunStore } from './case-summary/queued-run-store.js';
 import { createPgSummaryRunStore, type SummaryRunStore } from './case-summary/run-store.js';
+import { queuedAssistantRunStore } from './assistant/queued-run-store.js';
+import { createPgAssistantRunStore, type AssistantRunStore } from './assistant/run-store.js';
 import { createCaseSummarizer } from './case-summary/summarizer.js';
 import { summaryProviderConfiguration } from './case-summary/provider-configuration.js';
 import { readTokenKeys } from './case-summary/token-keys.js';
@@ -43,6 +45,8 @@ export { ROUTE_REFUSED_ACTION, guardAiRouteGroup } from './route-guard.js';
 export { createCaseSummarizer } from './case-summary/summarizer.js';
 /** @public Test hooks: the services/api tests build a case summarizer with the in-memory store, and the integration test runs the real store on a Postgres. */
 export { createMemorySummaryRunStore, createPgSummaryRunStore } from './case-summary/run-store.js';
+/** @public Test hooks, as for the summary: the services/api tests build the assistant with the in-memory store, and the integration test runs the real store on a Postgres. */
+export { createMemoryAssistantRunStore, createPgAssistantRunStore } from './assistant/run-store.js';
 /** @public The instructions of that test. */
 export { buildSummaryInstructions } from './case-summary/instructions.js';
 /** @public Opens a summary token for the copy to notes and the export that follow, and for the tests of the token. */
@@ -96,6 +100,8 @@ interface EnterpriseExtensionOptions {
   readonly now?: () => number;
   /** Only a test sets this, to a store that opens no connection; the record of the case summary otherwise uses a pool of its own. */
   readonly summaryRunStore?: (context: AuditSinkContext) => SummaryRunStore;
+  /** Only a test sets this: the store of the assistant turns' records. */
+  readonly assistantRunStore?: (context: AuditSinkContext) => AssistantRunStore;
   /** Only a test sets this: how often the removal of old records runs, in milliseconds. */
   readonly retentionIntervalMs?: number;
   /** Only a test sets this, to a folder that stands in for the summary files shipped with the product. */
@@ -126,6 +132,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let assistantInstructions: AssistantInstructions | undefined;
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
+  let assistantRuns: AssistantRunStore | undefined;
   let retentionTimer: ReturnType<typeof setInterval> | undefined;
   let runs: RunStore | undefined;
   const reportFailure = createFailureReporter(() => logger);
@@ -153,7 +160,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantTurnRoute({ router: assistantRouter, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantTurnRoute({ router: assistantRouter, runs: () => assistantRuns, runSettings: () => assistantSettings, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -244,11 +251,26 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       runs = store === undefined ? undefined : queuedRunStore(store, () => recordQueue);
       const summaryStore = features.summary ? (options.summaryRunStore ?? createPgSummaryRunStore)(context) : undefined;
       summaryRuns = summaryStore === undefined ? undefined : queuedSummaryRunStore(summaryStore, () => recordQueue);
+      const assistantStore = features.assistant ? (options.assistantRunStore ?? createPgAssistantRunStore)(context) : undefined;
+      assistantRuns = assistantStore === undefined ? undefined : queuedAssistantRunStore(assistantStore, () => recordQueue);
+      const removals: (() => void)[] = [];
       if (summaryStore !== undefined) {
-        const removeOld = (): void => {
+        removals.push(() => {
           if (summarySettings === undefined) return;
           const cutoff = new Date((options.now ?? Date.now)() - summarySettings.retentionDays * MILLISECONDS_A_DAY);
           summaryStore.removeStartedBefore(cutoff).catch(() => logger?.warn({ event: 'summary-runs.removal_failed' }, 'the removal of old case summary records failed'));
+        });
+      }
+      if (assistantStore !== undefined) {
+        removals.push(() => {
+          if (assistantSettings === undefined) return;
+          const cutoff = new Date((options.now ?? Date.now)() - assistantSettings.runRetentionDays * MILLISECONDS_A_DAY);
+          assistantStore.removeStartedBefore(cutoff).catch(() => logger?.warn({ event: 'assistant-runs.removal_failed' }, 'the removal of old assistant turn records failed'));
+        });
+      }
+      if (removals.length > 0) {
+        const removeOld = (): void => {
+          for (const remove of removals) remove();
         };
         removeOld();
         retentionTimer = setInterval(removeOld, options.retentionIntervalMs ?? RETENTION_INTERVAL_MS);
@@ -259,7 +281,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       return {
         sink: audit.sink,
         close: () =>
-          (closing ??= (retentionTimer === undefined ? undefined : clearInterval(retentionTimer), Promise.allSettled([audit.close(), store?.close(), summaryStore?.close()]).then((results) => {
+          (closing ??= (retentionTimer === undefined ? undefined : clearInterval(retentionTimer), Promise.allSettled([audit.close(), store?.close(), summaryStore?.close(), assistantStore?.close()]).then((results) => {
             const failed = results.find((result) => result.status === 'rejected');
             if (failed?.status === 'rejected') throw failed.reason;
           }))),

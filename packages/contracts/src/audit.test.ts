@@ -223,3 +223,13 @@ describe('the closing event of an assistant turn', () => {
     expect(Object.keys(assistantTurnAuditDetailSchema.parse(MINIMAL))).toEqual(['outcome', 'modelCalls']);
   });
 });
+
+describe('the run id of the Ask event of an assistant turn', () => {
+  const ASKED = { intent: 'widgetById', kind: 'template', outcome: 'complete', templateId: 'entity', paramsHash: SHA, rowCount: 1 };
+
+  it('is an optional UUID of the askRun detail', () => {
+    expect(auditDetailSchema.safeParse({ askRun: ASKED }).success).toBe(true);
+    expect(auditDetailSchema.safeParse({ askRun: { ...ASKED, runId: '01939999-0000-7000-8000-0000000000ff' } }).success).toBe(true);
+    expect(auditDetailSchema.safeParse({ askRun: { ...ASKED, runId: 'run-1' } }).success).toBe(false);
+  });
+});

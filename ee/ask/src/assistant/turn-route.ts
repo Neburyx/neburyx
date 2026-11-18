@@ -24,6 +24,8 @@ import { summarizeRun } from '../questions/run-summary.js';
 import { capabilitiesOf, definitionOf, execute, patternDefinitionOf, patternOf, refusal, writeEvent, type Execution } from '../questions/question-routes.js';
 import { verifyContinueToken } from '../questions/continue-token.js';
 import type { RouterInput, RouterOutcome } from './router.js';
+import type { AssistantRunStore } from './run-store.js';
+import type { AssistantSettings } from './settings.js';
 import { noteTurnStarted, withTurnAudit } from './turn-audit.js';
 import { countWords } from './words.js';
 
@@ -37,6 +39,9 @@ export interface TurnRouteOptions {
   readonly router: () => ((input: RouterInput, signal: AbortSignal) => Promise<RouterOutcome>) | undefined;
   readonly folder: () => AskFolder | undefined;
   readonly logger: () => ExtensionLogger | undefined;
+  /** The store of the records of the turns' model calls; absent, nothing is recorded. */
+  readonly runs?: () => AssistantRunStore | undefined;
+  readonly runSettings?: () => AssistantSettings | undefined;
   readonly now?: () => number;
 }
 
@@ -111,7 +116,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     permission: 'principal',
     requestSchema: assistantTurnRequestSchema,
     responseSchema: assistantTurnAnswerSchema,
-    handler: withTurnAudit(options.logger, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
+    handler: withTurnAudit({ logger: options.logger, ...(options.runs === undefined ? {} : { runs: options.runs }), ...(options.runSettings === undefined ? {} : { settings: options.runSettings }), ...(options.now === undefined ? {} : { now: options.now }) }, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
       const { sourceReadable, investigationReadable, patterns } = gateClientOf(request);
       const router = options.router();
       if (sourceReadable === undefined || investigationReadable === undefined || router === undefined) throw unsupported();

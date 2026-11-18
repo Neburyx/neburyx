@@ -1,16 +1,19 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
-import { assistantTurnAnswerSchema, type AuditEvent, type AuditSink } from '@neburyx/contracts';
-import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { createEnterpriseExtension, createMemoryAssistantRunStore } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
-import { createAuditQueue } from '../audit/queue.js';
+import { createAuditQueue, createEventQueue } from '../audit/queue.js';
 import { fileQueryDepsOf } from '../gate/file-query.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { exportWebRoot, startExportRig } from '../testing/export-rig.js';
 import { plainNode, plainRelationship } from '../testing/normalize-fixtures.js';
+
+type AssistantRunStore = ReturnType<typeof createMemoryAssistantRunStore>;
 
 afterAll(() => {
   rmSync(exportWebRoot, { recursive: true, force: true });
@@ -43,22 +46,25 @@ const ENV = { NEBURYX_ASK_API_KEY: 'a-test-key' };
 const INTENTS = { widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } }, queryById: { parameters: ['id'], query: 'MATCH (n:Widget {widgetId: $id}) RETURN n' }, sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } } };
 const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, labels: ['Widget'], properties: { widgetId: id, ownerName: 'Ana Silva' } });
 
-async function assistantRig(options: { reply?: string | (() => string); hang?: boolean; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+async function assistantRig(options: { reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
-  const extension = createEnterpriseExtension({ modelBaseUrl: stub.url });
+  const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, ...(options.runStore === undefined ? {} : { assistantRunStore: () => options.runStore as AssistantRunStore }) });
   const features = options.features ?? { ask: false, summary: false, assistant: true };
   const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
   const armed = { open: false };
+  const sinkOpened = options.runStore === undefined ? undefined : extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined });
+  if (options.recordQueue !== undefined) extension.attachRecordQueue?.(options.recordQueue);
   extension.attachAudit?.(options.modelAudit ?? { record: async (event) => void events.push(event) });
-  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
+  const rig = await startExportRig({ extension, previewOn: true, directAudit: true, ...(options.auditCounts === undefined ? {} : { auditCounts: options.auditCounts }), ...(options.requestAudit === undefined ? {} : { auditMember: options.requestAudit }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), ...(options.fileQuery === undefined && options.answer === undefined ? {} : { answer: (call) => (call.templateId === 'file-query' ? options.fileQuery : armed.open ? options.answer?.(call) : undefined) }) });
   const investigation = await rig.open();
   armed.open = true;
   const body = { sourceId: 'demo', investigationId: investigation.id, message: 'Is this person guilty?', viewElementKeys: [] };
   const post = (payload: unknown = body) => rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: payload as object });
   const stop = async (): Promise<void> => {
     await rig.stop();
+    await sinkOpened?.close();
     stub.server.closeAllConnections();
     await new Promise<void>((resolve) => stub.server.close(() => resolve()));
   };
@@ -146,8 +152,12 @@ describe('the ask route through the real gate', () => {
 
 describe('the ask route and hostile values the router names', () => {
   it('never puts a value of the router into a statement text, whatever it holds, and answers 200 or a refusal of the product', async () => {
-    const hostile = { value: '' };
+    const hostile = { value: 'W-1' };
     const rig = await assistantRig({ reply: () => JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: hostile.value } }) });
+    const first = rig.rig.executor.calls.length;
+    await rig.post({ ...rig.body, message: 'Show a widget' });
+    // the fixed words of the statements: a value that is one of them (such as `name`) is not a value that leaked
+    const fixed = rig.rig.executor.calls.slice(first).map((call) => call.cypher).join('\n');
     await fc.assert(
       fc.asyncProperty(fc.oneof(fc.string({ maxLength: 120 }), fc.constantFrom("W-1' OR 1=1 //", '}) DETACH DELETE n //', '$id', '`; CALL dbms.shutdown()', 'W-1\u0000')), async (value) => {
         hostile.value = value;
@@ -156,7 +166,7 @@ describe('the ask route and hostile values the router names', () => {
         expect([200, 400]).toContain(answer.statusCode);
         if (answer.statusCode === 200) assistantTurnAnswerSchema.parse(answer.json());
         const text = rig.rig.executor.calls.slice(before).map((call) => call.cypher).join('\n');
-        if (value.length >= 4) expect(text).not.toContain(value);
+        if (value.length >= 4 && !fixed.includes(value)) expect(text).not.toContain(value);
       }),
       { numRuns: 60 },
     );
@@ -328,6 +338,10 @@ describe('the closing event of a turn in the running application', () => {
     await rig.stop();
   });
 
+  const recordsFor = () => {
+    const queue = createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => job.write() } }], idFields: (job) => job.ids, settings: { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: () => undefined } });
+    return { queue, attached: { enqueue: (job: RecordJob) => void queue.sink.record(job) } satisfies RecordQueue };
+  };
   const LEAK_CANARIES = [CANARY, 'W-1', 'key-canary-9', REPLY_CANARY, 'Choose the intent that answers the question', routerPrompt, 'Ana Silva'];
   const leaks = (text: string, label: string): void => {
     for (const canary of LEAK_CANARIES) expect(text, `${label}: ${canary}`).not.toContain(canary);
@@ -359,6 +373,21 @@ describe('the closing event of a turn in the running application', () => {
     const [event] = closed(everything(rig));
     expect(event).toMatchObject({ result: 'failed', detail: { turn: { outcome: 'cancelled', ...Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined)) } } });
     leaks(JSON.stringify(everything(rig)), kind);
+    await rig.stop();
+  });
+
+  it.each([
+    ['model', 'cancelled', 'cancelled'],
+    ['read', 'answered', 'cancelled'],
+  ] as const)('stores the run of a turn the client gives up while its %s is pending: the call is %s and the run %s, through the real HTTP abort', async (kind, callStatus, runOutcome) => {
+    const store = createMemoryAssistantRunStore();
+    const records = recordsFor();
+    const rig = await cancelledTurn(kind, { runStore: store, recordQueue: records.attached });
+    await vi.waitFor(() => expect(store.runs[0]?.outcome).toBeDefined());
+    expect(store.runs[0]).toMatchObject({ outcome: runOutcome, calls: 1 });
+    expect(store.runs[0]?.callEnds[0]).toMatchObject({ status: callStatus });
+    expect(store.runs[0]?.callStarts[0]?.valuesText).toContain(CANARY);
+    leaks(JSON.stringify([...everything(rig)]), kind);
     await rig.stop();
   });
 
@@ -419,6 +448,124 @@ describe('POST /v1/assistant/turns when the assistant is off', () => {
     expect(rig.stub.bodies).toHaveLength(0);
     const status = await rig.rig.app.inject({ url: '/v1/ai/status' });
     expect(status.json().assistant).toEqual({ available: false });
+    await rig.stop();
+  });
+});
+
+describe('the stored runs of a turn in the running application', () => {
+  const CANARY = 'CANARY-MESSAGE-7';
+  const REPLY_CANARY = 'REPLY-CANARY';
+  const SETTINGS = { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 };
+  const timedOut = (call: ExecuteCall): ExecuteOutcome | undefined => (call.templateId === 'entity-load' ? { status: 'timeout' } : undefined);
+  const ASK = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
+
+  const recordsOver = (write: (job: RecordJob) => Promise<void>, size = SETTINGS.queueSize) => {
+    const logs: Record<string, unknown>[] = [];
+    const queue = createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => write(job) } }], idFields: (job) => job.ids, settings: { ...SETTINGS, queueSize: size }, logger: { warn: (fields) => void logs.push(fields) } });
+    const attached: RecordQueue = { enqueue: (job) => void queue.sink.record(job) };
+    return { queue, attached, logs, auditCounts: () => queue.counts() };
+  };
+
+  const outcomes = [
+    { name: 'answered', reply: ASK, words: 3, steps: 4 },
+    { name: 'refused', reply: '{"route":"refuse","cause":"verdict"}', words: 3, steps: 4 },
+    { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, words: 3, steps: 4 },
+    { name: 'failed', reply: ASK, options: { answer: timedOut }, words: 3, steps: 4 },
+    { name: 'too-long', reply: '{"route":"view"}', words: 1001, steps: 2 },
+  ] as const;
+
+  async function turnWith(item: { reply: string; words?: number; options?: Partial<Parameters<typeof assistantRig>[0]> }, options: Partial<Parameters<typeof assistantRig>[0]> = {}) {
+    const rig = await assistantRig({ reply: item.reply, ...item.options, ...options });
+    const message = item.words !== undefined && item.words > 100 ? Array.from({ length: item.words }, () => CANARY).join(' ') : `Show ${CANARY} W-1`;
+    const answer = await rig.post({ ...rig.body, message, viewElementKeys: ['key-canary-9'] });
+    return { rig, answer };
+  }
+  const readyz = async (rig: Awaited<ReturnType<typeof assistantRig>>) => (await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json();
+
+  it.each(outcomes)('stores the instructions, the values and the reply of the $name turn, through the queue of the records, linked to its audit events by the run id', async (item) => {
+    const store = createMemoryAssistantRunStore();
+    const records = recordsOver((job) => job.write());
+    const { rig, answer } = await turnWith(item, { runStore: store, recordQueue: records.attached });
+    expect(answer.statusCode).toBe(200);
+    await vi.waitFor(() => expect(store.runs[0]?.outcome).toBeDefined());
+    const [recorded] = store.runs;
+    expect(recorded).toMatchObject({ start: { sourceId: 'demo', traceId: expect.any(String), settings: { model: 'claude-sonnet-5-5' } } });
+    if (item.name === 'too-long') {
+      expect(recorded).toMatchObject({ calls: 0, outcome: 'refused' });
+    } else {
+      expect(recorded).toMatchObject({ calls: 1 });
+      expect(recorded?.callStarts[0]?.valuesText).toContain(CANARY);
+      expect(recorded?.callStarts[0]?.valuesText).toContain('key-canary-9');
+      expect(recorded?.callStarts[0]?.instructionsText).toContain('Choose the intent that answers the question');
+      expect(recorded?.callEnds[0]).toMatchObject({ status: item.name === 'unplaced' ? 'failed' : 'answered', tokensIn: 10, tokensOut: 5, replyText: item.reply });
+    }
+    const all = [...rig.events, ...rig.rig.events];
+    const linked = all.filter((event) => JSON.stringify(event.detail ?? null).includes(recorded?.id ?? 'none'));
+    expect(linked.length).toBeGreaterThanOrEqual(1);
+    expect(records.queue.counts()).toMatchObject({ failed: 0, dropped: 0 });
+    await rig.stop();
+  });
+
+  it.each(outcomes)('keeps the stored text out of every audit event, log line, header, body, readiness output and error of the $name turn, and answers as a turn that records nothing', async (item) => {
+    const store = createMemoryAssistantRunStore();
+    const records = recordsOver((job) => job.write());
+    const recording = await turnWith(item, { runStore: store, recordQueue: records.attached, auditCounts: records.auditCounts });
+    const plain = await turnWith(item);
+    expect(recording.answer.statusCode).toBe(plain.answer.statusCode);
+    expect(recording.answer.json()).toEqual(plain.answer.json());
+    await vi.waitFor(() => expect(store.runs[0]?.outcome).toBeDefined());
+    const ready = await recording.rig.rig.app.inject({ url: '/readyz' });
+    const exposed = JSON.stringify({ events: [...recording.rig.events, ...recording.rig.rig.events], logs: records.logs, headers: recording.answer.headers, ready: ready.body });
+    for (const canary of [CANARY, 'key-canary-9', REPLY_CANARY, 'Choose the intent that answers the question', 'You help an analyst']) expect(exposed, canary).not.toContain(canary);
+    for (const canary of [CANARY, 'key-canary-9', REPLY_CANARY, 'Choose the intent that answers the question', 'You help an analyst']) expect(recording.answer.body, `body: ${canary}`).not.toContain(canary);
+    if (item.name === 'answered') expect(recording.answer.body).toContain('W-1');
+    else expect(recording.answer.body).not.toContain('W-1');
+    await recording.rig.stop();
+    await plain.rig.stop();
+  });
+
+  it('keeps the canaries of a refused request out of its error, the readiness output, the events and the logs, and stores nothing', async () => {
+    const store = createMemoryAssistantRunStore();
+    const records = recordsOver((job) => job.write());
+    const rig = await assistantRig({ reply: ASK, runStore: store, recordQueue: records.attached, auditCounts: records.auditCounts });
+    const refused = await rig.post({ ...rig.body, message: `Show ${CANARY}`, extra: REPLY_CANARY });
+    expect(refused.statusCode).toBe(400);
+    const ready = await readyz(rig);
+    for (const canary of [CANARY, REPLY_CANARY]) {
+      expect(refused.body, canary).not.toContain(canary);
+      expect(JSON.stringify([ready, rig.events, rig.rig.events, records.logs]), canary).not.toContain(canary);
+    }
+    expect(store.runs).toEqual([]);
+    await rig.stop();
+  });
+
+  it.each(outcomes)('answers the $name turn as before, counts every failed write in the health probe, writes the closing event, and logs run ids and steps only, when the store fails every write', async (item) => {
+    const plain = await turnWith(item);
+    let attempts = 0;
+    const failing: AssistantRunStore = { ...createMemoryAssistantRunStore(), begin: () => (attempts++, Promise.reject(new Error('the store is down'))), beginCall: () => (attempts++, Promise.reject(new Error('the store is down'))), endCall: () => (attempts++, Promise.reject(new Error('the store is down'))), finish: () => (attempts++, Promise.reject(new Error('the store is down'))) };
+    const records = recordsOver((job) => job.write());
+    const recording = await turnWith(item, { runStore: failing, recordQueue: records.attached, auditCounts: records.auditCounts });
+    expect(recording.answer.json(), item.name).toEqual(plain.answer.json());
+    await vi.waitFor(() => expect(records.queue.counts().failed, item.name).toBe(attempts));
+    expect(attempts, item.name).toBe(item.name === 'too-long' ? 2 : 4);
+    expect((await readyz(recording.rig)).audit.failed, item.name).toBe(attempts);
+    expect(records.logs.every((line) => line['event'] === 'audit.event_failed' && typeof line['runId'] === 'string' && typeof line['step'] === 'string'), item.name).toBe(true);
+    expect(JSON.stringify(records.logs)).not.toContain(CANARY);
+    expect([...recording.rig.events, ...recording.rig.rig.events].filter((event) => event.action === 'assistant.turn.closed'), item.name).toHaveLength(1);
+    await recording.rig.stop();
+    await plain.rig.stop();
+  });
+
+  it('does not wait for a store that never answers, and drops what the queue cannot hold, counted in the health probe and logged by ids', async () => {
+    const never = new Promise<void>(() => undefined);
+    const store: AssistantRunStore = { ...createMemoryAssistantRunStore(), begin: () => never, beginCall: () => never, endCall: () => never, finish: () => never };
+    const records = recordsOver((job) => job.write(), 1);
+    const { rig, answer } = await turnWith({ reply: '{"route":"refuse","cause":"verdict"}' }, { runStore: store, recordQueue: records.attached, auditCounts: records.auditCounts });
+    expect(answer.statusCode).toBe(200);
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'refuse' });
+    await vi.waitFor(() => expect(records.queue.counts().dropped).toBeGreaterThan(0));
+    expect((await readyz(rig)).audit.dropped).toBe(records.queue.counts().dropped);
+    expect(JSON.stringify(records.logs)).not.toContain(CANARY);
     await rig.stop();
   });
 });

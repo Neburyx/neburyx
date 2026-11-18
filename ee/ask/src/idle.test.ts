@@ -7,6 +7,7 @@ import type * as WorkerThreads from 'node:worker_threads';
 import { JUDGE_MODULE, createCheckRunner, judgeSentences, parseJudged } from '@neburyx/ee-ai-runtime';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemorySummaryRunStore } from './case-summary/run-store.js';
+import { createMemoryAssistantRunStore } from './assistant/run-store.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 const sink: AuditSink = { record: async () => undefined };
@@ -55,11 +56,12 @@ afterEach(() => {
 
 /** The AI resources of an extension: the pools of the two run stores, the timer of the removal of old summary records and the model clients made. */
 function counted(features?: { ask?: boolean; summary?: boolean; assistant?: boolean }) {
-  const pools = { ask: 0, summary: 0 };
+  const pools = { ask: 0, summary: 0, assistant: 0 };
   const extension = createEnterpriseExtension({
     ...(features === undefined ? {} : { features }),
     runStore: () => (pools.ask++, { record: async () => undefined, close: async () => undefined }),
     summaryRunStore: () => (pools.summary++, { ...createMemorySummaryRunStore(), close: async () => undefined }),
+    assistantRunStore: () => (pools.assistant++, { ...createMemoryAssistantRunStore(), close: async () => undefined }),
   });
   return { extension, pools };
 }
@@ -67,7 +69,7 @@ function counted(features?: { ask?: boolean; summary?: boolean; assistant?: bool
 describe('the AI code before and after it is asked to start', () => {
   it('holds no pool, no timer, no thread and no model client when the extension is only created', () => {
     const { pools } = counted();
-    expect(pools).toEqual({ ask: 0, summary: 0 });
+    expect(pools).toEqual({ ask: 0, summary: 0, assistant: 0 });
     expect(vi.getTimerCount()).toBe(0);
     expect(providerCalls.made).toBe(0);
     expect(threads.made).toBe(0);
@@ -89,7 +91,7 @@ describe('the AI code before and after it is asked to start', () => {
   it('holds no pool and no timer after configure, until the audit sink is mounted, and makes no model client', async () => {
     const { extension, pools } = counted();
     expect((await extension.configure?.({ preview: true }, ENV, CONTEXT))?.ok).toBe(true);
-    expect(pools).toEqual({ ask: 0, summary: 0 });
+    expect(pools).toEqual({ ask: 0, summary: 0, assistant: 0 });
     expect(vi.getTimerCount()).toBe(0);
     expect(providerCalls.made).toBe(0);
     expect(threads.made).toBe(0);
@@ -99,7 +101,7 @@ describe('the AI code before and after it is asked to start', () => {
     const { extension, pools } = counted();
     await extension.configure?.({ preview: true }, ENV, CONTEXT);
     const mounted = extension.createAuditSink?.(SINK_CONTEXT);
-    expect(pools).toEqual({ ask: 1, summary: 1 });
+    expect(pools).toEqual({ ask: 1, summary: 1, assistant: 1 });
     expect(vi.getTimerCount()).toBe(1);
     await mounted?.close();
     expect(vi.getTimerCount()).toBe(0);
@@ -110,7 +112,7 @@ describe('the AI code before and after it is asked to start', () => {
     const outcome = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key' }, CONTEXT);
     expect(outcome?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
-    expect(pools).toEqual({ ask: 0, summary: 1 });
+    expect(pools).toEqual({ ask: 0, summary: 1, assistant: 1 });
     expect(vi.getTimerCount()).toBe(1);
     expect(extension.askFolder()).toBeUndefined();
     expect(extension.askClassifier()).toBeUndefined();
@@ -119,10 +121,10 @@ describe('the AI code before and after it is asked to start', () => {
   });
 
   it('opens no summary pool and starts no timer with the summary off, and Ask works as before', async () => {
-    const { extension, pools } = counted({ summary: false });
+    const { extension, pools } = counted({ summary: false, assistant: false });
     expect((await extension.configure?.({ preview: true }, ENV, CONTEXT))?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
-    expect(pools).toEqual({ ask: 1, summary: 0 });
+    expect(pools).toEqual({ ask: 1, summary: 0, assistant: 0 });
     expect(vi.getTimerCount()).toBe(0);
     expect(extension.askClassifier()).toBeDefined();
     expect(extension.caseSummarizer?.()).toBeUndefined();
@@ -133,7 +135,7 @@ describe('the AI code before and after it is asked to start', () => {
     const { extension, pools } = counted();
     expect((await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key' }, { ...CONTEXT, features: { ask: false, summary: true, assistant: true } }))?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
-    expect(pools).toEqual({ ask: 0, summary: 1 });
+    expect(pools).toEqual({ ask: 0, summary: 1, assistant: 1 });
     expect(extension.askFolder()).toBeUndefined();
   });
 
@@ -141,7 +143,7 @@ describe('the AI code before and after it is asked to start', () => {
     const { extension, pools } = counted({ ask: false, summary: false, assistant: false });
     expect((await extension.configure?.({ preview: true }, {}, CONTEXT))?.ok).toBe(true);
     extension.createAuditSink?.(SINK_CONTEXT);
-    expect(pools).toEqual({ ask: 0, summary: 0 });
+    expect(pools).toEqual({ ask: 0, summary: 0, assistant: 0 });
     expect(vi.getTimerCount()).toBe(0);
     expect(providerCalls.made).toBe(0);
     expect(threads.made).toBe(0);
@@ -205,7 +207,7 @@ describe('a route of a feature that is switched off', () => {
     expect(outcome).toEqual({ ok: true, warnings: [{ event: 'assistant.ask_folder_unavailable', message: expect.any(String) }] });
     expect(off.extension.askFolder()).toBeUndefined();
     expect(off.extension.assistantSettings()).toBeDefined();
-    const on = counted({ summary: false });
+    const on = counted({ summary: false, assistant: false });
     expect((await on.extension.configure?.({ preview: true }, missing, CONTEXT))?.ok).toBe(false);
   });
 
@@ -221,7 +223,7 @@ describe('a route of a feature that is switched off', () => {
     expect(outcome).toEqual({ ok: true, warnings: [{ event: 'assistant.ask_folder_unavailable', message: expect.any(String) }] });
     expect(JSON.stringify(outcome)).not.toContain('SENTINEL-CONTENT');
     expect(off.extension.askFolder()).toBeUndefined();
-    const on = counted({ summary: false });
+    const on = counted({ summary: false, assistant: false });
     const refused = await on.extension.configure?.({ preview: true }, env, CONTEXT);
     expect(refused?.ok).toBe(false);
     expect(on.extension.askFolder()).toBeUndefined();

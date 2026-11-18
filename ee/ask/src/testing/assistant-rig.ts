@@ -8,6 +8,8 @@ import { loadAskFolder } from '../folder/load.js';
 import { buildAssistantInstructions } from '../assistant/instructions.js';
 import { ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION, createAssistantRouter } from '../assistant/router.js';
 import { createAssistantTurnRoute } from '../assistant/turn-route.js';
+import type { AssistantRunStore } from '../assistant/run-store.js';
+import { readAssistantSettings } from '../assistant/settings.js';
 import { makeAskFolder } from './ask-folder.js';
 import { UNAVAILABLE_SUMMARIZER } from './case-summarizer.js';
 
@@ -47,6 +49,11 @@ export interface RigOptions {
   readonly intents?: unknown;
   readonly run?: (continuing: boolean) => AskRun | Promise<AskRun>;
   readonly runThrows?: Error;
+  /** The store of the records of the turns' model calls; absent, nothing is recorded. */
+  readonly runStore?: AssistantRunStore;
+  /** The environment the assistant's settings are read from for the run record. */
+  readonly settingsEnv?: Record<string, string>;
+  readonly logs?: { readonly fields: Record<string, unknown>; readonly message: string }[];
 }
 
 export interface Rig {
@@ -74,7 +81,8 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const model = createAuditedModelCall({ provider: fixture, configuration: { model: 'configured-model' }, sink });
   const instructions = buildAssistantInstructions(PROMPT);
   const router = createAssistantRouter({ model, folder: () => folder, instructions: () => instructions, maxInputTokens: () => options.maxInputTokens ?? 25_000 });
-  const route = createAssistantTurnRoute({ router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => undefined, now: () => clock.now });
+  const settings = readAssistantSettings(options.settingsEnv ?? {});
+  const route = createAssistantTurnRoute({ ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',

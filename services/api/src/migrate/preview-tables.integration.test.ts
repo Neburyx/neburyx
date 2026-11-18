@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 import { stringify } from 'yaml';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, createPgSummaryRunStore, promptRecordOf, type ModelProvider } from '@neburyx/ee-ask';
+import { buildSummaryInstructions, createAuditedModelCall, createCaseSummarizer, createEnterpriseExtension, createPgAssistantRunStore, createPgSummaryRunStore, promptRecordOf, type ModelProvider } from '@neburyx/ee-ask';
 import { clearRegisteredExtension, type ExtensionLoader } from '../profile/extension.js';
 import { attempt, fixtureFolder, removeFixtureFolders, rows, runInProcess } from '../testing/database.js';
 import { startPostgres, type TestDatabase, type TestPostgres } from '../testing/postgres.js';
@@ -339,12 +339,65 @@ describe('the summary_runs and summary_run_calls tables of the preview', () => {
   });
 });
 
+describe('the assistant_runs and assistant_run_calls tables of the preview', () => {
+  const contextOf = (database: TestDatabase) => ({ databaseUrl: database.appUrl, poolSize: 2, connectionTimeoutMs: 5000, statementTimeoutMs: 5000, queryTimeoutMs: 5000, newId: () => randomUUID(), onConnectionError: () => undefined });
+  const BASE = { actorId: randomUUID(), sourceId: 'demo', traceId: 'tr-1', settings: { model: 'm' } };
+  const call = (runId: string, number: number) => ({ runId, number, startedAt: new Date(), instructionsSha256: 'a'.repeat(64), instructionsText: 'INSTRUCTIONS', valuesText: 'VALUES' });
+
+  it('has the columns of the data model, a cascade from the calls to the run, and no foreign key to the users table', async () => {
+    const database = await migratedWithPreview();
+    expect((await columnsOf(database, 'assistant_runs')).map((column) => column['column_name'])).toEqual(['id', 'actor_id', 'investigation_id', 'source_id', 'trace_id', 'started_at', 'finished_at', 'outcome', 'calls', 'settings']);
+    expect((await columnsOf(database, 'assistant_run_calls')).map((column) => column['column_name'])).toEqual(['run_id', 'call_number', 'started_at', 'duration_ms', 'instructions_sha256', 'instructions_text', 'values_text', 'reply_text', 'status', 'failure_kind', 'tokens_in', 'tokens_out']);
+    expect(await rows(database.ownerUrl, `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'assistant_run_calls'::regclass AND contype = 'f'`)).toEqual([{ definition: 'FOREIGN KEY (run_id) REFERENCES assistant_runs(id) ON DELETE CASCADE' }]);
+    expect(await rows(database.ownerUrl, `SELECT 1 FROM pg_constraint WHERE conrelid = 'assistant_runs'::regclass AND contype = 'f'`)).toEqual([]);
+  });
+
+  it('is written, completed and removed by the real store through the application role, and a removal takes the calls with the run', async () => {
+    const database = await migratedWithPreview();
+    const store = createPgAssistantRunStore(contextOf(database));
+    try {
+      const startedAt = new Date('2026-10-01T00:00:00Z');
+      const id = randomUUID();
+      await store.begin({ ...BASE, id, startedAt });
+      await store.begin({ ...BASE, id, startedAt });
+      expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM assistant_runs WHERE id = $1', [id])).toEqual([{ n: 1 }]);
+      await store.beginCall(call(id, 1));
+      await store.beginCall(call(id, 1));
+      expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM assistant_run_calls WHERE run_id = $1', [id])).toEqual([{ n: 1 }]);
+      await store.endCall({ runId: id, number: 1, status: 'refused', replyText: 'REPLY', tokensIn: 5, tokensOut: 2, durationMs: 40 });
+      await store.finish(id, 'failed', 1, new Date());
+      expect(await rows(database.ownerUrl, 'SELECT outcome, calls FROM assistant_runs WHERE id = $1', [id])).toEqual([{ outcome: 'failed', calls: 1 }]);
+      expect(await rows(database.ownerUrl, 'SELECT status, reply_text, tokens_in, duration_ms FROM assistant_run_calls WHERE run_id = $1', [id])).toEqual([{ status: 'refused', reply_text: 'REPLY', tokens_in: 5, duration_ms: 40 }]);
+      await expect(store.endCall({ runId: randomUUID(), number: 1, status: 'answered', durationMs: 1 })).rejects.toMatchObject({ code: 'ASSISTANT_RUN_WRITE_FAILED' });
+      expect(await store.removeStartedBefore(new Date(startedAt.getTime()))).toBe(0);
+      expect(await attempt(database.appUrl, "UPDATE assistant_runs SET outcome = 'x' WHERE false")).toBe('allowed');
+      expect(await store.removeStartedBefore(new Date(startedAt.getTime() + 1))).toBe(1);
+      expect(await rows(database.ownerUrl, 'SELECT 1 FROM assistant_run_calls')).toEqual([]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('is added to a database migrated to 0006 by the next start, without a change to the earlier tables', async () => {
+    const UNTIL_0006 = ['0001-audit-events.sql', '0002-ask-runs.sql', '0003-ask-plans.sql', '0004-drop-ask-plans.sql', '0005-ask-runs-intent.sql', '0006-summary-runs.sql'];
+    const until0006: ExtensionLoader = {
+      load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: fixtureFolder(Object.fromEntries(UNTIL_0006.map((name) => [name, readFileSync(join(PREVIEW_MIGRATIONS, name), 'utf8')]))) }),
+    };
+    const database = await postgres.newDatabase();
+    expect((await runInProcess(previewOn(database), SHIPPED, { extensionLoader: until0006 })).code).toBe(0);
+    expect(await rows(database.ownerUrl, `SELECT to_regclass('public.assistant_runs') IS NOT NULL AS runs`)).toEqual([{ runs: false }]);
+    const migrated = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
+    expect([migrated.code, migrated.stderr]).toEqual([0, '']);
+    expect(await rows(database.ownerUrl, `SELECT to_regclass('public.assistant_runs') IS NOT NULL AS runs, to_regclass('public.assistant_run_calls') IS NOT NULL AS calls`)).toEqual([{ runs: true, calls: true }]);
+  });
+});
+
 describe('a start of the Community product', () => {
   it('creates neither table, and loads no preview migration', async () => {
     const database = await postgres.newDatabase();
     const result = await runInProcess(environment(database), SHIPPED);
     expect(result.code).toBe(0);
-    const found = await rows(database.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS audit, to_regclass('public.ask_runs') IS NOT NULL AS runs, to_regclass('public.summary_runs') IS NOT NULL AS summaries`);
-    expect(found).toEqual([{ audit: false, runs: false, summaries: false }]);
+    const found = await rows(database.ownerUrl, `SELECT to_regclass('public.audit_events') IS NOT NULL AS audit, to_regclass('public.ask_runs') IS NOT NULL AS runs, to_regclass('public.summary_runs') IS NOT NULL AS summaries, to_regclass('public.assistant_runs') IS NOT NULL AS assistant`);
+    expect(found).toEqual([{ audit: false, runs: false, summaries: false, assistant: false }]);
   });
 });

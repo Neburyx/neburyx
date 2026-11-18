@@ -10,7 +10,7 @@ const settingsOf = (env: Record<string, string | undefined> = {}) => {
 
 describe('the assistant settings by environment', () => {
   it('have the default of each setting when none is given', () => {
-    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000 });
+    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 5, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000, runRetentionDays: 30 });
   });
 
   it('take a value of every setting, and treat an empty value as not given', () => {
@@ -25,8 +25,9 @@ describe('the assistant settings by environment', () => {
       [ASSISTANT_VARIABLES.maxMessageWords]: '500',
       [ASSISTANT_VARIABLES.maxInputTokens]: '10000',
       [ASSISTANT_VARIABLES.maxOutputTokens]: '2000',
+      [ASSISTANT_VARIABLES.runRetentionDays]: '7',
     });
-    expect(settings).toEqual({ model: 'claude-haiku-5-5', timeoutMs: 30_000, totalTimeoutMs: 90_000, maxCalls: 3, maxSteps: 2, maxRows: 40, contextTurns: 5, maxMessageWords: 500, maxInputTokens: 10_000, maxOutputTokens: 2000 });
+    expect(settings).toEqual({ model: 'claude-haiku-5-5', timeoutMs: 30_000, totalTimeoutMs: 90_000, maxCalls: 3, maxSteps: 2, maxRows: 40, contextTurns: 5, maxMessageWords: 500, maxInputTokens: 10_000, maxOutputTokens: 2000, runRetentionDays: 7 });
     expect(settingsOf({ [ASSISTANT_VARIABLES.maxCalls]: '' }).maxCalls).toBe(5);
   });
 
@@ -82,5 +83,18 @@ describe('the rows a turn may read', () => {
     expect(rowsAllowed(settingsOf({ [ASSISTANT_VARIABLES.maxRows]: '120' }), 50)).toBe(120);
     expect(rowsAllowed(settingsOf({ [ASSISTANT_VARIABLES.maxRows]: '5000' }), 50)).toBe(200);
     expect(rowsAllowed(settingsOf({ [ASSISTANT_VARIABLES.maxSteps]: '2' }), 25)).toBe(50);
+  });
+});
+
+describe('the retention of the stored turn runs', () => {
+  it('is 30 days when not given, and a positive whole number when given', () => {
+    expect(settingsOf().runRetentionDays).toBe(30);
+    expect(settingsOf({ [ASSISTANT_VARIABLES.runRetentionDays]: '1' }).runRetentionDays).toBe(1);
+    expect(settingsOf({ [ASSISTANT_VARIABLES.runRetentionDays]: '' }).runRetentionDays).toBe(30);
+  });
+
+  it.each(['0', '-1', '1.5', '30d', 'abc', '99999999999999999999'])('stops the start for %s and names the setting, not the value', (value) => {
+    const result = read({ [ASSISTANT_VARIABLES.runRetentionDays]: value });
+    expect(result).toEqual({ ok: false, problems: [`${ASSISTANT_VARIABLES.runRetentionDays} must be a positive whole number`] });
   });
 });

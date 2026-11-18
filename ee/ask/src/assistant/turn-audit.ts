@@ -11,6 +11,8 @@ import {
   type ExtensionLogger,
   type ExtensionRequest,
 } from '@neburyx/contracts';
+import type { ModelAnswer } from '@neburyx/ee-ai-runtime';
+import { createTurnRun, type CallRecord, type TurnRun, type TurnRunDeps } from './turn-run.js';
 
 export const TURN_CLOSED_ACTION = 'assistant.turn.closed';
 const TURN_EVENT_NOT_BUILT = 'assistant-turn-event-not-built';
@@ -20,6 +22,9 @@ type Usage = { readonly kind: 'known'; readonly inputTokens: number; readonly ou
 
 /** What a turn knows as it runs: ids, codes, hashes and counts, never a message, a reply or a value. */
 interface TurnNotes {
+  /** Opens the turn's run when the turn passes its first checks. */
+  readonly open: (started: { readonly sourceId: string; readonly investigationId: string }) => TurnRun;
+  run?: TurnRun;
   started?: { readonly sourceId: string; readonly investigationId: string };
   calls: number;
   modelRef?: string;
@@ -67,17 +72,34 @@ export const noteTurnStarted = (started: { readonly sourceId: string; readonly i
   note((notes) => {
     notes.started = started;
     notes.steps = 0;
+    notes.run = notes.open(started);
   });
 
-/** A model call is about to be made: its prompt and the configured model, which stay if the call throws or is aborted. */
-export const noteModelCall = (call: { readonly modelRef: string; readonly promptId: string; readonly promptVersion: number; readonly instructionsSha256: string }): void =>
-  note((notes) => {
-    notes.calls += 1;
-    notes.modelRef = call.modelRef;
-    notes.promptId = call.promptId;
-    notes.promptVersion = String(call.promptVersion);
-    notes.instructionsSha256 = call.instructionsSha256;
-  });
+/** The id of the run of the turn that is running, for the events it writes; absent outside a turn and before the turn started. */
+export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;
+
+const NO_CALL_RECORD: CallRecord = { received: () => undefined, end: () => undefined };
+
+/** What a model call of the turn is known by; the run id is absent outside a turn. */
+export interface ModelCallNote {
+  readonly runId?: string;
+  /** For the context of the audited call: keeps what the provider returned the moment it returns. */
+  readonly received: (answer: ModelAnswer) => void;
+  readonly end: CallRecord['end'];
+}
+
+/** A model call is about to be made: its prompt and the configured model, which stay if the call throws or is aborted, and its record, written before the call and ended after it. */
+export function startModelCall(call: { readonly modelRef: string; readonly promptId: string; readonly promptVersion: number; readonly instructionsSha256: string; readonly instructions: string; readonly values: string }): ModelCallNote {
+  const notes = scope.getStore();
+  if (notes === undefined) return { received: NO_CALL_RECORD.received, end: NO_CALL_RECORD.end };
+  notes.calls += 1;
+  notes.modelRef = call.modelRef;
+  notes.promptId = call.promptId;
+  notes.promptVersion = String(call.promptVersion);
+  notes.instructionsSha256 = call.instructionsSha256;
+  const record = notes.run?.startCall({ instructionsSha256: call.instructionsSha256, instructions: call.instructions, values: call.values }) ?? NO_CALL_RECORD;
+  return { ...(notes.run === undefined ? {} : { runId: notes.run.id }), received: record.received, end: record.end };
+}
 
 /** The provider's answer arrived: the model that answered, when it said so, and the usage. */
 export const noteModelAnswer = (answer: { readonly model?: string; readonly usage?: Usage }): void =>
@@ -171,6 +193,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
     modelCalls: notes.calls,
+    ...(notes.run === undefined ? {} : { runId: notes.run.id }),
     ...call,
   });
 }
@@ -179,13 +202,25 @@ function closingEvent(request: ExtensionRequest, started: NonNullable<TurnNotes[
   return { actorId: request.principalId, actorRole: request.principalRole, action: TURN_CLOSED_ACTION, result, sourceId: started.sourceId, investigationId: started.investigationId, traceId: request.traceId, detail: { turn } };
 }
 
+function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): Ending {
+  const ending: Ending = 'answer' in outcome ? endingOf(notes, outcome.answer) : endingOfError(outcome.error);
+  return request.signal.aborted ? { ...ending, outcome: 'cancelled', result: 'failed' } : ending;
+}
+
 function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
   const { started } = notes;
   if (started === undefined) return;
+  let ending: Ending | undefined;
+  try {
+    ending = endingFor(request, notes, outcome);
+  } catch {
+    ending = undefined;
+  }
+  // the run row ends with the turn's outcome before the closing event says it
+  notes.run?.finish(ending?.outcome ?? 'failed', notes.calls);
   let event: AuditEvent;
   try {
-    let ending: Ending = 'answer' in outcome ? endingOf(notes, outcome.answer) : endingOfError(outcome.error);
-    if (request.signal.aborted) ending = { ...ending, outcome: 'cancelled', result: 'failed' };
+    if (ending === undefined) throw new Error('the turn has no ending');
     // a detail the contract does not accept (a free string, a bad count) throws here: it is never queued
     event = closingEvent(request, started, ending.result, detailOf(notes, ending));
   } catch {
@@ -204,18 +239,26 @@ function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, n
     .catch(() => undefined);
 }
 
+export interface TurnAuditOptions {
+  readonly logger: () => ExtensionLogger | undefined;
+  readonly runs?: TurnRunDeps['runs'];
+  readonly settings?: TurnRunDeps['settings'];
+  readonly now?: () => number;
+}
+
 /** Wraps the handler of a turn: one closing event when the turn that passed its first checks ends, whatever the end. The handler's answer or failure goes on as it was. */
-export function withTurnAudit(logger: () => ExtensionLogger | undefined, handler: (request: ExtensionRequest) => Promise<AssistantTurnAnswer>): (request: ExtensionRequest) => Promise<AssistantTurnAnswer> {
+export function withTurnAudit(options: TurnAuditOptions, handler: (request: ExtensionRequest) => Promise<AssistantTurnAnswer>): (request: ExtensionRequest) => Promise<AssistantTurnAnswer> {
+  const runDeps: TurnRunDeps = { runs: options.runs ?? (() => undefined), settings: options.settings ?? (() => undefined), now: options.now ?? Date.now, logger: options.logger };
   return async (request) => {
-    const notes: TurnNotes = { calls: 0 };
+    const notes: TurnNotes = { calls: 0, open: (started) => createTurnRun(runDeps, request, started) };
     let answer: AssistantTurnAnswer;
     try {
       answer = await scope.run(notes, () => handler(request));
     } catch (error) {
-      close(request, logger(), notes, { error });
+      close(request, options.logger(), notes, { error });
       throw error;
     }
-    close(request, logger(), notes, { answer });
+    close(request, options.logger(), notes, { answer });
     return answer;
   };
 }

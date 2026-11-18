@@ -90,6 +90,8 @@ export const askRunAuditDetailSchema = z.strictObject({
   /** The id and version of the saved pattern a run of the intent `saved-pattern` ran; its name is never recorded. */
   patternId: z.uuid().optional(),
   patternVersion: z.number().int().min(1).optional(),
+  /** The record of the assistant turn this question was part of; absent for a question of Ask. */
+  runId: z.uuid().optional(),
 });
 
 export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;

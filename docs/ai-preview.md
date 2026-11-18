@@ -212,9 +212,14 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` | 1000 | 3000 |
 | `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS` | 25000 | 100000 |
 | `NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS` | 4000 | 32000 |
+| `NEBURYX_ASSISTANT_RUN_RETENTION_DAYS` (days the stored model-call records of the turns are kept) | 30 | a positive whole number |
 | `NEBURYX_ASSISTANT_PROMPT_FILE` | the file shipped with the product | |
 
 `NEBURYX_ASSISTANT_PROMPT_FILE` names an absolute path to a file that replaces the router's instructions (at most as large as a classification file of the Ask folder). The reply format is added by the product after the file's text and cannot be changed by it, and the hash of the instructions used is kept with them. No setting raises a limit or budget of a source.
+
+### What a turn stores
+
+For each model call of a turn the application keeps, in the tables `assistant_runs` and `assistant_run_calls` of its own database, the exact instructions and values it sent and the reply as the provider gave it (a refused, cut-off or badly formed reply too), with the status, the failure kind, the tokens and the duration. This is the one place where the text of a message and of a reply is at rest, so it holds real names and values: no route, screen, export, log line, evidence view or audit event reads or holds it, and it is removed after `NEBURYX_ASSISTANT_RUN_RETENTION_DAYS` (at start-up and every hour; a failed removal is logged as one fixed line and tried again). The records are queued when the call starts and completed when it ends, after the request has gone on: the model is never kept waiting for a write, a failed or dropped write is counted in `GET /readyz` and logged by the run id and the step (never text), and a record can be lost if the process stops while it is queued. Every audit event of the turn (the model call, the Ask read and the closing event) carries the run id, so a bad reply can be traced from the audit to what was sent. Where the extension is loaded without the application's database for these tables nothing is written, and the events still carry the run id.
 
 ### A turn
 
