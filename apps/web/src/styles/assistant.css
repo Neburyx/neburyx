@@ -189,3 +189,8 @@
   margin: 0;
   padding: 0;
 }
+
+/* the dock does not bound the height of its panel, so a long thread would grow past the window: the panel scrolls inside the room under the header and the region's top gap */
+.assistant-panel {
+  max-height: calc(var(--full-height) - var(--header-height) - var(--region-top) - var(--space-16));
+}

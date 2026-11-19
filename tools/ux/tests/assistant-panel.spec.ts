@@ -268,4 +268,28 @@ test.describe('the Assistant panel', () => {
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     });
   }
+
+  test('keeps the page and the panel in place when a long answer from the view arrives', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page);
+    const ids = ['AC-1', 'AC-2', 'AC-3', 'AC-4', 'AC-5', 'AC-6', 'AC-7', 'AC-8', 'AC-9', 'AC-10'];
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      sentences: ids.map((id, index) => ({ text: `Account ${id} is in view, number ${index + 1} of ${ids.length}.`, cites: [`n${index + 1}`] })),
+      citations: ids.map((id, index) => ({ key: `n${index + 1}`, kind: 'entity' as const, ref: { sourceId: 'banking-demo', entityType: 'account', stableId: id } })),
+      coverage: { retrieval: '10 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 10 of the 10 shown elements.' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, answer);
+    await open(page);
+    await page.getByLabel('Your message').fill('what is in view?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText('Sources · 10')).toBeVisible();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const box = await panel(page).boundingBox();
+    expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight <= document.documentElement.clientHeight)).toBe(true);
+  });
 });
