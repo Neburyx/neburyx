@@ -55,6 +55,8 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
     const asked = valuesOf(input);
     const allowed = Math.min(REPEATS + 1, Math.max(1, (options.maxCalls?.() ?? REPEATS + 1) - 1));
     for (let call = 1; call <= allowed; call += 1) {
+      // a turn that was cancelled or ran out of time while the first reply was read makes no second call
+      if (call > 1 && signal.aborted) return { status: 'failed', code: 'timeout' };
       const values = call === 1 ? asked : `${asked}\n\n${NOT_A_ROUTE_NOTE}`;
       if (estimateTokens(instructions.text, values) > options.maxInputTokens()) return call === 1 ? { status: 'too-large' } : { status: 'unplaced', calls: call - 1 };
       const outcome = await routeOnce(options, instructions, input, values, signal, call);

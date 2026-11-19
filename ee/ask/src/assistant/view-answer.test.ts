@@ -507,6 +507,37 @@ describe('the router when its reply is not a route', () => {
     expect(routerCalls(t)).toHaveLength(1);
   });
 
+  it('does not repeat a call the provider declined', async () => {
+    const t = await rig({ reply: { kind: 'refused' }, view: good, routerMaxCalls: 5 });
+    expect(await answerOf(t.route.handler(t.request(manyBody)))).toMatchObject({ status: 'unavailable', kind: 'service', readStarted: false });
+    expect(routerCalls(t)).toHaveLength(1);
+    expect(viewCalls(t)).toHaveLength(0);
+  });
+
+  it('makes no second call when the time of the turn is spent while the first reply is read, and completes the one record', async () => {
+    const store = createMemoryAssistantRunStore();
+    let expireNow = (): void => undefined;
+    const t = await rig({ reply: () => (expireNow(), sentences), view: good, routerMaxCalls: 5, runStore: store });
+    expireNow = t.expire;
+    expect(await answerOf(t.route.handler(t.request(manyBody)))).toMatchObject({ status: 'unavailable', kind: 'timeout', readStarted: false });
+    expect(routerCalls(t)).toHaveLength(1);
+    await vi.waitFor(() => expect(store.runs[0]?.outcome).toBeDefined());
+    expect(store.runs[0]?.callStarts).toHaveLength(1);
+    expect(store.runs[0]?.callEnds).toHaveLength(1);
+  });
+
+  it('makes no second call when the client closes the connection while the first reply is read, and completes the one record', async () => {
+    const store = createMemoryAssistantRunStore();
+    const controller = new AbortController();
+    const t = await rig({ reply: () => (controller.abort(), sentences), view: good, routerMaxCalls: 5, runStore: store });
+    await t.route.handler(t.request(manyBody, { signal: controller.signal }));
+    expect(routerCalls(t)).toHaveLength(1);
+    expect(t.events.filter((event) => event.action === 'assistant.turn.closed').map((event) => JSON.stringify(event))[0]).toContain('"outcome":"cancelled"');
+    await vi.waitFor(() => expect(store.runs[0]?.outcome).toBeDefined());
+    expect(store.runs[0]?.callStarts).toHaveLength(1);
+    expect(store.runs[0]?.callEnds).toHaveLength(1);
+  });
+
   it('counts both router calls in the closing event', async () => {
     const t = await rig({ reply: sequence(sentences, route('view')), view: good, routerMaxCalls: 5 });
     await answerOf(t.route.handler(t.request(manyBody)));
