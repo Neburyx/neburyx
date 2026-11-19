@@ -269,8 +269,8 @@ test.describe('the Assistant panel', () => {
     });
   }
 
-  test('keeps the page and the panel in place when a long answer from the view arrives', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
+  for (const width of [1440, 1280]) test(`keeps the page and the panel in place when a long answer from the view arrives at ${width} pixels`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
     await openWorkspace(page);
     const ids = ['AC-1', 'AC-2', 'AC-3', 'AC-4', 'AC-5', 'AC-6', 'AC-7', 'AC-8', 'AC-9', 'AC-10'];
     const answer: AssistantTurnAnswer = {
