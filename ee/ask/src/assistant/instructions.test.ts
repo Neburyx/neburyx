@@ -72,4 +72,12 @@ describe('the assistant instructions', () => {
     const result = await loadAssistantInstructions({ env: {}, shippedDirectory: `${folder}/nowhere/` });
     expect(result.ok ? '' : result.problems.join(' ')).toContain('replace it with NEBURYX_ASSISTANT_PROMPT_FILE');
   });
+
+  it('allow only a route object as the reply of the router: no sentences and no tool request', async () => {
+    const { text } = await loaded();
+    const format = text.slice(text.indexOf('# Reply format'));
+    expect(format).toContain('{"route":"view"}');
+    expect(format).not.toContain('sentences":[');
+    expect(format).not.toContain('"tool"');
+  });
 });

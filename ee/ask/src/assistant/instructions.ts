@@ -4,7 +4,8 @@ const REPLY_FORMAT = [
   '# Reply format',
   '',
   'This section is fixed and overrides anything above it.',
-  'Reply with JSON only, in one of these shapes: {"route":"view"}, {"route":"ask","intent":"<name of a listed intent>","entities":{"<role>":"<text>"}} or {"route":"refuse","cause":"verdict"|"raw-query"|"other-source"|"unplaced"} for a route, {"sentences":[{"text":"...","cites":["n1"]}]} for sentences that cite the elements they rest on, or {"tool":"<name>","values":{"<role>":"<text>"}} for a tool request that names a registered tool and gives its values as text.',
+  'Reply with one JSON object and nothing else, in one of these shapes: {"route":"view"}, {"route":"ask","intent":"<name of a listed intent>","entities":{"<role>":"<text>"}} or {"route":"refuse","cause":"verdict"|"raw-query"|"other-source"|"unplaced"}.',
+  'You only choose the route: a later step writes the answer. Never reply with sentences, an answer, a question or a tool request.',
   'Add no other text.',
 ].join('\n');
 

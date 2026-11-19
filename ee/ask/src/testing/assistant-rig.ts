@@ -44,12 +44,14 @@ export const offerOf = (id: string, name: string): AskPatternOffer => ({
 });
 
 export interface RigOptions {
-  readonly reply?: FixtureReply;
+  readonly reply?: FixtureReplies[string];
   readonly sink?: 'fails';
   readonly readable?: 'source' | 'investigation' | 'both';
   readonly maxInputTokens?: number;
   readonly maxMessageWords?: number;
   readonly maxCalls?: number;
+  /** The calls of a turn the router may spend (it repeats a reply that is not a route when there is room); absent, it makes one call. */
+  readonly routerMaxCalls?: number;
   /** The limit of the view answer alone; the router keeps its own. */
   readonly viewMaxInputTokens?: number;
   readonly totalTimeoutMs?: number;
@@ -114,7 +116,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const model = createAuditedModelCall({ provider, configuration: { model: 'configured-model' }, sink });
   const expiry = new AbortController();
   const instructions = buildAssistantInstructions(PROMPT);
-  const router = createAssistantRouter({ model, folder: () => folder, instructions: () => instructions, maxInputTokens: () => options.maxInputTokens ?? 25_000 });
+  const router = createAssistantRouter({ model, folder: () => folder, instructions: () => instructions, maxInputTokens: () => options.maxInputTokens ?? 25_000, ...(options.routerMaxCalls === undefined ? {} : { maxCalls: () => options.routerMaxCalls ?? 1 }) });
   const viewInstructions = buildSummaryInstructions('You answer from the view. SENTINEL-VIEW-PROMPT', 'SENTINEL-TYPOLOGY');
   const viewAnswer = options.view === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});

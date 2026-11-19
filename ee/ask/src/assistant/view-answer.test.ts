@@ -471,3 +471,47 @@ describe('the outcome of the view answer and the precedence of its stops', () =>
     expect(viewCalls(t)).toHaveLength(1);
   });
 });
+
+describe('the router when its reply is not a route', () => {
+  const MANY_KEYS = ['A-1', 'A-2', 'A-3', 'A-4', 'A-5'].map((id) => JSON.stringify(['node', 'demo', 'widget', id]));
+  const manyBody = { ...VIEW_BODY, message: 'What am I looking at?', viewElementKeys: MANY_KEYS };
+  const sentences = ok(JSON.stringify({ sentences: [{ text: 'You are looking at five accounts.', cites: ['n1'] }] }));
+  const route = (name: string) => ok(`{"route":"${name}"}`);
+  const routerCalls = (t: Awaited<ReturnType<typeof rig>>) => t.fixture.calls.filter((call) => call.promptId === 'assistant.route');
+
+  it('asks once more with the fixed note when a view of several elements gets a sentence-shaped reply, and answers from the repeat', async () => {
+    const t = await rig({ reply: sequence(sentences, route('view')), view: good, routerMaxCalls: 5 });
+    const answer = await answerOf(t.route.handler(t.request(manyBody)));
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', calls: 3 });
+    expect(routerCalls(t)).toHaveLength(2);
+    expect(routerCalls(t)[0]?.values).toContain(MANY_KEYS[4]);
+    expect(routerCalls(t)[1]?.values).toContain('Your last reply was not a route');
+  });
+
+  it('gives the fixed sentence of the unplaced refusal when the repeat is not a route either, after two calls and no more', async () => {
+    const t = await rig({ reply: sentences, view: good, routerMaxCalls: 5 });
+    expect(await answerOf(t.route.handler(t.request(manyBody)))).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    expect(routerCalls(t)).toHaveLength(2);
+    expect(viewCalls(t)).toHaveLength(0);
+  });
+
+  it('makes no repeat when the call limit leaves no room for the answer after it', async () => {
+    const t = await rig({ reply: sentences, view: good, routerMaxCalls: 2 });
+    expect(await answerOf(t.route.handler(t.request(manyBody)))).toMatchObject({ route: 'refuse', cause: 'unplaced' });
+    expect(routerCalls(t)).toHaveLength(1);
+  });
+
+  it('does not repeat a call that failed or was declined', async () => {
+    const t = await rig({ reply: { kind: 'failed', code: 'timeout' }, view: good, routerMaxCalls: 5 });
+    expect(await answerOf(t.route.handler(t.request(manyBody)))).toMatchObject({ status: 'unavailable', kind: 'timeout', readStarted: false });
+    expect(routerCalls(t)).toHaveLength(1);
+  });
+
+  it('counts both router calls in the closing event', async () => {
+    const t = await rig({ reply: sequence(sentences, route('view')), view: good, routerMaxCalls: 5 });
+    await answerOf(t.route.handler(t.request(manyBody)));
+    const closed = t.events.filter((event) => event.action === 'assistant.turn.closed').map((event) => JSON.stringify(event));
+    expect(closed).toHaveLength(1);
+    expect(closed[0]).toContain('"modelCalls":3');
+  });
+});

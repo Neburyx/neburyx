@@ -172,7 +172,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   const assistantRouter = (): ReturnType<typeof createAssistantRouter> | undefined => {
     const model = assistantModelOf();
     const settings = assistantSettings;
-    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens });
+    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens, maxCalls: () => settings.maxCalls });
   };
   const guarded = [
     guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),

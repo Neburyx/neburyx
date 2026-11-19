@@ -207,7 +207,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') throw new ExtensionRefusal({ code: 'ACCESS_DENIED' });
             const progress: ViewProgress = { calls: 0, read: 0, readStarted: false };
             try {
-              return viewTurn(await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: 1, startedAt, progress }));
+              return viewTurn(await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress }));
             } catch (error) {
               if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
               // the gate's own refusal of the read, with no partial answer; every other refusal goes on as the gate gave it

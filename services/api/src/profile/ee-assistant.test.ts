@@ -363,7 +363,7 @@ describe('the closing event of a turn in the running application', () => {
   const outcomes: { name: string; reply: string; options?: Partial<Parameters<typeof assistantRig>[0]>; body?: (rig: Rig) => object; closing: Record<string, unknown> }[] = [
     { name: 'answered', reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}', closing: { route: 'ask', outcome: 'answered', intent: 'widgetById', templateId: 'entity', steps: 1, modelCalls: 1 } },
     { name: 'refused', reply: '{"route":"refuse","cause":"verdict"}', closing: { route: 'refuse', outcome: 'refused', cause: 'verdict', modelCalls: 1 } },
-    { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, closing: { route: 'refuse', outcome: 'refused', cause: 'unplaced', modelCalls: 1 } },
+    { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, closing: { route: 'refuse', outcome: 'refused', cause: 'unplaced', modelCalls: 2 } },
     { name: 'view', reply: '{"route":"view"}', closing: { route: 'view', outcome: 'refused', cause: 'not-answered', modelCalls: 1 } },
     { name: 'too-long', reply: '{"route":"view"}', body: (rig) => ({ ...rig.body, message: Array.from({ length: 1001 }, () => CANARY).join(' ') }), closing: { outcome: 'refused', cause: 'too-long', modelCalls: 0 } },
     { name: 'continue-invalid', reply: '{"route":"view"}', body: (rig) => ({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [CANARY_KEY], continue: { intent: 'widgetById', entities: { id: 'W-1' }, continueToken: `${'1'.repeat(13)}.${'a'.repeat(64)}` } }), closing: { outcome: 'refused', cause: 'continue-invalid', modelCalls: 0 } },
@@ -610,7 +610,7 @@ describe('the stored runs of a turn in the running application', () => {
   const outcomes = [
     { name: 'answered', reply: ASK, words: 3, steps: 4 },
     { name: 'refused', reply: '{"route":"refuse","cause":"verdict"}', words: 3, steps: 4 },
-    { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, words: 3, steps: 4 },
+    { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, words: 3, steps: 6 },
     { name: 'failed', reply: ASK, options: { answer: timedOut }, words: 3, steps: 4 },
     { name: 'too-long', reply: '{"route":"view"}', words: 1001, steps: 2 },
   ] as const;
@@ -634,7 +634,7 @@ describe('the stored runs of a turn in the running application', () => {
     if (item.name === 'too-long') {
       expect(recorded).toMatchObject({ calls: 0, outcome: 'refused' });
     } else {
-      expect(recorded).toMatchObject({ calls: 1 });
+      expect(recorded).toMatchObject({ calls: item.name === 'unplaced' ? 2 : 1 });
       expect(recorded?.callStarts[0]?.valuesText).toContain(CANARY);
       expect(recorded?.callStarts[0]?.valuesText).toContain('key-canary-9');
       expect(recorded?.callStarts[0]?.instructionsText).toContain('Choose the intent that answers the question');
@@ -688,7 +688,7 @@ describe('the stored runs of a turn in the running application', () => {
     const recording = await turnWith(item, { runStore: failing, recordQueue: records.attached, auditCounts: records.auditCounts });
     expect(recording.answer.json(), item.name).toEqual(plain.answer.json());
     await vi.waitFor(() => expect(records.queue.counts().failed, item.name).toBe(attempts));
-    expect(attempts, item.name).toBe(item.name === 'too-long' ? 2 : 4);
+    expect(attempts, item.name).toBe(item.name === 'too-long' ? 2 : item.name === 'unplaced' ? 6 : 4);
     expect((await readyz(recording.rig)).audit.failed, item.name).toBe(attempts);
     expect(records.logs.every((line) => line['event'] === 'audit.event_failed' && typeof line['runId'] === 'string' && typeof line['step'] === 'string'), item.name).toBe(true);
     expect(JSON.stringify(records.logs)).not.toContain(CANARY);

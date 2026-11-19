@@ -47,7 +47,7 @@ export function ViewAnswerCard({ answer, entries }: { readonly answer: ViewAnswe
                 const entry = byKey.get(key);
                 return entry === undefined ? null : (
                   <button key={key} type="button" className="summary-chip" aria-label={`${ASSISTANT_COPY.citationNumber} ${entry.number}, ${labelOf(entry)}, ${status(entry).toLowerCase()}`} onClick={() => press(entry)}>
-                    <span aria-hidden="true">[{entry.number}]</span>
+                    <span aria-hidden="true">[{entry.number}]</span> {labelOf(entry)}
                   </button>
                 );
               })}

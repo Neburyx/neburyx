@@ -9,12 +9,16 @@ export const ROUTER_PROMPT_VERSION = 1;
 export const ROUTER_AUDIT_ACTION = 'assistant.route';
 
 const NO_KEYS = '(none)';
+const NOT_A_ROUTE_NOTE = 'Your last reply was not a route. Reply with one route object only and nothing else.';
+const REPEATS = 1;
 
 export interface RouterOptions {
   readonly model: AuditedModelCall;
   readonly folder: () => AskFolder | undefined;
   readonly instructions: () => AssistantInstructions | undefined;
   readonly maxInputTokens: () => number;
+  /** The calls of a whole turn; the router repeats a reply that is not a route only when it leaves room for the answer too. */
+  readonly maxCalls?: () => number;
 }
 
 export interface RouterInput {
@@ -29,8 +33,8 @@ export interface RouterInput {
 }
 
 export type RouterOutcome =
-  | { readonly status: 'routed'; readonly reply: AssistantRouterReply }
-  | { readonly status: 'unplaced' }
+  | { readonly status: 'routed'; readonly reply: AssistantRouterReply; readonly calls: number }
+  | { readonly status: 'unplaced'; readonly calls: number }
   | { readonly status: 'too-large' }
   | { readonly status: 'failed'; readonly code: FailureCode | 'refused' };
 
@@ -40,7 +44,7 @@ const valuesOf = (input: RouterInput): string =>
 
 /**
  * One audited call of the router, with the router's prompt and the source's `classification.md` as the instructions (so the audit's instructions hash covers both) and the message as typed in the values.
- * The reply is read strictly; whatever does not fit is `unplaced` and there is no second call.
+ * The reply is read strictly; a reply that is not a route is asked for once more with a fixed note, and a second one is `unplaced`.
  */
 export function createAssistantRouter(options: RouterOptions): (input: RouterInput, signal: AbortSignal) => Promise<RouterOutcome> {
   return async (input, signal) => {
@@ -48,29 +52,40 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
     if (base === undefined) return { status: 'failed', code: 'rejected' };
     const source = options.folder()?.source(input.sourceId);
     const instructions = source === undefined ? base : buildAssistantInstructions(`${base.prompt}\n\n# This source's questions\n\n${source.classification.text}`);
-    const values = valuesOf(input);
-    if (estimateTokens(instructions.text, values) > options.maxInputTokens()) return { status: 'too-large' };
-    let answer;
-    const record = startModelCall({ modelRef: options.model.modelRef, promptId: ROUTER_PROMPT_ID, promptVersion: ROUTER_PROMPT_VERSION, instructionsSha256: instructions.sha256, instructions: instructions.text, values });
-    try {
-      answer = await options.model.call(
-        { promptId: ROUTER_PROMPT_ID, version: ROUTER_PROMPT_VERSION, instructions: instructions.text, values },
-        { action: ROUTER_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, sourceId: input.sourceId, investigationId: input.investigationId, ...(record.runId === undefined ? {} : { runId: record.runId }), onProviderAnswer: record.received },
-        signal,
-      );
-    } catch (error) {
-      record.end({ error, aborted: signal.aborted });
-      // an event that cannot be built withholds the answer; any other failure of the call is the service's
-      if (error instanceof AuditUnavailableError) throw error;
-      return { status: 'failed', code: 'unreachable' };
+    const asked = valuesOf(input);
+    const allowed = Math.min(REPEATS + 1, Math.max(1, (options.maxCalls?.() ?? REPEATS + 1) - 1));
+    for (let call = 1; call <= allowed; call += 1) {
+      const values = call === 1 ? asked : `${asked}\n\n${NOT_A_ROUTE_NOTE}`;
+      if (estimateTokens(instructions.text, values) > options.maxInputTokens()) return call === 1 ? { status: 'too-large' } : { status: 'unplaced', calls: call - 1 };
+      const outcome = await routeOnce(options, instructions, input, values, signal, call);
+      if (outcome !== 'not-a-route') return outcome;
     }
-    noteModelAnswer({ ...(answer.status === 'ok' ? { model: answer.model } : {}), ...(answer.usage === undefined ? {} : { usage: answer.usage }) });
-    if (answer.status !== 'ok') {
-      record.end({ aborted: signal.aborted });
-      return answer.status === 'refused' ? { status: 'failed', code: 'refused' } : { status: 'failed', code: answer.code };
-    }
-    const read = readAssistantRoute(answer.text);
-    record.end({ aborted: signal.aborted, ...(read.ok ? {} : { notARoute: true }) });
-    return read.ok ? { status: 'routed', reply: read.reply } : { status: 'unplaced' };
+    return { status: 'unplaced', calls: allowed };
   };
+}
+
+/** One call of the router: a route, a failure, or `not-a-route` for a reply that is not one. */
+async function routeOnce(options: RouterOptions, instructions: AssistantInstructions, input: RouterInput, values: string, signal: AbortSignal, call: number): Promise<RouterOutcome | 'not-a-route'> {
+  let answer;
+  const record = startModelCall({ modelRef: options.model.modelRef, promptId: ROUTER_PROMPT_ID, promptVersion: ROUTER_PROMPT_VERSION, instructionsSha256: instructions.sha256, instructions: instructions.text, values });
+  try {
+    answer = await options.model.call(
+      { promptId: ROUTER_PROMPT_ID, version: ROUTER_PROMPT_VERSION, instructions: instructions.text, values },
+      { action: ROUTER_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, sourceId: input.sourceId, investigationId: input.investigationId, ...(record.runId === undefined ? {} : { runId: record.runId }), onProviderAnswer: record.received },
+      signal,
+    );
+  } catch (error) {
+    record.end({ error, aborted: signal.aborted });
+    // an event that cannot be built withholds the answer; any other failure of the call is the service's
+    if (error instanceof AuditUnavailableError) throw error;
+    return { status: 'failed', code: 'unreachable' };
+  }
+  noteModelAnswer({ ...(answer.status === 'ok' ? { model: answer.model } : {}), ...(answer.usage === undefined ? {} : { usage: answer.usage }) });
+  if (answer.status !== 'ok') {
+    record.end({ aborted: signal.aborted });
+    return answer.status === 'refused' ? { status: 'failed', code: 'refused' } : { status: 'failed', code: answer.code };
+  }
+  const read = readAssistantRoute(answer.text);
+  record.end({ aborted: signal.aborted, ...(read.ok ? {} : { notARoute: true }) });
+  return read.ok ? { status: 'routed', reply: read.reply, calls: call } : 'not-a-route';
 }
