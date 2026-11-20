@@ -14,6 +14,8 @@ export const BIND_KEYS = ['anchor', 'attribute', 'target', 'via'] as const;
 export const entityTypeProfileSchema = z.strictObject({
   type: name,
   label: name,
+  /** The mapping's plain-text meaning of the type; absent when it has none. */
+  description: z.string().min(1).max(300).optional(),
   keyed: z.boolean(),
   stableIdProperty: name,
   displayName: name,
@@ -39,6 +41,8 @@ export const relationshipTypeProfileSchema = z.strictObject({
   type: name,
   from: name,
   to: name,
+  /** As for an entity type. */
+  description: z.string().min(1).max(300).optional(),
   aggregate: z.boolean(),
   observedAt: name.nullable(),
   /** The property that holds a relationship's stable ID; none for a type whose relationships are one aggregate. */

@@ -7,6 +7,6 @@ export { parseKeyText } from './key-file.js';
 export { gateClientOf, type GateClient } from './gate-client.js';
 export { BudgetReached, recordingProvider, type Recording, type Usage } from './eval/recording.js';
 export { replayProvider, type ReplayAnswer } from './eval/replay.js';
-export { JUDGE_MODULE, judgeSentences, parseJudged, type CheckedText, type JudgeInput, type Judged } from './reply-checks.js';
+export { JUDGE_MODULE, VERDICT, judgeSentences, parseJudged, type CheckedText, type JudgeInput, type Judged } from './reply-checks.js';
 export { DEFAULT_OFFLOAD_THRESHOLD_MS, createCheckRunner, type CheckModule, type CheckOutcome, type CheckRunner, type CheckRunnerOptions, type HeavyCheck } from './check-runner.js';
 export { AI_FEATURES, featureSwitches, type AiFeature, type AiFeatureSwitches } from './feature-switches.js';

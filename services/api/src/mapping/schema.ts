@@ -13,6 +13,8 @@ const URI_SCHEMES = ['neo4j:', 'neo4j+s:', 'neo4j+ssc:', 'bolt:', 'bolt+s:', 'bo
 const name = z.string().min(1).refine((text) => isWellFormed(text) && !text.includes('\u0000'), { message: 'must be well-formed Unicode (no unpaired surrogate, no NUL)' });
 const property = z.string().min(1).regex(/^[^{}]*$/);
 const propertyList = z.array(property);
+/** A plain-text meaning of a type: one to 300 characters, well-formed, no control characters. */
+const description = z.string().min(1).max(300).refine((text) => isWellFormed(text) && !/[\u0000-\u001f\u007f-\u009f]/.test(text), { message: 'must be plain text of 1 to 300 characters with no control characters' });
 
 /** The kind a mapping declares for filterable properties, by property name; a hint for screens, never read by a statement. */
 const kindsSchema = z.record(property, z.enum(FILTER_KINDS));
@@ -104,6 +106,7 @@ const degreeEntrySchema = z.strictObject({
 const entitySchema = z.strictObject({
   type: name,
   label: name,
+  description: description.optional(),
   stable_id: property,
   title: name.optional(),
   search: propertyList.optional(),
@@ -122,6 +125,7 @@ const relationshipSchema = z.strictObject({
   type: name,
   from: name,
   to: name,
+  description: description.optional(),
   stable_id: property.optional(),
   observed_at: property.optional(),
   evidence: propertyList.optional(),

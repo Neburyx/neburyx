@@ -32,6 +32,8 @@ export interface DegreeDeclaration {
 export interface EntityModel {
   readonly type: string;
   readonly label: string;
+  /** Present only when the mapping declares it, so a mapping without one keeps its configuration hash. */
+  readonly description?: string;
   readonly stableId: string;
   readonly title: string;
   readonly titleProperties: readonly string[];
@@ -72,6 +74,8 @@ export interface RelationshipModel {
   readonly type: string;
   readonly from: string;
   readonly to: string;
+  /** As for an entity type: present only when declared. */
+  readonly description?: string;
   readonly stableId?: string;
   readonly aggregate: boolean;
   readonly observedAt?: string;

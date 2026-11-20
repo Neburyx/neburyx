@@ -60,7 +60,8 @@ function ordinaryWords(assembled: CheckedText): Set<string> {
  * The words of the verdict check: a sentence that states or implies guilt, fraud, an offence, suspicion, intent or a conclusion (a conclusion that is denied, as in "no conclusion can be drawn", is no verdict). Whole words and their endings, case-insensitive; a word that only holds a stem
  * inside is not matched, and the phrase may be split by any whitespace.
  */
-const VERDICT = /\b(?:guilt\w*|fraud\w*|launder\w*|crim\w*|offen[cs]e\w*|offender\w*|suspect\w*|suspic\w*|intent\w*|deliberate\w*|illegal\w*|unlawful\w*|convict\w*|culprit\w*|perpetrator\w*|proves?|proof|responsible\s+for)\b/i;
+/** @public Exported so a test can hold the packs' descriptions to the same words. */
+export const VERDICT = /\b(?:guilt\w*|fraud\w*|launder\w*|crim\w*|offen[cs]e\w*|offender\w*|suspect\w*|suspic\w*|intent\w*|deliberate\w*|illegal\w*|unlawful\w*|convict\w*|culprit\w*|perpetrator\w*|proves?|proof|responsible\s+for)\b/i;
 
 /** The word of a conclusion, which a sentence may use to say that none can be drawn: it is a verdict unless a negation stands within the three words before it. */
 const CONCLUSION = /\b(?:conclud\w*|conclusion\w*)\b/giu;

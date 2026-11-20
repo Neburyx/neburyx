@@ -105,6 +105,7 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
   return {
     type: raw.type,
     label: raw.label,
+    ...(raw.description === undefined ? {} : { description: raw.description }),
     stableId: raw.stable_id,
     title,
     titleProperties,
@@ -171,6 +172,7 @@ function buildRelationship(raw: RawRelationship, path: readonly (string | number
     type: raw.type,
     from: raw.from,
     to: raw.to,
+    ...(raw.description === undefined ? {} : { description: raw.description }),
     ...(raw.stable_id === undefined ? {} : { stableId: raw.stable_id }),
     aggregate: raw.stable_id === undefined,
     ...(raw.observed_at === undefined ? {} : { observedAt: raw.observed_at }),

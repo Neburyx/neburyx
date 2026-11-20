@@ -9,6 +9,7 @@ sources:
     entities:
       - type: account
         label: Account
+        description: "A bank account that holds a balance and takes part in transfers and payments."
         stable_id: accountId
         title: "Account {accountId}"
         search: [accountId, holderName]
@@ -17,6 +18,7 @@ sources:
         display: { icon: money, key_properties: [accountKind, status, openedOn], state_property: status }
       - type: customer
         label: Customer
+        description: "A person or business that holds one or more accounts with the bank."
         stable_id: customerId
         title: "{fullName}"
         search: [customerId, fullName]
@@ -26,18 +28,21 @@ sources:
         display: { icon: person, key_properties: [customerId, segment] }
       - type: device
         label: Device
+        description: "A phone, computer or other device that was used to reach the bank's services."
         stable_id: fingerprint
         search: [fingerprint]
         filterable: [platform]
         display: { icon: terminal, key_properties: [platform, firstSeen] }
       - type: ip_address
         label: IpAddress
+        description: "A network address from which the bank's services were reached."
         stable_id: address
         search: [address]
         filterable: [network]
         display: { name: IP address, icon: network, key_properties: [address, network] }
       - type: transaction
         label: Transaction
+        description: "One movement of money recorded by the bank, with an amount and a time."
         stable_id: transactionId
         title: "Transaction {transactionId}"
         search: [transactionId]
@@ -46,6 +51,7 @@ sources:
         display: { icon: document, key_properties: [amount, channel, status], state_property: status }
       - type: merchant
         label: Merchant
+        description: "A business that receives payments."
         stable_id: merchantId
         title: "{name}"
         search: [merchantId, name]
@@ -56,9 +62,11 @@ sources:
       - type: HOLDS_ACCOUNT
         from: customer
         to: account
+        description: "The customer holds the account."
       - type: USES_DEVICE
         from: account
         to: device
+        description: "The account was used from the device."
         stable_id: eventId
         observed_at: lastSeen
         evidence: [sourceRecordId]
@@ -67,6 +75,7 @@ sources:
       - type: CONNECTS_FROM
         from: account
         to: ip_address
+        description: "The device reached the bank's services from the network address."
         stable_id: eventId
         observed_at: lastSeen
         evidence: [sourceRecordId]
@@ -74,14 +83,17 @@ sources:
       - type: INITIATED
         from: account
         to: transaction
+        description: "The account started the transaction."
         stable_id: eventId
         observed_at: initiatedAt
       - type: PAID_TO
         from: transaction
         to: merchant
+        description: "The transaction paid the merchant."
       - type: TRANSFERRED_TO
         from: account
         to: account
+        description: "The transaction moved money to the account."
         observed_at: transferredAt
 
     derived:

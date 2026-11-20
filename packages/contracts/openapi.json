@@ -30529,6 +30529,11 @@
                   "type": "string",
                   "minLength": 1
                 },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
+                },
                 "keyed": {
                   "type": "boolean"
                 },
@@ -30686,6 +30691,11 @@
                 "to": {
                   "type": "string",
                   "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 300
                 },
                 "aggregate": {
                   "type": "boolean"

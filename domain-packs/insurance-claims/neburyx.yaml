@@ -9,6 +9,7 @@ sources:
     entities:
       - type: claim
         label: Claim
+        description: "A request to the insurer for payment after a loss, with a date and a status."
         stable_id: claimNumber
         title: "Claim {claimNumber}"
         search: [claimNumber]
@@ -17,6 +18,7 @@ sources:
         display: { icon: folder, key_properties: [lossType, status, filedOn], state_property: status }
       - type: policy
         label: Policy
+        description: "The insurance contract under which a claim is made."
         stable_id: policyNumber
         title: "Policy {policyNumber}"
         search: [policyNumber]
@@ -24,6 +26,7 @@ sources:
         display: { icon: shield, key_properties: [cover, startedOn] }
       - type: claimant
         label: Claimant
+        description: "A person who makes a claim."
         stable_id: claimantId
         title: "{fullName}"
         search: [claimantId, fullName]
@@ -31,23 +34,27 @@ sources:
         display: { icon: person }
       - type: vehicle
         label: Vehicle
+        description: "A vehicle that is named in a claim."
         stable_id: vin
         search: [vin]
         filterable: [make]
         display: { icon: car, key_properties: [make, model, year] }
       - type: repairer
         label: Repairer
+        description: "A business that repairs vehicles."
         stable_id: repairerId
         title: "{name}"
         search: [repairerId, name]
         display: { icon: wrench }
       - type: address
         label: Address
+        description: "A street address recorded for a person."
         stable_id: addressId
         search: [addressId, line1]
         display: { icon: house, key_properties: [line1, city] }
       - type: phone
         label: Phone
+        description: "A phone number recorded for a person."
         stable_id: number
         search: [number]
         pii: [{ property: owner, class: name }]
@@ -57,9 +64,11 @@ sources:
       - type: UNDER_POLICY
         from: claim
         to: policy
+        description: "The claim is made under the policy."
       - type: FILED_BY
         from: claim
         to: claimant
+        description: "The claim was filed by the claimant."
         stable_id: eventId
         observed_at: filedAt
         evidence: [sourceRecordId]
@@ -67,15 +76,19 @@ sources:
       - type: INVOLVES_VEHICLE
         from: claim
         to: vehicle
+        description: "The claim names the vehicle."
       - type: REPAIRED_BY
         from: claim
         to: repairer
+        description: "The vehicle was repaired by the repairer."
       - type: LIVES_AT
         from: claimant
         to: address
+        description: "The claimant has the address recorded."
       - type: REACHED_AT
         from: claimant
         to: phone
+        description: "The claimant has the phone number recorded."
 
     derived:
       - id: shared-phone

@@ -30,6 +30,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
     entityTypes: source.entities.map((entity) => ({
       type: entity.type,
       label: entity.label,
+      ...(entity.description === undefined ? {} : { description: entity.description }),
       keyed: isKeyed(entity),
       stableIdProperty: entity.stableId,
       displayName: entity.display.name ?? entity.label,
@@ -50,6 +51,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
       type: relationship.type,
       from: relationship.from,
       to: relationship.to,
+      ...(relationship.description === undefined ? {} : { description: relationship.description }),
       aggregate: relationship.aggregate,
       observedAt: relationship.observedAt ?? null,
       stableIdProperty: relationship.stableId ?? null,
