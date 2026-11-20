@@ -271,7 +271,6 @@ export const ASSISTANT_STREAM_MAX_MS = 660_000;
 
 /** The phases of a turn a client is told about, in the order a turn goes through them. */
 export const ASSISTANT_STEP_PHASES = ['routing', 'reading-view', 'reading', 'answering'] as const;
-export type AssistantStepPhase = (typeof ASSISTANT_STEP_PHASES)[number];
 
 /**
  * The members of a `step` event: which step of the turn is about to run. `tool`, `label` and `subject` belong to a read: the tool's name (the intent's name or the template's), the plain-words label the operator gave an intent (when it has one),
@@ -293,4 +292,5 @@ export const assistantTurnStreamEventSchema = z.union([
   z.strictObject({ event: z.literal('answer'), answer: z.lazy(() => assistantTurnAnswerSchema) }),
   z.object({ event: z.literal('error'), code: z.string().min(1), message: z.string(), retryable: z.boolean().optional(), traceId: z.string().min(1), details: z.record(z.string(), z.unknown()).optional() }),
 ]);
+/** @public The type of a line of a streamed turn, for the clients that read one. */
 export type AssistantTurnStreamEvent = z.infer<typeof assistantTurnStreamEventSchema>;
