@@ -111,11 +111,6 @@
   font-weight: 600;
 }
 
-/* the page focuses the heading of a card so that it is read first; it is not in the tab order and draws no ring, as the headings of base.css */
-.assistant-turn h3[tabindex='-1']:focus-visible {
-  outline: none;
-}
-
 .assistant-clarify p {
   margin: 0;
 }
