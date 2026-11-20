@@ -23,7 +23,7 @@ export interface AssistantRecordOptions {
 
 async function hashesOf(sets: readonly AssistantSet[], hooks: Hooks): Promise<Record<string, string>> {
   const hashes: Record<string, string> = {};
-  for (const set of sets) hashes[set.label] = await hooks.routerTextSha256(set.source);
+  for (const set of sets) hashes[set.source.sourceId] = await hooks.routerTextSha256(set.source);
   return hashes;
 }
 
@@ -55,7 +55,7 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
         `model: ${settings.model}`,
         `effort: ${settings.effort}`,
         `output limit: ${settings.outputLimit}`,
-        ...sets.map((set) => `router text hash ${set.label}: ${hashes[set.label]}`),
+        ...sets.map((set) => `router text hash ${set.label}: ${hashes[set.source.sourceId]}`),
         `set hash: ${assistantSetHash(sets)}`,
         `estimated input tokens: ${await estimatedTokens(sets, hooks)}`,
       ],
@@ -120,7 +120,7 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
       `requests routed: ${outcomes.length} of ${requests}`,
       `model: ${live.model}`,
       `effort: ${live.effort}`,
-      ...sets.map((set) => `router text hash ${set.label}: ${hashes[set.label]}`),
+      ...sets.map((set) => `router text hash ${set.label}: ${hashes[set.source.sourceId]}`),
       `tokens: in ${usage.inputTokens}, out ${usage.outputTokens}, cache read ${usage.cacheReadTokens}, cache write ${usage.cacheWriteTokens}, calls without counts ${usage.withoutCounts}`,
       `failed calls: ${usage.failed}`,
       ...(stopped ? ['stopped at the budget: the recording holds the requests routed so far'] : []),

@@ -63,6 +63,17 @@ describe('the recorder of the assistant\'s router', () => {
     expect(await runCli([...base(fixture), '--budget', '6', '--out', join(fixture.root, 'out')], io().io, hooksWith(answerRoutes))).toBe(2);
   });
 
+  it('names the source of each pack in the recording, so that the recording of the committed packs is accepted when it is scored', async () => {
+    const out = join(scratch(), 'packs');
+    const packs = join(ROOT, 'domain-packs');
+    expect(await runCli(['assistant', 'record', '--packs', packs, '--budget', '220', '--out', out], io().io, hooksWith(answerRoutes))).toBe(0);
+    const recorded = JSON.parse(readFileSync(join(out, 'recording.json'), 'utf8')) as { folders: Record<string, string> };
+    expect(Object.keys(recorded.folders).sort()).toEqual(['banking-demo', 'insurance-demo']);
+    const scored = io();
+    await runCli(['assistant', '--packs', packs, '--replay', join(out, 'recording.json')], scored.io, hooksWith(answerRoutes));
+    expect(scored.err.join('\n')).not.toContain('another router text');
+  });
+
   it('routes each request once, writes the recording with the wordings and a run record without them, both owner-only in an owner-only folder, and the recording scores', async () => {
     const fixture = privateSet();
     const out = join(scratch(), 'run');
