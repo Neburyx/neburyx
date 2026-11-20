@@ -74,26 +74,30 @@ describe('the meaning route of a turn', () => {
 
 describe('the fixed sentence appended to a view answer', () => {
   const view = (text: string) => ok(JSON.stringify({ sentences: [{ text, cites: ['n1'] }] }));
-  const run = async (reply: ReturnType<typeof ok>, message: string) => {
-    const t = await rig({ view: reply });
+  const routeView = (...asked: string[]) => ok(JSON.stringify(asked.length === 0 ? { route: 'view' } : { route: 'view', types: asked }));
+  const run = async (reply: ReturnType<typeof ok>, message: string, router: ReturnType<typeof ok>) => {
+    const t = await rig({ reply: router, view: reply });
     return answerOf(t.route.handler(t.request({ ...VIEW_BODY, message }, { typeDescriptions: () => types })));
   };
 
-  it('adds the sentence for a type the message names that has no description, whatever the model wrote', async () => {
-    const answer = await run(view('Account A-1 is in view.'), 'What is in view, and what is a gizmo?');
+  it('adds the sentence for a type the router said the message also asks the meaning of, when it has no description, whatever the model wrote', async () => {
+    const answer = await run(view('Account A-1 is in view.'), 'What is in view, and what is a gizmo?', routeView('gizmo'));
     expect(answer).toMatchObject({ status: 'answered', route: 'view', noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.' });
   });
 
-  it('names a type by its type name or label only, exactly and as a whole word: no fuzzy match', async () => {
-    for (const message of ['What is in view, and what are gizmos?', 'What is in view, and what is a gizmoid?', 'What is in view, with the widget?']) {
-      const answer = await run(view('Account A-1 is in view.'), message);
-      expect(answer).not.toHaveProperty('noDescription');
+  it('adds nothing for a type the message merely names, with no names from the router: a question that is not about meaning gets no such sentence', async () => {
+    for (const message of ['How many gizmo records are there?', 'What is in view, and what is the gizmo status?']) {
+      expect(await run(view('Account A-1 is in view.'), message, routeView())).not.toHaveProperty('noDescription');
     }
-    expect(await run(view('Account A-1 is in view.'), 'What is in view, and what is GizmoLabel?')).toMatchObject({ noDescription: expect.stringContaining('Gizmo') });
   });
 
-  it('is the answer no-description alone when every sentence was removed and the message names an undescribed type', async () => {
-    const answer = await run(view('Account A-1 is fraudulent.'), 'Is it fraud, and what is a gizmo?');
+  it('matches the names of the router exactly, as type, label or display name, whatever the case: no fuzzy match, and a described type gets nothing', async () => {
+    expect(await run(view('Account A-1 is in view.'), 'Q', routeView('GizmoLabel'))).toMatchObject({ noDescription: expect.stringContaining('Gizmo') });
+    for (const asked of ['gizmos', 'gizmoid', 'widget']) expect(await run(view('Account A-1 is in view.'), 'Q', routeView(asked))).not.toHaveProperty('noDescription');
+  });
+
+  it('is the answer no-description alone when every sentence was removed and the router asked for an undescribed type', async () => {
+    const answer = await run(view('Account A-1 is fraudulent.'), 'Is it fraud, and what is a gizmo?', routeView('gizmo'));
     expect(answer).toMatchObject({ status: 'no-description', names: ['Gizmo'] });
   });
 

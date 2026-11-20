@@ -71,6 +71,8 @@ export interface ViewInput {
   readonly context?: string;
   /** What the mapping says the types of the source mean; the ones that matter to this call reach it as `m` lines. Absent, the values are as they were. */
   readonly typeDescriptions?: TypeDescriptions;
+  /** The names of types the router said the message also asks the meaning of. */
+  readonly askedTypes?: readonly string[];
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -215,7 +217,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const { assembled } = prepared;
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
-    const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message);
+    const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message, input.askedTypes);
     const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
     const cited = new Set<number>();
     // the names of the last reply that named types without a description, for the answer when it is the one accepted

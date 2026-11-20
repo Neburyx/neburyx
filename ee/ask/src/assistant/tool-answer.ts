@@ -120,7 +120,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     const { assembled, readKeys } = assembleResults(input.reads, input.view?.assembled);
     if (assembled.keys.size === 0 && readKeys.length === 0) return { kind: 'unsupported', calls: 0 };
     const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${read.result === undefined ? 'found nothing' : coverageOf(read.result)}`)].join('; ');
-    const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message);
+    const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes);
     const values = valuesOf(input.message, assembled, coverage, input.context) + typeLines.section;
     const remaining = input.startedAt + options.totalTimeoutMs - now();
     if (remaining <= 0 || input.deadline.aborted) return { kind: 'limit', limit: 'time', calls: 0 };

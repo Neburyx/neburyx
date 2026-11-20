@@ -4,7 +4,8 @@ import { ASK_FOLDER_LIMITS, hasDuplicateKeys, isParameterName } from './ask-fold
 import { ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_MEANING_NAMES_MAX, ASSISTANT_MEANING_NAME_MAX, ASSISTANT_REFUSAL_CAUSES, type AssistantRefusalCause } from './assistant-turn.js';
 
 export type AssistantRouterReply =
-  | { readonly route: 'view' }
+  /** `types`: the names of types the message also asks the meaning of, as the analyst wrote them; the server adds the fixed sentence for those that have no description. */
+  | { readonly route: 'view'; readonly types?: readonly string[] }
   /** The message asks only what named types or links mean: the names as the analyst wrote them, for the server to match and answer. */
   | { readonly route: 'meaning'; readonly types: readonly string[] }
   | { readonly route: 'refuse'; readonly cause: AssistantRefusalCause }
@@ -22,6 +23,17 @@ const hasExactly = (data: Readonly<Record<string, unknown>>, keys: readonly stri
   const own = Object.keys(data);
   return own.length === keys.length && keys.every((key) => key in data);
 };
+
+/** The names of types a reply gives, one to eight, each plain text of 1 to 80 characters. */
+function meaningNamesOf(value: unknown): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > ASSISTANT_MEANING_NAMES_MAX) return undefined;
+  const names: string[] = [];
+  for (const name of value) {
+    if (typeof name !== 'string' || name.trim() === '' || [...name].length > ASSISTANT_MEANING_NAME_MAX || /[\u0000-\u001f\u007f-\u009f]/.test(name)) return undefined;
+    names.push(name);
+  }
+  return names;
+}
 
 function candidatesOf(value: unknown): readonly string[] | undefined {
   if (!Array.isArray(value) || value.length < 2 || value.length > ASSISTANT_CLARIFICATION_MAX_CANDIDATES) return undefined;
@@ -59,16 +71,14 @@ export function readAssistantRoute(text: string): ReadAssistantRoute {
   }
   if (!isRecord(data)) return bad;
   const route = data['route'];
-  if (route === 'view') return hasExactly(data, ['route']) ? { ok: true, reply: { route } } : bad;
+  if (route === 'view') {
+    if (hasExactly(data, ['route'])) return { ok: true, reply: { route } };
+    const asked = hasExactly(data, ['route', 'types']) ? meaningNamesOf(data['types']) : undefined;
+    return asked === undefined ? bad : { ok: true, reply: { route, types: asked } };
+  }
   if (route === 'meaning') {
-    const types = data['types'];
-    if (!hasExactly(data, ['route', 'types']) || !Array.isArray(types) || types.length < 1 || types.length > ASSISTANT_MEANING_NAMES_MAX) return bad;
-    const names: string[] = [];
-    for (const name of types) {
-      if (typeof name !== 'string' || name.trim() === '' || [...name].length > ASSISTANT_MEANING_NAME_MAX || /[\u0000-\u001f\u007f-\u009f]/.test(name)) return bad;
-      names.push(name);
-    }
-    return { ok: true, reply: { route, types: names } };
+    const names = hasExactly(data, ['route', 'types']) ? meaningNamesOf(data['types']) : undefined;
+    return names === undefined ? bad : { ok: true, reply: { route, types: names } };
   }
   if (route === 'refuse') {
     const cause = data['cause'];

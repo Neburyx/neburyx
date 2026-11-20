@@ -14,7 +14,7 @@ export interface TypeLines {
   readonly entries: ReadonlyMap<string, Omit<AssistantDescriptionCitation, 'key' | 'kind'>>;
   /** The types in play that have no description, by every name the model may use for them (lower case), to the name of the profile. */
   readonly undescribed: ReadonlyMap<string, string>;
-  /** The profile names of the types the message itself names, by type name or label, exactly, whole word, case-insensitive, that have no description to show: the server adds the fixed sentence for them to any answer. */
+  /** The profile names of the types the router said the analyst also asked the meaning of, matched exactly and kept when they have no description to show: the server adds the fixed sentence for them to the answer. */
   readonly named: readonly string[];
 }
 
@@ -48,7 +48,7 @@ export function usableDescriptions(descriptions: TypeDescriptions): TypeDescript
   };
 }
 
-export function typeLinesOf(offered: TypeDescriptions | undefined, assembled: AssembledText | undefined, message: string): TypeLines {
+export function typeLinesOf(offered: TypeDescriptions | undefined, assembled: AssembledText | undefined, message: string, askedTypes: readonly string[] = []): TypeLines {
   if (offered === undefined) return NO_TYPE_LINES;
   const descriptions = usableDescriptions(offered);
   const present = typesOf(assembled);
@@ -65,9 +65,11 @@ export function typeLinesOf(offered: TypeDescriptions | undefined, assembled: As
   const undescribed = new Map<string, string>();
   const describedNames = new Set(described.flatMap((type) => type.aliases.map((alias) => alias.toLowerCase())));
   for (const type of inPlay) if (type.description === undefined) for (const alias of type.aliases) if (!describedNames.has(alias.toLowerCase())) undescribed.set(alias.toLowerCase(), type.name);
+  // the types the router said the analyst also asked the meaning of, matched exactly (type, label or display name, whatever the case) and kept when the mapping has no description to show
+  const asked = new Set(askedTypes.map((name) => name.trim().toLowerCase()));
   const named = [
-    ...descriptions.entityTypes.filter((entity) => entity.description === undefined && [entity.type, entity.label].some((name) => mentions(message, name))).map((entity) => entity.displayName),
-    ...descriptions.relationshipTypes.filter((relationship) => relationship.description === undefined && mentions(message, relationship.type)).map((relationship) => relationship.type),
+    ...descriptions.entityTypes.filter((entity) => entity.description === undefined && [entity.type, entity.label, entity.displayName].some((name) => asked.has(name.toLowerCase()))).map((entity) => entity.displayName),
+    ...descriptions.relationshipTypes.filter((relationship) => relationship.description === undefined && asked.has(relationship.type.toLowerCase())).map((relationship) => relationship.type),
   ];
   if (described.length === 0 && undescribed.size === 0 && named.length === 0) return NO_TYPE_LINES;
   const lines = new Map(described.map((line, index) => [`m${index + 1}`, `m${index + 1}: ${line.kind} type ${line.name}: ${JSON.stringify(line.description)}`] as const));

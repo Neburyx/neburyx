@@ -87,3 +87,10 @@ describe('the meaning route', () => {
   });
 });
 
+
+describe('the names a view reply may carry', () => {
+  it('reads a view reply with the names of types the message also asks the meaning of, and refuses a malformed list', () => {
+    expect(readAssistantRoute('{"route":"view","types":["widget"]}')).toEqual({ ok: true, reply: { route: 'view', types: ['widget'] } });
+    for (const text of ['{"route":"view","types":[]}', '{"route":"view","types":[5]}', '{"route":"view","types":["a"],"extra":1}', '{"route":"view","types":"widget"}']) expect(readAssistantRoute(text)).toEqual({ ok: false });
+  });
+});
