@@ -26,7 +26,7 @@ export type AssistantRefusalCause = (typeof ASSISTANT_REFUSAL_CAUSES)[number];
 
 export const ASSISTANT_REFUSAL_SENTENCES: Readonly<Record<AssistantRefusalCause, string>> = {
   verdict: 'I can’t judge guilt or intent. I can show what the investigation connects.',
-  'raw-query': 'I can’t run query text. Ask in your own words, or use the manual tools.',
+  'raw-query': 'I can’t take query text. Describe what you want to see in plain words.',
   'other-source': 'I can only work with the source of this investigation.',
   unplaced: 'I can’t place this message. Rephrase it, or use the manual tools.',
 };

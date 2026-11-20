@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { heavyRun, okRun } from '../patterns/patterns-kit.js';
 import { node as testNode, key as testKey } from '../state/test-data.js';
@@ -164,13 +164,13 @@ describe('the Assistant thread: failures and Try again', () => {
     const h = harness(async () => (++calls === 1 ? ok(REFUSE) : calls === 2 ? { ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } } : ok(VIEW)));
     render(h.tree());
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     await typeAndSend('second');
     expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.serviceTitle })).toBeTruthy();
     expect((screen.getByLabelText(ASSISTANT_COPY.fieldLabel) as HTMLTextAreaElement).value).toBe('second');
-    expect(screen.getByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.tryAgain }));
-    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.notAnswered })).toBeTruthy();
+    expect(await screen.findAllByRole('heading', { name: ASSISTANT_COPY.notAnswered })).toHaveLength(2);
     expect(h.sent.map(messageOf)).toEqual(['first', 'second', 'second']);
     expect(document.querySelectorAll('.assistant-message')).toHaveLength(2);
   });
@@ -210,18 +210,18 @@ describe('the Assistant thread: the session', () => {
     const h = harness(async () => ok(REFUSE));
     const view = render(h.tree(true));
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     view.rerender(h.tree(false));
     view.rerender(h.tree(true));
     expect(screen.getByText('first')).toBeTruthy();
-    expect(screen.getByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
   });
 
   it('lists the turns as a list the keyboard can read, older ones included', async () => {
     const h = harness(async () => ok(REFUSE));
     render(h.tree());
     for (const text of ['one', 'two', 'three']) await typeAndSend(text);
-    await screen.findAllByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findAllByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     expect(within(screen.getByRole('list', { name: ASSISTANT_COPY.thread })).getAllByRole('listitem')).toHaveLength(3);
   });
 });
@@ -237,7 +237,7 @@ describe('the Assistant thread: clearing', () => {
     const h = bound(async () => ok(REFUSE));
     render(h.tree());
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     act(() => h.state.setMask(true));
     expect(screen.queryByText('first')).toBeNull();
     expect(screen.getByText(ASSISTANT_COPY.maskingTitle)).toBeTruthy();
@@ -264,7 +264,7 @@ describe('the Assistant thread: clearing', () => {
     await typeAndSend('first');
     act(() => h.state.setMask(true));
     await act(async () => finish(ok(REFUSE)));
-    expect(screen.queryByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeNull();
+    expect(screen.queryByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeNull();
     expect(h.session.store.getState().turns).toEqual([]);
     h.stop();
   });
@@ -285,7 +285,7 @@ describe('the Assistant thread: clearing', () => {
     const h = bound(async () => ok(REFUSE));
     render(h.tree());
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     act(() => h.state.describeInvestigation({ ...RECORD, sourceState: 'removed' }));
     expect(screen.queryByText('first')).toBeNull();
     expect(screen.getByText(ASSISTANT_COPY.sourceChanged)).toBeTruthy();
@@ -342,7 +342,7 @@ describe('the Assistant thread: what a review asked for', () => {
     await screen.findByRole('heading', { name: ASSISTANT_COPY.serviceTitle });
     await userEvent.clear(screen.getByLabelText(ASSISTANT_COPY.fieldLabel));
     await typeAndSend('newer');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     await userEvent.type(screen.getByLabelText(ASSISTANT_COPY.fieldLabel), 'my new draft');
     await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.tryAgain }));
     await screen.findByRole('heading', { name: ASSISTANT_COPY.serviceTitle });
@@ -411,7 +411,7 @@ describe('the Assistant thread: the person and the access', () => {
     const h = harness(async () => ok(REFUSE));
     const view = render(h.tree(true));
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     view.rerender(h.tree(false));
     h.session.store.setState({ ...h.session.store.getState(), principalId: 'someone-else' });
     view.rerender(h.tree(true));
@@ -424,7 +424,7 @@ describe('the Assistant thread: the person and the access', () => {
     const h = harness(async () => (++calls === 1 ? ok(REFUSE) : { ok: false, failure: { code: 'NOT_FOUND', message: 'x', retryable: false, traceId: 't' } }));
     render(h.tree());
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     await typeAndSend('second');
     expect(await screen.findByText(ASSISTANT_COPY.accessLost)).toBeTruthy();
     expect(screen.queryByText('first')).toBeNull();

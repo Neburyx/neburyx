@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AssistantThreadResponse, AssistantTurnAnswer } from '@neburyx/contracts';
+import { ASSISTANT_REFUSAL_SENTENCES, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
 import { bindAssistantPanel } from './assistant-binder.js';
@@ -61,7 +61,7 @@ describe('the notices of the thread (frame AS9)', () => {
     expect(screen.getByRole('region', { name: ASSISTANT_COPY.newThreadTitle })).toBeTruthy();
     expect(screen.queryByText(ASSISTANT_COPY.introTitle)).toBeNull();
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     expect(screen.queryByText(ASSISTANT_COPY.newThreadTitle)).toBeNull();
   });
 
@@ -81,7 +81,7 @@ describe('the notices of the thread (frame AS9)', () => {
     const h = bound(async () => ok(CLEARED));
     render(h.tree());
     await typeAndSend('first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     act(() => h.state.setMask(true));
     expect(await screen.findByText(ASSISTANT_COPY.maskingTitle)).toBeTruthy();
     expect(screen.getByText(ASSISTANT_COPY.maskingBody)).toBeTruthy();
@@ -110,14 +110,14 @@ describe('the stored thread in the panel', () => {
     render(loading.tree());
     expect(await screen.findByText(ASSISTANT_COPY.storedLoading)).toBeTruthy();
     await typeAndSend('while loading');
-    expect(await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     expect(loading.sent).toHaveLength(1);
     cleanup();
     const failed = harness(async () => ok(REFUSE), 1000, async () => refused('INTERNAL_ERROR'));
     render(failed.tree());
     expect(await screen.findByText(ASSISTANT_COPY.storedFailed)).toBeTruthy();
     await typeAndSend('after failure');
-    expect(await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     cleanup();
     const empty = harness(async () => ok(REFUSE));
     render(empty.tree());
@@ -154,7 +154,7 @@ describe('the stored thread in the panel', () => {
     expect(h.reads).toEqual(['inv-1']);
     expect(screen.getAllByRole('listitem', { name: /Read from the source, Answered/ })).toHaveLength(1);
     await typeAndSend('mine');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     expect(screen.getAllByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toHaveLength(1);
     expect(screen.getAllByText('mine')).toHaveLength(1);
   });
@@ -180,7 +180,7 @@ describe('the stored thread in the panel', () => {
     render(h.tree());
     await screen.findByText(ASSISTANT_COPY.storedLoading);
     await typeAndSend('sent first');
-    await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' });
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
     await act(async () => {
       wait.resolve(ok(STORED));
     });
@@ -237,7 +237,7 @@ describe('the stored thread in the panel', () => {
       answer.resolve(ok(REFUSE));
     });
     expect(screen.queryByText('pending one')).toBeNull();
-    expect(screen.queryByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeNull();
+    expect(screen.queryByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeNull();
     expect(flow.reads).toEqual(['inv-1']);
     flow.stop();
   });

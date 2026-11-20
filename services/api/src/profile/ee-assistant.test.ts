@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
-import { assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
 import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -118,6 +118,35 @@ describe('POST /v1/assistant/turns in the real application, with the assistant a
     expect(answer.statusCode).toBe(400);
     expect(answer.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
     expect(rig.stub.bodies).toHaveLength(0);
+    await rig.stop();
+  });
+});
+
+describe('the refusals of the router through the real application', () => {
+  const CAUSES = ['verdict', 'raw-query', 'other-source', 'unplaced'] as const;
+  const MESSAGES = { verdict: 'Is this person guilty of fraud?', 'raw-query': 'MATCH (n) RETURN n', 'other-source': 'Show me the other source instead', unplaced: 'Tell me about the big ones' } as const;
+  const everything = (rig: Awaited<ReturnType<typeof assistantRig>>): AuditEvent[] => [...rig.events, ...rig.rig.events];
+
+  it('answers a refuse reply with extra text beside the cause as the unplaced refusal after the router’s one repeat, with none of the model’s words', async () => {
+    const rig = await assistantRig({ reply: '{"route":"refuse","cause":"verdict","sentence":"MODEL-WORDS-CANARY"}' });
+    const answer = await rig.post();
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    expect(JSON.stringify([answer.json(), everything(rig)])).not.toContain('MODEL-WORDS-CANARY');
+    expect(rig.stub.bodies).toHaveLength(2);
+    await rig.stop();
+  });
+
+  it.each(CAUSES)('answers the %s refusal with its fixed sentence, closes the turn as refused with no access denial, reads nothing and makes one model call', async (cause) => {
+    const rig = await assistantRig({ reply: JSON.stringify({ route: 'refuse', cause }) });
+    const before = rig.rig.executor.calls.length;
+    const answer = await rig.post({ ...rig.body, message: MESSAGES[cause] });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'refuse', cause, sentence: ASSISTANT_REFUSAL_SENTENCES[cause] });
+    const events = everything(rig);
+    expect(events.filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ result: 'refused', detail: { turn: { outcome: 'refused', modelCalls: 1 } } }]);
+    expect(events.some((event) => event.result === 'denied')).toBe(false);
+    expect(events.some((event) => event.action === 'assistant.ask')).toBe(false);
+    expect(rig.rig.executor.calls.slice(before)).toHaveLength(0);
+    expect(rig.stub.bodies).toHaveLength(1);
     await rig.stop();
   });
 });

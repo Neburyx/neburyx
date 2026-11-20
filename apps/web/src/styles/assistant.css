@@ -58,6 +58,12 @@
   font-size: var(--font-size-small);
 }
 
+.assistant-refusal-region {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
 .assistant-refusal,
 .assistant-not-answered {
   display: flex;
@@ -65,9 +71,32 @@
   gap: var(--space-6);
 }
 
-.assistant-not-answered h3 {
+.assistant-refusal {
+  padding: var(--space-10);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface-muted);
+}
+
+.assistant-not-answered h3,
+.assistant-refusal h3 {
   margin: 0;
   font-size: var(--font-size-small);
+}
+
+.assistant-refusal h3 {
+  font-weight: normal;
+}
+
+/* the page focuses the heading of a turn so that its card is read first; it is not in the tab order and draws no ring, as the headings of base.css */
+.assistant-turn h3[tabindex='-1']:focus-visible {
+  outline: none;
+}
+
+.assistant-chip-unavailable {
+  border-color: var(--color-control-border);
+  background: var(--color-neutral-surface);
+  color: var(--color-neutral-text);
+  cursor: default;
 }
 
 .assistant-over {

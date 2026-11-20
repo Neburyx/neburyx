@@ -1,12 +1,13 @@
 import { useEffect, useId, useState } from 'react';
 import { AnswerCard, HeavyCard } from '../ask/answer-card.js';
-import { humanize } from '../ask/text.js';
+import { hintOf, humanize } from '../ask/text.js';
 import { askFailureWords, isContinueInvalid } from '../ask/ask-failure.js';
 import { isAssistantOff } from './failure-kinds.js';
 import { rateLimitedSentence } from '../patterns/failure-words.js';
 import { ASSISTANT_COPY, unavailableSentence } from './copy.js';
 import type { Failure, Step, Turn } from './assistant-session.js';
 import { ViewAnswerCard } from './view-answer-card.js';
+import { RefusalCard } from './refusal-card.js';
 
 export interface TurnActions {
   readonly sourceId: string;
@@ -131,15 +132,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
         </section>
       );
     case 'refuse':
-      return (
-        <section className="assistant-refusal" aria-labelledby={titleId}>
-          <Tag text={ASSISTANT_COPY.routeRefuse} />
-          <h3 id={titleId} className="visually-hidden" tabIndex={-1} data-ask-focus="title">
-            {ASSISTANT_COPY.refusalHeading}
-          </h3>
-          <p>{outcome.sentence}</p>
-        </section>
-      );
+      return <RefusalCard sentence={outcome.sentence} />;
     case 'not-answered':
       return (
         <section className="assistant-not-answered" aria-labelledby={titleId}>
@@ -161,17 +154,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
     case 'view-answer':
       return <ViewAnswerCard answer={outcome.answer} entries={outcome.entries} />;
     case 'ask-refused':
-      return (
-        <>
-          <Tag text={ASSISTANT_COPY.routeAsk} />
-          <section className="assistant-refusal" aria-labelledby={titleId}>
-            <h3 id={titleId} className="visually-hidden" tabIndex={-1} data-ask-focus="title">
-              {ASSISTANT_COPY.refusalHeading}
-            </h3>
-            <p>{outcome.refused.sentence}</p>
-          </section>
-        </>
-      );
+      return <RefusalCard sentence={outcome.refused.sentence} hint={hintOf(outcome.refused.cause)} />;
     case 'heavy':
       return (
         <>

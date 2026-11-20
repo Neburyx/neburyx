@@ -22,7 +22,7 @@ export type TurnCall = (request: AssistantTurnRequest, signal: AbortSignal | und
 export type ThreadCall = (investigationId: string, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadResponse>>;
 const EMPTY_THREAD: ThreadCall = async () => ({ ok: true, value: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
 
-export function harness(turn: TurnCall, limit: number | null = 1000, thread: ThreadCall = EMPTY_THREAD) {
+export function harness(turn: TurnCall, limit: number | null = 1000, thread: ThreadCall = EMPTY_THREAD, summary = false) {
   const state = createClientState();
   state.bindSource('a');
   state.show({ id: 'inv-1', sourceId: 'a', record: RECORD, resultKeys: [], nodeRefs: [], edgeRefs: [] }, []);
@@ -40,7 +40,7 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
       return thread(investigationId, signal);
     },
   });
-  const status = aiStatus(limit === null ? {} : { assistant: limit });
+  const status = aiStatus({ summary, ...(limit === null ? {} : { assistant: limit }) });
   const shell = createShellData(fakeClient({ getAiStatus: async () => ({ ok: true, value: status }), getMe: async () => ({ ok: true, value: me({}) }), getSources: async () => ({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } }) }));
   const tree = (open = true) => (
     <ApiClientProvider client={client}>
@@ -53,7 +53,7 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
       </ClientStateProvider>
     </ApiClientProvider>
   );
-  return { tree, sent, reads, session, state, shell };
+  return { tree, sent, reads, session, state, shell, tools };
 }
 
 export const typeAndSend = async (text: string) => {

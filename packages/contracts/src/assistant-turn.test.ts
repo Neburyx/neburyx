@@ -93,3 +93,14 @@ describe('the assistant turn answer', () => {
     expect(assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'refuse', cause: 'verdict' }).success).toBe(false);
   });
 });
+
+describe('the fixed sentences of a refusal', () => {
+  it('are the four agreed sentences, none of which holds a value of the message or a word of the model', () => {
+    expect(ASSISTANT_REFUSAL_SENTENCES).toEqual({
+      verdict: 'I can’t judge guilt or intent. I can show what the investigation connects.',
+      'raw-query': 'I can’t take query text. Describe what you want to see in plain words.',
+      'other-source': 'I can only work with the source of this investigation.',
+      unplaced: 'I can’t place this message. Rephrase it, or use the manual tools.',
+    });
+  });
+});

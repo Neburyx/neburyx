@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AssistantTurnAnswer } from '@neburyx/contracts';
+import { ASSISTANT_REFUSAL_SENTENCES, type AssistantTurnAnswer } from '@neburyx/contracts';
 import { edge, key, node, ref } from '../state/test-data.js';
 import { need } from '../test-utils.js';
 import { elementKey } from '../state/keys.js';
@@ -72,7 +72,7 @@ describe('the Assistant panel: an answer from the view', () => {
     shown(h);
     render(h.tree());
     await typeAndSend('is this fraud?');
-    expect(await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     expect(screen.queryByText('AI-drafted')).toBeNull();
   });
 

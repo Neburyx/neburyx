@@ -63,16 +63,16 @@ describe('the Assistant panel: a message', () => {
     expect(await screen.findByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeTruthy();
   });
 
-  it('shows a refusal turn with its route tag and the fixed sentence, and a view turn with its tag and the fixed not-answered sentence', async () => {
+  it('shows a refusal turn with its fixed sentence and a view turn with its tag and the fixed not-answered sentence, each titled Not answered', async () => {
     const answers = [REFUSE, VIEW];
     const h = harness(async () => ({ ok: true, value: answers.shift() ?? VIEW }));
     render(h.tree());
     await typeAndSend('is this guilty?');
-    expect(await screen.findByText(ASSISTANT_COPY.routeRefuse, { selector: 'p' })).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     expect(screen.getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     await typeAndSend('what is this?');
     expect(await screen.findByText(ASSISTANT_COPY.routeView, { selector: 'p' })).toBeTruthy();
-    expect(screen.getByRole('heading', { name: ASSISTANT_COPY.notAnswered })).toBeTruthy();
+    expect(screen.getAllByRole('heading', { name: ASSISTANT_COPY.notAnswered })).toHaveLength(2);
     expect(screen.getByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeTruthy();
     expect(screen.getAllByText(/is this guilty\?|what is this\?/)).toHaveLength(2);
   });

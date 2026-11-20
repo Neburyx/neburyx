@@ -104,17 +104,17 @@ test.describe('the Assistant panel', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
-  test('sends a message with Enter, shows the refusal turn with its tag and fixed sentence, and a view turn as not answered', async ({ page }) => {
+  test('sends a message with Enter, shows the refusal turn with its fixed sentence, and a view turn as not answered, each titled Not answered', async ({ page }) => {
     await openWorkspace(page);
     const sent = await answerWith(page, (body) => (body.message === 'what is this?' ? VIEW : REFUSE));
     await open(page);
     await page.getByLabel('Your message').fill('is this guilty?');
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
-    await expect(panel(page).locator('.assistant-tag', { hasText: 'Refused' })).toBeVisible();
+    await expect(panel(page).getByRole('heading', { name: 'Not answered' }).first()).toBeVisible();
     await page.getByLabel('Your message').fill('what is this?');
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('heading', { name: 'Not answered' })).toBeFocused();
+    await expect(page.getByRole('heading', { name: 'Not answered' }).last()).toBeFocused();
     await expect(panel(page).getByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeVisible();
     expect(sent.map((body) => body.message)).toEqual(['is this guilty?', 'what is this?']);
     expect(sent[0]).toMatchObject({ sourceId: 'banking-demo', viewElementKeys: expect.any(Array) });
@@ -332,5 +332,78 @@ test.describe('the Assistant panel', () => {
     const box = await panel(page).boundingBox();
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
     await expectHeaderStays(page);
+  });
+
+  const refused = async (page: Page): Promise<void> => {
+    await openWorkspace(page);
+    await answerWith(page, REFUSE);
+    await page.route((url) => url.pathname === '/v1/summary', () => new Promise<void>(() => undefined));
+    await open(page);
+    await page.getByLabel('Your message').fill('is this guilty?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('heading', { name: 'Not answered' })).toBeVisible();
+  };
+
+  test('draws the refusal as one grey card with a regular small title and no outline on the focused title, the hint and chips as AS6 draws them', async ({ page }) => {
+    await refused(page);
+    const title = panel(page).getByRole('heading', { name: 'Not answered' });
+    await expect(title).toBeFocused();
+    const card = panel(page).locator('.assistant-refusal');
+    expect(await card.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+    expect(await title.evaluate((element) => [getComputedStyle(element).fontWeight, getComputedStyle(element).outlineStyle])).toEqual(['400', 'none']);
+    expect(await card.getByRole('button', { name: 'Open Filters' }).count()).toBe(1);
+  });
+
+  test('draws no outline on the focused title of a not-answered view turn or of a failure card either', async ({ page }) => {
+    await openWorkspace(page);
+    await answerWith(page, VIEW);
+    await open(page);
+    await page.getByLabel('Your message').fill('what is this?');
+    await page.keyboard.press('Enter');
+    const title = panel(page).getByRole('heading', { name: 'Not answered' });
+    await expect(title).toBeFocused();
+    expect(await title.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe('none');
+  });
+
+  test('reaches the chips with Tab, opens the Filters tool with Enter and leaves it open on a second activation', async ({ page }) => {
+    await refused(page);
+    const filters = panel(page).getByRole('button', { name: 'Open Filters' });
+    await filters.focus();
+    await expect(filters).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(panel(page).getByRole('button', { name: 'Summarize this view' })).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Enter');
+    const toolButton = page.getByRole('group', { name: 'Tools' }).getByRole('button', { name: 'Filters' });
+    await expect(toolButton).toHaveAttribute('aria-pressed', 'true');
+    await filters.click();
+    await expect(toolButton).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('opens the AI case summary panel from Summarize this view and closes the assistant panel', async ({ page }) => {
+    await refused(page);
+    await panel(page).getByRole('button', { name: 'Summarize this view' }).click();
+    await expect(page.getByRole('complementary', { name: 'AI case summary' })).toBeVisible();
+    await expect(panel(page)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Assistant' }).click();
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+  });
+
+  test('offers Open Paths in the built app and opens the Paths tool', async ({ page }) => {
+    await refused(page);
+    await expect(panel(page).getByText('Open Paths is left out because this build has no Paths tool.')).toHaveCount(0);
+    await panel(page).getByRole('button', { name: 'Open Paths' }).click();
+    await expect(page.getByRole('complementary', { name: 'Bounded path search' })).toBeVisible();
+  });
+
+  test('shows the refusal card and its chips inside the panel at 1280 pixels, without clipping', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await refused(page);
+    const box = await panel(page).boundingBox();
+    for (const name of ['Open Filters', 'Summarize this view', 'Open Paths']) {
+      const inner = await panel(page).getByRole('button', { name }).boundingBox();
+      expect(box !== null && inner !== null && inner.x >= box.x && inner.x + inner.width <= box.x + box.width).toBe(true);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 });
