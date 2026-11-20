@@ -3,7 +3,7 @@ import type { CheckedText } from '@neburyx/ee-ai-runtime';
 import type { AssembledText } from '../case-summary/assemble.js';
 
 /** The most meaning lines one call carries; the types of the elements come first, then the types the message names. */
-export const TYPE_LINES_MAX = 40;
+const TYPE_LINES_MAX = 40;
 
 /** The meaning lines of one call: the lines by key, the section of the values that lists them, and the keys. Empty when no type that matters has a description. */
 export interface TypeLines {
@@ -16,7 +16,7 @@ export interface TypeLines {
   readonly undescribed: ReadonlyMap<string, string>;
 }
 
-export const NO_TYPE_LINES: TypeLines = { lines: new Map(), section: '', keys: new Set(), entries: new Map(), undescribed: new Map() };
+const NO_TYPE_LINES: TypeLines = { lines: new Map(), section: '', keys: new Set(), entries: new Map(), undescribed: new Map() };
 
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const mentions = (message: string, name: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped(name)}(?![\\p{L}\\p{N}_-])`, 'iu').test(message);

@@ -207,10 +207,10 @@ describe('the Assistant panel: an answer from the view', () => {
 });
 
 describe('the Assistant panel: what a type means', () => {
-  const MEANING = { key: 'm1', kind: 'description' as const, typeKind: 'entity' as const, type: 'Account', description: 'A bank account that <script>holds</script> a balance, in a_very_long_word_'.concat('x'.repeat(120)) };
+  const MEANING = { key: 'm1', kind: 'description' as const, typeKind: 'entity' as const, type: 'Widget', description: 'A widget that <script>holds</script> a balance, in a_very_long_word_'.concat('x'.repeat(120)) };
   const WITH_MEANING: AssistantTurnAnswer = {
     ...ANSWER,
-    sentences: [{ text: 'An account holds a balance.', cites: ['m1'] }, { text: 'ent-2 has one relationship.', cites: ['n2'] }],
+    sentences: [{ text: 'A widget holds a balance.', cites: ['m1'] }, { text: 'ent-2 has one relationship.', cites: ['n2'] }],
     citations: [{ key: 'n2', kind: 'entity', ref: B }, MEANING],
     noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.',
   };
@@ -219,8 +219,8 @@ describe('the Assistant panel: what a type means', () => {
     const h = harness(async () => ok(WITH_MEANING));
     shown(h);
     render(h.tree());
-    await typeAndSend('what is an account?');
-    const chip = await screen.findByRole('button', { name: /^About Account:/ });
+    await typeAndSend('what is a widget?');
+    const chip = await screen.findByRole('button', { name: /^About Widget:/ });
     expect(chip.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText(ASSISTANT_COPY.operatorDescription)).toBeNull();
     await userEvent.click(chip);

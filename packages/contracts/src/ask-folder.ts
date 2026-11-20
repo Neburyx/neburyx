@@ -114,7 +114,7 @@ function deepFreeze<T extends object>(value: T): T {
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 /** The longest label of an intent: a few plain words for the cards, the steps and the reads text. */
-export const ASK_INTENT_LABEL_MAX = 80;
+const ASK_INTENT_LABEL_MAX = 80;
 
 /** The label of an intent as the member to add to it, or none; a label that is not 1 to 80 characters of plain text is a problem naming the intent and the rule. */
 function labelOf(name: string, value: unknown, problems: string[]): { readonly label: string } | Record<string, never> {

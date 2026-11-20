@@ -120,7 +120,7 @@ export const ASSISTANT_CONFIRMATION_INVALID_SENTENCE = 'This confirmation is no 
 export const ASSISTANT_CITATION_TITLE_MAX = 400;
 
 /** The citation of a meaning line (`m1`): what the mapping says a type means, as the server wrote it into the call. It names no element and no record; `type` is the type's display name, or the relationship type's name. */
-export const assistantDescriptionCitationSchema = z.strictObject({ key: text, kind: z.literal('description'), typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) });
+const assistantDescriptionCitationSchema = z.strictObject({ key: text, kind: z.literal('description'), typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) });
 
 /** What kind of tool a read was, as the registry names it: an intent of the source's folder, a catalog template, a pattern or the view. */
 export const ASSISTANT_READ_KINDS = ['intent', 'template', 'pattern', 'view'] as const;
