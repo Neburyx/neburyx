@@ -60,10 +60,10 @@ export interface ExtensionRequest {
   readonly typeDescriptions?: (sourceId: string) => TypeDescriptions;
 }
 
-/** The descriptions of the types of one source that have one; a type without a description is not listed. */
+/** The types of one source with the description the mapping gives each, when it gives one: the server tells which types have a meaning to quote and which have none. */
 export interface TypeDescriptions {
-  readonly entityTypes: readonly { readonly type: string; readonly label: string; readonly displayName: string; readonly description: string }[];
-  readonly relationshipTypes: readonly { readonly type: string; readonly description: string }[];
+  readonly entityTypes: readonly { readonly type: string; readonly label: string; readonly displayName: string; readonly description?: string }[];
+  readonly relationshipTypes: readonly { readonly type: string; readonly description?: string }[];
 }
 
 /** The investigation and source a view belongs to and whether the personal data of its nodes is masked. */

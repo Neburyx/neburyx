@@ -40,7 +40,7 @@ export interface Checked {
 }
 
 export type Drafted =
-  | { readonly status: 'drafted'; readonly sentences: readonly SummarySentence[]; readonly removed: number; readonly calls: number; /** Whether the last reply held verdict wording, with no call left to repeat it. */ readonly verdictFound: boolean; /** The model the provider says produced the reply that was accepted. */ readonly model: string }
+  | { readonly status: 'drafted'; /** The fixed sentence for the types the reply named as having no description, when the caller accepted them. */ readonly noDescription?: string; readonly sentences: readonly SummarySentence[]; readonly removed: number; readonly calls: number; /** Whether the last reply held verdict wording, with no call left to repeat it. */ readonly verdictFound: boolean; /** The model the provider says produced the reply that was accepted. */ readonly model: string }
   | { readonly status: 'tooLarge'; readonly calls: number }
   | { readonly status: 'timeLimit'; readonly calls: number; readonly checked?: Checked }
   | { readonly status: 'failed'; readonly kind: SummaryFailureKind; readonly calls: number; readonly checked?: Checked };
@@ -87,6 +87,8 @@ export interface DraftOptions {
   readonly trace?: (call: { readonly number: number; readonly instructions: string; readonly values: string }) => CallTrace;
   /** A reply that is not sentences but is one the caller reads itself: when this accepts a reply's text, the draft ends there with that text. Absent, every reply must be sentences, as the case summary has it. */
   readonly alternative?: (text: string) => boolean;
+  /** Accepts the names a reply says have no description, beside its sentences: the fixed sentence the server writes from them, or undefined when a name is not one it may take, which is a reply that does not fit. Absent, a reply may have no such member. */
+  readonly noDescription?: (names: readonly string[]) => string | undefined;
   /** Keeps the record of each request: written before the request is made, finished when it ends. A write that fails ends the click. */
   readonly record?: {
     beforeCall(call: { readonly number: number; readonly instructions: string; readonly values: string; readonly startedAt: Date }): Promise<void>;
@@ -96,15 +98,17 @@ export interface DraftOptions {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The sentences of a reply of the exact shape `{"sentences":[{"text","cites"}]}` with at most the sentence limit; anything else is undefined. */
-function parseReply(text: string): readonly SummarySentence[] | undefined {
+/** The sentences of a reply of the exact shape `{"sentences":[{"text","cites"}]}`, with the optional member `noDescription` (a list of names), with at most the sentence limit; anything else is undefined. */
+function parseReply(text: string): { readonly sentences: readonly SummarySentence[]; readonly noDescription?: readonly string[] } | undefined {
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
     return undefined;
   }
-  if (!isRecord(json) || Object.keys(json).join() !== 'sentences' || !Array.isArray(json['sentences']) || json['sentences'].length > MAX_SUMMARY_SENTENCES) return undefined;
+  if (!isRecord(json) || !['sentences', 'noDescription,sentences'].includes(Object.keys(json).sort().join()) || !Array.isArray(json['sentences']) || json['sentences'].length > MAX_SUMMARY_SENTENCES) return undefined;
+  const named = json['noDescription'];
+  if ('noDescription' in json && (!Array.isArray(named) || named.length === 0 || !named.every((name): name is string => typeof name === 'string' && name !== ''))) return undefined;
   const sentences: SummarySentence[] = [];
   for (const entry of json['sentences'] as unknown[]) {
     if (!isRecord(entry) || Object.keys(entry).sort().join() !== 'cites,text') return undefined;
@@ -112,7 +116,7 @@ function parseReply(text: string): readonly SummarySentence[] | undefined {
     if (typeof sentence !== 'string' || sentence === '' || !Array.isArray(cites) || !cites.every((cite): cite is string => typeof cite === 'string' && cite !== '')) return undefined;
     sentences.push({ text: sentence, cites });
   }
-  return sentences;
+  return { sentences, ...(Array.isArray(named) ? { noDescription: named as string[] } : {}) };
 }
 
 /**
@@ -183,13 +187,14 @@ export async function draftSummary(options: DraftOptions): Promise<DraftedOrAlte
       if (answer.status === 'refused') return { status: 'failed', kind: 'refused', calls, ...so() };
       if (answer.status === 'failed') return { status: 'failed', kind: FAILURE_KINDS[answer.code], calls, ...so() };
       const model = answer.model;
-      const sentences = parseReply(answer.text);
-      if (sentences === undefined) {
+      const parsed = parseReply(answer.text);
+      const fixed = parsed?.noDescription === undefined ? undefined : options.noDescription?.(parsed.noDescription);
+      if (parsed === undefined || (parsed.noDescription !== undefined && fixed === undefined)) {
         if (options.alternative?.(answer.text) === true) return { status: 'alternative', text: answer.text, calls };
         values = `${options.values}\n\n${FORMAT_NOTE}`;
         continue;
       }
-      const judged = await options.judge(sentences, AbortSignal.any([options.signal, limit.signal]));
+      const judged = await options.judge(parsed.sentences, AbortSignal.any([options.signal, limit.signal]));
       if ('refused' in judged) {
         if (judged.refused !== 'cancelled') options.onCheckRefused?.(judged.refused);
         if (options.signal.aborted) throw new Error('the request was cancelled');
@@ -197,11 +202,13 @@ export async function draftSummary(options: DraftOptions): Promise<DraftedOrAlte
         throw new Error('a check of the reply could not run');
       }
       checked = { kept: judged.kept.length, removed: judged.removed };
+      // the part about types the mapping does not describe stands alone when every sentence was removed or one held a verdict: the answer is that sentence only
+      if (fixed !== undefined && (judged.verdictFound || judged.kept.length === 0)) return { status: 'drafted', sentences: [], removed: judged.removed, calls, verdictFound: false, model, noDescription: fixed };
       if ((judged.verdictFound || judged.kept.length === 0) && calls < callLimit) {
         values = `${options.values}\n\n${judged.verdictFound ? VERDICT_NOTE : NOTHING_LEFT_NOTE}`;
         continue;
       }
-      return { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls, verdictFound: judged.verdictFound, model };
+      return { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls, verdictFound: judged.verdictFound, model, ...(fixed === undefined ? {} : { noDescription: fixed }) };
     } finally {
       clearTimeout(timer);
     }

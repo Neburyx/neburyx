@@ -158,6 +158,8 @@ export const assistantTurnAnswerSchema = z.union([
     sentence: text,
   }),
   z.strictObject({ status: z.literal('not-answered'), route: z.enum(['ask', 'view']), sentence: text }),
+  /** A question about what a type means, when the mapping gives the type no description: the fixed sentence the server wrote from the names of the profile, and the names. No element is cited and no model's word is shown. */
+  z.strictObject({ status: z.literal('no-description'), route: z.enum(['ask', 'view']), sentence: text, names: z.array(text.max(ASSISTANT_CITATION_TITLE_MAX)).min(1).max(40) }),
   /** A failure of the model's service; `readStarted` is false when no read of the source began, and `retryAfterSeconds` is present only when the service said how long to wait. */
   z.strictObject({ status: z.literal('unavailable'), kind: z.enum(ASSISTANT_FAILURE_KINDS), readStarted: z.boolean(), retryAfterSeconds: z.number().int().positive().optional() }),
   z.strictObject({ status: z.literal('too-large'), sentence: text }),
@@ -218,6 +220,8 @@ export const assistantTurnAnswerSchema = z.union([
     coverage: z.strictObject({ retrieval: text, summary: text, /** Written by the server when the answer rests on sentences of an attached summary: which of them, in words. */ summaryCited: text.optional() }),
     /** The positions (from 1, as the summary's sentences are numbered in the draft) of the attached summary's sentences the answer cites; present only when there are some. */
     summarySentencesCited: z.array(z.number().int().min(1).max(12)).min(1).max(12).optional(),
+    /** The fixed sentence for a type in the question that the mapping does not describe, beside the sentences for the ones it does. */
+    noDescription: text.optional(),
     model: text,
     calls: z.number().int().positive(),
   }),
@@ -229,6 +233,8 @@ export const assistantTurnAnswerSchema = z.union([
     /** `title` is the element's title as the result gave it (masked as it was asked), so an element that is not drawn is still named. */
     citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema])).min(0),
     coverage: z.strictObject({ retrieval: text, summary: text }),
+    /** As for the view route's answer. */
+    noDescription: text.optional(),
     model: text,
     calls: z.number().int().positive(),
     steps: z.number().int().min(2),

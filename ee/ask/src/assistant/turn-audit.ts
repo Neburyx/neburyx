@@ -193,6 +193,8 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
     case 'not-answered':
       if (notes.answered === true) return { route: answer.route, outcome: 'answered', result: 'success', ...(notes.citedElements === undefined ? {} : { citedElements: notes.citedElements }) };
       return { route: answer.route, outcome: 'refused', result: 'refused', cause: notes.cause ?? 'not-answered' };
+    case 'no-description':
+      return { route: answer.route, outcome: 'answered', result: 'success', cause: 'no-description' };
     case 'unavailable':
       return { ...(notes.route === 'view' ? { route: 'view' as const } : answer.readStarted ? { route: 'ask' as const } : {}), outcome: 'failed', result: 'failed', failureKind: answer.kind };
     case 'too-large':

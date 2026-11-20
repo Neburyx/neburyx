@@ -53,6 +53,14 @@ describe('the assistant turn answer: the view route', () => {
     expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
   });
 
+  it('accepts the answer no-description and the member noDescription, and refuses an empty list of names or an extra member', () => {
+    const none = { status: 'no-description', route: 'view', sentence: 'The mapping has no description for Gizmo, so I cannot say what it means.', names: ['Gizmo'] };
+    expect(assistantTurnAnswerSchema.safeParse(none).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...none, names: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...none, cites: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.' }).success).toBe(true);
+  });
+
   it('accepts a citation of a meaning line, alone or beside an element, and refuses one with a member it does not have', () => {
     const description = { key: 'm1', kind: 'description', typeKind: 'entity', type: 'Widget', description: 'A widget is a small unit.' };
     expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: [{ text: 'A widget is a small unit.', cites: ['m1'] }], citations: [description] }).success).toBe(true);

@@ -12,7 +12,7 @@ import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { buildViewToolInstructions } from './step-instructions.js';
 import type { ToolRegistry } from './tool-registry.js';
-import { descriptionCitationsOf, typeLinesOf, withTypeLines } from './type-lines.js';
+import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, withTypeLines } from './type-lines.js';
 import { readToolRequest, type ToolRequest } from './tool-request.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
@@ -79,6 +79,8 @@ type StoppedBecause = 'deadline' | 'input' | 'calls';
 type ViewResult =
   | { readonly status: 'answered'; readonly answer: Extract<AssistantTurnAnswer, { status: 'answered'; route: 'view' }>; readonly cited: number }
   | { readonly status: 'unsupported' }
+  /** The question is about types the mapping does not describe: the fixed sentence the server wrote from the names of the profile. */
+  | { readonly status: 'no-description'; readonly sentence: string; readonly names: readonly string[] }
   /** The model asked for a read instead of answering: the loop goes on from this reading, with the request as its first step. */
   | { readonly status: 'tool'; readonly request: ToolRequest; readonly reading: SummaryReading; readonly assembled: AssembledText }
   | { readonly status: 'invalid-keys' }
@@ -216,6 +218,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message);
     const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
     const cited = new Set<number>();
+    // the names of the last reply that named types without a description, for the answer when it is the one accepted
+    let lastNames: readonly string[] | undefined;
     let drafted: DraftedOrAlternative;
     try {
       drafted = await draftSummary({
@@ -224,7 +228,12 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         instructions: sent.text,
         values: valuesOf(input.message, assembled.text + typeLines.section, section),
         prompt: { id: VIEW_PROMPT_ID, version: promptVersion },
-        alternative: (text: string) => tools !== undefined && readToolRequest(text, tools).ok,
+        alternative: (text: string) => (tools !== undefined && readToolRequest(text, tools).ok) || noDescriptionReplyOf(text, typeLines) !== undefined,
+        noDescription: (names: readonly string[]) => {
+          const found = undescribedNamesOf(names, typeLines);
+          lastNames = found;
+          return found === undefined ? undefined : noDescriptionSentence(found);
+        },
         maxInputTokens: settings.maxInputTokens,
         judge: async (sentences, signal) => {
           if (input.summary === undefined) {
@@ -299,7 +308,9 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     switch (drafted.status) {
       case 'alternative': {
         const read = tools === undefined ? undefined : readToolRequest(drafted.text, tools);
-        return read?.ok === true ? outcome({ status: 'tool', request: read.request, reading, assembled }) : outcome({ status: 'unsupported' });
+        if (read?.ok === true) return outcome({ status: 'tool', request: read.request, reading, assembled });
+        const undescribed = noDescriptionReplyOf(drafted.text, typeLines);
+        return undescribed === undefined ? outcome({ status: 'unsupported' }) : outcome({ status: 'no-description', sentence: noDescriptionSentence(undescribed), names: undescribed });
       }
       case 'tooLarge':
         return outcome({ status: 'stopped', because: 'input' });
@@ -309,11 +320,12 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         // a reply that never fit the format, after the one repeat, is the fixed not-answered turn
         return drafted.kind === 'format' ? outcome({ status: 'unsupported' }) : outcome({ status: 'failed', kind: kindOf(drafted.kind === 'rate-limited' ? 'rate-limited' : drafted.kind === 'timeout' ? 'timeout' : 'provider-error') });
       case 'drafted': {
+        if (drafted.sentences.length === 0 && drafted.noDescription !== undefined && lastNames !== undefined) return outcome({ status: 'no-description', sentence: drafted.noDescription, names: lastNames });
         if (drafted.sentences.length === 0 || drafted.verdictFound) return outcome({ status: 'unsupported' });
         const elementCitations = [...citationsOf(drafted.sentences, assembled)];
         const citations = [...elementCitations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);
-        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
+        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], ...(drafted.noDescription === undefined ? {} : { noDescription: drafted.noDescription }), citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
         return outcome({ status: 'answered', answer, cited: elementCitations.length });
       }
       default: {

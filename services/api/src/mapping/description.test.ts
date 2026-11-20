@@ -54,13 +54,13 @@ describe('the description of a type', () => {
     expect(refusal(undefined, value)).not.toBe('loaded');
   });
 
-  it('is listed for the assistant for the types that have one, with the display name, and for no unknown source', () => {
+  it('is listed for the assistant for every type, with the description of the ones that have one and the display name, and for no unknown source', () => {
     const model = load('A thing that holds items.', 'Joins a thing to another.');
     expect(typeDescriptionsOf(model.sources[0])).toEqual({
-      entityTypes: [{ type: 'node_a', label: 'NodeA', displayName: 'NodeA', description: 'A thing that holds items.' }],
+      entityTypes: [{ type: 'node_a', label: 'NodeA', displayName: 'NodeA', description: 'A thing that holds items.' }, { type: 'node_b', label: 'NodeB', displayName: 'NodeB' }],
       relationshipTypes: [{ type: 'LINKS', description: 'Joins a thing to another.' }],
     });
     expect(typeDescriptionsOf(undefined)).toEqual({ entityTypes: [], relationshipTypes: [] });
-    expect(typeDescriptionsOf(load().sources[0])).toEqual({ entityTypes: [], relationshipTypes: [] });
+    expect(typeDescriptionsOf(load().sources[0])).toEqual({ entityTypes: [{ type: 'node_a', label: 'NodeA', displayName: 'NodeA' }, { type: 'node_b', label: 'NodeB', displayName: 'NodeB' }], relationshipTypes: [{ type: 'LINKS' }] });
   });
 });

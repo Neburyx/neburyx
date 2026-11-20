@@ -6562,6 +6562,43 @@
             "properties": {
               "status": {
                 "type": "string",
+                "const": "no-description"
+              },
+              "route": {
+                "type": "string",
+                "enum": [
+                  "ask",
+                  "view"
+                ]
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              },
+              "names": {
+                "minItems": 1,
+                "maxItems": 40,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 400
+                }
+              }
+            },
+            "required": [
+              "status",
+              "route",
+              "sentence",
+              "names"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
                 "const": "unavailable"
               },
               "kind": {
@@ -7615,6 +7652,10 @@
                   "maximum": 12
                 }
               },
+              "noDescription": {
+                "type": "string",
+                "minLength": 1
+              },
               "model": {
                 "type": "string",
                 "minLength": 1
@@ -7980,6 +8021,10 @@
                   "summary"
                 ],
                 "additionalProperties": false
+              },
+              "noDescription": {
+                "type": "string",
+                "minLength": 1
               },
               "model": {
                 "type": "string",

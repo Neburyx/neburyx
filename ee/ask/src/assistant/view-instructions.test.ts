@@ -1,4 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ASK_FOLDER_LIMITS } from '@neburyx/contracts';
@@ -59,5 +61,15 @@ describe('the instructions of the view answer', () => {
   it('name the shipped file and the setting that replaces it when a shipped file is missing', async () => {
     const result = await loadViewInstructions({ env: {}, shippedDirectory: `${folder}/nowhere/` });
     expect(result.ok ? '' : result.problems.join(' ')).toContain('replace it with NEBURYX_ASSISTANT_VIEW_PROMPT_FILE');
+  });
+});
+
+describe('the shipped prompts for a meaning question', () => {
+  it('send a question about what a type means to view, and give the view call the reply form for a type without a description', async () => {
+    const router = await readFile(fileURLToPath(new URL('../../prompts/assistant-router.md', import.meta.url)), 'utf8');
+    expect(router).toContain('asks what a kind of thing or a kind of link means');
+    const view = await readFile(fileURLToPath(new URL('../../prompts/assistant-view.md', import.meta.url)), 'utf8');
+    expect(view).toContain('{"noDescription":[');
+    expect(view).toContain('only for a type with no m line');
   });
 });

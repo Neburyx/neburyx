@@ -167,7 +167,7 @@ describe('the meaning lines of the answer after tool steps', () => {
     const answer = await answerOf(r.route.handler(r.request(undefined, described)));
     const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
     expect(call?.values).toContain(`m1: entity type widget: ${JSON.stringify(WIDGET)}`);
-    if (answer.status !== 'answered') throw new Error('not answered');
+    if (answer.status !== 'answered' || !('sentences' in answer)) throw new Error('not answered');
     expect(answer.sentences).toHaveLength(2);
     expect(answer.citations.map((citation) => citation.kind)).toEqual(['entity', 'description']);
   });
@@ -177,4 +177,13 @@ describe('the meaning lines of the answer after tool steps', () => {
     await answerOf(r.route.handler(r.request()));
     expect(r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer')?.values).not.toContain('What the types mean');
   });
+
+  it('takes a reply that names an undescribed type in play through its own hook, alone and beside sentences', async () => {
+    const mapping = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget' }], relationshipTypes: [] }) };
+    const alone = await setup(ok('{"noDescription":["widget"]}'));
+    expect(await answerOf(alone.route.handler(alone.request(undefined, mapping)))).toEqual({ status: 'no-description', route: 'ask', sentence: 'The mapping has no description for Widget, so I cannot say what it means.', names: ['Widget'] });
+    const beside = await setup(ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }], noDescription: ['Widget'] })));
+    expect(await answerOf(beside.route.handler(beside.request(undefined, mapping)))).toMatchObject({ status: 'answered', noDescription: 'The mapping has no description for Widget, so I cannot say what it means.' });
+  });
 });
+

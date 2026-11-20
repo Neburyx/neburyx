@@ -22,10 +22,10 @@ function filterKindsOf(filterable: readonly string[], kinds: Readonly<Record<str
   return Object.fromEntries(names.map((property) => [property, Object.hasOwn(declared, property) ? (declared[property] ?? 'unknown') : 'unknown']));
 }
 
-/** The descriptions the mapping gives the types of a source: only the types that have one; none for an unknown source. */
+/** The types of a source with the description the mapping gives each, when it gives one; none for an unknown source. */
 export function typeDescriptionsOf(source: SourceModel | undefined): TypeDescriptions {
-  const entityTypes = (source?.entities ?? []).flatMap((entity) => (entity.description === undefined ? [] : [{ type: entity.type, label: entity.label, displayName: entity.display.name ?? entity.label, description: entity.description }]));
-  const relationshipTypes = (source?.relationships ?? []).flatMap((relationship) => (relationship.description === undefined ? [] : [{ type: relationship.type, description: relationship.description }]));
+  const entityTypes = (source?.entities ?? []).map((entity) => ({ type: entity.type, label: entity.label, displayName: entity.display.name ?? entity.label, ...(entity.description === undefined ? {} : { description: entity.description }) }));
+  const relationshipTypes = (source?.relationships ?? []).map((relationship) => ({ type: relationship.type, ...(relationship.description === undefined ? {} : { description: relationship.description }) }));
   return { entityTypes, relationshipTypes };
 }
 

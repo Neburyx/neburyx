@@ -75,6 +75,7 @@ export type LoopOutcome =
   | { readonly kind: 'waiting'; readonly wait: { readonly request: ToolRequest; readonly answer: Answered }; readonly steps: readonly PlanStep[]; readonly counters: { readonly steps: number; readonly rows: number; readonly calls: number }; readonly reads: readonly AssistantRead[]; readonly fromView: boolean }
   /** The checked answer after tool steps: sentences that cite the elements the steps returned. */
   | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
+  | { readonly kind: 'no-description'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind }
   | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly reads: readonly AssistantRead[] }
@@ -86,6 +87,8 @@ function answered(outcome: ToolAnswerOutcome, steps: number, calls: number, read
   switch (outcome.kind) {
     case 'sentences':
       return { kind: 'sentences', answer: outcome, steps, calls: calls + outcome.calls, reads, ...(stoppedAt === undefined ? {} : { stoppedAt }) };
+    case 'noDescription':
+      return { kind: 'no-description', sentence: outcome.sentence, names: outcome.names, calls: calls + outcome.calls };
     case 'unsupported':
       return { kind: 'unsupported' };
     case 'limit':

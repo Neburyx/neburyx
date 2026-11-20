@@ -2,14 +2,14 @@ import { ASSISTANT_CITATION_TITLE_MAX, type AskRunResult, type SummaryReading, t
 import { AuditUnavailableError, type AuditedModelCall, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { type AssembledText, estimateTokens } from '../case-summary/assemble.js';
 import { retrievalLine } from '../case-summary/coverage.js';
-import { draftSummary, type Drafted } from '../case-summary/draft.js';
+import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { listedElements } from '../summary/index.js';
 import { coverageOf, inexactCountOf } from './coverage.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { StepScope } from './tool-step.js';
-import { descriptionCitationsOf, typeLinesOf, withTypeLines } from './type-lines.js';
+import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, withTypeLines } from './type-lines.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const ANSWER_PROMPT_ID = 'assistant.answer';
@@ -49,7 +49,9 @@ export interface ToolAnswerInput {
 }
 
 export type ToolAnswerOutcome =
-  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number }
+  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string }
+  /** The question is about types the mapping does not describe: the fixed sentence the server wrote and the names of the profile. */
+  | { readonly kind: 'noDescription'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported'; readonly calls: number }
   | { readonly kind: 'limit'; readonly limit: 'calls' | 'time' | 'input'; readonly calls: number }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind; readonly calls: number };
@@ -127,7 +129,8 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     const checkedText = withTypeLines({ ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) }, typeLines);
     const turnSignal = AbortSignal.any([input.signal, input.deadline]);
     let calls = 0;
-    let drafted: Drafted;
+    let lastNames: readonly string[] | undefined;
+    let drafted: DraftedOrAlternative;
     try {
       drafted = await draftSummary({
         call: options.model,
@@ -136,6 +139,12 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
         values,
         prompt: { id: ANSWER_PROMPT_ID, version: ANSWER_PROMPT_VERSION },
         maxInputTokens: input.maxInputTokens,
+        alternative: (text: string) => noDescriptionReplyOf(text, typeLines) !== undefined,
+        noDescription: (names: readonly string[]) => {
+          const found = undescribedNamesOf(names, typeLines);
+          lastNames = found;
+          return found === undefined ? undefined : noDescriptionSentence(found);
+        },
         judge: async (sentences, signal) => {
           const checked = await options.checks.run(judgeCheck, { sentences, text: checkedText }, { timeoutMs: options.timeoutMs, signal });
           return checked.status === 'refused' ? { refused: checked.reason } : checked.value;
@@ -164,6 +173,10 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
       return input.deadline.aborted ? { kind: 'limit', limit: 'time', calls } : { kind: 'failed', why: 'service', calls };
     }
     switch (drafted.status) {
+      case 'alternative': {
+        const undescribed = noDescriptionReplyOf(drafted.text, typeLines);
+        return undescribed === undefined ? { kind: 'unsupported', calls: drafted.calls } : { kind: 'noDescription', sentence: noDescriptionSentence(undescribed), names: undescribed, calls: drafted.calls };
+      }
       case 'tooLarge':
         return { kind: 'limit', limit: 'input', calls: drafted.calls };
       case 'timeLimit':
@@ -171,6 +184,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
       case 'failed':
         return drafted.kind === 'format' ? { kind: 'unsupported', calls: drafted.calls } : { kind: 'failed', why: failureOf(drafted.kind), calls: drafted.calls };
       case 'drafted': {
+        if (drafted.sentences.length === 0 && drafted.noDescription !== undefined && lastNames !== undefined) return { kind: 'noDescription', sentence: drafted.noDescription, names: lastNames, calls: drafted.calls };
         if (drafted.sentences.length === 0 || drafted.verdictFound) return { kind: 'unsupported', calls: drafted.calls };
         const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
         const citations = [...cited].flatMap((key) => {
@@ -178,7 +192,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
           return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref, ...(citationTitleOf(element.title) === undefined ? {} : { title: citationTitleOf(element.title) }) }];
         });
         const withDescriptions = [...citations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
-        return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls };
+        return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls, ...(drafted.noDescription === undefined ? {} : { noDescription: drafted.noDescription }) };
       }
       default: {
         const unreachable: never = drafted;
