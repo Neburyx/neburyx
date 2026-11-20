@@ -122,7 +122,7 @@ describe('the Assistant panel: an answer from the view', () => {
     await typeAndSend('and again?');
     act(() => h.state.setMask(true));
     expect(screen.queryByText('AI-drafted')).toBeNull();
-    expect(screen.getByText(ASSISTANT_COPY.maskingCleared)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.maskingTitle)).toBeTruthy();
     await act(async () => release());
     expect(screen.queryByText('AI-drafted')).toBeNull();
     h.stop();

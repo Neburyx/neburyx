@@ -726,7 +726,7 @@ describe('the thread of an investigation in the running application', () => {
   };
   type ThreadRig = Awaited<ReturnType<typeof assistantRig>>;
   const readThread = (rig: ThreadRig, id = rig.body.investigationId) => rig.rig.app.inject({ method: 'GET', url: `/v1/assistant/investigations/${id}/thread` });
-  const send = (rig: ThreadRig, message = `Show ${CANARY} W-1`) => rig.post({ ...rig.body, message, viewElementKeys: ['key-canary-9'] });
+  const send = (rig: ThreadRig, message = `Show ${CANARY} W-1`) => rig.post({ ...rig.body, message, viewElementKeys: [CANARY_KEY] });
 
   it('keeps an answered turn and a refused turn, answers them back to their person as kinds and counts, and holds no text of the message, the value or the reply', async () => {
     current = FIRST;
