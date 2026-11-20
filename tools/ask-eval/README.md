@@ -37,6 +37,28 @@ pnpm ask-eval record --packs domain-packs --budget <n> --out <folder outside eve
 - The key is read only from the file named by `NEBURYX_ASK_API_KEY_FILE`, as the product reads it; a key in the environment is refused. The model and effort come from `NEBURYX_ASK_*`.
 - `--out` holds `recording.json` (the replay format, so it can be committed as the replay) and `run-record.json` (the model, effort, prompt hashes, calls, failed calls and tokens; no text). Both are written with mode 0600.
 
+## The assistant's router
+
+`ask-eval assistant` scores the assistant's router on `assistant-questions.yaml` of each pack: single messages and short threads, each with the route it should take (a view, an Ask question with its intent and entities, a clarification with its candidates, or a refusal with its cause). It runs the product's own router, with the product's own thread context built from labelled earlier turns, over recorded replies of the model.
+
+```bash
+pnpm ask-eval assistant --packs domain-packs --replay tools/ask-eval/data/assistant/scripted/replay.json
+pnpm ask-eval assistant --packs domain-packs --write-replay <file outside every git working tree>
+pnpm ask-eval assistant record --packs domain-packs --dry-run
+pnpm ask-eval assistant record --packs domain-packs --budget <n> --out <folder outside every git working tree> [--model <name>] [--force]
+pnpm ask-eval assistant loop-cost --packs domain-packs --budget <n> --out <folder>
+pnpm ask-eval assistant defaults --packs domain-packs --run-record <file> --loop-cost <file> [--out <folder>]
+```
+
+- A request is right only when its route, intent and every entity equal the expectation; every refusal must be refused, with its expected cause; at most 8% of the plans (rounded down) may miss.
+- The committed `scripted` replay is built from the expectations, not from a model: it proves the harness and the set agree, and it is what the nightly workflow replays. It must be written again whenever the set or the router's text changes. A replay of a model is kept in `data/assistant/<model>/` with its baseline; the replay names the hash of the router text it was recorded with, and a replay of another text is refused.
+- A request makes one call and, when the first reply is not a route, one repeat. `--dry-run` makes no call, needs no key and prints the most calls a run can make. The budget must be at least twice the requests, and it is checked before each request against the most that request can cost, so a run stops between requests, never inside one.
+- The report prints the share of first replies that were not a bare route (text around the route, a wrong form, a route the turn did not accept, a failed call) and how many the repeat rescued, with ids only and never a wording.
+- `loop-cost` runs each single message twice through the real turn route over stand-in reads, with the tool loop off and on, and reports the extra calls, tokens and time per routed message by route. The reads are a stand-in that returns a fixed result for each intent, so the rows and the read times are not those of a source.
+- `defaults` compares what the records observed (the maximum, the 95th and the 99th percentile) with the assistant's defaults and the highest value each setting accepts, and says for each "inside", "close" (over 80% of the default) or "over", with a proposed value for a close or over figure. It prints and writes a record outside the repository; it changes no file of the repository.
+- A run measures the product's defaults (calls, steps, context turns, input tokens) whatever `NEBURYX_ASSISTANT_*` settings are given: only the model, the timeout and the output limit are taken from them, and each record names the limits it used.
+- The key is read only from the file named by `NEBURYX_ASK_API_KEY_FILE`; the model, the timeout and the output limit come from the assistant's own `NEBURYX_ASSISTANT_*` settings.
+
 ## A private question set
 
 A question file with its own Ask folder can be run from outside the repository: `--questions <file> --folder <folder> --source <id>` (the folder in the product's shape, `<folder>/<id>/classification.md` and `intents.json`). Every private input and output path must be outside every git working tree; the tool refuses one inside. `ask-eval scan --questions <file> --folder <folder> --source <id> <checkout>` counts, and prints only counts, the whole questions, intent names and long classification lines of the private set that occur anywhere under a checkout; it exits 1 when any is not 0 (`--exclude <path>` leaves a path out, `--common <path>` names text the private classification may share with public files).

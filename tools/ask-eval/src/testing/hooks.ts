@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { classify, loadSource, runSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
-import type { EvalHooks, RecordedAnswer } from '../hooks.js';
+import { assistantLimits, assistantRunSettings, classify, contextKeys, contextTurns, liveAssistantProvider, loadSource, loopCostRun, loopDefaults, routeMessage, routerRequests, routerTextBytes, routerTextSha256, runSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
+import type { AssistantHooks, EvalHooks, RecordedAnswer } from '../hooks.js';
 
 const made: string[] = [];
 
@@ -18,12 +18,12 @@ export function scratch(prefix = 'ask-eval-test-'): string {
 }
 
 /** The hooks the entry script gives the command, with the live provider replaced by one that answers from a function and counts nothing itself. */
-export function hooksWith(answer: (question: string) => RecordedAnswer): EvalHooks & { readonly asked: string[] } {
+export function hooksWith(answer: (question: string, promptId: string) => RecordedAnswer): EvalHooks & AssistantHooks & { readonly asked: string[] } {
   const asked: string[] = [];
   const inner = {
     complete: async (request: { readonly values: string; readonly promptId: string; readonly version: number; readonly instructions?: string }) => {
       asked.push(request.values);
-      const given = answer(request.values);
+      const given = answer(request.values, request.promptId);
       const prompt = { id: request.promptId, version: request.version, sha256: createHash('sha256').update(request.instructions ?? '', 'utf8').digest('hex') };
       if ('reply' in given) return { status: 'ok' as const, text: given.reply, usage: { kind: 'known' as const, inputTokens: 10, outputTokens: 5, cacheReadTokens: 2 }, model: 'fixture', prompt };
       if ('declined' in given) return { status: 'refused' as const, usage: { kind: 'unknown' as const }, prompt };
@@ -36,6 +36,17 @@ export function hooksWith(answer: (question: string) => RecordedAnswer): EvalHoo
     classify: (source, provider, model, question) => classify(source as never, provider as never, model, question),
     replayProvider: (answers) => replayProvider(answers as never),
     recordingProvider: (provider, budget) => recordingProvider(provider as never, budget) as never,
+    routeMessage: (source, provider, model, input) => routeMessage(source as never, provider as never, model, input) as never,
+    routerRequests: (source, input) => routerRequests(source as never, input),
+    routerTextSha256: (source) => routerTextSha256(source as never),
+    contextKeys: (source, earlier) => contextKeys(source as never, earlier),
+    contextTurns,
+    routerTextBytes: (source) => routerTextBytes(source as never),
+    assistantRunSettings,
+    loopCostRun: (source, provider, model, input, steps) => loopCostRun(source as never, provider as never, model, input, steps),
+    loopDefaults,
+    assistantLimits,
+    liveAssistantProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium', outputLimit: 4000 }),
     runSettings,
     liveProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium' }),
   };

@@ -18,7 +18,7 @@ export const ASSISTANT_VARIABLES = {
 } as const;
 
 /** Defaults and ceilings are hypotheses to be measured, except the timeout of a call, the calls, the words of a message and the turns of context, which are given. */
-const DEFAULTS = {
+export const DEFAULTS = {
   model: SUMMARY_DEFAULTS.model,
   timeoutMs: 60_000,
   totalTimeoutMs: SUMMARY_DEFAULTS.totalTimeoutMs,
@@ -31,7 +31,7 @@ const DEFAULTS = {
   runRetentionDays: SUMMARY_DEFAULTS.retentionDays,
 } as const;
 
-const RANGES = {
+export const RANGES = {
   timeoutMs: AI_LIMITS.timeoutMs,
   totalTimeoutMs: AI_LIMITS.timeoutMs,
   maxCalls: { min: 1, max: 10 },

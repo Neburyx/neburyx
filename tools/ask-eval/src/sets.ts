@@ -27,6 +27,20 @@ export function cleanUpTemporary(): void {
   for (const path of temporary.splice(0)) rmSync(path, { recursive: true, force: true });
 }
 
+/** The Ask folder of one pack, copied to a temporary folder in the shape the product loads and loaded as the product loads it. */
+export async function loadPackSource(pack: string, name: string, hooks: EvalHooks): Promise<SourceHandle> {
+  if (!existsSync(join(pack, 'ask'))) throw new UsageError(`the pack ${name} has no ask folder`);
+  const id = SOURCE_ID.exec(readFileSync(join(pack, 'neburyx.yaml'), 'utf8'))?.[1];
+  if (id === undefined) throw new UsageError(`the pack ${name} names no source id`);
+  const root = mkdtempSync(join(tmpdir(), 'ask-eval-'));
+  temporary.push(root);
+  mkdirSync(join(root, id));
+  cpSync(join(pack, 'ask'), join(root, id), { recursive: true });
+  const loaded = await hooks.loadSource(root, id);
+  if (!loaded.ok) throw new UsageError(`the ask folder of the pack ${name} does not pass the start-up checks: ${loaded.problems.join('; ')}`);
+  return loaded.source;
+}
+
 async function demoSets(packsFolder: string, hooks: EvalHooks): Promise<SourceSet[]> {
   const sets: SourceSet[] = [];
   const names = readdirSync(packsFolder, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
@@ -34,15 +48,7 @@ async function demoSets(packsFolder: string, hooks: EvalHooks): Promise<SourceSe
     const pack = join(packsFolder, name);
     if (!existsSync(join(pack, 'questions.yaml')) && !existsSync(join(pack, 'ask'))) continue;
     if (!existsSync(join(pack, 'questions.yaml')) || !existsSync(join(pack, 'ask'))) throw new UsageError(`the pack ${name} needs both questions.yaml and an ask folder`);
-    const id = SOURCE_ID.exec(readFileSync(join(pack, 'neburyx.yaml'), 'utf8'))?.[1];
-    if (id === undefined) throw new UsageError(`the pack ${name} names no source id`);
-    const root = mkdtempSync(join(tmpdir(), 'ask-eval-'));
-    temporary.push(root);
-    mkdirSync(join(root, id));
-    cpSync(join(pack, 'ask'), join(root, id), { recursive: true });
-    const loaded = await hooks.loadSource(root, id);
-    if (!loaded.ok) throw new UsageError(`the ask folder of the pack ${name} does not pass the start-up checks: ${loaded.problems.join('; ')}`);
-    sets.push({ label: name, source: loaded.source, questions: readQuestions(readFileSync(join(pack, 'questions.yaml'), 'utf8')) });
+    sets.push({ label: name, source: await loadPackSource(pack, name, hooks), questions: readQuestions(readFileSync(join(pack, 'questions.yaml'), 'utf8')) });
   }
   if (sets.length === 0) throw new UsageError('no pack with questions and an ask folder was found');
   return sets;

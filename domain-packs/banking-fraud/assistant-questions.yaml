@@ -1,0 +1,186 @@
+# The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
+messages:
+  - id: describe-the-view
+    wording: "What am I looking at?"
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }] }
+  - id: summarize-what-is-on-screen
+    wording: "Describe the accounts and the device on screen."
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }] }
+  - id: accounts-on-the-same-device
+    wording: "Which accounts use the same device as AC-0002000?"
+    expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002000 } }
+  - id: accounts-on-the-same-address
+    wording: "Which accounts connect from the same address as AC-0002000?"
+    expect: { route: ask, intent: accounts-on-the-same-address, entities: { account: AC-0002000 } }
+  - id: same-device-in-the-last-90-days
+    wording: "Which accounts used the same device as AC-0002000 in the last 90 days?"
+    expect: { route: ask, intent: same-device-in-the-last-90-days, entities: { account: AC-0002000 } }
+  - id: two-shared-devices
+    wording: "Which accounts share at least 2 devices with AC-0002000?"
+    expect: { route: ask, intent: two-shared-devices, entities: { account: AC-0002000 } }
+  - id: ten-accounts-on-the-same-address
+    wording: "Show 10 accounts that use the same address as AC-0002000."
+    expect: { route: ask, intent: ten-accounts-on-the-same-address, entities: { account: AC-0002000 } }
+  - id: accounts-paid-by-an-account
+    wording: "Which accounts has AC-0002000 transferred money to?"
+    expect: { route: ask, intent: accounts-paid-by-an-account, entities: { account: AC-0002000 } }
+  - id: accounts-that-paid-an-account
+    wording: "Which accounts sent money to AC-0002001?"
+    expect: { route: ask, intent: accounts-that-paid-an-account, entities: { account: AC-0002001 } }
+  - id: accounts-within-two-transfers
+    wording: "Which accounts are connected to AC-0002000 by transfers within 2 steps?"
+    expect: { route: ask, intent: accounts-within-two-transfers, entities: { account: AC-0002000 } }
+  - id: merchants-an-account-paid
+    wording: "Which merchants has AC-0002000 paid?"
+    expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002000 } }
+  - id: merchants-paid-in-the-last-30-days
+    wording: "Which merchants did AC-0002000 pay in the last 30 days?"
+    expect: { route: ask, intent: merchants-paid-in-the-last-30-days, entities: { account: AC-0002000 } }
+  - id: show-an-account
+    wording: "Show me AC-0002000."
+    expect: { route: ask, intent: show-an-account, entities: { account: AC-0002000 } }
+  - id: devices-and-addresses-of-an-account
+    wording: "How many devices and addresses is AC-0002000 connected to?"
+    expect: { route: ask, intent: devices-and-addresses-of-an-account, entities: { account: AC-0002000 } }
+  - id: accounts-using-a-device
+    wording: "Which accounts use DV-000010?"
+    expect: { route: ask, intent: accounts-using-a-device, entities: { device: DV-000010 } }
+  - id: latest-transactions-of-an-account
+    wording: "Show the latest transactions of AC-0002000."
+    expect: { route: ask, intent: latest-transactions-of-an-account, entities: { account: AC-0002000 } }
+  - id: payments-made-to-a-merchant
+    wording: "Show the payments made to MR-0100."
+    expect: { route: ask, intent: payments-made-to-a-merchant, entities: { merchant: MR-0100 } }
+  - id: devices-used-in-the-last-7-days
+    wording: "Which devices did AC-0002000 use in the last 7 days?"
+    expect: { route: ask, intent: devices-used-in-the-last-7-days, entities: { account: AC-0002000 } }
+  - id: shared-device-chain
+    wording: "Which accounts are linked to AC-0002000 by a shared device, and what chain shows it?"
+    expect: { route: ask, intent: shared-device-chain, entities: { account: AC-0002000 } }
+  - id: why-two-accounts-are-linked
+    wording: "Why are AC-0002000 and AC-0002001 linked through a shared device?"
+    expect: { route: ask, intent: why-two-accounts-are-linked, entities: { first: AC-0002000, second: AC-0002001 } }
+  - id: transactions-with-a-payment-reference
+    wording: "Which transactions have the payment reference PR-00000010?"
+    expect: { route: ask, intent: transactions-with-a-payment-reference, entities: { reference: PR-00000010 } }
+  - id: shortest-path-between-accounts
+    wording: "What is the shortest path between AC-0002000 and AC-0002001?"
+    expect: { route: ask, intent: shortest-path-between-accounts, entities: { first: AC-0002000, second: AC-0002001 } }
+  - id: customers-by-name
+    wording: "Who is the customer named Ada Alder?"
+    expect: { route: ask, intent: customers-by-name, entities: { name: Ada Alder } }
+  - id: verdict-on-an-owner
+    wording: "Is the owner of AC-0002000 guilty of fraud?"
+    expect: { route: refuse, cause: verdict }
+  - id: verdict-on-money-laundering
+    wording: "Does AC-0002001 prove that money laundering is happening?"
+    expect: { route: refuse, cause: verdict }
+  - id: raw-query-match
+    wording: "MATCH (a:Account) RETURN a LIMIT 10"
+    expect: { route: refuse, cause: raw-query }
+  - id: raw-query-sql
+    wording: "Run this for me: SELECT * FROM accounts WHERE risk > 5"
+    expect: { route: refuse, cause: raw-query }
+  - id: other-source-claims
+    wording: "Show me the accounts on the same device in the insurance claims source instead."
+    expect: { route: refuse, cause: other-source }
+  - id: other-source-customers
+    wording: "Switch to the customer records database and list the owners there."
+    expect: { route: refuse, cause: other-source }
+  - id: unplaced-the-big-ones
+    wording: "Tell me about the big ones."
+    expect: { route: refuse, cause: unplaced }
+  - id: unplaced-make-it-nicer
+    wording: "Make it all a bit nicer."
+    expect: { route: refuse, cause: unplaced }
+
+# Short threads: each turn is labelled with its route and, for a plan, its intent and inputs; a follow-up names no entity and is resolved from the turns before it.
+threads:
+  - id: device-then-merchants
+    turns:
+      - message: "Which accounts use the same device as AC-0002000?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002000 } }
+      - message: "And which merchants has it paid?"
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002000 } }
+  - id: address-then-show
+    turns:
+      - message: "Which accounts connect from the same address as AC-0002010?"
+        expect: { route: ask, intent: accounts-on-the-same-address, entities: { account: AC-0002010 } }
+      - message: "Show me that account."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002010 } }
+  - id: paid-payers-latest
+    turns:
+      - message: "Which accounts has AC-0002020 transferred money to?"
+        expect: { route: ask, intent: accounts-paid-by-an-account, entities: { account: AC-0002020 } }
+      - message: "And which accounts sent money to it?"
+        expect: { route: ask, intent: accounts-that-paid-an-account, entities: { account: AC-0002020 } }
+      - message: "Show its latest transactions."
+        expect: { route: ask, intent: latest-transactions-of-an-account, entities: { account: AC-0002020 } }
+  - id: verdict-in-the-middle
+    turns:
+      - message: "Show me AC-0002030."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002030 } }
+      - message: "Is its owner a criminal?"
+        expect: { route: refuse, cause: verdict }
+      - message: "Fine, which devices and addresses is it connected to?"
+        expect: { route: ask, intent: devices-and-addresses-of-an-account, entities: { account: AC-0002030 } }
+  - id: two-accounts-then-which
+    turns:
+      - message: "Which accounts use the same device as AC-0002050?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002050 } }
+      - message: "Which accounts use the same device as AC-0002051?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002051 } }
+      - message: "Which merchants has that account paid?"
+        expect: { route: clarify, intent: merchants-an-account-paid, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002050 }, { entityType: account, stableId: AC-0002051 }] }
+  - id: two-accounts-who-paid
+    turns:
+      - message: "Show me AC-0002060."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002060 } }
+      - message: "Show me AC-0002061."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002061 } }
+      - message: "Who sent money to it?"
+        expect: { route: clarify, intent: accounts-that-paid-an-account, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002060 }, { entityType: account, stableId: AC-0002061 }] }
+  - id: five-turns-the-last-one-wins
+    turns:
+      - message: "Show me AC-0002070."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002070 } }
+      - message: "Show me AC-0002071."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002071 } }
+      - message: "Show me AC-0002072."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002072 } }
+      - message: "Which devices is it connected to?"
+        expect: { route: ask, intent: devices-and-addresses-of-an-account, entities: { account: AC-0002072 } }
+      - message: "And which merchants did it pay in the last 30 days?"
+        expect: { route: ask, intent: merchants-paid-in-the-last-30-days, entities: { account: AC-0002072 } }
+  - id: raw-query-in-the-middle
+    turns:
+      - message: "Show me AC-0002080."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002080 } }
+      - message: "MATCH (n) WHERE n.id = 'AC-0002080' RETURN n"
+        expect: { route: refuse, cause: raw-query }
+      - message: "Which accounts are connected to it by transfers within 2 steps?"
+        expect: { route: ask, intent: accounts-within-two-transfers, entities: { account: AC-0002080 } }
+  - id: other-source-in-the-middle
+    turns:
+      - message: "Which devices did AC-0002090 use in the last 7 days?"
+        expect: { route: ask, intent: devices-used-in-the-last-7-days, entities: { account: AC-0002090 } }
+      - message: "Now show the same for the insurance claims source."
+        expect: { route: refuse, cause: other-source }
+      - message: "Back here: which accounts share a device with it?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002090 } }
+  - id: view-then-an-account
+    turns:
+      - message: "Describe what is on screen."
+        expect: { route: view, view: [{ entityType: account, stableId: AC-0002100 }, { entityType: account, stableId: AC-0002101 }] }
+      - message: "Show AC-0002100 on its own."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002100 } }
+      - message: "Which accounts connect from the same address as it?"
+        expect: { route: ask, intent: accounts-on-the-same-address, entities: { account: AC-0002100 } }
+  - id: unplaced-in-the-middle
+    turns:
+      - message: "Which merchants has AC-0002110 paid?"
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002110 } }
+      - message: "Make the ones I care about bigger."
+        expect: { route: refuse, cause: unplaced }
+      - message: "Which accounts sent money to it?"
+        expect: { route: ask, intent: accounts-that-paid-an-account, entities: { account: AC-0002110 } }

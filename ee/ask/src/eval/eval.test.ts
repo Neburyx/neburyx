@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { classify, loadSource } from './evaluate.js';
-import { LiveProviderError, liveProvider, runSettings } from './live.js';
+import { LiveProviderError, assistantRunSettings, liveAssistantProvider, liveProvider, runSettings } from './live.js';
 import { BudgetReached, promptRecordOf, recordingProvider, replayProvider, type ModelProvider, type ReplayAnswer } from '@neburyx/ee-ai-runtime';
 
 const made: string[] = [];
@@ -139,3 +139,36 @@ describe('the live provider', () => {
     expect(runSettings({ NEBURYX_ASK_CLASSIFICATION_MODEL: 'other-model', NEBURYX_ASK_EFFORT: 'low' })).toEqual({ model: 'other-model', effort: 'low' });
   });
 });
+
+describe('the live provider of the assistant', () => {
+  const folder = '/somewhere/absolute';
+  const keyFile = (): string => {
+    const root = mkdtempSync(join(tmpdir(), 'eval-key-'));
+    made.push(root);
+    const key = join(root, 'key');
+    writeFileSync(key, 'sk-test-not-a-real-key\n', { mode: 0o600 });
+    return key;
+  };
+
+  it('refuses a key in the environment and a missing key file, before any call', async () => {
+    await expect(liveAssistantProvider({ NEBURYX_ASK_API_KEY: 'x' }, folder)).rejects.toThrow(/NEBURYX_ASK_API_KEY_FILE/);
+    await expect(liveAssistantProvider({}, folder)).rejects.toThrow(LiveProviderError);
+  });
+
+  it('uses the assistant\'s own model and output limit, never Ask\'s, forces retries to 0 and takes the model of a flag over the setting', async () => {
+    const env = { NEBURYX_ASK_API_KEY_FILE: keyFile(), NEBURYX_ASK_CLASSIFICATION_MODEL: 'ask-model', NEBURYX_ASK_MAX_RETRIES: '3', NEBURYX_ASSISTANT_MODEL: 'assistant-model', NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS: '1234' };
+    const built = await liveAssistantProvider(env, folder);
+    expect(built).toMatchObject({ model: 'assistant-model', outputLimit: 1234, maxRetries: 0 });
+    expect((await liveAssistantProvider(env, folder, 'flag-model')).model).toBe('flag-model');
+  });
+
+  it('settles the model, the effort and the output limit without a key, with the assistant\'s defaults', () => {
+    expect(assistantRunSettings({})).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium', outputLimit: 4000 });
+    expect(assistantRunSettings({ NEBURYX_ASSISTANT_MODEL: 'other' }, 'flag')).toMatchObject({ model: 'flag' });
+  });
+
+  it('refuses a setting of the assistant that is out of range, naming the setting and never its value', async () => {
+    await expect(liveAssistantProvider({ NEBURYX_ASK_API_KEY_FILE: keyFile(), NEBURYX_ASSISTANT_MAX_CALLS: '99' }, folder)).rejects.toThrow(/NEBURYX_ASSISTANT_MAX_CALLS/);
+  });
+});
+

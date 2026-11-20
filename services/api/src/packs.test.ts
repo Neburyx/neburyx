@@ -21,6 +21,7 @@ const MAPPING_FILE = 'neburyx.yaml';
 const DEMO_FILE = 'demo.yaml';
 const CASES_FILE = 'cases.yaml';
 const QUESTIONS_FILE = 'questions.yaml';
+const ASSISTANT_QUESTIONS_FILE = 'assistant-questions.yaml';
 const ASK_FOLDER = 'ask';
 const ASK_FILES = ['classification.md', 'intents.json'];
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -204,8 +205,8 @@ describe('the shape of a pack directory', () => {
 });
 
 describe.each(packs)('the %s pack: the mapping file', (pack) => {
-  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions and an Ask folder when the pack has them, and nothing else', () => {
-    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASK_FOLDER].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
+  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions, assistant questions and an Ask folder when the pack has them, and nothing else', () => {
+    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASSISTANT_QUESTIONS_FILE, ASK_FOLDER].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
     expect(shapeProblems(join(PACKS_ROOT, pack))).toEqual([]);
   });
 

@@ -45,9 +45,27 @@ describe('the nightly Ask evaluation workflow', () => {
   it('installs from the lockfile and ends by running the runner on the checked-in packs, replay and baseline files', () => {
     const runs = (job?.steps ?? []).flatMap((step) => (step.run === undefined ? [] : [step.run]));
     expect(runs.slice(0, 2)).toEqual(['corepack enable', 'pnpm install --frozen-lockfile']);
-    const last = runs.at(-1) ?? '';
+    const last = runs.find((run) => run.startsWith('pnpm ask-eval --packs')) ?? '';
     expect(last).toMatch(/^pnpm ask-eval /);
     for (const file of ['domain-packs', 'tools/ask-eval/data/replay.json', 'tools/ask-eval/data/baseline.json']) expect(last).toContain(file);
+  });
+
+  it('also replays the assistant router\'s committed replies, with no model call, key or recording', () => {
+    const runs = (job?.steps ?? []).flatMap((step) => (step.run === undefined ? [] : [step.run]));
+    const assistant = runs.filter((run) => run.startsWith('pnpm ask-eval assistant '));
+    expect(assistant.length).toBeGreaterThanOrEqual(1);
+    for (const run of assistant) {
+      expect(run).toContain('--packs domain-packs');
+      expect(run).toMatch(/--replay tools\/ask-eval\/data\/assistant\/[\w-]+\/replay\.json/);
+      expect(run).not.toMatch(/\b(record|loop-cost|defaults)\b|--write-replay|--update-baseline|--run-record/);
+    }
+    expect(text).not.toContain('NEBURYX_ASK_API_KEY_FILE');
+    const steps = job?.steps ?? [];
+    const askAt = steps.findIndex((step) => step.run?.startsWith('pnpm ask-eval --packs') === true);
+    const assistantAt = steps.findIndex((step) => step.run?.startsWith('pnpm ask-eval assistant ') === true);
+    expect(askAt).toBeGreaterThan(-1);
+    expect(assistantAt).toBeGreaterThan(askAt);
+    expect(text).toMatch(/if: always\(\)\n\s+run: pnpm ask-eval assistant /);
   });
 
   it('is not named by the per-push CI workflow and its script builds what the runner needs', () => {

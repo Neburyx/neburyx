@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { belowBaseline, parseBaseline, questionsHash, updatedBaseline } from './baseline.js';
-import type { EvalHooks } from './hooks.js';
+import { runAssistant } from './assistant-run.js';
+import type { AssistantHooks, EvalHooks } from './hooks.js';
 import { requireOutsideGitTree, writePrivateFile } from './paths.js';
 import { readQuestions, UsageError } from './questions.js';
 import { recordRun } from './record.js';
@@ -15,6 +16,10 @@ export const USAGE = `usage:
   ask-eval (--packs <folder> | --questions <file> --folder <folder> --source <id>) --replay <file> [--baseline <file> [--update-baseline]] [--json]
   ask-eval (--packs <folder> | --questions <file> --folder <folder> --source <id>) --write-replay <file>
   ask-eval record (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force])
+  ask-eval assistant (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--replay <file> [--baseline <file> [--update-baseline]] | --write-replay <file>) [--json]
+  ask-eval assistant record (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force]) [--model <name>]
+  ask-eval assistant loop-cost (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force]) [--model <name>]
+  ask-eval assistant defaults (--packs <folder> | --questions <file> --folder <folder> --source <id>) --run-record <file> --loop-cost <file> [--out <folder> [--force]]
   ask-eval scan --questions <file> --folder <folder> --source <id> [--exclude <path>]... [--common <path>]... <checkout>`;
 
 export interface CliIo {
@@ -23,18 +28,18 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['packs', 'questions', 'folder', 'source', 'replay', 'baseline', 'write-replay', 'budget', 'out', 'exclude', 'common'];
+const VALUE_FLAGS = ['run-record', 'loop-cost', 'model', 'packs', 'questions', 'folder', 'source', 'replay', 'baseline', 'write-replay', 'budget', 'out', 'exclude', 'common'];
 const SWITCHES = ['dry-run', 'force', 'json', 'update-baseline'];
 
 interface Parsed {
-  readonly command: 'score' | 'record' | 'scan';
+  readonly command: 'score' | 'record' | 'scan' | 'assistant';
   readonly values: Map<string, string[]>;
   readonly switches: Set<string>;
   readonly rest: string[];
 }
 
 function parse(argv: readonly string[]): Parsed {
-  const command = argv[0] === 'record' || argv[0] === 'scan' ? argv[0] : 'score';
+  const command = argv[0] === 'record' || argv[0] === 'scan' || argv[0] === 'assistant' ? argv[0] : 'score';
   const args = command === 'score' ? argv : argv.slice(1);
   const values = new Map<string, string[]>();
   const switches = new Set<string>();
@@ -95,9 +100,9 @@ async function score(parsed: Parsed, io: CliIo, hooks: EvalHooks): Promise<numbe
   let problem: string | undefined;
   if (baselinePath !== undefined) {
     const baseline = parseBaseline(readFileSync(baselinePath, 'utf8'));
-    problem = belowBaseline(baseline, sets, result, replay.model);
+    problem = belowBaseline(baseline, questionsHash(sets), result, replay.model);
     if (parsed.switches.has('update-baseline')) {
-      const text = `${JSON.stringify(updatedBaseline(baseline, sets, result, replay.model), null, 2)}\n`;
+      const text = `${JSON.stringify(updatedBaseline(baseline, questionsHash(sets), result, replay.model), null, 2)}\n`;
       if (privateRun) writePrivateFile(baselinePath, text, true);
       else writeFileSync(baselinePath, text);
       io.out('baseline written');
@@ -148,11 +153,21 @@ async function record(parsed: Parsed, io: CliIo, hooks: EvalHooks): Promise<numb
 }
 
 /** Runs one command and returns its exit code: 0 for a pass, 1 for a miss, 2 for a usage error. A message never holds a wording, an entity value, a reply or a key. */
-export async function runCli(argv: readonly string[], io: CliIo, hooks: EvalHooks): Promise<number> {
+export async function runCli(argv: readonly string[], io: CliIo, hooks: EvalHooks & Partial<AssistantHooks>): Promise<number> {
   try {
     const parsed = parse(argv);
     if (parsed.command === 'scan') return await scan(parsed, io, hooks);
     if (parsed.command === 'record') return await record(parsed, io, hooks);
+    if (parsed.command === 'assistant') {
+      const path = (name: string): { readonly [key: string]: string } => (one(parsed, name) === undefined ? {} : { [name === 'write-replay' ? 'writeReplay' : name]: resolve(one(parsed, name) ?? '') });
+      const plain = (name: string): { readonly [key: string]: string } => (one(parsed, name) === undefined ? {} : { [name]: one(parsed, name) ?? '' });
+      return await runAssistant(
+        { ...path('packs'), ...path('questions'), ...path('folder'), ...plain('source'), ...path('replay'), ...path('write-replay'), ...path('baseline'), ...plain('budget'), ...path('out'), ...plain('model'), updateBaseline: parsed.switches.has('update-baseline'), json: parsed.switches.has('json'), mode: parsed.rest[0] === 'record' ? 'record' : parsed.rest[0] === 'loop-cost' ? 'loop-cost' : parsed.rest[0] === 'defaults' ? 'defaults' : 'score', ...path('run-record'), ...(one(parsed, 'loop-cost') === undefined ? {} : { loopCost: resolve(one(parsed, 'loop-cost') ?? '') }), dryRun: parsed.switches.has('dry-run'), force: parsed.switches.has('force') },
+        io,
+        hooks,
+        io.env,
+      );
+    }
     return await score(parsed, io, hooks);
   } catch (error) {
     if (error instanceof UsageError) {

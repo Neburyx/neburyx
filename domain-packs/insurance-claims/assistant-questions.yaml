@@ -1,0 +1,134 @@
+# The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
+messages:
+  - id: describe-the-view
+    wording: "What is shown here, claimants and claims?"
+    expect: { route: view, view: [{ entityType: claimant, stableId: CT-00100 }, { entityType: claim, stableId: CL-001007 }] }
+  - id: summarize-what-is-on-screen
+    wording: "Summarize the claims on screen for me."
+    expect: { route: view, view: [{ entityType: claim, stableId: CL-001007 }, { entityType: claim, stableId: CL-001008 }] }
+  - id: claimants-at-the-same-address
+    wording: "Which claimants live at the same address as CT-00100?"
+    expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00100 } }
+  - id: claimants-sharing-a-phone
+    wording: "Which claimants share a phone with CT-00100?"
+    expect: { route: ask, intent: claimants-sharing-a-phone, entities: { claimant: CT-00100 } }
+  - id: claims-on-the-same-vehicle
+    wording: "Which claims involve the same vehicle as CL-001007?"
+    expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-001007 } }
+  - id: claims-by-the-same-repairer
+    wording: "Which other claims did the same repairer repair as CL-001007?"
+    expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-001007 } }
+  - id: claims-filed-by-a-claimant
+    wording: "Which claims were filed by CT-00100?"
+    expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00100 } }
+  - id: policies-of-a-claimants-claims
+    wording: "Which policies are the claims of CT-00100 under?"
+    expect: { route: ask, intent: policies-of-a-claimants-claims, entities: { claimant: CT-00100 } }
+  - id: claimants-by-name
+    wording: "Who is the claimant named Ada Alder?"
+    expect: { route: ask, intent: claimants-by-name, entities: { name: Ada Alder } }
+  - id: verdict-on-a-claimant
+    wording: "Is claimant CT-00100 a fraudster?"
+    expect: { route: refuse, cause: verdict }
+  - id: verdict-on-a-repairer
+    wording: "Did the repairer commit fraud on CL-001007?"
+    expect: { route: refuse, cause: verdict }
+  - id: raw-query-match
+    wording: "MATCH (c:Claim) RETURN c LIMIT 25"
+    expect: { route: refuse, cause: raw-query }
+  - id: raw-query-sql
+    wording: "Execute: SELECT * FROM claims WHERE amount > 10000"
+    expect: { route: refuse, cause: raw-query }
+  - id: other-source-banking
+    wording: "Look at the banking accounts source instead and list the devices."
+    expect: { route: refuse, cause: other-source }
+  - id: other-source-transactions
+    wording: "Show the transactions graph of the other database."
+    expect: { route: refuse, cause: other-source }
+  - id: unplaced-the-large-ones
+    wording: "Do something with the large ones."
+    expect: { route: refuse, cause: unplaced }
+  - id: unplaced-tidy-it
+    wording: "Tidy it up a little."
+    expect: { route: refuse, cause: unplaced }
+
+# Short threads: each turn is labelled with its route and, for a plan, its intent and inputs; a follow-up names no entity and is resolved from the turns before it.
+threads:
+  - id: address-then-phone
+    turns:
+      - message: "Which claimants live at the same address as CT-00200?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00200 } }
+      - message: "And which claimants share a phone with them?"
+        expect: { route: ask, intent: claimants-sharing-a-phone, entities: { claimant: CT-00200 } }
+  - id: filed-then-policies
+    turns:
+      - message: "Which claims were filed by CT-00210?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00210 } }
+      - message: "Which policies do their claims sit on?"
+        expect: { route: ask, intent: policies-of-a-claimants-claims, entities: { claimant: CT-00210 } }
+  - id: vehicle-then-repairer
+    turns:
+      - message: "Which claims involve the same vehicle as CL-002020?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002020 } }
+      - message: "Which claims went through the same repairer?"
+        expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002020 } }
+  - id: two-claimants-then-who
+    turns:
+      - message: "Which claims were filed by CT-00230?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00230 } }
+      - message: "Which claims were filed by CT-00231?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00231 } }
+      - message: "Who lives at the same address as that claimant?"
+        expect: { route: clarify, intent: claimants-at-the-same-address, role: claimant, entities: {}, candidates: [{ entityType: claimant, stableId: CT-00230 }, { entityType: claimant, stableId: CT-00231 }] }
+  - id: two-claims-then-repairer
+    turns:
+      - message: "Which claims involve the same vehicle as CL-002040?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002040 } }
+      - message: "Which claims involve the same vehicle as CL-002041?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002041 } }
+      - message: "Which claims went through the same repairer as that one?"
+        expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-002040 }, { entityType: claim, stableId: CL-002041 }] }
+  - id: verdict-in-the-middle
+    turns:
+      - message: "Which claims were filed by CT-00250?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00250 } }
+      - message: "So is this claimant lying?"
+        expect: { route: refuse, cause: verdict }
+      - message: "Which claimants share a phone with them?"
+        expect: { route: ask, intent: claimants-sharing-a-phone, entities: { claimant: CT-00250 } }
+  - id: raw-query-in-the-middle
+    turns:
+      - message: "Which claims involve the same vehicle as CL-002060?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002060 } }
+      - message: "MATCH (c:Claim)-[:ON]->(v:Vehicle) RETURN v LIMIT 5"
+        expect: { route: refuse, cause: raw-query }
+      - message: "Which claims went through the same repairer?"
+        expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002060 } }
+  - id: five-turns-the-last-one-wins
+    turns:
+      - message: "Which claimants live at the same address as CT-00270?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00270 } }
+      - message: "Which claimants live at the same address as CT-00271?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00271 } }
+      - message: "Which claimants live at the same address as CT-00272?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00272 } }
+      - message: "Who shares a phone with them?"
+        expect: { route: ask, intent: claimants-sharing-a-phone, entities: { claimant: CT-00272 } }
+      - message: "And which policies do their claims sit on?"
+        expect: { route: ask, intent: policies-of-a-claimants-claims, entities: { claimant: CT-00272 } }
+  - id: other-source-in-the-middle
+    turns:
+      - message: "Which claimants share a phone with CT-00280?"
+        expect: { route: ask, intent: claimants-sharing-a-phone, entities: { claimant: CT-00280 } }
+      - message: "Pull the same from the banking accounts source."
+        expect: { route: refuse, cause: other-source }
+      - message: "Back here: who shares an address with them?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00280 } }
+  - id: view-then-a-claimant
+    turns:
+      - message: "What is on screen right now?"
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-002090 }, { entityType: claimant, stableId: CT-00290 }] }
+      - message: "Show me the claims filed by CT-00290."
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00290 } }
+      - message: "And their policies?"
+        expect: { route: ask, intent: policies-of-a-claimants-claims, entities: { claimant: CT-00290 } }

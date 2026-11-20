@@ -5,6 +5,8 @@ import { configureAsk } from '../configure.js';
 import type { ModelProvider } from '@neburyx/ee-ai-runtime';
 import { summaryProviderConfiguration } from '../case-summary/provider-configuration.js';
 import type { SummarySettings } from '../case-summary/settings.js';
+import { assistantProviderConfiguration } from '../assistant/provider-configuration.js';
+import { readAssistantSettings } from '../assistant/settings.js';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -48,4 +50,29 @@ export async function liveSummaryProvider(env: Env, folder: string, settings: Su
   const { configuration, used } = await askConfigurationFor(env, folder);
   const own = summaryProviderConfiguration(configuration, settings);
   return { provider: createAnthropicProvider({ configuration: own, env: used }), model: own.model, maxRetries: own.limits.maxRetries, cacheEnabled: own.cache.enabled };
+}
+
+const ASSISTANT_KEPT = /^NEBURYX_ASSISTANT_/;
+
+function assistantSettingsOf(env: Env, model: string | undefined) {
+  const kept: Record<string, string | undefined> = {};
+  for (const [name, value] of Object.entries(env)) if (ASSISTANT_KEPT.test(name)) kept[name] = value;
+  const read = readAssistantSettings({ ...kept, ...(model === undefined ? {} : { NEBURYX_ASSISTANT_MODEL: model }) });
+  if (!read.ok) throw new LiveProviderError(read.problems.join('; '));
+  return read.settings;
+}
+
+/** What an assistant run will use, without a key and without reading a key file: the model (the setting, or the one given), the effort and the output limit of a reply. */
+export function assistantRunSettings(env: Env, model?: string): { readonly model: string; readonly effort: string; readonly outputLimit: number } {
+  const settings = assistantSettingsOf(env, model);
+  const given = env['NEBURYX_ASK_EFFORT'];
+  return { model: settings.model, effort: given === undefined || given === '' ? AI_DEFAULTS.effort : given, outputLimit: settings.maxOutputTokens };
+}
+
+/** The provider of an assistant recording run: the provider of the assistant's own configuration (its model, its timeout, its output limit, no retry), built the way `liveProvider` builds Ask's, with the key from `NEBURYX_ASK_API_KEY_FILE` only. */
+export async function liveAssistantProvider(env: Env, folder: string, model?: string): Promise<{ readonly provider: ModelProvider; readonly model: string; readonly effort: string; readonly outputLimit: number; readonly maxRetries: number }> {
+  const { configuration, used } = await askConfigurationFor(env, folder);
+  const settings = assistantSettingsOf(env, model);
+  const own = assistantProviderConfiguration(configuration, settings);
+  return { provider: createAnthropicProvider({ configuration: own, env: used }), model: own.model, effort: own.limits.effort, outputLimit: own.limits.maxTokens, maxRetries: own.limits.maxRetries };
 }
