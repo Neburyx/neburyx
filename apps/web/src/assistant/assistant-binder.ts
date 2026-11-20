@@ -5,7 +5,7 @@ import { isSourceChanged } from '../state/investigation-state.js';
 import type { ClientState } from '../state/client-state.js';
 import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { AssistantPanel } from './assistant-panel.js';
-import { AssistantSessionProvider, createAssistantSession, type AssistantSession } from './assistant-session.js';
+import { AssistantSessionProvider, createAssistantSession, registerAssistantSession, type AssistantSession } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
 import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDTH } from './panel-layout.js';
 
@@ -42,18 +42,20 @@ export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, se
       return;
     }
     if (held.mask !== mask) {
-      session.clear({ mask, notice: held.turns.length === 0 ? undefined : { kind: 'masking-cleared' } });
+      session.clear({ mask, notice: held.summary !== undefined ? { kind: 'masking-cleared', summary: true } : held.turns.length === 0 ? undefined : { kind: 'masking-cleared' } });
       return;
     }
-    if (isSourceChanged(investigation.record?.sourceState) && (held.turns.length > 0 || session.stored.getState().kind !== 'idle')) session.clear(held.turns.length > 0 ? { notice: { kind: 'source-changed' } } : {});
+    if (isSourceChanged(investigation.record?.sourceState) && (held.turns.length > 0 || held.summary !== undefined || session.stored.getState().kind !== 'idle')) session.clear(held.turns.length > 0 || held.summary !== undefined ? { notice: { kind: 'source-changed' } } : {});
   };
   const stops = [state.presentation.view.subscribe(syncPanel), state.investigation.subscribe(syncThread), state.mask.subscribe(syncThread)];
+  const unregisterSession = registerAssistantSession(state, session);
   const unregister = registerAiAction('assistant', () => state.presentation.setAssistantOpen(!state.presentation.view.getState().assistantOpen));
   syncThread();
   syncPanel();
   return () => {
     for (const stop of stops) stop();
     unregister();
+    unregisterSession();
     remove?.();
     remove = undefined;
   };

@@ -65,9 +65,10 @@ interface DraftCardProps {
   readonly onPress: (entry: CitationEntry) => void;
   readonly onRegenerate: () => void;
   readonly onDiscard: () => void;
+  readonly onAsk: () => void;
 }
 
-export function DraftCard({ draft, previous, busy, note, copy, sourceId, onCopy, onEdit, onPress, onRegenerate, onDiscard }: DraftCardProps) {
+export function DraftCard({ draft, previous, busy, note, copy, sourceId, onCopy, onEdit, onPress, onRegenerate, onDiscard, onAsk }: DraftCardProps) {
   const graph = useVisibleGraph();
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
@@ -149,6 +150,15 @@ export function DraftCard({ draft, previous, busy, note, copy, sourceId, onCopy,
       <p className="summary-tags">
         <span className="summary-tag">{SUMMARY_COPY.notSaved}</span>
       </p>
+      <div className="summary-ask">
+        <p className="summary-ask-row">
+          <button type="button" className="summary-button summary-button-outline" onClick={onAsk}>
+            {SUMMARY_COPY.askAbout}
+          </button>
+          <span className="summary-tag summary-tag-accent">{SUMMARY_COPY.askNew}</span>
+        </p>
+        <p className="summary-note">{SUMMARY_COPY.askNote}</p>
+      </div>
       <Disclosure sent={response.sent} calls={response.calls} />
     </section>
   );

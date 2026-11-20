@@ -19,14 +19,14 @@ export function NewThreadCard() {
   );
 }
 
-export function MaskingCard() {
+export function MaskingCard({ summary = false }: { readonly summary?: boolean }) {
   return (
     <div className="assistant-masking">
       <section className="ask-failure ask-failure-caution" role="status">
         <h3>{ASSISTANT_COPY.maskingTitle}</h3>
-        <p>{ASSISTANT_COPY.maskingBody}</p>
+        <p>{summary ? ASSISTANT_COPY.maskingBodyWithSummary : ASSISTANT_COPY.maskingBody}</p>
       </section>
-      <p className="ask-note">{ASSISTANT_COPY.maskingNote}</p>
+      <p className="ask-note">{summary ? ASSISTANT_COPY.maskingNoteWithSummary : ASSISTANT_COPY.maskingNote}</p>
     </div>
   );
 }

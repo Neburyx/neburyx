@@ -1,13 +1,16 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
-import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore, sealToken } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 import { createAuditQueue, createEventQueue } from '../audit/queue.js';
+import { LOCAL_IDENTITY } from '../testing/app-store.js';
 import { fileQueryDepsOf } from '../gate/file-query.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { exportWebRoot, startExportRig, type ExportRigOptions } from '../testing/export-rig.js';
@@ -52,11 +55,19 @@ const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, lab
 /** An answer with the tokens of its choices made alike: each carries the time it was made, so two answers to one question differ in them and in nothing else. */
 const sameButTokens = (answer: unknown): unknown => JSON.parse(JSON.stringify(answer, (key, value: unknown) => (key === 'choiceToken' ? 'token' : value)));
 
-async function assistantRig(options: { maxSteps?: number; principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+/** The file of a summary token key the extension reads, owner-only as it requires. */
+function tokenKeyFile(): string {
+  const file = join(mkdtempSync(join(tmpdir(), 'nbx-assistant-key-')), 'token.key');
+  writeFileSync(file, `${'7'.repeat(64)}\n`);
+  chmodSync(file, 0o600);
+  return file;
+}
+
+async function assistantRig(options: { maxSteps?: number; withSummary?: boolean; principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore() });
-  const features = options.features ?? { ask: false, summary: false, assistant: true };
-  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'], features });
+  const features = options.features ?? { ask: false, summary: options.withSummary === true, assistant: true };
+  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), ...(options.withSummary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
   const armed = { open: false };
@@ -1046,6 +1057,77 @@ describe('the thread of an investigation in the running application', () => {
     expect(answer.statusCode).toBe(200);
     await vi.waitFor(() => expect(records.queue.counts().dropped).toBeGreaterThan(0));
     expect((await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json().audit.dropped).toBe(records.queue.counts().dropped);
+    await rig.stop();
+  });
+});
+
+describe('a follow-up about an attached summary, through the real application', () => {
+  const DRAFT = JSON.stringify({ sentences: [{ text: 'Widget W-1 and widget W-2 are listed.', cites: ['n1', 'n2'] }] });
+  const key = (id: string) => JSON.stringify(['node', 'demo', 'widget', id]);
+
+  it('answers from the summary a real draft made: its token opens for this person, the elements are read again through the gate, and an element only the summary cites can be cited', async () => {
+    const replies = [DRAFT, '{"route":"view"}', JSON.stringify({ sentences: [{ text: 'Widget W-2 is listed with widget W-1.', cites: ['n2', 'n1'] }] })];
+    const rig = await assistantRig({ withSummary: true, runStore: createMemoryAssistantRunStore(), reply: () => replies.shift() ?? '' });
+    const drafted = await rig.rig.app.inject({ method: 'POST', url: '/v1/summary', payload: { investigationId: rig.body.investigationId, sourceId: 'demo', entities: [{ sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, { sourceId: 'demo', entityType: 'widget', stableId: 'W-2' }] }, headers: { 'idempotency-key': 'key-0000000000000001' } });
+    expect([drafted.statusCode, JSON.stringify(drafted.json())]).toEqual([200, expect.any(String)]);
+    const { summaryToken } = drafted.json() as { summaryToken: string };
+    const before = rig.rig.executor.calls.length;
+    const answer = await rig.post({ ...rig.body, message: 'Which widgets does the summary list?', viewElementKeys: [key('W-1')], summaryToken });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view', citations: [{ key: 'n2' }, { key: 'n1' }] });
+    expect(rig.rig.executor.calls.length).toBeGreaterThan(before);
+    expect(rig.stub.bodies[2]).toContain('Widget W-1 and widget W-2 are listed.');
+    expect(rig.stub.bodies[1]).not.toContain('are listed');
+    await rig.stop();
+  });
+
+  it('refuses a token that was altered with the fixed sentence, reading nothing and calling no model', async () => {
+    const rig = await assistantRig({ withSummary: true, runStore: createMemoryAssistantRunStore(), reply: () => DRAFT });
+    const drafted = await rig.rig.app.inject({ method: 'POST', url: '/v1/summary', payload: { investigationId: rig.body.investigationId, sourceId: 'demo', entities: [{ sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, { sourceId: 'demo', entityType: 'widget', stableId: 'W-2' }] }, headers: { 'idempotency-key': 'key-0000000000000002' } });
+    const { summaryToken } = drafted.json() as { summaryToken: string };
+    const altered = `${summaryToken.slice(0, -2)}${summaryToken.endsWith('A') ? 'B' : 'A'}A`;
+    const calls = rig.stub.bodies.length;
+    const before = rig.rig.executor.calls.length;
+    const answer = await rig.post({ ...rig.body, message: 'Which widgets does the summary list?', viewElementKeys: [key('W-1')], summaryToken: altered });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toEqual({ status: 'summary-invalid', sentence: 'This summary can no longer be used. Generate it again.' });
+    expect(rig.stub.bodies).toHaveLength(calls);
+    expect(rig.rig.executor.calls).toHaveLength(before);
+    await rig.stop();
+  });
+
+  const queues: [string, RecordQueue][] = [
+    ['a queue that never writes the records of the summary or of the turn', { enqueue: () => undefined }],
+    ['a queue whose writes all fail', { enqueue: (job: RecordJob) => void job.write().catch(() => undefined) }],
+  ];
+
+  it.each(queues)('answers the follow-up as it does with the records written, over %s', async (_name, queue) => {
+    const replies = [DRAFT, '{"route":"view"}', JSON.stringify({ sentences: [{ text: 'Widget W-2 is listed with widget W-1.', cites: ['n2', 'n1'] }] })];
+    const rig = await assistantRig({ withSummary: true, runStore: createMemoryAssistantRunStore(), recordQueue: queue, reply: () => replies.shift() ?? '' });
+    const drafted = await rig.rig.app.inject({ method: 'POST', url: '/v1/summary', payload: { investigationId: rig.body.investigationId, sourceId: 'demo', entities: [{ sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, { sourceId: 'demo', entityType: 'widget', stableId: 'W-2' }] }, headers: { 'idempotency-key': 'key-0000000000000004' } });
+    expect(drafted.statusCode).toBe(200);
+    const { summaryToken } = drafted.json() as { summaryToken: string };
+    const answer = await rig.post({ ...rig.body, message: 'Which widgets does the summary list?', viewElementKeys: [key('W-1')], summaryToken });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view', citations: [{ key: 'n2' }, { key: 'n1' }] });
+    await rig.stop();
+  });
+
+  it('refuses a token as a summary that cannot be used when the summary is switched off, reading nothing and calling no model', async () => {
+    const off = await assistantRig({ withSummary: true, features: { ask: false, summary: false, assistant: true }, runStore: createMemoryAssistantRunStore() });
+    const keys = { current: { kid: 'abcd1234', bytes: Buffer.from('7'.repeat(64), 'hex') } };
+    const token = sealToken(keys, { investigationId: off.body.investigationId, generatedBy: LOCAL_IDENTITY.principal.id, policyVersion: 'none', modelRef: 'm', promptId: 'case-summary', promptVersion: '1', sentences: [{ text: 'Widget W-1 is listed.', cites: ['n1'] }], inputRefs: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' } }], propertyValuesSent: false, runId: randomUUID(), mask: false, wordListVersion: 2, templates: [{ storable: false, reason: 'unlisted-word' }] }, Date.now());
+    const before = off.rig.executor.calls.length;
+    const answer = await off.post({ ...off.body, message: 'Which widgets does the summary list?', viewElementKeys: [key('W-1')], summaryToken: token });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toEqual({ status: 'summary-invalid', sentence: 'This summary can no longer be used. Generate it again.' });
+    expect(off.stub.bodies).toHaveLength(0);
+    expect(off.rig.executor.calls).toHaveLength(before);
+    await off.stop();
+  });
+
+  it('refuses a summary token on a continue as an invalid request', async () => {
+    const rig = await assistantRig({ withSummary: true });
+    const { message: _message, ...rest } = rig.body;
+    const answer = await rig.post({ ...rest, continue: { intent: 'widgetById', entities: { id: 'W-1' }, continueToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` }, summaryToken: 'v1.x.y.z.w' });
+    expect(answer.statusCode).toBe(400);
+    expect(answer.json().error).toMatchObject({ code: 'INVALID_REQUEST' });
     await rig.stop();
   });
 });

@@ -48,6 +48,7 @@ interface TurnNotes {
   answered?: boolean;
   citedElements?: number;
   cause?: string;
+  summary?: { readonly kept: number; readonly dropped: number };
 }
 
 const scope = new AsyncLocalStorage<TurnNotes>();
@@ -65,6 +66,8 @@ export interface TurnNote {
   /** The things the accepted answer cited, which the thread keeps as references; their number is `citedElements` unless that is given. */
   readonly citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   readonly cause?: string;
+  /** How many sentences of an attached summary still held and how many did not. */
+  readonly summary?: { readonly kept: number; readonly dropped: number };
 }
 
 /** Notes what the route of a turn knows; outside a turn it does nothing. */
@@ -78,6 +81,7 @@ export function noteTurn(change: TurnNote): void {
     }
     if (change.citedElements !== undefined) notes.citedElements = change.citedElements;
     if (change.cause !== undefined) notes.cause = change.cause;
+    if (change.summary !== undefined) notes.summary = change.summary;
   });
 }
 
@@ -192,6 +196,8 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
       return { route: 'ask', outcome: 'clarification', result: 'success' };
     case 'choice-invalid':
       return { outcome: 'refused', result: 'refused', cause: 'choice-invalid' };
+    case 'summary-invalid':
+      return { outcome: 'refused', result: 'refused', cause: 'summary-invalid' };
     default: {
       const unreachable: never = answer;
       return unreachable;
@@ -231,6 +237,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.paramsHash === undefined ? {} : { paramsHash: notes.paramsHash }),
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
+    ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls,
     ...(notes.run === undefined ? {} : { runId: notes.run.id }),
     ...call,
@@ -258,6 +265,8 @@ function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantT
 function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
   const route = ending.route ?? notes.route;
   if (notes.thread === undefined || route === undefined || (ending.outcome !== 'answered' && ending.outcome !== 'refused')) return;
+  // a summary that could not be used leaves nothing in the thread, even when the turn had been placed on a route
+  if (ending.cause === 'summary-invalid') return;
   const known = notes.usage?.kind === 'known' ? notes.usage : undefined;
   const intent = ending.intent ?? notes.intent;
   notes.thread.write({

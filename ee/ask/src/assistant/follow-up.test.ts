@@ -5,6 +5,7 @@ import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, answerOf, heavyResult, nodeOf, ok, rig, routeAsk, type Rig, type RigOptions } from '../testing/assistant-rig.js';
 import { issueContinueToken } from '../questions/continue-token.js';
+import { sealToken } from '../case-summary/token.js';
 import { sign } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { createMemoryAssistantThreadStore, type MemoryAssistantThreadStore } from './thread-store.js';
@@ -32,7 +33,7 @@ const keyOf = (values: string, title: string): string | undefined => new RegExp(
 interface Follow {
   readonly rig: Rig;
   readonly threads: MemoryAssistantThreadStore;
-  readonly send: (message: string, over?: Parameters<Rig['request']>[1], viewElementKeys?: readonly string[]) => ReturnType<typeof answerOf>;
+  readonly send: (message: string, over?: Parameters<Rig['request']>[1], viewElementKeys?: readonly string[], summaryToken?: string) => ReturnType<typeof answerOf>;
 }
 
 /** A rig whose router answers each call from a script: the first turn runs the intent for A-1, the next ones are what the test names. */
@@ -40,8 +41,8 @@ async function follow(reply: (values: string, call: number) => FixtureReply, opt
   failures.length = 0;
   let call = 0;
   const made = await rig({ ...options, threadStore: threads, records: immediate, reply: (request) => reply(request.values, call++) });
-  const send: Follow['send'] = async (message, over, viewElementKeys = BASE.viewElementKeys) => {
-    const answer = answerOf(made.route.handler(made.request({ ...BASE, message, viewElementKeys }, { principalId: PERSON, ...over })));
+  const send: Follow['send'] = async (message, over, viewElementKeys = BASE.viewElementKeys, summaryToken) => {
+    const answer = answerOf(made.route.handler(made.request({ ...BASE, message, viewElementKeys, ...(summaryToken === undefined ? {} : { summaryToken }) }, { principalId: PERSON, ...over })));
     await drain();
     return answer;
   };
@@ -186,6 +187,21 @@ describe('the context of a follow-up: how much of the thread, whose, and what a 
     for (const intent of shown) expect(values).toContain(`ask "${intent}"`);
     for (const intent of hidden) expect(values).not.toContain(`ask "${intent}"`);
     expect(values.indexOf(`ask "${shown[0]}"`)).toBeLessThan(values.indexOf(`ask "${shown.at(-1)}"`));
+  });
+
+  it('keeps to the number of turns the setting names when a summary is attached, and the summary adds only its own sentences', async () => {
+    const keys = { current: { kid: 'cur00001', bytes: Buffer.alloc(32, 1) } };
+    const ref = (stableId: string) => ({ sourceId: 'demo', entityType: 'widget', stableId });
+    const token = sealToken(keys, { investigationId: INVESTIGATION, generatedBy: PERSON, policyVersion: 'none', modelRef: 'm', promptId: 'case-summary', promptVersion: '1', sentences: [{ text: 'Account A-1 is listed.', cites: ['n1'] }], inputRefs: [{ key: 'n1', kind: 'entity', ref: ref('A-1') }], propertyValuesSent: false, runId: '0192f000-0000-7000-8000-0000000000aa', mask: false, wordListVersion: 2, templates: [{ storable: false, reason: 'unlisted-word' }] }, 1_800_000_000_000);
+    const t = await follow(quiet, { settingsEnv: { [SETTING]: '2' }, summaryKeys: keys });
+    await seed(t.threads, ...['i1', 'i2', 'i3', 'i4'].map((intent) => asked(intent)));
+    await t.send(FOLLOW_UP, { policyVersion: () => 'none' }, undefined, token);
+    const values = routerValues(t.rig, 0);
+    expect(values).toContain('ask "i4"');
+    expect(values).toContain('ask "i3"');
+    expect(values).not.toContain('ask "i2"');
+    expect(values).toContain('An AI case summary of this investigation is attached to this turn.');
+    expect(values).not.toContain('Account A-1 is listed.');
   });
 
   it.each([

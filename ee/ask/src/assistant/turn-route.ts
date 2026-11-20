@@ -5,6 +5,7 @@ import {
   ASSISTANT_LIMIT_SENTENCES,
   ASSISTANT_NOT_ANSWERED_SENTENCE,
   ASSISTANT_REFUSAL_SENTENCES,
+  ASSISTANT_SUMMARY_INVALID_SENTENCE,
   ASSISTANT_TOO_LARGE_SENTENCE,
   ExtensionRefusal,
   assistantTurnAnswerSchema,
@@ -39,6 +40,8 @@ import { issueChoiceToken, verifyChoiceToken } from './choice-token.js';
 import { candidatesFor, candidatesOfReply, clarificationAnswer, roleEntityType, type Candidate } from './clarification.js';
 import { followUpsOf, type FollowUp } from './follow-ups.js';
 import { buildContext, type TurnContext } from './context.js';
+import { ATTACHED_SUMMARY_LINE, openAttachment, type SummaryAttachment } from './summary-attachment.js';
+import type { TokenKeys } from '../case-summary/token-keys.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
 import { noteStep, noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
@@ -74,6 +77,8 @@ export interface TurnRouteOptions {
   readonly records?: () => RecordQueue | undefined;
   /** How many of the person's last turns of the thread the router is shown; absent, it is shown none. */
   readonly contextTurns?: () => number | undefined;
+  /** The keys the summary's tokens are sealed under; absent, no summary token opens. */
+  readonly summaryKeys?: () => TokenKeys | undefined;
   readonly now?: () => number;
 }
 
@@ -103,6 +108,8 @@ function unavailableOf(error: unknown): AssistantTurnAnswer | undefined {
   }
 }
 
+const summaryInvalid = (): AssistantTurnAnswer => ({ status: 'summary-invalid', sentence: ASSISTANT_SUMMARY_INVALID_SENTENCE });
+
 const answeredAsk = (answer: AskAnswer): AssistantTurnAnswer => {
   if ('refused' in answer || answer.answered.continueToken !== undefined) return { status: 'answered', route: 'ask', answer };
   const { result, intent, outcome } = answer.answered;
@@ -118,6 +125,8 @@ function viewTurn(outcome: ViewOutcome): AssistantTurnAnswer {
     case 'unsupported':
     case 'tool':
       return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
+    case 'summary-invalid':
+      return summaryInvalid();
     case 'invalid-keys':
       throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'view-keys' });
     case 'cancelled':
@@ -327,6 +336,12 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       if (words > limit) return { status: 'too-long', words, limit };
       // the keys are the client's: they are read back into references before any model sees the message
       if (options.viewAnswer?.() !== undefined && !readViewKeys(body.viewElementKeys, body.sourceId).ok) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'view-keys' });
+      let summary: SummaryAttachment | undefined;
+      if (body.summaryToken !== undefined) {
+        // opened before anything is read or sent: a token that does not open ends the turn here, whatever the cause
+        summary = openAttachment(options.summaryKeys?.(), body.summaryToken, { sourceId: body.sourceId, investigationId: body.investigationId, actorId: request.principalId, policyVersion: request.policyVersion?.(body.sourceId) ?? 'none', now: (options.now ?? Date.now)() });
+        if (summary === undefined) return summaryInvalid();
+      }
       const listing = patterns === undefined ? undefined : await patterns(body.sourceId);
       const built = listing === undefined ? undefined : buildPatternCatalog(listing);
       let context: TurnContext | undefined;
@@ -340,7 +355,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       }
       let outcome: RouterOutcome;
       try {
-        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(context === undefined ? {} : { context: context.text }), accepts: (reply) => reply.route !== 'clarify' || candidatesOfReply(reply, context, options.folder(), body.sourceId) !== undefined, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
+        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(context === undefined && summary === undefined ? {} : { context: [context?.text, summary === undefined ? undefined : ATTACHED_SUMMARY_LINE].filter((part) => part !== undefined).join('\n\n') }), accepts: (reply) => reply.route !== 'clarify' || candidatesOfReply(reply, context, options.folder(), body.sourceId) !== undefined, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
       } catch (error) {
         // the model returned a prompt other than the one sent, so nothing of the call is kept
         if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
@@ -371,7 +386,8 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
               const loop = options.toolLoop?.();
               const tools = loop !== undefined && options.viewTools?.() === true && options.folder()?.source(body.sourceId) !== undefined ? toolRegistryOf(scope, false) : undefined;
-              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(tools === undefined ? {} : { tools }) });
+              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }) });
+              if (viewed.summary !== undefined) noteTurn({ summary: viewed.summary });
               if (viewed.status === 'tool' && loop !== undefined) {
                 // the view's reading is the first step of the loop; the model's request is the second
                 noteStep();

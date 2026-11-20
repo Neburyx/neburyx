@@ -1,10 +1,14 @@
-import { readViewKeys, type AssistantFailureKind, type AssistantTurnAnswer, type ExtensionRequest, type SummaryReading } from '@neburyx/contracts';
-import { AuditUnavailableError, type AuditedModelCall, type CheckRunner, type FailureCode, type GateClient } from '@neburyx/ee-ai-runtime';
+import { ASSISTANT_VIEW_KEYS_MAX, readViewKeys, type AssistantFailureKind, type ElementRefs, type AssistantTurnAnswer, type ExtensionRequest, type SummaryReading } from '@neburyx/contracts';
+import { AuditUnavailableError, type AuditedModelCall, type CheckRunner, type Judged, type FailureCode, type GateClient } from '@neburyx/ee-ai-runtime';
 import { prepareSummary } from '../case-summary/prepare.js';
 import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
+import { MAX_SUMMARY_SENTENCES } from '../case-summary/instructions.js';
+import { rejudge, type KeptSentence } from '../case-summary/rejudge.js';
+import { canonicalText } from '../questions/canonical.js';
+import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { buildViewToolInstructions } from './step-instructions.js';
 import type { ToolRegistry } from './tool-registry.js';
@@ -13,9 +17,9 @@ import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
-export const VIEW_PROMPT_VERSION = 1;
+export const VIEW_PROMPT_VERSION = 2;
 /** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 2;
+export const VIEW_TOOLS_PROMPT_VERSION = 3;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -60,6 +64,8 @@ export interface ViewInput {
   readonly progress: ViewProgress;
   /** The reads the model may ask for instead of answering; absent, the view call has the two reply forms it always had. */
   readonly tools?: ToolRegistry;
+  /** A summary attached to the turn: its sentences that still hold are given to the model beside the elements. */
+  readonly summary?: SummaryAttachment;
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -71,15 +77,68 @@ type ViewResult =
   /** The model asked for a read instead of answering: the loop goes on from this reading, with the request as its first step. */
   | { readonly status: 'tool'; readonly request: ToolRequest; readonly reading: SummaryReading; readonly assembled: AssembledText }
   | { readonly status: 'invalid-keys' }
+  | { readonly status: 'summary-invalid' }
   | { readonly status: 'failed'; readonly kind: AssistantFailureKind }
   | { readonly status: 'stopped'; readonly because: StoppedBecause }
   | { readonly status: 'cancelled' };
 
-export type ViewOutcome = ViewResult & { readonly calls: number; readonly read: number; readonly readStarted: boolean };
+export type ViewOutcome = ViewResult & { readonly calls: number; readonly read: number; readonly readStarted: boolean; readonly summary?: { readonly kept: number; readonly dropped: number } };
 
 const kindOf = (code: FailureCode): AssistantFailureKind => (code === 'timeout' ? 'timeout' : code === 'rate-limited' ? 'rate-limit' : 'service');
 
-const valuesOf = (message: string, text: string): string => `Question:\n${message}\n\nElements in view:\n${text}`;
+const valuesOf = (message: string, text: string, summary: string): string => `Question:\n${message}\n\nElements in view:\n${text}${summary}`;
+
+/** The sentences of the attached summary that still hold, with the keys of this turn's text: model-written context beside the elements, never a source of the checks. */
+const summarySectionOf = (kept: readonly KeptSentence[]): string => (kept.length === 0 ? '' : `\n\nSentences of an AI case summary of this investigation, written earlier by a model (each lists the keys of the elements it rests on):\n${kept.map((sentence) => `s${sentence.position}: ${sentence.text} (keys: ${sentence.cites.join(', ')})`).join('\n')}`);
+
+/** The key of a sentence of the attached summary as the model cites it: `s2`. */
+const SENTENCE_KEY = /^s(\d+)$/;
+const KEY_PART = String.raw`(?<![\p{L}\p{N}_-])[nes]\d+(?![\p{L}\p{N}_-])`;
+/** A group of keys in brackets, alone or in a list: `(s1)`, `[s1, n4]`, `(s1 and s2)`; a key in a longer id, such as `DEV-s12`, is not one. */
+const KEY_GROUP = new RegExp(String.raw`\s*[(\[]\s*${KEY_PART}(?:\s*(?:,|;|and|&)\s*${KEY_PART})*\s*[)\]]`, 'gu');
+/** A sentence key anywhere else in the text, which stands in the grammar for a name and so removes the sentence. */
+const BARE_SENTENCE_KEY = /(?<![\p{L}\p{N}_-])s\d+(?![\p{L}\p{N}_-])/u;
+
+/** The text without the sentence keys of its bracketed groups: `(s1, n4)` becomes `(n4)` and `(s1 and s2)` nothing; a group that holds no sentence key is left for the checks of the element keys. */
+function withoutSentenceKeys(text: string): string {
+  return text.replace(KEY_GROUP, (group) => {
+    const keys = group.match(new RegExp(KEY_PART, 'gu')) ?? [];
+    if (!keys.some((key) => key.startsWith('s'))) return group;
+    const elements = keys.filter((key) => !key.startsWith('s'));
+    return elements.length === 0 ? '' : ` (${elements.join(', ')})`;
+  });
+}
+
+/** "Cites the summary's sentence 1." as the server writes it, from the positions of the sentences used. */
+const citedLineOf = (positions: readonly number[]): string => (positions.length === 1 ? `Cites the summary's sentence ${positions[0]}.` : `Cites the summary's sentences ${positions.slice(0, -1).join(', ')} and ${positions.at(-1)}.`);
+
+const refCount = (refs: ElementRefs): number => refs.entities.length + refs.edges.length + refs.aggregates.length + refs.derived.length;
+
+/** The references of the view and the ones only the summary cites, each once. */
+function merged(view: ElementRefs, extra: ElementRefs): ElementRefs {
+  const added = onlyNew(view, extra);
+  return { entities: [...view.entities, ...added.entities], edges: [...view.edges, ...added.edges], aggregates: [...view.aggregates, ...added.aggregates], derived: [...view.derived, ...added.derived] };
+}
+
+/** The references of `extra` that `view` does not hold already. */
+function onlyNew(view: ElementRefs, extra: ElementRefs): ElementRefs {
+  const seen = new Set([...view.entities, ...view.edges, ...view.aggregates, ...view.derived].map((ref) => canonicalText(ref)));
+  const fresh = <T extends object>(refs: readonly T[]): T[] => refs.filter((ref) => !seen.has(canonicalText(ref)));
+  return { entities: fresh(extra.entities), edges: fresh(extra.edges), aggregates: fresh(extra.aggregates), derived: fresh(extra.derived) };
+}
+
+/** What both reads gave, once each: the counts around the reading stay those of the first read, the view's. */
+function combined(view: SummaryReading, extra: SummaryReading): SummaryReading {
+  const held = new Set([...view.nodes.map((node) => canonicalText(node.ref)), ...view.edges.map((edge) => canonicalText(edge.ref))]);
+  return { ...view, nodes: [...view.nodes, ...extra.nodes.filter((node) => !held.has(canonicalText(node.ref)))], edges: [...view.edges, ...extra.edges.filter((edge) => !held.has(canonicalText(edge.ref)))] };
+}
+
+/** The two lines of coverage; with a summary attached they count the elements in view only, so that the elements only the summary cites are not shown as shown. */
+function coverageOf(viewReading: SummaryReading, sentences: Parameters<typeof summaryLine>[0], attached: { readonly inView: ReadonlySet<string>; readonly assembled: AssembledText } | undefined): { readonly retrieval: string; readonly summary: string } {
+  if (attached === undefined) return { retrieval: retrievalLine(viewReading), summary: summaryLine(sentences, viewReading) };
+  const viewKeys = new Set([...attached.assembled.keys].filter(([, element]) => attached.inView.has(canonicalText(element.ref))).map(([key]) => key));
+  return { retrieval: retrievalLine(viewReading), summary: summaryLine(sentences.map((sentence) => ({ ...sentence, cites: sentence.cites.filter((key) => viewKeys.has(key)) })), viewReading) };
+}
 
 const DEADLINE = new Error('the time of the turn is spent');
 
@@ -99,7 +158,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
   const now = options.now ?? Date.now;
   return async (input) => {
     const { progress } = input;
-    const outcome = (rest: ViewResult): ViewOutcome => ({ ...rest, calls: progress.calls, read: progress.read, readStarted: progress.readStarted });
+    let counts: { readonly kept: number; readonly dropped: number } | undefined;
+    const outcome = (rest: ViewResult): ViewOutcome => ({ ...rest, calls: progress.calls, read: progress.read, readStarted: progress.readStarted, ...(counts === undefined ? {} : { summary: counts }) });
     const instructions = options.instructions();
     const settings = options.settings();
     if (instructions === undefined || settings === undefined) return outcome({ status: 'failed', kind: 'service' });
@@ -107,44 +167,100 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     if (!keys.ok) return outcome({ status: 'invalid-keys' });
     const { entities, edges, aggregates, derived } = keys.refs;
     if (entities.length + edges.length + aggregates.length + derived.length === 0) return outcome({ status: 'unsupported' });
+    const wanted = input.summary === undefined ? keys.refs : merged(keys.refs, input.summary.refs);
+    // the elements of the view and of the summary together stay within the cap of a view, or nothing is read
+    if (wanted.entities.length + wanted.edges.length + wanted.aggregates.length + wanted.derived.length > ASSISTANT_VIEW_KEYS_MAX) return outcome({ status: 'stopped', because: 'input' });
     const remaining = input.startedAt + settings.totalTimeoutMs - now();
     if (remaining <= 0 || input.deadline.aborted) return outcome({ status: 'stopped', because: 'deadline' });
     if (input.signal.aborted) return outcome({ status: 'cancelled' });
     const turnSignal = AbortSignal.any([input.signal, input.deadline]);
     const ended = (): ViewOutcome | undefined => (input.signal.aborted ? outcome({ status: 'cancelled' }) : input.deadline.aborted ? outcome({ status: 'stopped', because: 'deadline' }) : undefined);
+    let viewReading: SummaryReading;
     let reading: SummaryReading;
     progress.readStarted = true;
     try {
-      reading = await until(input.readElements({ investigationId: input.investigationId, sourceId: input.sourceId, mask: input.mask, signal: turnSignal }, keys.refs), turnSignal);
+      const scope = { investigationId: input.investigationId, sourceId: input.sourceId, mask: input.mask, signal: turnSignal };
+      viewReading = await until(input.readElements(scope, keys.refs), turnSignal);
+      if (viewReading.nodes.length + viewReading.edges.length === 0) return outcome({ status: 'unsupported' });
+      // the elements only the summary cites are read apart, so that the counts of the view's coverage stay the view's own
+      const apart = input.summary === undefined ? undefined : onlyNew(keys.refs, input.summary.refs);
+      reading = apart === undefined || refCount(apart) === 0 ? viewReading : combined(viewReading, await until(input.readElements(scope, apart), turnSignal));
     } catch (error) {
       const stopped = ended();
       if (stopped === undefined) throw error;
       return stopped;
     }
     progress.read = reading.nodes.length + reading.edges.length;
-    if (progress.read === 0) return outcome({ status: 'unsupported' });
+    const judgedSummary = input.summary === undefined ? undefined : rejudge(input.summary.payload, reading);
+    const kept = (judgedSummary?.kept ?? []).slice(0, MAX_SUMMARY_SENTENCES);
+    if (input.summary !== undefined) counts = { kept: kept.length, dropped: input.summary.payload.sentences.length - kept.length };
+    if (input.summary !== undefined && kept.length === 0) return outcome({ status: 'summary-invalid' });
+    const section = summarySectionOf(kept);
+    const inView = new Set([...keys.refs.entities, ...keys.refs.edges, ...keys.refs.aggregates, ...keys.refs.derived].map((ref) => canonicalText(ref)));
     const { tools } = input;
     const sent = tools === undefined ? instructions : buildViewToolInstructions(instructions, tools);
     const promptVersion = tools === undefined ? VIEW_PROMPT_VERSION : VIEW_TOOLS_PROMPT_VERSION;
-    const prepared = prepareSummary(reading, sent.text, settings.maxInputTokens);
+    const prepared = prepareSummary(reading, sent.text + section, settings.maxInputTokens);
     if (!prepared.ready) return outcome({ status: 'stopped', because: 'input' });
     const { assembled } = prepared;
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
     const checkedText = checkedTextOf(assembled);
+    const cited = new Set<number>();
     let drafted: DraftedOrAlternative;
     try {
       drafted = await draftSummary({
         call: options.model,
         context: { action: VIEW_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
         instructions: sent.text,
-        values: valuesOf(input.message, assembled.text),
+        values: valuesOf(input.message, assembled.text, section),
         prompt: { id: VIEW_PROMPT_ID, version: promptVersion },
         alternative: (text: string) => tools !== undefined && readToolRequest(text, tools).ok,
         maxInputTokens: settings.maxInputTokens,
         judge: async (sentences, signal) => {
-          const checked = await options.checks.run(judgeCheck, { sentences, text: checkedText }, { timeoutMs: settings.timeoutMs, signal });
-          return checked.status === 'refused' ? { refused: checked.reason } : checked.value;
+          if (input.summary === undefined) {
+            const checked = await options.checks.run(judgeCheck, { sentences, text: checkedText }, { timeoutMs: settings.timeoutMs, signal });
+            return checked.status === 'refused' ? { refused: checked.reason } : checked.value;
+          }
+          // with a summary attached each sentence is judged alone, together, so that the sentences of the summary it cites stay known by the sentence that cites them
+          cited.clear();
+          const byKey = new Map(kept.map((sentence) => [`s${sentence.position}`, sentence]));
+          const prepared = sentences.map((reply) => {
+            const text = withoutSentenceKeys(reply.text);
+            if (BARE_SENTENCE_KEY.test(text)) return undefined;
+            const used = new Set<number>();
+            const cites = new Set<string>();
+            for (const key of reply.cites) {
+              const summarySentence = SENTENCE_KEY.test(key) ? byKey.get(key) : undefined;
+              if (summarySentence === undefined) cites.add(key);
+              else {
+                used.add(summarySentence.position);
+                for (const own of summarySentence.cites) cites.add(own);
+              }
+            }
+            return { sentence: { text, cites: [...cites] }, used };
+          });
+          const runs = await Promise.all(prepared.map((item) => (item === undefined ? undefined : options.checks.run(judgeCheck, { sentences: [item.sentence], text: checkedText }, { timeoutMs: settings.timeoutMs, signal }))));
+          const keptSentences: Judged['kept'][number][] = [];
+          let removed = 0;
+          let verdictFound = false;
+          let keysStripped = 0;
+          let keysRemoved = 0;
+          for (const [index, run] of runs.entries()) {
+            if (run === undefined) {
+              removed += 1;
+              keysRemoved += 1;
+              continue;
+            }
+            if (run.status === 'refused') return { refused: run.reason };
+            keptSentences.push(...run.value.kept);
+            removed += run.value.removed;
+            verdictFound ||= run.value.verdictFound;
+            keysStripped += run.value.keysStripped;
+            keysRemoved += run.value.keysRemoved;
+            if (run.value.kept.length > 0) for (const position of prepared[index]?.used ?? []) cited.add(position);
+          }
+          return { kept: keptSentences, removed, verdictFound, keysStripped, keysRemoved };
         },
         maxCalls: allowed,
         repeats: 1,
@@ -186,7 +302,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
       case 'drafted': {
         if (drafted.sentences.length === 0 || drafted.verdictFound) return outcome({ status: 'unsupported' });
         const citations = [...citationsOf(drafted.sentences, assembled)];
-        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], citations, coverage: { retrieval: retrievalLine(reading), summary: summaryLine(drafted.sentences, reading) }, model: drafted.model, calls: progress.calls + input.callsUsed };
+        const positions = [...cited].sort((a, b) => a - b);
+        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
         return outcome({ status: 'answered', answer, cited: citations.length });
       }
       default: {

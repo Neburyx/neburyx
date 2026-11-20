@@ -116,6 +116,7 @@ export function ViewAnswerCard({
         {"steps" in answer ? (
           <p>{`${ASSISTANT_COPY.steps} · ${answer.steps}`}</p>
         ) : null}
+        {"summaryCited" in answer.coverage && answer.coverage.summaryCited !== undefined ? <p>{answer.coverage.summaryCited}</p> : null}
         <p>{answer.coverage.retrieval}</p>
         <p>{answer.coverage.summary}</p>
       </div>

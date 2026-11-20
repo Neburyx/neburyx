@@ -144,6 +144,9 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   paramsHash: sha256Hex.optional(),
   steps: wholeCount.optional(),
   citedElements: wholeCount.optional(),
+  /** When an AI case summary was attached and used: how many of its sentences still held and how many did not; never a sentence. */
+  summarySentencesKept: wholeCount.optional(),
+  summarySentencesDropped: wholeCount.optional(),
   modelCalls: wholeCount,
   modelRef: label.optional(),
   promptId: label.optional(),

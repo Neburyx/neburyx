@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_LIMITS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_LIMITS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
 
 const body = { sourceId: 'banking', investigationId: 'inv-1', message: 'Which accounts share a device?', viewElementKeys: ['n1', 'n2'] };
 
@@ -194,5 +194,35 @@ describe('the answer of the ask route after tool steps', () => {
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, extra: 1 }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, answer: { refused: { cause: 'no-intent', sentence: 'x' } } }).success).toBe(false);
+  });
+});
+
+describe('the summary an assistant turn carries', () => {
+  const base = { sourceId: 'a', investigationId: 'i', viewElementKeys: [] };
+  const TOKEN = 'v1.cur00001.aaaa.bbbb.cccc';
+
+  it('is carried by the message form only: the choice and continue forms refuse it', () => {
+    expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'x', summaryToken: TOKEN }).success).toBe(true);
+    expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'x', summaryToken: '' }).success).toBe(false);
+    expect(assistantTurnRequestSchema.safeParse({ ...base, continue: { intent: 'i', entities: {}, continueToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` }, summaryToken: TOKEN }).success).toBe(false);
+    expect(assistantTurnRequestSchema.safeParse({ ...base, choice: { intent: 'i', roles: ['id'], entities: { id: 'x' }, choiceToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` }, summaryToken: TOKEN }).success).toBe(false);
+  });
+
+  it('answers a summary that cannot be used with its fixed sentence and nothing else', () => {
+    expect(ASSISTANT_SUMMARY_INVALID_SENTENCE).toBe('This summary can no longer be used. Generate it again.');
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'summary-invalid', sentence: ASSISTANT_SUMMARY_INVALID_SENTENCE }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'summary-invalid', sentence: ASSISTANT_SUMMARY_INVALID_SENTENCE, cause: 'expired' }).success).toBe(false);
+  });
+});
+
+describe('the view answer that rests on a summary', () => {
+  const view = { status: 'answered', route: 'view', sentences: [{ text: 'x', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'k', stableId: 's' } }], coverage: { retrieval: '1 shown', summary: 'The draft cites 1 of the 1 shown elements.' }, model: 'm', calls: 2 };
+
+  it('carries the positions of the summary sentences it cites and the line that says so, each only when there are some', () => {
+    expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, summarySentencesCited: [1, 3], coverage: { ...view.coverage, summaryCited: "Cites the summary's sentences 1 and 3." } }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, summarySentencesCited: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, summarySentencesCited: [0] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, summarySentencesCited: [13] }).success).toBe(false);
   });
 });

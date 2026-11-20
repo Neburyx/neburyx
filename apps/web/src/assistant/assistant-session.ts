@@ -31,7 +31,8 @@ export type Failure =
   | { readonly kind: 'request'; readonly failure: ApiFailure; readonly until: number | undefined }
   | { readonly kind: 'continue-invalid' }
   | { readonly kind: 'choice-invalid' }
-  | { readonly kind: 'follow-up-invalid' };
+  | { readonly kind: 'follow-up-invalid' }
+  | { readonly kind: 'summary-invalid'; readonly sentence: string };
 
 /** An answer of sentences that cite elements: from the view, or after tool steps (then it carries the number of steps). */
 export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>;
@@ -64,7 +65,18 @@ export interface Turn {
   readonly chip?: true;
 }
 
-type Notice = { readonly kind: 'too-long'; readonly words: number; readonly limit: number } | { readonly kind: 'view-too-large' } | { readonly kind: 'access-lost' } | { readonly kind: 'masking-cleared' } | { readonly kind: 'source-changed' };
+type Notice = { readonly kind: 'too-long'; readonly words: number; readonly limit: number } | { readonly kind: 'view-too-large' } | { readonly kind: 'access-lost' } | { readonly kind: 'masking-cleared'; readonly summary?: true } | { readonly kind: 'source-changed' };
+
+/** An AI case summary the person handed to the thread: what the thread shows of it, and the token that goes with each message while it is attached. It leaves with the thread. */
+export interface AttachedSummary {
+  readonly token: string;
+  readonly sentences: readonly string[];
+  readonly model: string;
+  /** When the draft arrived, in milliseconds. */
+  readonly arrivedAt: number;
+  /** Whether the token goes with the next message; a removed or refused summary stays shown. */
+  readonly status: 'attached' | 'removed' | 'invalid';
+}
 
 /** What the panel keeps while it is closed: the thread of one investigation under one masking. `epoch` changes whenever the thread is cleared, so an answer that was sent before cannot come back. */
 export interface AssistantSessionState {
@@ -76,9 +88,10 @@ export interface AssistantSessionState {
   readonly nextId: number;
   readonly turns: readonly Turn[];
   readonly notice: Notice | undefined;
+  readonly summary: AttachedSummary | undefined;
 }
 
-const EMPTY_ASSISTANT_SESSION: AssistantSessionState = { investigationId: null, principalId: null, mask: false, epoch: 0, input: '', nextId: 1, turns: [], notice: undefined };
+const EMPTY_ASSISTANT_SESSION: AssistantSessionState = { investigationId: null, principalId: null, mask: false, epoch: 0, input: '', nextId: 1, turns: [], notice: undefined, summary: undefined };
 
 export interface AssistantSession {
   readonly store: Store<AssistantSessionState>;
@@ -109,6 +122,18 @@ export function createAssistantSession(): AssistantSession {
 }
 
 export const isAskAnswer = (answer: AskAnswer): answer is Extract<AskAnswer, { answered: unknown }> => 'answered' in answer;
+
+const sessions = new WeakMap<object, AssistantSession>();
+
+/** The session of the Assistant panel bound to a client state, for the parts of the page outside the panel that hand it something (the summary panel). */
+export const registerAssistantSession = (owner: object, session: AssistantSession): (() => void) => {
+  sessions.set(owner, session);
+  return () => {
+    if (sessions.get(owner) === session) sessions.delete(owner);
+  };
+};
+
+export const assistantSessionOf = (owner: object): AssistantSession | undefined => sessions.get(owner);
 
 const Context = createContext<AssistantSession | undefined>(undefined);
 

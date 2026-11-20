@@ -24,7 +24,7 @@ export type AssistantChoice = z.infer<typeof assistantChoiceSchema>;
 
 /** A turn is a message, the continue of a heavy stop (the intent, the entities and the token of the answer that stopped) or the choice of an element a clarification offered, never two of them: three forms, so the published schema says so. */
 export const assistantTurnRequestSchema = z.union([
-  z.strictObject({ ...turnBase, message: text }),
+  z.strictObject({ ...turnBase, message: text, /** The token of an AI case summary the person keeps attached to the thread; the server opens it for every turn. */ summaryToken: text.optional() }),
   z.strictObject({ ...turnBase, continue: askContinueRequestSchema.pick({ intent: true, entities: true, continueToken: true }) }),
   z.strictObject({ ...turnBase, choice: assistantChoiceSchema }),
 ]);
@@ -74,6 +74,8 @@ export const ASSISTANT_CONTINUE_INVALID_SENTENCE = 'This continue is no longer v
 
 export const ASSISTANT_CHOICE_INVALID_SENTENCE = 'This choice is no longer valid. Nothing was read.';
 
+export const ASSISTANT_SUMMARY_INVALID_SENTENCE = 'This summary can no longer be used. Generate it again.';
+
 export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
     status: z.literal('answered'),
@@ -102,6 +104,8 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({ status: z.literal('continue-invalid'), sentence: text }),
   /** A choice whose token is altered, old, another person's, another investigation's or another masking's, whose intent changed, or whose element is no longer readable: nothing was read. */
   z.strictObject({ status: z.literal('choice-invalid'), sentence: text }),
+  /** A message that carried a summary that can no longer be used, whatever the cause: no answer was built from it. */
+  z.strictObject({ status: z.literal('summary-invalid'), sentence: text }),
   /** A message the assistant cannot place on one element: the fixed question naming the entity type, and each element it may mean as the analyst sees it, with what the panel sends when it is picked. Nothing was read for the intent. */
   z.strictObject({
     status: z.literal('clarification'),
@@ -115,7 +119,9 @@ export const assistantTurnAnswerSchema = z.union([
     sentences: z.array(summarySentenceSchema).min(1).max(12),
     citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) })).min(1),
     /** The two lines of coverage the server writes: what was read and what is not yet retrieved, and how much of what was read the sentences cite. */
-    coverage: z.strictObject({ retrieval: text, summary: text }),
+    coverage: z.strictObject({ retrieval: text, summary: text, /** Written by the server when the answer rests on sentences of an attached summary: which of them, in words. */ summaryCited: text.optional() }),
+    /** The positions (from 1, as the summary's sentences are numbered in the draft) of the attached summary's sentences the answer cites; present only when there are some. */
+    summarySentencesCited: z.array(z.number().int().min(1).max(12)).min(1).max(12).optional(),
     model: text,
     calls: z.number().int().positive(),
   }),

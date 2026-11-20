@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AskAnswer, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
+import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, askAnswerSchema, summaryResponseSchema, type AskAnswer, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
 import { canvasOf } from './support/workspace.ts';
 
 const accountOf = (sourceId: string) => ({ ref: { sourceId, entityType: 'account', stableId: 'AC-2' }, display: { title: 'Account AC-2', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
@@ -515,5 +515,76 @@ test.describe('the Assistant panel', () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     const box = await panel(page).boundingBox();
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+  });
+
+  const summaryDraft = (sourceId: string) =>
+    summaryResponseSchema.parse({
+      status: 'ok',
+      sentences: [{ text: 'AC-1 is an account.', cites: ['n1'], storable: true }],
+      citations: [{ key: 'n1', kind: 'entity', ref: { sourceId, entityType: 'account', stableId: 'AC-1' } }],
+      coverage: { retrieval: '1 shown · ~38 not yet retrieved (estimated)', summary: 'The draft cites 1 of the 1 shown elements' },
+      removedCount: 0,
+      sent: 'n1 account AC-1',
+      model: 'stub-model',
+      calls: 1,
+      summaryToken: 'v1.tok',
+    });
+
+  async function draftThenAsk(page: Page): Promise<void> {
+    await openWorkspace(page);
+    await page.route((url) => url.pathname === '/v1/summary', async (route) => route.fulfill({ json: summaryDraft((route.request().postDataJSON() as { sourceId: string }).sourceId) }));
+    await header(page).getByRole('button', { name: /^Summarize/ }).click();
+    const summaryPanel = page.getByRole('complementary', { name: 'AI case summary' });
+    await expect(summaryPanel.getByRole('button', { name: 'Ask about this summary' })).toBeInViewport({ ratio: 1 });
+    await expect(summaryPanel.getByText('Opens the Assistant with this summary as context, for you and this investigation only.')).toBeVisible();
+    await summaryPanel.getByRole('button', { name: 'Ask about this summary' }).click();
+    await expect(panel(page)).toBeVisible();
+    await expect(summaryPanel).toHaveCount(0);
+    await expect(page.getByLabel('Your message')).toBeFocused();
+  }
+
+  for (const width of [1440, 1280]) test(`hands the summary to the thread at ${width} pixels: the context block and the chip are in view, and the message carries the token while the chip is on`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const view: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      sentences: [{ text: 'AC-1 is an account.', cites: ['n1'] }],
+      citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } }],
+      coverage: { retrieval: '1 shown · ~38 not yet retrieved (estimated)', summary: 'The draft cites 1 of the 1 shown elements.', summaryCited: "Cites the summary's sentence 1." },
+      summarySentencesCited: [1],
+      model: 'stub-model',
+      calls: 2,
+    };
+    await draftThenAsk(page);
+    const sent = await answerWith(page, view);
+    const block = panel(page).getByRole('region', { name: 'AI case summary' });
+    await expect(block).toBeInViewport({ ratio: 1 });
+    await expect(block.getByText(/^1 sentence · drafted \d\d:\d\d UTC · Model: stub-model$/)).toBeVisible();
+    await expect(block.getByText('AC-1 is an account.')).toBeVisible();
+    await expect(block.getByText('Used for this thread only. It is dropped if masking, policy or access changes.')).toBeVisible();
+    await expect(panel(page).getByText('Asking about: AI case summary')).toBeInViewport({ ratio: 1 });
+    await expect(page.getByPlaceholder('Ask a follow-up…')).toBeInViewport({ ratio: 1 });
+    await page.getByLabel('Your message').fill('which claim rests on the account?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText("Cites the summary's sentence 1.")).toBeInViewport({ ratio: 1 });
+    expect(sent).toHaveLength(1);
+    expect((sent[0] as unknown as { summaryToken?: string }).summaryToken).toBe('v1.tok');
+    await panel(page).getByRole('button', { name: 'Stop asking about the AI case summary' }).click();
+    await expect(page.getByPlaceholder('Ask about this investigation…')).toBeVisible();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  for (const width of [1440, 1280]) test(`shows the summary that can no longer be used as a card at ${width} pixels, removes the chip and gives the message back`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await draftThenAsk(page);
+    await answerWith(page, { status: 'summary-invalid', sentence: ASSISTANT_SUMMARY_INVALID_SENTENCE });
+    await page.getByLabel('Your message').fill('which claim rests on the account?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('heading', { name: 'Summary no longer attached' })).toBeInViewport({ ratio: 1 });
+    await expect(panel(page).getByText(ASSISTANT_SUMMARY_INVALID_SENTENCE)).toBeVisible();
+    await expect(panel(page).getByText('Asking about: AI case summary')).toHaveCount(0);
+    await expect(panel(page).getByText('No longer attached', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Your message')).toHaveValue('which claim rests on the account?');
   });
 });

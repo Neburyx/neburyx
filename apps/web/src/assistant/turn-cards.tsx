@@ -69,6 +69,8 @@ function failureView(failure: Failure, sourceId: string): FailureView {
       return { title: ASSISTANT_COPY.choiceInvalidTitle, text: ASSISTANT_CHOICE_INVALID_SENTENCE, tone: 'caution', action: 'ask-again' };
     case 'follow-up-invalid':
       return { title: ASSISTANT_COPY.followUpInvalidTitle, text: ASSISTANT_COPY.followUpInvalid, tone: 'caution', action: 'none' };
+    case 'summary-invalid':
+      return { title: ASSISTANT_COPY.summaryInvalidTitle, text: failure.sentence, tone: 'caution', action: 'none' };
     case 'request': {
       if (isContinueInvalid(failure.failure)) return { title: ASSISTANT_COPY.continueInvalidTitle, text: ASSISTANT_COPY.continueInvalid, tone: 'caution', action: 'ask-again' };
       if (isAssistantOff(failure.failure)) return { title: ASSISTANT_COPY.serviceTitle, text: ASSISTANT_COPY.notAvailableNow, tone: 'caution', action: 'none' };

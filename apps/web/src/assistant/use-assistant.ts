@@ -51,6 +51,8 @@ export interface AssistantModel {
   readonly followUpsTurn: number | undefined;
   /** A turn is out, so a follow-up cannot be pressed. */
   readonly busy: boolean;
+  /** Stops sending the attached summary with messages; what the thread shows of it stays. */
+  removeSummary(): void;
 }
 
 /** A failure of a pick leaves the clarification on screen with the failure beside it, so the analyst can pick again; any other failure is the turn's own card. */
@@ -82,6 +84,8 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
       return { kind: 'clarification', question: answer.question, candidates: answer.candidates };
     case 'choice-invalid':
       return { kind: 'failed', failure: { kind: retry.kind === 'chip' ? 'follow-up-invalid' : 'choice-invalid' }, retry };
+    case 'summary-invalid':
+      return { kind: 'failed', failure: { kind: 'summary-invalid', sentence: answer.sentence }, retry };
     default: {
       const unreachable: never = answer;
       return unreachable;
@@ -167,11 +171,14 @@ export function useAssistant(): AssistantModel {
           return;
         }
         setOutcome(turnId, afterFailure(outcome, retry));
+        // a summary the server refused is not attached again: the chip goes and the block says so
+        const held = store.getState().summary;
+        if (outcome.kind === 'failed' && outcome.failure.kind === 'summary-invalid' && held !== undefined) patch({ summary: { ...held, status: 'invalid' } });
         if (outcome.kind === 'failed' && retry.kind === 'message') restoreInput(retry.text);
         setFocus(turnId);
       });
     },
-    [clear, client, open, restoreInput, setFocus, setOutcome, sourceId, state, store],
+    [clear, client, open, patch, restoreInput, setFocus, setOutcome, sourceId, state, store],
   );
 
   const base = useCallback((): Pick<AssistantTurnRequest, 'sourceId' | 'investigationId' | 'viewElementKeys' | 'mask'> | undefined => {
@@ -200,7 +207,8 @@ export function useAssistant(): AssistantModel {
         id = held.nextId;
         store.setState({ ...held, nextId: held.nextId + 1, input: '', notice: undefined, turns: [...held.turns, { id, message: text, outcome: { kind: 'pending', call: 'message' } }] });
       } else setOutcome(id, { kind: 'pending', call: 'message' });
-      settle(id, { ...common, message: text }, retry);
+      const attached = held.summary?.status === 'attached' ? held.summary.token : undefined;
+      settle(id, { ...common, message: text, ...(attached === undefined ? {} : { summaryToken: attached }) }, retry);
     },
     [base, limit, patch, setOutcome, settle, sourceChanged, store],
   );
@@ -312,6 +320,12 @@ export function useAssistant(): AssistantModel {
       const turn = turnOf(turnId);
       const followUp = turn?.outcome.kind === 'answered' ? turn.outcome.followUps[index] : undefined;
       if (followUp !== undefined) pressFrom(undefined, followUp);
+    },
+    removeSummary: () => {
+      const held = store.getState().summary;
+      if (held === undefined || held.status !== 'attached') return;
+      patch({ summary: { ...held, status: 'removed' } });
+      setFocus('input');
     },
     cancelClarification: (turnId) => {
       const turn = turnOf(turnId);

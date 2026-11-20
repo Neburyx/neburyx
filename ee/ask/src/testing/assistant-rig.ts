@@ -16,6 +16,7 @@ import type { AssistantThreadStore } from '../assistant/thread-store.js';
 import { readAssistantSettings } from '../assistant/settings.js';
 import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, VIEW_TOOLS_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
 import { buildSummaryInstructions } from '../case-summary/instructions.js';
+import type { TokenKeys } from '../case-summary/token-keys.js';
 import { makeAskFolder } from './ask-folder.js';
 import { UNAVAILABLE_SUMMARIZER } from './case-summarizer.js';
 
@@ -87,6 +88,8 @@ export interface RigOptions {
   /** The title of the first element of the view. */
   readonly viewTitle?: string;
   readonly checks?: CheckRunner;
+  /** The keys the summary's tokens open under; absent, no summary token opens. */
+  readonly summaryKeys?: TokenKeys;
   /** Stands in for the model's service on the answer call, to throw or to wait for an abort. */
   /** Called when the read of the elements begins. */
   readonly onViewRead?: () => void;
@@ -140,7 +143,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const viewAnswer = options.view === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});
   const toolLoop = options.step === undefined ? undefined : createToolLoop({ model, prompt: () => PROMPT, settings: () => ({ maxCalls: options.maxCalls ?? 5, maxSteps: options.loopSteps ?? 4, maxInputTokens: options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }) }), answer: createToolAnswer({ model, instructions: () => buildSummaryInstructions('You answer from what the reads returned. SENTINEL-ANSWER-PROMPT', 'SENTINEL-TYPOLOGY'), checks: options.checks ?? createCheckRunner(), timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000, now: () => clock.now }) });
-  const route = createAssistantTurnRoute({ ...(toolLoop === undefined ? {} : { toolLoop: () => toolLoop, viewTools: () => (options.loopSteps ?? 4) >= 2 }), totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const route = createAssistantTurnRoute({ ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }), ...(toolLoop === undefined ? {} : { toolLoop: () => toolLoop, viewTools: () => (options.loopSteps ?? 4) >= 2 }), totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',

@@ -103,7 +103,7 @@ export function SummaryPanel({ onClose, returnToGraph }: { readonly onClose: () 
           </section>
         ) : null}
         {outcome !== undefined ? <OutcomeCard outcome={outcome} sourceId={model.sourceId ?? ''} onTryAgain={model.generate} onReturn={returnToGraph} /> : null}
-        {draft !== undefined ? <DraftCard draft={draft} previous={generating || outcome !== undefined} busy={generating} note={model.note} copy={model.state.copy} sourceId={model.sourceId ?? ''} onCopy={model.copy} onEdit={model.edit} onPress={model.press} onRegenerate={model.generate} onDiscard={model.discard} /> : null}
+        {draft !== undefined ? <DraftCard draft={draft} previous={generating || outcome !== undefined} busy={generating} note={model.note} copy={model.state.copy} sourceId={model.sourceId ?? ''} onCopy={model.copy} onEdit={model.edit} onPress={model.press} onRegenerate={model.generate} onDiscard={model.discard} onAsk={model.askAbout} /> : null}
       </div>
       <div className="summary-body">
         <NotesSection copies={model.state.copies} sourceId={model.sourceId ?? ''} request={model.notesRequests} />

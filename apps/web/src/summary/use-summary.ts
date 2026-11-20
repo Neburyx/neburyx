@@ -10,6 +10,7 @@ import { reasonOf as invalidReasonOf } from '../patterns/failure-words.js';
 import { citationEntries, editedOf, pressOf, settledOf, storableCountOf, summaryRequestOf, type CitationEntry } from './summary-model.js';
 import { loadedLine } from '../workspace/scope-text.js';
 import { SUMMARY_COPY } from './copy.js';
+import { assistantSessionOf } from '../assistant/assistant-session.js';
 import { EMPTY_SUMMARY_SESSION, useSummarySession, type SummarySessionState } from './summary-session.js';
 
 type FocusTarget = 'title' | 'start' | 'draft' | 'cancel';
@@ -37,6 +38,8 @@ export interface SummaryModel {
   edit(index: number, text: string): void;
   press(entry: CitationEntry): void;
   close(): void;
+  /** Hands the draft to the Assistant as context for this thread and opens it; the summary panel closes as the Assistant opens. */
+  askAbout(): void;
 }
 
 const newKey = (): string => crypto.randomUUID();
@@ -198,6 +201,13 @@ export function useSummary(onClose: () => void): SummaryModel {
       state.presentation.select([entry.graphKey]);
     },
     close: onClose,
+    askAbout: () => {
+      const draft = session.getState().draft;
+      const assistant = assistantSessionOf(state);
+      if (draft === undefined || assistant === undefined) return;
+      assistant.store.setState({ ...assistant.store.getState(), summary: { token: draft.response.summaryToken, sentences: draft.response.sentences.map((sentence) => sentence.text), model: draft.response.model, arrivedAt: draft.arrivedAt, status: 'attached' } });
+      state.presentation.setAssistantOpen(true);
+    },
   };
 }
 

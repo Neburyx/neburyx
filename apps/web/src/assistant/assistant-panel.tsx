@@ -3,6 +3,7 @@ import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
 import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, wordsText } from './copy.js';
 import { MaskingCard, NewThreadCard, StandingNote, StoredTurns } from './thread-notices.js';
 import { useStoredThread } from './stored-thread.js';
+import { SummaryContext } from './summary-context.js';
 import { TurnView } from './turn-cards.js';
 import { useAssistant } from './use-assistant.js';
 
@@ -67,7 +68,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const field = useRef<HTMLTextAreaElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
-  const { turns, notice, input } = model.state;
+  const { turns, notice, input, summary } = model.state;
   const storedTurns = stored.kind === 'ready' ? stored.thread.turns : [];
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
@@ -132,6 +133,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
         {!unavailable && stored.kind === 'loading' ? <p className="ask-note" role="status">{ASSISTANT_COPY.storedLoading}</p> : null}
         {!unavailable && stored.kind === 'failed' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.storedFailed}</p> : null}
         {!unavailable && storedTurns.length > 0 ? <StoredTurns turns={storedTurns} earlier={stored.kind === 'ready' ? stored.thread.earlierTurns : 0} /> : null}
+        {!unavailable && summary !== undefined ? <SummaryContext summary={summary} /> : null}
         {unavailable || turns.length > 0 || storedTurns.length > 0 || showNewThread ? null : <Intro />}
         {!unavailable && turns.length > 0 ? (
           <ol className="assistant-thread" aria-label={ASSISTANT_COPY.thread}>
@@ -141,7 +143,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           </ol>
         ) : null}
         {notice?.kind === 'access-lost' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.accessLost}</p> : null}
-        {notice?.kind === 'masking-cleared' ? <MaskingCard /> : null}
+        {notice?.kind === 'masking-cleared' ? <MaskingCard summary={notice.summary === true} /> : null}
         {model.viewTooLarge || notice?.kind === 'view-too-large' ? <p className="ask-note" role="alert">{ASSISTANT_COPY.viewTooLarge}</p> : null}
       </div>
       <form
@@ -151,6 +153,14 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           if (canSend) model.send();
         }}
       >
+        {summary?.status === 'attached' && !unavailable ? (
+          <p className="assistant-asking">
+            <span className="summary-tag summary-tag-accent">{ASSISTANT_COPY.summaryAsking}</span>
+            <button type="button" className="assistant-asking-remove" aria-label={ASSISTANT_COPY.summaryRemove} onClick={model.removeSummary}>
+              ×
+            </button>
+          </p>
+        ) : null}
         <label htmlFor="assistant-message" className="visually-hidden">
           {ASSISTANT_COPY.fieldLabel}
         </label>
@@ -163,7 +173,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           aria-disabled={pending ? true : undefined}
           disabled={!available}
           className={tooLongNotice === undefined ? undefined : 'assistant-over'}
-          placeholder={unavailable ? ASSISTANT_COPY.unavailableField : pending ? ASSISTANT_COPY.waitingPlaceholder : ASSISTANT_COPY.placeholder}
+          placeholder={unavailable ? ASSISTANT_COPY.unavailableField : pending ? ASSISTANT_COPY.waitingPlaceholder : summary?.status === 'attached' ? ASSISTANT_COPY.summaryPlaceholder : ASSISTANT_COPY.placeholder}
           aria-invalid={tooLongNotice !== undefined}
           aria-describedby="assistant-counter assistant-keys"
           onChange={(event) => model.setInput(event.target.value)}

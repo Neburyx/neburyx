@@ -316,3 +316,17 @@
 .summary-block p {
   margin: 0;
 }
+
+.summary-ask {
+  margin: var(--space-12) 0;
+  padding: var(--space-12);
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius);
+}
+
+.summary-ask-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin: 0 0 var(--space-8);
+}
