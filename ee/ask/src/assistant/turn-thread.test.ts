@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { ExtensionRefusal, askRunResultSchema, auditDetailSchema, type AssistantThreadTurnWrite, type ExtensionRequest, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, auditDetailSchema, type AssistantThreadTurnWrite, type ExtensionRequest, type RecordJob, type RecordQueue } from '@neburyx/contracts';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, sign, type Rig, type RigOptions } from '../testing/assistant-rig.js';
+import { BODY, VIEW_BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, sign, type Rig, type RigOptions } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { createMemoryAssistantThreadStore, type AssistantThreadStore, type MemoryAssistantThreadStore } from './thread-store.js';
 import { TURN_CLOSED_ACTION, noteTurn, noteTurnStarted, withTurnAudit } from './turn-audit.js';
@@ -169,6 +169,17 @@ describe('a turn kept in the thread as references and metadata', () => {
     const [kept] = threads.threads.get(`${INVESTIGATION}:${PERSON}`)?.turns ?? [];
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(46);
+  });
+
+  it('keeps an answered view turn with the references its answer cited, as many as the audit event counts', async () => {
+    const view = await turnRig({ view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })) });
+    const result = await run(view, { ...VIEW_BODY, investigationId: INVESTIGATION });
+    const answer = 'value' in result ? assistantTurnAnswerSchema.parse(result.value) : undefined;
+    if (answer?.status !== 'answered' || answer.route !== 'view') throw new Error('not a view answer');
+    const [kept] = stored(view);
+    expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
+    expect(kept?.citationRefs).toHaveLength(2);
+    expect(kept?.citationRefs).toEqual(answer.citations.map((citation) => citation.ref));
   });
 
   it('keeps nothing for a turn that failed, was cancelled, was too long or too large, a continue that is not valid, or a person who may not read', async () => {

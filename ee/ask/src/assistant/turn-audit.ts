@@ -226,9 +226,10 @@ function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { reado
   return request.signal.aborted ? { ...ending, outcome: 'cancelled', result: 'failed', failureKind: 'cancelled' } : ending;
 }
 
-/** The things an accepted Ask answer cited, as references: the element or relationship of each citation of its summary. */
+/** The things an accepted answer cited, as references: the element or relationship of each citation of an answer from the view, or of the summary of an Ask answer. */
 function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): AssistantThreadTurnWrite['citationRefs'] {
   if (notes.citedRefs !== undefined) return notes.citedRefs;
+  if ('answer' in outcome && outcome.answer.status === 'answered' && outcome.answer.route === 'view') return outcome.answer.citations.map((citation) => citation.ref);
   if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answered' in outcome.answer.answer)) return [];
   return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
 }
