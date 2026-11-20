@@ -48,7 +48,7 @@ describe('the Assistant panel: follow-ups under an answer', () => {
     render(h.tree());
     await typeAndSend('who paid acc-1?');
     await userEvent.click(await screen.findByRole('button', { name: 'Paths between · acc-1, acc-2' }));
-    expect(await screen.findByText(/Refused/)).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_COPY.notAnswered)).toBeTruthy();
     expect(h.sent).toHaveLength(2);
     expect(h.sent[1]).toMatchObject({ choice: CHIPS[1]?.choice });
     expect('message' in (h.sent[1] ?? {})).toBe(false);
@@ -65,7 +65,7 @@ describe('the Assistant panel: follow-ups under an answer', () => {
     await userEvent.keyboard('{Enter}');
     expect((await screen.findByRole('button', { name: 'Paths between · acc-1, acc-2' })).hasAttribute('disabled')).toBe(true);
     await act(async () => release());
-    expect(await screen.findByText(/Refused/)).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_COPY.notAnswered)).toBeTruthy();
   });
 
   it('answers a follow-up that is no longer valid with its card, no button to ask again, and leaves the follow-ups where they were', async () => {
@@ -86,7 +86,7 @@ describe('the Assistant panel: follow-ups under an answer', () => {
     await typeAndSend('who paid acc-1?');
     await userEvent.click(await screen.findByRole('button', { name: 'Accounts paid to · acc-1' }));
     await userEvent.click(await screen.findByRole('button', { name: ASSISTANT_COPY.tryAgain }));
-    expect(await screen.findByText(/Refused/)).toBeTruthy();
+    expect(await screen.findByText(ASSISTANT_COPY.notAnswered)).toBeTruthy();
     expect(h.sent[2]).toMatchObject({ choice: CHIPS[0]?.choice });
   });
 
