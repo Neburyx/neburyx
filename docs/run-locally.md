@@ -71,7 +71,20 @@ To run the AI features, set a provider key in your shell (`NEBURYX_ASK_API_KEY` 
 
 To see a change of the mapping file in the running app without restarting `pnpm dev`, set `NEBURYX_DEV=1` in your shell before it: the API reads the mapping file again when it is saved (`NEBURYX_DEV_MAPPING` is the file it watches). An invalid file keeps the mapping that works and the API writes why in its output; a change to the address, database or login names of a source, to the `ai` section or to `NEBURYX_PROFILE` is refused with that message and applies after a restart. It is for development and is not set by anything else.
 
-The settings of Ask are not in the mapping file: set the `NEBURYX_ASK_*` variables in your shell before `pnpm dev`, with `NEBURYX_ASK_MAPPING_FOLDER` pointing to a local folder of intents (the folder is described in [Switch the AI features on](ai-preview.md#the-ask-folder)) and the key in `NEBURYX_ASK_API_KEY` or in a file named by `NEBURYX_ASK_API_KEY_FILE`. The command passes them, the `NEBURYX_SUMMARY_*` settings of the case summary (the token key in a file named by `NEBURYX_SUMMARY_TOKEN_KEY_FILE`, the model, the limits) and `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL`, to the API only, not to the migrate step or the web dev server. They cannot come from the env file in `NEBURYX_DEV_MAPPING_ENV`, which refuses `NEBURYX_*` names. Other secrets of your shell are not passed. For a local run of the case summary, the size guard (`NEBURYX_SUMMARY_MAX_INPUT_TOKENS`) and the output limit (`NEBURYX_SUMMARY_MAX_OUTPUT_TOKENS`) have defaults; raise the guard if your elements carry long text properties.
+The settings of Ask are not in the mapping file: set the `NEBURYX_ASK_*` variables in your shell before `pnpm dev`, with `NEBURYX_ASK_MAPPING_FOLDER` pointing to a local folder of intents (the folder is described in [Switch the AI features on](ai-preview.md#the-ask-folder)) and the key in `NEBURYX_ASK_API_KEY` or in a file named by `NEBURYX_ASK_API_KEY_FILE`. The command passes them, the `NEBURYX_SUMMARY_*` settings of the case summary (the token key in a file named by `NEBURYX_SUMMARY_TOKEN_KEY_FILE`, the model, the limits) the `NEBURYX_ASSISTANT_*` settings of the assistant and `NEBURYX_AI_CACHE` and `NEBURYX_AI_CACHE_TTL`, to the API only, not to the migrate step or the web dev server. They cannot come from the env file in `NEBURYX_DEV_MAPPING_ENV`, which refuses `NEBURYX_*` names. Other secrets of your shell are not passed. For a local run of the case summary, the size guard (`NEBURYX_SUMMARY_MAX_INPUT_TOKENS`) and the output limit (`NEBURYX_SUMMARY_MAX_OUTPUT_TOKENS`) have defaults; raise the guard if your elements carry long text properties.
+
+### The AI settings in a file: `pnpm dev:enterprise`
+
+`pnpm dev:enterprise` is `pnpm dev` with these AI settings read from a file instead of your shell: `~/.config/neburyx/dev-ai.env`, or the file that `NEBURYX_DEV_AI_CONFIG` names (an absolute path). Make it readable by you only (`chmod 600`):
+
+```
+NEBURYX_ASK_API_KEY_FILE=<absolute path of the file that holds the provider key>
+NEBURYX_ASK_MAPPING_FOLDER=<absolute path of the Ask folder>
+NEBURYX_SUMMARY_TOKEN_KEY_FILE=<absolute path of the summary token key>
+NEBURYX_DEV=1
+```
+
+It may hold `NEBURYX_PROFILE`, `NEBURYX_DEV`, and the `NEBURYX_ASK_*`, `NEBURYX_SUMMARY_*`, `NEBURYX_ASSISTANT_*` and `NEBURYX_AI_CACHE*` settings above, each with a value; it refuses any other name, an empty value and a mode wider than `0600`, before anything is built or started, with a message that names the file or the setting and never a value. A non-empty value in your shell wins over the file's. Prefer `NEBURYX_ASK_API_KEY_FILE` to the key itself. Plain `pnpm dev` does not read this file.
 
 It prints the addresses. Open the web app one; `GET /v1/sources` on the API lists the sources of your mapping. A change to a source file of the contracts, the API or the web app reaches the running app without restarting the command. The command does not check that the source login is read-only; use `test-source` for that (see the repository's `CLAUDE.md`).
 

@@ -3,6 +3,7 @@
 The command behind `pnpm dev`. It is a developer tool: it runs other programs with argument lists (never a shell) and imports nothing from the product. It starts no container and never calls Docker. How to use it is in [docs/run-locally.md](../../docs/run-locally.md).
 
 - `src/config.ts`: reads the settings file (`NEBURYX_DEV_CONFIG`, or `~/.config/neburyx/dev.env`), lets the environment win, and refuses a missing file, a missing or unknown key and a mode wider than `0600`.
+- `src/config.ts` also reads the AI settings file of `pnpm dev:enterprise` (`NEBURYX_DEV_AI_CONFIG`, or `~/.config/neburyx/dev-ai.env`): the same mode rule, only the AI settings the command passes to the API (`AI_FILE_VARIABLES` in `src/environments.ts`), the shell winning.
 - `src/mapping.ts`: the checks of the env file that holds the source logins.
 - `src/external.ts`: the three database settings.
 - `src/up.ts`: the steps of the command: check the settings, take the lock, build, migrate, supervise.

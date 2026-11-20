@@ -43,6 +43,29 @@ const SUMMARY_VARIABLES = [
   'NEBURYX_SUMMARY_RUN_RETENTION_DAYS',
 ] as const;
 
+/** The settings of the assistant the developer may set; only the API reads them (its on/off switch is one of the AI decision settings). */
+const ASSISTANT_VARIABLES = [
+  'NEBURYX_ASSISTANT_MODEL',
+  'NEBURYX_ASSISTANT_PROMPT_FILE',
+  'NEBURYX_ASSISTANT_VIEW_PROMPT_FILE',
+  'NEBURYX_ASSISTANT_TYPOLOGY_FILE',
+  'NEBURYX_ASSISTANT_CONTEXT_TURNS',
+  'NEBURYX_ASSISTANT_MAX_CALLS',
+  'NEBURYX_ASSISTANT_MAX_STEPS',
+  'NEBURYX_ASSISTANT_MAX_ROWS',
+  'NEBURYX_ASSISTANT_MAX_INPUT_TOKENS',
+  'NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS',
+  'NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS',
+  'NEBURYX_ASSISTANT_TIMEOUT_MS',
+  'NEBURYX_ASSISTANT_TOTAL_TIMEOUT_MS',
+  'NEBURYX_ASSISTANT_RUN_RETENTION_DAYS',
+  'NEBURYX_ASSISTANT_THREAD_READ_TURNS',
+  'NEBURYX_ASSISTANT_THREAD_RETENTION',
+] as const;
+
+/** Every setting the AI settings file of `pnpm dev:enterprise` may hold: the ones `pnpm dev` already takes from the shell for the AI features, and nothing else. */
+export const AI_FILE_VARIABLES: readonly string[] = [...new Set([PROFILE_VARIABLE, DEV_VARIABLE, ...CACHE_VARIABLES, ...ASK_VARIABLES, ...AI_DECISION_VARIABLES, ...SUMMARY_VARIABLES, ...ASSISTANT_VARIABLES])];
+
 type Source = Readonly<Record<string, string | undefined>>;
 export type Environment = Readonly<Record<string, string>>;
 
@@ -86,6 +109,11 @@ export function aiDecisionEnvironment(source: Source): Environment {
 /** The settings of the case summary the developer may set in the shell; only the API reads them, so the migrate step and the web server are not given them. */
 export function summaryEnvironment(source: Source): Environment {
   return pick(source, SUMMARY_VARIABLES);
+}
+
+/** The settings of the assistant the developer may set; only the API reads them. */
+export function assistantEnvironment(source: Source): Environment {
+  return pick(source, ASSISTANT_VARIABLES);
 }
 
 /** The connect limit the children will use, for the wait that must outlast it; a value they would refuse counts as the default, since they stop on it themselves. */

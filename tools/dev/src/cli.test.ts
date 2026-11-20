@@ -119,4 +119,43 @@ describe('the command', () => {
     expect(await main([], failing)).toBe(1);
     expect(errors).toEqual(['dev: an unexpected error stopped the command']);
   });
+
+  it('dev:enterprise hands the AI settings file to the API under the shell, and plain dev ignores the file', async () => {
+    const { deps, home } = rig();
+    const ai = join(home, '.config/neburyx/dev-ai.env');
+    writeFileSync(ai, ['NEBURYX_ASK_API_KEY_FILE=/keys/ask', 'NEBURYX_ASSISTANT_MAX_CALLS=7', 'NEBURYX_SUMMARY_MODEL=from-file', ''].join('\n'));
+    chmodSync(ai, 0o600);
+    const seen: Record<string, string>[] = [];
+    const watching: CliDependencies = { ...deps, env: { ...deps.env, NEBURYX_SUMMARY_MODEL: 'from-shell' }, supervise: async (options) => (seen.push({ ...options.api.env }), 0) };
+    expect(await main(['enterprise'], watching)).toBe(0);
+    expect(seen[0]).toMatchObject({ NEBURYX_ASK_API_KEY_FILE: '/keys/ask', NEBURYX_ASSISTANT_MAX_CALLS: '7', NEBURYX_SUMMARY_MODEL: 'from-shell' });
+    expect(await main([], watching)).toBe(0);
+    expect(seen[1]).not.toHaveProperty('NEBURYX_ASK_API_KEY_FILE');
+    expect(seen[1]).toMatchObject({ NEBURYX_SUMMARY_MODEL: 'from-shell' });
+  });
+
+  it('dev:enterprise refuses a missing, too-open or unknown-setting AI file before any command, naming the file and no value', async () => {
+    const missing = rig();
+    expect(await main(['enterprise'], missing.deps)).toBe(1);
+    expect(missing.errors.join('\n')).toContain(join(missing.home, '.config/neburyx/dev-ai.env'));
+    expect(missing.calls).toEqual([]);
+
+    const open = rig();
+    const openFile = join(open.home, '.config/neburyx/dev-ai.env');
+    writeFileSync(openFile, 'NEBURYX_ASK_API_KEY=aisecret\n');
+    chmodSync(openFile, 0o644);
+    expect(await main(['enterprise'], open.deps)).toBe(1);
+    expect(open.errors.join('\n')).toContain('wider than 0600');
+    expect(open.calls).toEqual([]);
+
+    const stray = rig();
+    const strayFile = join(stray.home, '.config/neburyx/dev-ai.env');
+    writeFileSync(strayFile, 'DATABASE_URL=postgres://x:aisecret@h/x\nNEBURYX_ASK_API_KEY=aisecret\n');
+    chmodSync(strayFile, 0o600);
+    expect(await main(['enterprise'], stray.deps)).toBe(1);
+    expect(stray.errors.join('\n')).toContain('DATABASE_URL');
+    expect(stray.calls).toEqual([]);
+
+    for (const errors of [missing.errors, open.errors, stray.errors]) expect(errors.join('\n')).not.toContain('aisecret');
+  });
 });

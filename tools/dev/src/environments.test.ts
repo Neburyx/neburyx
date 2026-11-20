@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aiDecisionEnvironment, apiEnvironment, askEnvironment, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
+import { aiDecisionEnvironment, apiEnvironment, askEnvironment, assistantEnvironment, AI_FILE_VARIABLES, baseEnvironment, cacheEnvironment, connectLimitMs, devEnvironment, limitsEnvironment, migrationEnvironment, summaryEnvironment, webEnvironment } from './environments.js';
 
 const developer = { PATH: '/bin', HOME: '/home/dev', TMPDIR: '/tmp', NODE_ENV: 'development', LANG: 'C', AWS_SECRET_ACCESS_KEY: 'a developer secret', DATABASE_URL: 'postgres://elsewhere', NEBURYX_DB_ADMIN_PASSWORD: 'inherited' };
 const cursorKey = Buffer.alloc(32, 3).toString('base64');
@@ -89,5 +89,13 @@ describe('the environments of the children', () => {
     const shell = { NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_API_KEY_FILE: '/f', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'on', NEBURYX_ASSISTANT_ENABLED: 'off', NEBURYX_ASK_MAX_TOKENS: '9' };
     expect(aiDecisionEnvironment(shell)).toEqual({ NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_API_KEY_FILE: '/f', NEBURYX_ASK_ENABLED: 'off', NEBURYX_SUMMARY_ENABLED: 'on', NEBURYX_ASSISTANT_ENABLED: 'off' });
     expect(askEnvironment(shell)).toMatchObject({ NEBURYX_ASSISTANT_ENABLED: 'off', NEBURYX_ASK_MAX_TOKENS: '9' });
+  });
+
+  it('passes the assistant settings, and nothing else, to the API; the AI file may hold only the AI settings', () => {
+    const given = { NEBURYX_ASSISTANT_MODEL: 'm', NEBURYX_ASSISTANT_MAX_CALLS: '5', NEBURYX_ASSISTANT_THREAD_RETENTION: 'close' };
+    expect(assistantEnvironment({ ...given, NEBURYX_PORT: '1', NEBURYX_ASK_PROVIDER: 'not passed' })).toEqual(given);
+    expect(AI_FILE_VARIABLES).toContain('NEBURYX_ASK_API_KEY_FILE');
+    expect(AI_FILE_VARIABLES).toContain('NEBURYX_ASSISTANT_ENABLED');
+    expect(AI_FILE_VARIABLES.filter((name) => !name.startsWith('NEBURYX_') || /^NEBURYX_(DEV_|DATABASE|CONFIG|HOST|PORT|CURSOR|EXPORT|WEB)/.test(name) && name !== 'NEBURYX_DEV')).toEqual([]);
   });
 });

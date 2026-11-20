@@ -58,3 +58,42 @@ export function loadDevConfig(env: Readonly<Record<string, string | undefined>>,
   if (missing.length > 0) throw new ConfigUnusable(`the settings are incomplete: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} neither in ${path} nor in the environment`);
   return values as DevConfig;
 }
+
+const AI_CONFIG_VARIABLE = 'NEBURYX_DEV_AI_CONFIG';
+const DEFAULT_AI_PATH = ['.config', 'neburyx', 'dev-ai.env'] as const;
+
+function aiConfigPath(env: Readonly<Record<string, string | undefined>>): string {
+  const named = env[AI_CONFIG_VARIABLE] ?? '';
+  if (named !== '') {
+    if (!isAbsolute(named)) throw new ConfigUnusable(`${AI_CONFIG_VARIABLE} must be an absolute path`);
+    return named;
+  }
+  const home = env['HOME'] ?? '';
+  if (home === '' || !isAbsolute(home)) throw new ConfigUnusable(`there is no AI settings file to read: ${AI_CONFIG_VARIABLE} is not set and HOME is not an absolute path`);
+  return join(home, ...DEFAULT_AI_PATH);
+}
+
+/**
+ * The environment of `pnpm dev:enterprise`: the AI settings of the file named by NEBURYX_DEV_AI_CONFIG, or ~/.config/neburyx/dev-ai.env,
+ * under the environment's own, where a non-empty value wins. The file must exist, be readable by its owner only and hold only the
+ * names in `allowed`, each with a value. Every message names the file's path or a setting's name and never a value.
+ */
+export function withAiConfig(env: Readonly<Record<string, string | undefined>>, files: Files, allowed: readonly string[]): Readonly<Record<string, string | undefined>> {
+  const path = aiConfigPath(env);
+  if (!files.exists(path)) throw new ConfigUnusable(`the AI settings file ${path} does not exist; pnpm dev:enterprise reads the NEBURYX_ASK_*, NEBURYX_SUMMARY_* and NEBURYX_ASSISTANT_* settings from it (or run pnpm dev with them in your shell)`);
+  const mode = files.mode(path);
+  if ((mode & ~0o600) !== 0) throw new ConfigUnusable(`the AI settings file ${path} has mode 0${mode.toString(8)}, wider than 0600; run chmod 600 on it`);
+  const fromFile = parseEnvFile(files.read(path));
+  const unknown = [...fromFile.keys()].filter((name) => !allowed.includes(name));
+  if (unknown.length > 0) {
+    const named = unknown.filter((name) => VARIABLE_NAME.test(name));
+    const stray = unknown.length - named.length;
+    const parts = [...(named.length > 0 ? [named.join(', ')] : []), ...(stray > 0 ? [`${stray} line${stray === 1 ? '' : 's'} that ${stray === 1 ? 'is' : 'are'} not NAME=value`] : [])];
+    throw new ConfigUnusable(`the AI settings file ${path} holds settings pnpm dev:enterprise does not pass on: ${parts.join(' and ')}`);
+  }
+  const empty = [...fromFile.entries()].filter(([, value]) => value === '').map(([name]) => name);
+  if (empty.length > 0) throw new ConfigUnusable(`the AI settings file ${path} gives ${empty.join(', ')} an empty value`);
+  const merged: Record<string, string | undefined> = { ...env };
+  for (const [name, value] of fromFile) if ((env[name] ?? '') === '') merged[name] = value;
+  return merged;
+}
