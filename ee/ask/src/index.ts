@@ -37,6 +37,7 @@ import { createToolLoop } from './assistant/tool-loop.js';
 import { createToolAnswer } from './assistant/tool-answer.js';
 import { loadViewInstructions, type ViewInstructions } from './assistant/view-instructions.js';
 import { createAssistantTurnRoute } from './assistant/turn-route.js';
+import { withheldDescriptionWarnings } from './assistant/description-warnings.js';
 
 /** @public Used by the audited-call integration test of `services/api`, which needs the real audit sink of the application and a real Postgres, so it cannot go through `createEnterpriseExtension()`. */
 export { AuditUnavailableError, createAuditedModelCall } from '@neburyx/ee-ai-runtime';
@@ -248,6 +249,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         else if (features.ask) return refuse(loaded.problems);
         else warnings.push({ event: 'assistant.ask_folder_unavailable', message: 'the folder of Ask questions could not be used, so the assistant runs without it' });
       }
+      if (features.assistant) warnings.push(...withheldDescriptionWarnings(context.typeDescriptions));
       let readSettings: SummarySettings | undefined;
       let readKeys: TokenKeys | undefined;
       let readInstructions: SummaryInstructions | undefined;

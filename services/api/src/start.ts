@@ -51,6 +51,7 @@ import { exportDirectoryProblem } from './exports/directory.js';
 import { createExportFileStore } from './exports/store.js';
 import { maintenanceTasks } from './jobs/maintenance.js';
 import { TaskConfigError, validateTasks, type Task } from './jobs/tasks.js';
+import { typeDescriptionsOf } from './registry/profile.js';
 
 const SHIPPED_MIGRATIONS = fileURLToPath(new URL('../migrations', import.meta.url));
 
@@ -244,7 +245,7 @@ export async function start(env: Readonly<Record<string, string | undefined>>, i
     if (extension.configure !== undefined) {
       let outcome;
       try {
-        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id), budgets: configureBudgets(mapping.sources), features: { ask: enablement.ask, summary: enablement.summary, assistant: enablement.providerConfigured && enablement.assistant } });
+        outcome = await extension.configure(mapping.ai ?? {}, env, { sourceIds: mapping.sources.map((source) => source.id), budgets: configureBudgets(mapping.sources), typeDescriptions: Object.fromEntries(mapping.sources.map((source) => [source.id, typeDescriptionsOf(source)])), features: { ask: enablement.ask, summary: enablement.summary, assistant: enablement.providerConfigured && enablement.assistant } });
       } catch (error) {
         io.logger.error({ event: 'profile.extension_configure_failed', cause: causeOf(error) }, 'enterprise extension could not be configured');
         io.stderr.write(`${EXTENSION_CONFIGURE_FAILED_MESSAGE}\n`);

@@ -193,6 +193,17 @@ describe('a route of a feature that is switched off', () => {
     }
   });
 
+  it('warns at start-up, naming the type and the rule and holding no text, of a description the assistant will not use, and not when the assistant is off', async () => {
+    const withVerdict = { 'source-a': { entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget', description: 'A widget is SENTINEL-TEXT proof of fraud.' }], relationshipTypes: [] } };
+    const on = counted({ ask: false, summary: false });
+    const outcome = await on.extension.configure?.({ preview: true }, ENV, { ...CONTEXT, typeDescriptions: withVerdict });
+    expect(outcome).toEqual({ ok: true, warnings: [{ event: 'assistant.description_withheld', message: expect.stringContaining('the entity type "widget"') }] });
+    expect(JSON.stringify(outcome)).not.toContain('SENTINEL-TEXT');
+    const off = counted({ ask: false, summary: false, assistant: false });
+    const quiet = await off.extension.configure?.({ preview: true }, ENV, { ...CONTEXT, typeDescriptions: withVerdict, features: { ask: false, summary: false, assistant: false } });
+    expect(JSON.stringify(quiet)).not.toContain('description_withheld');
+  });
+
   it('says a feature that is off is not available whatever else is in place', async () => {
     const { extension } = counted({ ask: false });
     await extension.configure?.({ preview: true }, ENV, CONTEXT);

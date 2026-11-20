@@ -389,7 +389,7 @@ describe('the enterprise extension at start', () => {
       const result = await start(CONFIGURED, rig.io);
       expect(result.exitCode).toBe(0);
       expect(rig.events).toEqual(['configure', 'open-store']);
-      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [], budgets: {}, features: { ask: true, summary: true, assistant: false } } }]);
+      expect(rig.calls).toEqual([{ settings: AI, env: CONFIGURED, context: { sourceIds: [], budgets: {}, typeDescriptions: {}, features: { ask: true, summary: true, assistant: false } } }]);
       if (result.exitCode === 0) await result.app.close();
     });
 

@@ -142,6 +142,8 @@ export interface ConfigureContext {
   /** Which AI features are on, as the application decided from the environment; absent, all are on. */
   readonly features?: { readonly ask: boolean; readonly summary: boolean; readonly assistant: boolean };
   readonly budgets?: Readonly<Record<string, ConfigureSourceBudgets>>;
+  /** The types of each source with the description the mapping gives each, so that the extension can say at start-up which descriptions it will not use. */
+  readonly typeDescriptions?: Readonly<Record<string, TypeDescriptions>>;
 }
 
 export interface ConfigureWarning {
