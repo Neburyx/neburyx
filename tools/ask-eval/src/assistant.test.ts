@@ -80,8 +80,19 @@ describe('the committed sets of the demo packs', () => {
   it('give each request its own first form, except a thread\'s first turn, which is the request of the single message it repeats and has its label', async () => {
     const requests = await requestsOf(await loadAssistantSets(PACKS, hooks()), hooks());
     const firsts = new Set([...requests.values()].map((entry) => entry.first));
-    expect(firsts.size).toBeGreaterThan(requests.size - 12);
-    expect(firsts.size).toBeLessThanOrEqual(requests.size);
+    // the first turns a thread shares with another thread of the set (the same wording and the same earlier turns) are one request
+    const sets = await loadAssistantSets(PACKS, hooks());
+    const byForm = new Map<string, string[]>();
+    for (const [name, entry] of requests) byForm.set(entry.first, [...(byForm.get(entry.first) ?? []), name]);
+    const sharing = [...byForm.values()].filter((names) => names.length > 1);
+    // every form two units share is shared by units with the same expectation and the same earlier turns, as the recorder allows
+    for (const names of sharing) {
+      const units = unitsOf(sets).filter((unit) => names.includes(unit.name));
+      expect(new Set(units.map((unit) => JSON.stringify([unit.expect, unit.earlier]))).size, names.join(', ')).toBe(1);
+    }
+    // three first turns of each of the two threads that open alike in both packs, and the first turn of the thread of the account just shown
+    expect(requests.size - firsts.size).toBe(sharing.reduce((sum, names) => sum + names.length - 1, 0));
+    expect(requests.size - firsts.size).toBe(9);
   });
 });
 

@@ -1,4 +1,4 @@
-# Ruling (orchestrator, 2026-11-20, per the design of the assistant's thread context): when "it" could mean elements of more than one earlier turn and nothing says which, the router asks, and never picks one silently; a thread where the message names which element it means expects `ask`.
+# When "it" could mean elements of more than one earlier turn and nothing says which, the router asks for a clarification and never picks one; a message that names which element it means expects an answer.
 # The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
 messages:
   - id: describe-the-view

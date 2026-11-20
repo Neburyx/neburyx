@@ -70,8 +70,10 @@ describe('the recorder of the assistant\'s router', () => {
     const recorded = JSON.parse(readFileSync(join(out, 'recording.json'), 'utf8')) as { folders: Record<string, string> };
     expect(Object.keys(recorded.folders).sort()).toEqual(['banking-demo', 'insurance-demo']);
     const scored = io();
-    await runCli(['assistant', '--packs', packs, '--replay', join(out, 'recording.json')], scored.io, hooksWith(answerRoutes));
-    expect(scored.err.join('\n')).not.toContain('another router text');
+    // the recording is accepted: the exit code is a score (0 or 1), never a usage error (2), and nothing is written to the error output
+    const code = await runCli(['assistant', '--packs', packs, '--replay', join(out, 'recording.json')], scored.io, hooksWith(answerRoutes));
+    expect(scored.err.join('\n')).toBe('');
+    expect(code).not.toBe(2);
   });
 
   it('routes each request once, writes the recording with the wordings and a run record without them, both owner-only in an owner-only folder, and the recording scores', async () => {

@@ -78,7 +78,7 @@ function findingsOf(runRecord: z.infer<typeof runRecordSchema>, loopRecord: z.in
   const perCall = (tokens: number, calls: number): number => Math.ceil(tokens / Math.max(1, calls));
   const requests = runRecord.outcomes.filter((outcome) => outcome.calls > 0);
   const turns = loopRecord.rows.map((entry) => entry.on);
-  const note = 'the figure of a turn is its largest single call; the figure of a router request is the mean of its calls, since the run record holds the tokens of a request and not of each call';
+  const note = 'the figure of a turn is its largest single call; the figure of a router request is the mean of its calls, since the run record holds the tokens of a request and not of each call; the input figure counts the tokens the provider reports as input, which leave out the tokens read from or written to its prompt cache, so it understates the size of what a call is sent';
   return [
     judge('tool steps a turn (reads the answer reports)', observe(turns.map((turn) => turn.steps)), limits.steps),
     judge('model calls a turn', observe([...turns.map((turn) => turn.total), ...requests.map((request) => request.calls)]), limits.calls),

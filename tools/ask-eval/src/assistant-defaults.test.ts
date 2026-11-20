@@ -5,7 +5,8 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { defaultsLines, judge, observe, runDefaults } from './assistant-defaults.js';
 import { loadAssistantSets } from './assistant-run.js';
 import { cleanUpTemporary } from './sets.js';
-import { cleanUp, hooksWith, scratch } from './testing/hooks.js';
+import { runCli } from './cli.js';
+import { cleanUp, hooksWith, io, scratch } from './testing/hooks.js';
 
 afterAll(() => {
   cleanUp();
@@ -80,5 +81,20 @@ describe('the defaults command', () => {
     expect(defaultsLines([]).length).toBe(0);
     mkdirSync(join(folder, 'unused'), { recursive: true });
     expect(readFileSync(runRecord, 'utf8')).toContain('outcomes');
+  });
+
+  it('is reached through the command line with the two records it names', async () => {
+    const folder = scratch();
+    const runRecord = join(folder, 'run-record.json');
+    const loop = join(folder, 'loop-cost-record.json');
+    writeFileSync(runRecord, JSON.stringify({ outcomes: [outcome('a', 1, 2000, 100)] }));
+    writeFileSync(loop, JSON.stringify({ rows: [{ name: 'a', on: on(2, 1) }] }));
+    const run = io();
+    const code = await runCli(['assistant', 'defaults', '--packs', PACKS, '--run-record', runRecord, '--loop-cost', loop], run.io, hooksWith(() => ({ failure: 'timeout' })));
+    expect(run.err.join('\n')).toBe('');
+    expect(code).toBe(0);
+    expect(run.out.join('\n')).toContain('tool steps a turn');
+    expect(await runCli(['assistant', 'defaults', '--packs', PACKS, '--loop-cost', loop], io().io, hooksWith(() => ({ failure: 'timeout' })))).toBe(2);
+    expect(await runCli(['assistant', 'defaults', '--packs', PACKS, '--run-record', runRecord], io().io, hooksWith(() => ({ failure: 'timeout' })))).toBe(2);
   });
 });
