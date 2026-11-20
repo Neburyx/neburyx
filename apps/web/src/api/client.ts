@@ -1,3 +1,4 @@
+import { readTurnStream, type TurnStep } from './turn-stream.js';
 import {
   canCarryInPath,
   coverageResponseSchema,
@@ -204,7 +205,8 @@ export interface ApiClient {
   ask(request: AskQuestionRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
   /** Reads the next page of an answer that stopped as heavy, with the token that answer carried; the model is not called. */
   askContinue(request: AskContinueRequest, signal?: AbortSignal): Promise<ApiResult<AskAnswer>>;
-  assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal): Promise<ApiResult<AssistantTurnAnswer>>;
+  /** One turn of the assistant. With `onStep` the client asks for a streamed turn: each step the server reports is handed over in order, then the result is the answer exactly as the JSON route gives it; a server that does not stream answers as before, with no step. */
+  assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal, onStep?: (step: TurnStep) => void): Promise<ApiResult<AssistantTurnAnswer>>;
   /** The caller's own thread of an investigation as the kind and end of each turn (no text), and when their previous thread was cleared. */
   assistantThread(investigationId: string, signal?: AbortSignal): Promise<ApiResult<AssistantThreadResponse>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
@@ -290,6 +292,18 @@ function failed(code: ClientFailure['code']): { readonly ok: false; readonly fai
   return { ok: false, failure: { code } };
 }
 
+/** A streamed turn as the client's result: the answer, the failure of the last line (read as the API's own error body is), a broken stream, or a read that was stopped. */
+async function settledTurn(response: Response, onStep: (step: TurnStep) => void, signal: AbortSignal | undefined): Promise<ApiResult<AssistantTurnAnswer>> {
+  const outcome = await readTurnStream(response.body, onStep, signal);
+  if (outcome.kind === 'answer') return { ok: true, value: outcome.answer };
+  if (outcome.kind === 'stopped' || wasAborted(signal)) return failed('ABORTED');
+  if (outcome.kind === 'error') {
+    const typed = errorBodySchema.safeParse({ error: outcome.error });
+    return typed.success ? { ok: false, failure: typed.data.error } : failed('SCHEMA_MISMATCH');
+  }
+  return failed('UNREADABLE_RESPONSE');
+}
+
 function parseJson(text: string): { readonly parsed: true; readonly value: unknown } | { readonly parsed: false } {
   try {
     return { parsed: true, value: JSON.parse(text) };
@@ -306,6 +320,8 @@ function isEnvelope(value: unknown): boolean {
 interface RequestExtras {
   readonly headers?: Readonly<Record<string, string>>;
   readonly keepalive?: boolean;
+  /** Reads the body of a response that is a stream, in place of reading it as one JSON text. */
+  readonly readStream?: (response: Response) => Promise<unknown>;
 }
 
 async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, signal: AbortSignal | undefined, method?: 'POST' | 'PUT' | 'DELETE', body?: unknown, extras: RequestExtras = {}): Promise<ApiResult<T>> {
@@ -314,6 +330,7 @@ async function request<T>(fetcher: Fetcher, path: string, schema: z.ZodType<T>, 
   let response: Response;
   try {
     response = await fetcher(path, signal === undefined && method === undefined ? undefined : { ...(signal === undefined ? {} : { signal }), ...(method === undefined ? {} : { method }), ...(extras.keepalive === true ? { keepalive: true } : {}), ...(body === undefined ? (extras.headers === undefined ? {} : { headers: extras.headers }) : { headers: { 'content-type': 'application/json', ...extras.headers }, body: JSON.stringify(body) }) });
+    if (extras.readStream !== undefined && response.ok && (response.headers.get('content-type') ?? '').toLowerCase().startsWith('application/x-ndjson')) return (await extras.readStream(response)) as ApiResult<T>;
     text = await response.text();
   } catch {
     return failed(wasAborted(signal) ? 'ABORTED' : 'NETWORK_UNAVAILABLE');
@@ -388,7 +405,8 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     copyPattern: (id, signal) => request(fetcher, `/v1/patterns/${encodeURIComponent(id)}/copy`, savedPatternSchema, signal, 'POST'),
     ask: (body, signal) => request(fetcher, '/v1/ask', askAnswerSchema, signal, 'POST', body),
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
-    assistantTurn: (body, signal) => request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body),
+    assistantTurn: (body, signal, onStep) =>
+      request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body, onStep === undefined ? {} : { headers: { accept: 'application/x-ndjson' }, readStream: (response) => settledTurn(response, onStep, signal) }),
     assistantThread: (investigationId, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),
