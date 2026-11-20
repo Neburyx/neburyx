@@ -433,6 +433,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       aiNotesFor: (context) => aiNotesCapabilities.current?.(context),
       investigationSourceFor: (context) => investigationSources.current?.(context),
       signalOf,
+      abortOf: (request) => controllerOf(request).abort(),
     });
   }
 

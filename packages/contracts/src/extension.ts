@@ -34,6 +34,8 @@ export interface ExtensionRequest {
   readonly policyVersion?: (sourceId: string) => string;
   /** Aborted when the client gives up the request. */
   readonly signal: AbortSignal;
+  /** Sends an event to the client of a streamed request: the name of one of the route's `stream.events` and its members, checked against that event's schema. Absent unless the route declares a stream and the client asked for one. Nothing sent here is logged. */
+  readonly emit?: (name: string, members: unknown) => void;
   /** Signs a text: 64 lowercase hex characters, with a key that stays in the application. Absent, a route that needs it refuses. */
   readonly signText?: (canonical: string) => string;
   /**
@@ -99,6 +101,19 @@ export interface AskRunner {
 
 export type ExtensionRouteMethod = 'GET' | 'POST';
 
+/** The media type of a streamed response: one JSON object a line (NDJSON). A client asks for it with `Accept`; any other client gets the JSON answer. */
+export const EXTENSION_STREAM_MEDIA_TYPE = 'application/x-ndjson';
+/** The event names the core owns: the last line of a stream, which carries the route's answer, and the line of a failure after the first event. A route's own events never use them. */
+export const EXTENSION_STREAM_RESERVED_EVENTS = ['answer', 'error'] as const;
+
+/** What makes a route streamable: the events it may send while its handler runs, and how long a stream may stay open. */
+export interface ExtensionRouteStream {
+  /** The route's own events: the strict schema of the members of each event, by the event's name (the `event` member itself is added by the core). Never `answer` or `error`. */
+  readonly events: Readonly<Record<string, ZodType>>;
+  /** The longest a stream stays open, in milliseconds; after that the core ends it with an `error` event and the request's abort signal fires. */
+  readonly maxMs: number;
+}
+
 export interface ExtensionRoute {
   readonly method: ExtensionRouteMethod;
   readonly url: string;
@@ -112,6 +127,8 @@ export interface ExtensionRoute {
   /** Required for a `POST` route and refused on a `GET` route: the strict schema of the body. */
   readonly requestSchema?: ZodType;
   readonly responseSchema: ZodType;
+  /** A route that may send events before its answer to a client that asked for a stream. Never together with `idempotent`: the application refuses to start. */
+  readonly stream?: ExtensionRouteStream;
   /** False when the feature of the route is switched off: the application then reads nothing of the request, as with the switch off, and the handler gives the refusal. Absent, the route is live. */
   readonly active?: () => boolean;
   /** A route a retry could repeat: the application requires an `Idempotency-Key`, runs the handler once per person and key, and replays its answer; `sourceOf` names the source the request is about. */

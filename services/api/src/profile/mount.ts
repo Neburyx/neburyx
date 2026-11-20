@@ -1,11 +1,12 @@
 import { markAskRunner, markReadElements } from './ai-reads.js';
-import { parseExtensionRefusal, type AskClassifier, type CaseSummarizer, type ExtensionRefusalFields, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
+import { EXTENSION_STREAM_RESERVED_EVENTS, parseExtensionRefusal, type AskClassifier, type CaseSummarizer, type ExtensionRefusalFields, type AuditSink, type ExtensionRequest, type ProfileExtension } from '@neburyx/contracts';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { AppStore } from '../app-store.js';
 import { AppError, errorResponse, errorStatus } from '../errors.js';
 import { IDEMPOTENT_REPLAY_HEADER, fingerprintOf, idempotencyKeyOf, runOnce } from '../exports/idempotency.js';
 import { communityAskClassifier, communityCaseSummarizer } from '../seams/community-seams.js';
 import type { PolicyProvider, Principal } from '../seams/seams.js';
+import { createStreamWriter, wantsStream } from './stream.js';
 
 /** What an extension route gets as its abort signal when the application gave no way to tell that the client gave up. */
 const NEVER_ABORTED = new AbortController();
@@ -46,11 +47,18 @@ export interface ExtensionMount {
   readonly typeDescriptions?: ExtensionRequest['typeDescriptions'];
   /** The signal that is aborted when the client gives up the request. */
   readonly signalOf?: (request: FastifyRequest) => AbortSignal;
+  /** Aborts the signal of a request, as a client that gives up does; used when a stream outlives its limit. */
+  readonly abortOf?: (request: FastifyRequest) => void;
 }
 
 export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExtension, store: Pick<AppStore, 'current'>, mount: ExtensionMount): void {
   for (const group of extension.routeGroups) {
     for (const route of group.routes) {
+      if (route.stream !== undefined) {
+        // a stream has no replay and no stored error body, and its last line and its failure line are the core's: a route that says otherwise does not start
+        if (route.idempotent !== undefined) throw new Error(`the route ${route.method} ${route.url} declares both a stream and idempotency`);
+        for (const reserved of EXTENSION_STREAM_RESERVED_EVENTS) if (Object.hasOwn(route.stream.events, reserved)) throw new Error(`the route ${route.method} ${route.url} declares the event ${reserved}, which the application owns`);
+      }
       app.route({
         method: route.method,
         url: route.url,
@@ -127,10 +135,10 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(investigation === undefined ? {} : { investigation }),
             };
           };
-          const produce = async (): Promise<unknown> => {
+          const produce = async (emit?: (name: string, members: unknown) => void): Promise<unknown> => {
           let reply: unknown;
           try {
-            reply = await route.handler(build());
+            reply = await route.handler(emit === undefined ? build() : { ...build(), emit });
           } catch (error) {
             const refusal = parseExtensionRefusal(error);
             // the application's own tools throw its errors: they keep their code
@@ -152,6 +160,23 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           }
           return parsed.data;
           };
+          if (route.stream !== undefined && live && wantsStream(request.headers.accept)) {
+            const writer = createStreamWriter(request, replyOut, route.stream, () => request.log.error({ event: 'extension.event_invalid', extension: extension.name }, 'an extension event did not match its schema'));
+            const timer = setTimeout(() => {
+              writer.fail('QUERY_TIMEOUT');
+              mount.abortOf?.(request);
+            }, route.stream.maxMs);
+            try {
+              writer.finish(await produce(writer.emit));
+            } catch (error) {
+              // before the first line the failure is the HTTP response of any request; after it, the last line of the stream
+              if (!writer.started()) throw error;
+              writer.fail(error instanceof AppError ? error.code : 'INTERNAL_ERROR', error instanceof AppError ? error.details : undefined);
+            } finally {
+              clearTimeout(timer);
+            }
+            return replyOut;
+          }
           const { idempotency } = mount;
           if (route.idempotent === undefined || idempotency === undefined || !live) return produce();
           const queryAt = request.url.indexOf('?');
