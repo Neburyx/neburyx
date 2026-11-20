@@ -292,4 +292,32 @@ test.describe('the Assistant panel', () => {
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= document.documentElement.clientHeight)).toBe(true);
   });
+
+  for (const width of [1440, 1280]) test(`keeps the workspace in place when a refusal follows a long answer from the view at ${width} pixels`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openWorkspace(page);
+    const ids = ['AC-1', 'AC-2', 'AC-3', 'AC-4', 'AC-5', 'AC-6', 'AC-7', 'AC-8', 'AC-9', 'AC-10'];
+    const long: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      sentences: ids.map((id, index) => ({ text: `Account ${id} is in view, number ${index + 1} of ${ids.length}.`, cites: [`n${index + 1}`] })),
+      citations: ids.map((id, index) => ({ key: `n${index + 1}`, kind: 'entity' as const, ref: { sourceId: 'banking-demo', entityType: 'account', stableId: id } })),
+      coverage: { retrieval: '10 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 10 of the 10 shown elements.' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, (body) => (body.message === 'what is in view?' ? long : REFUSE));
+    await open(page);
+    await page.getByLabel('Your message').fill('what is in view?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText('Sources · 10')).toBeVisible();
+    await page.getByLabel('Your message').fill('is this fraud?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    const moved = await page.evaluate(() => [...document.querySelectorAll('*')].filter((element) => element.scrollTop !== 0 && !element.classList.contains('assistant-panel')).map((element) => `${element.tagName}.${element.className}:${element.scrollTop}`));
+    expect(moved).toEqual([]);
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const box = await panel(page).boundingBox();
+    expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+  });
 });

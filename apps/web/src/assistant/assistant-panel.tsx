@@ -19,6 +19,16 @@ function focusAssistantControl(): void {
   controls.find((control) => control.textContent?.trim().startsWith(ASSISTANT_COPY.title))?.focus();
 }
 
+function focusInside(element: HTMLElement | null | undefined, panel: HTMLElement | null): void {
+  if (!element) return;
+  element.focus({ preventScroll: true });
+  if (!panel) return;
+  const above = element.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+  const below = element.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom;
+  if (above < 0) panel.scrollTop += above;
+  else if (below > 0) panel.scrollTop += below;
+}
+
 function Intro() {
   return (
     <div className="assistant-intro">
@@ -65,8 +75,9 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   useEffect(() => {
-    if (model.focus.target === 'input') field.current?.focus();
-    else body.current?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`)?.focus();
+    const panel = body.current?.closest<HTMLElement>('.assistant-panel') ?? null;
+    if (model.focus.target === 'input') focusInside(field.current, panel);
+    else focusInside(body.current?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`), panel);
   }, [model.focus]);
   useEffect(() => {
     if (model.canCancel) cancel.current?.focus();
