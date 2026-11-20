@@ -247,7 +247,6 @@ test.describe('the Assistant panel', () => {
     expect(await hint.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   });
 
-
   for (const width of [1440, 1280]) {
     test(`shows an answer from the view at ${width} pixels with its tags, markers, sources and the two lines of coverage, and selects the cited element`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
@@ -298,6 +297,7 @@ test.describe('the Assistant panel', () => {
     await page.getByLabel('Your message').fill('what is in view?');
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText('Sources · 10')).toBeVisible();
+    await expect(panel(page).getByText('Account AC-1 is in view, number 1 of 10.')).toBeInViewport({ ratio: 1 });
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     const box = await panel(page).boundingBox();
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
@@ -325,7 +325,7 @@ test.describe('the Assistant panel', () => {
     await expect(panel(page).getByText('Sources · 10')).toBeVisible();
     await page.getByLabel('Your message').fill('is this fraud?');
     await page.keyboard.press('Enter');
-    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeInViewport({ ratio: 1 });
     const moved = await page.evaluate(() => [...document.querySelectorAll('*')].filter((element) => element.scrollTop !== 0 && !element.classList.contains('assistant-body')).map((element) => `${element.tagName}.${element.className}:${element.scrollTop}`));
     expect(moved).toEqual([]);
     expect(await page.evaluate(() => window.scrollY)).toBe(0);

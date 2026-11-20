@@ -19,14 +19,11 @@ function focusAssistantControl(): void {
   controls.find((control) => control.textContent?.trim().startsWith(ASSISTANT_COPY.title))?.focus();
 }
 
-function focusInside(element: HTMLElement | null | undefined, scroller: HTMLElement | null): void {
+function focusInside(element: HTMLElement | null | undefined, thread: HTMLElement | null, turn?: HTMLElement | null): void {
   if (!element) return;
   element.focus({ preventScroll: true });
-  if (!scroller || !scroller.contains(element)) return;
-  const above = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-  const below = element.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
-  if (above < 0) scroller.scrollTop += above;
-  else if (below > 0) scroller.scrollTop += below;
+  if (!thread || !turn || !thread.contains(turn)) return;
+  thread.scrollTop += turn.getBoundingClientRect().top - thread.getBoundingClientRect().top;
 }
 
 function Intro() {
@@ -76,8 +73,11 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   useEffect(() => {
     const thread = body.current;
-    if (model.focus.target === 'input') focusInside(field.current, thread);
-    else focusInside(thread?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`), thread);
+    if (model.focus.target === 'input') focusInside(field.current, null);
+    else {
+      const turn = thread?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"]`);
+      focusInside(turn?.querySelector<HTMLElement>('[data-ask-focus]'), thread, turn);
+    }
   }, [model.focus]);
   useEffect(() => {
     if (model.canCancel) cancel.current?.focus();
