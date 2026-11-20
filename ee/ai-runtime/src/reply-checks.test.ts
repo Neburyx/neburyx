@@ -71,6 +71,8 @@ describe('a conclusion that is denied is no verdict, and no other word of the ve
     'No conclusion can be drawn, but this is fraud.',
   ])('still counts %s', (text) => {
     expect(verdict(text)).toBe(true);
+  });
+});
 
 describe('the checks of a sentence that cites a meaning line', () => {
   const MEANING = 'm1: entity type Ledger: "A ledger holds up to 12 entries."';
