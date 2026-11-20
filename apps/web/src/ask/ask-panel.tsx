@@ -130,11 +130,11 @@ export function AskPanel({ onClose }: { readonly onClose: () => void }) {
             {limitText(used)}
           </span>
           {asking ? (
-            <button type="button" className="ask-send ask-send-cancel" onClick={model.cancel}>
+            <button key="cancel" type="button" className="ask-send ask-send-cancel" onClick={model.cancel}>
               {ASK_COPY.cancel}
             </button>
           ) : (
-            <button type="submit" className="ask-send" disabled={!model.canSend}>
+            <button key="send" type="submit" className="ask-send" disabled={!model.canSend}>
               {ASK_COPY.send} <span aria-hidden="true">▸</span>
             </button>
           )}

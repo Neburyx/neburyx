@@ -193,4 +193,24 @@ test.describe('the Ask panel', () => {
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '3');
     await expect(panel(page).getByRole('button', { name: /^Add / })).toHaveCount(0);
   });
+
+  test('sends one request when Enter activates Cancel: the question goes back to the field and is not sent again', async ({ page }) => {
+    await openWorkspace(page);
+    let asked = 0;
+    await page.route((url) => url.pathname === '/v1/ask', () => {
+      asked += 1;
+      return new Promise<void>(() => undefined);
+    });
+    await open(page);
+    await page.getByLabel('Your question').fill('who is AC-2?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await page.keyboard.press('Tab');
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('heading', { name: 'Cancelled' })).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(asked).toBe(1);
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toHaveCount(0);
+  });
 });
