@@ -1,3 +1,4 @@
+# Ruling (orchestrator, 2026-11-20, per the design of the assistant's thread context): when "it" could mean elements of more than one earlier turn and nothing says which, the router asks, and never picks one silently; a thread where the message names which element it means expects `ask`.
 # The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
 messages:
   - id: describe-the-view
@@ -140,7 +141,19 @@ threads:
         expect: { route: ask, intent: show-an-account, entities: { account: AC-0002061 } }
       - message: "Who sent money to it?"
         expect: { route: clarify, intent: accounts-that-paid-an-account, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002060 }, { entityType: account, stableId: AC-0002061 }] }
-  - id: five-turns-the-last-one-wins
+  - id: five-turns-it-is-ambiguous
+    turns:
+      - message: "Show me AC-0002070."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002070 } }
+      - message: "Show me AC-0002071."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002071 } }
+      - message: "Show me AC-0002072."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002072 } }
+      - message: "Which devices is it connected to?"
+        expect: { route: clarify, intent: devices-and-addresses-of-an-account, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002070 }, { entityType: account, stableId: AC-0002071 }, { entityType: account, stableId: AC-0002072 }] }
+      - message: "And which merchants did it pay in the last 30 days?"
+        expect: { route: clarify, intent: merchants-paid-in-the-last-30-days, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002070 }, { entityType: account, stableId: AC-0002071 }, { entityType: account, stableId: AC-0002072 }] }
+  - id: five-turns-the-last-one-named
     turns:
       - message: "Show me AC-0002070."
         expect: { route: ask, intent: show-an-account, entities: { account: AC-0002070 } }
@@ -169,6 +182,14 @@ threads:
       - message: "Back here: which accounts share a device with it?"
         expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002090 } }
   - id: view-then-an-account
+    turns:
+      - message: "Describe what is on screen."
+        expect: { route: view, view: [{ entityType: account, stableId: AC-0002100 }, { entityType: account, stableId: AC-0002101 }] }
+      - message: "Show AC-0002100 on its own."
+        expect: { route: ask, intent: show-an-account, entities: { account: AC-0002100 } }
+      - message: "Which accounts connect from the same address as it?"
+        expect: { route: clarify, intent: accounts-on-the-same-address, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002100 }, { entityType: account, stableId: AC-0002101 }] }
+  - id: view-then-the-account-just-shown
     turns:
       - message: "Describe what is on screen."
         expect: { route: view, view: [{ entityType: account, stableId: AC-0002100 }, { entityType: account, stableId: AC-0002101 }] }

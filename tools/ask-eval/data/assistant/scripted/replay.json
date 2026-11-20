@@ -152,6 +152,12 @@
     "Message:\nShow me AC-0002072.\n\nEarlier turns of this thread, oldest first:\n1. ask \"show-an-account\"; ran for account = c1\n2. ask \"show-an-account\"; ran for account = c2\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002070\" | \"account\"\nc2 | \"AC-0002071\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"show-an-account\",\"entities\":{\"account\":\"AC-0002072\"}}"
     },
+    "Message:\nWhich devices is it connected to?\n\nEarlier turns of this thread, oldest first:\n1. ask \"show-an-account\"; ran for account = c1\n2. ask \"show-an-account\"; ran for account = c2\n3. ask \"show-an-account\"; ran for account = c3\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002070\" | \"account\"\nc2 | \"AC-0002071\" | \"account\"\nc3 | \"AC-0002072\" | \"account\"\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"devices-and-addresses-of-an-account\",\"role\":\"account\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
+    },
+    "Message:\nAnd which merchants did it pay in the last 30 days?\n\nEarlier turns of this thread, oldest first:\n1. ask \"show-an-account\"; ran for account = c1\n2. ask \"show-an-account\"; ran for account = c2\n3. ask \"show-an-account\"; ran for account = c3\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002070\" | \"account\"\nc2 | \"AC-0002071\" | \"account\"\nc3 | \"AC-0002072\" | \"account\"\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"merchants-paid-in-the-last-30-days\",\"role\":\"account\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
+    },
     "Message:\nWhich devices is the last account I asked about connected to?\n\nEarlier turns of this thread, oldest first:\n1. ask \"show-an-account\"; ran for account = c1\n2. ask \"show-an-account\"; ran for account = c2\n3. ask \"show-an-account\"; ran for account = c3\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002070\" | \"account\"\nc2 | \"AC-0002071\" | \"account\"\nc3 | \"AC-0002072\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"devices-and-addresses-of-an-account\",\"entities\":{\"account\":\"AC-0002072\"}}"
     },
@@ -181,6 +187,9 @@
     },
     "Message:\nShow AC-0002100 on its own.\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002100\" | \"account\"\nc2 | \"AC-0002101\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002100\" (also in the earlier turns)\nc2 | \"account\" | \"AC-0002101\" (also in the earlier turns)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"show-an-account\",\"entities\":{\"account\":\"AC-0002100\"}}"
+    },
+    "Message:\nWhich accounts connect from the same address as it?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n2. ask \"show-an-account\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002100\" | \"account\"\nc2 | \"AC-0002101\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002100\" (also in the earlier turns)\nc2 | \"account\" | \"AC-0002101\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-on-the-same-address\",\"role\":\"account\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
     },
     "Message:\nWhich accounts connect from the same address as the account you just showed?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n2. ask \"show-an-account\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002100\" | \"account\"\nc2 | \"AC-0002101\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002100\" (also in the earlier turns)\nc2 | \"account\" | \"AC-0002101\" (also in the earlier turns)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002100\"}}"
@@ -260,7 +269,7 @@
     "Message:\nWhich claims involve the same vehicle as CL-002020?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claims-on-the-same-vehicle\",\"entities\":{\"claim\":\"CL-002020\"}}"
     },
-    "Message:\nWhich claims went through the same repairer as that claim?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002020\" | \"claim\"\n\nIn view:\n(none)": {
+    "Message:\nWhich claims went through the same repairer?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002020\" | \"claim\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claims-by-the-same-repairer\",\"entities\":{\"claim\":\"CL-002020\"}}"
     },
     "Message:\nWhich claims were filed by CT-00230?\n\nIn view:\n(none)": {
@@ -307,6 +316,12 @@
     },
     "Message:\nWhich claimants live at the same address as CT-00272?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00270\" | \"claimant\"\nc2 | \"CT-00271\" | \"claimant\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"entities\":{\"claimant\":\"CT-00272\"}}"
+    },
+    "Message:\nWho shares a phone with them?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n3. ask \"claimants-at-the-same-address\"; ran for claimant = c3\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00270\" | \"claimant\"\nc2 | \"CT-00271\" | \"claimant\"\nc3 | \"CT-00272\" | \"claimant\"\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claimants-sharing-a-phone\",\"role\":\"claimant\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
+    },
+    "Message:\nAnd which policies do their claims sit on?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n3. ask \"claimants-at-the-same-address\"; ran for claimant = c3\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00270\" | \"claimant\"\nc2 | \"CT-00271\" | \"claimant\"\nc3 | \"CT-00272\" | \"claimant\"\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"policies-of-a-claimants-claims\",\"role\":\"claimant\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
     },
     "Message:\nWho shares a phone with the last claimant I asked about?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n3. ask \"claimants-at-the-same-address\"; ran for claimant = c3\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00270\" | \"claimant\"\nc2 | \"CT-00271\" | \"claimant\"\nc3 | \"CT-00272\" | \"claimant\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-sharing-a-phone\",\"entities\":{\"claimant\":\"CT-00272\"}}"

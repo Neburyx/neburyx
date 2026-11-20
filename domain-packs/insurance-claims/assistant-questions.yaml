@@ -1,3 +1,4 @@
+# Ruling (orchestrator, 2026-11-20, per the design of the assistant's thread context): when "it" could mean elements of more than one earlier turn and nothing says which, the router asks, and never picks one silently; a thread where the message names which element it means expects `ask`.
 # The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
 messages:
   - id: describe-the-view
@@ -70,7 +71,7 @@ threads:
     turns:
       - message: "Which claims involve the same vehicle as CL-002020?"
         expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002020 } }
-      - message: "Which claims went through the same repairer as that claim?"
+      - message: "Which claims went through the same repairer?"
         expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002020 } }
   - id: two-claimants-then-who
     turns:
@@ -104,7 +105,19 @@ threads:
         expect: { route: refuse, cause: raw-query }
       - message: "Which claims went through the same repairer?"
         expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002060 } }
-  - id: five-turns-the-last-one-wins
+  - id: five-turns-it-is-ambiguous
+    turns:
+      - message: "Which claimants live at the same address as CT-00270?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00270 } }
+      - message: "Which claimants live at the same address as CT-00271?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00271 } }
+      - message: "Which claimants live at the same address as CT-00272?"
+        expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00272 } }
+      - message: "Who shares a phone with them?"
+        expect: { route: clarify, intent: claimants-sharing-a-phone, role: claimant, entities: {}, candidates: [{ entityType: claimant, stableId: CT-00270 }, { entityType: claimant, stableId: CT-00271 }, { entityType: claimant, stableId: CT-00272 }] }
+      - message: "And which policies do their claims sit on?"
+        expect: { route: clarify, intent: policies-of-a-claimants-claims, role: claimant, entities: {}, candidates: [{ entityType: claimant, stableId: CT-00270 }, { entityType: claimant, stableId: CT-00271 }, { entityType: claimant, stableId: CT-00272 }] }
+  - id: five-turns-the-last-one-named
     turns:
       - message: "Which claimants live at the same address as CT-00270?"
         expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00270 } }
