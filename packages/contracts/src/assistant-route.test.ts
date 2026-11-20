@@ -70,7 +70,7 @@ describe('the reading of a reply of the router', () => {
 
 describe('the meaning route', () => {
   it('reads the names the analyst wrote, one to eight, as text', () => {
-    expect(readAssistantRoute('{"route":"meaning","types":["account","LIVES_AT"]}')).toEqual({ ok: true, reply: { route: 'meaning', types: ['account', 'LIVES_AT'] } });
+    expect(readAssistantRoute('{"route":"meaning","types":["widget","LINKS_TO"]}')).toEqual({ ok: true, reply: { route: 'meaning', types: ['widget', 'LINKS_TO'] } });
   });
 
   it.each([
