@@ -13,8 +13,8 @@ const CLARIFICATION: AssistantTurnAnswer = {
   status: 'clarification',
   question: 'Which widget do you mean?',
   candidates: [
-    { title: 'W-884', type: 'Widget', choice: choiceFor('W-884') },
-    { title: 'W-217', type: 'Widget', choice: choiceFor('W-217') },
+    { title: 'W-884', type: 'widget', choice: choiceFor('W-884') },
+    { title: 'W-217', type: 'widget', choice: choiceFor('W-217') },
   ],
 };
 const ok = (value: AssistantTurnAnswer) => ({ ok: true as const, value });
@@ -31,6 +31,7 @@ describe('the Assistant panel: a clarification turn', () => {
     expect(rows.textContent).toContain('W-884');
     expect(rows.textContent).toContain('W-217');
     expect(rows.textContent).toContain('Widget');
+    expect(rows.textContent).not.toContain('widget');
     expect(screen.getByText(ASSISTANT_COPY.clarifyStatus)).toBeTruthy();
     expect(screen.getByRole('button', { name: ASSISTANT_COPY.cancel })).toBeTruthy();
   });

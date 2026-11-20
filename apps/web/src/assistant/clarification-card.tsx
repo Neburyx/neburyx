@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { humanize } from '../ask/text.js';
 import { ASSISTANT_COPY } from './copy.js';
 import type { ClarificationCandidate } from './assistant-session.js';
 
@@ -34,12 +35,12 @@ export function ClarificationCard({
           <li key={index}>
             <button type="button" className="assistant-clarify-row" onClick={() => onPick(index)}>
               <span className="assistant-clarify-name">{candidate.title}</span>
-              <span className="assistant-clarify-type">{candidate.type}</span>
+              <span className="assistant-clarify-type">{humanize(candidate.type)}</span>
             </button>
           </li>
         ))}
       </ul>
-      <button type="button" className="ask-continue" onClick={onCancel}>
+      <button type="button" className="ask-continue ask-send-cancel" onClick={onCancel}>
         {ASSISTANT_COPY.cancel}
       </button>
       <p className="ask-note">{ASSISTANT_COPY.clarifyStatus}</p>
