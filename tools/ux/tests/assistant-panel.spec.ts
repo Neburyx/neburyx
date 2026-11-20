@@ -54,6 +54,17 @@ async function answerWith(page: Page, answer: AssistantTurnAnswer | ((body: Sent
   return sent;
 }
 
+async function expectHeaderStays(page: Page): Promise<void> {
+  const box = await panel(page).boundingBox();
+  const head = await panel(page).locator('.ask-head').boundingBox();
+  expect(box !== null && head !== null && Math.abs(head.y - box.y) <= 1).toBe(true);
+  await expect(panel(page).getByRole('heading', { name: 'Assistant' })).toBeInViewport();
+  await expect(panel(page).getByRole('button', { name: 'Close' })).toBeInViewport();
+  await expect(page.getByLabel('Your message')).toBeInViewport();
+  expect(await panel(page).evaluate((element) => element.scrollTop)).toBe(0);
+  expect(await panel(page).locator('.assistant-body').evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+}
+
 async function open(page: Page): Promise<void> {
   await header(page).getByRole('button', { name: 'Assistant' }).click();
   await expect(panel(page)).toBeVisible();
@@ -291,6 +302,7 @@ test.describe('the Assistant panel', () => {
     const box = await panel(page).boundingBox();
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= document.documentElement.clientHeight)).toBe(true);
+    await expectHeaderStays(page);
   });
 
   for (const width of [1440, 1280]) test(`keeps the workspace in place when a refusal follows a long answer from the view at ${width} pixels`, async ({ page }) => {
@@ -314,10 +326,11 @@ test.describe('the Assistant panel', () => {
     await page.getByLabel('Your message').fill('is this fraud?');
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
-    const moved = await page.evaluate(() => [...document.querySelectorAll('*')].filter((element) => element.scrollTop !== 0 && !element.classList.contains('assistant-panel')).map((element) => `${element.tagName}.${element.className}:${element.scrollTop}`));
+    const moved = await page.evaluate(() => [...document.querySelectorAll('*')].filter((element) => element.scrollTop !== 0 && !element.classList.contains('assistant-body')).map((element) => `${element.tagName}.${element.className}:${element.scrollTop}`));
     expect(moved).toEqual([]);
     expect(await page.evaluate(() => window.scrollY)).toBe(0);
     const box = await panel(page).boundingBox();
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+    await expectHeaderStays(page);
   });
 });

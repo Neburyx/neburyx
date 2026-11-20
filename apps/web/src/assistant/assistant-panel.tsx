@@ -19,14 +19,14 @@ function focusAssistantControl(): void {
   controls.find((control) => control.textContent?.trim().startsWith(ASSISTANT_COPY.title))?.focus();
 }
 
-function focusInside(element: HTMLElement | null | undefined, panel: HTMLElement | null): void {
+function focusInside(element: HTMLElement | null | undefined, scroller: HTMLElement | null): void {
   if (!element) return;
   element.focus({ preventScroll: true });
-  if (!panel) return;
-  const above = element.getBoundingClientRect().top - panel.getBoundingClientRect().top;
-  const below = element.getBoundingClientRect().bottom - panel.getBoundingClientRect().bottom;
-  if (above < 0) panel.scrollTop += above;
-  else if (below > 0) panel.scrollTop += below;
+  if (!scroller || !scroller.contains(element)) return;
+  const above = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  const below = element.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+  if (above < 0) scroller.scrollTop += above;
+  else if (below > 0) scroller.scrollTop += below;
 }
 
 function Intro() {
@@ -75,9 +75,9 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const showNewThread = stored.kind === 'ready' && turns.length === 0 && storedTurns.length === 0 && stored.thread.previousThreadClearedAt !== null && notice?.kind !== 'masking-cleared' && notice?.kind !== 'access-lost';
   const pending = turns.some((turn) => turn.outcome.kind === 'pending');
   useEffect(() => {
-    const panel = body.current?.closest<HTMLElement>('.assistant-panel') ?? null;
-    if (model.focus.target === 'input') focusInside(field.current, panel);
-    else focusInside(body.current?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`), panel);
+    const thread = body.current;
+    if (model.focus.target === 'input') focusInside(field.current, thread);
+    else focusInside(thread?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`), thread);
   }, [model.focus]);
   useEffect(() => {
     if (model.canCancel) cancel.current?.focus();

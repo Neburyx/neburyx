@@ -194,3 +194,9 @@
 .assistant-panel {
   max-height: calc(var(--full-height) - var(--header-height) - var(--region-top) - var(--space-16));
 }
+
+.assistant-panel .assistant-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
