@@ -148,9 +148,9 @@ threads:
         expect: { route: ask, intent: show-an-account, entities: { account: AC-0002071 } }
       - message: "Show me AC-0002072."
         expect: { route: ask, intent: show-an-account, entities: { account: AC-0002072 } }
-      - message: "Which devices is it connected to?"
+      - message: "Which devices is the last account I asked about connected to?"
         expect: { route: ask, intent: devices-and-addresses-of-an-account, entities: { account: AC-0002072 } }
-      - message: "And which merchants did it pay in the last 30 days?"
+      - message: "And which merchants did that last account pay in the last 30 days?"
         expect: { route: ask, intent: merchants-paid-in-the-last-30-days, entities: { account: AC-0002072 } }
   - id: raw-query-in-the-middle
     turns:
@@ -174,7 +174,7 @@ threads:
         expect: { route: view, view: [{ entityType: account, stableId: AC-0002100 }, { entityType: account, stableId: AC-0002101 }] }
       - message: "Show AC-0002100 on its own."
         expect: { route: ask, intent: show-an-account, entities: { account: AC-0002100 } }
-      - message: "Which accounts connect from the same address as it?"
+      - message: "Which accounts connect from the same address as the account you just showed?"
         expect: { route: ask, intent: accounts-on-the-same-address, entities: { account: AC-0002100 } }
   - id: unplaced-in-the-middle
     turns:

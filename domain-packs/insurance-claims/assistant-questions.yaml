@@ -70,7 +70,7 @@ threads:
     turns:
       - message: "Which claims involve the same vehicle as CL-002020?"
         expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002020 } }
-      - message: "Which claims went through the same repairer?"
+      - message: "Which claims went through the same repairer as that claim?"
         expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002020 } }
   - id: two-claimants-then-who
     turns:
@@ -112,9 +112,9 @@ threads:
         expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00271 } }
       - message: "Which claimants live at the same address as CT-00272?"
         expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00272 } }
-      - message: "Who shares a phone with them?"
+      - message: "Who shares a phone with the last claimant I asked about?"
         expect: { route: ask, intent: claimants-sharing-a-phone, entities: { claimant: CT-00272 } }
-      - message: "And which policies do their claims sit on?"
+      - message: "And which policies do the claims of that last claimant sit on?"
         expect: { route: ask, intent: policies-of-a-claimants-claims, entities: { claimant: CT-00272 } }
   - id: other-source-in-the-middle
     turns:
