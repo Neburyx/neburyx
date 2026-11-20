@@ -62,19 +62,19 @@ describe('an assistant turn: what the router is sent', () => {
     expect(fixture.calls).toHaveLength(1);
     const [call] = fixture.calls;
     expect(call?.promptId).toBe('assistant.route');
-    expect(call?.version).toBe(3);
+    expect(call?.version).toBe(4);
     expect(call?.instructions).toContain('SENTINEL-PROMPT');
     expect(call?.instructions).toContain('SENTINEL-CLASSIFICATION');
     expect(call?.instructions?.endsWith(instructions.text.slice(instructions.text.indexOf('# Reply format')))).toBe(true);
     expect(call?.values).toContain(MESSAGE);
-    expect(call?.values).toContain('n1\nn2');
+    expect(call?.values).toContain('In view:\n(none)');
     expect(call?.values).toContain(ASK_SAVED_PATTERN_NOTE);
     expect(call?.values).not.toContain('SENTINEL-CLASSIFICATION');
     const routed = events.filter((candidate) => candidate.action === ROUTER_AUDIT_ACTION);
     expect(routed).toHaveLength(1);
     const event = routed[0];
     expect(event?.action).toBe(ROUTER_AUDIT_ACTION);
-    expect(event?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '3', promptSha256: createHash('sha256').update(call?.instructions ?? '', 'utf8').digest('hex') } });
+    expect(event?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '4', promptSha256: createHash('sha256').update(call?.instructions ?? '', 'utf8').digest('hex') } });
     expect(JSON.stringify(event)).not.toContain('SENTINEL-MESSAGE');
   });
 
@@ -151,7 +151,7 @@ describe('an assistant turn: replies that are not a route, and failures', () => 
       await route.handler(request());
       const routed = events.filter((candidate) => candidate.action === ROUTER_AUDIT_ACTION);
       expect(routed).toHaveLength(1);
-      expect(routed[0]?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '3' } });
+      expect(routed[0]?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '4' } });
     }
   });
 });

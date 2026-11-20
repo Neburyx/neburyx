@@ -484,7 +484,8 @@ describe('the router when its reply is not a route', () => {
     const answer = await answerOf(t.route.handler(t.request(manyBody)));
     expect(answer).toMatchObject({ status: 'answered', route: 'view', calls: 3 });
     expect(routerCalls(t)).toHaveLength(2);
-    expect(routerCalls(t)[0]?.values).toContain(MANY_KEYS[4]);
+    expect(routerCalls(t)[0]?.values).toContain('c5 | "widget" | "A-5"');
+    expect(routerCalls(t)[0]?.values).not.toContain(MANY_KEYS[4]);
     expect(routerCalls(t)[1]?.values).toContain('Your last reply was not a route');
   });
 

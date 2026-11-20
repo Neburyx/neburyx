@@ -5,7 +5,7 @@ import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import { buildAssistantInstructions, type AssistantInstructions } from './instructions.js';
 
 export const ROUTER_PROMPT_ID = 'assistant.route';
-export const ROUTER_PROMPT_VERSION = 3;
+export const ROUTER_PROMPT_VERSION = 4;
 export const ROUTER_AUDIT_ACTION = 'assistant.route';
 
 const NO_KEYS = '(none)';
@@ -28,6 +28,8 @@ export interface RouterInput {
   readonly investigationId: string;
   readonly message: string;
   readonly viewElementKeys: readonly string[];
+  /** The elements in view as the router names them, each with a key of the context's table (see `withView`); absent, the client's own keys are listed as they were sent. */
+  readonly viewText?: string;
   readonly actorId: string;
   readonly actorRole: Parameters<AuditedModelCall['call']>[1]['actorRole'];
   readonly traceId: string;
@@ -46,7 +48,7 @@ export type RouterOutcome =
 
 /** What the call is given besides the instructions: the message as typed, the context of the thread, the keys of the view and, with a catalog, the note and the catalog of the caller's own saved patterns. */
 const valuesOf = (input: RouterInput): string =>
-  [`Message:\n${input.message}`, ...(input.context === undefined ? [] : [input.context]), `Keys of the elements in view:\n${input.viewElementKeys.length === 0 ? NO_KEYS : input.viewElementKeys.join('\n')}`, ...(input.patternCatalog === undefined ? [] : [`${ASK_SAVED_PATTERN_NOTE}\n${input.patternCatalog}`])].join('\n\n');
+  [`Message:\n${input.message}`, ...(input.context === undefined ? [] : [input.context]), input.viewText === undefined ? `Keys of the elements in view:\n${input.viewElementKeys.length === 0 ? NO_KEYS : input.viewElementKeys.join('\n')}` : `In view:\n${input.viewText}`, ...(input.patternCatalog === undefined ? [] : [`${ASK_SAVED_PATTERN_NOTE}\n${input.patternCatalog}`])].join('\n\n');
 
 /**
  * One audited call of the router, with the router's prompt and the source's `classification.md` as the instructions (so the audit's instructions hash covers both) and the message as typed in the values.

@@ -41,7 +41,7 @@ import type { AssistantRunStore } from './run-store.js';
 import { issueChoiceToken, verifyChoiceToken } from './choice-token.js';
 import { candidatesFor, candidatesOfReply, clarificationAnswer, roleEntityType, type Candidate } from './clarification.js';
 import { followUpsOf, type FollowUp } from './follow-ups.js';
-import { buildContext, type TurnContext } from './context.js';
+import { buildContext, canonical, withView, type TurnContext } from './context.js';
 import { ATTACHED_SUMMARY_LINE, openAttachment, type SummaryAttachment } from './summary-attachment.js';
 import type { TokenKeys } from '../case-summary/token-keys.js';
 import type { AssistantThreadStore } from './thread-store.js';
@@ -148,14 +148,29 @@ function viewTurn(outcome: ViewOutcome): AssistantTurnAnswer {
   }
 }
 
+/** The candidates of a clarification with the title the analyst sees: an element only the view holds was keyed by its id, so its title is read through the gate, masked as this message asks. */
+async function titledFromView(candidates: readonly Candidate[], context: TurnContext, body: { readonly investigationId: string; readonly sourceId: string; readonly mask?: boolean | undefined }, readElements: ExtensionRequest['readElements'], signal: AbortSignal): Promise<readonly Candidate[]> {
+  const viewKeys = new Set([...(context.fromView ?? [])].flatMap((key) => context.keys.get(key) ?? []).map(canonical));
+  const wanted = candidates.filter((candidate) => viewKeys.has(canonical(candidate.ref)));
+  if (wanted.length === 0 || readElements === undefined) return candidates;
+  const reading = await readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, { entities: wanted.map((candidate) => candidate.ref), edges: [], aggregates: [], derived: [] });
+  return candidates.flatMap((candidate) => {
+    if (!wanted.includes(candidate)) return [candidate];
+    const node = reading.nodes.find((read) => read.ref.sourceId === candidate.ref.sourceId && read.ref.entityType === candidate.ref.entityType && read.ref.stableId === candidate.ref.stableId);
+    return node === undefined ? [] : [{ ref: candidate.ref, title: node.display.title, type: node.display.type }];
+  });
+}
+
 /** The values of an `ask` reply: the typed ones, and for each role the router named by a key of the context the stable ID of that key's element; or the roles whose key names nothing of this turn's context. */
-function entitiesOfReply(reply: Extract<AssistantRouterReply, { route: 'ask' }>, context: TurnContext | undefined): { readonly entities: AskEntities; readonly unheld?: undefined } | { readonly entities: AskEntities; readonly unheld: readonly string[] } {
+function entitiesOfReply(reply: Extract<AssistantRouterReply, { route: 'ask' }>, context: TurnContext | undefined, entityTypeOf: (role: string) => string | undefined = () => undefined): { readonly entities: AskEntities; readonly unheld?: undefined } | { readonly entities: AskEntities; readonly unheld: readonly string[] } {
   const named = Object.entries(reply.elements ?? {});
   const resolved: Record<string, string> = { ...reply.entities };
   const unheld: string[] = [];
   for (const [role, key] of named) {
     const ref = context?.keys.get(key);
-    if (ref === undefined) unheld.push(role);
+    const wanted = entityTypeOf(role);
+    // a key of an element of another entity type than the role takes names nothing for it
+    if (ref === undefined || (wanted !== undefined && ref.entityType !== wanted)) unheld.push(role);
     else resolved[role] = ref.stableId;
   }
   return unheld.length === 0 ? { entities: resolved } : { entities: resolved, unheld };
@@ -433,9 +448,12 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
         if (unavailable === undefined) throw error;
         return unavailable;
       }
+      // the elements in view get keys of the same table as the thread's context, so that "this account" can be named; a key resolves only to a reference of the view or the thread
+      const viewRead = readViewKeys(body.viewElementKeys, body.sourceId);
+      const routed = withView(context, viewRead.ok ? viewRead.refs : { entities: [], edges: [], aggregates: [], derived: [] }, body.sourceId);
       let outcome: RouterOutcome;
       try {
-        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(context === undefined && summary === undefined ? {} : { context: [context?.text, summary === undefined ? undefined : ATTACHED_SUMMARY_LINE].filter((part) => part !== undefined).join('\n\n') }), accepts: (reply) => reply.route !== 'clarify' || candidatesOfReply(reply, context, options.folder(), body.sourceId) !== undefined, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
+        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, ...(routed.viewText === undefined ? {} : { viewText: routed.viewText }), actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(context === undefined && summary === undefined ? {} : { context: [context?.text, summary === undefined ? undefined : ATTACHED_SUMMARY_LINE].filter((part) => part !== undefined).join('\n\n') }), accepts: (reply) => reply.route !== 'clarify' || candidatesOfReply(reply, routed, options.folder(), body.sourceId) !== undefined, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
       } catch (error) {
         // the model returned a prompt other than the one sent, so nothing of the call is kept
         if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
@@ -452,8 +470,18 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           const { reply } = outcome;
           if (reply.route === 'refuse') return refused(reply.cause);
           if (reply.route === 'clarify') {
-            const candidates = candidatesOfReply(reply, context, options.folder(), body.sourceId);
-            return candidates === undefined ? refused('unplaced') : clarificationAnswer(candidates, choicesOf(request, body, reply.intent, reply.role, othersOfClarify(reply, context), Object.keys(reply.elements ?? {})));
+            const found = candidatesOfReply(reply, routed, options.folder(), body.sourceId);
+            let candidates: readonly Candidate[] | undefined;
+            try {
+              candidates = found === undefined ? undefined : await titledFromView(found, routed, body, readElements, AbortSignal.any([request.signal, deadline]));
+            } catch (error) {
+              if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+              if (request.signal.aborted) throw new Error('the request was cancelled');
+              const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);
+              if (unavailable === undefined) throw error;
+              return unavailable;
+            }
+            return candidates === undefined || candidates.length === 0 ? refused('unplaced') : clarificationAnswer(candidates, choicesOf(request, body, reply.intent, reply.role, othersOfClarify(reply, routed), Object.keys(reply.elements ?? {})));
           }
           if (reply.route === 'view') {
             noteTurn({ route: 'view' });
@@ -488,10 +516,11 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             await writeEvent(request, ASK_ACTION, 'refused', body.sourceId, { kind: 'template', outcome: 'refused', cause: 'no-ask-for-source' });
             return answeredAsk(refusal('no-ask-for-source'));
           }
-          const resolved = entitiesOfReply(reply, context);
+          const intentOfReply = options.folder()?.intent(body.sourceId, reply.intent);
+          const resolved = entitiesOfReply(reply, routed, (role) => (intentOfReply === undefined ? undefined : roleEntityType(intentOfReply, role)));
           if (resolved.unheld !== undefined) {
             try {
-              return await clarifyUnheld(request, reply, resolved.unheld, resolved.entities, context, body, readElements, AbortSignal.any([request.signal, deadline]));
+              return await clarifyUnheld(request, reply, resolved.unheld, resolved.entities, routed, body, readElements, AbortSignal.any([request.signal, deadline]));
             } catch (error) {
               if (request.signal.aborted) throw new Error('the request was cancelled');
               const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);

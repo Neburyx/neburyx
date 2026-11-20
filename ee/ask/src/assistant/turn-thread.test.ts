@@ -78,7 +78,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     await run(turn);
     const [kept] = stored(turn);
     expect(stored(turn)).toHaveLength(1);
-    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '3', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
+    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '4', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
     expect(kept?.questionHash).toMatch(SHA);
     expect(kept?.entities).toEqual([{ role: 'id', ref: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' } }]);
     expect(kept?.citationRefs).toEqual([

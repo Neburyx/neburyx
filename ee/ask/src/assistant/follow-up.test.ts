@@ -685,3 +685,90 @@ describe('a follow-up on the view route, placed by the thread', () => {
     expect(viewCalls(t.rig)).toHaveLength(0);
   });
 });
+
+describe('the elements in view, named by a key of the same table as the thread\'s context', () => {
+  const view = (...ids: string[]) => ids.map((id) => widgetKey(id));
+  const sendWith = (t: Follow, message: string, keys: readonly string[]) => t.send(message, undefined, keys);
+
+  it('lists each entity in view with a key, its type and its id, in a fresh thread, and no longer the raw keys the client sent', async () => {
+    const t = await follow(quiet);
+    await sendWith(t, 'Show it', view('A-1'));
+    const values = routerValues(t.rig, 0);
+    expect(values).toContain('c1 | "widget" | "A-1"');
+    expect(values).not.toContain(widgetKey('A-1'));
+    expect(values).not.toContain('Earlier turns');
+  });
+
+  it('lists a relationship in view with a key, its type and the ends the client sent', async () => {
+    const t = await follow(quiet);
+    await sendWith(t, 'Show it', [widgetKey('A-1'), JSON.stringify(['edge', 'demo', 'stored', 'MADE_FROM', 'widget', 'gadget', 'e-1'])]);
+    expect(routerValues(t.rig, 0)).toContain('c2 | relationship | "MADE_FROM" | "widget" → "gadget" | "e-1"');
+  });
+
+  it('runs the intent for the element a key of the view names, resolved by the server and never from text', async () => {
+    const t = await follow(() => naming('c1'));
+    expect(await sendWith(t, 'what are the details of this account', view('A-7'))).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(ranFor(t.rig)[0]).toContain('"stableId":"A-7"');
+  });
+
+  it('shares a key with the thread\'s context when the element is in both, and numbers the new ones after it', async () => {
+    const t = await follow(quiet);
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
+    await sendWith(t, FOLLOW_UP, view('A-1', 'A-2'));
+    const values = routerValues(t.rig, 0);
+    expect(values).toContain('c1 | "widget" | "A-1" (also in the earlier turns)');
+    expect(values).toContain('c2 | "widget" | "A-2"');
+  });
+
+  it('takes a stable id written where a key stands for nothing: the reply is not a route, so no run and no value from the id', async () => {
+    const t = await follow(() => ok('{"route":"ask","intent":"shared","entities":{},"elements":{"id":"A-7"}}'));
+    const answer = await sendWith(t, 'what are the details of this account', view('A-7'));
+    expect(answer).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    expect(ranFor(t.rig)).toHaveLength(0);
+  });
+
+  it('refuses a key of an element of another entity type than the role takes', async () => {
+    const t = await follow(() => naming('c2'));
+    const other = JSON.stringify(['node', 'demo', 'gadget', 'gadgetone']);
+    const answer = await sendWith(t, 'what are the details of this one', [widgetKey('A-1'), other]);
+    expect(ranFor(t.rig)).toHaveLength(0);
+    expect(answer.status === 'answered' && answer.route === 'ask').toBe(false);
+  });
+
+  it('asks which one is meant when the reply names a key of nothing and two elements of the type are in view, with their titles read through the gate', async () => {
+    const t = await follow(() => naming('c9'), { readNodes: (refs, mask) => refs.entities.map((ref) => nodeOf(ref.stableId, mask ? `Masked ${ref.stableId}` : `Account ${ref.stableId}`)) });
+    const answer = await sendWith(t, 'what are the details of this account', view('A-1', 'A-2'));
+    expect(answer).toMatchObject({ status: 'clarification' });
+    expect(answer.status === 'clarification' ? answer.candidates.map((candidate) => candidate.title).sort() : []).toEqual(['Account A-1', 'Account A-2']);
+  });
+
+  it('shows a clarification the title of an element only the view holds, read through the gate for this message\'s masking', async () => {
+    const reply = () => ok(JSON.stringify({ route: 'clarify', intent: 'shared', role: 'id', entities: {}, candidates: ['c1', 'c2'] }));
+    const t = await follow(reply, { readNodes: (refs, mask) => refs.entities.map((ref) => nodeOf(ref.stableId, mask ? `Masked ${ref.stableId}` : `Account ${ref.stableId}`)) });
+    const answer = await t.rig.route.handler(t.rig.request({ ...BASE, message: 'which?', viewElementKeys: view('A-1', 'A-2'), mask: true }, { principalId: PERSON }));
+    const parsed = assistantTurnAnswerSchema.parse(answer);
+    expect(parsed.status === 'clarification' ? parsed.candidates.map((candidate) => candidate.title).sort() : []).toEqual(['Masked A-1', 'Masked A-2']);
+  });
+
+  it('refuses a key of a relationship named under a role: it is no element a role can take, and nothing runs', async () => {
+    const edge = JSON.stringify(['edge', 'demo', 'stored', 'MADE_FROM', 'widget', 'gadget', 'e-1']);
+    const t = await follow(() => naming('c2'));
+    const answer = await sendWith(t, 'what are the details of this relationship', [widgetKey('A-1'), edge]);
+    expect(ranFor(t.rig)).toHaveLength(0);
+    expect(answer.status === 'answered' && answer.route === 'ask').toBe(false);
+  });
+
+  it('leaves out a candidate only the view holds when the gate does not give it back, and answers unplaced when none is left', async () => {
+    const reply = () => ok(JSON.stringify({ route: 'clarify', intent: 'shared', role: 'id', entities: {}, candidates: ['c1', 'c2'] }));
+    const t = await follow(reply, { readNodes: () => [] });
+    const answer = assistantTurnAnswerSchema.parse(await t.rig.route.handler(t.rig.request({ ...BASE, message: 'which?', viewElementKeys: view('A-1', 'A-2') }, { principalId: PERSON })));
+    expect(answer).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+  });
+
+  it('answers unavailable, not an error, when the gate fails while the titles of the candidates are read', async () => {
+    const reply = () => ok(JSON.stringify({ route: 'clarify', intent: 'shared', role: 'id', entities: {}, candidates: ['c1', 'c2'] }));
+    const t = await follow(reply, { readNodes: () => { throw new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE', reason: 'unreachable' }); } });
+    const answer = assistantTurnAnswerSchema.parse(await t.rig.route.handler(t.rig.request({ ...BASE, message: 'which?', viewElementKeys: view('A-1', 'A-2') }, { principalId: PERSON })));
+    expect(answer).toMatchObject({ status: 'unavailable', kind: 'source-unavailable' });
+  });
+});
