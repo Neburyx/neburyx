@@ -92,6 +92,8 @@ export interface AssistantAppOptions {
   readonly stores?: boolean;
   /** Settings of the assistant, by name (`NEBURYX_ASSISTANT_*`). */
   readonly settings?: Readonly<Record<string, string>>;
+  /** A description for a type of the source's mapping, by the name of the type. */
+  readonly descriptions?: Readonly<Record<string, string>>;
 }
 
 const INTENTS = {
@@ -122,7 +124,7 @@ export async function startAssistantApp(options: AssistantAppOptions) {
   extension.attachAudit?.({ record: (event) => (modelEvents.push(event), Promise.resolve()) });
   const logs: string[] = [];
   const armed = { open: false };
-  const rig = await startExportRig({ extension, links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
+  const rig = await startExportRig({ extension, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
   const investigation = await rig.open();
   armed.open = true;
   const body = (message: string, over: Record<string, unknown> = {}) => ({ sourceId: 'demo', investigationId: investigation.id, message, viewElementKeys: [], ...over });

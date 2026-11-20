@@ -11,7 +11,7 @@ A domain pack is a directory of plain YAML and Markdown (and, for Ask, the two d
 
 | File | Purpose |
 |---|---|
-| `neburyx.yaml` | A complete mapping file for **one source**: connection address, credentials by reference, entity and relationship types, display settings, derived rules and pattern presets. Run it as it is with `NEBURYX_CONFIG`. |
+| `neburyx.yaml` | A complete mapping file for **one source**: connection address, credentials by reference, entity and relationship types, display settings, derived rules and pattern presets. Run it as it is with `NEBURYX_CONFIG`. Each entity type and relationship type carries a neutral plain-text `description` that the assistant may quote when an analyst asks what the type means (see [the mapping guide](../docs/mapping-guide.md)); a description states what a type is and never a verdict or a policy. |
 | `README.md` | The pack in plain words: what it maps, its presets, and the address and variables it expects. |
 | `demo.yaml` | Only for a pack that has a demo: the definition of its synthetic demo data, built into a graph by `tools/demo-graph`. Its dates are relative to the day the graph is built (it states the `reference_date` its ranges were written for), so a question about the last days finds data. The answers about the last 7, 30 and 90 days hold for a few days after a start; a restart of the demo builds the graph again for that day, which moves the window. |
 | `cases.yaml` | Only for a pack that has a demo: its scripted demo cases, each with a known answer for the default seed, and the preset investigation that "Open demo case" opens (a starting entity and a case reference). Tests check the answers against the loaded demo graph. |

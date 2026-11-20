@@ -10,7 +10,7 @@ type Answered = Extract<AskAnswer, { answered: unknown }>['answered'];
 type Refused = Extract<AskAnswer, { refused: unknown }>['refused'];
 
 /** What one step of the loop is run against: the request, the gate's capabilities and the options of Ask's routes, and the view the person had on screen. */
-export type StepScope = Pick<Execution, 'request' | 'capabilities' | 'options' | 'sourceId' | 'mask' | 'investigationId' | 'patterns' | 'action'> & { readonly viewElementKeys: readonly string[]; readonly askedTypes?: readonly string[] };
+export type StepScope = Pick<Execution, 'request' | 'capabilities' | 'options' | 'sourceId' | 'mask' | 'investigationId' | 'patterns' | 'action'> & { readonly viewElementKeys: readonly string[]; readonly askedTypes?: readonly string[]; readonly contextTypes?: readonly string[] };
 
 export type StepResult =
   | { readonly status: 'answered'; readonly answer: Answered; readonly rows: number }

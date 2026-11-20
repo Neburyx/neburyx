@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TypeDescriptions } from '@neburyx/contracts';
 import { VIEW_BODY, answerOf, ok, rig } from '../testing/assistant-rig.js';
+import { typeLinesOf } from './type-lines.js';
 
 const reply = (sentences: readonly { text: string; cites: readonly string[] }[]) => ok(JSON.stringify({ sentences }));
 const WIDGET = 'A widget is a small unit that holds up to 12 parts.';
@@ -119,6 +120,15 @@ describe('a question about a type the mapping does not describe', () => {
     const closing = t.events.find((event) => event.action === 'assistant.turn.closed');
     expect(JSON.stringify(closing)).toContain('no-description');
     expect(JSON.stringify(closing)).toContain('"outcome":"answered"');
+  });
+});
+
+describe('the types in play for a call', () => {
+  it('include the entity types of the thread the router named, once each, beside those of the elements, and a described type that is in neither is left out', () => {
+    const offered: TypeDescriptions = { entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget', description: WIDGET }, { type: 'gadget', label: 'Gadget', displayName: 'Gadget', description: 'A gadget is a tool.' }], relationshipTypes: [] };
+    const lines = typeLinesOf(offered, undefined, 'what does it mean?', [], ['widget', 'widget']);
+    expect([...lines.lines.values()]).toEqual([`m1: entity type Widget: ${JSON.stringify(WIDGET)}`]);
+    expect(typeLinesOf(offered, undefined, 'what does it mean?').lines.size).toBe(0);
   });
 });
 

@@ -477,6 +477,8 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           if (reply.route === 'refuse') return refused(reply.cause);
           if (reply.route === 'meaning') {
             // the names are matched by the server, which writes the answer; a name that matches no type is a question for the view
+            // the same roles may ask as for the view route, whichever way the question is routed
+            if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') throw new ExtensionRefusal({ code: 'ACCESS_DENIED' });
             const meant = meaningAnswerOf(reply.types, request.typeDescriptions?.(body.sourceId));
             if (meant !== undefined) {
               noteTurn({ route: 'view' });
@@ -501,16 +503,18 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             noteTurn({ route: 'view' });
             // the names the router said the message also asks the meaning of: the answer gets the fixed sentence for those without a description
             const askedTypes = reply.types;
+            // the entity types of the elements of the thread the router named by key: they are in play for a follow-up, so that their descriptions reach the call
+            const contextTypes = context === undefined ? undefined : [...new Set([...context.keys.values()].map((ref) => ref.entityType))];
             const answerView = options.viewAnswer?.();
             if (answerView === undefined || readElements === undefined) return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
             if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') throw new ExtensionRefusal({ code: 'ACCESS_DENIED' });
             const progress: ViewProgress = { calls: 0, read: 0, readStarted: false };
             try {
               const capabilities = capabilitiesOf(request);
-              const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(askedTypes === undefined ? {} : { askedTypes }), ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
+              const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(askedTypes === undefined ? {} : { askedTypes }), ...(contextTypes === undefined ? {} : { contextTypes }), ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
               const loop = options.toolLoop?.();
               const tools = loop !== undefined && options.viewTools?.() === true && options.folder()?.source(body.sourceId) !== undefined ? toolRegistryOf(scope, false) : undefined;
-              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }), ...(context === undefined ? {} : { context: context.text }), ...(typeDescriptions === undefined ? {} : { typeDescriptions }), ...(askedTypes === undefined ? {} : { askedTypes }) });
+              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }), ...(context === undefined ? {} : { context: context.text }), ...(typeDescriptions === undefined ? {} : { typeDescriptions }), ...(askedTypes === undefined ? {} : { askedTypes }), ...(contextTypes === undefined ? {} : { contextTypes }) });
               if (viewed.summary !== undefined) noteTurn({ summary: viewed.summary });
               if (viewed.status === 'tool' && loop !== undefined) {
                 // the view's reading is the first step of the loop; the model's request is the second
@@ -551,7 +555,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               ? undefined
               : async (answer: AskAnswer): Promise<AssistantTurnAnswer | undefined> => {
                   if ('refused' in answer || answer.answered.continueToken !== undefined) return undefined;
-                  const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(execution.patterns === undefined ? {} : { patterns: execution.patterns }) };
+                  const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(context === undefined ? {} : { contextTypes: [...new Set([...context.keys.values()].map((ref) => ref.entityType))] }), ...(execution.patterns === undefined ? {} : { patterns: execution.patterns }) };
                   const looped = await loop({ scope, message, deadline, startedAt, callsUsed: outcome.calls, ...(context === undefined ? {} : { context: context.text }), first: { tool: reply.intent, answer: answer.answered, asked: resolved.entities } });
                   return looped === undefined ? undefined : loopAnswer(looped, 'ask', waitingOf(request, body, message, startedAt));
                 };

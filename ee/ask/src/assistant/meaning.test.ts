@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { TypeDescriptions } from '@neburyx/contracts';
-import { VIEW_BODY, answerOf, ok, rig } from '../testing/assistant-rig.js';
+import { describe, expect, it, vi } from 'vitest';
+import { ExtensionRefusal, type TypeDescriptions } from '@neburyx/contracts';
+import { VIEW_BODY, answerOf, ok, refusalOf, rig } from '../testing/assistant-rig.js';
 import { meaningAnswerOf } from './meaning.js';
 import { TURN_CLOSED_ACTION } from './turn-audit.js';
 
@@ -48,6 +48,21 @@ describe('the meaning route of a turn', () => {
     expect(answer).toMatchObject({ status: 'meaning', described: [{ type: 'Widget', description: WIDGET }], noDescription: { names: ['Gizmo'] } });
     expect(t.fixture.calls).toHaveLength(1);
     expect(t.elementReads).toHaveLength(0);
+  });
+
+  it('refuses a viewer as the view route does, before anything is answered, and writes no answered event', async () => {
+    const t = await rig({ reply: meaning('widget') });
+    const refusal = await refusalOf(t.route.handler(t.request({ ...VIEW_BODY, message: 'What is a widget?' }, { principalRole: 'viewer', typeDescriptions: () => types })));
+    expect(refusal).toMatchObject({ code: 'ACCESS_DENIED' });
+  });
+
+  it('never reads the descriptions of a source the person may not read: the refusal of the source comes first', async () => {
+    const t = await rig({ reply: meaning('widget') });
+    const read = vi.fn(() => types);
+    const refusal = await refusalOf(t.route.handler(t.request({ ...VIEW_BODY, message: 'What is a widget?' }, { askSourceReadable: () => Promise.reject(new ExtensionRefusal({ code: 'NOT_FOUND' })), typeDescriptions: read })));
+    expect(refusal).toMatchObject({ code: 'NOT_FOUND' });
+    expect(read).not.toHaveBeenCalled();
+    expect(t.fixture.calls).toHaveLength(0);
   });
 
   it('works with an empty view', async () => {

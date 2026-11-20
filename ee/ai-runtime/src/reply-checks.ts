@@ -86,7 +86,8 @@ function statesConclusion(text: string): boolean {
  */
 export function descriptionHoldsVerdict(description: string, ownNames: readonly string[]): boolean {
   const left = [...ownNames].sort((a, b) => b.length - a.length).reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'giu'), ' '), description);
-  return VERDICT.test(left) || statesConclusion(left);
+  const hit = VERDICT.test(left);
+  return hit || statesConclusion(left);
 }
 
 export interface Judged {

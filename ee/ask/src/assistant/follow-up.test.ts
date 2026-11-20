@@ -772,3 +772,26 @@ describe('the elements in view, named by a key of the same table as the thread\'
     expect(answer).toMatchObject({ status: 'unavailable', kind: 'source-unavailable' });
   });
 });
+
+describe('the descriptions of the types of the thread, in play for a follow-up', () => {
+  const viewReply = ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is shown.', cites: ['n1'] }] }));
+  const described = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget', description: 'A widget is a unit.' }, { type: 'gizmo', label: 'Gizmo', displayName: 'Gizmo', description: 'A gizmo is a tool.' }], relationshipTypes: [] }) };
+  const gizmo = { sourceId: 'demo', entityType: 'gizmo', stableId: 'Z-0' };
+  const viewCalls = (r: Rig) => r.fixture.calls.filter((call) => call.promptId === 'assistant.view');
+
+  it('gives the view call the description of the type of an element of an earlier turn that the router named, though no element of that type is in view', async () => {
+    const t = await follow(() => ok(JSON.stringify({ route: 'view' })), { view: viewReply, readNodes: (refs) => refs.entities.map((ref) => ({ ...nodeOf(ref.stableId, `Gizmo ${ref.stableId}`), ref, display: { title: `Gizmo ${ref.stableId}`, type: ref.entityType } })) });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: gizmo }] }));
+    await t.send('what does it mean?', described, VIEW_KEYS);
+    const sent = viewCalls(t.rig)[0]?.values ?? '';
+    expect(sent).toContain('entity type Gizmo');
+    expect(sent).toContain('entity type Widget');
+  });
+
+  it('gives no description of a type the thread does not hold and the view does not show', async () => {
+    const t = await follow(() => ok(JSON.stringify({ route: 'view' })), { view: viewReply });
+    await t.send('what does it mean?', described, VIEW_KEYS);
+    expect(viewCalls(t.rig)[0]?.values ?? '').not.toContain('entity type Gizmo');
+  });
+});
+

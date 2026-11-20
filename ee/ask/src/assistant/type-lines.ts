@@ -48,10 +48,11 @@ export function usableDescriptions(descriptions: TypeDescriptions): TypeDescript
   };
 }
 
-export function typeLinesOf(offered: TypeDescriptions | undefined, assembled: AssembledText | undefined, message: string, askedTypes: readonly string[] = []): TypeLines {
+export function typeLinesOf(offered: TypeDescriptions | undefined, assembled: AssembledText | undefined, message: string, askedTypes: readonly string[] = [], contextEntityTypes: readonly string[] = []): TypeLines {
   if (offered === undefined) return NO_TYPE_LINES;
   const descriptions = usableDescriptions(offered);
   const present = typesOf(assembled);
+  for (const type of contextEntityTypes) if (!present.entities.includes(type)) present.entities.push(type);
   const inPlay: { readonly kind: 'entity' | 'relationship'; readonly name: string; readonly aliases: readonly string[]; readonly description: string | undefined }[] = [];
   const add = (kind: 'entity' | 'relationship', name: string, aliases: readonly string[], description: string | undefined): void => {
     if (!inPlay.some((held) => held.kind === kind && held.name === name)) inPlay.push({ kind, name, aliases, description });

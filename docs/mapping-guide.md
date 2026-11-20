@@ -166,7 +166,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 |---|---|---|
 | `type` | yes | The name Neburyx uses for the type |
 | `label` | yes | The label the nodes carry in your graph |
-| `description` | no | A plain-text meaning of the type, 1 to 300 characters with no control characters. The assistant may quote it, as a cited line, when an analyst asks what the type means. Write what the type is, not a verdict or a policy: a sentence that restates a verdict word is rejected when the assistant answers |
+| `description` | no | A plain-text meaning of the type, 1 to 300 characters with no control characters. The assistant may quote it, as a cited line, when an analyst asks what the type means. Write what the type is, not a verdict or a policy: a description that holds a word of the assistant's verdict list is not used (the assistant answers a question about the type as if it had no description) and the start-up log names the type with a warning, `assistant.description_withheld`, without the text |
 | `stable_id` | yes | The property that identifies a record; must be unique. It may be a `pii` field: the type is then *keyed*, see [keyed identifiers](../domain-packs/README.md#an-entity-type-whose-identifier-is-personal-data) |
 | `title` | no | A title built from properties, such as `"Account {accountId}"`. Without one, the title is the stable ID. A title built from a `pii` field is masked with it |
 | `search` | no | Properties that search reads. Each needs an index |
@@ -210,7 +210,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `type` | yes | The relationship type in your graph |
 | `from` | yes | The entity type at the start |
 | `to` | yes | The entity type at the end |
-| `description` | no | A plain-text meaning of the relationship type, 1 to 300 characters with no control characters. The assistant may quote it, as a cited line, when an analyst asks what the type means. Write what the type is, not a verdict or a policy: a sentence that restates a verdict word is rejected when the assistant answers |
+| `description` | no | A plain-text meaning of the relationship type, 1 to 300 characters with no control characters. The assistant may quote it, as a cited line, when an analyst asks what the type means. Write what the type is, not a verdict or a policy: a description that holds a word of the assistant's verdict list is not used (the assistant answers a question about the type as if it had no description) and the start-up log names the type with a warning, `assistant.description_withheld`, without the text |
 | `stable_id` | no | Recommended: with it each relationship is an item of its own and pages continue without a repeat; without it the type is shown as aggregate relationships. See [a paged relationship type](../domain-packs/README.md#a-relationship-type-that-is-paged) |
 | `observed_at` | no | The temporal property used to order and filter, and the one an expansion's time window follows: a relationship type with no `observed_at` is not filtered by a window |
 | `evidence` | no | Properties that refer to source records. Each needs an index |

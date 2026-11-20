@@ -12,6 +12,8 @@ export interface AssistantRigOptions {
   readonly maxSteps?: number;
   /** Mounts the stores of the extension, for a turn that may wait for a confirmation. */
   readonly stores?: boolean;
+  /** A description for a type of the source's mapping, by the name of the type. */
+  readonly descriptions?: Readonly<Record<string, string>>;
 }
 
 export interface AssistantRig {
@@ -29,7 +31,7 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}) });
   return {
     stub,
     events: app.events,

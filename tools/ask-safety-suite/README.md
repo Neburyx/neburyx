@@ -38,6 +38,10 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 | The same with caching off | `src/provider-input.test.ts` | is one user message that joins the instructions |
 | A question with text that looks like an instruction is sent as typed | `src/provider-input.test.ts` | is the same body for a question that holds text |
 | No property value of a result reaches the provider, and the model is called once for each question | `src/provider-input.test.ts` | holds no property value in any request of any later question |
+| A question about what a type means is answered by the server from the operator's text, with one model call and no read of the source | `src/assistant-descriptions.test.ts` | answers a question about a described type with the operator |
+| A hostile type name in the router's reply is never shown and reads nothing | `src/assistant-descriptions.test.ts` | never shows a type name that is |
+| An `m` line holds the operator's text as a quoted string and no value of the graph, and an `m` key the model invents is dropped | `src/assistant-descriptions.test.ts` | holds the operator |
+| A reply that says a described type has no description is never shown | `src/assistant-descriptions.test.ts` | never shows a reply that says a described type has no description |
 | For a person with saved patterns the provider receives their own catalog and no id, version, anchor or other person's pattern | `src/provider-input.test.ts` | is the question, the fixed note and the catalog |
 | No id of a pattern is in any request | `src/provider-input.test.ts` | carries no id of any pattern |
 | A leaky provider input is caught | `src/provider-input.test.ts` | canary: a request that carries a property value |
