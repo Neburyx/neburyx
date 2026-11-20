@@ -27,6 +27,8 @@ export interface ToolAnswerOptions {
 
 export interface ReadDone {
   readonly tool: string;
+  /** The plain-words label of the intent that was read, when it has one: the reads text says `read of <label>`. */
+  readonly label?: string;
   readonly result?: AskRunResult;
 }
 
@@ -68,7 +70,7 @@ export function citationTitleOf(title: string | undefined): string | undefined {
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 }
 
-const readLine = (key: string, read: ReadDone): string => `${key}: read of ${read.tool}: ${read.result === undefined ? 'found nothing' : coverageOf(read.result)}`;
+const readLine = (key: string, read: ReadDone): string => `${key}: read of ${read.label ?? read.tool}: ${read.result === undefined ? 'found nothing' : coverageOf(read.result)}`;
 
 /**
  * The lines the model may cite. The elements the reads listed, once each (those of a view keep the view's keys, the reads' are r1, r2, ...): the type and the title as the result gave them (masked as it was asked), never

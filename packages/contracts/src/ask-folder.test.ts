@@ -92,3 +92,28 @@ describe('the intents file', () => {
     expect(problems.join(' ')).not.toContain('SENTINEL');
   });
 });
+
+describe('the label of an intent', () => {
+  const shared = { parameters: ['id'], template: 'shared-attribute', settings: SHARED_SETTINGS };
+
+  it('is kept with the intent, and an intent without one is as it was', () => {
+    const parsed = parseIntentsFile(file({ byId: { label: 'Account by id', parameters: ['id'], query: QUERY }, shared }));
+    expect(parsed).toEqual({ ok: true, intents: [{ name: 'byId', label: 'Account by id', parameters: ['id'], kind: 'query', query: QUERY }, { name: 'shared', parameters: ['id'], kind: 'template', template: 'shared-attribute', settings: SHARED_SETTINGS }] });
+    expect(parseIntentsFile(file({ shared: { ...shared, label: 'Accounts at the same bank' } }))).toMatchObject({ ok: true, intents: [{ label: 'Accounts at the same bank' }] });
+  });
+
+  it('accepts 80 characters and refuses what is empty, over 80, has a control character, is not text or is a lone half of a pair, naming the intent', () => {
+    expect(problemsOf({ shared: { ...shared, label: 'é'.repeat(80) } })).toEqual([]);
+    for (const label of ['', 'é'.repeat(81), 'two\nlines', 'tab\there', 5, ['x'], null, 'half \uD83D']) {
+      const problems = problemsOf({ shared: { ...shared, label } });
+      expect(problems.join(' ')).toContain('intent "shared": the label must be plain text of 1 to 80 characters');
+    }
+  });
+
+  it('refuses a label that is the label or the name of another intent', () => {
+    expect(problemsOf({ one: { ...shared, label: 'Same' }, two: { ...shared, label: 'Same' } }).join(' ')).toContain('the label is the same as the label of intent');
+    expect(problemsOf({ one: { ...shared, label: 'two' }, two: shared }).join(' ')).toContain('the label is the same as the name of intent "two"');
+    expect(problemsOf({ one: { ...shared, label: 'one' }, two: shared })).toEqual([]);
+  });
+});
+

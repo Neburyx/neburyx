@@ -6679,6 +6679,11 @@
                           "minLength": 1,
                           "maxLength": 200
                         },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
                         "kind": {
                           "type": "string",
                           "enum": [
@@ -6731,6 +6736,11 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
                         },
                         "kind": {
                           "type": "string",
@@ -6793,6 +6803,11 @@
                           "minLength": 1,
                           "maxLength": 200
                         },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
                         "kind": {
                           "type": "string",
                           "enum": [
@@ -6845,6 +6860,11 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
                         },
                         "kind": {
                           "type": "string",
@@ -7066,6 +7086,11 @@
                     "minLength": 1,
                     "maxLength": 200
                   },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
                   "kind": {
                     "type": "string",
                     "enum": [
@@ -7130,6 +7155,11 @@
                           "minLength": 1,
                           "maxLength": 200
                         },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
                         "kind": {
                           "type": "string",
                           "enum": [
@@ -7182,6 +7212,11 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
                         },
                         "kind": {
                           "type": "string",
@@ -8054,6 +8089,11 @@
                           "minLength": 1,
                           "maxLength": 200
                         },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
                         "kind": {
                           "type": "string",
                           "enum": [
@@ -8106,6 +8146,11 @@
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
+                        },
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
                         },
                         "kind": {
                           "type": "string",

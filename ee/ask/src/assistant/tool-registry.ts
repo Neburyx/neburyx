@@ -6,6 +6,8 @@ type ToolKind = 'intent' | 'template' | 'pattern' | 'view';
 
 export interface Tool {
   readonly name: string;
+  /** The plain-words label of an intent that has one: shown to the model beside the id, which a request still names. */
+  readonly label?: string;
   readonly kind: ToolKind;
   /** The names of the values a request for the tool gives, exactly. */
   readonly parameters: readonly string[];
@@ -42,7 +44,7 @@ export function buildToolRegistry(input: ToolRegistryInput): ToolRegistry {
     tools.push(tool);
   };
   for (const intent of input.source?.intents ?? []) {
-    add({ name: intent.name, kind: 'intent', parameters: intent.parameters, available: intent.kind === 'query' || input.templateRunnable(intent.template) });
+    add({ name: intent.name, ...(intent.label === undefined ? {} : { label: intent.label }), kind: 'intent', parameters: intent.parameters, available: intent.kind === 'query' || input.templateRunnable(intent.template) });
   }
   if (input.source !== undefined) {
     for (const template of TEMPLATE_TOOL_LIST) add({ name: template.name, kind: 'template', parameters: template.parameters, available: input.templateRunnable(template.template) });

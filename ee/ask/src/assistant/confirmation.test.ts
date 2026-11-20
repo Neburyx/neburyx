@@ -377,3 +377,15 @@ describe('a decision that cannot be made does not use the confirmation up', () =
   });
 });
 
+describe('the label of a waiting intent', () => {
+  const intents = { byId: { label: 'Account by id', parameters: ['id'], query: 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 5' }, shared: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } } };
+
+  it('is on the step the analyst is asked about and on its read, and the plan still names the id', async () => {
+    const { first } = await waiting({ intents });
+    expect(first.step).toMatchObject({ tool: 'byId', label: 'Account by id' });
+    expect(first.reads[1]).toMatchObject({ tool: 'byId', label: 'Account by id' });
+    expect(first.reads[0]).not.toHaveProperty('label');
+    expect(first.plan).not.toContain('Account by id');
+  });
+});
+

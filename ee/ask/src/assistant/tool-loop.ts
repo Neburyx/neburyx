@@ -139,6 +139,12 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
     const lines: string[] = [];
     const reads: ReadDone[] = [];
     const entries: AssistantRead[] = [];
+    // the plain-words label of an intent travels with its read, for the card, the step line and the text the model reads; templates, patterns and the view have none
+    const labelFor = (tool: string): { readonly label?: string } => {
+      const found = registry.find(tool);
+      return found?.kind === 'intent' && found.label !== undefined ? { label: found.label } : {};
+    };
+    const put = (entry: AssistantRead): void => void entries.push({ ...entry, ...(entry.kind === 'intent' ? labelFor(entry.tool) : {}) });
     // the steps of the turn that a decision reads again: each tool and the values the gate accepted for it
     const done: PlanStep[] = [];
     let latest: Answered | undefined;
@@ -153,14 +159,14 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       const { pattern, ...ownValues } = input.first.asked ?? answer.entities;
       const firstTool = answer.patternName === undefined ? input.first.tool : (pattern ?? input.first.tool);
       lines.push(resultLine(input.first.tool, answer));
-      reads.push({ tool: input.first.tool, result: answer.result });
-      entries.push(readOfAnswer(answer.patternName === undefined ? 'intent' : 'pattern', answer.patternName ?? input.first.tool, answer));
+      reads.push({ tool: input.first.tool, result: answer.result, ...labelFor(input.first.tool) });
+      put(readOfAnswer(answer.patternName === undefined ? 'intent' : 'pattern', answer.patternName ?? input.first.tool, answer));
       done.push({ tool: firstTool, values: answer.patternName === undefined ? answer.entities : ownValues });
       latest = input.first.answer;
       rows = summarizeRun(input.first.answer.result).rowCount;
     } else if (input.view !== undefined) {
       lines.push(`view:\n${input.view.assembled.text}`);
-      entries.push(readOfView(input.view.reading.nodes.length + input.view.reading.edges.length));
+      put(readOfView(input.view.reading.nodes.length + input.view.reading.edges.length));
       rows = input.view.reading.nodes.length + input.view.reading.edges.length;
     }
     // an Ask read stands as the answer when nothing came after it; a view's reading has no answer of its own, so a loop entered from it that cannot go on ends with a limit
@@ -176,32 +182,32 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
         case 'answered':
           latest = step.answer;
           rows += step.rows;
-          entries.push(readOfAnswer(tool.kind, step.answer.patternName ?? tool.name, step.answer));
+          put(readOfAnswer(tool.kind, step.answer.patternName ?? tool.name, step.answer));
           lines.push(resultLine(tool.name, step.answer));
-          reads.push({ tool: tool.name, result: step.answer.result });
+          reads.push({ tool: tool.name, result: step.answer.result, ...labelFor(tool.name) });
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'heavy':
           // a read that has grown past what Ask reads at once since it was read, found again: it is not read, and a decision never leads to another
-          entries.push(readNotRead(tool.kind, tool.name));
+          put(readNotRead(tool.kind, tool.name));
           lines.push(`${tool.name}: not read, it is larger than one read now`);
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'refused':
-          if (step.refused.cause === 'nothing-found') reads.push({ tool: tool.name });
-          entries.push(step.refused.cause === 'nothing-found' ? readOfNothing(tool.kind, tool.name, values) : readNotRead(tool.kind, tool.name));
+          if (step.refused.cause === 'nothing-found') reads.push({ tool: tool.name, ...labelFor(tool.name) });
+          put(step.refused.cause === 'nothing-found' ? readOfNothing(tool.kind, tool.name, values) : readNotRead(tool.kind, tool.name));
           lines.push(`${tool.name}: ${step.refused.cause === 'nothing-found' ? 'nothing found' : 'not read, its values did not fit'}`);
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'view':
           rows += step.rows;
           view ??= { reading: step.reading, assembled: assembleText(step.reading) };
-          entries.push(readOfView(step.rows));
+          put(readOfView(step.rows));
           lines.push(`view: ${step.rows} elements read`);
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'no-view':
-          entries.push(readNotRead('view', 'view'));
+          put(readNotRead('view', 'view'));
           lines.push('view: not available');
           done.push({ tool: tool.name, values, ...mark });
           break;
@@ -221,10 +227,10 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           if (again?.status === 'view') {
             view = { reading: again.reading, assembled: assembleText(again.reading) };
             rows += again.rows;
-            entries.push(readOfView(again.rows));
+            put(readOfView(again.rows));
             lines.push(`view:\n${view.assembled.text}`);
           } else {
-            entries.push(readNotRead('view', 'view'));
+            put(readNotRead('view', 'view'));
             lines.push('view: not available');
           }
         }
@@ -233,7 +239,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           if (input.deadline.aborted) return { kind: 'limit', limit: 'time', reads: entries };
           const tool = registry.find(earlier.tool);
           if (tool === undefined || !tool.available) {
-            entries.push(readNotRead(tool?.kind ?? 'intent', earlier.tool));
+            put(readNotRead(tool?.kind ?? 'intent', earlier.tool));
             lines.push(`${earlier.tool}: not read, it is not available now`);
             continue;
           }
@@ -245,10 +251,10 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       }
       const tool = registry.find(resume.wait.tool);
       if (tool === undefined || !tool.available) {
-        entries.push(readNotRead(tool?.kind ?? 'intent', resume.wait.tool));
+        put(readNotRead(tool?.kind ?? 'intent', resume.wait.tool));
         lines.push(`${resume.wait.tool}: not read, it is not available now`);
       } else if (resume.decision === 'skip') {
-        entries.push(readNotRead(tool.kind, resume.wait.tool));
+        put(readNotRead(tool.kind, resume.wait.tool));
         lines.push(`${resume.wait.tool}: skipped by the analyst`);
       } else {
         // every limit is checked again before the heavy step is read: a decision never lifts one

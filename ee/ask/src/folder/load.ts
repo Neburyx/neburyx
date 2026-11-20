@@ -118,7 +118,7 @@ async function loadSource(folder: string, sourceId: string, problems: string[], 
       return undefined;
     }
   }
-  const intents: AskIntent[] = parsed.intents.map((intent) => (intent.kind === 'query' ? { name: intent.name, parameters: intent.parameters, kind: 'query', query: Object.freeze({ text: intent.query, sha256: sha256Of(Buffer.from(intent.query, 'utf8')) }) } : intent));
+  const intents: AskIntent[] = parsed.intents.map((intent) => (intent.kind === 'query' ? { name: intent.name, ...(intent.label === undefined ? {} : { label: intent.label }), parameters: intent.parameters, kind: 'query', query: Object.freeze({ text: intent.query, sha256: sha256Of(Buffer.from(intent.query, 'utf8')) }) } : intent));
   return Object.freeze({ classification: Object.freeze({ text: classification.text, sha256: classification.sha256 }), intents: Object.freeze(intents.map((intent) => Object.freeze(intent))) });
 }
 

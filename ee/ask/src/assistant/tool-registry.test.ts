@@ -72,3 +72,14 @@ describe('the registry of tools of a turn', () => {
     expect(new Set(buildToolRegistry(base).tools.map((tool) => tool.kind))).toEqual(new Set(['intent', 'template', 'pattern', 'view']));
   });
 });
+
+describe('the label of an intent in the registry', () => {
+  it('is on the intent that has one and on no template, pattern or view; the name stays the id', () => {
+    const labelled: AskSourceFolder = { ...source, intents: source.intents.map((intent) => (intent.name === 'shared' ? { ...intent, label: 'Accounts at the same bank' } : intent)) };
+    const registry = buildToolRegistry({ ...base, source: labelled });
+    expect(registry.find('shared')).toMatchObject({ name: 'shared', label: 'Accounts at the same bank' });
+    expect(registry.find('byId')).not.toHaveProperty('label');
+    expect(registry.tools.filter((tool) => tool.kind !== 'intent').some((tool) => 'label' in tool)).toBe(false);
+  });
+});
+

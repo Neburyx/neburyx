@@ -90,7 +90,7 @@ export async function waitingAnswer(ctx: WaitContext, outcome: Waiting): Promise
     status: 'confirmation',
     pendingId,
     plan,
-    step: { tool: wait.request.tool.name, kind: wait.request.tool.kind, ...(subject === undefined ? {} : { subject }), count: { quality: 'lowerBound', value: heavy.value }, page: heavy.page },
+    step: { tool: wait.request.tool.name, ...(wait.request.tool.kind === 'intent' && wait.request.tool.label !== undefined ? { label: wait.request.tool.label } : {}), kind: wait.request.tool.kind, ...(subject === undefined ? {} : { subject }), count: { quality: 'lowerBound', value: heavy.value }, page: heavy.page },
     reads: [...outcome.reads],
   };
 }

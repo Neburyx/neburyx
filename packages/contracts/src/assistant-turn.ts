@@ -137,6 +137,8 @@ export const assistantReadSchema = z.union([
   z
     .strictObject({
       tool: text.max(200),
+      /** The plain-words label the operator gave the intent in the Ask folder; none for a template, a pattern or the view, and for an intent without one. */
+      label: text.max(80).optional(),
       kind: z.enum(ASSISTANT_READ_KINDS),
       subject: text.max(400).optional(),
       read: z.literal(true),
@@ -145,7 +147,7 @@ export const assistantReadSchema = z.union([
       partial: z.boolean(),
     })
     .refine((entry) => (entry.quality === 'unknown') === (entry.rows === undefined), { message: 'a count that is unknown has no number and every other count has one', path: ['rows'] }),
-  z.strictObject({ tool: text.max(200), kind: z.enum(ASSISTANT_READ_KINDS), read: z.literal(false) }),
+  z.strictObject({ tool: text.max(200), label: text.max(80).optional(), kind: z.enum(ASSISTANT_READ_KINDS), read: z.literal(false) }),
 ]);
 
 export type AssistantRead = z.infer<typeof assistantReadSchema>;
@@ -197,6 +199,7 @@ export const assistantTurnAnswerSchema = z.union([
     plan: z.string().max(ASSISTANT_PLAN_MAX_CHARACTERS).regex(ASSISTANT_PLAN_PATTERN),
     step: z.strictObject({
       tool: text.max(200),
+      label: text.max(80).optional(),
       kind: z.enum(ASSISTANT_READ_KINDS),
       subject: text.max(400).optional(),
       count: z.strictObject({ quality: z.enum(ASSISTANT_COUNT_QUALITIES), value: z.number().int().nonnegative().optional() }),

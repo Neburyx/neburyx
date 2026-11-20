@@ -21,7 +21,7 @@ export interface StepInstructions {
 
 /** The tools as text: one line for each, with the names of the values it takes. */
 export const toolsText = (registry: ToolRegistry): string =>
-  ['# Tools you may ask for', '', ...registry.tools.filter((tool) => tool.available).map((tool) => `${tool.name}(${tool.parameters.join(', ')})`)].join('\n');
+  ['# Tools you may ask for', '', ...registry.tools.filter((tool) => tool.available).map((tool) => `${tool.name}(${tool.parameters.join(', ')})${tool.label === undefined ? '' : ` - ${tool.label}`}`)].join('\n');
 
 /** The step call's instructions: the prompt, the tools the registry offers, then the reply format, which is last whatever the prompt says. No tool of the provider's own kind is sent. */
 export function buildStepInstructions(prompt: string, registry: ToolRegistry): StepInstructions {

@@ -187,3 +187,30 @@ describe('the meaning lines of the answer after tool steps', () => {
   });
 });
 
+describe('the label of an intent in a turn', () => {
+  const intents = {
+    byId: { label: 'Account by id', parameters: ['id'], query: 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 5' },
+    shared: { label: 'Accounts at the same bank', parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } },
+  };
+
+  it('is written as `read of <label>` in the lines the model reads, carried on each read of the answer, and the request still names the id', async () => {
+    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }), { intents });
+    const answer = await answerOf(r.route.handler(r.request()));
+    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
+    expect(call?.values).toContain('s1: read of Accounts at the same bank:');
+    expect(call?.values).toContain('s2: read of Account by id:');
+    const stepCall = r.fixture.calls.find((entry) => entry.promptId === 'assistant.step');
+    expect(stepCall?.instructions).toContain('byId(id) - Account by id');
+    if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an Ask answer');
+    expect(answer.reads.map((read) => [read.tool, read.label])).toEqual([['shared', 'Accounts at the same bank'], ['byId', 'Account by id']]);
+  });
+
+  it('leaves a folder without labels as it was: no label on a read and the id in the lines', async () => {
+    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }));
+    const answer = await answerOf(r.route.handler(r.request()));
+    expect(r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer')?.values).toContain('s1: read of shared:');
+    if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an Ask answer');
+    expect(answer.reads.some((read) => 'label' in read)).toBe(false);
+  });
+});
+

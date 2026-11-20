@@ -23,13 +23,13 @@ const TEMPLATE_IDS: readonly string[] = ASK_TEMPLATE_IDS;
 
 /** An intent as the file states it, before the loader adds the hash of its query. */
 export type ParsedAskIntent =
-  | { readonly name: string; readonly parameters: readonly string[]; readonly kind: 'query'; readonly query: string }
-  | { readonly name: string; readonly parameters: readonly string[]; readonly kind: 'template'; readonly template: string; readonly settings: Readonly<Record<string, unknown>> };
+  | { readonly name: string; readonly label?: string; readonly parameters: readonly string[]; readonly kind: 'query'; readonly query: string }
+  | { readonly name: string; readonly label?: string; readonly parameters: readonly string[]; readonly kind: 'template'; readonly template: string; readonly settings: Readonly<Record<string, unknown>> };
 
 /** An intent of the loaded folder. A query's hash is the SHA-256 of its exact UTF-8 text; the audit of a run can name it. */
 export type AskIntent =
-  | { readonly name: string; readonly parameters: readonly string[]; readonly kind: 'query'; readonly query: { readonly text: string; readonly sha256: string } }
-  | { readonly name: string; readonly parameters: readonly string[]; readonly kind: 'template'; readonly template: string; readonly settings: Readonly<Record<string, unknown>> };
+  | { readonly name: string; readonly label?: string; readonly parameters: readonly string[]; readonly kind: 'query'; readonly query: { readonly text: string; readonly sha256: string } }
+  | { readonly name: string; readonly label?: string; readonly parameters: readonly string[]; readonly kind: 'template'; readonly template: string; readonly settings: Readonly<Record<string, unknown>> };
 
 /** What the folder holds for one source: the classification text (with the SHA-256 of the file's bytes) and the intents in file order. */
 export interface AskSourceFolder {
@@ -111,6 +111,32 @@ function deepFreeze<T extends object>(value: T): T {
   return Object.freeze(value);
 }
 
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** The longest label of an intent: a few plain words for the cards, the steps and the reads text. */
+export const ASK_INTENT_LABEL_MAX = 80;
+
+/** The label of an intent as the member to add to it, or none; a label that is not 1 to 80 characters of plain text is a problem naming the intent and the rule. */
+function labelOf(name: string, value: unknown, problems: string[]): { readonly label: string } | Record<string, never> {
+  if (value === undefined) return {};
+  if (typeof value !== 'string' || value === '' || [...value].length > ASK_INTENT_LABEL_MAX || /[\u0000-\u001f\u007f-\u009f]/.test(value) || LONE_SURROGATE.test(value)) {
+    problems.push(`intent "${name}": the label must be plain text of 1 to ${ASK_INTENT_LABEL_MAX} characters with no control character`);
+    return {};
+  }
+  return { label: value };
+}
+
+/** A label that is the label or the name of another intent would make two reads read alike. */
+function labelClashes(intents: readonly ParsedAskIntent[]): string[] {
+  const problems: string[] = [];
+  for (const intent of intents) {
+    if (intent.label === undefined) continue;
+    const other = intents.find((candidate) => candidate !== intent && (candidate.name === intent.label || candidate.label === intent.label));
+    if (other !== undefined) problems.push(`intent "${intent.name}": the label is the same as the ${other.name === intent.label ? 'name' : 'label'} of intent "${other.name}"`);
+  }
+  return problems;
+}
+
 export function parseIntentsFile(text: string): ParsedIntents {
   let data: unknown;
   try {
@@ -140,10 +166,11 @@ export function parseIntentsFile(text: string): ParsedIntents {
       continue;
     }
     for (const key of Object.keys(entry)) {
-      if (!['parameters', 'query', 'template', 'settings'].includes(key)) problems.push(`intent "${name}": ${PLAIN_KEY.test(key) ? `the key ${key}` : 'a key'} is not known`);
+      if (!['label', 'parameters', 'query', 'template', 'settings'].includes(key)) problems.push(`intent "${name}": ${PLAIN_KEY.test(key) ? `the key ${key}` : 'a key'} is not known`);
     }
     const before = problems.length;
     const parameters = parametersOf(name, entry['parameters'], problems);
+    const label = labelOf(name, entry['label'], problems);
     const hasQuery = 'query' in entry;
     const hasTemplate = 'template' in entry;
     if (hasQuery === hasTemplate) {
@@ -157,7 +184,7 @@ export function parseIntentsFile(text: string): ParsedIntents {
       else if (byteLength(query) > ASK_FOLDER_LIMITS.queryBytes) problems.push(`intent "${name}": the query is longer than ${ASK_FOLDER_LIMITS.queryBytes} bytes`);
       else {
         problems.push(...checkIntentQuery({ intent: name, query, parameters }));
-        if (problems.length === before) intents.push({ name, parameters, kind: 'query', query });
+        if (problems.length === before) intents.push({ name, ...label, parameters, kind: 'query', query });
       }
       continue;
     }
@@ -167,8 +194,9 @@ export function parseIntentsFile(text: string): ParsedIntents {
     else if (!isRecord(settings)) problems.push(`intent "${name}": settings must be an object`);
     else {
       problems.push(...checkTemplateSettings({ intent: name, template, parameters, settings }));
-      if (problems.length === before) intents.push({ name, parameters, kind: 'template', template, settings });
+      if (problems.length === before) intents.push({ name, ...label, parameters, kind: 'template', template, settings });
     }
   }
+  problems.push(...labelClashes(intents));
   return problems.length > 0 ? { ok: false, problems } : { ok: true, intents: intents.map((intent) => deepFreeze(intent)) };
 }
