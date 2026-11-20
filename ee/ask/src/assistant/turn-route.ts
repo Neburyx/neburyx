@@ -503,7 +503,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             noteTurn({ route: 'view' });
             // the names the router said the message also asks the meaning of: the answer gets the fixed sentence for those without a description
             const askedTypes = reply.types;
-            // the entity types of the elements of the thread the router named by key: they are in play for a follow-up, so that their descriptions reach the call
+            // the entity types of the elements the router context lists: they are in play for a follow-up, so that their descriptions reach the call
             const contextTypes = context === undefined ? undefined : [...new Set([...context.keys.values()].map((ref) => ref.entityType))];
             const answerView = options.viewAnswer?.();
             if (answerView === undefined || readElements === undefined) return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
