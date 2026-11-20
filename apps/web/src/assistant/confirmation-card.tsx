@@ -10,7 +10,7 @@ const rowsOf = (value: number): string => `${figure(value)} ${value === 1 ? 'row
 const QUALITY_CHIPS = { exact: 'Exact', estimated: 'Estimated', lowerBound: 'Lower bound', unknown: 'Unknown' } as const;
 
 /** The question of the card: the tool and, when there is one, its subject, in fixed words. A tool or subject with markup in it is text. */
-export const confirmationQuestion = (step: Waiting['step']): string => `Read ${humanize(step.tool)}${step.subject === undefined ? '' : ` for ${step.subject}`}?`;
+export const confirmationQuestion = (step: Waiting['step']): string => `Read ${step.label ?? humanize(step.tool)}${step.subject === undefined ? '' : ` for ${step.subject}`}?`;
 
 /** What the step would read: a fixed sentence with the subject and the size of the page. */
 export const confirmationSentence = (step: Waiting['step']): string => `This read ${step.subject === undefined ? '' : `of ${step.subject} `}is larger than one page. This would read one page of ${rowsOf(step.page)}.`;

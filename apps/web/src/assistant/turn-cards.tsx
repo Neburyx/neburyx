@@ -192,6 +192,15 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <p>{outcome.sentence}</p>
         </section>
       );
+    case 'no-description':
+      return (
+        <section className="assistant-no-description" aria-labelledby={titleId}>
+          <h3 id={titleId} className="visually-hidden" tabIndex={-1} data-ask-focus="title">
+            {ASSISTANT_COPY.noDescriptionTitle}
+          </h3>
+          <p>{outcome.sentence}</p>
+        </section>
+      );
     case 'answered':
       return (
         <>

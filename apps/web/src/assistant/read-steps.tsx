@@ -24,7 +24,7 @@ function ReadBox({ entry }: { readonly entry: AssistantRead }) {
   return (
     <li className="assistant-read">
       <p className="assistant-read-title">
-        <span>{entry.read ? `Ran ${humanize(entry.tool)}` : `Did not run ${humanize(entry.tool)}`}</span>
+        <span>{entry.read ? `Ran ${entry.label ?? humanize(entry.tool)}` : `Did not run ${entry.label ?? humanize(entry.tool)}`}</span>
         <span className="ask-tag">{KIND_TAGS[entry.kind]}</span>
       </p>
       <p className="assistant-read-line">

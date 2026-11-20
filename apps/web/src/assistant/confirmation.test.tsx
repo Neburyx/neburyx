@@ -47,6 +47,13 @@ describe('the confirmation card of a heavy step', () => {
     expect(document.querySelector('details.assistant-steps')).toBeNull();
   });
 
+  it('writes the question with the label of the intent, as text, and with the humanized id when there is none', () => {
+    const step = { tool: 'shared', kind: 'intent' as const, subject: 'DEV-884', count: { quality: 'unknown' as const }, page: 25 };
+    expect(confirmationQuestion({ ...step, label: 'Accounts at the same bank' })).toBe('Read Accounts at the same bank for DEV-884?');
+    expect(confirmationQuestion({ ...step, label: '<b>Accounts</b>' })).toBe('Read <b>Accounts</b> for DEV-884?');
+    expect(confirmationQuestion(step)).toBe('Read Shared for DEV-884?');
+  });
+
   it('writes the question and the sentence from fixed words, and shows a subject with markup as text', () => {
     const hostile = { ...WAITING.status === 'confirmation' ? WAITING.step : { tool: '', kind: 'template' as const, count: { quality: 'unknown' as const }, page: 1 }, subject: '<img src=x onerror=alert(1)>' };
     expect(confirmationQuestion(hostile)).toBe('Read Relationships of a device for <img src=x onerror=alert(1)>?');

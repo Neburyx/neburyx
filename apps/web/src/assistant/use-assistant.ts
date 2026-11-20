@@ -78,7 +78,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: Assistant
     case 'not-answered':
       return { kind: 'not-answered', sentence: answer.sentence };
     case 'no-description':
-      return { kind: 'not-answered', sentence: answer.sentence };
+      return { kind: 'no-description', sentence: answer.sentence };
     case 'unavailable':
       return { kind: 'failed', failure: { kind: 'unavailable', why: answer.kind, readStarted: answer.readStarted, retryAfterSeconds: answer.retryAfterSeconds, until: answer.retryAfterSeconds === undefined ? undefined : now + answer.retryAfterSeconds * MILLISECONDS_A_SECOND }, retry };
     case 'too-large':

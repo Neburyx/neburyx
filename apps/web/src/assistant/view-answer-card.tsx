@@ -25,6 +25,15 @@ export function ViewAnswerCard({
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
   const [note, setNote] = useState("");
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const meanings = new Map(
+    answer.citations.flatMap((citation) => (citation.kind === "description" ? [[citation.key, citation] as const] : [])),
+  );
+  const toggle = (key: string): void => {
+    const next = new Set(opened);
+    if (!next.delete(key)) next.add(key);
+    setOpened(next);
+  };
   const drawn = drawnKeys(graph);
   const held = new Set([
     ...investigation.nodeRefs.map(elementKey),
@@ -70,6 +79,21 @@ export function ViewAnswerCard({
             <p className="assistant-sentence">{sentence.text}</p>
             <span className="summary-chips">
               {sentence.cites.map((key) => {
+                const meaning = meanings.get(key);
+                if (meaning !== undefined) {
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      className="summary-chip assistant-description-chip"
+                      aria-expanded={opened.has(key)}
+                      aria-label={`${ASSISTANT_COPY.aboutType} ${meaning.type}: ${ASSISTANT_COPY.operatorDescription}`}
+                      onClick={() => toggle(key)}
+                    >
+                      {`${ASSISTANT_COPY.aboutType} ${meaning.type}`}
+                    </button>
+                  );
+                }
                 const entry = byKey.get(key);
                 return entry === undefined ? null : (
                   <button
@@ -85,9 +109,19 @@ export function ViewAnswerCard({
                 );
               })}
             </span>
+            {sentence.cites.flatMap((key) => {
+              const meaning = meanings.get(key);
+              return meaning === undefined || !opened.has(key) ? [] : [
+                <p key={key} className="assistant-description" role="note">
+                  <span className="assistant-description-mark">{ASSISTANT_COPY.operatorDescription}</span>
+                  <span>{meaning.description}</span>
+                </p>,
+              ];
+            })}
           </li>
         ))}
       </ol>
+      {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {entries.length === 0 ? null : (
         <details className="assistant-sources" open>
           <summary>{`${ASSISTANT_COPY.sources} · ${entries.length}`}</summary>

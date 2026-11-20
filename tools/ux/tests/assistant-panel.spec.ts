@@ -282,6 +282,55 @@ test.describe('the Assistant panel', () => {
   }
 
   for (const width of [1440, 1280]) {
+    test(`shows an About chip for the meaning of a type at ${width} pixels, opens the operator's description as text and selects nothing, and shows the plain card of a type with no description`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+      const description = 'A bank account that holds a balance and takes part in transfers and payments.';
+      const answer: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'view',
+        sentences: [{ text: 'An account holds a balance and takes part in transfers and payments.', cites: ['m1'] }, { text: 'Account AC-1 is in view.', cites: ['n1'] }],
+        citations: [{ key: 'n1', kind: 'entity', ref: cited }, { key: 'm1', kind: 'description', typeKind: 'entity', type: 'Account', description }],
+        coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
+        noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.',
+        model: 'claude-sonnet-5-5',
+        calls: 2,
+      };
+      await answerWith(page, answer);
+      await open(page);
+      await page.getByLabel('Your message').fill('what is an account and a gizmo?');
+      await page.keyboard.press('Enter');
+      const chip = panel(page).getByRole('button', { name: /^About Account:/ });
+      await expect(chip).toBeVisible();
+      await expect(panel(page).getByText(description)).toHaveCount(0);
+      await chip.click();
+      await expect(panel(page).getByText(description)).toBeVisible();
+      await expect(panel(page).getByText('The operator’s description of the type, not a read of the source')).toBeVisible();
+      await expect(panel(page).getByText('The mapping has no description for Gizmo, so I cannot say what it means.')).toBeVisible();
+      await expect(panel(page).getByText('Sources · 1')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      const box = await panel(page).boundingBox();
+      expect(box === null ? 0 : box.x + box.width).toBeLessThanOrEqual(width);
+    });
+
+    test(`shows a type with no description as a plain card at ${width} pixels: the fixed sentence, no AI-drafted tag and no sources`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const sentence = 'The mapping has no description for Gizmo, so I cannot say what it means.';
+      await answerWith(page, { status: 'no-description', route: 'view', sentence, names: ['Gizmo'] });
+      await open(page);
+      await page.getByLabel('Your message').fill('what is a gizmo?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByText(sentence)).toBeVisible();
+      await expect(panel(page).getByText('what is a gizmo?')).toBeVisible();
+      await expect(panel(page).getByText('AI-drafted')).toHaveCount(0);
+      await expect(panel(page).getByText(/^Sources/)).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
+  }
+
+  for (const width of [1440, 1280]) {
     test(`shows an answer after tool steps at ${width} pixels with its tags, the number of steps, markers, sources and coverage, and selects the cited element`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openWorkspace(page);

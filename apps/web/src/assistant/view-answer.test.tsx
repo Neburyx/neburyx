@@ -205,3 +205,46 @@ describe('the Assistant panel: an answer from the view', () => {
     expect(await screen.findByText(words)).toBeTruthy();
   });
 });
+
+describe('the Assistant panel: what a type means', () => {
+  const MEANING = { key: 'm1', kind: 'description' as const, typeKind: 'entity' as const, type: 'Account', description: 'A bank account that <script>holds</script> a balance, in a_very_long_word_'.concat('x'.repeat(120)) };
+  const WITH_MEANING: AssistantTurnAnswer = {
+    ...ANSWER,
+    sentences: [{ text: 'An account holds a balance.', cites: ['m1'] }, { text: 'ent-2 has one relationship.', cites: ['n2'] }],
+    citations: [{ key: 'n2', kind: 'entity', ref: B }, MEANING],
+    noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.',
+  };
+
+  it('shows an About chip that opens the operator description as text, marks it, and selects nothing', async () => {
+    const h = harness(async () => ok(WITH_MEANING));
+    shown(h);
+    render(h.tree());
+    await typeAndSend('what is an account?');
+    const chip = await screen.findByRole('button', { name: /^About Account:/ });
+    expect(chip.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText(ASSISTANT_COPY.operatorDescription)).toBeNull();
+    await userEvent.click(chip);
+    expect(chip.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText(ASSISTANT_COPY.operatorDescription)).toBeTruthy();
+    // markup in a description is text, and a very long word stays inside the panel's text
+    expect(screen.getByText(MEANING.description)).toBeTruthy();
+    expect(document.querySelector('.assistant-description script')).toBeNull();
+    expect([...h.state.presentation.view.getState().selection]).toEqual([]);
+    expect(screen.getByText('The mapping has no description for Gizmo, so I cannot say what it means.')).toBeTruthy();
+    // the sources list holds elements only
+    expect(screen.getByText('Sources · 1')).toBeTruthy();
+  });
+
+  it('shows the answer no-description as a plain card: the fixed sentence, no AI-drafted tag and no sources', async () => {
+    const sentence = 'The mapping has no description for Gizmo, so I cannot say what it means.';
+    const h = harness(async () => ok({ status: 'no-description', route: 'view', sentence, names: ['Gizmo'] }));
+    shown(h);
+    render(h.tree());
+    await typeAndSend('what is a gizmo?');
+    expect(await screen.findByText(sentence)).toBeTruthy();
+    expect(screen.getByText('what is a gizmo?')).toBeTruthy();
+    expect(screen.queryByText('AI-drafted')).toBeNull();
+    expect(screen.queryByText(/^Sources/)).toBeNull();
+  });
+});
+

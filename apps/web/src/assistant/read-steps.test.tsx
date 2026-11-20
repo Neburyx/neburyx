@@ -61,3 +61,13 @@ describe('the steps of a turn', () => {
     expect(render(<ReadSteps reads={[]} />).container.textContent).toBe('');
   });
 });
+
+describe('the title of a read that has a label', () => {
+  it('says Ran with the label, as plain text, and falls back to the humanized id without one', () => {
+    render(<ReadSteps open reads={[read({ tool: 'shared', kind: 'intent', label: 'Accounts at the same bank' }), read({ tool: 'accounts-using-a-device' }), { tool: 'byId', label: 'Account by <b>id</b>', kind: 'intent', read: false }]} />);
+    expect(screen.getByText('Ran Accounts at the same bank')).toBeTruthy();
+    expect(screen.getByText('Did not run Account by <b>id</b>')).toBeTruthy();
+    expect(screen.getAllByText(/^Ran /).length).toBe(2);
+  });
+});
+
