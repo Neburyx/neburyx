@@ -1,7 +1,7 @@
 import { ASSISTANT_NOT_ANSWERED_SENTENCE } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { answerOf, lowerBoundResult, ok, okResult, rig, routeAsk, unknownCountResult, zeroResult, type Rig } from '../testing/assistant-rig.js';
+import { answerOf, expandResult, lowerBoundResult, ok, okResult, rig, routeAsk, unknownCountResult, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { assistantTurnAnswerSchema } from '@neburyx/contracts';
 import { assembleResults, citationTitleOf } from './tool-answer.js';
 import { TURN_CLOSED_ACTION } from './turn-audit.js';
@@ -47,6 +47,13 @@ describe('the answer after tool steps', () => {
     expect(readKeys).toEqual(['s1', 's2']);
     expect([...assembled.keys.keys()]).toEqual(['r1', 'r2']);
     expect(assembled.carriesPropertyValues).toBe(false);
+  });
+
+  it('writes the read of an expansion in its own unit, 2 matches and not the 3 nodes with the anchor, and a relationship with its type once', () => {
+    const { assembled } = assembleResults([{ tool: 'sentBy', result: expandResult() }]);
+    expect(assembled.lines.get('s1')).toBe('s1: read of sentBy: 2 matches shown · exact');
+    const relationship = [...assembled.lines.values()].find((line) => line.includes('SENT'));
+    expect(relationship).toBe('r4: SENT: Account A-1 → Account A-2');
   });
 
   it('writes a read that found nothing as its own line, and a read with an exact zero with the zero', () => {

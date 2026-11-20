@@ -3,7 +3,8 @@ import { ASK_CONTINUE_LIFETIME_MS, ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_
 import { afterAll, describe, expect, it } from 'vitest';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, answerOf, heavyResult, nodeOf, ok, rig, routeAsk, type Rig, type RigOptions } from '../testing/assistant-rig.js';
+import { BODY, VIEW_KEYS, answerOf, okResult, heavyResult, nodeOf, ok, rig, routeAsk, type Rig, type RigOptions } from '../testing/assistant-rig.js';
+import { estimateTokens } from '../case-summary/assemble.js';
 import { issueContinueToken } from '../questions/continue-token.js';
 import { sealToken } from '../case-summary/token.js';
 import { sign } from '../testing/assistant-rig.js';
@@ -573,5 +574,114 @@ describe('follow-up chips on an answer', () => {
     expect(await press(partial.t, partial.chips[1]?.choice as AssistantChoice)).toMatchObject({ status: 'choice-invalid' });
     expect(JSON.stringify(partial.t.rig.elementReads.at(-1)?.refs)).toContain('A-2');
     expect(ranFor(partial.t.rig)).toHaveLength(1);
+  });
+});
+
+const edgeRef = (stableId: string, type = 'ON_DOMAIN', sourceId = 'demo') => ({ sourceId, type, from: 'A-1', to: 'A-2', stableId });
+const edgeOf = (stableId: string, type = 'ON_DOMAIN') => ({ ref: edgeRef(stableId, type), from: widget('A-1'), to: widget('A-2'), type, direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] });
+
+describe('the relationships an earlier turn cited', () => {
+  const READ = (refs: { edges: readonly { stableId: string }[] }) => refs.edges.map((ref) => edgeOf(ref.stableId));
+  /** The gate gives back only what it is asked for, titled as the masking of the message gives it. */
+  const only = (gone: readonly string[] = []) => (refs: { entities: readonly { stableId: string }[] }, mask: boolean) => refs.entities.filter((ref) => !gone.includes(ref.stableId)).map((ref) => nodeOf(ref.stableId, mask ? `Masked ${ref.stableId}` : `Account ${ref.stableId}`));
+  const cited = (edges: unknown[] = [edgeRef('e-1')]) => turnOf({ route: 'view', outcome: 'answered', citationRefs: [widget('A-1'), ...edges] as never });
+
+  it('reach the router as lines of type and the titles of the two ends, the far end read through the gate, never as keys', async () => {
+    const t = await follow(quiet, { readEdges: READ as never, readNodes: only() as never });
+    await seed(t.threads, cited());
+    await t.send(FOLLOW_UP);
+    const values = routerValues(t.rig, 0);
+    expect(values).toContain('Relationships those turns cited (not keyed, never cited), type | from → to:');
+    expect(values).toContain('"ON_DOMAIN" | "Account A-1" → "Account A-2"');
+    expect(JSON.stringify(t.rig.elementReads[0]?.refs)).toContain('"e-1"');
+    expect(JSON.stringify(t.rig.elementReads[1]?.refs)).toContain('"A-2"');
+    expect(values).not.toMatch(/^c\d+ \| "Account A-2"/m);
+  });
+
+  it('show the ends as the masking of the message gives them', async () => {
+    const t = await follow(quiet, { readEdges: READ as never, readNodes: only() as never });
+    await seed(t.threads, cited());
+    await t.rig.route.handler(t.rig.request({ ...BASE, message: FOLLOW_UP, mask: true }, { principalId: PERSON }));
+    expect(routerValues(t.rig, 0)).toContain('"ON_DOMAIN" | "Masked A-1" → "Masked A-2"');
+  });
+
+  it('leave out a relationship whose end the gate does not give back', async () => {
+    const t = await follow(quiet, { readEdges: READ as never, readNodes: only(['A-2']) as never });
+    await seed(t.threads, cited());
+    await t.send(FOLLOW_UP);
+    expect(routerValues(t.rig, 0)).not.toContain('Relationships those turns cited');
+    expect(routerValues(t.rig, 0)).not.toContain('ON_DOMAIN');
+  });
+
+  it('say nothing of relationships when no turn cited one, and leave out one of another source and those past the cap of a view', async () => {
+    const none = await follow(quiet);
+    await seed(none.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
+    await none.send(FOLLOW_UP);
+    expect(routerValues(none.rig, 0)).not.toContain('Relationships those turns cited');
+    const t = await follow(quiet, { readEdges: READ as never, readNodes: only() as never });
+    const many = Array.from({ length: ASSISTANT_VIEW_KEYS_MAX - 1 }, (_unused, index) => edgeRef(`e-${index}`));
+    const older = Array.from({ length: 20 }, (_unused, index) => edgeRef(`old-${index}`));
+    await seed(t.threads, turnOf({ route: 'view', outcome: 'answered', citationRefs: older as never }), turnOf({ route: 'view', outcome: 'answered', citationRefs: [...many, edgeRef('other', 'X', 'other-source')] as never }));
+    await t.send(FOLLOW_UP);
+    const sent = JSON.stringify(t.rig.elementReads[0]?.refs);
+    expect(sent).not.toContain('other-source');
+    expect((sent.match(/"stableId":"e-/g) ?? []).length).toBe(ASSISTANT_VIEW_KEYS_MAX - 1);
+    expect((sent.match(/"stableId":"old-/g) ?? []).length).toBe(1);
+  });
+
+  it('reach the view call too, so that "it" can be placed', async () => {
+    const t = await follow(() => ok('{"route":"view"}'), { view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is shown.', cites: ['n1'] }] })), readEdges: READ as never, readNodes: only() as never });
+    await seed(t.threads, cited());
+    await t.send('what is the significance of it?', undefined, VIEW_KEYS);
+    expect(t.rig.fixture.calls.find((call) => call.promptId === 'assistant.view')?.values).toContain('"ON_DOMAIN" | "Account A-1" → "Account A-2"');
+  });
+});
+
+describe('a follow-up on the view route, placed by the thread', () => {
+  const viewReply = ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is shown.', cites: ['n1'] }] }));
+  const viewCalls = (r: Rig) => r.fixture.calls.filter((call) => call.promptId === 'assistant.view');
+
+  it('gives the view call the earlier turns the router was given, with their keys said not to be elements in view', async () => {
+    const t = await follow(() => ok('{"route":"view"}'), { view: viewReply });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }], citationRefs: [widget('A-2')] }));
+    expect(await t.send('what is the significance of it?', undefined, VIEW_KEYS)).toMatchObject({ status: 'answered', route: 'view' });
+    const values = viewCalls(t.rig)[0]?.values ?? '';
+    expect(values).toContain('Earlier turns of this conversation');
+    expect(values).toContain('1. ask "shared"; ran for id = c1; cited c2');
+    expect(values).toMatch(/^c1 \| "Account A-1" \| "widget"$/m);
+    expect(values).toContain('Elements in view:');
+  });
+
+  it('gives it nothing when the thread holds no turn, and cites no key of the context', async () => {
+    const t = await follow(() => ok('{"route":"view"}'), { view: viewReply });
+    await t.send('what is the significance of it?', undefined, VIEW_KEYS);
+    expect(viewCalls(t.rig)[0]?.values).not.toContain('Earlier turns');
+    const cited = await follow(() => ok('{"route":"view"}'), { view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is shown.', cites: ['c1'] }] })) });
+    await seed(cited.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
+    expect(await cited.send('what is it?', undefined, VIEW_KEYS)).toMatchObject({ status: 'not-answered' });
+  });
+
+  it('gives the answer step after a view tool request the same earlier turns, and a key of them is not citable', async () => {
+    const steps = [ok('{"tool":"shared","values":{"id":"A-2"}}'), ok('{"done":true}')];
+    let next = 0;
+    const t = await follow(() => ok('{"route":"view"}'), { view: ok('{"tool":"shared","values":{"id":"A-2"}}'), step: () => steps[Math.min(next++, 1)] ?? ok('{"done":true}'), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['c1'] }] })), run: () => ({ status: 'ok', result: okResult() }) });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
+    const answer = await t.send('what is it?', undefined, VIEW_KEYS);
+    const values = t.rig.fixture.calls.find((call) => call.promptId === 'assistant.answer')?.values ?? '';
+    expect(values).toContain('Earlier turns of this conversation');
+    expect(values).toMatch(/^c1 \| "Account A-1" \| "widget"$/m);
+    expect(JSON.stringify(answer)).not.toContain('"key":"c1"');
+  });
+
+  it('counts the context in the input guard of the view call: a limit that fits the call without it is over with it, and nothing is sent', async () => {
+    const probe = await follow(() => ok('{"route":"view"}'), { view: viewReply });
+    await probe.send('what is it?', undefined, VIEW_KEYS);
+    const sent = viewCalls(probe.rig)[0];
+    if (sent === undefined) throw new Error('no call');
+    const limit = estimateTokens(sent.instructions ?? '', sent.values);
+    const t = await follow(() => ok('{"route":"view"}'), { view: viewReply, viewMaxInputTokens: limit });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
+    expect(await t.send('what is it?', undefined, VIEW_KEYS)).toMatchObject({ status: 'too-large' });
+    expect(viewCalls(t.rig)).toHaveLength(0);
   });
 });

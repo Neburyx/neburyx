@@ -57,10 +57,26 @@ function ordinaryWords(assembled: CheckedText): Set<string> {
 }
 
 /**
- * The words of the verdict check: a sentence that states or implies guilt, fraud, an offence, suspicion, intent or a conclusion. Whole words and their endings, case-insensitive; a word that only holds a stem
+ * The words of the verdict check: a sentence that states or implies guilt, fraud, an offence, suspicion, intent or a conclusion (a conclusion that is denied, as in "no conclusion can be drawn", is no verdict). Whole words and their endings, case-insensitive; a word that only holds a stem
  * inside is not matched, and the phrase may be split by any whitespace.
  */
-const VERDICT = /\b(?:guilt\w*|fraud\w*|launder\w*|crim\w*|offen[cs]e\w*|offender\w*|suspect\w*|suspic\w*|intent\w*|deliberate\w*|illegal\w*|unlawful\w*|convict\w*|culprit\w*|perpetrator\w*|conclud\w*|conclusion\w*|proves?|proof|responsible\s+for)\b/i;
+const VERDICT = /\b(?:guilt\w*|fraud\w*|launder\w*|crim\w*|offen[cs]e\w*|offender\w*|suspect\w*|suspic\w*|intent\w*|deliberate\w*|illegal\w*|unlawful\w*|convict\w*|culprit\w*|perpetrator\w*|proves?|proof|responsible\s+for)\b/i;
+
+/** The word of a conclusion, which a sentence may use to say that none can be drawn: it is a verdict unless a negation stands within the three words before it. */
+const CONCLUSION = /\b(?:conclud\w*|conclusion\w*)\b/giu;
+const NEGATIONS = new Set(['no', 'not', 'cannot', 'nothing', 'without', 'never']);
+const WORD = /[\p{L}\p{N}'’]+/gu;
+
+/** Whether a negation stands within the three words before the position; `not` followed by `only` is no negation, and neither is anything outside those three words. */
+function negatedBefore(text: string, position: number): boolean {
+  const words = (text.slice(0, position).toLowerCase().match(WORD) ?? []).slice(-3);
+  return words.some((word, index) => (NEGATIONS.has(word) || /n['’]t$/u.test(word)) && !(word === 'not' && words[index + 1] === 'only'));
+}
+
+/** Whether the text uses a word of a conclusion without a negation before it: only the words of the conclusion are excused by a negation, every other word of the verdict list stays one. */
+function statesConclusion(text: string): boolean {
+  return [...text.matchAll(CONCLUSION)].some((found) => !negatedBefore(text, found.index));
+}
 
 export interface Judged {
   readonly kept: readonly SummarySentence[];
@@ -116,7 +132,7 @@ function titleAndIdOf(line: string): string[] {
 function holdsVerdict(sentence: SummarySentence, assembled: CheckedText): boolean {
   const names = sentence.cites.flatMap((cite) => titleAndIdOf(assembled.lines.get(cite) ?? '')).sort((left, right) => right.length - left.length);
   const left = names.reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'giu'), ' '), sentence.text);
-  return VERDICT.test(left);
+  return VERDICT.test(left) || statesConclusion(left);
 }
 
 function citationsHold(sentence: SummarySentence, assembled: CheckedText): boolean {

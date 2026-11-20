@@ -76,7 +76,7 @@ describe('the rule about the title of a cited element, taken out of the product,
     const asked = { text: quoted.text, cites: quoted.cites.map((key) => defined(evidence.keys.get(key), key)) };
     const whole = await answerWith(undefined, asked, evidence);
     expect(whole.kept).toEqual([asked]);
-    const mutated = await answerWith({ name: 'the title of a cited element', from: 'return VERDICT.test(left);', to: 'return VERDICT.test(sentence.text);' }, asked, evidence);
+    const mutated = await answerWith({ name: 'the title of a cited element', from: 'return VERDICT.test(left) || statesConclusion(left);', to: 'return VERDICT.test(sentence.text) || statesConclusion(sentence.text);' }, asked, evidence);
     expect(mutated.kept).toEqual([]);
   });
 });

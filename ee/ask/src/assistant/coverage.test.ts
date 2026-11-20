@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { askRunResultSchema, type AskRunResult } from '@neburyx/contracts';
 import { coverageOf } from './coverage.js';
-import { fileQueryResult, okResult } from '../testing/assistant-rig.js';
+import { derivedRuleResult, expandResult, fileQueryResult, okResult } from '../testing/assistant-rig.js';
 
 const withCount = (base: AskRunResult, count: unknown): AskRunResult => {
   if (base.templateId !== 'shared-attribute' || base.result.status !== 'ok') throw new Error('fixture');
@@ -62,5 +62,36 @@ describe('the coverage line of a result with no count of its own', () => {
     if (entity.templateId !== 'shared-attribute' || entity.result.status !== 'ok') throw new Error('fixture');
     const [first] = entity.result.nodes;
     expect(coverageOf(askRunResultSchema.parse({ templateId: 'entity', result: first }))).toBe('1 shown');
+  });
+});
+
+describe('the coverage line of an expansion: the neighbours it lists, never the anchor beside them', () => {
+  it('counts two neighbours of three listed nodes as two matches, exact when no page has more', () => {
+    expect(coverageOf(expandResult())).toBe('2 matches shown · exact');
+  });
+
+  it('says a lower bound when the count of a page is not exact even though it has no more', () => {
+    const base = expandResult();
+    if (base.templateId !== 'expand') throw new Error('fixture');
+    const dropped = askRunResultSchema.parse({ ...base, result: { ...base.result, pages: base.result.pages.map((page) => ({ ...page, matchingTotal: { quality: 'lowerBound', value: 2, scope: 'test' } })) } });
+    expect(coverageOf(dropped)).toBe('2 matches shown · lower bound');
+  });
+
+  it('says a lower bound when a page has more', () => {
+    expect(coverageOf(expandResult(true))).toBe('2 matches shown · lower bound');
+  });
+});
+
+describe('the coverage line of a derived rule run: the other ends, never the anchor listed once for each rule', () => {
+  it('counts the other ends of two rules and not their two anchors', () => {
+    expect(coverageOf(derivedRuleResult())).toBe('3 matches shown · exact');
+  });
+
+  it('says what is not yet retrieved from the counts of the rules, and the worst quality of them', () => {
+    expect(coverageOf(derivedRuleResult({ quality: 'lowerBound', value: 28 }))).toBe('3 matches shown · ≥ 27 not yet retrieved · lower bound');
+  });
+
+  it('says the count is unknown when a rule\'s count is', () => {
+    expect(coverageOf(derivedRuleResult({ quality: 'unknown' }))).toBe('3 matches shown · count unknown');
   });
 });

@@ -44,6 +44,31 @@ export const lowerBoundResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'lowerBound', value: 150, scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
 export const unknownCountResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'unknown', scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
+/** An expansion of A-1: the anchor, two neighbours and the stored relationship to the first, with a page that has more when asked to. */
+export const expandResult = (hasMore = false): AskRunResult =>
+  askRunResultSchema.parse({
+    templateId: 'expand',
+    result: {
+      ref: node('A-1').ref,
+      pageSize: 25,
+      nodes: [node('A-1'), node('A-2'), node('A-3')],
+      edges: [{ ref: { sourceId: SOURCE, type: 'SENT', from: 'A-1', to: 'A-2', stableId: 'e-1' }, from: node('A-1').ref, to: node('A-2').ref, type: 'SENT', direction: 'out', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }],
+      pages: [{ neighborType: 'widget', returned: 2, hasMore, matchingTotal: { quality: hasMore ? 'lowerBound' : 'exact', value: 2, scope: 'test' } }],
+      warnings: [],
+    },
+  });
+/** A derived rule run for A-1 with two rules: the first lists the anchor and two other ends, the second the anchor and one; the count of the second may be given. */
+export const derivedRuleResult = (second: { quality: string; value?: number } = { quality: 'exact', value: 1 }): AskRunResult =>
+  askRunResultSchema.parse({
+    templateId: 'derived-rule-run',
+    result: {
+      ref: node('A-1').ref,
+      results: [
+        { ruleId: 'r-one', ruleVersion: 1, count: { quality: 'exact', value: 2, scope: 'derived:neighbors' }, nodes: [node('A-1'), node('A-2'), node('A-3')], edges: [], warnings: [] },
+        { ruleId: 'r-two', ruleVersion: 1, count: { ...second, scope: 'derived:neighbors' }, nodes: [node('A-1'), node('A-4')], edges: [], warnings: [] },
+      ],
+    },
+  });
 export const heavyResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { quality: 'lowerBound', value: 1000, scope: 'test' }, threshold: 1000, continueLimit: 25, notices: [], warnings: [] } });
 export const fileQueryResult = (): AskRunResult =>
@@ -101,6 +126,8 @@ export interface RigOptions {
   readonly viewNodes?: readonly ReturnType<typeof node>[];
   /** The elements the stand-in of the gate gives back for the references it is asked for; absent, `viewNodes` or the two exportable ones whatever is asked. */
   readonly readNodes?: (refs: ElementRefs, mask: boolean) => readonly ReturnType<typeof node>[];
+  /** The relationships the stand-in of the gate gives back for the references it is asked for. */
+  readonly readEdges?: (refs: ElementRefs) => readonly unknown[];
   /** The replies of the model to the step call; its presence turns the tool loop on. */
   readonly step?: FixtureReplies[string];
   /** The replies of the model to the answer call after tool steps. */
@@ -176,7 +203,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
       options.onViewRead?.();
       if (options.viewReadThrows !== undefined) throw options.viewReadThrows;
       if (options.viewReadHangs === true) return new Promise<never>(() => undefined);
-      return { nodes: [...(options.readNodes?.(refs, scope.mask) ?? options.viewNodes ?? [node('A-1', options.viewTitle), node('A-2')])], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
+      return { nodes: [...(options.readNodes?.(refs, scope.mask) ?? options.viewNodes ?? [node('A-1', options.viewTitle), node('A-2')])], edges: [...(options.readEdges?.(refs) ?? [])] as never, unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
     },
     askRunner: (scope) => ({
       run: async (asked, runOptions) => {

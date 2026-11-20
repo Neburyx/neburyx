@@ -12,7 +12,7 @@ import type { StepScope } from './tool-step.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const ANSWER_PROMPT_ID = 'assistant.answer';
-export const ANSWER_PROMPT_VERSION = 1;
+export const ANSWER_PROMPT_VERSION = 3;
 const ANSWER_AUDIT_ACTION = 'assistant.answer';
 
 export interface ToolAnswerOptions {
@@ -36,6 +36,8 @@ export interface ToolAnswerInput {
   readonly reads: readonly ReadDone[];
   /** What the view showed, when the loop was entered from the view: its elements keep the keys the view call gave them. */
   readonly view?: { readonly assembled: AssembledText; readonly reading: SummaryReading };
+  /** What the router was given of the person's earlier turns: context for the question, never an element that may be cited. */
+  readonly context?: string;
   readonly steps: number;
   readonly callsUsed: number;
   readonly maxCalls: number;
@@ -85,7 +87,8 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
       const key = `r${number}`;
       // the title the result gave, masked as it was asked, goes with the key: an element the person has not drawn is still named
       keys.set(key, 'entityType' in listed.element ? { kind: 'entity', ref: listed.element, title: listed.title } : { kind: 'relationship', ref: listed.element, title: listed.title });
-      lines.set(key, `${key}: ${listed.type}: ${listed.title}`);
+      // a relationship's title already begins with its type
+      lines.set(key, 'entityType' in listed.element ? `${key}: ${listed.type}: ${listed.title}` : `${key}: ${listed.title}`);
     }
   }
   const readKeys = reads.map((_, index) => `s${index + 1}`);
@@ -98,7 +101,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
   return { assembled: { text: [...lines.values()].join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues: view?.carriesPropertyValues ?? false }, readKeys };
 }
 
-const valuesOf = (message: string, assembled: AssembledText, coverage: string): string => `Question:\n${message}\n\nWhat the reads returned (cite an s line to state what a read found, including that it found nothing):\n${assembled.text}\n\nCoverage:\n${coverage}`;
+const valuesOf = (message: string, assembled: AssembledText, coverage: string, context?: string): string => `Question:\n${message}\n\nWhat the reads returned (cite an s line to state what a read found, including that it found nothing):\n${assembled.text}\n\nCoverage:\n${coverage}${context === undefined ? '' : `\n\nEarlier turns of this conversation, given only so that the question can be placed (their keys, such as c1, are not elements in view and are never cited):\n${context}`}`;
 
 /**
  * The model's answer after the tool steps: sentences that cite the elements the steps returned, put through the summary's checks (every sentence cites a key that was returned, a number occurs in the lines it cites,
@@ -112,7 +115,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     const { assembled, readKeys } = assembleResults(input.reads, input.view?.assembled);
     if (assembled.keys.size === 0 && readKeys.length === 0) return { kind: 'unsupported', calls: 0 };
     const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${read.result === undefined ? 'found nothing' : coverageOf(read.result)}`)].join('; ');
-    const values = valuesOf(input.message, assembled, coverage);
+    const values = valuesOf(input.message, assembled, coverage, input.context);
     const remaining = input.startedAt + options.totalTimeoutMs - now();
     if (remaining <= 0 || input.deadline.aborted) return { kind: 'limit', limit: 'time', calls: 0 };
     const allowed = input.maxCalls - input.callsUsed;

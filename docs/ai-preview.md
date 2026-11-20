@@ -208,7 +208,7 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_MAX_CALLS` (model calls a turn) | 5 | 10 |
 | `NEBURYX_ASSISTANT_MAX_STEPS` (reads a turn) | 4 | 8 |
 | `NEBURYX_ASSISTANT_MAX_ROWS` (rows read a turn) | the source's own page limit times the steps | an operator may only lower it |
-| `NEBURYX_ASSISTANT_CONTEXT_TURNS` (earlier turns the router sees) | 3 | 6 |
+| `NEBURYX_ASSISTANT_CONTEXT_TURNS` (earlier turns the router, the answer from the view and the answer after tool steps see: references and titles only, read again through the gate, with the relationships those turns cited and the titles of their ends) | 3 | 6 |
 | `NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS` | 1000 | 3000 |
 | `NEBURYX_ASSISTANT_MAX_INPUT_TOKENS` | 25000 | 100000 |
 | `NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS` | 4000 | 32000 |

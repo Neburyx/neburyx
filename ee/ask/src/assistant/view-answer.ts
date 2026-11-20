@@ -17,9 +17,9 @@ import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
-export const VIEW_PROMPT_VERSION = 2;
+export const VIEW_PROMPT_VERSION = 4;
 /** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 3;
+export const VIEW_TOOLS_PROMPT_VERSION = 5;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -66,6 +66,8 @@ export interface ViewInput {
   readonly tools?: ToolRegistry;
   /** A summary attached to the turn: its sentences that still hold are given to the model beside the elements. */
   readonly summary?: SummaryAttachment;
+  /** What the router was given of the person's earlier turns of the thread (references and titles only, read again through the gate): so that a follow-up such as "what does it mean" can be placed. Never a source of the checks. */
+  readonly context?: string;
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -85,6 +87,9 @@ type ViewResult =
 export type ViewOutcome = ViewResult & { readonly calls: number; readonly read: number; readonly readStarted: boolean; readonly summary?: { readonly kept: number; readonly dropped: number } };
 
 const kindOf = (code: FailureCode): AssistantFailureKind => (code === 'timeout' ? 'timeout' : code === 'rate-limited' ? 'rate-limit' : 'service');
+
+/** The earlier turns of the thread as the router was given them, beside the elements: context for the question, never an element the sentences may cite. */
+const contextSectionOf = (context: string | undefined): string => (context === undefined ? '' : `\n\nEarlier turns of this conversation, given only so that the question can be placed (their keys, such as c1, are not elements in view and are never cited):\n${context}`);
 
 const valuesOf = (message: string, text: string, summary: string): string => `Question:\n${message}\n\nElements in view:\n${text}${summary}`;
 
@@ -195,7 +200,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const kept = (judgedSummary?.kept ?? []).slice(0, MAX_SUMMARY_SENTENCES);
     if (input.summary !== undefined) counts = { kept: kept.length, dropped: input.summary.payload.sentences.length - kept.length };
     if (input.summary !== undefined && kept.length === 0) return outcome({ status: 'summary-invalid' });
-    const section = summarySectionOf(kept);
+    const section = summarySectionOf(kept) + contextSectionOf(input.context);
     const inView = new Set([...keys.refs.entities, ...keys.refs.edges, ...keys.refs.aggregates, ...keys.refs.derived].map((ref) => canonicalText(ref)));
     const { tools } = input;
     const sent = tools === undefined ? instructions : buildViewToolInstructions(instructions, tools);

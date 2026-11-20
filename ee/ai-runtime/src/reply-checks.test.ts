@@ -45,3 +45,31 @@ describe('the check as a worker thread runs it', () => {
     expect(parseJudged({ kept: [{ text: 1 }], removed: 0, keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeUndefined();
   });
 });
+
+describe('a conclusion that is denied is no verdict, and no other word of the verdict list is excused', () => {
+  const verdict = (text: string): boolean => judgeSentences([{ text, cites: ['n1'] }], TEXT).verdictFound;
+
+  it.each([
+    'No conclusion can be drawn about Ledger A.',
+    'Ledger A cannot be concluded to mean anything.',
+    'The elements do not support a conclusion.',
+    'Nothing is a conclusion about Ledger A.',
+    'Ledger A is listed without any conclusion.',
+    'One cannot conclude more than what Ledger A shows.',
+  ])('does not count %s', (text) => {
+    expect(verdict(text)).toBe(false);
+  });
+
+  it.each([
+    'Ledger A leads to the conclusion that it is a risk.',
+    'We can conclude that Ledger A matters.',
+    'Not only can we conclude it, the pattern repeats.',
+    'Not only concluded, Ledger A is flagged.',
+    'The elements, in short, give no hint at all, so the conclusion stands.',
+    'There is no conclusion other than that Ledger A is responsible for it.',
+    'One cannot conclude it is not fraud.',
+    'No conclusion can be drawn, but this is fraud.',
+  ])('still counts %s', (text) => {
+    expect(verdict(text)).toBe(true);
+  });
+});

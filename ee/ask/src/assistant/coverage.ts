@@ -8,7 +8,7 @@ const figure = (value: number): string => value.toLocaleString('en-US');
 const NOUNS = { match: ['match', 'matches'], row: ['row', 'rows'] } as const;
 const plural = (value: number, noun: keyof typeof NOUNS): string => `${figure(value)} ${NOUNS[noun][value === 1 ? 0 : 1]}`;
 
-/** The matches a result lists and the count of matches it carries, for the results whose count is of matches: the nodes it lists include the anchor and what it passed through, so they are never subtracted from it. */
+/** The matches a result lists and the count of matches it carries, for the results whose count is of matches: the nodes a template run lists include the anchor and what it passed through, so they are never subtracted from its count; the matches of an expansion or a derived rule run are the neighbours or other ends it lists, without its anchor. */
 function matchesOf(run: AskRunResult): { readonly shown: number; readonly count: Count } | undefined {
   switch (run.templateId) {
     case 'shared-attribute':
@@ -18,6 +18,23 @@ function matchesOf(run: AskRunResult): { readonly shown: number; readonly count:
       if (run.result.status === 'heavy') return undefined;
       if ('matchIds' in run.result) return { shown: run.result.matchIds.length, count: run.result.count };
       return 'matches' in run.result ? { shown: run.result.matches.length, count: run.result.count } : undefined;
+    case 'derived-rule-run': {
+      // each rule's nodes include the anchor, which is no match: the matches are the other ends each rule lists, counted by each rule's own count (the same end under two rules is two matches, in the shown and in the count alike)
+      const { ref, results } = run.result;
+      const isAnchor = (node: { readonly ref: { readonly sourceId: string; readonly entityType: string; readonly stableId: string } }): boolean => node.ref.sourceId === ref.sourceId && node.ref.entityType === ref.entityType && node.ref.stableId === ref.stableId;
+      const shown = results.reduce((sum, entry) => sum + entry.nodes.filter((node) => !isAnchor(node)).length, 0);
+      const values = results.map((entry) => entry.count.value);
+      const qualities = results.map((entry) => entry.count.quality);
+      const quality = qualities.includes('unknown') || values.includes(undefined) ? 'unknown' : qualities.includes('lowerBound') ? 'lowerBound' : qualities.includes('estimated') ? 'estimated' : 'exact';
+      const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+      return { shown, count: { quality, ...(quality === 'unknown' ? {} : { value: total }), scope: 'derived:neighbors' } };
+    }
+    case 'expand': {
+      // the nodes of an expansion include its anchor, which is no match: the matches are the neighbours it lists, and the count is exact only when no page has more
+      const { ref, nodes, pages } = run.result;
+      const shown = nodes.filter((node) => node.ref.sourceId !== ref.sourceId || node.ref.entityType !== ref.entityType || node.ref.stableId !== ref.stableId).length;
+      return { shown, count: { quality: pages.some((page) => page.hasMore || page.nextCursor !== undefined || page.matchingTotal.quality !== 'exact') ? 'lowerBound' : 'exact', value: shown, scope: 'neighbors' } };
+    }
     default:
       return undefined;
   }

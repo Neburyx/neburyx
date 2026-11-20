@@ -45,6 +45,8 @@ interface LoopBase {
   readonly startedAt: number;
   /** The model calls of the turn so far. */
   readonly callsUsed: number;
+  /** What the router was given of the person's earlier turns, so that the answer can place a follow-up. */
+  readonly context?: string;
 }
 
 /** The read the route already ran, as the first step of the turn: an Ask read, or the view's reading with the tool request the model gave in place of an answer, which is the next step. */
@@ -162,7 +164,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
     const stop = (limit: AssistantLimit): LoopOutcome | undefined => (steps === 1 && !fromView ? undefined : { kind: 'limit', limit, reads: entries });
     const finished = (stoppedAt?: AssistantLimit): LoopOutcome => (latest === undefined ? { kind: 'failed', why: 'service' } : { kind: 'finished', answer: latest, steps, reads: entries, ...(stoppedAt === undefined ? {} : { stoppedAt }) });
     const finalAnswer = async (stoppedAt?: AssistantLimit): Promise<LoopOutcome> =>
-      answered(await options.answer({ scope, message: input.message, reads, ...(view === undefined ? {} : { view }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls, entries, stoppedAt);
+      answered(await options.answer({ scope, message: input.message, reads, ...(input.context === undefined ? {} : { context: input.context }), ...(view === undefined ? {} : { view }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls, entries, stoppedAt);
     /** What one step of the turn, made now or read again, adds to what the model sees and to the reads of the turn. */
     const apply = (request: ToolRequest, step: StepResult, how: { readonly confirmed?: boolean } = {}): void => {
       const { tool, values } = request;

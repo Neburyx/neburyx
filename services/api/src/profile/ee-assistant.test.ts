@@ -872,6 +872,17 @@ describe('the stored runs of a turn in the running application', () => {
   });
 });
 
+/** What reached the source of a call: its query text and its parameters, never its trace identifier, which is a random identifier that can hold any short text, such as `c9`. */
+const queryOf = (call: { readonly cypher?: unknown; readonly parameters?: unknown }): string => JSON.stringify({ cypher: call.cypher, parameters: call.parameters });
+
+describe('what reached the source of a call, as the tests below read it', () => {
+  it('leaves out the trace identifier, whatever random text it holds, and keeps the query and the parameters', () => {
+    expect(queryOf({ cypher: 'RETURN 1', parameters: {}, traceId: 'tr-1b2c-a5c9-4924' } as never)).not.toMatch(/c9\b/);
+    expect(queryOf({ cypher: 'RETURN 1', parameters: { id: 'c9' } })).toMatch(/c9\b/);
+    expect(queryOf({ cypher: 'DETACH DELETE n', parameters: {} })).toMatch(/DETACH/);
+  });
+});
+
 describe('the thread of an investigation in the running application', () => {
   const CANARY = 'CANARY-MESSAGE-7';
   const ASK = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
@@ -945,7 +956,7 @@ describe('the thread of an investigation in the running application', () => {
     expect(second).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
     const after = rig.rig.executor.calls.slice(before);
     expect(after.map((call) => call.templateId)).toEqual(['schema-indexes', 'entity-load-many']);
-    for (const call of after) expect(JSON.stringify(call)).not.toMatch(/DETACH|c9\b/);
+    for (const call of after) expect(queryOf(call)).not.toMatch(/DETACH|c9\b/);
     await rig.stop();
   });
 
