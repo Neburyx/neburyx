@@ -1,0 +1,8 @@
+{
+  "replay": {
+    "model": "claude-haiku-5-5",
+    "questions": "d2200966f613cc866ebb94559e417c175fdff42b8ec0860fed5a84bb61af296e",
+    "refusals": 23,
+    "plans": 95
+  }
+}

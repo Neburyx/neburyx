@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
@@ -66,6 +66,16 @@ describe('the nightly Ask evaluation workflow', () => {
     expect(askAt).toBeGreaterThan(-1);
     expect(assistantAt).toBeGreaterThan(askAt);
     expect(text).toMatch(/if: always\(\)\n\s+run: pnpm ask-eval assistant /);
+  });
+
+  it('replays every model\'s committed pair of replay and baseline of the assistant, so that a pair added later cannot be left out', () => {
+    const base = join(repoRoot, 'tools', 'ask-eval', 'data', 'assistant');
+    const models = readdirSync(base).filter((name) => name !== 'scripted' && statSync(join(base, name)).isDirectory());
+    expect(models.length).toBeGreaterThanOrEqual(1);
+    for (const model of models) {
+      expect(readdirSync(join(base, model)).sort(), model).toEqual(['baseline.json', 'replay.json']);
+      expect(text).toContain(`--replay tools/ask-eval/data/assistant/${model}/replay.json --baseline tools/ask-eval/data/assistant/${model}/baseline.json`);
+    }
   });
 
   it('is not named by the per-push CI workflow and its script builds what the runner needs', () => {

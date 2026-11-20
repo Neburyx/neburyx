@@ -22,3 +22,7 @@ jobs:
       - run: pnpm ask-eval --packs domain-packs --replay tools/ask-eval/data/replay.json --baseline tools/ask-eval/data/baseline.json
       - if: always()
         run: pnpm ask-eval assistant --packs domain-packs --replay tools/ask-eval/data/assistant/scripted/replay.json
+      - if: always()
+        run: pnpm ask-eval assistant --packs domain-packs --replay tools/ask-eval/data/assistant/claude-sonnet-5-5/replay.json --baseline tools/ask-eval/data/assistant/claude-sonnet-5-5/baseline.json
+      - if: always()
+        run: pnpm ask-eval assistant --packs domain-packs --replay tools/ask-eval/data/assistant/claude-haiku-5-5/replay.json --baseline tools/ask-eval/data/assistant/claude-haiku-5-5/baseline.json
