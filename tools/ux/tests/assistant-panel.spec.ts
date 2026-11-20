@@ -280,6 +280,39 @@ test.describe('the Assistant panel', () => {
     });
   }
 
+  for (const width of [1440, 1280]) {
+    test(`shows an answer after tool steps at ${width} pixels with its tags, the number of steps, markers, sources and coverage, and selects the cited element`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const answer: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'ask',
+        sentences: [{ text: 'Account AC-1 shares a device with account AC-2.', cites: ['r1', 'r2'] }],
+        citations: [
+          { key: 'r1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } },
+          { key: 'r2', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-2' } },
+        ],
+        coverage: { retrieval: '2 shown · 0 not yet retrieved (exact)', summary: 'The answer cites 2 of the 2 elements the reads returned.' },
+        model: 'claude-sonnet-5-5',
+        calls: 4,
+        steps: 2,
+      };
+      await answerWith(page, answer);
+      await open(page);
+      await page.getByLabel('Your message').fill('who shares a device with AC-1?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByText('AI-drafted')).toBeVisible();
+      await expect(panel(page).getByText('Account AC-1 shares a device with account AC-2.')).toBeVisible();
+      await expect(panel(page).getByText('Steps · 2')).toBeVisible();
+      await expect(panel(page).getByText('Sources · 2')).toBeVisible();
+      await expect(panel(page).getByText('The answer cites 2 of the 2 elements the reads returned.')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Answer from the reads' })).toBeFocused();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      const box = await panel(page).boundingBox();
+      expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+    });
+  }
+
   for (const width of [1440, 1280]) test(`keeps the page and the panel in place when a long answer from the view arrives at ${width} pixels`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await openWorkspace(page);

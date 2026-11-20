@@ -260,7 +260,7 @@ describe('the records of the other ends of a turn', () => {
     expect(bad.store.runs[0]).toMatchObject({ outcome: 'refused', calls: 0 });
     const heavy = await turnRig({ reply: SHARED, run: (continuing) => ({ status: 'ok', result: continuing ? okResult() : askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { quality: 'lowerBound', value: 1000, scope: 'test' }, threshold: 1000, continueLimit: 25, notices: [], warnings: [] } }) }) });
     const first = await answerOf(heavy.r.route.handler(heavy.r.request()));
-    const token = first.status === 'answered' && first.route === 'ask' && 'answered' in first.answer ? first.answer.answered.continueToken : undefined;
+    const token = first.status === 'answered' && first.route === 'ask' && 'answer' in first && 'answered' in first.answer ? first.answer.answered.continueToken : undefined;
     heavy.store.runs.length = 0;
     await run(heavy, { sourceId: 'demo', investigationId: 'inv-1', viewElementKeys: [], continue: { intent: 'shared', entities: { id: 'A-1' }, continueToken: token } });
     expect(heavy.store.runs[0]).toMatchObject({ outcome: 'answered', calls: 0 });

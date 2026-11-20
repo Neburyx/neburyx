@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
+import { ASSISTANT_LIMIT_SENTENCES, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { heavyRun, okRun } from '../patterns/patterns-kit.js';
 import { node as testNode, key as testKey } from '../state/test-data.js';
@@ -59,6 +59,65 @@ describe('the Assistant thread: the answer of the ask route', () => {
     expect(await screen.findAllByText('Sources · 1')).toHaveLength(2);
     const ids = [...document.querySelectorAll('[id]')].map((node) => node.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('the Assistant thread: the answer after tool steps', () => {
+  it('shows the cited sentences as an AI-drafted answer with its sources, the number of steps and the coverage', async () => {
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'ask',
+      sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }],
+      citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }],
+      coverage: { retrieval: '2 shown · exact', summary: 'The answer cites 1 of the 2 elements the reads returned.' },
+      model: 'claude-test',
+      calls: 4,
+      steps: 2,
+    };
+    const h = harness(async () => ok(answer));
+    render(h.tree());
+    await typeAndSend('who else?');
+    expect(await screen.findByText('Account acc-1 is listed.')).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.drafted)).toBeTruthy();
+    expect(screen.getByText(`${ASSISTANT_COPY.steps} · 2`)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: ASSISTANT_COPY.sentencesFromReads })).toBeTruthy();
+    expect(screen.getByText('The answer cites 1 of the 2 elements the reads returned.')).toBeTruthy();
+  });
+});
+
+describe('the Assistant thread: an answer after steps that cites the line of a read only', () => {
+  it('shows the sentence, the coverage of each read and no Sources list', async () => {
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'ask',
+      sentences: [{ text: 'The read of the second tool found 0 matches.', cites: ['s2'] }],
+      citations: [],
+      coverage: { retrieval: 'read 1, a: 1 match shown · exact; read 2, b: 0 matches shown · exact', summary: 'The answer cites 0 of the 1 elements the reads returned.' },
+      model: 'claude-test',
+      calls: 4,
+      steps: 2,
+    };
+    const h = harness(async () => ok(answer));
+    render(h.tree());
+    await typeAndSend('who else?');
+    expect(await screen.findByText('The read of the second tool found 0 matches.')).toBeTruthy();
+    expect(screen.getByText('read 1, a: 1 match shown · exact; read 2, b: 0 matches shown · exact')).toBeTruthy();
+    expect(screen.queryByText(/^Sources/)).toBeNull();
+  });
+});
+
+describe('the Assistant thread: a turn that reached a limit', () => {
+  it('shows the fixed sentence of the limit as a card titled Stopped at a limit, keeps the earlier turns, and offers nothing to retry', async () => {
+    const answers: AssistantTurnAnswer[] = [VIEW, { status: 'limit', limit: 'steps', sentence: ASSISTANT_LIMIT_SENTENCES.steps }];
+    const h = harness(async () => ok(answers.shift() ?? VIEW));
+    render(h.tree());
+    await typeAndSend('first');
+    await screen.findByText(ASSISTANT_NOT_ANSWERED_SENTENCE);
+    await typeAndSend('second');
+    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.limitTitle })).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_LIMIT_SENTENCES.steps)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: ASSISTANT_COPY.tryAgain })).toBeNull();
   });
 });
 

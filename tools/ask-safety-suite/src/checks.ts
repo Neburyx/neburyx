@@ -1,5 +1,11 @@
 import type { ExecuteCall } from '../../../services/api/src/gate/executor.js';
 
+/** The reads of a turn that ran tool steps are the reads the registry offered: each template the gate ran is one of the allowed, and at least one read happened. */
+export function expectOnlyRegisteredReads(reads: readonly Pick<ExecuteCall, 'templateId'>[], allowed: readonly string[]): void {
+  if (reads.length === 0) fail('no read reached the source, so nothing was checked');
+  for (const read of reads) if (!allowed.includes(read.templateId)) fail('a read ran that no registered tool names');
+}
+
 export class SafetyCheckFailed extends Error {}
 
 const fail = (message: string): never => {

@@ -72,6 +72,19 @@ describe('the drafting loop', () => {
     expect(requests).toHaveLength(1);
   });
 
+  it('ends at once with the text of a reply the caller reads itself, and makes no further call', async () => {
+    const { call, requests } = scripted([ok('{"tool":"x"}'), ok(GOOD)]);
+    const drafted = await draftSummary({ call, context: CONTEXT, instructions: 'INSTRUCTIONS', values: 'VALUES', judge: (sentences) => ({ kept: sentences, removed: 0, verdictFound: false }), maxCalls: 5, totalTimeoutMs: 1000, signal: new AbortController().signal, alternative: (text) => text.startsWith('{"tool"') });
+    expect(drafted).toEqual({ status: 'alternative', text: '{"tool":"x"}', calls: 1 });
+    expect(requests).toHaveLength(1);
+  });
+
+  it('treats a reply the reader refuses as a reply that does not fit, and sentences are judged as before', async () => {
+    const { call } = scripted([ok('nope'), ok(GOOD)]);
+    const drafted = await draftSummary({ call, context: CONTEXT, instructions: 'INSTRUCTIONS', values: 'VALUES', judge: (sentences) => ({ kept: sentences, removed: 0, verdictFound: false }), maxCalls: 5, totalTimeoutMs: 1000, signal: new AbortController().signal, alternative: () => false });
+    expect(drafted).toMatchObject({ status: 'drafted', calls: 2 });
+  });
+
   it('ends at once on a refusal', async () => {
     const { call, requests } = scripted([{ status: 'refused', usage: { kind: 'unknown' }, prompt: PROMPT }]);
     expect(await run(call)).toEqual({ status: 'failed', kind: 'refused', calls: 1 });

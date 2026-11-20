@@ -129,15 +129,24 @@ export const noteModelAnswer = (answer: { readonly model?: string; readonly usag
     notes.usage = answer.usage ?? { kind: 'unknown' };
   });
 
-/** An intent is about to run: the template, if it has one, the keyed hash of its parameters, the one read it makes and the route it was on. */
+/** An intent is about to run: the first one of a turn gives the turn its intent, template and keyed hash of parameters; every one adds the elements its parameters resolved to and counts as a step. */
 export const noteRun = (run: { readonly intent: string; readonly templateId?: TurnNotes['templateId']; readonly paramsHash: string; readonly entities?: AssistantThreadTurnWrite['entities'] }): void =>
   note((notes) => {
-    notes.intent = run.intent;
-    if (run.templateId !== undefined) notes.templateId = run.templateId;
-    notes.paramsHash = run.paramsHash;
-    if (run.entities !== undefined) notes.entities = run.entities;
-    notes.steps = 1;
-    notes.route = 'ask';
+    if (notes.intent === undefined) {
+      notes.intent = run.intent;
+      if (run.templateId !== undefined) notes.templateId = run.templateId;
+      notes.paramsHash = run.paramsHash;
+    }
+    if (run.entities !== undefined) notes.entities = [...(notes.entities ?? []), ...run.entities];
+    notes.steps = (notes.steps ?? 0) + 1;
+    notes.route ??= 'ask';
+  });
+
+/** A step that is not an intent (the view read again) ran: it counts as a step of the turn. */
+export const noteStep = (): void =>
+  note((notes) => {
+    notes.steps = (notes.steps ?? 0) + 1;
+    notes.route ??= 'ask';
   });
 
 const codeOf = (text: string): string => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100) || 'unknown';
@@ -157,6 +166,7 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
     case 'answered':
       if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause };
       if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
+      if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
       if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
       return {
         route: 'ask',
@@ -166,12 +176,14 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
         ...(answer.answer.answered.summary === undefined ? {} : { citedElements: answer.answer.answered.summary.citations.length }),
       };
     case 'not-answered':
-      if (notes.answered === true) return { route: 'view', outcome: 'answered', result: 'success', ...(notes.citedElements === undefined ? {} : { citedElements: notes.citedElements }) };
-      return { route: 'view', outcome: 'refused', result: 'refused', cause: notes.cause ?? 'not-answered' };
+      if (notes.answered === true) return { route: answer.route, outcome: 'answered', result: 'success', ...(notes.citedElements === undefined ? {} : { citedElements: notes.citedElements }) };
+      return { route: answer.route, outcome: 'refused', result: 'refused', cause: notes.cause ?? 'not-answered' };
     case 'unavailable':
       return { ...(notes.route === 'view' ? { route: 'view' as const } : answer.readStarted ? { route: 'ask' as const } : {}), outcome: 'failed', result: 'failed', failureKind: answer.kind };
     case 'too-large':
       return { outcome: 'refused', result: 'refused', cause: 'too-large' };
+    case 'limit':
+      return { outcome: 'refused', result: 'refused', cause: `limit-${answer.limit}` };
     case 'too-long':
       return { outcome: 'refused', result: 'refused', cause: 'too-long' };
     case 'continue-invalid':
@@ -237,8 +249,8 @@ function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { reado
 /** The things an accepted answer cited, as references: the element or relationship of each citation of an answer from the view, or of the summary of an Ask answer. */
 function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): AssistantThreadTurnWrite['citationRefs'] {
   if (notes.citedRefs !== undefined) return notes.citedRefs;
-  if ('answer' in outcome && outcome.answer.status === 'answered' && outcome.answer.route === 'view') return outcome.answer.citations.map((citation) => citation.ref);
-  if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answered' in outcome.answer.answer)) return [];
+  if ('answer' in outcome && outcome.answer.status === 'answered' && 'sentences' in outcome.answer) return outcome.answer.citations.map((citation) => citation.ref);
+  if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answer' in outcome.answer) || !('answered' in outcome.answer.answer)) return [];
   return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
 }
 

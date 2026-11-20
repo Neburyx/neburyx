@@ -2,10 +2,11 @@ import { writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import type { CaseSummarizer } from '@neburyx/contracts';
 import { DEFAULT_OFFLOAD_THRESHOLD_MS, judgeSentences, type CheckedText } from '@neburyx/ee-ai-runtime';
-import { createEnterpriseExtension } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
 import { afterAll, describe, expect, it } from 'vitest';
 import { DEFAULT_AI_SLOT_SHARE } from '../../../services/api/src/seams/ai-share.js';
 import { makeAskFolder, removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
+import { startTurnModel, type TurnModel } from '../../../services/api/src/testing/assistant-turns.js';
 import { timeManualExpand } from './ai-load.js';
 import { RECORD_PATH, percentile, readRecord, statisticsOf, type AiRuntimeRecord, type Statistics } from './ai-load.record.js';
 import type { RigOptions } from './rig.js';
@@ -41,6 +42,22 @@ async function aiLoadOptions(): Promise<RigOptions> {
   const extension = createEnterpriseExtension();
   const configured = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'] });
   if (configured?.ok !== true) throw new Error('the extension of the AI load could not be configured');
+  return { extension, caseSummarizer: SUMMARIZER, askClassifier: { availability: () => ({ available: true }), classify: async () => ({ ok: true, intent: 'nodeById', entities: { id: 'H-1' } }) } };
+}
+
+/** The model of the assistant as a load sees it: the router sends every turn to the intent, the step asks for a second read once and is then done, and the answer cites the first read. */
+function assistantModelReply(body: string): string {
+  if (body.includes('What the reads returned')) return JSON.stringify({ sentences: [{ text: 'A node is listed.', cites: ['r1'] }] });
+  if (body.includes('Masked results so far')) return body.split('nodeById:').length - 1 < 2 ? JSON.stringify({ tool: 'nodeById', values: { id: 'H-2' } }) : '{"done":true}';
+  return JSON.stringify({ route: 'ask', intent: 'nodeById', entities: { id: 'H-1' } });
+}
+
+/** The same extension with the assistant on, its model a stand-in on the loopback address: a turn makes its two reads through the gate as AI reads, beside the Ask and summary reads. */
+async function assistantLoadOptions(model: TurnModel): Promise<RigOptions> {
+  const extension = createEnterpriseExtension({ modelBaseUrl: model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore() });
+  const configured = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), NEBURYX_ASSISTANT_MAX_STEPS: '4' }, { sourceIds: ['demo'], features: { ask: true, summary: true, assistant: true } });
+  if (configured?.ok !== true) throw new Error('the extension of the assistant load could not be configured');
+  extension.attachAudit?.({ record: () => Promise.resolve() });
   return { extension, caseSummarizer: SUMMARIZER, askClassifier: { availability: () => ({ available: true }), classify: async () => ({ ok: true, intent: 'nodeById', entities: { id: 'H-1' } }) } };
 }
 
@@ -135,5 +152,38 @@ describe.skipIf(CALIBRATING)('a manual expand beside AI requests', () => {
     const record = readRecord();
     expect(record.share).toBe(DEFAULT_AI_SLOT_SHARE);
     expect(record.offload.thresholdMs).toBe(DEFAULT_OFFLOAD_THRESHOLD_MS);
+  });
+});
+
+describe.skipIf(CALIBRATING)('a manual expand beside real assistant turns', () => {
+  const KINDS = ['ask', 'summary', 'assistant'] as const;
+
+  async function measured(aiShare: number | undefined): Promise<{ record: AiRuntimeRecord; alone: Statistics; withAi: Statistics; steps: number }> {
+    const record = readRecord();
+    const model = await startTurnModel(assistantModelReply);
+    try {
+      const options = await assistantLoadOptions(model);
+      const alone: number[] = [];
+      const withAi: number[] = [];
+      for (const readMs of record.workload.readMsList) {
+        alone.push((await timeManualExpand(options, { aiRequests: 0, readMs })).expandMs);
+        withAi.push((await timeManualExpand(options, { aiRequests: record.workload.aiRequests, readMs, kinds: KINDS, ...(aiShare === undefined ? {} : { aiShare }) })).expandMs);
+      }
+      return { record, alone: statisticsOf(alone), withAi: statisticsOf(withAi), steps: model.requests.filter((body) => body.includes('Masked results so far')).length };
+    } finally {
+      await model.close();
+    }
+  }
+  const within = (record: AiRuntimeRecord, statistics: Statistics, alone: Statistics): boolean => statistics.medianMs <= alone.medianMs * record.margin.ratio && statistics.p95Ms <= alone.p95Ms * record.margin.ratio;
+
+  it('stays within the recorded margin of its time alone with a third of the AI requests real assistant turns, whose model is asked for a next step and whose reads go through the gate', async () => {
+    const { record, alone, withAi, steps } = await measured(readRecord().share);
+    expect(steps).toBeGreaterThan(0);
+    expect(within(record, withAi, alone)).toBe(true);
+  });
+
+  it('is caught when the share is off: the same run goes over the margin', async () => {
+    const { record, alone, withAi } = await measured(undefined);
+    expect(within(record, withAi, alone)).toBe(false);
   });
 });

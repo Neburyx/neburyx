@@ -32,7 +32,7 @@ const CASES: readonly { readonly mutation: Mutation; readonly breaking: (e: Evid
     breaking: (e) => ({ text: 'There were 40 transfers.', cites: [e.estimated] }),
   },
   {
-    mutation: { name: 'names', from: '|| !namesHold(sentence, assembled)', to: '' },
+    mutation: { name: 'names', from: '|| !namesHold(sentence, namesScopeOf(sentence, assembled))', to: '' },
     breaking: (e) => ({ text: `${defined(labelled.invented_names[0], 'an invented name')} is connected.`, cites: [e.first] }),
   },
   {

@@ -1,0 +1,146 @@
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import type { AuditEvent } from '@neburyx/contracts';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
+import { fileQueryDepsOf } from '../gate/file-query.js';
+import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
+import { makeAskFolder } from './ask-folder.js';
+import { startExportRig } from './export-rig.js';
+
+/** A reply the stand-in does not answer until the test says so (or never): the call stays pending at the model. */
+export const HOLD = { hold: true } as const;
+type Reply = string | typeof HOLD;
+
+/** A stand-in for the model service on the loopback address: the next reply for each request, `HOLD` for a call that stays pending, and the body of every request it received. */
+export interface TurnModel {
+  readonly baseUrl: string;
+  readonly requests: string[];
+  readonly replies: Reply[];
+  /** The calls that are pending now: held, not answered, and not given up by the caller (a call the application aborts leaves this count). */
+  held(): number;
+  /** Answers every held call with the reply given, and holds no later call. */
+  release(reply: string): void;
+  reset(): void;
+  close(): Promise<void>;
+}
+
+const NO_REPLY = '{"route":"refuse","cause":"unplaced"}';
+
+/** `reply` answers every request from its body instead of the queue: a load of many turns that make their calls in any order. */
+export async function startTurnModel(reply?: (body: string) => string): Promise<TurnModel> {
+  const requests: string[] = [];
+  const replies: Reply[] = [];
+  const pending: Array<(reply: string) => void> = [];
+  let open = true;
+  const answer = (response: import('node:http').ServerResponse, text: string): void => {
+    if (response.destroyed) return;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
+  };
+  const server: Server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on('data', (chunk: Buffer) => chunks.push(chunk));
+    request.on('end', () => {
+      requests.push(Buffer.concat(chunks).toString('utf8'));
+      const next = reply === undefined ? (replies.shift() ?? NO_REPLY) : reply(requests[requests.length - 1] ?? '');
+      if (next === HOLD && open) {
+        const entry = (text: string): void => answer(response, text);
+        pending.push(entry);
+        response.on('close', () => {
+          const at = pending.indexOf(entry);
+          if (at >= 0) pending.splice(at, 1);
+        });
+        return;
+      }
+      answer(response, typeof next === 'string' ? next : NO_REPLY);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return {
+    baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+    requests,
+    replies,
+    held: () => pending.length,
+    release: (reply) => {
+      open = false;
+      for (const answerHeld of pending.splice(0)) answerHeld(reply);
+    },
+    reset: () => {
+      requests.length = 0;
+      replies.length = 0;
+      pending.length = 0;
+      open = true;
+    },
+    close: () => {
+      server.closeAllConnections();
+      return new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+export interface AssistantAppOptions {
+  readonly model: { readonly baseUrl: string };
+  /** What the scripted source answers for a read; undefined leaves it to the rig's own answers. */
+  readonly respond?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
+  /** The most steps of a turn; the loop is on from two. */
+  readonly maxSteps?: number;
+  readonly maxCalls?: number;
+  /** The name the source gives an entity read by its stable id. */
+  readonly name?: (id: string) => string;
+  /** Settings of the assistant, by name (`NEBURYX_ASSISTANT_*`). */
+  readonly settings?: Readonly<Record<string, string>>;
+}
+
+const INTENTS = {
+  widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } },
+  findWidgets: { parameters: ['q'], template: 'search', settings: { entityTypes: ['widget'], text: '$q' } },
+  byId: { parameters: ['id'], query: 'MATCH (n:Widget) WHERE n.widgetId = $id RETURN n LIMIT 5' },
+};
+
+export type AssistantApp = Awaited<ReturnType<typeof startAssistantApp>>;
+
+/** The real application with the real enterprise extension and the assistant on (its tool loop from two steps), over a model service the test gives and the real gate over a scripted source. */
+export async function startAssistantApp(options: AssistantAppOptions) {
+  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore() });
+  const env = {
+    NEBURYX_ASK_API_KEY: 'not-a-real-key',
+    NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS),
+    NEBURYX_ASK_MAX_RETRIES: '0',
+    NEBURYX_ASK_TIMEOUT_MS: '5000',
+    NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 4),
+    ...(options.maxCalls === undefined ? {} : { NEBURYX_ASSISTANT_MAX_CALLS: String(options.maxCalls) }),
+    ...options.settings,
+  };
+  const configured = await extension.configure?.({}, env, { sourceIds: ['demo'], features: { ask: false, summary: false, assistant: true } });
+  if (configured?.ok !== true) throw new Error(`the extension was not configured: ${JSON.stringify(configured)}`);
+  const modelEvents: AuditEvent[] = [];
+  extension.attachAudit?.({ record: (event) => (modelEvents.push(event), Promise.resolve()) });
+  const logs: string[] = [];
+  const armed = { open: false };
+  const rig = await startExportRig({ extension, links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
+  const investigation = await rig.open();
+  armed.open = true;
+  const body = (message: string, over: Record<string, unknown> = {}) => ({ sourceId: 'demo', investigationId: investigation.id, message, viewElementKeys: [], ...over });
+  let address: string | undefined;
+  return {
+    app: rig.app,
+    store: rig.store,
+    executor: rig.executor,
+    logs,
+    /** The events of the application and of the extension's own sink: the gate's, the routes' and the model calls'. */
+    events: (): AuditEvent[] => [...modelEvents, ...rig.events],
+    /** The reads that reached the source, without the schema reads of its start. */
+    reads: (): ExecuteCall[] => rig.executor.calls.filter((call) => !call.templateId.startsWith('schema-')),
+    /** One turn through the application's own route. */
+    turn: async (message: string, over: Record<string, unknown> = {}) => {
+      const response = await rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: body(message, over) });
+      return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+    },
+    /** One turn over the real connection, which the caller may abort. */
+    sendTurn: async (message: string, signal: AbortSignal, over: Record<string, unknown> = {}) => {
+      address ??= await rig.app.listen({ host: '127.0.0.1', port: 0 });
+      return fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body(message, over)), signal }).catch(() => undefined);
+    },
+    close: () => rig.stop(),
+  };
+}

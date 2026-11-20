@@ -8,6 +8,8 @@ export interface CheckedText {
   readonly lines: ReadonlyMap<string, string>;
   readonly inexactCounts: readonly { readonly phrase: string; readonly value: string }[];
   readonly unknownCountKeys: ReadonlySet<string>;
+  /** The keys of lines that state what a read found and are no element: a sentence that cites only these is checked for names against the lines it cites, so it cannot name an element it does not cite. */
+  readonly readKeys?: ReadonlySet<string>;
 }
 
 const NUMBER_TOKEN = /[-+]?(?:\d[\d,]*(?:\.\d+)?|\.\d+)/g;
@@ -131,6 +133,14 @@ function numbersHold(sentence: SummarySentence, assembled: CheckedText): boolean
   return assembled.inexactCounts.every((count) => !standalone.includes(count.value) || sentence.text.includes(count.phrase));
 }
 
+/** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
+function namesScopeOf(sentence: SummarySentence, assembled: CheckedText): CheckedText {
+  const reads = assembled.readKeys;
+  if (reads === undefined || sentence.cites.length === 0 || !sentence.cites.every((cite) => reads.has(cite))) return assembled;
+  const lines = new Map(sentence.cites.flatMap((cite) => (assembled.lines.has(cite) ? [[cite, assembled.lines.get(cite) ?? ''] as const] : [])));
+  return { ...assembled, text: [...lines.values()].join('\n'), lines };
+}
+
 function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   const sent = assembled.text.normalize('NFC');
   const known = words(sent);
@@ -157,7 +167,7 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   return true;
 }
 
-const KEY = '[ne]\\d+';
+const KEY = '[ners]\\d+';
 const KEY_GROUP = new RegExp(`\\s*[(\\[]\\s*${KEY}(?:\\s*(?:,|;|and|&)\\s*${KEY})*\\s*[)\\]]`, 'gu');
 const KEY_WORD = new RegExp(`(?<![\\p{L}\\p{N}_-])${KEY}(?![\\p{L}\\p{N}_-])`, 'u');
 
@@ -200,7 +210,7 @@ export function judgeSentences(sentences: readonly SummarySentence[], assembled:
       continue;
     }
     const sentence = clean.stripped ? { ...original, text: clean.text } : original;
-    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !namesHold(sentence, assembled)) removed += 1;
+    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled))) removed += 1;
     else {
       kept.push(sentence);
       if (clean.stripped) keysStripped += 1;

@@ -44,3 +44,14 @@ export function coverageOf(run: AskRunResult): string {
   const { rowCount, partial } = summarizeRun(run);
   return `${figure(rowCount)} shown${partial ? ' · partial' : ''}`;
 }
+
+/** What a read's line says of a count that is not exact: the phrase as the line writes it with the figure it carries (a figure not yet retrieved, or the rows of a file query), or `unknown` when the line says the count is not known. Nothing for an exact count. */
+export function inexactCountOf(run: AskRunResult): { readonly phrase: string; readonly value: string } | 'unknown' | undefined {
+  const matches = matchesOf(run);
+  const count = matches?.count ?? (run.templateId === 'file-query' ? run.result.count : undefined);
+  if (count === undefined) return undefined;
+  if (count.quality === 'unknown' || count.value === undefined) return 'unknown';
+  if (count.quality === 'exact') return undefined;
+  const figureValue = matches === undefined ? count.value : Math.max(count.value - matches.shown, 0);
+  return figureValue === 0 && matches !== undefined ? undefined : { phrase: `${SIGNS[count.quality]}${figure(figureValue)}`, value: String(figureValue) };
+}

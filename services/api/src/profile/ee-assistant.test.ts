@@ -52,11 +52,11 @@ const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, lab
 /** An answer with the tokens of its choices made alike: each carries the time it was made, so two answers to one question differ in them and in nothing else. */
 const sameButTokens = (answer: unknown): unknown => JSON.parse(JSON.stringify(answer, (key, value: unknown) => (key === 'choiceToken' ? 'token' : value)));
 
-async function assistantRig(options: { principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
+async function assistantRig(options: { maxSteps?: number; principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore() });
   const features = options.features ?? { ask: false, summary: false, assistant: true };
-  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'], features });
+  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
   const armed = { open: false };
@@ -150,6 +150,70 @@ describe('the refusals of the router through the real application', () => {
     expect(events.some((event) => event.action === 'assistant.ask')).toBe(false);
     expect(rig.rig.executor.calls.slice(before)).toHaveLength(0);
     expect(rig.stub.bodies).toHaveLength(1);
+    await rig.stop();
+  });
+});
+
+describe('the tool loop through the real application', () => {
+  const ROUTE = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
+  const ANSWER = JSON.stringify({ sentences: [{ text: 'Ana Silva is listed.', cites: ['r1'] }] });
+  const everything = (rig: Awaited<ReturnType<typeof assistantRig>>): AuditEvent[] => [...rig.events, ...rig.rig.events];
+  const sequence = (...replies: string[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? '{"done":true}';
+  };
+  const entityReads = (rig: Awaited<ReturnType<typeof assistantRig>>) => rig.rig.executor.calls.filter((call) => call.templateId === 'entity-load').length;
+
+  it('asks the model for the next step after the first read, answers Ask’s own reply when it is done, and counts two model calls and one step', async () => {
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"done":true}'), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1' });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { intent: 'widgetById' } } });
+    expect(rig.stub.bodies).toHaveLength(2);
+    expect(everything(rig).filter((event) => event.action === 'assistant.step')).toHaveLength(1);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 2, steps: 1, outcome: 'answered' } } }]);
+    await rig.stop();
+  });
+
+  it('runs a second read the model asks for through the gate, and counts three model calls and two steps', async () => {
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"widgetById","values":{"id":"W-2"}}', '{"done":true}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-2') }] } : undefined) });
+    const before = entityReads(rig);
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and W-2' });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(entityReads(rig) - before).toBe(2);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 4, steps: 2 } } }]);
+    await rig.stop();
+  });
+
+  it('answers after the steps with sentences that cite the elements the reads returned, checked, with four model calls and two steps', async () => {
+    const answerJson = JSON.stringify({ sentences: [{ text: 'Ana Silva appears on two widgets.', cites: ['r1', 'r2'] }] });
+    let read = 0;
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"widgetById","values":{"id":"W-2"}}', '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode(`W-${++read}`) }] } : undefined) });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and W-2' });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 4 });
+    const events = everything(rig);
+    expect(events.filter((event) => event.action === 'assistant.answer')).toHaveLength(1);
+    expect(events.filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 4, steps: 2, outcome: 'answered' } } }]);
+    expect(JSON.stringify(events)).not.toContain('appears on two widgets');
+    await rig.stop();
+  });
+
+  it('runs a built-in template the model names by its id as a second read through the gate, and counts two steps', async () => {
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"entity","values":{"entityType":"widget","stableId":"W-2"}}', '{"done":true}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-2') }] } : undefined) });
+    const before = entityReads(rig);
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and the widget W-2' });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(entityReads(rig) - before).toBe(2);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { steps: 2 } } }]);
+    await rig.stop();
+  });
+
+  it('answers over what was read when the steps of the turn are spent, and reads nothing more', async () => {
+    const rig = await assistantRig({ maxSteps: 2, reply: sequence(ROUTE, '{"tool":"widgetById","values":{"id":"W-2"}}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-2') }] } : undefined) });
+    const before = entityReads(rig);
+    const answer = await rig.post({ ...rig.body, message: 'Show many' });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 3 });
+    expect(entityReads(rig) - before).toBe(2);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { outcome: 'answered', steps: 2, modelCalls: 3 } } }]);
     await rig.stop();
   });
 });
@@ -867,7 +931,7 @@ describe('the thread of an investigation in the running application', () => {
     const records = recordsOver();
     const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
     const answer = assistantTurnAnswerSchema.parse((await send(rig, 'Show W-1')).json());
-    if (answer.status !== 'answered' || answer.route !== 'ask') throw new Error('not an ask answer');
+    if (answer.status !== 'answered' || !('answer' in answer)) throw new Error('not an ask answer');
     const chip = answer.followUps?.[0];
     expect(answer.followUps?.map((held) => held.choice.intent)).toEqual(['sharedGadget']);
     expect(chip?.choice.roles).toEqual(['id']);

@@ -81,3 +81,37 @@ describe('the assistant instructions', () => {
     expect(format).not.toContain('"tool"');
   });
 });
+
+describe('the shipped router prompt and the reply format', () => {
+  const shippedText = async () => {
+    const result = await loadAssistantInstructions({ env: {} });
+    if (!result.ok) throw new Error(result.problems.join('; '));
+    return result.instructions;
+  };
+
+  it('refuses a message with a part that asks for a verdict, a query or another source with that cause, whatever else it asks, in the prompt and in the fixed format, for both settings', async () => {
+    const shipped = await shippedText();
+    expect(shipped.prompt).toContain('in any part of it, choose `refuse` with that cause, whatever else it asks');
+    for (const multiRead of [false, true]) {
+      const text = buildAssistantInstructions(shipped.prompt, multiRead).text;
+      expect(text).toContain('A message any part of which asks for a verdict, for query text or for anything about another source, investigation or person is refused with that cause, whatever else it asks.');
+      expect(text.endsWith('Add no other text.')).toBe(true);
+    }
+  });
+
+  it('places a message that needs several reads on its first read only when the loop is on, and otherwise leaves it unplaced, with a different instructions hash', async () => {
+    const { prompt } = await shippedText();
+    const on = buildAssistantInstructions(prompt, true);
+    const off = buildAssistantInstructions(prompt);
+    expect(on.text).toContain('A message that needs several reads is one `ask` reply with the intent of its first read');
+    expect(on.text).not.toContain('refused with the cause `unplaced`.\nYou only');
+    expect(off.text).toContain('A message that needs more than one read is refused with the cause `unplaced`.');
+    expect(off.text).not.toContain('with the intent of its first read');
+    expect(on.sha256).not.toBe(off.sha256);
+  });
+
+  it('tells the model that its whole reply is the one object, for both settings', async () => {
+    const { prompt } = await shippedText();
+    for (const multiRead of [false, true]) expect(buildAssistantInstructions(prompt, multiRead).text).toContain('its first character is { and its last is }');
+  });
+});

@@ -14,4 +14,5 @@ Rules:
 - Never write a query, a statement or code of any kind.
 - Never state or imply guilt, fraud or intent; describe only what the elements show.
 - Never use a name, an identifier or a number that was not given to you.
-- When the message needs more than you were given, choose `refuse` with the cause `unplaced`.
+- When a message asks for a verdict, for a query or for anything about another source, investigation or person, in any part of it, choose `refuse` with that cause, whatever else it asks.
+- When no listed intent and nothing in view fits the message, choose `refuse` with the cause `unplaced`.

@@ -56,6 +56,18 @@ export const ASSISTANT_NOT_ANSWERED_SENTENCE = 'I can’t support an answer from
 export const ASSISTANT_FAILURE_KINDS = ['service', 'source-unavailable', 'busy', 'timeout', 'rate-limit'] as const;
 export type AssistantFailureKind = (typeof ASSISTANT_FAILURE_KINDS)[number];
 
+/** The limits that end a turn of the tool loop, and the fixed sentence of each: nothing of the model, the message or the source is in them. */
+export const ASSISTANT_LIMITS = ['calls', 'steps', 'rows', 'time', 'input'] as const;
+export type AssistantLimit = (typeof ASSISTANT_LIMITS)[number];
+
+export const ASSISTANT_LIMIT_SENTENCES: Readonly<Record<AssistantLimit, string>> = {
+  calls: 'The assistant reached the number of model calls a turn may make, so it stopped. Nothing more was read.',
+  steps: 'The assistant reached the number of reads a turn may make, so it stopped. Nothing more was read.',
+  rows: 'The assistant reached the number of rows a turn may read, so it stopped. Nothing more was read.',
+  time: 'The assistant reached the time a turn may take, so it stopped. Nothing more was read.',
+  input: 'What the assistant had to send grew past what a turn may send, so it stopped. Nothing more was read.',
+};
+
 export const ASSISTANT_TOO_LARGE_SENTENCE = 'The message and the view are too large to send. Narrow the view or ask something smaller.';
 
 export const ASSISTANT_CONTINUE_INVALID_SENTENCE = 'This continue is no longer valid. Nothing was read.';
@@ -69,10 +81,12 @@ export const assistantTurnAnswerSchema = z.union([
     cause: z.enum(ASSISTANT_REFUSAL_CAUSES),
     sentence: text,
   }),
-  z.strictObject({ status: z.literal('not-answered'), route: z.literal('view'), sentence: text }),
+  z.strictObject({ status: z.literal('not-answered'), route: z.enum(['ask', 'view']), sentence: text }),
   /** A failure of the model's service; `readStarted` is false when no read of the source began, and `retryAfterSeconds` is present only when the service said how long to wait. */
   z.strictObject({ status: z.literal('unavailable'), kind: z.enum(ASSISTANT_FAILURE_KINDS), readStarted: z.boolean(), retryAfterSeconds: z.number().int().positive().optional() }),
   z.strictObject({ status: z.literal('too-large'), sentence: text }),
+  /** A turn of the tool loop that reached one of its limits: it ran nothing more, and the sentence is the fixed one of the limit. */
+  z.strictObject({ status: z.literal('limit'), limit: z.enum(ASSISTANT_LIMITS), sentence: text }),
   /** The `ask` route: Ask's own answer, a result with its cited summary and sources, a heavy stop with its token, or a refusal with its cause. */
   z.strictObject({
     status: z.literal('answered'),
@@ -104,6 +118,17 @@ export const assistantTurnAnswerSchema = z.union([
     coverage: z.strictObject({ retrieval: text, summary: text }),
     model: text,
     calls: z.number().int().positive(),
+  }),
+  /** The `ask` or the `view` route (the route the message was placed on) after tool steps: sentences that each cite elements the steps returned, or the line of a read (to state what it found, including nothing), kept by the checks, the citations of elements they name (none when every sentence cites reads only), the model that wrote them, the calls the turn made and the steps it ran. */
+  z.strictObject({
+    status: z.literal('answered'),
+    route: z.enum(['ask', 'view']),
+    sentences: z.array(summarySentenceSchema).min(1).max(12),
+    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) })).min(0),
+    coverage: z.strictObject({ retrieval: text, summary: text }),
+    model: text,
+    calls: z.number().int().positive(),
+    steps: z.number().int().min(2),
   }),
   /** A message over the limit of words: nothing was sent to a model and nothing was read. */
   z.strictObject({ status: z.literal('too-long'), words: z.number().int().positive(), limit: z.number().int().positive() }),

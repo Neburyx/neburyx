@@ -85,6 +85,8 @@ export interface DraftOptions {
   readonly onCall?: (calls: number) => void;
   /** Told as each call is about to be made, so the caller can keep a record of it; the case summary keeps its own. */
   readonly trace?: (call: { readonly number: number; readonly instructions: string; readonly values: string }) => CallTrace;
+  /** A reply that is not sentences but is one the caller reads itself: when this accepts a reply's text, the draft ends there with that text. Absent, every reply must be sentences, as the case summary has it. */
+  readonly alternative?: (text: string) => boolean;
   /** Keeps the record of each request: written before the request is made, finished when it ends. A write that fails ends the click. */
   readonly record?: {
     beforeCall(call: { readonly number: number; readonly instructions: string; readonly values: string; readonly startedAt: Date }): Promise<void>;
@@ -117,7 +119,11 @@ function parseReply(text: string): readonly SummarySentence[] | undefined {
  * Calls the model until a reply fits the reply format, within the call limit and the total time limit. A reply that is whole but does not fit gets one more call with a fixed note; anything the provider itself
  * fails at ends the click at once. The call in flight is aborted when the total time is spent or the client gives up, and no call follows.
  */
-export async function draftSummary(options: DraftOptions): Promise<Drafted> {
+export type DraftedOrAlternative = Drafted | { readonly status: 'alternative'; readonly text: string; readonly calls: number };
+
+export async function draftSummary(options: DraftOptions & { readonly alternative: (text: string) => boolean }): Promise<DraftedOrAlternative>;
+export async function draftSummary(options: DraftOptions): Promise<Drafted>;
+export async function draftSummary(options: DraftOptions): Promise<DraftedOrAlternative> {
   const now = options.now ?? Date.now;
   const started = now();
   let calls = 0;
@@ -179,6 +185,7 @@ export async function draftSummary(options: DraftOptions): Promise<Drafted> {
       const model = answer.model;
       const sentences = parseReply(answer.text);
       if (sentences === undefined) {
+        if (options.alternative?.(answer.text) === true) return { status: 'alternative', text: answer.text, calls };
         values = `${options.values}\n\n${FORMAT_NOTE}`;
         continue;
       }

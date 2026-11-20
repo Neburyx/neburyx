@@ -78,7 +78,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     await run(turn);
     const [kept] = stored(turn);
     expect(stored(turn)).toHaveLength(1);
-    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '1', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
+    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '2', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
     expect(kept?.questionHash).toMatch(SHA);
     expect(kept?.entities).toEqual([{ role: 'id', ref: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' } }]);
     expect(kept?.citationRefs).toEqual([
@@ -107,7 +107,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     const continued = await turnRig({ reply: SHARED, run: (continuing) => ({ status: 'ok', result: continuing ? okResult() : heavyResult() }) });
     const first = await answerOf(continued.r.route.handler(continued.r.request(BASE, { principalId: PERSON })));
     await drain();
-    const token = first.status === 'answered' && first.route === 'ask' && 'answered' in first.answer ? first.answer.answered.continueToken : undefined;
+    const token = first.status === 'answered' && first.route === 'ask' && 'answer' in first && 'answered' in first.answer ? first.answer.answered.continueToken : undefined;
     expect(stored(continued)).toHaveLength(1);
     await run(continued, { sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], continue: { intent: 'shared', entities: { id: 'A-1' }, continueToken: token } });
     const after = stored(continued)[1];

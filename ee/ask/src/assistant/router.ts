@@ -5,7 +5,7 @@ import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import { buildAssistantInstructions, type AssistantInstructions } from './instructions.js';
 
 export const ROUTER_PROMPT_ID = 'assistant.route';
-export const ROUTER_PROMPT_VERSION = 1;
+export const ROUTER_PROMPT_VERSION = 2;
 export const ROUTER_AUDIT_ACTION = 'assistant.route';
 
 const NO_KEYS = '(none)';
@@ -19,6 +19,8 @@ export interface RouterOptions {
   readonly maxInputTokens: () => number;
   /** The calls of a whole turn; the router repeats a reply that is not a route only when it leaves room for the answer too. */
   readonly maxCalls?: () => number;
+  /** Whether a message that needs several reads is placed on its first read (the tool loop is on); otherwise such a message is not placed. */
+  readonly multiRead?: () => boolean;
 }
 
 export interface RouterInput {
@@ -55,7 +57,8 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
     const base = options.instructions();
     if (base === undefined) return { status: 'failed', code: 'rejected' };
     const source = options.folder()?.source(input.sourceId);
-    const instructions = source === undefined ? base : buildAssistantInstructions(`${base.prompt}\n\n# This source's questions\n\n${source.classification.text}`);
+    const multiRead = options.multiRead?.() === true;
+    const instructions = buildAssistantInstructions(source === undefined ? base.prompt : `${base.prompt}\n\n# This source's questions\n\n${source.classification.text}`, multiRead);
     const asked = valuesOf(input);
     const allowed = Math.min(REPEATS + 1, Math.max(1, (options.maxCalls?.() ?? REPEATS + 1) - 1));
     for (let call = 1; call <= allowed; call += 1) {

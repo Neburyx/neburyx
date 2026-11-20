@@ -8,10 +8,13 @@ import { loadAskFolder } from '../folder/load.js';
 import { buildAssistantInstructions } from '../assistant/instructions.js';
 import { ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION, createAssistantRouter } from '../assistant/router.js';
 import { createAssistantTurnRoute } from '../assistant/turn-route.js';
+import { createToolLoop } from '../assistant/tool-loop.js';
+import { createToolAnswer, ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION } from '../assistant/tool-answer.js';
+import { STEP_PROMPT_ID, STEP_PROMPT_VERSION } from '../assistant/step-instructions.js';
 import type { AssistantRunStore } from '../assistant/run-store.js';
 import type { AssistantThreadStore } from '../assistant/thread-store.js';
 import { readAssistantSettings } from '../assistant/settings.js';
-import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
+import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, VIEW_TOOLS_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
 import { buildSummaryInstructions } from '../case-summary/instructions.js';
 import { makeAskFolder } from './ask-folder.js';
 import { UNAVAILABLE_SUMMARIZER } from './case-summarizer.js';
@@ -31,6 +34,14 @@ export const routeAsk = (intent: string, entities: Record<string, string>): Fixt
 const node = (stableId: string, title = `Account ${stableId}`) => ({ ref: { sourceId: SOURCE, entityType: 'widget', stableId }, display: { title, type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
 export const okResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: 1, scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
+/** A read of the shared-attribute template that found no match: the anchor only, with an exact zero. */
+export const zeroResult = (): AskRunResult =>
+  askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: 0, scope: 'test' }, matchIds: [], nodes: [node('A-1')], edges: [], notices: [], warnings: [] } });
+/** A read whose count is a lower bound above what it lists, and one whose count is not known. */
+export const lowerBoundResult = (): AskRunResult =>
+  askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'lowerBound', value: 150, scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
+export const unknownCountResult = (): AskRunResult =>
+  askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'unknown', scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
 export const heavyResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'heavy', templateId: 'shared-attribute', templateVersion: '1', estimate: { quality: 'lowerBound', value: 1000, scope: 'test' }, threshold: 1000, continueLimit: 25, notices: [], warnings: [] } });
 export const fileQueryResult = (): AskRunResult =>
@@ -84,6 +95,12 @@ export interface RigOptions {
   readonly viewNodes?: readonly ReturnType<typeof node>[];
   /** The elements the stand-in of the gate gives back for the references it is asked for; absent, `viewNodes` or the two exportable ones whatever is asked. */
   readonly readNodes?: (refs: ElementRefs, mask: boolean) => readonly ReturnType<typeof node>[];
+  /** The replies of the model to the step call; its presence turns the tool loop on. */
+  readonly step?: FixtureReplies[string];
+  /** The replies of the model to the answer call after tool steps. */
+  readonly answer?: FixtureReplies[string];
+  readonly loopSteps?: number;
+  readonly loopRows?: number;
 }
 
 export interface Rig {
@@ -113,16 +130,17 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const elementReads: Rig['elementReads'] = [];
   const clock = { now: NOW };
   const sink: AuditSink = { record: (event) => (options.sink === 'fails' ? Promise.reject(new Error('down')) : (events.push(event), Promise.resolve())) };
-  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view }) } });
+  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view, [replyKey(VIEW_PROMPT_ID, VIEW_TOOLS_PROMPT_VERSION)]: options.view }), ...(options.step === undefined ? {} : { [replyKey(STEP_PROMPT_ID, STEP_PROMPT_VERSION)]: options.step }), ...(options.answer === undefined ? {} : { [replyKey(ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION)]: options.answer }) } });
   const provider: ModelProvider = options.viewProvider === undefined ? fixture : { complete: (request, signal) => (request.promptId === VIEW_PROMPT_ID && options.viewProvider !== undefined ? options.viewProvider(request, signal) : fixture.complete(request, signal)) };
   const model = createAuditedModelCall({ provider, configuration: { model: 'configured-model' }, sink });
   const expiry = new AbortController();
   const instructions = buildAssistantInstructions(PROMPT);
-  const router = createAssistantRouter({ model, folder: () => folder, instructions: () => instructions, maxInputTokens: () => options.maxInputTokens ?? 25_000, ...(options.routerMaxCalls === undefined ? {} : { maxCalls: () => options.routerMaxCalls ?? 1 }) });
+  const router = createAssistantRouter({ model, folder: () => folder, instructions: () => instructions, multiRead: () => options.step !== undefined && (options.loopSteps ?? 4) >= 2, maxInputTokens: () => options.maxInputTokens ?? 25_000, ...(options.routerMaxCalls === undefined ? {} : { maxCalls: () => options.routerMaxCalls ?? 1 }) });
   const viewInstructions = buildSummaryInstructions('You answer from the view. SENTINEL-VIEW-PROMPT', 'SENTINEL-TYPOLOGY');
   const viewAnswer = options.view === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});
-  const route = createAssistantTurnRoute({ totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const toolLoop = options.step === undefined ? undefined : createToolLoop({ model, prompt: () => PROMPT, settings: () => ({ maxCalls: options.maxCalls ?? 5, maxSteps: options.loopSteps ?? 4, maxInputTokens: options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }) }), answer: createToolAnswer({ model, instructions: () => buildSummaryInstructions('You answer from what the reads returned. SENTINEL-ANSWER-PROMPT', 'SENTINEL-TYPOLOGY'), checks: options.checks ?? createCheckRunner(), timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000, now: () => clock.now }) });
+  const route = createAssistantTurnRoute({ ...(toolLoop === undefined ? {} : { toolLoop: () => toolLoop, viewTools: () => (options.loopSteps ?? 4) >= 2 }), totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',

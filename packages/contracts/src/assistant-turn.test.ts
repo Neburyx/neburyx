@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_LIMITS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
 
 const body = { sourceId: 'banking', investigationId: 'inv-1', message: 'Which accounts share a device?', viewElementKeys: ['n1', 'n2'] };
 
@@ -160,5 +160,39 @@ describe('the choice of an assistant turn', () => {
   it('answers a choice that is not valid with its fixed sentence', () => {
     expect(assistantTurnAnswerSchema.safeParse({ status: 'choice-invalid', sentence: ASSISTANT_CHOICE_INVALID_SENTENCE }).success).toBe(true);
     expect(ASSISTANT_CHOICE_INVALID_SENTENCE).toBe('This choice is no longer valid. Nothing was read.');
+  });
+});
+
+describe('the limit status of a turn', () => {
+  it.each(ASSISTANT_LIMITS)('accepts the %s limit with its own fixed sentence, and nothing else', (limit) => {
+    const answer = { status: 'limit', limit, sentence: ASSISTANT_LIMIT_SENTENCES[limit] };
+    expect(assistantTurnAnswerSchema.safeParse(answer).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, extra: 1 }).success).toBe(false);
+  });
+
+  it('refuses a limit that is not one of the five, and a limit without its sentence', () => {
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'tokens', sentence: 'x' }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'calls' }).success).toBe(false);
+  });
+
+  it('has a different sentence for each limit, none with a value in it', () => {
+    expect(new Set(Object.values(ASSISTANT_LIMIT_SENTENCES)).size).toBe(ASSISTANT_LIMITS.length);
+  });
+});
+
+describe('the answer of the ask route after tool steps', () => {
+  const ref = { sourceId: 'banking', entityType: 'widget', stableId: 'A-1' };
+  const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '2 shown', summary: 'The answer cites 1 of the 2 elements the reads returned.' }, model: 'm', calls: 4, steps: 2 };
+
+  it('accepts the sentences with their citations, the coverage, the model, the calls and at least two steps', () => {
+    expect(assistantTurnAnswerSchema.safeParse(answer).success).toBe(true);
+  });
+
+  it('accepts no citation of an element (a sentence may cite the line of a read only), and refuses one step, no sentence, an extra member, and the answer of Ask together with the sentences', () => {
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, steps: 1 }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, sentences: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [] }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, extra: 1 }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, answer: { refused: { cause: 'no-intent', sentence: 'x' } } }).success).toBe(false);
   });
 });

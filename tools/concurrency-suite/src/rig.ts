@@ -121,7 +121,7 @@ const EDGE_ROWS: ExecuteOutcome = { status: 'rows', rows: [{ r: plainRelationshi
 const READS = [ENTITY_LOAD_ID, ENTITY_LOAD_MANY_ID, EDGE_LOAD_ID, DERIVED_EDGE_SUPPORT_ID, DERIVED_RULE_RUN_ID, EXPAND_NEIGHBORS_ID];
 
 /** Which read route `http` calls: the entity read, the stored edge read, or the source link of the entity. */
-export type Route = 'entity' | 'edge' | 'link' | 'derived-edge' | 'derived-neighbors' | 'summary' | 'expand' | 'ask';
+export type Route = 'entity' | 'edge' | 'link' | 'derived-edge' | 'derived-neighbors' | 'summary' | 'expand' | 'ask' | 'assistant';
 
 /** Fake timers: set at a time of the shared clock, fired in order of time and then of setting. */
 function timers(clock: { now: number }) {
@@ -234,12 +234,14 @@ export async function startRig(options: RigOptions = {}): Promise<Rig> {
     http: (sourceId = SOURCE, route = 'entity') =>
       new Promise<HttpAnswer>((resolve, reject) => {
         const path =
-          route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : route === 'derived-edge' ? derivedEdgePathOf(sourceId) : route === 'derived-neighbors' ? DERIVED_NEIGHBORS_PATH : route === 'summary' ? '/v1/summary' : route === 'expand' ? '/v1/graph/expand' : route === 'ask' ? '/v1/ask' : `/v1/entities/${sourceId}/node_a/H-1`;
+          route === 'edge' ? edgePathOf(sourceId) : route === 'link' ? linkPathOf(sourceId) : route === 'derived-edge' ? derivedEdgePathOf(sourceId) : route === 'derived-neighbors' ? DERIVED_NEIGHBORS_PATH : route === 'summary' ? '/v1/summary' : route === 'expand' ? '/v1/graph/expand' : route === 'ask' ? '/v1/ask' : route === 'assistant' ? '/v1/assistant/turns' : `/v1/entities/${sourceId}/node_a/H-1`;
         const body =
           route === 'derived-neighbors'
             ? JSON.stringify({ sourceId, ref: { entityType: 'node_a', stableId: 'H-1' } })
             : route === 'ask'
               ? JSON.stringify({ sourceId, question: 'Show the node H-1' })
+              : route === 'assistant'
+                ? JSON.stringify({ sourceId, investigationId: summaryInvestigation, message: 'Show the node H-1 and then the node H-2', viewElementKeys: [] })
               : route === 'expand'
                 ? JSON.stringify({ sourceId, ref: { entityType: 'node_a', stableId: 'H-1' }, neighborTypes: ['node_b'] })
             : route === 'summary'

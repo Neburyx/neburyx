@@ -61,6 +61,8 @@ function failureView(failure: Failure, sourceId: string): FailureView {
     }
     case 'too-large':
       return { title: ASSISTANT_COPY.tooLargeTitle, text: failure.sentence, tone: 'caution', action: 'none' };
+    case 'limit':
+      return { title: ASSISTANT_COPY.limitTitle, text: failure.sentence, tone: 'caution', action: 'none' };
     case 'continue-invalid':
       return { title: ASSISTANT_COPY.continueInvalidTitle, text: ASSISTANT_COPY.continueInvalid, tone: 'caution', action: 'ask-again' };
     case 'choice-invalid':

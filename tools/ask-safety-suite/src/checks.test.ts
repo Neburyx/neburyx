@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectedBody, expectNoValue, expectOnlyParameters, expectProviderInput, SafetyCheckFailed } from './checks.js';
+import { expectedBody, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
 
 const TEXT = 'MATCH (n) WHERE n.id = $id AND n.x = $x RETURN n';
 const read = (cypher: string, parameters: Record<string, unknown>) => ({ cypher, parameters });
@@ -47,5 +47,16 @@ describe('the check that no record holds a value', () => {
     expect(() => expectNoValue([{ detail: { x: 'SENTINEL-1' } }], ['SENTINEL-1'])).toThrow(SafetyCheckFailed);
     expect(() => expectNoValue([[{ intent: 'SENTINEL-2' }]], ['SENTINEL-2'])).toThrow(SafetyCheckFailed);
     expect(() => expectNoValue([['a log line SENTINEL-3']], ['SENTINEL-3'])).toThrow(SafetyCheckFailed);
+  });
+});
+
+describe('the check that every read is a read of a registered tool', () => {
+  it('passes reads of the allowed templates', () => {
+    expect(() => expectOnlyRegisteredReads([{ templateId: 'entity-load' }, { templateId: 'file-query' }], ['entity-load', 'file-query'])).not.toThrow();
+  });
+
+  it('canary: fails a read no tool names, and a case that read nothing', () => {
+    expect(() => expectOnlyRegisteredReads([{ templateId: 'entity-load' }, { templateId: 'drop-everything' }], ['entity-load'])).toThrow(SafetyCheckFailed);
+    expect(() => expectOnlyRegisteredReads([], ['entity-load'])).toThrow(SafetyCheckFailed);
   });
 });

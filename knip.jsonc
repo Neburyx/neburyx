@@ -9,7 +9,10 @@
     "ee/audit": {},
     "services/api": {},
     "packages/test-containers": {},
-    "tools/cancellation-suite": {},
+    "tools/cancellation-suite": {
+      // Imported by the shared assistant helper of services/api that the suite compiles; the package is declared so that the suite builds on its own in the image.
+      "ignoreDependencies": ["@neburyx/ee-ask"]
+    },
     "tools/concurrency-suite": {},
     "tools/dco-check": {},
     "tools/demo-graph": {},

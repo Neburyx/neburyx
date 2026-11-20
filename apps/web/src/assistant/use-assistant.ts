@@ -63,7 +63,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence };
-      if (answer.route === 'view') return { kind: 'view-answer', answer, entries: entriesOf(answer) };
+      if (answer.route === 'view' || 'sentences' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, step: answer.step, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
@@ -72,6 +72,8 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
       return { kind: 'failed', failure: { kind: 'unavailable', why: answer.kind, readStarted: answer.readStarted, retryAfterSeconds: answer.retryAfterSeconds, until: answer.retryAfterSeconds === undefined ? undefined : now + answer.retryAfterSeconds * MILLISECONDS_A_SECOND }, retry };
     case 'too-large':
       return { kind: 'failed', failure: { kind: 'too-large', sentence: answer.sentence }, retry };
+    case 'limit':
+      return { kind: 'failed', failure: { kind: 'limit', sentence: answer.sentence }, retry };
     case 'too-long':
       return { tooLong: { words: answer.words, limit: answer.limit } };
     case 'continue-invalid':

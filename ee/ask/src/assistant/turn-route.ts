@@ -2,6 +2,7 @@ import {
   ASK_SAVED_PATTERN_INTENT,
   ASSISTANT_CHOICE_INVALID_SENTENCE,
   ASSISTANT_CONTINUE_INVALID_SENTENCE,
+  ASSISTANT_LIMIT_SENTENCES,
   ASSISTANT_NOT_ANSWERED_SENTENCE,
   ASSISTANT_REFUSAL_SENTENCES,
   ASSISTANT_TOO_LARGE_SENTENCE,
@@ -24,6 +25,7 @@ import {
   type ExtensionRoute,
   type RecordQueue,
 } from '@neburyx/contracts';
+import { withTemplateTools } from './tool-templates.js';
 import { AuditUnavailableError, gateClientOf, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog } from '../patterns/index.js';
 import { coverageOf } from './coverage.js';
@@ -39,9 +41,10 @@ import { followUpsOf, type FollowUp } from './follow-ups.js';
 import { buildContext, type TurnContext } from './context.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
-import { noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
+import { noteStep, noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
 import { countWords } from './words.js';
 import type { ViewInput, ViewOutcome, ViewProgress } from './view-answer.js';
+import { toolRegistryOf, type LoopInput, type LoopOutcome } from './tool-loop.js';
 
 const TURNS_URL = '/v1/assistant/turns';
 const ASK_ACTION = 'assistant.ask';
@@ -58,6 +61,10 @@ export interface TurnRouteOptions {
   readonly turnDeadline?: (totalMs: number) => AbortSignal;
   /** Answers from the elements in view; without it the view route gives the fixed sentence. */
   readonly viewAnswer?: () => ((input: ViewInput) => Promise<ViewOutcome>) | undefined;
+  /** Whether the view call may answer with a tool request, which goes on in the loop from the view's reading; absent or false, the view call has its two reply forms. */
+  readonly viewTools?: () => boolean;
+  /** The loop after an `ask` run: the model may ask for another registered read. Without it, an `ask` turn is its one read, as before the loop. */
+  readonly toolLoop?: () => ((input: LoopInput) => Promise<LoopOutcome | undefined>) | undefined;
   readonly logger: () => ExtensionLogger | undefined;
   /** The store of the records of the turns' model calls; absent, nothing is recorded. */
   readonly runs?: () => AssistantRunStore | undefined;
@@ -109,6 +116,7 @@ function viewTurn(outcome: ViewOutcome): AssistantTurnAnswer {
     case 'answered':
       return outcome.answer;
     case 'unsupported':
+    case 'tool':
       return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
     case 'invalid-keys':
       throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'view-keys' });
@@ -149,10 +157,36 @@ function othersOfClarify(reply: Extract<AssistantRouterReply, { route: 'clarify'
   return resolved;
 }
 
-async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => readonly FollowUp[]): Promise<AssistantTurnAnswer> {
+/** What a loop that ran steps answers: the answer of its last read, Ask's heavy stop, the stop of a limit, or the fixed sentence of a request that did not fit. */
+function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view'): AssistantTurnAnswer | undefined {
+  switch (outcome.kind) {
+    case 'finished':
+      return outcome.steps > 1 ? answeredAsk({ answered: outcome.answer }) : undefined;
+    case 'heavy':
+      return answeredAsk({ answered: outcome.answer });
+    case 'limit':
+      return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit] };
+    case 'sentences':
+      return { status: 'answered', route, sentences: [...outcome.answer.sentences], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps };
+    case 'unsupported':
+      return { status: 'not-answered', route, sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
+    case 'failed':
+      return { status: 'unavailable', kind: outcome.why, readStarted: true };
+    case 'ended':
+      return { status: 'answered', route: 'refuse', cause: 'unplaced', sentence: ASSISTANT_REFUSAL_SENTENCES.unplaced };
+    default: {
+      const unreachable: never = outcome;
+      return unreachable;
+    }
+  }
+}
+
+async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => readonly FollowUp[], after?: (answer: AskAnswer) => Promise<AssistantTurnAnswer | undefined>): Promise<AssistantTurnAnswer> {
   if (run.request.signal.aborted) throw new Error('the request was cancelled');
   try {
     const answer = await execute(run);
+    const looped = after === undefined ? undefined : await after(answer);
+    if (looped !== undefined) return looped;
     const turn = answeredAsk(answer);
     const chips = followUps?.(answer) ?? [];
     return turn.status === 'answered' && turn.route === 'ask' && chips.length > 0 ? { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) } : turn;
@@ -235,6 +269,8 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     if (!wanted.every((ref) => reading.nodes.some((node) => node.ref.entityType === ref.entityType && node.ref.stableId === ref.stableId))) return invalid;
     return runAndAnswer({ request, capabilities: capabilitiesOf(request), options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: choice.intent, entities: choice.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId }, followUpsFor(request, body));
   }
+  /** The continue of a heavy stop finds a catalog template that a tool step of the loop ran, which the router's own `ask` reply never does. */
+  const continueOptions = { ...runOptions, folder: () => withTemplateTools(options.folder()) };
 
   async function continueTurn(request: ExtensionRequest, body: AssistantTurnRequest, asked: Extract<AssistantTurnRequest, { continue: unknown }>['continue']): Promise<AssistantTurnAnswer> {
     const capabilities = capabilitiesOf(request);
@@ -247,7 +283,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       offer = await patternOf(findPattern, body.sourceId, asked.entities);
       definition = offer === undefined ? undefined : patternDefinitionOf(offer);
     } else {
-      const found = options.folder()?.intent(body.sourceId, asked.intent);
+      const found = continueOptions.folder()?.intent(body.sourceId, asked.intent);
       definition = found === undefined ? undefined : definitionOf(found);
     }
     const binding = { principalId: request.principalId, sourceId: body.sourceId, intent: asked.intent, definition: definition ?? '', entities: asked.entities, mask, investigationId: body.investigationId };
@@ -255,7 +291,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       await writeEvent(request, CONTINUE_ACTION, 'refused', body.sourceId, { kind: 'template', outcome: 'refused', cause: 'continue-invalid' });
       return { status: 'continue-invalid', sentence: ASSISTANT_CONTINUE_INVALID_SENTENCE };
     }
-    return runAndAnswer({ request, capabilities, options: runOptions, sourceId: body.sourceId, mask, intent: asked.intent, entities: asked.entities, continuing: true, action: CONTINUE_ACTION, investigationId: body.investigationId, ...(offer === undefined ? {} : { offer }) }, followUpsFor(request, body));
+    return runAndAnswer({ request, capabilities, options: continueOptions, sourceId: body.sourceId, mask, intent: asked.intent, entities: asked.entities, continuing: true, action: CONTINUE_ACTION, investigationId: body.investigationId, ...(offer === undefined ? {} : { offer }) }, followUpsFor(request, body));
   }
 
   return {
@@ -331,7 +367,18 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             if (request.principalRole !== 'administrator' && request.principalRole !== 'investigator') throw new ExtensionRefusal({ code: 'ACCESS_DENIED' });
             const progress: ViewProgress = { calls: 0, read: 0, readStarted: false };
             try {
-              return viewTurn(await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress }));
+              const capabilities = capabilitiesOf(request);
+              const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
+              const loop = options.toolLoop?.();
+              const tools = loop !== undefined && options.viewTools?.() === true && options.folder()?.source(body.sourceId) !== undefined ? toolRegistryOf(scope, false) : undefined;
+              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(tools === undefined ? {} : { tools }) });
+              if (viewed.status === 'tool' && loop !== undefined) {
+                // the view's reading is the first step of the loop; the model's request is the second
+                noteStep();
+                const looped = await loop({ scope, message, deadline, startedAt, callsUsed: outcome.calls + viewed.calls, view: { reading: viewed.reading, assembled: viewed.assembled, request: viewed.request } });
+                return looped === undefined ? viewTurn(viewed) : (loopAnswer(looped, 'view') ?? viewTurn(viewed));
+              }
+              return viewTurn(viewed);
             } catch (error) {
               if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
               // the gate's own refusal of the read, with no partial answer; every other refusal goes on as the gate gave it
@@ -356,7 +403,18 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               return unavailable;
             }
           }
-          return runAndAnswer({ request, capabilities, options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: reply.intent, entities: resolved.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) }, followUpsFor(request, body));
+          const execution: Execution = { request, capabilities, options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: reply.intent, entities: resolved.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
+          const loop = options.toolLoop?.();
+          const after =
+            loop === undefined
+              ? undefined
+              : async (answer: AskAnswer): Promise<AssistantTurnAnswer | undefined> => {
+                  if ('refused' in answer || answer.answered.continueToken !== undefined) return undefined;
+                  const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(execution.patterns === undefined ? {} : { patterns: execution.patterns }) };
+                  const looped = await loop({ scope, message, deadline, startedAt, callsUsed: outcome.calls, first: { tool: reply.intent, answer: answer.answered } });
+                  return looped === undefined ? undefined : loopAnswer(looped, 'ask');
+                };
+          return runAndAnswer(execution, followUpsFor(request, body), after);
         }
         default: {
           const unreachable: never = outcome;

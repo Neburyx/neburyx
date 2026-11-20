@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { SUMMARY_DEFAULTS, THREAD_READ_TURNS_DEFAULT, type AskClassifier, type ConfigureOutcome, type ConfigureWarning, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
+import { SUMMARY_DEFAULTS, THREAD_READ_TURNS_DEFAULT, type AskClassifier, type ConfigureContext, type ConfigureOutcome, type ConfigureWarning, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
 import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, optionalFolderChoice, type AskConfiguration } from './configure.js';
@@ -27,11 +27,13 @@ import { readSummarySettings, summaryAvailability, type SummaryAvailability, typ
 import { loadAskFolder } from './folder/load.js';
 import type { AssistantInstructions } from './assistant/instructions.js';
 import { loadAssistantInstructions } from './assistant/load-instructions.js';
-import { readAssistantSettings, type AssistantSettings } from './assistant/settings.js';
+import { readAssistantSettings, rowsAllowed, type AssistantSettings } from './assistant/settings.js';
 import { guardAiRouteGroup } from './route-guard.js';
 import { assistantProviderConfiguration } from './assistant/provider-configuration.js';
 import { createAssistantRouter } from './assistant/router.js';
 import { createViewAnswer } from './assistant/view-answer.js';
+import { createToolLoop } from './assistant/tool-loop.js';
+import { createToolAnswer } from './assistant/tool-answer.js';
 import { loadViewInstructions, type ViewInstructions } from './assistant/view-instructions.js';
 import { createAssistantTurnRoute } from './assistant/turn-route.js';
 
@@ -137,6 +139,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let instructions: SummaryInstructions | undefined;
   let summarySettings: SummarySettings | undefined;
   let assistantSettings: AssistantSettings | undefined;
+  let sourceBudgets: ConfigureContext['budgets'];
   let assistantInstructions: AssistantInstructions | undefined;
   let viewInstructions: ViewInstructions | undefined;
   let tokenKeys: TokenKeys | undefined;
@@ -172,10 +175,19 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   const assistantRouter = (): ReturnType<typeof createAssistantRouter> | undefined => {
     const model = assistantModelOf();
     const settings = assistantSettings;
-    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, maxInputTokens: () => settings.maxInputTokens, maxCalls: () => settings.maxCalls });
+    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, multiRead: () => settings.maxSteps >= 2, maxInputTokens: () => settings.maxInputTokens, maxCalls: () => settings.maxCalls });
+  };
+  const assistantToolLoop = (): ReturnType<typeof createToolLoop> | undefined => {
+    const model = assistantModelOf();
+    const settings = assistantSettings;
+    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createToolLoop({ model, prompt: () => assistantInstructions?.prompt, settings: (sourceId) => {
+        const maxPage = sourceBudgets?.[sourceId]?.maxPage;
+        const rows = maxPage === undefined ? settings.maxRows : rowsAllowed(settings, maxPage);
+        return { maxCalls: settings.maxCalls, maxSteps: settings.maxSteps, maxInputTokens: settings.maxInputTokens, ...(rows === undefined ? {} : { rowsAllowed: rows }) };
+      }, answer: createToolAnswer({ model, instructions: () => viewInstructions, checks, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, ...(options.now === undefined ? {} : { now: options.now }) }) });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, toolLoop: assistantToolLoop, viewTools: () => (assistantSettings?.maxSteps ?? 1) >= 2, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -225,6 +237,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       const folderChoice = askConfigured?.configuration === undefined ? (features.assistant ? optionalFolderChoice(env) : undefined) : { folder: askConfigured.configuration.mappingFolder, problems: [] };
       if (folderChoice !== undefined && folderChoice.problems.length > 0) return refuse(folderChoice.problems);
       if (folderChoice?.folder !== undefined) {
+        sourceBudgets = context.budgets;
         const loaded = await loadAskFolder({ folder: folderChoice.folder, sourceIds: context.sourceIds, ...(context.budgets === undefined ? {} : { budgets: context.budgets }) });
         if (loaded.ok) loadedFolder = loaded.folder;
         else if (features.ask) return refuse(loaded.problems);

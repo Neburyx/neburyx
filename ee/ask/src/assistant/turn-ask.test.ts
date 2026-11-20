@@ -10,10 +10,20 @@ afterAll(removeAskFolders);
 const PATTERN = offerOf('22222222-2222-4222-8222-222222222222', 'SECRET-PATTERN-NAME');
 const SHARED = routeAsk('shared', { id: 'A-1' });
 const askOf = (answer: Awaited<ReturnType<typeof answerOf>>): AskAnswer => {
-  if (answer.status !== 'answered' || answer.route !== 'ask') throw new Error(`not an ask answer: ${answer.status}`);
+  if (answer.status !== 'answered' || answer.route !== 'ask' || !('answer' in answer)) throw new Error(`not an ask answer: ${answer.status}`);
   return answer.answer;
 };
 const eventOfAction = (events: Rig['events'], action: string) => events.find((event) => event.action === action);
+
+describe('the ask route: a name that is no intent of the source’s folder', () => {
+  it.each(['entity', 'shortest-paths', 'saved-pattern'])('refuses the router’s reply that names the catalog template or the reserved intent %s, as an intent that is not known, and reads nothing', async (name) => {
+    const { route, request, runs, events } = await rig({ reply: routeAsk(name, { entityType: 'widget', stableId: 'A-1' }), step: undefined });
+    const answer = askOf(await answerOf(route.handler(request())));
+    expect(answer).toMatchObject({ refused: { cause: 'unknown-intent' } });
+    expect(runs).toHaveLength(0);
+    expect(events.some((event) => event.action === 'assistant.ask' && event.result === 'success')).toBe(false);
+  });
+});
 
 describe('the ask route: a template intent', () => {
   it('binds and runs the intent through the gate once, and answers Ask’s result with its cited summary', async () => {

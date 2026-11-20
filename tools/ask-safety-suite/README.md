@@ -11,6 +11,7 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 
 - `src/rig.ts` starts the application with the extension a test file gives it, and keeps what happened: the reads at the source, the events of the application's audit seam (the route's and the gate's), the events of the extension's own sink (the classification's model calls), the rows of `ask_runs` and the log lines. It imports no enterprise package, because the open-core check lets only test files import them: each test file builds the extension, the model stand-in and the run store itself, and carries its own `vi.mock` of `@neburyx/ee-audit` (that mocked module is in `src/mock-audit.ts`).
 - `src/checks.ts` holds the three checks: `expectOnlyParameters` (the statement is exactly the expected text and each value reached the source as a parameter equal to what was typed; a value that is inside the folder's own text is not a failure by itself), `expectProviderInput` (the request body is exactly the expected body, key for key) and `expectNoValue` (no record holds a sentinel). Each has a canary: a test that gives it a deliberately leaky input and proves that it throws, so a check that cannot fail is found.
+- `src/assistant-rig.ts` starts the application with the assistant on and its tool loop (`NEBURYX_ASSISTANT_MAX_STEPS` 4), the real extension over the same stand-in, and the real gate over a scripted source; a turn gives the replies of the model in order (the router's, each step's, the answer's). `src/checks.ts` also holds `expectOnlyRegisteredReads` (every read that reached the source ran a template a registered tool names, and at least one read happened).
 - `src/hostile.ts` is the table of hostile values, each with a sentinel inside it: the checks search for the sentinel, never for the value's punctuation.
 
 ## Named tests
@@ -46,6 +47,12 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 | Nothing is redacted or withheld in the request path | `src/records.test.ts` | sends the model the question exactly as typed |
 | Masking applies to the result nodes only: the model and the source receive the same | `src/records.test.ts` | masks the personal property of the result nodes |
 | The checks fail on a leaky input | `src/checks.test.ts` | canary: fails a statement with a value built into its text |
+| A request for a tool that is not offered, with query text, or that does not fit, ends the turn after one repeat and the source sees the first read only | `src/assistant-loop.test.ts` | ends the turn as the unplaced refusal after the one repeat for |
+| An instruction in a tool result runs no tool outside the registry | `src/assistant-loop.test.ts` | reaches the model only as a masked line of the results |
+| A value of a tool request reaches the source only as a parameter of the stored statement | `src/assistant-loop.test.ts` | runs the stored statement of a file query with |
+| A built-in template for an entity type the mapping does not know reads nothing | `src/assistant-loop.test.ts` | refuses a built-in template for an entity type that is |
+| The rig of the loop reads when a request is a good one | `src/assistant-loop.test.ts` | runs a built-in template with an anchor of the source |
+| A read that no tool names is caught | `src/checks.test.ts` | canary: fails a read no tool names |
 | A case that never ran cannot pass | `src/rig.test.ts` | counts what a case expects |
 | The settings that withheld a property from the model are refused as unknown keys of the mapping file | `../../services/api/src/mapping/ai.test.ts` | refuses %s as a key the section does not have |
 | The loader names the intent and never the text of a bad query | `../../ee/ask/src/folder/load.test.ts` | naming the intent and not the text |

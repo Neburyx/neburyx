@@ -1,15 +1,21 @@
 import { readViewKeys, type AssistantFailureKind, type AssistantTurnAnswer, type ExtensionRequest, type SummaryReading } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type CheckRunner, type FailureCode, type GateClient } from '@neburyx/ee-ai-runtime';
 import { prepareSummary } from '../case-summary/prepare.js';
+import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
-import { draftSummary, type Drafted } from '../case-summary/draft.js';
+import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
+import { buildViewToolInstructions } from './step-instructions.js';
+import type { ToolRegistry } from './tool-registry.js';
+import { readToolRequest, type ToolRequest } from './tool-request.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
 export const VIEW_PROMPT_VERSION = 1;
+/** The version of the view prompt that carries the tools and the tool request as a third reply form. */
+export const VIEW_TOOLS_PROMPT_VERSION = 2;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -52,6 +58,8 @@ export interface ViewInput {
   readonly callsUsed: number;
   readonly startedAt: number;
   readonly progress: ViewProgress;
+  /** The reads the model may ask for instead of answering; absent, the view call has the two reply forms it always had. */
+  readonly tools?: ToolRegistry;
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -60,6 +68,8 @@ type StoppedBecause = 'deadline' | 'input' | 'calls';
 type ViewResult =
   | { readonly status: 'answered'; readonly answer: Extract<AssistantTurnAnswer, { status: 'answered'; route: 'view' }>; readonly cited: number }
   | { readonly status: 'unsupported' }
+  /** The model asked for a read instead of answering: the loop goes on from this reading, with the request as its first step. */
+  | { readonly status: 'tool'; readonly request: ToolRequest; readonly reading: SummaryReading; readonly assembled: AssembledText }
   | { readonly status: 'invalid-keys' }
   | { readonly status: 'failed'; readonly kind: AssistantFailureKind }
   | { readonly status: 'stopped'; readonly because: StoppedBecause }
@@ -113,20 +123,24 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     }
     progress.read = reading.nodes.length + reading.edges.length;
     if (progress.read === 0) return outcome({ status: 'unsupported' });
-    const prepared = prepareSummary(reading, instructions.text, settings.maxInputTokens);
+    const { tools } = input;
+    const sent = tools === undefined ? instructions : buildViewToolInstructions(instructions, tools);
+    const promptVersion = tools === undefined ? VIEW_PROMPT_VERSION : VIEW_TOOLS_PROMPT_VERSION;
+    const prepared = prepareSummary(reading, sent.text, settings.maxInputTokens);
     if (!prepared.ready) return outcome({ status: 'stopped', because: 'input' });
     const { assembled } = prepared;
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
     const checkedText = checkedTextOf(assembled);
-    let drafted: Drafted;
+    let drafted: DraftedOrAlternative;
     try {
       drafted = await draftSummary({
         call: options.model,
         context: { action: VIEW_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
-        instructions: instructions.text,
+        instructions: sent.text,
         values: valuesOf(input.message, assembled.text),
-        prompt: { id: VIEW_PROMPT_ID, version: VIEW_PROMPT_VERSION },
+        prompt: { id: VIEW_PROMPT_ID, version: promptVersion },
+        alternative: (text: string) => tools !== undefined && readToolRequest(text, tools).ok,
         maxInputTokens: settings.maxInputTokens,
         judge: async (sentences, signal) => {
           const checked = await options.checks.run(judgeCheck, { sentences, text: checkedText }, { timeoutMs: settings.timeoutMs, signal });
@@ -139,7 +153,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         now,
         onCall: (calls) => void (progress.calls = calls),
         trace: (call) => {
-          const record = startModelCall({ modelRef: options.model.modelRef, promptId: VIEW_PROMPT_ID, promptVersion: VIEW_PROMPT_VERSION, instructionsSha256: instructions.sha256, instructions: call.instructions, values: call.values });
+          const record = startModelCall({ modelRef: options.model.modelRef, promptId: VIEW_PROMPT_ID, promptVersion, instructionsSha256: sent.sha256, instructions: call.instructions, values: call.values });
           return {
             ...(record.runId === undefined ? {} : { runId: record.runId }),
             received: (answer) => {
@@ -158,6 +172,10 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
       return stopped ?? outcome({ status: 'failed', kind: 'service' });
     }
     switch (drafted.status) {
+      case 'alternative': {
+        const read = tools === undefined ? undefined : readToolRequest(drafted.text, tools);
+        return read?.ok === true ? outcome({ status: 'tool', request: read.request, reading, assembled }) : outcome({ status: 'unsupported' });
+      }
       case 'tooLarge':
         return outcome({ status: 'stopped', because: 'input' });
       case 'timeLimit':

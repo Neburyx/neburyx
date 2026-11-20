@@ -499,7 +499,7 @@ describe('follow-up chips on an answer', () => {
   const answered = async (options: RigOptions = {}) => {
     const t = await follow((_values, call) => (call === 0 ? ASKED_A1 : quiet()), { intents: INTENTS, ...options });
     const first = await t.send(FIRST);
-    if (first.status !== 'answered' || first.route !== 'ask') throw new Error('not an ask answer');
+    if (first.status !== 'answered' || !('answer' in first)) throw new Error('not an ask answer');
     return { t, chips: first.followUps ?? [] };
   };
   const press = (t: Follow, choice: AssistantChoice, over: Record<string, unknown> = {}, principalId = PERSON) =>
@@ -517,10 +517,10 @@ describe('follow-up chips on an answer', () => {
     const plain = await follow((_values, call) => (call === 0 ? ASKED_A1 : quiet()));
     const answer = await plain.send(FIRST);
     expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
-    expect(answer.status === 'answered' && answer.route === 'ask' ? answer.followUps : 'x').toBeUndefined();
+    expect(answer.status === 'answered' && 'answer' in answer ? answer.followUps : 'x').toBeUndefined();
     const heavy = await follow(() => ASKED_A1, { run: () => ({ status: 'ok', result: heavyResult() }) });
     const stopped = await heavy.send(FIRST);
-    expect(stopped.status === 'answered' && stopped.route === 'ask' ? stopped.followUps : 'x').toBeUndefined();
+    expect(stopped.status === 'answered' && 'answer' in stopped ? stopped.followUps : 'x').toBeUndefined();
   });
 
   it('runs a pressed follow-up with those elements through the gate with no model call, and the answer has follow-ups of its own', async () => {
@@ -530,7 +530,7 @@ describe('follow-up chips on an answer', () => {
     expect(ranFor(t.rig)).toHaveLength(2);
     expect(ranFor(t.rig)[1]).toContain('A-2');
     expect(t.rig.fixture.calls).toHaveLength(1);
-    expect(answer.status === 'answered' && answer.route === 'ask' ? answer.followUps?.map((chip) => chip.choice.intent) : []).toEqual(['shared', 'widgetById']);
+    expect(answer.status === 'answered' && 'answer' in answer ? answer.followUps?.map((chip) => chip.choice.intent) : []).toEqual(['shared', 'widgetById']);
     await drain();
     expect(storedTurns(t.threads)[1]).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'between' });
     expect(closingOf(t.rig)).toMatchObject({ detail: { turn: { route: 'ask', outcome: 'answered', intent: 'between', modelCalls: 0 } } });

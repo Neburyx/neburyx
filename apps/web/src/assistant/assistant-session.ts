@@ -27,12 +27,14 @@ export type Retry =
 export type Failure =
   | { readonly kind: 'unavailable'; readonly why: AssistantFailureKind; readonly readStarted: boolean; readonly retryAfterSeconds: number | undefined; readonly until: number | undefined }
   | { readonly kind: 'too-large'; readonly sentence: string }
+  | { readonly kind: 'limit'; readonly sentence: string }
   | { readonly kind: 'request'; readonly failure: ApiFailure; readonly until: number | undefined }
   | { readonly kind: 'continue-invalid' }
   | { readonly kind: 'choice-invalid' }
   | { readonly kind: 'follow-up-invalid' };
 
-export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; route: 'view' }>;
+/** An answer of sentences that cite elements: from the view, or after tool steps (then it carries the number of steps). */
+export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>;
 
 export type Outcome =
   | { readonly kind: 'pending'; readonly call: 'message' }
