@@ -51,11 +51,19 @@ function valuesOf(entities: Readonly<Record<string, string | number | boolean>>,
 }
 
 /** Why a router's outcome misses what a unit expects, or undefined when it is right: the route, and for a plan its intent and every entity, for a clarification also its role and candidates, for a refusal its cause. */
+/** Whether two lists name the same types, whatever the order and the case. */
+const sameNames = (left: readonly string[], right: readonly string[]): boolean => {
+  const lower = (names: readonly string[]): string => JSON.stringify([...new Set(names.map((name) => name.trim().toLowerCase()))].sort());
+  return lower(left) === lower(right);
+};
+
 function missOf(expect: AssistantExpect, outcome: RouteOutcome): string | undefined {
   if (outcome.status === 'unplaced') return 'unplaced';
   if (outcome.status !== 'routed') return 'failed';
   const { reply } = outcome;
   if (reply.route !== expect.route) return 'wrong-route';
+  if (expect.route === 'meaning' && reply.route === 'meaning') return sameNames(reply.types, expect.types) ? undefined : 'wrong-types';
+  if (expect.route === 'view' && reply.route === 'view') return sameNames(reply.types ?? [], expect.types ?? []) ? undefined : 'wrong-types';
   if (expect.route === 'refuse' && reply.route === 'refuse') return reply.cause === expect.cause ? undefined : 'wrong-cause';
   if (expect.route === 'ask' && reply.route === 'ask') {
     if (reply.intent !== expect.intent) return 'wrong-intent';

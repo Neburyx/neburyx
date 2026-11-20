@@ -12,7 +12,8 @@ export const inputOf = (unit: Unit) => ({ message: unit.message, viewElementKeys
 /** The reply a router would give for what a unit expects: the scripted answer. A clarification names its candidates by the keys of the thread's context. */
 async function scriptedReply(unit: Unit, hooks: AssistantHooks): Promise<string> {
   const { expect } = unit;
-  if (expect.route === 'view') return JSON.stringify({ route: 'view' });
+  if (expect.route === 'view') return JSON.stringify(expect.types === undefined ? { route: 'view' } : { route: 'view', types: expect.types });
+  if (expect.route === 'meaning') return JSON.stringify({ route: 'meaning', types: expect.types });
   if (expect.route === 'refuse') return JSON.stringify({ route: 'refuse', cause: expect.cause });
   if (expect.route === 'ask') return JSON.stringify({ route: 'ask', intent: expect.intent, entities: expect.entities });
   const keys = await hooks.contextKeys(unit.set.source, unit.earlier);

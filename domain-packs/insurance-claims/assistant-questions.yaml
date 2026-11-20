@@ -1,5 +1,5 @@
 # When "it" could mean elements of more than one earlier turn and nothing says which, the router asks for a clarification and never picks one; a message that names which element it means expects an answer.
-# The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
+# The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view, with the names of types when it also asks what they mean; meaning, with the names of the types it asks about; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
 messages:
   - id: describe-the-view
     wording: "What is shown here, claimants and claims?"
@@ -54,6 +54,19 @@ messages:
     expect: { route: refuse, cause: unplaced }
 
 # Short threads: each turn is labelled with its route and, for a plan, its intent and inputs; a follow-up names no entity and is resolved from the turns before it.
+  - id: what-is-a-claim
+    wording: "What is a claim?"
+    expect: { route: meaning, types: [claim] }
+  - id: what-does-a-policy-mean
+    wording: "What does a policy mean in this data?"
+    expect: { route: meaning, types: [policy] }
+  - id: what-do-the-links-mean
+    wording: "What do FILED_BY and UNDER_POLICY stand for?"
+    expect: { route: meaning, types: [FILED_BY, UNDER_POLICY] }
+  - id: what-is-shown-and-what-is-a-claimant
+    wording: "What is shown here, and what is a claimant?"
+    expect: { route: view, view: [{ entityType: claimant, stableId: CT-00100 }, { entityType: claim, stableId: CL-001007 }], types: [claimant] }
+
 threads:
   - id: address-then-phone
     turns:

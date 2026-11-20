@@ -10,13 +10,17 @@ const MIN_TURNS = 2;
 const MAX_TURNS = 5;
 
 const elementSchema = z.strictObject({ entityType: z.string().min(1), stableId: z.string().min(1) });
-const viewSchema = z.strictObject({ route: z.literal('view'), view: z.array(elementSchema).min(1) });
+const typeNames = z.array(z.string().min(1)).min(1).max(8);
+/** A view question; `types` when the message also asks what types mean (the router adds their names to its view reply). */
+const viewSchema = z.strictObject({ route: z.literal('view'), view: z.array(elementSchema).min(1), types: typeNames.optional() });
+/** A question that asks only what types mean: the router copies their names; no view is needed. */
+const meaningSchema = z.strictObject({ route: z.literal('meaning'), types: typeNames });
 const refuseSchema = z.strictObject({ route: z.literal('refuse'), cause: z.enum(ASSISTANT_REFUSAL_CAUSES) });
 const askSchema = z.strictObject({ route: z.literal('ask'), intent: z.string().min(1), entities: z.record(z.string(), z.string()) });
 const clarifySchema = z.strictObject({ route: z.literal('clarify'), intent: z.string().min(1), role: z.string().min(1), entities: z.record(z.string(), z.string()), candidates: z.array(elementSchema).min(2) });
 
-const messageSchema = z.strictObject({ id: z.string().min(1), wording: z.string(), expect: z.union([viewSchema, refuseSchema, askSchema]) });
-const turnSchema = z.strictObject({ message: z.string(), expect: z.union([viewSchema, refuseSchema, askSchema, clarifySchema]) });
+const messageSchema = z.strictObject({ id: z.string().min(1), wording: z.string(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema]) });
+const turnSchema = z.strictObject({ message: z.string(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema, clarifySchema]) });
 const threadSchema = z.strictObject({ id: z.string().min(1), turns: z.array(turnSchema) });
 const fileSchema = z.strictObject({ messages: z.array(messageSchema), threads: z.array(threadSchema).optional() });
 

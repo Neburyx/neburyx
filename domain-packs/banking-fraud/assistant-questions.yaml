@@ -1,5 +1,5 @@
 # When "it" could mean elements of more than one earlier turn and nothing says which, the router asks for a clarification and never picks one; a message that names which element it means expects an answer.
-# The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
+# The labelled messages of the assistant for this pack: what a person types, with the route the router should choose (view, with the names of types when it also asks what they mean; meaning, with the names of the types it asks about; ask with its intent and inputs; or refuse with its cause). One message for every intent of the pack's Ask folder.
 messages:
   - id: describe-the-view
     wording: "What am I looking at?"
@@ -96,6 +96,19 @@ messages:
     expect: { route: refuse, cause: unplaced }
 
 # Short threads: each turn is labelled with its route and, for a plan, its intent and inputs; a follow-up names no entity and is resolved from the turns before it.
+  - id: what-is-an-account
+    wording: "What is an account?"
+    expect: { route: meaning, types: [account] }
+  - id: what-does-a-device-mean
+    wording: "What does a device mean in this data?"
+    expect: { route: meaning, types: [device] }
+  - id: what-do-the-links-mean
+    wording: "What do TRANSFERRED_TO and INITIATED stand for?"
+    expect: { route: meaning, types: [TRANSFERRED_TO, INITIATED] }
+  - id: what-is-shown-and-what-is-a-merchant
+    wording: "What is on screen, and what is a merchant?"
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }], types: [merchant] }
+
 threads:
   - id: device-then-merchants
     turns:

@@ -1,8 +1,8 @@
 {
   "note": "scripted",
   "folders": {
-    "banking-demo": "08dc4d0ef223bdef4152fbd2ae6fbd10c944b9c298c7d3e13565743d2f198e1f",
-    "insurance-demo": "1d8b8860da13c82a66807ef5adad0d6cc60efe6053bc959ed99283d1ab4dd177"
+    "banking-demo": "6bb8ef28d53e6dfc0e66481b9931b0f7b434949294948f26d8bb26eeef452540",
+    "insurance-demo": "f0f66d69b25380cc9a2d9750376659bf3edbca6d5e879ef9d700deb159d87c67"
   },
   "answers": {
     "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
@@ -97,6 +97,18 @@
     },
     "Message:\nMake it all a bit nicer.\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nWhat is an account?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"meaning\",\"types\":[\"account\"]}"
+    },
+    "Message:\nWhat does a device mean in this data?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"meaning\",\"types\":[\"device\"]}"
+    },
+    "Message:\nWhat do TRANSFERRED_TO and INITIATED stand for?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"meaning\",\"types\":[\"TRANSFERRED_TO\",\"INITIATED\"]}"
+    },
+    "Message:\nWhat is on screen, and what is a merchant?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
+      "reply": "{\"route\":\"view\",\"types\":[\"merchant\"]}"
     },
     "Message:\nAnd which merchants has it paid?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-on-the-same-device\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
@@ -253,6 +265,18 @@
     },
     "Message:\nTidy it up a little.\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nWhat is a claim?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"meaning\",\"types\":[\"claim\"]}"
+    },
+    "Message:\nWhat does a policy mean in this data?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"meaning\",\"types\":[\"policy\"]}"
+    },
+    "Message:\nWhat do FILED_BY and UNDER_POLICY stand for?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"meaning\",\"types\":[\"FILED_BY\",\"UNDER_POLICY\"]}"
+    },
+    "Message:\nWhat is shown here, and what is a claimant?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"\nc2 | \"claim\" | \"CL-001007\"": {
+      "reply": "{\"route\":\"view\",\"types\":[\"claimant\"]}"
     },
     "Message:\nWhich claimants live at the same address as CT-00200?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"entities\":{\"claimant\":\"CT-00200\"}}"
