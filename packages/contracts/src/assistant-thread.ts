@@ -10,7 +10,7 @@ const sha256Hex = z.string().regex(/^[0-9a-f]{64}$/);
 
 /** The routes and ends of a turn that a thread keeps: a turn that failed, was cancelled or was not let through leaves nothing. */
 export const THREAD_TURN_ROUTES = ['ask', 'view', 'refuse'] as const;
-export const THREAD_TURN_OUTCOMES = ['answered', 'refused'] as const;
+export const THREAD_TURN_OUTCOMES = ['answered', 'refused', 'waiting'] as const;
 
 /** The element a parameter of an intent resolved to, with the role (the parameter's name) it had; never the text the person typed. */
 export const threadEntitySchema = z.strictObject({ role: z.string().refine(isParameterName, { message: 'a parameter name' }), ref: elementRefSchema });

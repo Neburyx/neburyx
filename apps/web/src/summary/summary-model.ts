@@ -32,7 +32,7 @@ function relationshipLabel(edge: GraphEdge, nodes: ReadonlyMap<string, GraphNode
 }
 
 /** The numbers 1, 2, 3 of the cited elements in the order of their first citation, then those of the response that no sentence cites; one number for one key. The labels are fixed here, from the graph the person holds, so a later change of the graph never rewrites a draft. */
-export function citationEntries(response: { readonly sentences: readonly { readonly cites: readonly string[] }[]; readonly citations: DraftResponse['citations'] }, graph: LoadedGraph): readonly CitationEntry[] {
+export function citationEntries(response: { readonly sentences: readonly { readonly cites: readonly string[] }[]; readonly citations: readonly (DraftResponse['citations'][number] & { readonly title?: string })[] }, graph: LoadedGraph): readonly CitationEntry[] {
   const nodes = new Map(graph.nodes.map((node) => [elementKey(node.ref), node]));
   const edges = new Map(graph.edges.map((edge) => [edgeKey(edge.ref), edge]));
   const known = new Map(response.citations.map((citation) => [citation.key, citation]));
@@ -45,10 +45,10 @@ export function citationEntries(response: { readonly sentences: readonly { reado
     const { ref } = citation;
     if ('entityType' in ref) {
       const node = nodes.get(elementKey(ref));
-      return [{ key, number: index + 1, kind: citation.kind, graphKey: elementKey(ref), label: node === undefined ? undefined : titleOf(node) }];
+      return [{ key, number: index + 1, kind: citation.kind, graphKey: elementKey(ref), label: node === undefined ? citation.title : titleOf(node) }];
     }
     const edge = edges.get(edgeKey(ref));
-    return [{ key, number: index + 1, kind: citation.kind, graphKey: edgeKey(ref), label: edge === undefined ? undefined : relationshipLabel(edge, nodes) }];
+    return [{ key, number: index + 1, kind: citation.kind, graphKey: edgeKey(ref), label: edge === undefined ? citation.title : relationshipLabel(edge, nodes) }];
   });
 }
 

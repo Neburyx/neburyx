@@ -13,7 +13,7 @@ import { useStoreSelector } from '../state/store.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import type { Answered } from '../ask/ask-session.js';
 import { citationEntries, type CitationEntry } from '../summary/summary-model.js';
-import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type FollowUp, type Outcome, type Retry, type ViewAnswer } from './assistant-session.js';
+import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type FollowUp, type Outcome, type Retry, type ViewAnswer, type Waiting } from './assistant-session.js';
 import { followUpLabel } from './follow-up-label.js';
 import { countWords } from './words.js';
 import { isAssistantOff } from './failure-kinds.js';
@@ -46,6 +46,10 @@ export interface AssistantModel {
   addToGraph(turnId: number): void;
   cancelClarification(turnId: number): void;
   pickCandidate(turnId: number, index: number): void;
+  /** Confirm or skip the heavy step a turn waits on. */
+  decide(turnId: number, decision: 'confirm' | 'skip'): void;
+  /** Cancel the turn that waits: the confirmation is dropped and nothing is read. */
+  cancelWaiting(turnId: number): void;
   pressFollowUp(turnId: number, index: number): void;
   /** The turn whose follow-ups are shown: the last one that was answered. */
   readonly followUpsTurn: number | undefined;
@@ -61,13 +65,16 @@ function afterFailure(outcome: Outcome, retry: Retry): Outcome {
   return { kind: 'clarification', question: retry.question, candidates: retry.candidates, failed: { failure: outcome.failure, index: retry.index } };
 }
 
-function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entriesOf: (answer: ViewAnswer) => readonly CitationEntry[]): Outcome | { readonly tooLong: { readonly words: number; readonly limit: number } } {
+/** What a request that waits for a decision sent: its message and the keys of its view, which the decision sends again as they were. */
+const sentOf = (request: AssistantTurnRequest): { readonly message: string; readonly viewElementKeys: readonly string[] } => ({ message: 'message' in request ? request.message : '', viewElementKeys: request.viewElementKeys });
+
+function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: AssistantTurnRequest, now: number, entriesOf: (answer: ViewAnswer) => readonly CitationEntry[]): Outcome | { readonly tooLong: { readonly words: number; readonly limit: number } } {
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence };
       if (answer.route === 'view' || 'sentences' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
-      return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, step: answer.step, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
+      return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, reads: answer.reads, stoppedAt: answer.stoppedAt, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
       return { kind: 'not-answered', sentence: answer.sentence };
     case 'unavailable':
@@ -75,7 +82,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
     case 'too-large':
       return { kind: 'failed', failure: { kind: 'too-large', sentence: answer.sentence }, retry };
     case 'limit':
-      return { kind: 'failed', failure: { kind: 'limit', sentence: answer.sentence }, retry };
+      return { kind: 'limit', limit: answer.limit, sentence: answer.sentence, reads: answer.reads };
     case 'too-long':
       return { tooLong: { words: answer.words, limit: answer.limit } };
     case 'continue-invalid':
@@ -86,6 +93,12 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
       return { kind: 'failed', failure: { kind: retry.kind === 'chip' ? 'follow-up-invalid' : 'choice-invalid' }, retry };
     case 'summary-invalid':
       return { kind: 'failed', failure: { kind: 'summary-invalid', sentence: answer.sentence }, retry };
+    case 'confirmation-invalid':
+      return { kind: 'failed', failure: { kind: 'confirmation-invalid', sentence: answer.sentence }, retry };
+    case 'cancelled':
+      return { kind: 'cancelled' };
+    case 'confirmation':
+      return { kind: 'waiting', waiting: { pendingId: answer.pendingId, plan: answer.plan, step: answer.step, reads: answer.reads, ...sentOf(request) } };
     default: {
       const unreachable: never = answer;
       return unreachable;
@@ -163,7 +176,7 @@ export function useAssistant(): AssistantModel {
           setFocus(turnId);
           return;
         }
-        const outcome = outcomeOf(result.value, retry, Date.now(), (answer) => citationEntries(answer, state.visibleGraph()));
+        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries(answer, state.visibleGraph()));
         if ('tooLong' in outcome) {
           store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId), notice: { kind: 'too-long', ...outcome.tooLong } });
           if (retry.kind === 'message') restoreInput(retry.text);
@@ -186,6 +199,16 @@ export function useAssistant(): AssistantModel {
     return { sourceId, investigationId, viewElementKeys: keysRef.current, ...(mask ? { mask: true as const } : {}) };
   }, [investigationId, mask, sourceId]);
 
+  /** A message sent while a confirmation waits drops it on the server: the card of any turn but the one that is being sent loses its buttons. */
+  const closeWaiting = useCallback(
+    (except: number): void => {
+      const held = store.getState();
+      if (!held.turns.some((turn) => turn.id !== except && turn.outcome.kind === 'waiting')) return;
+      store.setState({ ...held, turns: held.turns.map((turn) => (turn.id !== except && turn.outcome.kind === 'waiting' ? { ...turn, outcome: { kind: 'waiting-closed' as const, reads: turn.outcome.waiting.reads } } : turn)) });
+    },
+    [store],
+  );
+
   const submit = useCallback(
     (text: string, reuse: number | undefined): void => {
       const common = base();
@@ -207,10 +230,11 @@ export function useAssistant(): AssistantModel {
         id = held.nextId;
         store.setState({ ...held, nextId: held.nextId + 1, input: '', notice: undefined, turns: [...held.turns, { id, message: text, outcome: { kind: 'pending', call: 'message' } }] });
       } else setOutcome(id, { kind: 'pending', call: 'message' });
+      closeWaiting(id);
       const attached = held.summary?.status === 'attached' ? held.summary.token : undefined;
       settle(id, { ...common, message: text, ...(attached === undefined ? {} : { summaryToken: attached }) }, retry);
     },
-    [base, limit, patch, setOutcome, settle, sourceChanged, store],
+    [base, closeWaiting, limit, patch, setOutcome, settle, sourceChanged, store],
   );
 
   const turnOf = (turnId: number) => store.getState().turns.find((turn) => turn.id === turnId);
@@ -250,7 +274,19 @@ export function useAssistant(): AssistantModel {
         id = held.nextId;
         store.setState({ ...held, nextId: held.nextId + 1, notice: undefined, turns: [...held.turns, { id, message: followUpLabel(followUp), chip: true, outcome: { kind: 'pending', call: 'message' } }] });
       } else setOutcome(id, { kind: 'pending', call: 'message' });
+      closeWaiting(id);
       settle(id, { ...common, choice: followUp.choice }, { kind: 'chip', followUp });
+    },
+    [base, closeWaiting, setOutcome, settle, sourceChanged, store],
+  );
+
+  /** The decision of the analyst on the card that waits: the plan, the message and the view of that turn, sent as they were, never the view of now. */
+  const decideFrom = useCallback(
+    (turnId: number, waiting: Waiting, decision: 'confirm' | 'skip'): void => {
+      const common = base();
+      if (common === undefined || sourceChanged || store.getState().turns.some((turn) => turn.outcome.kind === 'pending')) return;
+      setOutcome(turnId, { kind: 'pending', call: 'decide', waiting, decision });
+      settle(turnId, { sourceId: common.sourceId, investigationId: common.investigationId, ...(common.mask === undefined ? {} : { mask: common.mask }), viewElementKeys: [...waiting.viewElementKeys], message: waiting.message, confirmation: { pendingId: waiting.pendingId, plan: waiting.plan, decision } }, { kind: 'decision', waiting, decision });
     },
     [base, setOutcome, settle, sourceChanged, store],
   );
@@ -286,6 +322,12 @@ export function useAssistant(): AssistantModel {
         setFocus(turn.id);
         return;
       }
+      if (turn.outcome.kind === 'pending' && turn.outcome.call === 'decide') {
+        // the request was given up: the confirmation was claimed, so nothing more runs, and the turn is cancelled
+        setOutcome(turn.id, { kind: 'cancelled' });
+        setFocus('input');
+        return;
+      }
       if (turn.outcome.kind === 'pending' && turn.outcome.call === 'choice') {
         setOutcome(turn.id, { kind: 'clarification', question: turn.outcome.question, candidates: turn.outcome.candidates });
         setFocus(turn.id);
@@ -306,6 +348,7 @@ export function useAssistant(): AssistantModel {
       if (retry.kind === 'continue') continueFrom(turnId, retry.heavy, retry.token);
       else if (retry.kind === 'message') submit(retry.text, turnId);
       else if (retry.kind === 'chip') pressFrom(turnId, retry.followUp);
+      else if (retry.kind === 'decision') decideFrom(turnId, retry.waiting, retry.decision);
     },
     continueRun: (turnId) => {
       const turn = turnOf(turnId);
@@ -316,6 +359,21 @@ export function useAssistant(): AssistantModel {
       if (turn !== undefined) submit(turn.message, turnId);
     },
     pickCandidate: pickFrom,
+    decide: (turnId, decision) => {
+      const turn = turnOf(turnId);
+      if (turn?.outcome.kind === 'waiting') decideFrom(turnId, turn.outcome.waiting, decision);
+    },
+    cancelWaiting: (turnId) => {
+      const turn = turnOf(turnId);
+      const common = base();
+      if (turn?.outcome.kind !== 'waiting' || common === undefined) return;
+      const { waiting } = turn.outcome;
+      // a cancel that does not arrive leaves the turn cancelled here; the confirmation expires, and nothing is read without a decision
+      void client.assistantTurn({ sourceId: common.sourceId, investigationId: common.investigationId, ...(common.mask === undefined ? {} : { mask: common.mask }), viewElementKeys: [...waiting.viewElementKeys], message: waiting.message, confirmation: { pendingId: waiting.pendingId, plan: waiting.plan, decision: 'cancel' } }, new AbortController().signal).then(() => undefined);
+      setOutcome(turnId, { kind: 'cancelled' });
+      restoreInput(turn.message);
+      setFocus('input');
+    },
     pressFollowUp: (turnId, index) => {
       const turn = turnOf(turnId);
       const followUp = turn?.outcome.kind === 'answered' ? turn.outcome.followUps[index] : undefined;

@@ -22,9 +22,48 @@ export const assistantChoiceSchema = z.strictObject({
 
 export type AssistantChoice = z.infer<typeof assistantChoiceSchema>;
 
-/** A turn is a message, the continue of a heavy stop (the intent, the entities and the token of the answer that stopped) or the choice of an element a clarification offered, never two of them: three forms, so the published schema says so. */
+/** The decisions of a waiting confirmation of a heavy step. */
+export const ASSISTANT_CONFIRMATION_DECISIONS = ['confirm', 'skip', 'cancel'] as const;
+export type AssistantConfirmationDecision = (typeof ASSISTANT_CONFIRMATION_DECISIONS)[number];
+
+/** The most characters of the plan a confirmation carries: a fixed ceiling, so the plan stays inside the size of a request. */
+export const ASSISTANT_PLAN_MAX_CHARACTERS = 24_000;
+/** A plan: when it expires, what it holds, and the signature of both with what they are bound to; each part is plain text of its own alphabet. */
+export const ASSISTANT_PLAN_PATTERN = /^[0-9]{1,16}\.[A-Za-z0-9_-]{1,23000}\.[0-9a-f]{64}$/;
+
+const planValues = z.record(z.string().min(1).max(64), z.string().min(1).max(400));
+
+/** A step of the turn the plan names: the tool and the values the gate accepted for it, and whether it is a heavy step the analyst confirmed (which a replay reads as its one bounded page without asking again). */
+const planStepSchema = z.strictObject({ tool: z.string().min(1).max(200), values: planValues, confirmed: z.literal(true).optional() });
+
+/**
+ * What a decision needs to carry the turn on: the hash of the message and of the view's keys it was made for, the earlier steps (read again on a decision, never stored), the step it waits on and the counters of the
+ * turn. Tools and values the gate accepted, and counters: no result, no element, no text of the model. The plan is signed by the server and sent back unchanged.
+ */
+export const assistantPlanSchema = z.strictObject({
+  messageHash: z.string().regex(/^[0-9a-f]{64}$/),
+  viewHash: z.string().regex(/^[0-9a-f]{64}$/),
+  fromView: z.boolean(),
+  steps: z.array(planStepSchema).max(40),
+  wait: planStepSchema,
+  counters: z.strictObject({ steps: z.number().int().min(1), rows: z.number().int().nonnegative(), calls: z.number().int().nonnegative(), elapsedMs: z.number().int().nonnegative() }),
+  /** The record of the waiting turn, which the turn that goes on from it names. */
+  runId: z.uuid().optional(),
+});
+export type AssistantPlan = z.infer<typeof assistantPlanSchema>;
+export type AssistantPlanStep = z.infer<typeof planStepSchema>;
+
+/** What the panel sends to decide a waiting confirmation: its id, the signed plan it was given and the decision, with the message as typed and the keys of the view of the waiting turn (the server compares both with the hashes the plan holds). */
+export const assistantConfirmationSchema = z.strictObject({
+  pendingId: z.string().uuid(),
+  plan: z.string().max(ASSISTANT_PLAN_MAX_CHARACTERS).regex(ASSISTANT_PLAN_PATTERN),
+  decision: z.enum(ASSISTANT_CONFIRMATION_DECISIONS),
+});
+
+/** A turn is a message, the continue of a heavy stop (the intent, the entities and the token of the answer that stopped), the choice of an element a clarification offered or the decision of a waiting confirmation (with the message and the view of the waiting turn), never two of them: four forms, so the published schema says so. */
 export const assistantTurnRequestSchema = z.union([
   z.strictObject({ ...turnBase, message: text, /** The token of an AI case summary the person keeps attached to the thread; the server opens it for every turn. */ summaryToken: text.optional() }),
+  z.strictObject({ ...turnBase, message: text, confirmation: assistantConfirmationSchema }),
   z.strictObject({ ...turnBase, continue: askContinueRequestSchema.pick({ intent: true, entities: true, continueToken: true }) }),
   z.strictObject({ ...turnBase, choice: assistantChoiceSchema }),
 ]);
@@ -61,11 +100,11 @@ export const ASSISTANT_LIMITS = ['calls', 'steps', 'rows', 'time', 'input'] as c
 export type AssistantLimit = (typeof ASSISTANT_LIMITS)[number];
 
 export const ASSISTANT_LIMIT_SENTENCES: Readonly<Record<AssistantLimit, string>> = {
-  calls: 'The assistant reached the number of model calls a turn may make, so it stopped. Nothing more was read.',
-  steps: 'The assistant reached the number of reads a turn may make, so it stopped. Nothing more was read.',
-  rows: 'The assistant reached the number of rows a turn may read, so it stopped. Nothing more was read.',
-  time: 'The assistant reached the time a turn may take, so it stopped. Nothing more was read.',
-  input: 'What the assistant had to send grew past what a turn may send, so it stopped. Nothing more was read.',
+  calls: 'This turn reached its limit for model calls, so it stopped. What was read is shown above.',
+  steps: 'This turn reached its limit for reads, so it stopped. What was read is shown above.',
+  rows: 'This turn reached its limit for rows, so it stopped. What was read is shown above.',
+  time: 'This turn ran out of time, so it stopped. What was read is shown above.',
+  input: 'This turn grew past what it may send, so it stopped. What was read is shown above.',
 };
 
 export const ASSISTANT_TOO_LARGE_SENTENCE = 'The message and the view are too large to send. Narrow the view or ask something smaller.';
@@ -75,6 +114,38 @@ export const ASSISTANT_CONTINUE_INVALID_SENTENCE = 'This continue is no longer v
 export const ASSISTANT_CHOICE_INVALID_SENTENCE = 'This choice is no longer valid. Nothing was read.';
 
 export const ASSISTANT_SUMMARY_INVALID_SENTENCE = 'This summary can no longer be used. Generate it again.';
+export const ASSISTANT_CONFIRMATION_INVALID_SENTENCE = 'This confirmation is no longer valid. Nothing was read.';
+
+/** The most characters of the title a citation of an answer after tool steps carries: a longer title is cut at a code point, so an element with a long title never fails the answer. */
+export const ASSISTANT_CITATION_TITLE_MAX = 400;
+
+/** What kind of tool a read was, as the registry names it: an intent of the source's folder, a catalog template, a pattern or the view. */
+export const ASSISTANT_READ_KINDS = ['intent', 'template', 'pattern', 'view'] as const;
+export type AssistantReadKind = (typeof ASSISTANT_READ_KINDS)[number];
+
+/** How sure the number of rows of a read is: the quality of its count. */
+export const ASSISTANT_COUNT_QUALITIES = ['exact', 'estimated', 'lowerBound', 'unknown'] as const;
+
+/**
+ * One read of a turn, written by the server: the tool and its kind, the subject (the values the gate accepted for the tool's parameters, as Ask's "Understood as" line shows them), and, for a read that ran, the
+ * rows it gave with the quality of that count (no number when the count is unknown) and whether it is partial; a read that did not run says so and has no subject.
+ */
+export const assistantReadSchema = z.union([
+  z
+    .strictObject({
+      tool: text.max(200),
+      kind: z.enum(ASSISTANT_READ_KINDS),
+      subject: text.max(400).optional(),
+      read: z.literal(true),
+      rows: z.number().int().nonnegative().optional(),
+      quality: z.enum(ASSISTANT_COUNT_QUALITIES),
+      partial: z.boolean(),
+    })
+    .refine((entry) => (entry.quality === 'unknown') === (entry.rows === undefined), { message: 'a count that is unknown has no number and every other count has one', path: ['rows'] }),
+  z.strictObject({ tool: text.max(200), kind: z.enum(ASSISTANT_READ_KINDS), read: z.literal(false) }),
+]);
+
+export type AssistantRead = z.infer<typeof assistantReadSchema>;
 
 export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
@@ -88,14 +159,16 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({ status: z.literal('unavailable'), kind: z.enum(ASSISTANT_FAILURE_KINDS), readStarted: z.boolean(), retryAfterSeconds: z.number().int().positive().optional() }),
   z.strictObject({ status: z.literal('too-large'), sentence: text }),
   /** A turn of the tool loop that reached one of its limits: it ran nothing more, and the sentence is the fixed one of the limit. */
-  z.strictObject({ status: z.literal('limit'), limit: z.enum(ASSISTANT_LIMITS), sentence: text }),
+  z.strictObject({ status: z.literal('limit'), limit: z.enum(ASSISTANT_LIMITS), sentence: text, reads: z.array(assistantReadSchema).max(20) }),
   /** The `ask` route: Ask's own answer, a result with its cited summary and sources, a heavy stop with its token, or a refusal with its cause. */
   z.strictObject({
     status: z.literal('answered'),
     route: z.literal('ask'),
     answer: askAnswerSchema,
-    /** Written by the server for a result that was read: what ran and how many elements it lists. Absent for a refusal and for a heavy stop. */
-    step: z.strictObject({ intent: z.string().min(1), rows: z.number().int().nonnegative(), outcome: z.enum(['complete', 'partial']) }).optional(),
+    /** Written by the server for a result that was read: each read of the turn in order, with its kind, subject, rows and the quality of that count. Absent for a refusal and for a heavy stop. */
+    reads: z.array(assistantReadSchema).min(1).max(20).optional(),
+    /** The limit that ended the reading of the turn, when it did: the answer is over what was read, and the panel shows the stop sentence of the limit under it. */
+    stoppedAt: z.enum(ASSISTANT_LIMITS).optional(),
     /** Written by the server for a result that was read: how much is shown and how much is not yet retrieved, with the quality of the count. */
     coverage: text.optional(),
     /** Other template questions of the source's folder the answer's elements can be put to, each with the titles of the elements as the analyst sees them and what the panel sends to ask it. */
@@ -106,6 +179,26 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({ status: z.literal('choice-invalid'), sentence: text }),
   /** A message that carried a summary that can no longer be used, whatever the cause: no answer was built from it. */
   z.strictObject({ status: z.literal('summary-invalid'), sentence: text }),
+  /** A decision whose confirmation is unknown, used, expired, replaced, another person's, another investigation's, source's or masking's, whose plan is altered or whose message or view is not the one it was made for: nothing was read. */
+  z.strictObject({ status: z.literal('confirmation-invalid'), sentence: text }),
+  /** The decision to cancel a waiting confirmation: the pending state is dropped and nothing was read. */
+  z.strictObject({ status: z.literal('cancelled') }),
+  /**
+   * A heavy step of the loop waits for the analyst: the pending id and the signed plan the decision sends back, what the step would read (its tool and kind, the subject, the count with its quality, the size of the page) and the reads made so far. Nothing of the step was read.
+   */
+  z.strictObject({
+    status: z.literal('confirmation'),
+    pendingId: z.string().uuid(),
+    plan: z.string().max(ASSISTANT_PLAN_MAX_CHARACTERS).regex(ASSISTANT_PLAN_PATTERN),
+    step: z.strictObject({
+      tool: text.max(200),
+      kind: z.enum(ASSISTANT_READ_KINDS),
+      subject: text.max(400).optional(),
+      count: z.strictObject({ quality: z.enum(ASSISTANT_COUNT_QUALITIES), value: z.number().int().nonnegative().optional() }),
+      page: z.number().int().positive(),
+    }),
+    reads: z.array(assistantReadSchema).max(20),
+  }),
   /** A message the assistant cannot place on one element: the fixed question naming the entity type, and each element it may mean as the analyst sees it, with what the panel sends when it is picked. Nothing was read for the intent. */
   z.strictObject({
     status: z.literal('clarification'),
@@ -130,11 +223,16 @@ export const assistantTurnAnswerSchema = z.union([
     status: z.literal('answered'),
     route: z.enum(['ask', 'view']),
     sentences: z.array(summarySentenceSchema).min(1).max(12),
-    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) })).min(0),
+    /** `title` is the element's title as the result gave it (masked as it was asked), so an element that is not drawn is still named. */
+    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() })).min(0),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     model: text,
     calls: z.number().int().positive(),
     steps: z.number().int().min(2),
+    /** Each read of the turn in order, written by the server. */
+    reads: z.array(assistantReadSchema).min(1).max(20),
+    /** The limit that ended the reading of the turn, when it did. */
+    stoppedAt: z.enum(ASSISTANT_LIMITS).optional(),
   }),
   /** A message over the limit of words: nothing was sent to a model and nothing was read. */
   z.strictObject({ status: z.literal('too-long'), words: z.number().int().positive(), limit: z.number().int().positive() }),

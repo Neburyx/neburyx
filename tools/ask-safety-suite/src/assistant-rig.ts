@@ -8,6 +8,10 @@ export interface AssistantRigOptions {
   readonly respond: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined;
   /** The name the source gives an entity read by its stable id. */
   readonly name?: (id: string) => string;
+  /** The most steps a turn may make; the loop is on from two. */
+  readonly maxSteps?: number;
+  /** Mounts the stores of the extension, for a turn that may wait for a confirmation. */
+  readonly stores?: boolean;
 }
 
 export interface AssistantRig {
@@ -25,7 +29,7 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}) });
   return {
     stub,
     events: app.events,

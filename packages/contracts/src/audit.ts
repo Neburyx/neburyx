@@ -92,6 +92,8 @@ export const askRunAuditDetailSchema = z.strictObject({
   patternVersion: z.number().int().min(1).optional(),
   /** The record of the assistant turn this question was part of; absent for a question of Ask. */
   runId: z.uuid().optional(),
+  /** That this read was made again to carry on a turn after the analyst's decision, not asked for by the person: the record of the decision's turn is the `runId`. */
+  replay: z.literal(true).optional(),
 });
 
 export type AskRunAuditDetail = z.infer<typeof askRunAuditDetailSchema>;
@@ -127,7 +129,7 @@ export const notesAuditDetailSchema = z.strictObject({ runId: z.uuid().optional(
 export type NotesAuditDetail = z.infer<typeof notesAuditDetailSchema>;
 
 /** How an assistant turn ended, as its closing audit event records it. */
-export const ASSISTANT_TURN_OUTCOMES = ['answered', 'refused', 'failed', 'cancelled', 'clarification'] as const;
+export const ASSISTANT_TURN_OUTCOMES = ['answered', 'refused', 'failed', 'cancelled', 'clarification', 'confirmation'] as const;
 export type AssistantTurnOutcome = (typeof ASSISTANT_TURN_OUTCOMES)[number];
 
 /**
@@ -155,6 +157,8 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   tokensIn: tokensSchema.optional(),
   tokensOut: tokensSchema.optional(),
   runId: z.uuid().optional(),
+  /** The record of the waiting turn this turn goes on from, after the analyst's decision. */
+  resumes: z.uuid().optional(),
 });
 
 export type AssistantTurnAuditDetail = z.infer<typeof assistantTurnAuditDetailSchema>;

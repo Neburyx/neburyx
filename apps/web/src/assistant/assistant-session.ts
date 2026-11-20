@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AssistantChoice, AssistantFailureKind, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
+import type { AssistantChoice, AssistantFailureKind, AssistantLimit, AssistantRead, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
 import type { CitationEntry } from '../summary/summary-model.js';
 import type { ApiFailure } from '../api/client.js';
 import type { AddedOutcome } from '../patterns/add-to-graph.js';
@@ -18,7 +18,18 @@ export interface ClarificationCandidate {
   readonly choice: AssistantChoice;
 }
 
+/** What a heavy step of the loop waits for: the pending id and the plan the decision sends back, what the step would read, the reads so far, and the message and the keys of the view of the turn, which the decision sends again as they were. */
+export interface Waiting {
+  readonly pendingId: string;
+  readonly plan: string;
+  readonly step: Extract<AssistantTurnAnswer, { status: 'confirmation' }>['step'];
+  readonly reads: readonly AssistantRead[];
+  readonly message: string;
+  readonly viewElementKeys: readonly string[];
+}
+
 export type Retry =
+  | { readonly kind: 'decision'; readonly waiting: Waiting; readonly decision: 'confirm' | 'skip' }
   | { readonly kind: 'message'; readonly text: string }
   | { readonly kind: 'chip'; readonly followUp: FollowUp }
   | { readonly kind: 'choice'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly index: number }
@@ -27,7 +38,7 @@ export type Retry =
 export type Failure =
   | { readonly kind: 'unavailable'; readonly why: AssistantFailureKind; readonly readStarted: boolean; readonly retryAfterSeconds: number | undefined; readonly until: number | undefined }
   | { readonly kind: 'too-large'; readonly sentence: string }
-  | { readonly kind: 'limit'; readonly sentence: string }
+  | { readonly kind: 'confirmation-invalid'; readonly sentence: string }
   | { readonly kind: 'request'; readonly failure: ApiFailure; readonly until: number | undefined }
   | { readonly kind: 'continue-invalid' }
   | { readonly kind: 'choice-invalid' }
@@ -41,21 +52,20 @@ export type Outcome =
   | { readonly kind: 'pending'; readonly call: 'message' }
   | { readonly kind: 'pending'; readonly call: 'continue'; readonly heavy: Answered; readonly token: string }
   | { readonly kind: 'pending'; readonly call: 'choice'; readonly question: string; readonly candidates: readonly ClarificationCandidate[] }
+  | { readonly kind: 'pending'; readonly call: 'decide'; readonly waiting: Waiting; readonly decision: 'confirm' | 'skip' }
+  | { readonly kind: 'waiting'; readonly waiting: Waiting }
+  /** A confirmation that is no longer open (another message was sent, or the panel was reloaded): the reads stay, the buttons are gone. */
+  | { readonly kind: 'waiting-closed'; readonly reads: readonly AssistantRead[] }
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'refuse'; readonly cause: AssistantRefusalCause; readonly sentence: string }
   | { readonly kind: 'not-answered'; readonly sentence: string }
-  | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly step: Step | undefined; readonly coverage: string | undefined; readonly followUps: readonly FollowUp[] }
+  | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly sentence: string; readonly reads: readonly AssistantRead[] }
+  | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly reads: readonly AssistantRead[] | undefined; readonly stoppedAt: AssistantLimit | undefined; readonly coverage: string | undefined; readonly followUps: readonly FollowUp[] }
   | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[] }
   | { readonly kind: 'clarification'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly failed?: { readonly failure: Failure; readonly index: number } }
   | { readonly kind: 'ask-refused'; readonly refused: Refused }
   | { readonly kind: 'heavy'; readonly answer: Answered; readonly token: string }
   | { readonly kind: 'failed'; readonly failure: Failure; readonly retry: Retry };
-
-export interface Step {
-  readonly intent: string;
-  readonly rows: number;
-  readonly outcome: 'complete' | 'partial';
-}
 
 export interface Turn {
   readonly id: number;

@@ -101,6 +101,8 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
     cancelClarification: model.cancelClarification,
     pickCandidate: model.pickCandidate,
     pressFollowUp: model.pressFollowUp,
+    decide: model.decide,
+    cancelWaiting: model.cancelWaiting,
     followUpsTurn: model.followUpsTurn,
     busy: model.busy,
   };

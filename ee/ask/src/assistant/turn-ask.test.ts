@@ -35,7 +35,7 @@ describe('the ask route: a template intent', () => {
     expect('answered' in answer && answer.answered.outcome).toBe('complete');
     expect('answered' in answer && answer.answered.summary).toBeDefined();
     expect('answered' in answer && answer.answered.continueToken).toBeUndefined();
-    expect(sent).toMatchObject({ step: { intent: 'shared', rows: 2, outcome: 'complete' }, coverage: '1 match shown · exact' });
+    expect(sent).toMatchObject({ reads: [{ tool: 'shared', kind: 'intent', read: true, quality: 'exact', partial: false }], coverage: '1 match shown · exact' });
     expect(eventOfAction(events, 'assistant.ask')).toMatchObject({ result: 'success', sourceId: 'demo' });
   });
 

@@ -1,13 +1,15 @@
-import { ASK_TEMPLATE_IDS, hasDuplicateKeys, type AskAnswer, type AskRunResult, type SummaryReading, type AssistantFailureKind, type AssistantLimit } from '@neburyx/contracts';
+import { ASK_TEMPLATE_IDS, hasDuplicateKeys, type AskAnswer, type AskRunResult, type AssistantRead, type SummaryReading, type AssistantFailureKind, type AssistantLimit } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall } from '@neburyx/ee-ai-runtime';
-import { estimateTokens, type AssembledText } from '../case-summary/assemble.js';
+import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { summarizeRun } from '../questions/run-summary.js';
 import { buildStepInstructions, STEP_PROMPT_ID, STEP_PROMPT_VERSION } from './step-instructions.js';
 import { buildToolRegistry } from './tool-registry.js';
 import { decideToolReply, readToolRequest, type ToolRequest } from './tool-request.js';
 import type { ReadDone, ToolAnswerInput, ToolAnswerOutcome } from './tool-answer.js';
-import { runToolStep, type StepScope } from './tool-step.js';
-import { noteModelAnswer, startModelCall } from './turn-audit.js';
+import type { PlanStep } from './plan-token.js';
+import { readNotRead, readOfAnswer, readOfNothing, readOfView } from './reads.js';
+import { runToolStep, type StepResult, type StepScope } from './tool-step.js';
+import { noteModelAnswer, noteReplaying, startModelCall } from './turn-audit.js';
 
 const STEP_AUDIT_ACTION = 'assistant.step';
 const REPEAT_NOTE = 'Your last reply was not valid. Reply with {"done":true} or one tool request only: start with { and write nothing before or after it, no reasoning.';
@@ -47,32 +49,45 @@ interface LoopBase {
 
 /** The read the route already ran, as the first step of the turn: an Ask read, or the view's reading with the tool request the model gave in place of an answer, which is the next step. */
 type LoopStart =
-  | { readonly first: { readonly tool: string; readonly answer: Answered }; readonly view?: undefined }
-  | { readonly view: { readonly reading: SummaryReading; readonly assembled: AssembledText; readonly request: ToolRequest }; readonly first?: undefined };
+  /** `asked` is what the router named: for a saved pattern, its key in the catalog and the pattern's own values. */
+  | { readonly first: { readonly tool: string; readonly answer: Answered; readonly asked?: Readonly<Record<string, string>> }; readonly view?: undefined; readonly resume?: undefined }
+  | { readonly view: { readonly reading: SummaryReading; readonly assembled: AssembledText; readonly request: ToolRequest }; readonly first?: undefined; readonly resume?: undefined }
+  /** A turn that went on after the analyst's decision on a heavy step: the earlier steps are read again, then the step is read (confirm) or left out (skip), and the loop goes on. */
+  | { readonly resume: ResumeState; readonly first?: undefined; readonly view?: undefined };
+
+export interface ResumeState {
+  readonly steps: readonly PlanStep[];
+  readonly wait: PlanStep;
+  readonly fromView: boolean;
+  readonly decision: 'confirm' | 'skip';
+  /** The steps, rows and model calls the turn had before the wait. */
+  readonly counters: { readonly steps: number; readonly rows: number; readonly calls: number };
+}
 
 export type LoopInput = LoopBase & LoopStart;
 
 export type LoopOutcome =
   /** The model needs nothing more, or the loop could not go on without losing what it had: `answer` is the answer of the last step that read something, and `steps` how many ran. */
-  | { readonly kind: 'finished'; readonly answer: Answered; readonly steps: number }
-  | { readonly kind: 'heavy'; readonly answer: Answered }
+  | { readonly kind: 'finished'; readonly answer: Answered; readonly steps: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
+  /** A heavy step the analyst has to confirm: nothing of it was read. The steps before it and the counters are what a decision needs to go on. */
+  | { readonly kind: 'waiting'; readonly wait: { readonly request: ToolRequest; readonly answer: Answered }; readonly steps: readonly PlanStep[]; readonly counters: { readonly steps: number; readonly rows: number; readonly calls: number }; readonly reads: readonly AssistantRead[]; readonly fromView: boolean }
   /** The checked answer after tool steps: sentences that cite the elements the steps returned. */
-  | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number }
+  | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind }
-  | { readonly kind: 'limit'; readonly limit: AssistantLimit }
+  | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly reads: readonly AssistantRead[] }
   /** A tool request that is malformed after its repeat, or names a tool that is no longer available. */
   | { readonly kind: 'ended'; readonly because: 'malformed' | 'unavailable' };
 
 /** What the loop reports of the answer call that follows its steps. */
-function answered(outcome: ToolAnswerOutcome, steps: number, calls: number): LoopOutcome {
+function answered(outcome: ToolAnswerOutcome, steps: number, calls: number, reads: readonly AssistantRead[], stoppedAt?: AssistantLimit): LoopOutcome {
   switch (outcome.kind) {
     case 'sentences':
-      return { kind: 'sentences', answer: outcome, steps, calls: calls + outcome.calls };
+      return { kind: 'sentences', answer: outcome, steps, calls: calls + outcome.calls, reads, ...(stoppedAt === undefined ? {} : { stoppedAt }) };
     case 'unsupported':
       return { kind: 'unsupported' };
     case 'limit':
-      return { kind: 'limit', limit: outcome.limit };
+      return { kind: 'limit', limit: outcome.limit, reads };
     case 'failed':
       return { kind: 'failed', why: outcome.why };
     default: {
@@ -113,20 +128,137 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
     const source = scope.options.folder()?.source(scope.sourceId);
     const registry = toolRegistryOf(scope, scope.viewElementKeys.length > 0);
     const instructions = buildStepInstructions(source === undefined ? prompt : `${prompt}\n\n# This source's questions\n\n${source.classification.text}`, registry);
-    const { view } = input;
-    const lines = [view === undefined ? resultLine(input.first.tool, input.first.answer) : `view:\n${view.assembled.text}`];
-    const reads: ReadDone[] = view === undefined ? [{ tool: input.first.tool, result: input.first.answer.result }] : [];
-    let latest: Answered | undefined = view === undefined ? input.first.answer : undefined;
-    let rows = view === undefined ? summarizeRun(input.first.answer.result).rowCount : view.reading.nodes.length + view.reading.edges.length;
-    let steps = 1;
-    let calls = input.callsUsed;
+    const { resume } = input;
+    const fromView = input.view !== undefined || resume?.fromView === true;
+    let view: { readonly reading: SummaryReading; readonly assembled: AssembledText } | undefined = input.view === undefined ? undefined : { reading: input.view.reading, assembled: input.view.assembled };
+    const lines: string[] = [];
+    const reads: ReadDone[] = [];
+    const entries: AssistantRead[] = [];
+    // the steps of the turn that a decision reads again: each tool and the values the gate accepted for it
+    const done: PlanStep[] = [];
+    let latest: Answered | undefined;
+    let rows = 0;
+    let steps = resume === undefined ? 1 : resume.counters.steps;
+    let calls = resume === undefined ? input.callsUsed : resume.counters.calls;
     let note = '';
-    let pending: ToolRequest | undefined = view?.request;
+    let pending: ToolRequest | undefined = input.view?.request;
+    if (input.first !== undefined) {
+      const { answer } = input.first;
+      // a saved pattern the router ran is a tool of the registry under its catalog key, which is what the router named in its `pattern` value; its other values are its own
+      const { pattern, ...ownValues } = input.first.asked ?? answer.entities;
+      const firstTool = answer.patternName === undefined ? input.first.tool : (pattern ?? input.first.tool);
+      lines.push(resultLine(input.first.tool, answer));
+      reads.push({ tool: input.first.tool, result: answer.result });
+      entries.push(readOfAnswer(answer.patternName === undefined ? 'intent' : 'pattern', answer.patternName ?? input.first.tool, answer));
+      done.push({ tool: firstTool, values: answer.patternName === undefined ? answer.entities : ownValues });
+      latest = input.first.answer;
+      rows = summarizeRun(input.first.answer.result).rowCount;
+    } else if (input.view !== undefined) {
+      lines.push(`view:\n${input.view.assembled.text}`);
+      entries.push(readOfView(input.view.reading.nodes.length + input.view.reading.edges.length));
+      rows = input.view.reading.nodes.length + input.view.reading.edges.length;
+    }
     // an Ask read stands as the answer when nothing came after it; a view's reading has no answer of its own, so a loop entered from it that cannot go on ends with a limit
-    const stop = (limit: AssistantLimit): LoopOutcome | undefined => (steps === 1 && view === undefined ? undefined : { kind: 'limit', limit });
-    const finished = (): LoopOutcome => (latest === undefined ? { kind: 'failed', why: 'service' } : { kind: 'finished', answer: latest, steps });
-    const finalAnswer = async (): Promise<LoopOutcome> =>
-      answered(await options.answer({ scope, message: input.message, reads, ...(view === undefined ? {} : { view: { assembled: view.assembled, reading: view.reading } }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls);
+    const stop = (limit: AssistantLimit): LoopOutcome | undefined => (steps === 1 && !fromView ? undefined : { kind: 'limit', limit, reads: entries });
+    const finished = (stoppedAt?: AssistantLimit): LoopOutcome => (latest === undefined ? { kind: 'failed', why: 'service' } : { kind: 'finished', answer: latest, steps, reads: entries, ...(stoppedAt === undefined ? {} : { stoppedAt }) });
+    const finalAnswer = async (stoppedAt?: AssistantLimit): Promise<LoopOutcome> =>
+      answered(await options.answer({ scope, message: input.message, reads, ...(view === undefined ? {} : { view }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls, entries, stoppedAt);
+    /** What one step of the turn, made now or read again, adds to what the model sees and to the reads of the turn. */
+    const apply = (request: ToolRequest, step: StepResult, how: { readonly confirmed?: boolean } = {}): void => {
+      const { tool, values } = request;
+      const mark = how.confirmed === true ? { confirmed: true as const } : {};
+      switch (step.status) {
+        case 'answered':
+          latest = step.answer;
+          rows += step.rows;
+          entries.push(readOfAnswer(tool.kind, step.answer.patternName ?? tool.name, step.answer));
+          lines.push(resultLine(tool.name, step.answer));
+          reads.push({ tool: tool.name, result: step.answer.result });
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'heavy':
+          // a read that has grown past what Ask reads at once since it was read, found again: it is not read, and a decision never leads to another
+          entries.push(readNotRead(tool.kind, tool.name));
+          lines.push(`${tool.name}: not read, it is larger than one read now`);
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'refused':
+          if (step.refused.cause === 'nothing-found') reads.push({ tool: tool.name });
+          entries.push(step.refused.cause === 'nothing-found' ? readOfNothing(tool.kind, tool.name, values) : readNotRead(tool.kind, tool.name));
+          lines.push(`${tool.name}: ${step.refused.cause === 'nothing-found' ? 'nothing found' : 'not read, its values did not fit'}`);
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'view':
+          rows += step.rows;
+          view ??= { reading: step.reading, assembled: assembleText(step.reading) };
+          entries.push(readOfView(step.rows));
+          lines.push(`view: ${step.rows} elements read`);
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'no-view':
+          entries.push(readNotRead('view', 'view'));
+          lines.push('view: not available');
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        default: {
+          const unreachable: never = step;
+          return unreachable;
+        }
+      }
+    };
+    if (resume !== undefined) {
+      // the earlier reads of the turn are made again through the gate, as of now: their results were never kept
+      noteReplaying(true);
+      try {
+        if (resume.fromView) {
+          const viewTool = registry.find('view');
+          const again = viewTool === undefined ? undefined : await runToolStep({ tool: viewTool, values: {} }, scope);
+          if (again?.status === 'view') {
+            view = { reading: again.reading, assembled: assembleText(again.reading) };
+            rows += again.rows;
+            entries.push(readOfView(again.rows));
+            lines.push(`view:\n${view.assembled.text}`);
+          } else {
+            entries.push(readNotRead('view', 'view'));
+            lines.push('view: not available');
+          }
+        }
+        for (const earlier of resume.steps) {
+          if (scope.request.signal.aborted) throw new Error('the request was cancelled');
+          if (input.deadline.aborted) return { kind: 'limit', limit: 'time', reads: entries };
+          const tool = registry.find(earlier.tool);
+          if (tool === undefined || !tool.available) {
+            entries.push(readNotRead(tool?.kind ?? 'intent', earlier.tool));
+            lines.push(`${earlier.tool}: not read, it is not available now`);
+            continue;
+          }
+          const request = { tool, values: earlier.values };
+          apply(request, await runToolStep(request, scope, { continuing: earlier.confirmed === true }), { ...(earlier.confirmed === true ? { confirmed: true } : {}) });
+        }
+      } finally {
+        noteReplaying(false);
+      }
+      const tool = registry.find(resume.wait.tool);
+      if (tool === undefined || !tool.available) {
+        entries.push(readNotRead(tool?.kind ?? 'intent', resume.wait.tool));
+        lines.push(`${resume.wait.tool}: not read, it is not available now`);
+      } else if (resume.decision === 'skip') {
+        entries.push(readNotRead(tool.kind, resume.wait.tool));
+        lines.push(`${resume.wait.tool}: skipped by the analyst`);
+      } else {
+        // every limit is checked again before the heavy step is read: a decision never lifts one
+        if (steps >= settings.maxSteps) return finalAnswer('steps');
+        if (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed) return finalAnswer('rows');
+        if (input.deadline.aborted) return { kind: 'limit', limit: 'time', reads: entries };
+        if (calls + 1 >= settings.maxCalls) return { kind: 'limit', limit: 'calls', reads: entries };
+        if (estimateTokens(instructions.text, `Question:\n${input.message}\n\nMasked results so far:\n${lines.join('\n')}`) > settings.maxInputTokens) return { kind: 'limit', limit: 'input', reads: entries };
+        if (scope.request.signal.aborted) throw new Error('the request was cancelled');
+        const request = { tool, values: resume.wait.values };
+        const confirmed = await runToolStep(request, scope, { continuing: true });
+        steps += 1;
+        apply(request, confirmed, { confirmed: true });
+      }
+    }
     let read: ReturnType<typeof readToolRequest>;
     for (;;) {
       if (scope.request.signal.aborted) throw new Error('the request was cancelled');
@@ -138,12 +270,15 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
         pending = undefined;
       } else {
         // a call is kept for the answer: when no call is left to choose another read, the answer is drafted over what was read, so a repeat of a step never takes the answer's call
-        if (calls + 1 >= settings.maxCalls) return steps === 1 && view === undefined ? finished() : finalAnswer();
+        if (calls + 1 >= settings.maxCalls) return steps === 1 && !fromView ? finished('calls') : finalAnswer('calls');
         if (input.deadline.aborted) return stop('time') ?? finished();
         // the limits of steps and rows bound the reads, not the answer to the reads made: no call is made to choose a read the turn may not make, and the answer is drafted over what was read
-        if (steps >= settings.maxSteps || (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed)) return steps === 1 ? finished() : finalAnswer();
+        if (steps >= settings.maxSteps || (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed)) {
+          const reached = steps >= settings.maxSteps ? 'steps' : 'rows';
+          return steps === 1 ? finished(reached) : finalAnswer(reached);
+        }
         const values = `Question:\n${input.message}\n\nMasked results so far:\n${lines.join('\n')}${note}`;
-        if (estimateTokens(instructions.text, values) > settings.maxInputTokens) return steps === 1 && view === undefined ? finished() : finalAnswer();
+        if (estimateTokens(instructions.text, values) > settings.maxInputTokens) return steps === 1 && !fromView ? finished('input') : finalAnswer('input');
         const reply = await askForStep(options.model, instructions, values, scope, AbortSignal.any([scope.request.signal, input.deadline]));
         calls += 1;
         if (reply === undefined) return finished();
@@ -157,36 +292,14 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
         if (decision === 'malformed' || decision === 'unavailable') return { kind: 'ended', because: decision };
       }
       if (!read.ok) return { kind: 'ended', because: 'malformed' };
-      if (steps >= settings.maxSteps) return { kind: 'limit', limit: 'steps' };
-      if (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed) return { kind: 'limit', limit: 'rows' };
+      if (steps >= settings.maxSteps) return { kind: 'limit', limit: 'steps', reads: entries };
+      if (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed) return { kind: 'limit', limit: 'rows', reads: entries };
       note = '';
       const step = await runToolStep(read.request, scope);
+      // a read Ask would stop as heavy is not read: the turn waits for the analyst, and the step does not count
+      if (step.status === 'heavy') return { kind: 'waiting', wait: { request: read.request, answer: step.answer }, steps: done, counters: { steps, rows, calls }, reads: entries, fromView };
       steps += 1;
-      switch (step.status) {
-        case 'heavy':
-          return { kind: 'heavy', answer: step.answer };
-        case 'answered':
-          latest = step.answer;
-          rows += step.rows;
-          lines.push(resultLine(read.request.tool.name, step.answer));
-          reads.push({ tool: read.request.tool.name, result: step.answer.result });
-          break;
-        case 'refused':
-          if (step.refused.cause === 'nothing-found') reads.push({ tool: read.request.tool.name });
-          lines.push(`${read.request.tool.name}: ${step.refused.cause === 'nothing-found' ? 'nothing found' : 'not read, its values did not fit'}`);
-          break;
-        case 'view':
-          rows += step.rows;
-          lines.push(`view: ${step.rows} elements read`);
-          break;
-        case 'no-view':
-          lines.push('view: not available');
-          break;
-        default: {
-          const unreachable: never = step;
-          return unreachable;
-        }
-      }
+      apply(read.request, step);
     }
   };
 }

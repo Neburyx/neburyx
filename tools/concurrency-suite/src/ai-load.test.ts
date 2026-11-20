@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import type { CaseSummarizer } from '@neburyx/contracts';
 import { DEFAULT_OFFLOAD_THRESHOLD_MS, judgeSentences, type CheckedText } from '@neburyx/ee-ai-runtime';
-import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
 import { afterAll, describe, expect, it } from 'vitest';
 import { DEFAULT_AI_SLOT_SHARE } from '../../../services/api/src/seams/ai-share.js';
 import { makeAskFolder, removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
@@ -54,7 +54,7 @@ function assistantModelReply(body: string): string {
 
 /** The same extension with the assistant on, its model a stand-in on the loopback address: a turn makes its two reads through the gate as AI reads, beside the Ask and summary reads. */
 async function assistantLoadOptions(model: TurnModel): Promise<RigOptions> {
-  const extension = createEnterpriseExtension({ modelBaseUrl: model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore() });
+  const extension = createEnterpriseExtension({ modelBaseUrl: model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
   const configured = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), NEBURYX_ASSISTANT_MAX_STEPS: '4' }, { sourceIds: ['demo'], features: { ask: true, summary: true, assistant: true } });
   if (configured?.ok !== true) throw new Error('the extension of the assistant load could not be configured');
   extension.attachAudit?.({ record: () => Promise.resolve() });

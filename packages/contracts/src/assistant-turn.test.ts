@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_LIMITS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
 
 const body = { sourceId: 'banking', investigationId: 'inv-1', message: 'Which accounts share a device?', viewElementKeys: ['n1', 'n2'] };
 
@@ -35,12 +35,12 @@ describe('the assistant turn request: a message or a continue', () => {
     expect(assistantTurnRequestSchema.safeParse({ ...base, continue: { ...asked, continueToken: 'nope' } }).success).toBe(false);
   });
 
-  it('is published as three forms that each require one of the members, so a client reading the schema alone refuses all and none', async () => {
+  it('is published as four forms that each require one of the members, so a client reading the schema alone refuses all and none', async () => {
     const { buildOpenApiDocument } = await import('./openapi.js');
     const schema = buildOpenApiDocument().components.schemas.AssistantTurnRequest;
     const forms = (schema['anyOf'] ?? schema['oneOf']) as readonly { required?: readonly string[]; additionalProperties?: unknown }[];
-    expect(forms).toHaveLength(3);
-    expect(forms.map((form) => form.required?.filter((name) => name === 'message' || name === 'continue' || name === 'choice'))).toEqual([['message'], ['continue'], ['choice']]);
+    expect(forms).toHaveLength(4);
+    expect(forms.map((form) => form.required?.filter((name) => name === 'message' || name === 'continue' || name === 'choice' || name === 'confirmation'))).toEqual([['message'], ['message', 'confirmation'], ['continue'], ['choice']]);
     expect(forms.every((form) => form.additionalProperties === false)).toBe(true);
   });
 });
@@ -164,28 +164,52 @@ describe('the choice of an assistant turn', () => {
 });
 
 describe('the limit status of a turn', () => {
-  it.each(ASSISTANT_LIMITS)('accepts the %s limit with its own fixed sentence, and nothing else', (limit) => {
-    const answer = { status: 'limit', limit, sentence: ASSISTANT_LIMIT_SENTENCES[limit] };
+  const read = { tool: 'a', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false };
+
+  it.each(ASSISTANT_LIMITS)('accepts the %s limit with its own fixed sentence and the reads made, and nothing else', (limit) => {
+    const answer = { status: 'limit', limit, sentence: ASSISTANT_LIMIT_SENTENCES[limit], reads: [read] };
     expect(assistantTurnAnswerSchema.safeParse(answer).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, reads: [] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, extra: 1 }).success).toBe(false);
   });
 
-  it('refuses a limit that is not one of the five, and a limit without its sentence', () => {
-    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'tokens', sentence: 'x' }).success).toBe(false);
-    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'calls' }).success).toBe(false);
+  it('refuses a limit that is not one of the five, and a limit without its sentence or its reads', () => {
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'tokens', sentence: 'x', reads: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'calls', reads: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'limit', limit: 'calls', sentence: 'x' }).success).toBe(false);
   });
 
-  it('has a different sentence for each limit, none with a value in it', () => {
+  it('has a different sentence for each limit, none with a digit or a value in it, each pointing at what was read above', () => {
     expect(new Set(Object.values(ASSISTANT_LIMIT_SENTENCES)).size).toBe(ASSISTANT_LIMITS.length);
+    for (const sentence of Object.values(ASSISTANT_LIMIT_SENTENCES)) {
+      expect(sentence).not.toMatch(/\d/);
+      expect(sentence).toMatch(/What was read is shown above\.$/);
+    }
+    expect(ASSISTANT_LIMIT_SENTENCES.time).toBe('This turn ran out of time, so it stopped. What was read is shown above.');
+  });
+
+  it('lets a citation of an answer after tool steps carry the title of the element as the result gave it, and no other member', () => {
+    const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [read, read] };
+    const cite = { key: 'r1', kind: 'entity', ref: { sourceId: 'banking', entityType: 'widget', stableId: 'A-1' } };
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [{ ...cite, title: 'Account A-1' }] }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [{ ...cite, title: '' }] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [{ ...cite, label: 'x' }] }).success).toBe(false);
+  });
+
+  it('names the limit that ended the reading of an answered turn, in the answer after tool steps and in Ask’s single read, and no other value', () => {
+    const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['s1'] }], citations: [], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [read, read] };
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, stoppedAt: 'rows' }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, stoppedAt: 'tokens' }).success).toBe(false);
   });
 });
 
 describe('the answer of the ask route after tool steps', () => {
   const ref = { sourceId: 'banking', entityType: 'widget', stableId: 'A-1' };
-  const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '2 shown', summary: 'The answer cites 1 of the 2 elements the reads returned.' }, model: 'm', calls: 4, steps: 2 };
+  const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '2 shown', summary: 'The answer cites 1 of the 2 elements the reads returned.' }, model: 'm', calls: 4, steps: 2, reads: [{ tool: 'a', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }, { tool: 'b', kind: 'template', read: false }] };
 
   it('accepts the sentences with their citations, the coverage, the model, the calls and at least two steps', () => {
     expect(assistantTurnAnswerSchema.safeParse(answer).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, reads: [] }).success).toBe(false);
   });
 
   it('accepts no citation of an element (a sentence may cite the line of a read only), and refuses one step, no sentence, an extra member, and the answer of Ask together with the sentences', () => {
@@ -226,3 +250,36 @@ describe('the view answer that rests on a summary', () => {
     expect(assistantTurnAnswerSchema.safeParse({ ...view, summarySentencesCited: [13] }).success).toBe(false);
   });
 });
+
+describe('the confirmation of a heavy step', () => {
+  const plan = `${'1'.repeat(10)}.${'a'.repeat(200)}.${'b'.repeat(64)}`;
+  const pendingId = '0192f000-0000-7000-8000-0000000000a1';
+  const base = { sourceId: 'banking', investigationId: 'inv-1', viewElementKeys: ['n1'] };
+  const waiting = { status: 'confirmation', pendingId, plan, step: { tool: 'shared', kind: 'intent', subject: 'A-9', count: { quality: 'lowerBound', value: 1000 }, page: 25 }, reads: [{ tool: 'a', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }] };
+
+  it('accepts the waiting answer with the pending id, the plan, what the step would read and the reads so far, and nothing else', () => {
+    expect(assistantTurnAnswerSchema.safeParse(waiting).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...waiting, extra: 1 }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...waiting, continueToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...waiting, step: { ...waiting.step, page: 0 } }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...waiting, plan: 'not a plan' }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...waiting, plan: `${'1'.repeat(10)}.${'a'.repeat(ASSISTANT_PLAN_MAX_CHARACTERS)}.${'b'.repeat(64)}` }).success).toBe(false);
+  });
+
+  it('takes the decision as a form of its own, with the message and the view, and as no other form', () => {
+    const form = { ...base, message: 'who else?', confirmation: { pendingId, plan, decision: 'confirm' } };
+    expect(assistantTurnRequestSchema.safeParse(form).success).toBe(true);
+    for (const decision of ['skip', 'cancel']) expect(assistantTurnRequestSchema.safeParse({ ...form, confirmation: { ...form.confirmation, decision } }).success).toBe(true);
+    for (const bad of [{ ...form, confirmation: { ...form.confirmation, decision: 'run' } }, { ...form, confirmation: { ...form.confirmation, pendingId: 'x' } }, { ...form, confirmation: { ...form.confirmation, extra: 1 } }, { ...form, continue: { intent: 'a', entities: {}, continueToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` } }, { ...base, confirmation: form.confirmation }]) {
+      expect(assistantTurnRequestSchema.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('answers a decision that is no longer valid with its fixed sentence, and a cancel with nothing more', () => {
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'confirmation-invalid', sentence: ASSISTANT_CONFIRMATION_INVALID_SENTENCE }).success).toBe(true);
+    expect(ASSISTANT_CONFIRMATION_INVALID_SENTENCE).toBe('This confirmation is no longer valid. Nothing was read.');
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'cancelled' }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'cancelled', extra: 1 }).success).toBe(false);
+  });
+});
+

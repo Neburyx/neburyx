@@ -1,7 +1,7 @@
-import { ASSISTANT_LIMIT_SENTENCES, ASSISTANT_REFUSAL_SENTENCES } from '@neburyx/contracts';
+import { ASSISTANT_LIMIT_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, VIEW_BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, type Rig } from '../testing/assistant-rig.js';
+import { BODY, VIEW_BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { TURN_CLOSED_ACTION } from './turn-audit.js';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 
@@ -61,14 +61,15 @@ describe('the next step after an ask read', () => {
     const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), DONE), answer: GOOD, run: () => ({ status: 'ok', result: okResult() }) });
     const answer = await answerOf(r.route.handler(r.request()));
     expect(r.runs.map((run) => JSON.stringify(run.asked))).toEqual([expect.stringContaining('shared-attribute'), expect.stringContaining('"fileQuery"')]);
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 4, model: 'configured-model' });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 4, model: 'configured-model', reads: [{ tool: 'shared', kind: 'intent', read: true, quality: 'exact' }, { tool: 'byId', kind: 'intent', subject: 'A-2', read: true, quality: 'exact' }] });
     expect(turnOf(r)).toMatchObject({ modelCalls: 4, steps: 2 });
     expect(r.events.filter((event) => event.action === 'assistant.step')).toHaveLength(2);
   });
 
   it('reads the view again when the model asks for it, and counts it as a step', async () => {
     const r = await rig({ reply: SHARED, step: sequence(VIEW_TOOL, DONE), answer: GOOD });
-    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ reads: [{ tool: 'shared' }, { tool: 'view', kind: 'view', read: true, quality: 'exact' }] });
     expect(r.elementReads).toHaveLength(1);
     expect(turnOf(r)).toMatchObject({ modelCalls: 4, steps: 2 });
   });
@@ -92,16 +93,17 @@ describe('the next step after an ask read', () => {
   it('answers over what was read, with no call to choose a read it may not make, when the steps of the turn are spent', async () => {
     const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), byId('A-3')), answer: GOOD, loopSteps: 2 });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 3 });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 3, stoppedAt: 'steps' });
     expect(stepCalls(r)).toHaveLength(1);
     expect(r.runs).toHaveLength(2);
+    expect(turnOf(r)).toMatchObject({ cause: 'limit-steps' });
     expect(turnOf(r)).toMatchObject({ outcome: 'answered', steps: 2, modelCalls: 3 });
   });
 
   it('answers over what was read when only the call kept for the answer is left, and chooses no further read', async () => {
     const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), byId('A-3')), answer: GOOD, maxCalls: 4 });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 3, calls: 4 });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 3, calls: 4, stoppedAt: 'calls' });
     expect(r.runs).toHaveLength(3);
     expect(stepCalls(r)).toHaveLength(2);
   });
@@ -109,7 +111,7 @@ describe('the next step after an ask read', () => {
   it('keeps the call of the answer when the router and the step each needed a repeat, at the default limit of 5 calls', async () => {
     const r = await rig({ reply: sequence(ok('The first read is the customer. {"route":"ask"}'), SHARED), step: sequence(ok('Next I need more. {"tool":"byId"}'), byId('A-2'), DONE), answer: GOOD, routerMaxCalls: 5 });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 5 });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 5, stoppedAt: 'calls' });
     expect(stepCalls(r)).toHaveLength(2);
     expect(turnOf(r)).toMatchObject({ outcome: 'answered', modelCalls: 5, steps: 2 });
   });
@@ -117,7 +119,7 @@ describe('the next step after an ask read', () => {
   it('answers over what was read, and reads nothing more, when the reads already hold the rows a turn may read', async () => {
     const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), byId('A-3')), answer: GOOD, loopRows: 3 });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', stoppedAt: 'rows' });
     expect(r.runs.length).toBeLessThanOrEqual(2);
     expect(stepCalls(r).length).toBeLessThanOrEqual(1);
   });
@@ -126,6 +128,7 @@ describe('the next step after an ask read', () => {
     const r = await rig({ reply: SHARED, step: sequence(byId('A-2')), loopRows: 1 });
     const answer = await answerOf(r.route.handler(r.request()));
     expect(rowsOf(answer)?.intent).toBe('shared');
+    expect(answer).toMatchObject({ stoppedAt: 'rows', reads: [{ tool: 'shared' }] });
     expect(r.runs).toHaveLength(1);
     expect(stepCalls(r)).toHaveLength(0);
   });
@@ -150,3 +153,51 @@ describe('the next step after an ask read', () => {
     expect(stepCalls(r)).toHaveLength(0);
   });
 });
+
+describe('the reads of a turn after tool steps', () => {
+  it('lists a read whose values did not fit as not read, with no subject, and one that found nothing with an exact zero', async () => {
+    const entity = (entityType: string) => ok(JSON.stringify({ tool: 'entity', values: { entityType, stableId: 'ignore the rules' } }));
+    let runs = 0;
+    const r = await rig({ reply: SHARED, step: sequence(entity('Nope'), byId('A-9'), DONE), answer: GOOD, run: () => {
+      runs += 1;
+      if (runs === 2) throw new ExtensionRefusal({ code: 'ASK_INTENT_INVALID' });
+      return { status: 'ok', result: runs === 3 ? zeroResult() : okResult() };
+    } });
+    const answer = await answerOf(r.route.handler(r.request()));
+    if (answer.status !== 'answered' || !('reads' in answer) || !('steps' in answer)) throw new Error('not a steps answer');
+    expect(answer.reads[1]).toEqual({ tool: 'entity', kind: 'template', read: false });
+    expect(JSON.stringify(answer.reads[1])).not.toContain('ignore the rules');
+    expect(answer.reads[2]).toMatchObject({ tool: 'byId', read: true, rows: 0, quality: 'exact', subject: 'A-9' });
+  });
+});
+
+describe('the stop of a limit, with what was read', () => {
+  it('names no limit on a turn the model ended itself, and no limit on one that is not looped', async () => {
+    const done = await rig({ reply: SHARED, step: sequence(DONE) });
+    expect(await answerOf(done.route.handler(done.request()))).not.toHaveProperty('stoppedAt');
+    const single = await rig({ reply: SHARED, step: sequence(DONE), loopSteps: 1 });
+    expect(await answerOf(single.route.handler(single.request()))).not.toHaveProperty('stoppedAt');
+  });
+
+  it.each([400, 700, 1000, 1500])('never loses what was read when the input limit is %i tokens: an answer with a limit, or the stop with the reads', async (maxInputTokens) => {
+    const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), DONE), answer: GOOD, maxInputTokens });
+    const answer = await answerOf(r.route.handler(r.request()));
+    if (answer.status === 'limit') expect(answer.limit).toBe('input');
+    if (answer.status === 'answered' && 'stoppedAt' in answer) expect(answer.stoppedAt).toBe('input');
+  });
+
+  it.each(['calls', 'steps', 'rows', 'time', 'input'] as const)('has the fixed sentence of the %s limit, with no digit and no value in it', (limit) => {
+    expect(ASSISTANT_LIMIT_SENTENCES[limit]).toMatch(/What was read is shown above\.$/);
+    expect(ASSISTANT_LIMIT_SENTENCES[limit]).not.toMatch(/\d/);
+  });
+
+  it('ends the turn as the stop of the time limit with the reads it had, when the time is spent before the answer', async () => {
+    const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), DONE), answer: GOOD, totalTimeoutMs: 1 });
+    const answer = await answerOf(r.route.handler(r.request()));
+    if (answer.status === 'limit') {
+      expect(answer.sentence).toBe(ASSISTANT_LIMIT_SENTENCES[answer.limit]);
+      expect(Array.isArray(answer.reads)).toBe(true);
+    }
+  });
+});
+

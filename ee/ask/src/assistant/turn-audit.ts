@@ -49,6 +49,9 @@ interface TurnNotes {
   citedElements?: number;
   cause?: string;
   summary?: { readonly kept: number; readonly dropped: number };
+  /** That the reads being made are made again after a decision; and the record of the waiting turn this turn goes on from. */
+  replaying?: boolean;
+  resumes?: string;
 }
 
 const scope = new AsyncLocalStorage<TurnNotes>();
@@ -101,6 +104,13 @@ export const readTurnContext = async (limit: number): Promise<readonly Assistant
 
 /** The id of the run of the turn that is running, for the events it writes; absent outside a turn and before the turn started. */
 export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;
+
+/** Marks the reads that follow as made again to carry on a turn after the analyst's decision (their events say so), or no longer. */
+export const noteReplaying = (replaying: boolean): void => note((notes) => void (notes.replaying = replaying));
+export const isReplaying = (): boolean => scope.getStore()?.replaying === true;
+
+/** Notes the record of the waiting turn this turn goes on from. */
+export const noteResumes = (runId: string): void => note((notes) => void (notes.resumes = runId));
 
 const NO_CALL_RECORD: CallRecord = { received: () => undefined, end: () => undefined };
 
@@ -170,7 +180,7 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
     case 'answered':
       if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause };
       if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
-      if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
+      if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(answer.stoppedAt === undefined ? {} : { cause: `limit-${answer.stoppedAt}` }) };
       if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
       return {
         route: 'ask',
@@ -178,6 +188,7 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
         result: answer.answer.answered.outcome === 'partial' || answer.answer.answered.continueToken !== undefined ? 'partial' : 'success',
         intent: answer.answer.answered.intent,
         ...(answer.answer.answered.summary === undefined ? {} : { citedElements: answer.answer.answered.summary.citations.length }),
+        ...(answer.stoppedAt === undefined ? {} : { cause: `limit-${answer.stoppedAt}` }),
       };
     case 'not-answered':
       if (notes.answered === true) return { route: answer.route, outcome: 'answered', result: 'success', ...(notes.citedElements === undefined ? {} : { citedElements: notes.citedElements }) };
@@ -198,6 +209,12 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
       return { outcome: 'refused', result: 'refused', cause: 'choice-invalid' };
     case 'summary-invalid':
       return { outcome: 'refused', result: 'refused', cause: 'summary-invalid' };
+    case 'confirmation-invalid':
+      return { outcome: 'refused', result: 'refused', cause: 'confirmation-invalid' };
+    case 'cancelled':
+      return { outcome: 'cancelled', result: 'failed', failureKind: 'cancelled' };
+    case 'confirmation':
+      return { route: 'ask', outcome: 'confirmation', result: 'success' };
     default: {
       const unreachable: never = answer;
       return unreachable;
@@ -240,6 +257,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls,
     ...(notes.run === undefined ? {} : { runId: notes.run.id }),
+    ...(notes.resumes === undefined ? {} : { resumes: notes.resumes }),
     ...call,
   });
 }
@@ -264,14 +282,15 @@ function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantT
 /** A turn that ended answered or refused on a route is kept in the thread as references and metadata; a turn that failed, was cancelled or was not let through leaves nothing. */
 function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
   const route = ending.route ?? notes.route;
-  if (notes.thread === undefined || route === undefined || (ending.outcome !== 'answered' && ending.outcome !== 'refused')) return;
+  const kept = ending.outcome === 'confirmation' ? ('waiting' as const) : ending.outcome === 'answered' || ending.outcome === 'refused' ? ending.outcome : undefined;
+  if (notes.thread === undefined || route === undefined || kept === undefined) return;
   // a summary that could not be used leaves nothing in the thread, even when the turn had been placed on a route
   if (ending.cause === 'summary-invalid') return;
   const known = notes.usage?.kind === 'known' ? notes.usage : undefined;
   const intent = ending.intent ?? notes.intent;
   notes.thread.write({
     route,
-    outcome: ending.outcome,
+    outcome: kept,
     ...(ending.cause === undefined ? {} : { cause: ending.cause }),
     questionHash: notes.questionHash ?? '',
     ...(intent === undefined ? {} : { intent }),

@@ -1,6 +1,6 @@
 import { ASK_SAVED_PATTERN_INTENT, ExtensionRefusal, readViewKeys, type AskAnswer, type SummaryReading } from '@neburyx/contracts';
 import { gateClientOf } from '@neburyx/ee-ai-runtime';
-import { execute, refusal, type Execution } from '../questions/question-routes.js';
+import { execute, patternOf, refusal, type Execution } from '../questions/question-routes.js';
 import { summarizeRun } from '../questions/run-summary.js';
 import { noteStep } from './turn-audit.js';
 import type { ToolRequest } from './tool-request.js';
@@ -53,12 +53,18 @@ async function run(execution: Execution): Promise<StepResult> {
  * deterministic summary); the view is read again as the view route reads it. The values reach the source only as parameters. A refusal of the gate or a failure of the read is thrown for the turn to answer; a turn
  * that was cancelled starts no step.
  */
-export async function runToolStep(requested: ToolRequest, scope: StepScope): Promise<StepResult> {
+export async function runToolStep(requested: ToolRequest, scope: StepScope, options: { readonly continuing?: boolean } = {}): Promise<StepResult> {
   if (scope.request.signal.aborted) throw new Error('the request was cancelled');
   const { tool, values } = requested;
   if (tool.kind === 'view') return readView(scope);
-  const common = { request: scope.request, capabilities: scope.capabilities, options: scope.options, sourceId: scope.sourceId, mask: scope.mask, continuing: false, action: scope.action, ...(scope.investigationId === undefined ? {} : { investigationId: scope.investigationId }) };
-  if (tool.kind === 'pattern') return run({ ...common, intent: ASK_SAVED_PATTERN_INTENT, entities: { pattern: tool.name, ...values }, ...(scope.patterns === undefined ? {} : { patterns: scope.patterns }) });
+  const common = { request: scope.request, capabilities: scope.capabilities, options: scope.options, sourceId: scope.sourceId, mask: scope.mask, continuing: options.continuing === true, action: scope.action, ...(scope.investigationId === undefined ? {} : { investigationId: scope.investigationId }) };
+  if (tool.kind === 'pattern') {
+    const entities = { pattern: tool.name, ...values };
+    // the continue of a saved pattern runs the pattern the route found by its id
+    const { findPattern } = gateClientOf(scope.request);
+    const offer = options.continuing === true && findPattern !== undefined ? await patternOf(findPattern, scope.sourceId, entities) : undefined;
+    return run({ ...common, intent: ASK_SAVED_PATTERN_INTENT, entities, ...(scope.patterns === undefined ? {} : { patterns: scope.patterns }), ...(offer === undefined ? {} : { offer }) });
+  }
   if (tool.kind === 'template') return run({ ...common, options: { ...scope.options, folder: () => withTemplateTools(scope.options.folder()) }, intent: tool.name, entities: values });
   return run({ ...common, intent: tool.name, entities: values });
 }

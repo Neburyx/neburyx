@@ -93,3 +93,70 @@ describe('cancelling an assistant turn during a tool step', () => {
     expect(saved()).toBe(before);
   });
 });
+
+describe('cancelling the decision on a heavy step of the loop', () => {
+  const MESSAGE = 'Show W-1 and the widgets that share a gadget with it';
+  const HEAVY_STEP = JSON.stringify({ tool: 'sharedGadget', values: { id: 'W-1' } });
+  let pausing = false;
+  let replayed: ExecuteCall[];
+  let local: AssistantApp;
+  let localModel: TurnModel;
+
+  const sourceOf = (call: ExecuteCall): Promise<ExecuteOutcome> | ExecuteOutcome | undefined => {
+    if (call.templateId === 'shared-attribute-count') return { status: 'rows', rows: [{ matches: 1_000_000, anchorBounded: false, skipped: false }] };
+    if (call.templateId === 'entity-load' && pausing) {
+      replayed.push(call);
+      return new Promise<ExecuteOutcome>((resolve) => call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' }), { once: true }));
+    }
+    return undefined;
+  };
+
+  beforeEach(async () => {
+    pausing = false;
+    replayed = [];
+    localModel = await startTurnModel();
+    local = await startAssistantApp({ model: localModel, respond: sourceOf, stores: true });
+  });
+  afterEach(async () => {
+    await local.close();
+    await localModel.close();
+  });
+
+  const waiting = async (): Promise<{ pendingId: string; plan: string }> => {
+    localModel.replies.push(ROUTE, HEAVY_STEP);
+    const first = await local.turn(MESSAGE);
+    if (first.body['status'] !== 'confirmation') throw new Error('not waiting');
+    return first.body as { pendingId: string; plan: string };
+  };
+  const decision = (held: { pendingId: string; plan: string }, decide: string) => ({ message: MESSAGE, confirmation: { pendingId: held.pendingId, plan: held.plan, decision: decide } });
+  const closings = () => local.events().filter((event) => event.action === 'assistant.turn.closed').map((event) => (event.detail as { turn: { outcome: string } }).turn.outcome);
+
+  it('starts no further read or call when the person cancels while the earlier reads are read again, closes that turn as cancelled, and the plan cannot be used again', async () => {
+    const held = await waiting();
+    pausing = true;
+    const controller = new AbortController();
+    const sent = local.sendTurn(MESSAGE, controller.signal, { confirmation: decision(held, 'confirm').confirmation });
+    await until(() => replayed.length > 0, 'the read that is made again to be pending');
+    const readsAtCancel = local.reads().length;
+    const callsAtCancel = localModel.requests.length;
+    controller.abort();
+    await sent;
+    await until(() => replayed.every((call) => call.signal?.aborted === true), 'the read to be aborted');
+    await pause();
+    expect(local.reads().length).toBe(readsAtCancel);
+    expect(localModel.requests.length).toBe(callsAtCancel);
+    expect(closings()).toEqual(['confirmation', 'cancelled']);
+    pausing = false;
+    expect((await local.turn(MESSAGE, decision(held, 'confirm'))).body).toMatchObject({ status: 'confirmation-invalid' });
+    expect(local.reads().filter((call) => call.templateId === 'shared-attribute')).toHaveLength(0);
+  });
+
+  it('drops the confirmation when the person cancels it, reads nothing, and closes the turn as cancelled', async () => {
+    const held = await waiting();
+    const readsBefore = local.reads().length;
+    expect((await local.turn(MESSAGE, decision(held, 'cancel'))).body).toEqual({ status: 'cancelled' });
+    expect(local.reads().length).toBe(readsBefore);
+    expect(closings()).toEqual(['confirmation', 'cancelled']);
+    expect((await local.turn(MESSAGE, decision(held, 'confirm'))).body).toMatchObject({ status: 'confirmation-invalid' });
+  });
+});

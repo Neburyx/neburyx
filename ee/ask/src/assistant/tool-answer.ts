@@ -1,4 +1,4 @@
-import { type AskRunResult, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
+import { ASSISTANT_CITATION_TITLE_MAX, type AskRunResult, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { type AssembledText, estimateTokens } from '../case-summary/assemble.js';
 import { retrievalLine } from '../case-summary/coverage.js';
@@ -55,6 +55,14 @@ type ElementKey = NonNullable<ReturnType<AssembledText['keys']['get']>>;
 
 const failureOf = (kind: string): AssistantFailureKind => (kind === 'timeout' ? 'timeout' : kind === 'rate-limited' ? 'rate-limit' : 'service');
 
+/** The title a citation carries: the element's own, cut to what the contract allows (its length in UTF-16 code units, as the schema counts it) without splitting a surrogate pair, and none when it is blank. */
+export function citationTitleOf(title: string | undefined): string | undefined {
+  if (title === undefined || title.trim() === '') return undefined;
+  if (title.length <= ASSISTANT_CITATION_TITLE_MAX) return title;
+  const cut = title.slice(0, ASSISTANT_CITATION_TITLE_MAX);
+  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+}
+
 const readLine = (key: string, read: ReadDone): string => `${key}: read of ${read.tool}: ${read.result === undefined ? 'found nothing' : coverageOf(read.result)}`;
 
 /**
@@ -75,7 +83,8 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
       seen.add(id);
       number += 1;
       const key = `r${number}`;
-      keys.set(key, 'entityType' in listed.element ? { kind: 'entity', ref: listed.element } : { kind: 'relationship', ref: listed.element });
+      // the title the result gave, masked as it was asked, goes with the key: an element the person has not drawn is still named
+      keys.set(key, 'entityType' in listed.element ? { kind: 'entity', ref: listed.element, title: listed.title } : { kind: 'relationship', ref: listed.element, title: listed.title });
       lines.set(key, `${key}: ${listed.type}: ${listed.title}`);
     }
   }
@@ -161,7 +170,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
         const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
         const citations = [...cited].flatMap((key) => {
           const element = assembled.keys.get(key);
-          return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref }];
+          return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref, ...(citationTitleOf(element.title) === undefined ? {} : { title: citationTitleOf(element.title) }) }];
         });
         return { kind: 'sentences', sentences: drafted.sentences, citations, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls };
       }

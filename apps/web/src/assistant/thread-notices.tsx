@@ -45,7 +45,7 @@ export function StoredTurns({ turns, earlier }: { readonly turns: AssistantThrea
           <li key={turn.seq} className="assistant-stored-row" aria-label={`${routeTag(turn.route)}, ${turn.outcome === 'answered' ? ASSISTANT_COPY.storedAnswered : ASSISTANT_COPY.storedRefused}`}>
             <span className="assistant-tag">{routeTag(turn.route)}</span>
             <span className="assistant-stored-what">{turn.intent ?? (turn.cause === undefined ? '' : causeText(turn.cause))}</span>
-            <span className="assistant-stored-end">{turn.outcome === 'answered' ? ASSISTANT_COPY.storedAnswered : ASSISTANT_COPY.storedRefused}</span>
+            <span className="assistant-stored-end">{turn.outcome === 'answered' ? ASSISTANT_COPY.storedAnswered : turn.outcome === 'waiting' ? ASSISTANT_COPY.waitingClosed : ASSISTANT_COPY.storedRefused}</span>
             <span className="assistant-stored-count">{sourcesText(turn.citedElements)}</span>
           </li>
         ))}

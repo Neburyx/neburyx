@@ -24,6 +24,7 @@ function refsOf(turn: AssistantContextTurn, sourceId: string): readonly EntityRe
 
 function lineOf(turn: AssistantContextTurn, keyOf: (ref: EntityRef) => string | undefined): string {
   const head = turn.route === 'refuse' ? 'refused' : turn.route === 'view' ? 'view' : `ask "${turn.intent ?? ''}"`;
+  if (turn.outcome === 'waiting') return `${head}; waiting for the analyst's confirmation, nothing was read for it`;
   if (turn.outcome === 'refused') return `${head}${turn.cause === undefined ? '' : ` (${turn.cause})`}${turn.route === 'refuse' ? '' : ' refused'}`;
   const roles = turn.entities.flatMap((entity) => {
     const key = keyOf(entity.ref);

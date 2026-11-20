@@ -6318,6 +6318,71 @@
                   "minLength": 1
                 }
               },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "confirmation": {
+                "type": "object",
+                "properties": {
+                  "pendingId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "plan": {
+                    "type": "string",
+                    "maxLength": 24000,
+                    "pattern": "^[0-9]{1,16}\\.[A-Za-z0-9_-]{1,23000}\\.[0-9a-f]{64}$"
+                  },
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "confirm",
+                      "skip",
+                      "cancel"
+                    ]
+                  }
+                },
+                "required": [
+                  "pendingId",
+                  "plan",
+                  "decision"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "sourceId",
+              "investigationId",
+              "viewElementKeys",
+              "message",
+              "confirmation"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "investigationId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mask": {
+                "type": "boolean"
+              },
+              "viewElementKeys": {
+                "maxItems": 300,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
               "continue": {
                 "type": "object",
                 "properties": {
@@ -6563,12 +6628,103 @@
               "sentence": {
                 "type": "string",
                 "minLength": 1
+              },
+              "reads": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "rows": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quality": {
+                          "type": "string",
+                          "enum": [
+                            "exact",
+                            "estimated",
+                            "lowerBound",
+                            "unknown"
+                          ]
+                        },
+                        "partial": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read",
+                        "quality",
+                        "partial"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
               }
             },
             "required": [
               "status",
               "limit",
-              "sentence"
+              "sentence",
+              "reads"
             ],
             "additionalProperties": false
           },
@@ -6586,32 +6742,106 @@
               "answer": {
                 "$ref": "#/components/schemas/AskAnswer"
               },
-              "step": {
-                "type": "object",
-                "properties": {
-                  "intent": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "rows": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "outcome": {
-                    "type": "string",
-                    "enum": [
-                      "complete",
-                      "partial"
-                    ]
-                  }
-                },
-                "required": [
-                  "intent",
+              "reads": {
+                "minItems": 1,
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "rows": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quality": {
+                          "type": "string",
+                          "enum": [
+                            "exact",
+                            "estimated",
+                            "lowerBound",
+                            "unknown"
+                          ]
+                        },
+                        "partial": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read",
+                        "quality",
+                        "partial"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "stoppedAt": {
+                "type": "string",
+                "enum": [
+                  "calls",
+                  "steps",
                   "rows",
-                  "outcome"
-                ],
-                "additionalProperties": false
+                  "time",
+                  "input"
+                ]
               },
               "coverage": {
                 "type": "string",
@@ -6740,6 +6970,213 @@
             "required": [
               "status",
               "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "confirmation-invalid"
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "cancelled"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "confirmation"
+              },
+              "pendingId": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "plan": {
+                "type": "string",
+                "maxLength": 24000,
+                "pattern": "^[0-9]{1,16}\\.[A-Za-z0-9_-]{1,23000}\\.[0-9a-f]{64}$"
+              },
+              "step": {
+                "type": "object",
+                "properties": {
+                  "tool": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "intent",
+                      "template",
+                      "pattern",
+                      "view"
+                    ]
+                  },
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 400
+                  },
+                  "count": {
+                    "type": "object",
+                    "properties": {
+                      "quality": {
+                        "type": "string",
+                        "enum": [
+                          "exact",
+                          "estimated",
+                          "lowerBound",
+                          "unknown"
+                        ]
+                      },
+                      "value": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      }
+                    },
+                    "required": [
+                      "quality"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "page": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "tool",
+                  "kind",
+                  "count",
+                  "page"
+                ],
+                "additionalProperties": false
+              },
+              "reads": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "rows": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quality": {
+                          "type": "string",
+                          "enum": [
+                            "exact",
+                            "estimated",
+                            "lowerBound",
+                            "unknown"
+                          ]
+                        },
+                        "partial": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read",
+                        "quality",
+                        "partial"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "status",
+              "pendingId",
+              "plan",
+              "step",
+              "reads"
             ],
             "additionalProperties": false
           },
@@ -7427,6 +7864,11 @@
                           ]
                         }
                       ]
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400
                     }
                   },
                   "required": [
@@ -7468,6 +7910,107 @@
                 "type": "integer",
                 "minimum": 2,
                 "maximum": 9007199254740991
+              },
+              "reads": {
+                "minItems": 1,
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "subject": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 400
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": true
+                        },
+                        "rows": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "quality": {
+                          "type": "string",
+                          "enum": [
+                            "exact",
+                            "estimated",
+                            "lowerBound",
+                            "unknown"
+                          ]
+                        },
+                        "partial": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read",
+                        "quality",
+                        "partial"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 200
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "intent",
+                            "template",
+                            "pattern",
+                            "view"
+                          ]
+                        },
+                        "read": {
+                          "type": "boolean",
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "tool",
+                        "kind",
+                        "read"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "stoppedAt": {
+                "type": "string",
+                "enum": [
+                  "calls",
+                  "steps",
+                  "rows",
+                  "time",
+                  "input"
+                ]
               }
             },
             "required": [
@@ -7478,7 +8021,8 @@
               "coverage",
               "model",
               "calls",
-              "steps"
+              "steps",
+              "reads"
             ],
             "additionalProperties": false
           },
@@ -7540,7 +8084,8 @@
                   "type": "string",
                   "enum": [
                     "answered",
-                    "refused"
+                    "refused",
+                    "waiting"
                   ]
                 },
                 "cause": {

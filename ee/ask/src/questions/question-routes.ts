@@ -35,7 +35,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog, type BuiltPatternCatalog } from '../patterns/index.js';
 import { summarizeRun } from './run-summary.js';
-import { currentRunId, noteRun } from '../assistant/turn-audit.js';
+import { currentRunId, isReplaying, noteRun } from '../assistant/turn-audit.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
 import { canonicalText } from './canonical.js';
 import { issueContinueToken, verifyContinueToken } from './continue-token.js';
@@ -90,7 +90,7 @@ export async function writeEvent(request: ExtensionRequest, action: string, resu
     ...(sourceId === undefined ? {} : { sourceId }),
     traceId: request.traceId,
     ...(detail.intent === undefined ? {} : { resourceType: 'ask-intent', resourceRef: detail.intent }),
-    detail: { askRun: { ...detail, ...(runId === undefined ? {} : { runId }) } },
+    detail: { askRun: { ...detail, ...(runId === undefined ? {} : { runId }), ...(isReplaying() ? { replay: true as const } : {}) } },
   };
   // the application queues the event and counts and logs its own failures; a failure here does not withhold the answer
   await request.audit.record(event).catch(() => undefined);

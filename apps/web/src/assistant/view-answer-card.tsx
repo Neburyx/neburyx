@@ -6,6 +6,7 @@ import { elementKey, edgeKey } from "../state/keys.js";
 import { SUMMARY_COPY } from "../summary/copy.js";
 import { pressOf, type CitationEntry } from "../summary/summary-model.js";
 import { ASSISTANT_COPY } from "./copy.js";
+import { ReadSteps } from "./read-steps.js";
 import type { ViewAnswer } from "./assistant-session.js";
 
 const labelOf = (entry: CitationEntry): string =>
@@ -111,11 +112,9 @@ export function ViewAnswerCard({
       <p className="summary-note" role="status">
         {note}
       </p>
+      {"reads" in answer ? <ReadSteps reads={answer.reads} /> : null}
       <div className="assistant-coverage">
         <p>{ASSISTANT_COPY.coverage}</p>
-        {"steps" in answer ? (
-          <p>{`${ASSISTANT_COPY.steps} · ${answer.steps}`}</p>
-        ) : null}
         {"summaryCited" in answer.coverage && answer.coverage.summaryCited !== undefined ? <p>{answer.coverage.summaryCited}</p> : null}
         <p>{answer.coverage.retrieval}</p>
         <p>{answer.coverage.summary}</p>

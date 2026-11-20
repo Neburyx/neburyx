@@ -17,6 +17,8 @@ import {
   type AskPatternOffer,
   type AssistantChoice,
   type AssistantFailureKind,
+  type AssistantLimit,
+  type AssistantRead,
   type AssistantRouterReply,
   type AssistantTurnAnswer,
   type AssistantTurnRequest,
@@ -30,7 +32,7 @@ import { withTemplateTools } from './tool-templates.js';
 import { AuditUnavailableError, gateClientOf, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { buildPatternCatalog } from '../patterns/index.js';
 import { coverageOf } from './coverage.js';
-import { summarizeRun } from '../questions/run-summary.js';
+import { readOfAnswer } from './reads.js';
 import { capabilitiesOf, definitionOf, execute, patternDefinitionOf, patternOf, refusal, writeEvent, type Execution } from '../questions/question-routes.js';
 import { canonicalText } from '../questions/canonical.js';
 import { verifyContinueToken } from '../questions/continue-token.js';
@@ -44,7 +46,9 @@ import { ATTACHED_SUMMARY_LINE, openAttachment, type SummaryAttachment } from '.
 import type { TokenKeys } from '../case-summary/token-keys.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
-import { noteStep, noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
+import { noteResumes, noteStep, noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
+import { auditConfirmation, openDecision, waitingAnswer, type WaitContext } from './confirmation.js';
+import type { AssistantPendingStore } from './pending-store.js';
 import { countWords } from './words.js';
 import type { ViewInput, ViewOutcome, ViewProgress } from './view-answer.js';
 import { toolRegistryOf, type LoopInput, type LoopOutcome } from './tool-loop.js';
@@ -79,6 +83,8 @@ export interface TurnRouteOptions {
   readonly contextTurns?: () => number | undefined;
   /** The keys the summary's tokens are sealed under; absent, no summary token opens. */
   readonly summaryKeys?: () => TokenKeys | undefined;
+  /** The store of the confirmations that wait for the analyst; absent, a heavy step of the loop stops the turn as Ask's heavy stop, with Continue. */
+  readonly pending?: () => AssistantPendingStore | undefined;
   readonly now?: () => number;
 }
 
@@ -110,11 +116,10 @@ function unavailableOf(error: unknown): AssistantTurnAnswer | undefined {
 
 const summaryInvalid = (): AssistantTurnAnswer => ({ status: 'summary-invalid', sentence: ASSISTANT_SUMMARY_INVALID_SENTENCE });
 
-const answeredAsk = (answer: AskAnswer): AssistantTurnAnswer => {
+const answeredAsk = (answer: AskAnswer, reads?: readonly AssistantRead[], stoppedAt?: AssistantLimit): AssistantTurnAnswer => {
   if ('refused' in answer || answer.answered.continueToken !== undefined) return { status: 'answered', route: 'ask', answer };
-  const { result, intent, outcome } = answer.answered;
-  const { rowCount } = summarizeRun(result);
-  return { status: 'answered', route: 'ask', answer, step: { intent, rows: rowCount, outcome }, coverage: coverageOf(result) };
+  const { result, intent } = answer.answered;
+  return { status: 'answered', route: 'ask', answer, reads: [...(reads ?? [readOfAnswer(answer.answered.patternName === undefined ? 'intent' : 'pattern', intent, answer.answered)])], coverage: coverageOf(result), ...(stoppedAt === undefined ? {} : { stoppedAt }) };
 };
 
 /** The answer of a turn for what the view answer came to; every exit has one. */
@@ -166,17 +171,17 @@ function othersOfClarify(reply: Extract<AssistantRouterReply, { route: 'clarify'
   return resolved;
 }
 
-/** What a loop that ran steps answers: the answer of its last read, Ask's heavy stop, the stop of a limit, or the fixed sentence of a request that did not fit. */
-function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view'): AssistantTurnAnswer | undefined {
+/** What a loop that ran steps answers: the answer of its last read, the confirmation a heavy step waits for, the stop of a limit, or the fixed sentence of a request that did not fit. A turn that went on after a decision always has an answer. */
+async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting: (waiting: Extract<LoopOutcome, { kind: 'waiting' }>) => Promise<AssistantTurnAnswer>, resumed = false): Promise<AssistantTurnAnswer | undefined> {
   switch (outcome.kind) {
     case 'finished':
-      return outcome.steps > 1 ? answeredAsk({ answered: outcome.answer }) : undefined;
-    case 'heavy':
-      return answeredAsk({ answered: outcome.answer });
+      return resumed || outcome.steps > 1 || outcome.stoppedAt !== undefined ? answeredAsk({ answered: outcome.answer }, outcome.reads, outcome.stoppedAt) : undefined;
+    case 'waiting':
+      return onWaiting(outcome);
     case 'limit':
-      return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit] };
+      return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit], reads: [...outcome.reads] };
     case 'sentences':
-      return { status: 'answered', route, sentences: [...outcome.answer.sentences], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps };
+      return { status: 'answered', route, sentences: [...outcome.answer.sentences], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
     case 'unsupported':
       return { status: 'not-answered', route, sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
     case 'failed':
@@ -303,6 +308,76 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     return runAndAnswer({ request, capabilities, options: continueOptions, sourceId: body.sourceId, mask, intent: asked.intent, entities: asked.entities, continuing: true, action: CONTINUE_ACTION, investigationId: body.investigationId, ...(offer === undefined ? {} : { offer }) }, followUpsFor(request, body));
   }
 
+  /** The fingerprint of the definition of a tool a plan waits on, as the continue of Ask binds it: a folder intent or catalog template by its definition, a saved pattern by its id and version. */
+  async function definitionOfTool(request: ExtensionRequest, sourceId: string, tool: string, values: Readonly<Record<string, string>>): Promise<string | undefined> {
+    const found = continueOptions.folder()?.intent(sourceId, tool);
+    if (found !== undefined) return definitionOf(found);
+    const { findPattern } = gateClientOf(request);
+    if (findPattern === undefined) return undefined;
+    const offer = await patternOf(findPattern, sourceId, { pattern: tool, ...values });
+    return offer === undefined ? undefined : patternDefinitionOf(offer);
+  }
+
+  /** What a turn that waits for a confirmation needs to keep it; a heavy step with no store to keep it in stops the turn as Ask's heavy stop does. */
+  function waitingOf(request: ExtensionRequest, body: { readonly sourceId: string; readonly investigationId: string; readonly mask?: boolean | undefined; readonly viewElementKeys: readonly string[] }, message: string, startedAt: number): (waiting: Extract<LoopOutcome, { kind: 'waiting' }>) => Promise<AssistantTurnAnswer> {
+    return (waiting) => {
+      const store = options.pending?.();
+      if (store === undefined) return Promise.resolve(answeredAsk({ answered: waiting.wait.answer }));
+      const ctx: WaitContext = { request, sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, startedAt, now: options.now ?? Date.now, store, definitionOf: (tool, values) => definitionOfTool(request, body.sourceId, tool, values) };
+      return waitingAnswer(ctx, waiting);
+    };
+  }
+
+  /** A new message drops the confirmation the person was waiting on: the step can never run. A store that cannot be reached never blocks the message. */
+  async function dropWaiting(request: ExtensionRequest, body: { readonly sourceId: string; readonly investigationId: string }): Promise<void> {
+    const store = options.pending?.();
+    if (store === undefined) return;
+    try {
+      const dropped = await store.drop(request.principalId, (options.now ?? Date.now)());
+      if (dropped !== undefined) await auditConfirmation(request, dropped, 'replaced');
+    } catch {
+      // the old row stays until it expires, usable only by the same person
+    }
+  }
+
+  /** The decision of the analyst on a waiting confirmation: verified, claimed once, and then the turn goes on, or ends if it was a cancel. */
+  async function confirmationTurn(request: ExtensionRequest, body: Extract<AssistantTurnRequest, { confirmation: unknown }>, signal: AbortSignal): Promise<AssistantTurnAnswer> {
+    const store = options.pending?.();
+    if (store === undefined) throw unsupported();
+    const now = options.now ?? Date.now;
+    const mask = body.mask === true;
+    // what a decision needs is checked before the confirmation is claimed, so a missing loop never uses it up
+    const loop = options.toolLoop?.();
+    if (loop === undefined) return { status: 'unavailable', kind: 'service', readStarted: false };
+    const { patterns } = gateClientOf(request);
+    const listing = patterns === undefined ? undefined : await patterns(body.sourceId);
+    const built = listing === undefined ? undefined : buildPatternCatalog(listing);
+    const scope = { request, capabilities: capabilitiesOf(request), options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
+    const registry = toolRegistryOf(scope, body.viewElementKeys.length > 0);
+    const decided = await openDecision({ request, sourceId: body.sourceId, investigationId: body.investigationId, mask, now, store, definitionOf: (tool, values) => definitionOfTool(request, body.sourceId, tool, values), toolAvailable: (tool) => registry.find(tool)?.available === true }, body);
+    if (decided.kind === 'answer') return decided.answer;
+    const { plan } = decided;
+    noteTurn({ route: 'ask' });
+    if (plan.runId !== undefined) noteResumes(plan.runId);
+    const route = plan.fromView ? 'view' : 'ask';
+    const total = options.totalTimeoutMs?.();
+    // the time of the wait does not count: the turn has the time it had left when it stopped
+    const remaining = total === undefined ? undefined : total - plan.counters.elapsedMs;
+    const deadline = remaining === undefined ? new AbortController().signal : remaining <= 0 ? AbortSignal.abort() : (options.turnDeadline ?? AbortSignal.timeout)(remaining);
+    const startedAt = now() - plan.counters.elapsedMs;
+    try {
+      const looped = await loop({ scope, message: body.message, deadline: AbortSignal.any([deadline, signal]), startedAt, callsUsed: plan.counters.calls, resume: decided.resume });
+      if (looped === undefined) return { status: 'unavailable', kind: 'service', readStarted: true };
+      return (await loopAnswer(looped, route, waitingOf(request, body, body.message, startedAt), true)) ?? { status: 'unavailable', kind: 'service', readStarted: true };
+    } catch (error) {
+      if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+      if (request.signal.aborted) throw new Error('the request was cancelled');
+      const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);
+      if (unavailable === undefined) throw error;
+      return unavailable;
+    }
+  }
+
   return {
     method: 'POST',
     url: TURNS_URL,
@@ -323,6 +398,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
         await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-choice', 1, body.choice.intent]) });
         return choiceTurn(request, body, readElements, AbortSignal.any([request.signal, deadline]), deadline);
       }
+      if ('confirmation' in body) {
+        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-confirmation', 1, body.message]) });
+        return confirmationTurn(request, body, AbortSignal.any([request.signal, deadline]));
+      }
       if ('continue' in body) {
         await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-continue', 1, body.continue.intent]) });
         return continueTurn(request, body, body.continue);
@@ -331,6 +410,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       const words = countWords(message);
       if (words === 0) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'empty-message' });
       await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-question', 1, message]) });
+      await dropWaiting(request, body);
       const limit = options.maxMessageWords();
       if (limit === undefined) throw unsupported();
       if (words > limit) return { status: 'too-long', words, limit };
@@ -392,7 +472,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
                 // the view's reading is the first step of the loop; the model's request is the second
                 noteStep();
                 const looped = await loop({ scope, message, deadline, startedAt, callsUsed: outcome.calls + viewed.calls, view: { reading: viewed.reading, assembled: viewed.assembled, request: viewed.request } });
-                return looped === undefined ? viewTurn(viewed) : (loopAnswer(looped, 'view') ?? viewTurn(viewed));
+                return looped === undefined ? viewTurn(viewed) : ((await loopAnswer(looped, 'view', waitingOf(request, body, message, startedAt))) ?? viewTurn(viewed));
               }
               return viewTurn(viewed);
             } catch (error) {
@@ -427,8 +507,8 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               : async (answer: AskAnswer): Promise<AssistantTurnAnswer | undefined> => {
                   if ('refused' in answer || answer.answered.continueToken !== undefined) return undefined;
                   const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(execution.patterns === undefined ? {} : { patterns: execution.patterns }) };
-                  const looped = await loop({ scope, message, deadline, startedAt, callsUsed: outcome.calls, first: { tool: reply.intent, answer: answer.answered } });
-                  return looped === undefined ? undefined : loopAnswer(looped, 'ask');
+                  const looped = await loop({ scope, message, deadline, startedAt, callsUsed: outcome.calls, first: { tool: reply.intent, answer: answer.answered, asked: resolved.entities } });
+                  return looped === undefined ? undefined : loopAnswer(looped, 'ask', waitingOf(request, body, message, startedAt));
                 };
           return runAndAnswer(execution, followUpsFor(request, body), after);
         }

@@ -55,3 +55,11 @@ export function inexactCountOf(run: AskRunResult): { readonly phrase: string; re
   const figureValue = matches === undefined ? count.value : Math.max(count.value - matches.shown, 0);
   return figureValue === 0 && matches !== undefined ? undefined : { phrase: `${SIGNS[count.quality]}${figure(figureValue)}`, value: String(figureValue) };
 }
+
+/** The count a read's line is written with: the count the result carries (of matches, or the rows of a file query), or the number of elements it lists, which is exact; `value` is absent when the count is not known. */
+export function countOf(run: AskRunResult): { readonly quality: Count['quality']; readonly value: number | undefined } {
+  const matches = matchesOf(run);
+  const count = matches?.count ?? (run.templateId === 'file-query' ? run.result.count : undefined);
+  if (count === undefined) return { quality: 'exact', value: summarizeRun(run).rowCount };
+  return count.quality === 'unknown' || count.value === undefined ? { quality: 'unknown', value: undefined } : { quality: count.quality, value: count.value };
+}

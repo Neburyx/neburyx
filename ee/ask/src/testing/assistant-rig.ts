@@ -13,6 +13,7 @@ import { createToolAnswer, ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION } from '../as
 import { STEP_PROMPT_ID, STEP_PROMPT_VERSION } from '../assistant/step-instructions.js';
 import type { AssistantRunStore } from '../assistant/run-store.js';
 import type { AssistantThreadStore } from '../assistant/thread-store.js';
+import type { AssistantPendingStore } from '../assistant/pending-store.js';
 import { readAssistantSettings } from '../assistant/settings.js';
 import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, VIEW_TOOLS_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
 import { buildSummaryInstructions } from '../case-summary/instructions.js';
@@ -70,13 +71,15 @@ export interface RigOptions {
   readonly patterns?: readonly AskPatternOffer[];
   readonly noFolder?: boolean;
   readonly intents?: unknown;
-  readonly run?: (continuing: boolean) => AskRun | Promise<AskRun>;
+  readonly run?: (continuing: boolean, asked: unknown) => AskRun | Promise<AskRun>;
   readonly runThrows?: Error;
   /** The store of the records of the turns' model calls; absent, nothing is recorded. */
   readonly runStore?: AssistantRunStore;
   /** The store of the threads, and the queue of the records its writes go through. */
   readonly threadStore?: AssistantThreadStore;
   readonly records?: RecordQueue;
+  /** The store of the confirmations that wait for the analyst; absent, a heavy step of the loop stops the turn as Ask's heavy stop. */
+  readonly pending?: AssistantPendingStore;
   /** The environment the assistant's settings are read from for the run record. */
   readonly settingsEnv?: Record<string, string>;
   readonly logs?: { readonly fields: Record<string, unknown>; readonly message: string }[];
@@ -143,7 +146,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const viewAnswer = options.view === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});
   const toolLoop = options.step === undefined ? undefined : createToolLoop({ model, prompt: () => PROMPT, settings: () => ({ maxCalls: options.maxCalls ?? 5, maxSteps: options.loopSteps ?? 4, maxInputTokens: options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }) }), answer: createToolAnswer({ model, instructions: () => buildSummaryInstructions('You answer from what the reads returned. SENTINEL-ANSWER-PROMPT', 'SENTINEL-TYPOLOGY'), checks: options.checks ?? createCheckRunner(), timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000, now: () => clock.now }) });
-  const route = createAssistantTurnRoute({ ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }), ...(toolLoop === undefined ? {} : { toolLoop: () => toolLoop, viewTools: () => (options.loopSteps ?? 4) >= 2 }), totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const route = createAssistantTurnRoute({ ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }), ...(toolLoop === undefined ? {} : { toolLoop: () => toolLoop, viewTools: () => (options.loopSteps ?? 4) >= 2 }), totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.pending === undefined ? {} : { pending: () => options.pending }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',
@@ -179,7 +182,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
       run: async (asked, runOptions) => {
         runs.push({ asked, options: runOptions, mask: scope.mask });
         if (options.runThrows !== undefined) throw options.runThrows;
-        return options.run === undefined ? { status: 'ok', result: okResult() } : options.run(runOptions?.continue === true);
+        return options.run === undefined ? { status: 'ok', result: okResult() } : options.run(runOptions?.continue === true, asked);
       },
     }),
     body,

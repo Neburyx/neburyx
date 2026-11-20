@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AuditEvent } from '@neburyx/contracts';
-import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
 import { fileQueryDepsOf } from '../gate/file-query.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { makeAskFolder } from './ask-folder.js';
@@ -87,6 +88,8 @@ export interface AssistantAppOptions {
   readonly maxCalls?: number;
   /** The name the source gives an entity read by its stable id. */
   readonly name?: (id: string) => string;
+  /** Mounts the stores of the extension (memory ones here), which the confirmation of a heavy step needs: it is kept in a store of its own. */
+  readonly stores?: boolean;
   /** Settings of the assistant, by name (`NEBURYX_ASSISTANT_*`). */
   readonly settings?: Readonly<Record<string, string>>;
 }
@@ -95,13 +98,14 @@ const INTENTS = {
   widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } },
   findWidgets: { parameters: ['q'], template: 'search', settings: { entityTypes: ['widget'], text: '$q' } },
   byId: { parameters: ['id'], query: 'MATCH (n:Widget) WHERE n.widgetId = $id RETURN n LIMIT 5' },
+  sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } },
 };
 
 export type AssistantApp = Awaited<ReturnType<typeof startAssistantApp>>;
 
 /** The real application with the real enterprise extension and the assistant on (its tool loop from two steps), over a model service the test gives and the real gate over a scripted source. */
 export async function startAssistantApp(options: AssistantAppOptions) {
-  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore() });
+  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
   const env = {
     NEBURYX_ASK_API_KEY: 'not-a-real-key',
     NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS),
@@ -113,6 +117,7 @@ export async function startAssistantApp(options: AssistantAppOptions) {
   };
   const configured = await extension.configure?.({}, env, { sourceIds: ['demo'], features: { ask: false, summary: false, assistant: true } });
   if (configured?.ok !== true) throw new Error(`the extension was not configured: ${JSON.stringify(configured)}`);
+  const sinkOpened = options.stores === true ? extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined }) : undefined;
   const modelEvents: AuditEvent[] = [];
   extension.attachAudit?.({ record: (event) => (modelEvents.push(event), Promise.resolve()) });
   const logs: string[] = [];
@@ -141,6 +146,9 @@ export async function startAssistantApp(options: AssistantAppOptions) {
       address ??= await rig.app.listen({ host: '127.0.0.1', port: 0 });
       return fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body(message, over)), signal }).catch(() => undefined);
     },
-    close: () => rig.stop(),
+    close: async () => {
+      await rig.stop();
+      await sinkOpened?.close();
+    },
   };
 }

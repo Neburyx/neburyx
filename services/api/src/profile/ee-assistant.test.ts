@@ -5,7 +5,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ASSISTANT_REFUSAL_SENTENCES, assistantThreadResponseSchema, assistantTurnAnswerSchema, type AuditCounts, type AuditEvent, type AuditSink, type RecordJob, type RecordQueue } from '@neburyx/contracts';
-import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantThreadStore, sealToken } from '@neburyx/ee-ask';
+import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore, sealToken } from '@neburyx/ee-ask';
 import fc from 'fast-check';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
@@ -65,7 +65,7 @@ function tokenKeyFile(): string {
 
 async function assistantRig(options: { maxSteps?: number; withSummary?: boolean; principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
-  const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore() });
+  const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
   const features = options.features ?? { ask: false, summary: options.withSummary === true, assistant: true };
   const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), ...(options.withSummary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
@@ -222,9 +222,9 @@ describe('the tool loop through the real application', () => {
     const rig = await assistantRig({ maxSteps: 2, reply: sequence(ROUTE, '{"tool":"widgetById","values":{"id":"W-2"}}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-2') }] } : undefined) });
     const before = entityReads(rig);
     const answer = await rig.post({ ...rig.body, message: 'Show many' });
-    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 3 });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 3, stoppedAt: 'steps', reads: [{ tool: 'widgetById', kind: 'intent', read: true }, { tool: 'widgetById', kind: 'intent', subject: 'W-2', read: true }] });
     expect(entityReads(rig) - before).toBe(2);
-    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { outcome: 'answered', steps: 2, modelCalls: 3 } } }]);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { outcome: 'answered', steps: 2, modelCalls: 3, cause: 'limit-steps' } } }]);
     await rig.stop();
   });
 });
@@ -291,7 +291,7 @@ describe('a file query through the real gate in the running application', () => 
     const rig = await assistantRig({ reply: REPLY, fileQuery: { status: 'rows', rows: [{ n: widgetNode('W-1') }, { n: widgetNode('W-2') }] } });
     const before = rig.rig.executor.calls.length;
     const answer = await rig.post({ ...rig.body, message: 'Query widget W-1' });
-    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { intent: 'queryById', result: { templateId: 'file-query' } } }, step: { intent: 'queryById', rows: 2 } });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { intent: 'queryById', result: { templateId: 'file-query' } } }, reads: [{ tool: 'queryById', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }] });
     const calls = rig.rig.executor.calls.slice(before).filter((call) => call.templateId === 'file-query');
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ accessMode: 'READ', parameters: { id: 'W-1' } });
@@ -311,6 +311,60 @@ describe('a file query through the real gate in the running application', () => 
     const answer = await rig.post({ ...rig.body, message: 'Query widget W-1' });
     expect(answer.statusCode).toBe(400);
     expect(answer.json().error).toMatchObject({ code: 'INVALID_REQUEST', details: { reason: 'file-query-result' } });
+    await rig.stop();
+  });
+});
+
+describe('a heavy step of the loop through the real gate in the running application', () => {
+  const ROUTE = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
+  const ANSWER = JSON.stringify({ sentences: [{ text: 'Ana Silva is listed.', cites: ['r1'] }, { text: 'Ana Silva is linked to GT-1.', cites: ['r5'] }] });
+  const widget = (id: string) => plainNode(['Widget'], { widgetId: id, ownerName: 'Ana Silva' }, `4:s:${id}`);
+  const gadget = plainNode(['Gadget'], { gadgetId: 'GT-1' }, '4:s:GT-1');
+  const sequence = (...replies: string[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? '{"done":true}';
+  };
+  const source = (call: ExecuteCall): ExecuteOutcome | undefined => {
+    if (call.templateId === 'entity-load') return { status: 'rows', rows: [{ n: widgetNode('W-1') }] };
+    if (call.templateId === 'shared-attribute-count') return { status: 'rows', rows: [{ matches: 1_000_000, anchorBounded: false, skipped: false }] };
+    if (call.templateId !== 'shared-attribute') return undefined;
+    const row = (match: string) => ({ a: widget('W-1'), b: widget(match), xs: [gadget], ras: [plainRelationship('MADE_FROM', widget('W-1'), gadget, { linkId: 'L-1' }, '5:s:L-1')], rbs: [plainRelationship('MADE_FROM', widget(match), gadget, { linkId: `L-${match}` }, `5:s:L-${match}`)] });
+    return { status: 'rows', rows: [row('W-2'), row('W-3')] };
+  };
+  const everything = (rig: Awaited<ReturnType<typeof assistantRig>>): AuditEvent[] => [...rig.events, ...rig.rig.events];
+  const pages = (rig: Awaited<ReturnType<typeof assistantRig>>) => rig.rig.executor.calls.filter((call) => call.templateId === 'shared-attribute').length;
+  const MESSAGE = 'Show W-1 and the widgets that share a gadget with it';
+
+  it('waits for the analyst, reads no page before the decision, reads one after Confirm, and refuses the same plan again, with every step of it audited', async () => {
+    const rig = await assistantRig({ threadStore: createMemoryAssistantThreadStore(), maxSteps: 4, reply: sequence(ROUTE, '{"tool":"sharedGadget","values":{"id":"W-1"}}', '{"done":true}', ANSWER), answer: source });
+    const waiting = assistantTurnAnswerSchema.parse((await rig.post({ ...rig.body, message: MESSAGE })).json());
+    if (waiting.status !== 'confirmation') throw new Error(`not waiting: ${JSON.stringify(waiting).slice(0, 200)}`);
+    expect(waiting).toMatchObject({ step: { tool: 'sharedGadget', kind: 'intent', subject: 'W-1', count: { quality: 'lowerBound' } }, reads: [{ tool: 'widgetById' }] });
+    expect(JSON.stringify(waiting)).not.toMatch(/continueToken|Ana Silva/);
+    expect(pages(rig)).toBe(0);
+    const decision = { ...rig.body, message: MESSAGE, confirmation: { pendingId: waiting.pendingId, plan: waiting.plan, decision: 'confirm' } };
+    const answer = assistantTurnAnswerSchema.parse((await rig.post(decision)).json());
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, reads: [{ tool: 'widgetById' }, { tool: 'sharedGadget' }] });
+    expect(pages(rig)).toBe(1);
+    // the elements the answer cites are named by the titles the reads gave, drawn or not: the entity and the relationship
+    if (!('citations' in answer)) throw new Error('not a steps answer');
+    expect(answer.citations).toMatchObject([{ key: 'r1', kind: 'entity', title: 'Ana Silva' }, { key: 'r5', kind: 'relationship', title: expect.stringContaining('Ana Silva → GT-1') }]);
+    expect(assistantTurnAnswerSchema.parse((await rig.post(decision)).json())).toMatchObject({ status: 'confirmation-invalid' });
+    expect(pages(rig)).toBe(1);
+    const events = everything(rig);
+    expect(events.filter((event) => event.action === 'assistant.confirmation').map((event) => (event.detail as { turn: { cause: string } }).turn.cause)).toEqual(['shown', 'confirm', 'invalid-used']);
+    expect(events.filter((event) => event.action === 'assistant.turn.closed').map((event) => (event.detail as { turn: { outcome: string } }).turn.outcome)).toEqual(['confirmation', 'answered', 'refused']);
+    expect(JSON.stringify(events)).not.toMatch(/Ana Silva|W-1/);
+    await rig.stop();
+  });
+
+  it('reads nothing of the step after Skip, and answers over what was read', async () => {
+    const rig = await assistantRig({ threadStore: createMemoryAssistantThreadStore(), maxSteps: 4, reply: sequence(ROUTE, '{"tool":"sharedGadget","values":{"id":"W-1"}}', '{"done":true}', ANSWER), answer: source });
+    const waiting = assistantTurnAnswerSchema.parse((await rig.post({ ...rig.body, message: MESSAGE })).json());
+    if (waiting.status !== 'confirmation') throw new Error('not waiting');
+    const answer = assistantTurnAnswerSchema.parse((await rig.post({ ...rig.body, message: MESSAGE, confirmation: { pendingId: waiting.pendingId, plan: waiting.plan, decision: 'skip' } })).json());
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(pages(rig)).toBe(0);
     await rig.stop();
   });
 });
@@ -341,7 +395,7 @@ describe('a heavy stop and its continue through the real gate in the running app
     expect(continued.answer.answered.result.result.matchIds.map((entry: { stableId: string }) => entry.stableId)).toEqual(['W-2', 'W-3']);
     expect(continued.answer.answered.summary.citations.length).toBeGreaterThan(0);
     expect(continued.answer.answered).not.toHaveProperty('continueToken');
-    expect(continued).toMatchObject({ step: { intent: 'sharedGadget', rows: expect.any(Number) }, coverage: expect.stringContaining('matches shown') });
+    expect(continued).toMatchObject({ reads: [expect.objectContaining({ tool: 'sharedGadget', kind: 'intent', read: true })], coverage: expect.stringContaining('matches shown') });
     expect(rig.stub.bodies).toHaveLength(modelCalls);
     expect(rig.rig.executor.calls.slice(before).some((call) => call.templateId === 'shared-attribute')).toBe(true);
     const altered = await rig.post({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [], continue: { intent: 'sharedGadget', entities: { id: 'W-2' }, continueToken: token } });

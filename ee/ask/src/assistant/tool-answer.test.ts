@@ -2,7 +2,8 @@ import { ASSISTANT_NOT_ANSWERED_SENTENCE } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { answerOf, lowerBoundResult, ok, okResult, rig, routeAsk, unknownCountResult, zeroResult, type Rig } from '../testing/assistant-rig.js';
-import { assembleResults } from './tool-answer.js';
+import { assistantTurnAnswerSchema } from '@neburyx/contracts';
+import { assembleResults, citationTitleOf } from './tool-answer.js';
 import { TURN_CLOSED_ACTION } from './turn-audit.js';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 
@@ -18,6 +19,26 @@ const sequence = (...replies: FixtureReply[]) => {
 };
 const turn = (r: Rig) => (r.events.find((event) => event.action === TURN_CLOSED_ACTION)?.detail as { turn: Record<string, unknown> }).turn;
 const setup = (answer: FixtureReply | (() => FixtureReply), extra: Parameters<typeof rig>[0] = {}) => rig({ reply: SHARED, step: sequence(TOOL, DONE), answer, run: () => ({ status: 'ok', result: okResult() }), ...extra });
+
+describe('the title of a citation', () => {
+  const answerWith = (title: string | undefined) => assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }], citations: [{ key: 'r1', kind: 'entity', ref: { sourceId: 'a', entityType: 'widget', stableId: 'A-1' }, ...(title === undefined ? {} : { title }) }], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [{ tool: 't', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }, { tool: 'u', kind: 'intent', read: false }] });
+
+  it('is cut to what the schema allows, counted as the schema counts it, for a long entity title, a relationship title of two long ends, emoji, and a cut that would fall inside a pair; and is none when blank', () => {
+    const cases = ['é'.repeat(1000), `MADE_FROM: ${'A'.repeat(300)} → ${'B'.repeat(300)}`, '😀'.repeat(500), `${'a'.repeat(399)}😀tail`, 'Account A-1'];
+    for (const title of cases) {
+      const cut = citationTitleOf(title);
+      expect(cut?.length).toBeLessThanOrEqual(400);
+      expect(answerWith(cut).success).toBe(true);
+      // the cut never ends in the first half of a pair
+      expect(/[\uD800-\uDBFF]$/.test(cut ?? '')).toBe(false);
+    }
+    expect(citationTitleOf(`${'a'.repeat(399)}😀tail`)).toBe('a'.repeat(399));
+    expect(citationTitleOf('😀'.repeat(500))).toBe('😀'.repeat(200));
+    expect(citationTitleOf('Account A-1')).toBe('Account A-1');
+    expect(citationTitleOf('   ')).toBeUndefined();
+    expect(citationTitleOf(undefined)).toBeUndefined();
+  });
+});
 
 describe('the answer after tool steps', () => {
   it('numbers each element the reads listed once, as a type and a title and nothing else, then writes a line for each read', () => {

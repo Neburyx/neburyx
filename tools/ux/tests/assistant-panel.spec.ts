@@ -42,6 +42,7 @@ interface Sent {
   investigationId: string;
   viewElementKeys: string[];
   continue?: { intent: string; entities: Record<string, string>; continueToken: string };
+  confirmation?: { pendingId: string; plan: string; decision: string };
   choice?: { intent: string; roles: string[]; entities: Record<string, string>; choiceToken: string };
 }
 
@@ -296,6 +297,10 @@ test.describe('the Assistant panel', () => {
         model: 'claude-sonnet-5-5',
         calls: 4,
         steps: 2,
+        reads: [
+          { tool: 'shared-devices', kind: 'intent', subject: 'AC-1', read: true, rows: 12, quality: 'exact', partial: false },
+          { tool: 'fan-out', kind: 'pattern', subject: 'AC-1', read: true, rows: 25, quality: 'lowerBound', partial: false },
+        ],
       };
       await answerWith(page, answer);
       await open(page);
@@ -304,12 +309,95 @@ test.describe('the Assistant panel', () => {
       await expect(panel(page).getByText('AI-drafted')).toBeVisible();
       await expect(panel(page).getByText('Account AC-1 shares a device with account AC-2.')).toBeVisible();
       await expect(panel(page).getByText('Steps · 2')).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Answer from the reads' })).toBeFocused();
+      await expect(panel(page).getByText('Ran Shared devices')).toBeHidden();
+      await panel(page).getByText('Steps · 2').click();
+      await expect(panel(page).getByText('Ran Shared devices')).toBeVisible();
+      await expect(panel(page).getByText('Folder intent')).toBeVisible();
+      await expect(panel(page).getByText('AC-1 · 12 rows · complete')).toBeVisible();
+      await expect(panel(page).getByText('from AC-1 · ≥ 25 rows · complete')).toBeVisible();
+      await expect(panel(page).getByText('Lower bound', { exact: true })).toBeVisible();
       await expect(panel(page).getByText('Sources · 2')).toBeVisible();
       await expect(panel(page).getByText('The answer cites 2 of the 2 elements the reads returned.')).toBeVisible();
-      await expect(page.getByRole('heading', { name: 'Answer from the reads' })).toBeFocused();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
       const box = await panel(page).boundingBox();
       expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+    });
+  }
+
+  for (const width of [1440, 1280]) {
+    test(`shows a heavy step that waits for the analyst at ${width} pixels, confirms it with the plan and the view of the turn, and goes on in the same turn`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const plan = `${'1'.repeat(10)}.${'a'.repeat(120)}.${'b'.repeat(64)}`;
+      const waiting: AssistantTurnAnswer = {
+        status: 'confirmation',
+        pendingId: '0192f000-0000-7000-8000-0000000000a1',
+        plan,
+        step: { tool: 'relationships-of-a-device', kind: 'template', subject: 'DEV-884', count: { quality: 'lowerBound', value: 1200 }, page: 25 },
+        reads: [{ tool: 'devices-of-an-account', kind: 'template', subject: 'ACC-71825', read: true, rows: 2, quality: 'exact', partial: false }],
+      };
+      const done: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'ask',
+        sentences: [{ text: 'Device DEV-884 is used by two accounts.', cites: ['s2'] }],
+        citations: [],
+        coverage: { retrieval: 'read 1: 2 shown · exact; read 2: 25 shown · ≥ 1,200 not yet retrieved', summary: 'The answer cites 0 of the 25 elements the reads returned.' },
+        model: 'claude-sonnet-5-5',
+        calls: 4,
+        steps: 2,
+        reads: [
+          { tool: 'devices-of-an-account', kind: 'template', subject: 'ACC-71825', read: true, rows: 2, quality: 'exact', partial: false },
+          { tool: 'relationships-of-a-device', kind: 'template', subject: 'DEV-884', read: true, rows: 1200, quality: 'lowerBound', partial: true },
+        ],
+      };
+      const sent = await answerWith(page, (body) => (body.confirmation === undefined ? waiting : done));
+      await open(page);
+      await page.getByLabel('Your message').fill('Who else uses DEV-884?');
+      await page.keyboard.press('Enter');
+      const title = page.getByRole('heading', { name: 'Read Relationships of a device for DEV-884?' });
+      await expect(title).toBeFocused();
+      await expect(panel(page).getByText('Waiting for you')).toBeVisible();
+      await expect(panel(page).getByText('This read of DEV-884 is larger than one page. This would read one page of 25 rows.')).toBeVisible();
+      await expect(panel(page).getByText('≥ 1,200 rows')).toBeVisible();
+      await expect(panel(page).getByText('Ran Devices of an account')).toBeVisible();
+      await expect(panel(page).getByText('Nothing more runs until you choose. Cancel stops the turn.')).toBeVisible();
+      for (const name of ['Confirm', 'Skip', 'Cancel']) await expect(panel(page).getByRole('button', { name })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      // Esc closes the panel, sends nothing, and the card is there again when the panel is opened
+      const requestsBefore = sent.length;
+      await page.keyboard.press('Escape');
+      await expect(panel(page)).toHaveCount(0);
+      expect(sent.length).toBe(requestsBefore);
+      await open(page);
+      await expect(page.getByRole('heading', { name: 'Read Relationships of a device for DEV-884?' })).toBeVisible();
+      await panel(page).getByRole('button', { name: 'Confirm' }).click();
+      await expect(panel(page).getByText('Device DEV-884 is used by two accounts.')).toBeVisible();
+      expect(sent[1]).toMatchObject({ message: 'Who else uses DEV-884?', viewElementKeys: sent[0]?.viewElementKeys, confirmation: { pendingId: '0192f000-0000-7000-8000-0000000000a1', plan, decision: 'confirm' } });
+      await expect(panel(page).getByRole('button', { name: 'Confirm' })).toHaveCount(0);
+    });
+
+    test(`shows the stop of a limit with the reads open above its card at ${width} pixels`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const stop: AssistantTurnAnswer = {
+        status: 'limit',
+        limit: 'steps',
+        sentence: 'This turn reached its limit for reads, so it stopped. What was read is shown above.',
+        reads: [
+          { tool: 'devices-of-an-account', kind: 'template', subject: 'ACC-48291', read: true, rows: 2, quality: 'exact', partial: false },
+          { tool: 'accounts-using-a-device', kind: 'template', subject: 'DEV-884', read: true, rows: 3, quality: 'exact', partial: false },
+        ],
+      };
+      await answerWith(page, stop);
+      await open(page);
+      await page.getByLabel('Your message').fill('Trace every device and account around ACC-48291');
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('heading', { name: 'Stopped at a limit' })).toBeFocused();
+      await expect(panel(page).getByText('This turn reached its limit for reads, so it stopped. What was read is shown above.')).toBeVisible();
+      await expect(panel(page).getByText('Ask a narrower question to go further. Confirming a step never lifts a limit.')).toBeVisible();
+      await expect(panel(page).getByText('Ran Devices of an account')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     });
   }
 

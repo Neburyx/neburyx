@@ -12,7 +12,7 @@ export function estimateTokens(...parts: readonly string[]): number {
   return Math.ceil(bytes / BYTES_PER_TOKEN_ESTIMATE);
 }
 
-type ElementKey = { readonly kind: 'entity'; readonly ref: ElementRef } | { readonly kind: 'relationship'; readonly ref: GraphEdge['ref'] };
+type ElementKey = { readonly kind: 'entity'; readonly ref: ElementRef; readonly title?: string } | { readonly kind: 'relationship'; readonly ref: GraphEdge['ref']; readonly title?: string };
 
 /** A count of an element that is not exact, as the text writes it: the sentence that states its number must copy the phrase. */
 interface InexactCount {

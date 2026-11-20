@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ASSISTANT_LIMIT_SENTENCES, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
+import { ASSISTANT_LIMIT_SENTENCES, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantRead, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { heavyRun, okRun } from '../patterns/patterns-kit.js';
 import { node as testNode, key as testKey } from '../state/test-data.js';
@@ -17,11 +17,13 @@ afterEach(() => {
 
 const TOKEN = `${'1'.repeat(10)}.${'a'.repeat(64)}`;
 const ENTITY = { ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' }, display: { title: 'acc-1', type: 'kind-a' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
-const inAnswer = (answer: unknown, extra: { step?: { intent: string; rows: number; outcome: 'complete' | 'partial' }; coverage?: string } = {}): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: askAnswerSchema.parse(answer), ...extra });
+const inAnswer = (answer: unknown, extra: { reads?: AssistantRead[]; coverage?: string } = {}): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: askAnswerSchema.parse(answer), ...extra });
 const ANSWERED = inAnswer({ answered: { intent: 'accounts-paid-by', entities: { targetId: 'acc-1' }, outcome: 'complete', result: { templateId: 'entity', result: ENTITY }, summary: { sentences: [{ text: 'acc-1 is here.', cites: ['n1'] }], citations: [{ key: 'n1', element: ENTITY.ref, type: 'kind-a', title: 'acc-1' }], omissions: 'Not named in the answer: none.' } } });
 const HEAVY = inAnswer({ answered: { intent: 'shared-devices', entities: { account: 'acc-1' }, outcome: 'complete', continueToken: TOKEN, result: { templateId: 'shared-attribute', result: heavyRun() } } });
 const CONTINUED = inAnswer({ answered: { intent: 'shared-devices', entities: { account: 'acc-1' }, outcome: 'complete', result: { templateId: 'shared-attribute', result: okRun(['acc-2']) } } });
 const REFUSED = inAnswer({ refused: { cause: 'no-intent', sentence: 'This question does not match any question type this source offers.' } });
+const R_SHARED: AssistantRead = { tool: 'shared', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false };
+const R_BY_ID: AssistantRead = { tool: 'byId', kind: 'intent', subject: 'A-2', read: true, rows: 1, quality: 'exact', partial: false };
 const ok = (value: AssistantTurnAnswer): ApiResult<AssistantTurnAnswer> => ({ ok: true, value });
 
 describe('the Assistant thread: the answer of the ask route', () => {
@@ -73,6 +75,7 @@ describe('the Assistant thread: the answer after tool steps', () => {
       model: 'claude-test',
       calls: 4,
       steps: 2,
+      reads: [R_SHARED, R_BY_ID],
     };
     const h = harness(async () => ok(answer));
     render(h.tree());
@@ -96,6 +99,7 @@ describe('the Assistant thread: an answer after steps that cites the line of a r
       model: 'claude-test',
       calls: 4,
       steps: 2,
+      reads: [R_SHARED, R_BY_ID],
     };
     const h = harness(async () => ok(answer));
     render(h.tree());
@@ -107,17 +111,59 @@ describe('the Assistant thread: an answer after steps that cites the line of a r
 });
 
 describe('the Assistant thread: a turn that reached a limit', () => {
-  it('shows the fixed sentence of the limit as a card titled Stopped at a limit, keeps the earlier turns, and offers nothing to retry', async () => {
-    const answers: AssistantTurnAnswer[] = [VIEW, { status: 'limit', limit: 'steps', sentence: ASSISTANT_LIMIT_SENTENCES.steps }];
+  it('shows the reads open above the card of the limit, with its title, its fixed sentence and its line, keeps the earlier turns, and offers nothing to retry', async () => {
+    const answers: AssistantTurnAnswer[] = [VIEW, { status: 'limit', limit: 'steps', sentence: ASSISTANT_LIMIT_SENTENCES.steps, reads: [R_SHARED, R_BY_ID] }];
     const h = harness(async () => ok(answers.shift() ?? VIEW));
     render(h.tree());
     await typeAndSend('first');
     await screen.findByText(ASSISTANT_NOT_ANSWERED_SENTENCE);
     await typeAndSend('second');
-    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.limitTitle })).toBeTruthy();
+    const title = await screen.findByRole('heading', { name: ASSISTANT_COPY.limitTitle });
     expect(screen.getByText(ASSISTANT_LIMIT_SENTENCES.steps)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.limitNoteReads)).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.limitNoteOther)).toBeNull();
+    expect(document.querySelectorAll('.assistant-read')).toHaveLength(2);
+    expect(document.querySelector('details.assistant-steps')).toBeNull();
+    expect(document.activeElement).toBe(title);
     expect(screen.getByText(ASSISTANT_NOT_ANSWERED_SENTENCE)).toBeTruthy();
     expect(screen.queryByRole('button', { name: ASSISTANT_COPY.tryAgain })).toBeNull();
+  });
+
+  it.each([
+    ['calls', 'Model calls'],
+    ['rows', 'Rows read'],
+    ['time', 'Time'],
+    ['input', 'Too large to send'],
+  ] as const)('titles the stop of the %s limit %s and shows the line of the ceiling, with no reads above it when none were made', async (limit, title) => {
+    const h = harness(async () => ok({ status: 'limit', limit, sentence: ASSISTANT_LIMIT_SENTENCES[limit], reads: [] }));
+    render(h.tree());
+    await typeAndSend('go');
+    expect(await screen.findByRole('heading', { name: title })).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_LIMIT_SENTENCES[limit])).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.limitNoteOther)).toBeTruthy();
+    expect(document.querySelectorAll('.assistant-read')).toHaveLength(0);
+  });
+
+  it('shows the card of the limit under an answer that was given over what was read, without taking the focus from the answer', async () => {
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'ask',
+      sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }],
+      citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }],
+      coverage: { retrieval: '2 shown · exact', summary: 'The answer cites 1 of the 2 elements the reads returned.' },
+      model: 'claude-test',
+      calls: 4,
+      steps: 2,
+      reads: [R_SHARED, R_BY_ID],
+      stoppedAt: 'rows',
+    };
+    const h = harness(async () => ok(answer));
+    render(h.tree());
+    await typeAndSend('who else?');
+    expect(await screen.findByText('Account acc-1 is listed.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Rows read' })).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_LIMIT_SENTENCES.rows)).toBeTruthy();
+    expect(document.activeElement).not.toBe(screen.getByRole('heading', { name: 'Rows read' }));
   });
 });
 
@@ -360,23 +406,25 @@ describe('the Assistant thread: what a review asked for', () => {
     const entities = { account: 'acc-1', pattern: '0a1b2c3d-0000-4000-8000-000000000000' };
     const answer = (outcome: 'complete' | 'partial') => ({ answered: { intent: 'shared-devices', entities, outcome, result: { templateId: 'shared-attribute', result: okRun(['acc-2']) } } });
     const answers = [
-      inAnswer(answer('complete'), { step: { intent: 'shared-devices', rows: 1, outcome: 'complete' }, coverage: '1 shown · exact' }),
-      inAnswer(answer('partial'), { step: { intent: 'shared-devices', rows: 25, outcome: 'partial' }, coverage: '25 shown · ≥ 123 not yet retrieved · lower bound' }),
-      inAnswer(answer('complete'), { step: { intent: 'shared-devices', rows: 3, outcome: 'complete' }, coverage: '3 shown · count unknown' }),
+      inAnswer(answer('complete'), { reads: [{ tool: 'shared-devices', kind: 'intent', subject: 'acc-1', read: true, rows: 1, quality: 'exact', partial: false }], coverage: '1 shown · exact' }),
+      inAnswer(answer('partial'), { reads: [{ tool: 'shared-devices', kind: 'intent', subject: 'acc-1', read: true, rows: 123, quality: 'lowerBound', partial: true }], coverage: '25 shown · ≥ 123 not yet retrieved · lower bound' }),
+      inAnswer(answer('complete'), { reads: [{ tool: 'shared-devices', kind: 'intent', subject: 'acc-1', read: true, quality: 'unknown', partial: false }], coverage: '3 shown · count unknown' }),
     ];
     const h = harness(async () => ok(answers.shift() ?? ANSWERED));
     render(h.tree());
     await typeAndSend('one');
     expect(await screen.findByText('Steps · 1')).toBeTruthy();
-    expect(screen.getByText('Ran Shared devices · 1 row · complete')).toBeTruthy();
+    expect(screen.getByText('acc-1 · 1 row · complete')).toBeTruthy();
+    expect(screen.getByText('Ran Shared devices')).toBeTruthy();
     expect(screen.getByText(ASSISTANT_COPY.coverage)).toBeTruthy();
     expect(screen.getByText('1 shown · exact')).toBeTruthy();
     await typeAndSend('two');
     expect(await screen.findByText('25 shown · ≥ 123 not yet retrieved · lower bound')).toBeTruthy();
-    expect(screen.getByText('Ran Shared devices · 25 rows · partial')).toBeTruthy();
+    expect(screen.getByText('acc-1 · ≥ 123 rows · partial')).toBeTruthy();
     await typeAndSend('three');
     expect(await screen.findByText('3 shown · count unknown')).toBeTruthy();
-    expect(document.querySelector('.assistant-steps')?.textContent).not.toMatch(/0a1b2c3d|acc-1/);
+    expect(screen.getByText('acc-1 · complete · no row count')).toBeTruthy();
+    expect(document.querySelector('.assistant-steps')?.textContent).not.toMatch(/0a1b2c3d/);
   });
 
   it('shows only the fixed sentence for a refusal of Ask’s list, with no chips and no manual-action card', async () => {
