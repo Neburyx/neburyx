@@ -61,6 +61,8 @@ export type Outcome =
   | { readonly kind: 'not-answered'; readonly sentence: string }
   /** The question was about types the mapping does not describe: the fixed sentence of the server. */
   | { readonly kind: 'no-description'; readonly sentence: string }
+  /** The answer to what types mean, written by the server from the operator's text: no model wrote it. */
+  | { readonly kind: 'meaning'; readonly described: readonly { readonly typeKind: 'entity' | 'relationship'; readonly type: string; readonly description: string }[]; readonly sentence: string | undefined }
   | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly sentence: string; readonly reads: readonly AssistantRead[] }
   | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly reads: readonly AssistantRead[] | undefined; readonly stoppedAt: AssistantLimit | undefined; readonly coverage: string | undefined; readonly followUps: readonly FollowUp[] }
   | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[] }

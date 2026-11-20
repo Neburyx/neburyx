@@ -6567,6 +6567,76 @@
             "properties": {
               "status": {
                 "type": "string",
+                "const": "meaning"
+              },
+              "described": {
+                "maxItems": 8,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "typeKind": {
+                      "type": "string",
+                      "enum": [
+                        "entity",
+                        "relationship"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400
+                    },
+                    "description": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 300
+                    }
+                  },
+                  "required": [
+                    "typeKind",
+                    "type",
+                    "description"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "noDescription": {
+                "type": "object",
+                "properties": {
+                  "sentence": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "names": {
+                    "minItems": 1,
+                    "maxItems": 8,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 400
+                    }
+                  }
+                },
+                "required": [
+                  "sentence",
+                  "names"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "status",
+              "described"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
                 "const": "no-description"
               },
               "route": {

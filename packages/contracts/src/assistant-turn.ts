@@ -118,6 +118,9 @@ export const ASSISTANT_CONFIRMATION_INVALID_SENTENCE = 'This confirmation is no 
 
 /** The most characters of the title a citation of an answer after tool steps carries: a longer title is cut at a code point, so an element with a long title never fails the answer. */
 export const ASSISTANT_CITATION_TITLE_MAX = 400;
+/** The most types a question about meaning may name, and the longest name. */
+export const ASSISTANT_MEANING_NAMES_MAX = 8;
+export const ASSISTANT_MEANING_NAME_MAX = 80;
 
 /** The citation of a meaning line (`m1`): what the mapping says a type means, as the server wrote it into the call. It names no element and no record; `type` is the type's display name, or the relationship type's name. */
 const assistantDescriptionCitationSchema = z.strictObject({ key: text, kind: z.literal('description'), typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) });
@@ -160,6 +163,14 @@ export const assistantTurnAnswerSchema = z.union([
     sentence: text,
   }),
   z.strictObject({ status: z.literal('not-answered'), route: z.enum(['ask', 'view']), sentence: text }),
+  /**
+   * A question that asks only what types or links mean, answered by the server from the operator's text: each type the mapping describes with its description as the operator wrote it, and the fixed sentence for the types it does not. No model wrote any of it.
+   */
+  z.strictObject({
+    status: z.literal('meaning'),
+    described: z.array(z.strictObject({ typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) })).max(ASSISTANT_MEANING_NAMES_MAX),
+    noDescription: z.strictObject({ sentence: text, names: z.array(text.max(ASSISTANT_CITATION_TITLE_MAX)).min(1).max(ASSISTANT_MEANING_NAMES_MAX) }).optional(),
+  }).refine((answer) => answer.described.length > 0 || answer.noDescription !== undefined, { message: 'a meaning answer says something', path: ['described'] }),
   /** A question about what a type means, when the mapping gives the type no description: the fixed sentence the server wrote from the names of the profile, and the names. No element is cited and no model's word is shown. */
   z.strictObject({ status: z.literal('no-description'), route: z.enum(['ask', 'view']), sentence: text, names: z.array(text.max(ASSISTANT_CITATION_TITLE_MAX)).min(1).max(40) }),
   /** A failure of the model's service; `readStarted` is false when no read of the source began, and `retryAfterSeconds` is present only when the service said how long to wait. */

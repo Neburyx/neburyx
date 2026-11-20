@@ -30,6 +30,7 @@ import {
 } from '@neburyx/contracts';
 import { withTemplateTools } from './tool-templates.js';
 import { AuditUnavailableError, gateClientOf, type FailureCode } from '@neburyx/ee-ai-runtime';
+import { meaningAnswerOf } from './meaning.js';
 import { buildPatternCatalog } from '../patterns/index.js';
 import { coverageOf } from './coverage.js';
 import { readOfAnswer } from './reads.js';
@@ -474,6 +475,14 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
         case 'routed': {
           const { reply } = outcome;
           if (reply.route === 'refuse') return refused(reply.cause);
+          if (reply.route === 'meaning') {
+            // the names are matched by the server, which writes the answer; a name that matches no type is a question for the view
+            const meant = meaningAnswerOf(reply.types, request.typeDescriptions?.(body.sourceId));
+            if (meant !== undefined) {
+              noteTurn({ route: 'view' });
+              return meant;
+            }
+          }
           if (reply.route === 'clarify') {
             const found = candidatesOfReply(reply, routed, options.folder(), body.sourceId);
             let candidates: readonly Candidate[] | undefined;
@@ -488,7 +497,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             }
             return candidates === undefined || candidates.length === 0 ? refused('unplaced') : clarificationAnswer(candidates, choicesOf(request, body, reply.intent, reply.role, othersOfClarify(reply, routed), Object.keys(reply.elements ?? {})));
           }
-          if (reply.route === 'view') {
+          if (reply.route === 'view' || reply.route === 'meaning') {
             noteTurn({ route: 'view' });
             const answerView = options.viewAnswer?.();
             if (answerView === undefined || readElements === undefined) return { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };

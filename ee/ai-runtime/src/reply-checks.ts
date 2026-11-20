@@ -81,6 +81,14 @@ function statesConclusion(text: string): boolean {
   return [...text.matchAll(CONCLUSION)].some((found) => !negatedBefore(text, found.index));
 }
 
+/**
+ * Whether the operator's description of a type holds a word of the verdict list (or a conclusion that is not denied), the name of the type itself excepted: such a description is not shown, and the type gets the fixed sentence of a type with no description.
+ */
+export function descriptionHoldsVerdict(description: string, ownNames: readonly string[]): boolean {
+  const left = [...ownNames].sort((a, b) => b.length - a.length).reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'giu'), ' '), description);
+  return VERDICT.test(left) || statesConclusion(left);
+}
+
 export interface Judged {
   readonly kept: readonly SummarySentence[];
   readonly removed: number;

@@ -246,5 +246,21 @@ describe('the Assistant panel: what a type means', () => {
     expect(screen.queryByText('AI-drafted')).toBeNull();
     expect(screen.queryByText(/^Sources/)).toBeNull();
   });
+
+  it('shows the answer meaning as the operator text with its mark and the fixed sentence: no AI-drafted tag, no sources, markup as text', async () => {
+    const description = 'A widget <script>holds</script> parts, in a_very_long_word_'.concat('x'.repeat(120));
+    const sentence = 'The mapping has no description for Gizmo, so I cannot say what it means.';
+    const h = harness(async () => ok({ status: 'meaning', described: [{ typeKind: 'entity', type: 'Widget', description }], noDescription: { sentence, names: ['Gizmo'] } }));
+    shown(h);
+    render(h.tree());
+    await typeAndSend('what are a widget and a gizmo?');
+    expect(await screen.findByText('About Widget')).toBeTruthy();
+    expect(screen.getByText(description)).toBeTruthy();
+    expect(screen.getByText(ASSISTANT_COPY.operatorDescription)).toBeTruthy();
+    expect(screen.getByText(sentence)).toBeTruthy();
+    expect(screen.queryByText('AI-drafted')).toBeNull();
+    expect(screen.queryByText(/^Sources/)).toBeNull();
+    expect(document.querySelector('.assistant-meaning script')).toBeNull();
+  });
 });
 

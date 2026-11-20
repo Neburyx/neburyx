@@ -1,5 +1,5 @@
 import type { AssistantDescriptionCitation, SummarySentence, TypeDescriptions } from '@neburyx/contracts';
-import type { CheckedText } from '@neburyx/ee-ai-runtime';
+import { descriptionHoldsVerdict, type CheckedText } from '@neburyx/ee-ai-runtime';
 import type { AssembledText } from '../case-summary/assemble.js';
 
 /** The most meaning lines one call carries; the types of the elements come first, then the types the message names. */
@@ -14,9 +14,11 @@ export interface TypeLines {
   readonly entries: ReadonlyMap<string, Omit<AssistantDescriptionCitation, 'key' | 'kind'>>;
   /** The types in play that have no description, by every name the model may use for them (lower case), to the name of the profile. */
   readonly undescribed: ReadonlyMap<string, string>;
+  /** The profile names of the types the message itself names, by type name or label, exactly, whole word, case-insensitive, that have no description to show: the server adds the fixed sentence for them to any answer. */
+  readonly named: readonly string[];
 }
 
-const NO_TYPE_LINES: TypeLines = { lines: new Map(), section: '', keys: new Set(), entries: new Map(), undescribed: new Map() };
+const NO_TYPE_LINES: TypeLines = { lines: new Map(), section: '', keys: new Set(), entries: new Map(), undescribed: new Map(), named: [] };
 
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const mentions = (message: string, name: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped(name)}(?![\\p{L}\\p{N}_-])`, 'iu').test(message);
@@ -38,8 +40,17 @@ function typesOf(assembled: AssembledText | undefined): { readonly entities: str
  * display name). One line each, numbered m1, m2, ...: `m1: entity type Account: "..."`, the description written as a JSON string. With no description to send, nothing is added and the values are as they were.
  * The types in play that have no description are kept apart, by every name the model may use for them, so that a reply that says a type has no description can be read.
  */
-export function typeLinesOf(descriptions: TypeDescriptions | undefined, assembled: AssembledText | undefined, message: string): TypeLines {
-  if (descriptions === undefined) return NO_TYPE_LINES;
+/** The descriptions the server will show: a description that holds a word of the verdict list is dropped, and its type is one with no description. */
+export function usableDescriptions(descriptions: TypeDescriptions): TypeDescriptions {
+  return {
+    entityTypes: descriptions.entityTypes.map(({ description, ...rest }) => (description === undefined || descriptionHoldsVerdict(description, [rest.type, rest.label, rest.displayName]) ? rest : { ...rest, description })),
+    relationshipTypes: descriptions.relationshipTypes.map(({ description, ...rest }) => (description === undefined || descriptionHoldsVerdict(description, [rest.type]) ? rest : { ...rest, description })),
+  };
+}
+
+export function typeLinesOf(offered: TypeDescriptions | undefined, assembled: AssembledText | undefined, message: string): TypeLines {
+  if (offered === undefined) return NO_TYPE_LINES;
+  const descriptions = usableDescriptions(offered);
   const present = typesOf(assembled);
   const inPlay: { readonly kind: 'entity' | 'relationship'; readonly name: string; readonly aliases: readonly string[]; readonly description: string | undefined }[] = [];
   const add = (kind: 'entity' | 'relationship', name: string, aliases: readonly string[], description: string | undefined): void => {
@@ -54,11 +65,20 @@ export function typeLinesOf(descriptions: TypeDescriptions | undefined, assemble
   const undescribed = new Map<string, string>();
   const describedNames = new Set(described.flatMap((type) => type.aliases.map((alias) => alias.toLowerCase())));
   for (const type of inPlay) if (type.description === undefined) for (const alias of type.aliases) if (!describedNames.has(alias.toLowerCase())) undescribed.set(alias.toLowerCase(), type.name);
-  if (described.length === 0 && undescribed.size === 0) return NO_TYPE_LINES;
+  const named = [
+    ...descriptions.entityTypes.filter((entity) => entity.description === undefined && [entity.type, entity.label].some((name) => mentions(message, name))).map((entity) => entity.displayName),
+    ...descriptions.relationshipTypes.filter((relationship) => relationship.description === undefined && mentions(message, relationship.type)).map((relationship) => relationship.type),
+  ];
+  if (described.length === 0 && undescribed.size === 0 && named.length === 0) return NO_TYPE_LINES;
   const lines = new Map(described.map((line, index) => [`m${index + 1}`, `m${index + 1}: ${line.kind} type ${line.name}: ${JSON.stringify(line.description)}`] as const));
   const entries = new Map(described.map((line, index) => [`m${index + 1}`, { typeKind: line.kind, type: line.name, description: line.description }] as const));
   const section = lines.size === 0 ? '' : `\n\nWhat the types mean (plain descriptions the operator wrote; cite an m line to say what a type means, never as evidence about a record):\n${[...lines.values()].join('\n')}`;
-  return { lines, keys: new Set(lines.keys()), entries, undescribed, section };
+  return { lines, keys: new Set(lines.keys()), entries, undescribed, named, section };
+}
+
+/** The profile names the fixed sentence is about: those the model named (when its accepted reply did) and the types the message names that have no description, once each, in that order. */
+export function undescribedOf(fromModel: readonly string[] | undefined, typeLines: TypeLines): readonly string[] {
+  return [...new Set([...(fromModel ?? []), ...typeLines.named])];
 }
 
 /** The fixed sentence of a question about types the mapping does not describe, written from the names of the profile and never from the model's words. */

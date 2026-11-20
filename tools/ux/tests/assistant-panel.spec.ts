@@ -314,6 +314,22 @@ test.describe('the Assistant panel', () => {
       expect(box === null ? 0 : box.x + box.width).toBeLessThanOrEqual(width);
     });
 
+    test(`shows what types mean as the operator's text at ${width} pixels with no AI-drafted tag, and the fixed sentence for the type with none`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const sentence = 'The mapping has no description for Gizmo, so I cannot say what it means.';
+      const description = 'A widget is a small unit that holds up to 12 parts, with a_very_long_word_'.concat('x'.repeat(80));
+      await answerWith(page, { status: 'meaning', described: [{ typeKind: 'entity', type: 'Widget', description }], noDescription: { sentence, names: ['Gizmo'] } });
+      await open(page);
+      await page.getByLabel('Your message').fill('what are a widget and a gizmo?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByText('About Widget')).toBeVisible();
+      await expect(panel(page).getByText(description)).toBeVisible();
+      await expect(panel(page).getByText(sentence)).toBeVisible();
+      await expect(panel(page).getByText('AI-drafted')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
+
     test(`shows a type with no description as a plain card at ${width} pixels: the fixed sentence, no AI-drafted tag and no sources`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openWorkspace(page);

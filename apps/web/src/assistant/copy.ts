@@ -41,6 +41,7 @@ export const ASSISTANT_COPY = {
   notAnswered: 'Not answered',
   noDescriptionTitle: 'About these types',
   aboutType: 'About',
+  meaningTitle: 'What these types mean',
   operatorDescription: 'The operator’s description of the type, not a read of the source',
   openFilters: 'Open Filters',
   summarizeView: 'Summarize this view',

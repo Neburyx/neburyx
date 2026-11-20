@@ -9,7 +9,7 @@ import { listedElements } from '../summary/index.js';
 import { coverageOf, inexactCountOf } from './coverage.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { StepScope } from './tool-step.js';
-import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, withTypeLines } from './type-lines.js';
+import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const ANSWER_PROMPT_ID = 'assistant.answer';
@@ -176,8 +176,10 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     }
     switch (drafted.status) {
       case 'alternative': {
-        const undescribed = noDescriptionReplyOf(drafted.text, typeLines);
-        return undescribed === undefined ? { kind: 'unsupported', calls: drafted.calls } : { kind: 'noDescription', sentence: noDescriptionSentence(undescribed), names: undescribed, calls: drafted.calls };
+        const asked = noDescriptionReplyOf(drafted.text, typeLines);
+        if (asked === undefined) return { kind: 'unsupported', calls: drafted.calls };
+        const alone = undescribedOf(asked, typeLines);
+        return { kind: 'noDescription', sentence: noDescriptionSentence(alone), names: alone, calls: drafted.calls };
       }
       case 'tooLarge':
         return { kind: 'limit', limit: 'input', calls: drafted.calls };
@@ -186,15 +188,15 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
       case 'failed':
         return drafted.kind === 'format' ? { kind: 'unsupported', calls: drafted.calls } : { kind: 'failed', why: failureOf(drafted.kind), calls: drafted.calls };
       case 'drafted': {
-        if (drafted.sentences.length === 0 && drafted.noDescription !== undefined && lastNames !== undefined) return { kind: 'noDescription', sentence: drafted.noDescription, names: lastNames, calls: drafted.calls };
-        if (drafted.sentences.length === 0 || drafted.verdictFound) return { kind: 'unsupported', calls: drafted.calls };
+        const fixed = undescribedOf(drafted.noDescription === undefined ? undefined : lastNames, typeLines);
+        if (drafted.sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? { kind: 'noDescription', sentence: noDescriptionSentence(fixed), names: fixed, calls: drafted.calls } : { kind: 'unsupported', calls: drafted.calls };
         const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
         const citations = [...cited].flatMap((key) => {
           const element = assembled.keys.get(key);
           return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref, ...(citationTitleOf(element.title) === undefined ? {} : { title: citationTitleOf(element.title) }) }];
         });
         const withDescriptions = [...citations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
-        return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls, ...(drafted.noDescription === undefined ? {} : { noDescription: drafted.noDescription }) };
+        return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
       }
       default: {
         const unreachable: never = drafted;

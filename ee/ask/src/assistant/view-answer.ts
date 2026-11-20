@@ -12,7 +12,7 @@ import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { buildViewToolInstructions } from './step-instructions.js';
 import type { ToolRegistry } from './tool-registry.js';
-import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, withTypeLines } from './type-lines.js';
+import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import { readToolRequest, type ToolRequest } from './tool-request.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
@@ -309,8 +309,10 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
       case 'alternative': {
         const read = tools === undefined ? undefined : readToolRequest(drafted.text, tools);
         if (read?.ok === true) return outcome({ status: 'tool', request: read.request, reading, assembled });
-        const undescribed = noDescriptionReplyOf(drafted.text, typeLines);
-        return undescribed === undefined ? outcome({ status: 'unsupported' }) : outcome({ status: 'no-description', sentence: noDescriptionSentence(undescribed), names: undescribed });
+        const asked = noDescriptionReplyOf(drafted.text, typeLines);
+        if (asked === undefined) return outcome({ status: 'unsupported' });
+        const alone = undescribedOf(asked, typeLines);
+        return outcome({ status: 'no-description', sentence: noDescriptionSentence(alone), names: alone });
       }
       case 'tooLarge':
         return outcome({ status: 'stopped', because: 'input' });
@@ -320,12 +322,13 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         // a reply that never fit the format, after the one repeat, is the fixed not-answered turn
         return drafted.kind === 'format' ? outcome({ status: 'unsupported' }) : outcome({ status: 'failed', kind: kindOf(drafted.kind === 'rate-limited' ? 'rate-limited' : drafted.kind === 'timeout' ? 'timeout' : 'provider-error') });
       case 'drafted': {
-        if (drafted.sentences.length === 0 && drafted.noDescription !== undefined && lastNames !== undefined) return outcome({ status: 'no-description', sentence: drafted.noDescription, names: lastNames });
-        if (drafted.sentences.length === 0 || drafted.verdictFound) return outcome({ status: 'unsupported' });
+        // the fixed sentence covers the types the model named and every type the message names that has no description, whatever the model wrote
+        const fixed = undescribedOf(drafted.noDescription === undefined ? undefined : lastNames, typeLines);
+        if (drafted.sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? outcome({ status: 'no-description', sentence: noDescriptionSentence(fixed), names: fixed }) : outcome({ status: 'unsupported' });
         const elementCitations = [...citationsOf(drafted.sentences, assembled)];
         const citations = [...elementCitations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);
-        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], ...(drafted.noDescription === undefined ? {} : { noDescription: drafted.noDescription }), citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
+        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }), citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
         return outcome({ status: 'answered', answer, cited: elementCitations.length });
       }
       default: {

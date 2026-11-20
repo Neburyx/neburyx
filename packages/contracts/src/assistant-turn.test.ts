@@ -53,6 +53,17 @@ describe('the assistant turn answer: the view route', () => {
     expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
   });
 
+  it('accepts the answer meaning with described types, a fixed sentence or both, and refuses one that says nothing or holds an extra member', () => {
+    const described = [{ typeKind: 'entity', type: 'Widget', description: 'A widget is a unit.' }];
+    const fixed = { sentence: 'The mapping has no description for Gizmo, so I cannot say what it means.', names: ['Gizmo'] };
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'meaning', described }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'meaning', described: [], noDescription: fixed }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'meaning', described, noDescription: fixed }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'meaning', described: [] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'meaning', described, route: 'view' }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ status: 'meaning', described: [{ ...described[0], description: 'x'.repeat(301) }] }).success).toBe(false);
+  });
+
   it('accepts the answer no-description and the member noDescription, and refuses an empty list of names or an extra member', () => {
     const none = { status: 'no-description', route: 'view', sentence: 'The mapping has no description for Gizmo, so I cannot say what it means.', names: ['Gizmo'] };
     expect(assistantTurnAnswerSchema.safeParse(none).success).toBe(true);

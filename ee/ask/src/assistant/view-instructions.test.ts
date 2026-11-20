@@ -65,9 +65,10 @@ describe('the instructions of the view answer', () => {
 });
 
 describe('the shipped prompts for a meaning question', () => {
-  it('send a question about what a type means to view, and give the view call the reply form for a type without a description', async () => {
+  it('send a question about what types mean to the meaning route, and give the view call the reply form for a type without a description', async () => {
     const router = await readFile(fileURLToPath(new URL('../../prompts/assistant-router.md', import.meta.url)), 'utf8');
-    expect(router).toContain('asks what a kind of thing or a kind of link means');
+    expect(router).toContain('`meaning`: the message asks only what one or more kinds of thing');
+    expect(router).toContain('When the message also asks about what is shown, choose `view`');
     const view = await readFile(fileURLToPath(new URL('../../prompts/assistant-view.md', import.meta.url)), 'utf8');
     expect(view).toContain('{"noDescription":[');
     expect(view).toContain('only for a type with no m line');

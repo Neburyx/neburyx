@@ -1,10 +1,12 @@
 import { type AskEntities } from './ask.js';
 import { entitiesOf, REPLY_MAX_CHARACTERS } from './ask-classify.js';
 import { ASK_FOLDER_LIMITS, hasDuplicateKeys, isParameterName } from './ask-folder.js';
-import { ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_REFUSAL_CAUSES, type AssistantRefusalCause } from './assistant-turn.js';
+import { ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_MEANING_NAMES_MAX, ASSISTANT_MEANING_NAME_MAX, ASSISTANT_REFUSAL_CAUSES, type AssistantRefusalCause } from './assistant-turn.js';
 
 export type AssistantRouterReply =
   | { readonly route: 'view' }
+  /** The message asks only what named types or links mean: the names as the analyst wrote them, for the server to match and answer. */
+  | { readonly route: 'meaning'; readonly types: readonly string[] }
   | { readonly route: 'refuse'; readonly cause: AssistantRefusalCause }
   | { readonly route: 'ask'; readonly intent: string; readonly entities: AskEntities; readonly elements?: Readonly<Record<string, string>> }
   | { readonly route: 'clarify'; readonly intent: string; readonly role: string; readonly entities: AskEntities; readonly elements?: Readonly<Record<string, string>>; readonly candidates: readonly string[] };
@@ -58,6 +60,16 @@ export function readAssistantRoute(text: string): ReadAssistantRoute {
   if (!isRecord(data)) return bad;
   const route = data['route'];
   if (route === 'view') return hasExactly(data, ['route']) ? { ok: true, reply: { route } } : bad;
+  if (route === 'meaning') {
+    const types = data['types'];
+    if (!hasExactly(data, ['route', 'types']) || !Array.isArray(types) || types.length < 1 || types.length > ASSISTANT_MEANING_NAMES_MAX) return bad;
+    const names: string[] = [];
+    for (const name of types) {
+      if (typeof name !== 'string' || name.trim() === '' || [...name].length > ASSISTANT_MEANING_NAME_MAX || /[\u0000-\u001f\u007f-\u009f]/.test(name)) return bad;
+      names.push(name);
+    }
+    return { ok: true, reply: { route, types: names } };
+  }
   if (route === 'refuse') {
     const cause = data['cause'];
     const known = ASSISTANT_REFUSAL_CAUSES.find((candidate) => candidate === cause);

@@ -67,3 +67,23 @@ describe('the reading of a reply of the router', () => {
     expect(readAssistantRoute(`{"route":"ask","intent":"byId","entities":{"id":"${'a'.repeat(100_001)}"}}`)).toEqual({ ok: false });
   });
 });
+
+describe('the meaning route', () => {
+  it('reads the names the analyst wrote, one to eight, as text', () => {
+    expect(readAssistantRoute('{"route":"meaning","types":["account","LIVES_AT"]}')).toEqual({ ok: true, reply: { route: 'meaning', types: ['account', 'LIVES_AT'] } });
+  });
+
+  it.each([
+    ['no names', '{"route":"meaning","types":[]}'],
+    ['nine names', JSON.stringify({ route: 'meaning', types: Array.from({ length: 9 }, (_, i) => `t${i}`) })],
+    ['a blank name', '{"route":"meaning","types":["  "]}'],
+    ['a name over 80 characters', JSON.stringify({ route: 'meaning', types: ['x'.repeat(81)] })],
+    ['a control character', '{"route":"meaning","types":["a\\nb"]}'],
+    ['a non-text name', '{"route":"meaning","types":[5]}'],
+    ['another member', '{"route":"meaning","types":["a"],"intent":"x"}'],
+    ['no types member', '{"route":"meaning"}'],
+  ])('refuses %s', (_name, text) => {
+    expect(readAssistantRoute(text)).toEqual({ ok: false });
+  });
+});
+

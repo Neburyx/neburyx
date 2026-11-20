@@ -201,6 +201,22 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <p>{outcome.sentence}</p>
         </section>
       );
+    case 'meaning':
+      return (
+        <section className="assistant-meaning" aria-labelledby={titleId}>
+          <h3 id={titleId} className="visually-hidden" tabIndex={-1} data-ask-focus="title">
+            {ASSISTANT_COPY.meaningTitle}
+          </h3>
+          {outcome.described.map((item) => (
+            <div key={`${item.typeKind}-${item.type}`} className="assistant-meaning-item">
+              <p className="assistant-meaning-type">{`${ASSISTANT_COPY.aboutType} ${item.type}`}</p>
+              <p className="assistant-description-mark">{ASSISTANT_COPY.operatorDescription}</p>
+              <p className="assistant-meaning-text">{item.description}</p>
+            </div>
+          ))}
+          {outcome.sentence === undefined ? null : <p className="assistant-no-description">{outcome.sentence}</p>}
+        </section>
+      );
     case 'answered':
       return (
         <>
