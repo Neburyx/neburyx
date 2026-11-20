@@ -1196,3 +1196,93 @@ describe('a follow-up about an attached summary, through the real application', 
     await rig.stop();
   });
 });
+
+describe('the application tools through the real application', () => {
+  const ROUTE = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
+  const sequence = (...replies: string[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? '{"done":true}';
+  };
+  const entityReads = (rig: Awaited<ReturnType<typeof assistantRig>>) => rig.rig.executor.calls.filter((call) => call.templateId === 'entity-load').length;
+  const widgets = (rig: Awaited<ReturnType<typeof assistantRig>>) => (call: ExecuteCall): ExecuteOutcome | undefined => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : (void rig, undefined));
+  const W1 = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
+  const note = (tokenId: string, text: string) => ({
+    tokenId,
+    generatedBy: 'person-1',
+    modelRef: 'claude-sonnet-5-5',
+    promptId: 'case-summary',
+    promptVersion: '1',
+    generatedAt: '2026-11-15T10:00:00.000Z',
+    wordListVersion: 2,
+    label: 'AI-drafted',
+    sentences: [{ text, placeholders: [{ name: '‹widget#1›', descriptor: { kind: 'entity', ref: W1 } }], cites: [{ key: 'n1', kind: 'entity', ref: W1 }] }],
+    inputRefs: [{ key: 'n1', kind: 'entity', ref: W1 }],
+  });
+
+  it('reads the typology the product ships, with no read of the source, and keeps a sentence that cites its first line', async () => {
+    const answerJson = JSON.stringify({ sentences: [{ text: 'A fan-in is when many sources send money to one receiver within a short time.', cites: ['t1'] }] });
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"typology","values":{}}', '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const before = entityReads(rig);
+    const answer = await rig.post({ ...rig.body, message: 'Which shape is a fan-in?' });
+    expect(entityReads(rig) - before).toBe(1);
+    const parsed = assistantTurnAnswerSchema.parse(answer.json());
+    expect(parsed).toMatchObject({ status: 'answered', sentences: [{ cites: ['t1'] }], steps: 2 });
+    expect(JSON.stringify(parsed)).toContain('"kind":"typology"');
+    expect(rig.stub.bodies.at(-1)).toContain('t5:');
+    await rig.stop();
+  });
+
+  it('reads the caller\'s own AI notes of the investigation through the application\'s capability, and nobody else\'s', async () => {
+    const answerJson = JSON.stringify({ sentences: [{ text: 'Ana Silva is listed.', cites: ['a1'] }] });
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"ai-notes","values":{}}', '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const { store } = rig.rig;
+    const mine = store.investigations[0];
+    const draft = store.drafts[0];
+    if (mine === undefined || draft === undefined) throw new Error('the rig opens an investigation');
+    const OTHER = '0192f000-0000-7000-8000-0000000000aa';
+    store.drafts[0] = { ...draft, aiNotes: { entries: [note('tok-mine', '‹widget#1› is mine.')] } };
+    store.investigations.push({ ...mine, id: OTHER, ownerId: '0192f000-0000-7000-8000-0000000000bb' });
+    store.drafts.push({ ...draft, id: '0192f000-0000-7000-8000-0000000000d9', investigationId: OTHER, aiNotes: { entries: [note('tok-other', '‹widget#1› is someone else\'s note.')] } });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and my notes' });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', sentences: [{ cites: ['r1'] }] });
+    const last = rig.stub.bodies.at(-1) ?? '';
+    expect(last).toContain('a1: Ana Silva is mine.');
+    expect(last).not.toContain("someone else");
+    const other = await rig.post({ ...rig.body, investigationId: OTHER, message: 'Show W-1 and my notes' });
+    expect(other.statusCode).toBe(404);
+    await rig.stop();
+  });
+
+  it('does not offer the summary tool while the summary is off, and a request for it ends the turn as the unplaced refusal', async () => {
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"ai-summary","values":{}}', '{"tool":"ai-summary","values":{}}'), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and a summary', viewElementKeys: [JSON.stringify(['node', 'demo', 'widget', 'W-1'])] });
+    expect(answer.statusCode).toBe(200);
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    expect(rig.stub.bodies.some((body) => body.includes('ai-summary()'))).toBe(false);
+    await rig.stop();
+  });
+
+  it('reads the notes as not read, and goes on, when the application refuses them as not the caller\'s while the investigation can be read', async () => {
+    const answerJson = JSON.stringify({ sentences: [{ text: 'Ana Silva is listed.', cites: ['r1'] }] });
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"ai-notes","values":{}}', '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    // the investigation is the caller's and can be read, but the store finds no notes for it: the application's read of them is `NOT_FOUND`
+    rig.rig.store.readAiNotes = async () => ({ outcome: 'not-found' });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and my notes' });
+    expect(answer.statusCode).toBe(200);
+    expect(JSON.stringify(answer.json())).toContain('"kind":"ai-notes"');
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered' });
+    await rig.stop();
+  });
+
+  it('drafts the AI case summary of the view in the turn with the real summarizer, counts its model call, and answers from its sentence by the elements it rests on', async () => {
+    const summaryJson = JSON.stringify({ sentences: [{ text: 'Ana Silva is a widget.', cites: ['n1'] }] });
+    const answerJson = JSON.stringify({ sentences: [{ text: 'Ana Silva is a widget.', cites: ['a1'] }] });
+    const rig = await assistantRig({ withSummary: true, threadStore: createMemoryAssistantThreadStore(), maxSteps: 4, reply: sequence(ROUTE, '{"tool":"ai-summary","values":{}}', summaryJson, '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1 and summarize the view', viewElementKeys: [JSON.stringify(['node', 'demo', 'widget', 'W-1'])] });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', calls: 5, sentences: [{ text: 'Ana Silva is a widget.' }] });
+    expect(JSON.stringify(answer.json())).toContain('"kind":"ai-summary"');
+    expect(rig.stub.bodies).toHaveLength(5);
+    await rig.stop();
+  });
+});
+

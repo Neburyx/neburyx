@@ -113,7 +113,8 @@ describe('the calibration of the AI runtime', () => {
     writeFileSync(RECORD_PATH, `${JSON.stringify(record, null, 2)}\n`);
   });
 
-  it('gives a record from a short run that holds the share to its margin and shows the share off to be slower', async () => {
+  // 2.3 s alone, measured on the dev machine; it timed out at 15 s only when the whole workspace's tests and a container suite ran at once. The run measures latency under load, so a loaded machine slows it by design: 60 s is about 26 times the run alone and still ends a hang.
+  it('gives a record from a short run that holds the share to its margin and shows the share off to be slower', { timeout: 60_000 }, async () => {
     const record = await calibrate(await aiLoadOptions(), SHORT_READ_MS_LIST);
     expect(record.workload).toMatchObject({ aiRequests: AI_REQUESTS, repetitions: SHORT_READ_MS_LIST.length });
     expect(record.withAiRequests.p95Ms).toBeLessThanOrEqual(record.alone.p95Ms * record.margin.ratio);

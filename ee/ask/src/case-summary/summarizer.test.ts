@@ -166,6 +166,15 @@ describe('the checks in the click', () => {
     expect(closed(events)[0]).toMatchObject({ result: 'partial', detail: { summary: { outcome: 'partial', sentencesKept: 1, sentencesRemoved: 1 } } });
   });
 
+  it('makes no more calls than the budget a caller gives, when it is smaller than its own limit, and no more than its own limit when it is larger', async () => {
+    const uncited = JSON.stringify({ sentences: [{ text: 'An uncited sentence.', cites: [] }] });
+    const small = summarizerWith([uncited], { maxCalls: 5 });
+    expect(await small.summarizer.summarize({ ...input(), maxCalls: 2 }, new AbortController().signal)).toMatchObject({ status: 'unsupported', calls: 2 });
+    expect(small.requests).toHaveLength(2);
+    const large = summarizerWith([uncited], { maxCalls: 2 });
+    expect(await large.summarizer.summarize({ ...input(), maxCalls: 9 }, new AbortController().signal)).toMatchObject({ status: 'unsupported', calls: 2 });
+  });
+
   it('makes one more call with a fixed note when nothing passes, and answers unsupported when the calls are used up', async () => {
     const { summarizer, requests, events } = summarizerWith([reply({ text: 'An uncited sentence.', cites: [] })], { maxCalls: 2 });
     const answer = await summarizer.summarize(input(), new AbortController().signal);
@@ -243,6 +252,40 @@ describe('the closing event of a click that ends before or after the checks', ()
     const summarizer = createCaseSummarizer({ settings: { ...settings, totalTimeoutMs: 1000 }, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }), now: () => clock });
     expect(await summarizer.summarize(input(), new AbortController().signal)).toMatchObject({ status: 'timeLimit' });
     expect(closed(events)[0]).toMatchObject({ detail: { summary: { outcome: 'timeLimit', sentencesKept: 0, sentencesRemoved: 1 } } });
+  });
+});
+
+describe('a draft that ends with the time limit of its caller', () => {
+  const closed = (events: readonly AuditEvent[]) => events.filter((event) => event.action === 'ai.case-summary.closed');
+  const run = async (giveUp: boolean) => {
+    const cancel = new AbortController();
+    const deadline = new AbortController();
+    const events: AuditEvent[] = [];
+    const store = createMemorySummaryRunStore();
+    const provider: ModelProvider = {
+      complete: async (request) => {
+        if (giveUp) cancel.abort();
+        deadline.abort();
+        return Promise.reject(Object.assign(new Error('aborted'), { name: 'AbortError', request: promptRecordOf(request) }));
+      },
+    };
+    const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async () => undefined } });
+    const summarizer = createCaseSummarizer({ settings, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+    const settled = await summarizer.summarize({ ...input(), deadline: deadline.signal }, cancel.signal).then((outcome) => ({ outcome }), (error: unknown) => ({ error }));
+    return { settled, events, store };
+  };
+
+  it('says it hit the time limit in its outcome, its event and its run, and not that the client cancelled', async () => {
+    const { settled, events, store } = await run(false);
+    expect(settled).toMatchObject({ outcome: { status: 'timeLimit' } });
+    expect(closed(events)[0]).toMatchObject({ detail: { summary: { outcome: 'timeLimit' } } });
+    expect(store.runs[0]?.outcome).toBe('timeLimit');
+  });
+
+  it('still ends as cancelled when the client has given up as well', async () => {
+    const { events, store } = await run(true);
+    expect(closed(events)[0]).toMatchObject({ detail: { summary: { outcome: 'cancelled' } } });
+    expect(store.runs[0]?.outcome).toBe('cancelled');
   });
 });
 

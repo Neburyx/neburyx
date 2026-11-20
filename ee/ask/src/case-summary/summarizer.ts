@@ -58,7 +58,11 @@ const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 
 /** Thrown by the summarizer for a failure after which its closing event was already written: the cause is the original failure, which the route passes on without a second event. */
 export class SummaryHandled extends Error {
-  constructor(readonly handled: unknown) {
+  constructor(
+    readonly handled: unknown,
+    /** The model calls the draft had made when it ended. */
+    readonly calls = 0,
+  ) {
     super('the case summary ended in a failure that was recorded');
     this.name = 'SummaryHandled';
   }
@@ -133,7 +137,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
       const cancel = async (): Promise<never> => {
         await finalize(calls, 'cancelled');
         await publish(calls, 'cancelled', 'failed', checked).catch(() => undefined);
-        throw new SummaryHandled(new Error('the request was cancelled'));
+        throw new SummaryHandled(new Error('the request was cancelled'), calls);
       };
       if (cancelled?.() === true) return cancel();
       await finalize(calls, outcome);
@@ -188,9 +192,9 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
             return judged;
           },
           ...(options.onCheckRefused === undefined ? {} : { onCheckRefused: options.onCheckRefused }),
-          maxCalls: settings.maxCalls,
+          maxCalls: Math.min(settings.maxCalls, input.maxCalls ?? settings.maxCalls),
           totalTimeoutMs: settings.totalTimeoutMs,
-          signal,
+          signal: input.deadline === undefined ? signal : AbortSignal.any([signal, input.deadline]),
           onCall: (calls) => void (callsMade = calls),
           ...(options.now === undefined ? {} : { now: options.now }),
         });
@@ -230,11 +234,13 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
           await finalize(callsMade, 'auditFailed').catch(() => undefined);
           throw error;
         }
+        // a draft that ended with the caller's own time limit, while the client has not given up, ends as the time limit: the record and the event say so
+        if (!signal.aborted && input.deadline?.aborted === true) return record({ status: 'timeLimit', calls: callsMade }, lastChecked);
         const ended = signal.aborted ? 'cancelled' : 'error';
         // the record of the run must end, whatever the audit does; a failure of the event alone leaves the failure the click had
         await finalize(callsMade, ended);
         await publish(callsMade, ended, 'failed', lastChecked).catch(() => undefined);
-        throw new SummaryHandled(error);
+        throw new SummaryHandled(error, callsMade);
       }
     },
   };

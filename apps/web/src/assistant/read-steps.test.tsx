@@ -16,6 +16,8 @@ describe('the line of a read', () => {
     ['an unknown count on a pattern', read({ rows: undefined, quality: 'unknown', kind: 'pattern' }), 'from DEV-884 · complete · no row count'],
     ['a partial read', read({ partial: true }), 'DEV-884 · 3 rows · partial'],
     ['a read with no subject', read({ subject: undefined, kind: 'view', rows: 12 }), '12 rows · complete'],
+    ['the typology as lines and never as rows', read({ subject: undefined, kind: 'typology', tool: 'typology', rows: undefined, lines: 5 }), '5 lines · complete'],
+    ['one line of the typology', read({ subject: undefined, kind: 'typology', tool: 'typology', rows: undefined, lines: 1 }), '1 line · complete'],
     ['a read that did not run', { tool: 'expand', kind: 'template', read: false } as AssistantRead, 'not read'],
   ])('writes %s', (_name, entry, line) => {
     expect(readLine(entry)).toBe(line);
@@ -23,6 +25,14 @@ describe('the line of a read', () => {
 
   it('never writes a count that is not exact as a bare number', () => {
     for (const quality of ['estimated', 'lowerBound'] as const) expect(readLine(read({ quality, rows: 9 }))).not.toMatch(/· 9 rows ·/);
+  });
+});
+
+describe('the tags of the application\'s reads', () => {
+  it('name the three kinds in the step line', () => {
+    const entries = [read({ tool: 'typology', kind: 'typology', subject: undefined, rows: undefined, lines: 5 }), read({ tool: 'ai-notes', kind: 'ai-notes', subject: undefined, rows: 3 }), read({ tool: 'ai-summary', kind: 'ai-summary', subject: undefined, rows: 12 })];
+    render(<ReadSteps reads={entries} />);
+    for (const tag of ['Typology', 'Your AI notes', 'AI case summary']) expect(screen.getByText(tag)).toBeTruthy();
   });
 });
 

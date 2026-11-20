@@ -12,7 +12,10 @@ const SHIPPED_TYPOLOGY = 'aml-typologies.md';
 /** The instructions of the view answer: the prompt, the typologies and the reply format, which is last whatever the other two say. It is the summary's format, so one check reads both. */
 export type ViewInstructions = SummaryInstructions;
 
-export type ViewInstructionsLoad = { readonly ok: true; readonly instructions: ViewInstructions } | { readonly ok: false; readonly problems: readonly string[] };
+/** The items of the typology file's list (the lines that begin with `- `), kept apart so that the typology can also be read as a tool; the heading and the paragraph around them are not lines. */
+export const typologyLinesOf = (text: string): readonly string[] => text.split('\n').flatMap((line) => (line.startsWith('- ') && line.slice(2).trim() !== '' ? [line.slice(2).trim()] : []));
+
+export type ViewInstructionsLoad = { readonly ok: true; readonly instructions: ViewInstructions; readonly typology: readonly string[] } | { readonly ok: false; readonly problems: readonly string[] };
 
 interface LoadOptions {
   /** Only a test sets this, to a folder that stands in for the one shipped with the product. */
@@ -27,5 +30,5 @@ export async function loadViewInstructions(options: LoadOptions = {}): Promise<V
   const typology = await textOf(options.env, TYPOLOGY_SETTING, `${directory}${SHIPPED_TYPOLOGY}`, `the shipped ${SHIPPED_TYPOLOGY} (replace it with ${TYPOLOGY_SETTING})`, false);
   const problems = [prompt, typology].filter((found): found is string => typeof found === 'string');
   if (typeof prompt === 'string' || typeof typology === 'string') return { ok: false, problems };
-  return { ok: true, instructions: buildSummaryInstructions(prompt.text, typology.text) };
+  return { ok: true, instructions: buildSummaryInstructions(prompt.text, typology.text), typology: typologyLinesOf(typology.text) };
 }

@@ -125,8 +125,8 @@ export const ASSISTANT_MEANING_NAME_MAX = 80;
 /** The citation of a meaning line (`m1`): what the mapping says a type means, as the server wrote it into the call. It names no element and no record; `type` is the type's display name, or the relationship type's name. */
 const assistantDescriptionCitationSchema = z.strictObject({ key: text, kind: z.literal('description'), typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) });
 
-/** What kind of tool a read was, as the registry names it: an intent of the source's folder, a catalog template, a pattern or the view. */
-export const ASSISTANT_READ_KINDS = ['intent', 'template', 'pattern', 'view'] as const;
+/** What kind of tool a read was, as the registry names it: an intent of the source's folder, a catalog template, a pattern, the view, or one of the application's own reads: the typology, the person's AI notes and the AI case summary. */
+export const ASSISTANT_READ_KINDS = ['intent', 'template', 'pattern', 'view', 'typology', 'ai-notes', 'ai-summary'] as const;
 export type AssistantReadKind = (typeof ASSISTANT_READ_KINDS)[number];
 
 /** How sure the number of rows of a read is: the quality of its count. */
@@ -134,7 +134,7 @@ export const ASSISTANT_COUNT_QUALITIES = ['exact', 'estimated', 'lowerBound', 'u
 
 /**
  * One read of a turn, written by the server: the tool and its kind, the subject (the values the gate accepted for the tool's parameters, as Ask's "Understood as" line shows them), and, for a read that ran, the
- * rows it gave with the quality of that count (no number when the count is unknown) and whether it is partial; a read that did not run says so and has no subject.
+ * rows it gave with the quality of that count (no number when the count is unknown) and whether it is partial (the typology gives lines instead of rows); a read that did not run says so and has no subject.
  */
 export const assistantReadSchema = z.union([
   z
@@ -148,8 +148,10 @@ export const assistantReadSchema = z.union([
       rows: z.number().int().nonnegative().optional(),
       quality: z.enum(ASSISTANT_COUNT_QUALITIES),
       partial: z.boolean(),
+      /** For the typology: the lines it gave, which are no rows of the source and have no count of rows. */
+      lines: z.number().int().nonnegative().optional(),
     })
-    .refine((entry) => (entry.quality === 'unknown') === (entry.rows === undefined), { message: 'a count that is unknown has no number and every other count has one', path: ['rows'] }),
+    .refine((entry) => entry.lines !== undefined || (entry.quality === 'unknown') === (entry.rows === undefined), { message: 'a count that is unknown has no number and every other count has one', path: ['rows'] }),
   z.strictObject({ tool: text.max(200), label: text.max(80).optional(), kind: z.enum(ASSISTANT_READ_KINDS), read: z.literal(false) }),
 ]);
 

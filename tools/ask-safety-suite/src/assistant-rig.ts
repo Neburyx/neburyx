@@ -14,9 +14,14 @@ export interface AssistantRigOptions {
   readonly stores?: boolean;
   /** A description for a type of the source's mapping, by the name of the type. */
   readonly descriptions?: Readonly<Record<string, string>>;
+  /** Turns the AI case summary on. */
+  readonly summary?: boolean;
 }
 
+
 export interface AssistantRig {
+  /** The application's in-memory stores: a test seeds a person's own notes here. */
+  readonly store: AssistantApp['store'];
   readonly stub: ModelStub;
   events(): AuditEvent[];
   readonly logs: string[];
@@ -31,9 +36,10 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}) });
   return {
     stub,
+    store: app.store,
     events: app.events,
     logs: app.logs,
     reads: app.reads,

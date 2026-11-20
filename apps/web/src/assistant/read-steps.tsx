@@ -5,8 +5,10 @@ import { ASSISTANT_COPY } from './copy.js';
 const figure = (value: number): string => value.toLocaleString('en-US');
 const rowsOf = (value: number): string => `${figure(value)} ${value === 1 ? 'row' : 'rows'}`;
 
-/** The tag of a kind, as the registry names it: a folder intent, a catalog template, a pattern of the person or the view. */
-const KIND_TAGS: Readonly<Record<AssistantRead['kind'], string>> = { intent: 'Folder intent', template: 'Template', pattern: 'Your pattern', view: 'View' };
+/** The tag of a kind, as the registry names it: a folder intent, a catalog template, a pattern of the person, the view, or one of the application's own reads. */
+const KIND_TAGS: Readonly<Record<AssistantRead['kind'], string>> = { intent: 'Folder intent', template: 'Template', pattern: 'Your pattern', view: 'View', typology: 'Typology', 'ai-notes': 'Your AI notes', 'ai-summary': 'AI case summary' };
+
+const linesOf = (value: number): string => `${figure(value)} ${value === 1 ? 'line' : 'lines'}`;
 
 const QUALITY_CHIPS = { exact: 'Exact', estimated: 'Estimated', lowerBound: 'Lower bound', unknown: 'Unknown' } as const;
 
@@ -16,7 +18,7 @@ export function readLine(entry: AssistantRead): string {
   const subject = entry.subject === undefined ? undefined : `${entry.kind === 'pattern' ? 'from ' : ''}${entry.subject}`;
   const state = entry.partial ? 'partial' : 'complete';
   const count = entry.rows === undefined ? undefined : entry.quality === 'estimated' ? `~ ${rowsOf(entry.rows)} (estimated)` : entry.quality === 'lowerBound' ? `≥ ${rowsOf(entry.rows)}` : rowsOf(entry.rows);
-  const parts = entry.rows === undefined ? [subject, state, 'no row count'] : [subject, count, state];
+  const parts = entry.lines !== undefined ? [subject, linesOf(entry.lines), state] : entry.rows === undefined ? [subject, state, 'no row count'] : [subject, count, state];
   return parts.filter((part): part is string => part !== undefined).join(' · ');
 }
 

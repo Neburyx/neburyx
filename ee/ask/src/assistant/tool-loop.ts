@@ -7,7 +7,7 @@ import { buildToolRegistry } from './tool-registry.js';
 import { decideToolReply, readToolRequest, type ToolRequest } from './tool-request.js';
 import type { ReadDone, ToolAnswerInput, ToolAnswerOutcome } from './tool-answer.js';
 import type { PlanStep } from './plan-token.js';
-import { readNotRead, readOfAnswer, readOfNothing, readOfView } from './reads.js';
+import { readNotRead, readOfAnswer, readOfNothing, readOfNotes, readOfSummary, readOfTypology, readOfView } from './reads.js';
 import { runToolStep, type StepResult, type StepScope } from './tool-step.js';
 import { noteModelAnswer, noteReplaying, startModelCall } from './turn-audit.js';
 
@@ -16,8 +16,10 @@ const REPEAT_NOTE = 'Your last reply was not valid. Reply with {"done":true} or 
 const TEMPLATES: readonly string[] = ASK_TEMPLATE_IDS;
 
 /** The tools a turn may ask for in this scope: the source's intents, the catalog templates, the person's patterns and, when it can be read again, the view. */
-export const toolRegistryOf = (scope: Pick<StepScope, 'options' | 'sourceId' | 'patterns'>, viewReadable: boolean) =>
-  buildToolRegistry({ source: scope.options.folder()?.source(scope.sourceId), patterns: scope.patterns?.built, viewReadable, templateRunnable: (template) => TEMPLATES.includes(template) });
+const typologyOf = (scope: Pick<StepScope, 'options'>): readonly string[] | undefined => scope.options.typology?.();
+
+export const toolRegistryOf = (scope: Pick<StepScope, 'options' | 'sourceId' | 'patterns' | 'request' | 'viewElementKeys'>, viewReadable: boolean) =>
+  buildToolRegistry({ source: scope.options.folder()?.source(scope.sourceId), patterns: scope.patterns?.built, viewReadable, templateRunnable: (template) => TEMPLATES.includes(template), notes: scope.request.aiNotes !== undefined, summary: scope.viewElementKeys.length > 0 && scope.request.caseSummarizer.availability().available, ...(typologyOf(scope) === undefined ? {} : { typology: typologyOf(scope) }) });
 
 type Answered = Extract<AskAnswer, { answered: unknown }>['answered'];
 
@@ -152,6 +154,8 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
     let steps = resume === undefined ? 1 : resume.counters.steps;
     let calls = resume === undefined ? input.callsUsed : resume.counters.calls;
     let note = '';
+    // the reading an AI case summary of this turn was drafted over, kept for another request for it
+    let summaryReading: SummaryReading | undefined;
     let pending: ToolRequest | undefined = input.view?.request;
     if (input.first !== undefined) {
       const { answer } = input.first;
@@ -211,6 +215,36 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           lines.push('view: not available');
           done.push({ tool: tool.name, values, ...mark });
           break;
+        case 'ai-notes':
+          rows += step.rows;
+          entries.push(readOfNotes(step.rows, step.notRead > 0));
+          lines.push(`ai-notes: ${step.sentences.length} ${step.sentences.length === 1 ? 'sentence' : 'sentences'}${step.notRead > 0 ? `, ${step.notRead} ${step.notRead === 1 ? 'entry' : 'entries'} not read` : ''}${step.sentences.map((sentence) => `\n- ${sentence.text}`).join('')}`);
+          reads.push({ tool: tool.name, written: { sentences: step.sentences, notRead: step.notRead } });
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'ai-summary':
+          rows += step.rows;
+          entries.push(readOfSummary(step.rows));
+          lines.push(`ai-summary: ${step.sentences.length} ${step.sentences.length === 1 ? 'sentence' : 'sentences'}${step.sentences.map((sentence) => `\n- ${sentence.text}`).join('')}`);
+          reads.push({ tool: tool.name, written: { sentences: step.sentences, notRead: 0 } });
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'no-summary':
+          entries.push(readNotRead('ai-summary', 'ai-summary'));
+          lines.push('ai-summary: not drafted');
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'no-notes':
+          entries.push(readNotRead('ai-notes', 'ai-notes'));
+          lines.push('ai-notes: not read');
+          done.push({ tool: tool.name, values, ...mark });
+          break;
+        case 'typology':
+          entries.push(readOfTypology(step.lines.length));
+          lines.push(`typology:\n${step.lines.map((line) => `- ${line}`).join('\n')}`);
+          reads.push({ tool: tool.name, typology: step.lines });
+          done.push({ tool: tool.name, values, ...mark });
+          break;
         default: {
           const unreachable: never = step;
           return unreachable;
@@ -241,6 +275,12 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           if (tool === undefined || !tool.available) {
             put(readNotRead(tool?.kind ?? 'intent', earlier.tool));
             lines.push(`${earlier.tool}: not read, it is not available now`);
+            continue;
+          }
+          if (tool.kind === 'ai-summary') {
+            // a summary costs model calls and may differ: it is not drafted again after a wait
+            entries.push(readNotRead('ai-summary', 'ai-summary'));
+            lines.push('ai-summary: not read, it is not drafted again after a wait');
             continue;
           }
           const request = { tool, values: earlier.values };
@@ -306,10 +346,25 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       if (steps >= settings.maxSteps) return { kind: 'limit', limit: 'steps', reads: entries };
       if (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed) return { kind: 'limit', limit: 'rows', reads: entries };
       note = '';
-      const step = await runToolStep(read.request, scope);
+      // the summary is a model call that counts in the turn's: it is not started when the turn has no call to spare besides the one kept for the answer
+      const summarizing = read.request.tool.kind === 'ai-summary';
+      if (summarizing && settings.maxCalls - calls - 1 < 1) return steps === 1 && !fromView ? finished('calls') : finalAnswer('calls');
+      const reading = view?.reading ?? summaryReading;
+      let step: StepResult;
+      try {
+        step = await runToolStep(read.request, scope, summarizing ? { ...(reading === undefined ? {} : { viewReading: reading }), callsBudget: settings.maxCalls - calls - 1, deadline: input.deadline } : {});
+      } catch (error) {
+        // a summary that ended with the turn's time ends the turn at its time limit, as a model call that does so; a cancel is the caller's
+        if (summarizing && input.deadline.aborted && !scope.request.signal.aborted) return { kind: 'limit', limit: 'time', reads: entries };
+        throw error;
+      }
       // a read Ask would stop as heavy is not read: the turn waits for the analyst, and the step does not count
       if (step.status === 'heavy') return { kind: 'waiting', wait: { request: read.request, answer: step.answer }, steps: done, counters: { steps, rows, calls }, reads: entries, fromView };
       steps += 1;
+      if (step.status === 'ai-summary') {
+        summaryReading = step.reading;
+        calls += step.calls;
+      } else if (step.status === 'no-summary') calls += step.calls;
       apply(read.request, step);
     }
   };

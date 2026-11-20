@@ -28,6 +28,6 @@ describe('the instructions of a step call', () => {
   });
 
   it('has its own prompt id and version', () => {
-    expect([STEP_PROMPT_ID, STEP_PROMPT_VERSION]).toEqual(['assistant.step', 1]);
+    expect([STEP_PROMPT_ID, STEP_PROMPT_VERSION]).toEqual(['assistant.step', 2]);
   });
 });

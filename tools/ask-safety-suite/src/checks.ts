@@ -48,3 +48,9 @@ export function expectNoValue(records: readonly unknown[], sentinels: readonly s
   const text = JSON.stringify(records);
   for (const sentinel of sentinels) if (text.includes(sentinel)) fail('a record holds a value that must not be recorded');
 }
+
+/** The draft's own AI notes were not written: the version and the entries are what they were before the turn. */
+export function expectNoNoteWrite(before: { readonly version: number; readonly aiNotes?: unknown }, after: { readonly version: number; readonly aiNotes?: unknown } | undefined): void {
+  if (after === undefined) return fail('the draft is gone, so nothing was checked');
+  if (after.version !== before.version || JSON.stringify(after.aiNotes ?? null) !== JSON.stringify(before.aiNotes ?? null)) fail('the notes of the draft changed during a turn');
+}

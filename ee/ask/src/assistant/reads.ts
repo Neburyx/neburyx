@@ -38,6 +38,15 @@ export const readNotRead = (kind: AssistantReadKind, tool: string): AssistantRea
 /** The view's reading, listed as a read of its own: the elements it gave, an exact count. */
 export const readOfView = (rows: number): AssistantRead => ({ tool: 'view', kind: 'view', read: true, rows, quality: 'exact', partial: false });
 
+/** The typology's lines, listed as a read of their own: lines of the product's own file, no rows of the source. */
+export const readOfTypology = (lines: number): AssistantRead => ({ tool: 'typology', kind: 'typology', read: true, lines, quality: 'exact', partial: false });
+
+/** The person's AI notes, listed as a read: the elements the gate gave for them, and partial when an entry was not read. */
+export const readOfNotes = (rows: number, partial: boolean): AssistantRead => ({ tool: 'ai-notes', kind: 'ai-notes', read: true, rows, quality: 'exact', partial });
+
+/** The AI case summary, listed as a read: the rows of the gate's read when the step made one (none when the turn's reading was used). */
+export const readOfSummary = (rows: number): AssistantRead => ({ tool: 'ai-summary', kind: 'ai-summary', read: true, rows, quality: 'exact', partial: false });
+
 /** What a read that Ask stopped as heavy would read: the figure it stopped at (a lower bound) and the size of the page a continue reads; absent for a result that is not that stop. */
 export function heavyOf(run: AskRunResult): { readonly value: number; readonly page: number } | undefined {
   if (!isHeavyResult(run)) return undefined;

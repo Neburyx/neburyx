@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { ToolRegistry } from './tool-registry.js';
 
 export const STEP_PROMPT_ID = 'assistant.step';
-export const STEP_PROMPT_VERSION = 1;
+export const STEP_PROMPT_VERSION = 2;
 
 const STEP_REPLY_FORMAT = [
   '# Reply format',
@@ -21,7 +21,7 @@ export interface StepInstructions {
 
 /** The tools as text: one line for each, with the names of the values it takes. */
 export const toolsText = (registry: ToolRegistry): string =>
-  ['# Tools you may ask for', '', ...registry.tools.filter((tool) => tool.available).map((tool) => `${tool.name}(${tool.parameters.join(', ')})${tool.label === undefined ? '' : ` - ${tool.label}`}`)].join('\n');
+  ['# Tools you may ask for', '', ...registry.tools.filter((tool) => tool.available).map((tool) => `${tool.name}(${tool.parameters.join(', ')})${tool.label === undefined ? '' : ` - ${tool.label}`}${tool.description === undefined ? '' : `: ${tool.description}`}`)].join('\n');
 
 /** The step call's instructions: the prompt, the tools the registry offers, then the reply format, which is last whatever the prompt says. No tool of the provider's own kind is sent. */
 export function buildStepInstructions(prompt: string, registry: ToolRegistry): StepInstructions {

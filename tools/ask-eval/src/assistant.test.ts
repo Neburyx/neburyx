@@ -288,7 +288,8 @@ describe('the committed threads of the demo packs', () => {
   });
 });
 
-describe('the threads scored over a replay', () => {
+// Each of these reads the demo packs and runs the CLI in the process: 20 to 210 ms alone, measured on the dev machine. They timed out at 5 s only when the whole workspace's tests and a container suite ran at once, so the limit is 30 s: about 140 times the slowest run alone, still short enough to catch a hang.
+describe('the threads scored over a replay', { timeout: 30_000 }, () => {
   const committed = () => JSON.parse(readFileSync(SCRIPTED, 'utf8')) as { note: string; folders: Record<string, string>; answers: Record<string, { reply: string }> };
   const firstOf = async (name: string): Promise<string> => {
     const requests = await requestsOf(await loadAssistantSets(PACKS, hooks()), hooks());

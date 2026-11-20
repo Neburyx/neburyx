@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AuditEvent } from '@neburyx/contracts';
@@ -90,6 +93,8 @@ export interface AssistantAppOptions {
   readonly name?: (id: string) => string;
   /** Mounts the stores of the extension (memory ones here), which the confirmation of a heavy step needs: it is kept in a store of its own. */
   readonly stores?: boolean;
+  /** Turns the AI case summary on (the summarizer reads its own token key from an owner-only file made here). */
+  readonly summary?: boolean;
   /** Settings of the assistant, by name (`NEBURYX_ASSISTANT_*`). */
   readonly settings?: Readonly<Record<string, string>>;
   /** A description for a type of the source's mapping, by the name of the type. */
@@ -103,6 +108,13 @@ const INTENTS = {
   sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } },
 };
 
+function tokenKeyFile(): string {
+  const file = join(mkdtempSync(join(tmpdir(), 'nbx-assistant-key-')), 'token.key');
+  writeFileSync(file, `${'7'.repeat(64)}\n`);
+  chmodSync(file, 0o600);
+  return file;
+}
+
 export type AssistantApp = Awaited<ReturnType<typeof startAssistantApp>>;
 
 /** The real application with the real enterprise extension and the assistant on (its tool loop from two steps), over a model service the test gives and the real gate over a scripted source. */
@@ -115,9 +127,10 @@ export async function startAssistantApp(options: AssistantAppOptions) {
     NEBURYX_ASK_TIMEOUT_MS: '5000',
     NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 4),
     ...(options.maxCalls === undefined ? {} : { NEBURYX_ASSISTANT_MAX_CALLS: String(options.maxCalls) }),
+    ...(options.summary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}),
     ...options.settings,
   };
-  const configured = await extension.configure?.({}, env, { sourceIds: ['demo'], features: { ask: false, summary: false, assistant: true } });
+  const configured = await extension.configure?.({}, env, { sourceIds: ['demo'], features: { ask: false, summary: options.summary === true, assistant: true } });
   if (configured?.ok !== true) throw new Error(`the extension was not configured: ${JSON.stringify(configured)}`);
   const sinkOpened = options.stores === true ? extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined }) : undefined;
   const modelEvents: AuditEvent[] = [];

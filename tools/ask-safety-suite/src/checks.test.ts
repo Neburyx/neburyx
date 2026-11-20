@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectedBody, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
+import { expectedBody, expectNoNoteWrite, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
 
 const TEXT = 'MATCH (n) WHERE n.id = $id AND n.x = $x RETURN n';
 const read = (cypher: string, parameters: Record<string, unknown>) => ({ cypher, parameters });
@@ -58,5 +58,19 @@ describe('the check that every read is a read of a registered tool', () => {
   it('canary: fails a read no tool names, and a case that read nothing', () => {
     expect(() => expectOnlyRegisteredReads([{ templateId: 'entity-load' }, { templateId: 'drop-everything' }], ['entity-load'])).toThrow(SafetyCheckFailed);
     expect(() => expectOnlyRegisteredReads([], ['entity-load'])).toThrow(SafetyCheckFailed);
+  });
+});
+
+describe('the check that a turn wrote no AI notes', () => {
+  const before = { version: 3, aiNotes: { entries: [] } };
+
+  it('passes a draft that is as it was', () => {
+    expect(() => expectNoNoteWrite(before, { version: 3, aiNotes: { entries: [] } })).not.toThrow();
+  });
+
+  it('canary: fails a new version, an added entry, and a draft that is gone', () => {
+    expect(() => expectNoNoteWrite(before, { version: 4, aiNotes: { entries: [] } })).toThrow(SafetyCheckFailed);
+    expect(() => expectNoNoteWrite(before, { version: 3, aiNotes: { entries: [{ tokenId: 'x' }] } })).toThrow(SafetyCheckFailed);
+    expect(() => expectNoNoteWrite(before, undefined)).toThrow(SafetyCheckFailed);
   });
 });

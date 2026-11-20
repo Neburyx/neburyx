@@ -35,6 +35,8 @@ interface TurnNotes {
   citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   started?: { readonly sourceId: string; readonly investigationId: string };
   calls: number;
+  /** The model calls an application tool made outside the turn's own recording (the AI case summary's), counted in the turn's calls and in no other field of it. */
+  summaryCalls?: number;
   modelRef?: string;
   promptId?: string;
   promptVersion?: string;
@@ -104,6 +106,9 @@ export const readTurnContext = async (limit: number): Promise<readonly Assistant
 
 /** The id of the run of the turn that is running, for the events it writes; absent outside a turn and before the turn started. */
 export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;
+
+/** Notes the model calls of an AI case summary drafted in this turn: the closing event counts them in the turn's calls; its model, prompt and token fields hold only the calls the turn made through its own recording. */
+export const noteSummaryCalls = (calls: number): void => note((notes) => void (notes.summaryCalls = (notes.summaryCalls ?? 0) + calls));
 
 /** Marks the reads that follow as made again to carry on a turn after the analyst's decision (their events say so), or no longer. */
 export const noteReplaying = (replaying: boolean): void => note((notes) => void (notes.replaying = replaying));
@@ -259,7 +264,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
-    modelCalls: notes.calls,
+    modelCalls: notes.calls + (notes.summaryCalls ?? 0),
     ...(notes.run === undefined ? {} : { runId: notes.run.id }),
     ...(notes.resumes === undefined ? {} : { resumes: notes.resumes }),
     ...call,
@@ -319,7 +324,7 @@ function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, n
     ending = undefined;
   }
   // the run row ends with the turn's outcome before the closing event says it
-  notes.run?.finish(ending?.outcome ?? 'failed', notes.calls);
+  notes.run?.finish(ending?.outcome ?? 'failed', notes.calls + (notes.summaryCalls ?? 0));
   if (ending !== undefined) storeThread(notes, ending, outcome);
   let event: AuditEvent;
   try {

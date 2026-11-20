@@ -102,3 +102,33 @@ describe('the checks of a sentence that cites a meaning line', () => {
     expect(judgeSentences([{ text: 'A Fraud Ledger.', cites: ['m1'] }], named).verdictFound).toBe(false);
   });
 });
+
+describe('the lines of the typology, cited by keys of their own', () => {
+  const LINES: CheckedText = {
+    text: 'n1: Ledger A (id a1)\nt1: Fan-in: many sources send money to one receiver.',
+    keys: new Map<string, unknown>([['n1', 'entity'], ['t1', true], ['s1', true]]),
+    lines: new Map([['n1', 'Ledger A (id a1)'], ['t1', 't1: Fan-in: many sources send money to one receiver.'], ['s1', 's1: read of typology: 1 line']]),
+    inexactCounts: [],
+    unknownCountKeys: new Set(),
+    readKeys: new Set(['s1', 't1']),
+  };
+
+  it('takes a key in brackets out of the shown text, as it does for an element', () => {
+    const judged = judgeSentences([{ text: 'A fan-in is many sources sending money to one receiver (t1).', cites: ['t1'] }], LINES);
+    expect(judged.kept).toEqual([{ text: 'A fan-in is many sources sending money to one receiver.', cites: ['t1'] }]);
+    expect(judged.keysStripped).toBe(1);
+  });
+
+  it('removes a sentence that writes the key where a name stands', () => {
+    const judged = judgeSentences([{ text: 't1 describes many sources sending money to one receiver.', cites: ['t1'] }], LINES);
+    expect(judged.kept).toEqual([]);
+    expect(judged.keysRemoved).toBe(1);
+  });
+
+  it('checks a sentence that cites only typology lines for names against those lines, so it cannot name an element it does not cite', () => {
+    expect(judgeSentences([{ text: 'A fan-in is many sources sending money to one receiver.', cites: ['t1'] }], LINES).kept).toHaveLength(1);
+    expect(judgeSentences([{ text: 'Ledger A is a fan-in.', cites: ['t1'] }], LINES).kept).toEqual([]);
+    expect(judgeSentences([{ text: 'Ledger A is a fan-in.', cites: ['t1', 'n1'] }], LINES).kept).toHaveLength(1);
+  });
+});
+

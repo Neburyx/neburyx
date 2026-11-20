@@ -147,6 +147,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let sourceBudgets: ConfigureContext['budgets'];
   let assistantInstructions: AssistantInstructions | undefined;
   let viewInstructions: ViewInstructions | undefined;
+  let typologyLines: readonly string[] = [];
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
   let assistantRuns: AssistantRunStore | undefined;
@@ -193,7 +194,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       }, answer: createToolAnswer({ model, instructions: () => viewInstructions, checks, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, ...(options.now === undefined ? {} : { now: options.now }) }) });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, toolLoop: assistantToolLoop, viewTools: () => (assistantSettings?.maxSteps ?? 1) >= 2, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, toolLoop: assistantToolLoop, viewTools: () => (assistantSettings?.maxSteps ?? 1) >= 2, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: () => typologyLines, notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -223,6 +224,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       assistantSettings = undefined;
       assistantInstructions = undefined;
       viewInstructions = undefined;
+      typologyLines = [];
       const assistant = features.assistant ? readAssistantSettings(env) : undefined;
       const assistantPrompt = features.assistant ? await loadAssistantInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
       const viewPrompt = features.assistant ? await loadViewInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
@@ -267,6 +269,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       assistantSettings = assistant?.ok === true ? assistant.settings : undefined;
       assistantInstructions = assistantPrompt?.ok === true ? assistantPrompt.instructions : undefined;
       viewInstructions = viewPrompt?.ok === true ? viewPrompt.instructions : undefined;
+      typologyLines = viewPrompt?.ok === true ? viewPrompt.typology : [];
       folder = loadedFolder;
       instructions = readInstructions;
       summarySettings = readSettings;

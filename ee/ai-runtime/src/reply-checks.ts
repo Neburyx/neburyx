@@ -214,7 +214,7 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   return true;
 }
 
-const KEY = '[nersm]\\d+';
+const KEY = '[nerastm]\\d+';
 const KEY_GROUP = new RegExp(`\\s*[(\\[]\\s*${KEY}(?:\\s*(?:,|;|and|&)\\s*${KEY})*\\s*[)\\]]`, 'gu');
 const KEY_WORD = new RegExp(`(?<![\\p{L}\\p{N}_-])${KEY}(?![\\p{L}\\p{N}_-])`, 'u');
 

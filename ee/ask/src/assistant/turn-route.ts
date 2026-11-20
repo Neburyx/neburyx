@@ -82,6 +82,10 @@ export interface TurnRouteOptions {
   readonly records?: () => RecordQueue | undefined;
   /** How many of the person's last turns of the thread the router is shown; absent, it is shown none. */
   readonly contextTurns?: () => number | undefined;
+  /** The lines of the typology the loop may offer as a tool; none, and it is not offered. */
+  readonly typology?: () => readonly string[] | undefined;
+  /** The most references an entry of the person's AI notes may hold for the notes tool to read it. */
+  readonly notesMaxRefs?: () => number | undefined;
   /** The keys the summary's tokens are sealed under; absent, no summary token opens. */
   readonly summaryKeys?: () => TokenKeys | undefined;
   /** The store of the confirmations that wait for the analyst; absent, a heavy step of the loop stops the turn as Ask's heavy stop, with Continue. */
@@ -232,7 +236,7 @@ async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => r
 }
 
 export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRoute {
-  const runOptions = { folder: options.folder, runs: () => undefined, logger: options.logger, ...(options.now === undefined ? {} : { now: options.now }) };
+  const runOptions = { folder: options.folder, runs: () => undefined, logger: options.logger, ...(options.now === undefined ? {} : { now: options.now }), ...(options.typology === undefined ? {} : { typology: options.typology }), ...(options.notesMaxRefs === undefined ? {} : { notesMaxRefs: options.notesMaxRefs }) };
 
   /** The last turns of this person's thread as the router is shown them, read again through the gate; a failure of the gate's read is the caller's to answer. */
   async function contextOf(body: Extract<AssistantTurnRequest, { message: string }>, readElements: ExtensionRequest['readElements'], signal: AbortSignal): Promise<TurnContext | undefined> {

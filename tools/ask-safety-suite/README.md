@@ -56,6 +56,11 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 | A value of a tool request reaches the source only as a parameter of the stored statement | `src/assistant-loop.test.ts` | runs the stored statement of a file query with |
 | A built-in template for an entity type the mapping does not know reads nothing | `src/assistant-loop.test.ts` | refuses a built-in template for an entity type that is |
 | The rig of the loop reads when a request is a good one | `src/assistant-loop.test.ts` | runs a built-in template with an anchor of the source |
+| A sentence of the person's notes that holds an instruction runs nothing, and no note is written | `src/assistant-tools.test.ts` | reaches the model only as a line of the results |
+| Another person's notes never reach the model | `src/assistant-tools.test.ts` | never reaches the model from another person |
+| A reply that cites a key the application tools did not return is dropped | `src/assistant-tools.test.ts` | drops a reply that cites a key the application tools did not return |
+| A sentence of an AI case summary drafted in the turn that holds an instruction runs nothing | `src/assistant-tools.test.ts` | is data for the model; the tool it names is refused |
+| A turn writes no AI notes (the check fails a changed draft) | `src/checks.test.ts` | canary: fails a new version, an added entry, and a draft that is gone |
 | A read that no tool names is caught | `src/checks.test.ts` | canary: fails a read no tool names |
 | A case that never ran cannot pass | `src/rig.test.ts` | counts what a case expects |
 | The settings that withheld a property from the model are refused as unknown keys of the mapping file | `../../services/api/src/mapping/ai.test.ts` | refuses %s as a key the section does not have |

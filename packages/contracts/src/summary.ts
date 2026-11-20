@@ -119,6 +119,10 @@ export interface CaseSummaryInput {
   readonly request: SummaryRequest;
   /** What the gate returned for the references of the request, read again for this person. */
   readonly reading: SummaryReading;
+  /** The most model calls this draft may make, when the caller has a limit of its own to keep (a turn of the assistant); the summarizer makes no more than the smaller of this and its own limit. */
+  readonly maxCalls?: number;
+  /** The time limit of the caller's own (a turn of the assistant): a draft that ends with it ends as `timeLimit`, not as a cancel by the client. */
+  readonly deadline?: AbortSignal;
 }
 
 export type CaseSummaryOutcome = SummaryResponse;

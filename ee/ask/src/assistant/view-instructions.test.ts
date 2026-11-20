@@ -26,7 +26,7 @@ const load = (env: Record<string, string> = {}) => loadViewInstructions({ env, s
 describe('the instructions of the view answer', () => {
   it('are the shipped prompt, the shipped typology and the fixed reply format, with the hash of that text', async () => {
     const result = await load();
-    expect(result).toEqual({ ok: true, instructions: buildSummaryInstructions('SHIPPED VIEW PROMPT', 'SHIPPED TYPOLOGY') });
+    expect(result).toEqual({ ok: true, instructions: buildSummaryInstructions('SHIPPED VIEW PROMPT', 'SHIPPED TYPOLOGY'), typology: [] });
   });
 
   it('are replaced file by file, the reply format stays last, and a replaced file cannot change it', async () => {
@@ -61,6 +61,12 @@ describe('the instructions of the view answer', () => {
   it('name the shipped file and the setting that replaces it when a shipped file is missing', async () => {
     const result = await loadViewInstructions({ env: {}, shippedDirectory: `${folder}/nowhere/` });
     expect(result.ok ? '' : result.problems.join(' ')).toContain('replace it with NEBURYX_ASSISTANT_VIEW_PROMPT_FILE');
+  });
+
+  it('keeps the items of the typology list apart, five for the shipped file and none of its heading or paragraph', async () => {
+    const shipped = await loadViewInstructions();
+    expect(shipped.ok && shipped.typology).toHaveLength(5);
+    expect(shipped.ok && shipped.typology.every((line) => !line.startsWith('#') && !line.startsWith('- '))).toBe(true);
   });
 });
 
