@@ -9,7 +9,7 @@ export const ROUTER_PROMPT_VERSION = 1;
 export const ROUTER_AUDIT_ACTION = 'assistant.route';
 
 const NO_KEYS = '(none)';
-const NOT_A_ROUTE_NOTE = 'Your last reply was not a route. Reply with one route object only and nothing else.';
+const NOT_A_ROUTE_NOTE = 'Your last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.';
 const REPEATS = 1;
 
 export interface RouterOptions {

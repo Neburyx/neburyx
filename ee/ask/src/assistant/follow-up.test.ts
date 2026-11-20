@@ -235,10 +235,10 @@ describe('the context of a follow-up: how much of the thread, whose, and what a 
   });
 
   it('counts the context in the input guard and sends nothing when the whole is over it', async () => {
-    const quietFit = await follow(quiet, { maxInputTokens: 600, readNodes: everyone });
+    const quietFit = await follow(quiet, { maxInputTokens: 900, readNodes: everyone });
     expect(await quietFit.send(FOLLOW_UP)).toMatchObject({ status: 'answered' });
     const many = Array.from({ length: ASSISTANT_VIEW_KEYS_MAX }, (_unused, index) => widget(`W-${index}`));
-    const t = await follow(quiet, { maxInputTokens: 600, readNodes: everyone });
+    const t = await follow(quiet, { maxInputTokens: 900, readNodes: everyone });
     await seed(t.threads, turnOf({ route: 'view', outcome: 'answered', citationRefs: many }));
     expect(await t.send(FOLLOW_UP)).toMatchObject({ status: 'too-large' });
     expect(t.rig.fixture.calls).toHaveLength(0);
