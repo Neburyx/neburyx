@@ -49,6 +49,9 @@ const ENV = { NEBURYX_ASK_API_KEY: 'a-test-key' };
 const INTENTS = { widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } }, queryById: { parameters: ['id'], query: 'MATCH (n:Widget {widgetId: $id}) RETURN n' }, sharedGadget: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'gadget', via: 'MADE_FROM' } } };
 const widgetNode = (id: string) => ({ $type: 'node', elementId: `4:s:${id}`, labels: ['Widget'], properties: { widgetId: id, ownerName: 'Ana Silva' } });
 
+/** An answer with the tokens of its choices made alike: each carries the time it was made, so two answers to one question differ in them and in nothing else. */
+const sameButTokens = (answer: unknown): unknown => JSON.parse(JSON.stringify(answer, (key, value: unknown) => (key === 'choiceToken' ? 'token' : value)));
+
 async function assistantRig(options: { principal?: ExportRigOptions['principal']; unexportableNode?: string; reply?: string | (() => string); hang?: boolean; runStore?: AssistantRunStore; threadStore?: AssistantThreadStore; principalId?: () => string; logLines?: string[]; recordQueue?: RecordQueue; auditCounts?: () => AuditCounts; requestAudit?: AuditSink; features?: { ask: boolean; summary: boolean; assistant: boolean }; modelAudit?: AuditSink; fileQuery?: ExecuteOutcome; answer?: (call: ExecuteCall) => ExecuteOutcome | Promise<ExecuteOutcome> | undefined } = {}) {
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore() });
@@ -542,7 +545,7 @@ describe('the closing event of a turn in the running application', () => {
       const { queue, logs } = queueOver(makeStore, size);
       const { rig, answer } = await turn(item, { requestAudit: queue.sink, modelAudit: queue.sink });
       expect(answer.statusCode, item.name).toBe(baseline.answer.statusCode);
-      expect(answer.json(), item.name).toEqual(baseline.answer.json());
+      expect(sameButTokens(answer.json()), item.name).toEqual(sameButTokens(baseline.answer.json()));
       await vi.waitFor(() => expect(logs.some((line) => line['action'] === 'assistant.turn.closed'), item.name).toBe(true));
       expect(queue.counts().failed + queue.counts().dropped, item.name).toBeGreaterThan(0);
       diagnosed(logs, item.name);
@@ -682,7 +685,7 @@ describe('the stored runs of a turn in the running application', () => {
     const recording = await turnWith(item, { runStore: store, recordQueue: records.attached, auditCounts: records.auditCounts });
     const plain = await turnWith(item);
     expect(recording.answer.statusCode).toBe(plain.answer.statusCode);
-    expect(recording.answer.json()).toEqual(plain.answer.json());
+    expect(sameButTokens(recording.answer.json())).toEqual(sameButTokens(plain.answer.json()));
     await vi.waitFor(() => expect(store.runs[0]?.outcome).toBeDefined());
     const ready = await recording.rig.rig.app.inject({ url: '/readyz' });
     const exposed = JSON.stringify({ events: [...recording.rig.events, ...recording.rig.rig.events], logs: records.logs, headers: recording.answer.headers, ready: ready.body });
@@ -715,7 +718,7 @@ describe('the stored runs of a turn in the running application', () => {
     const failing: AssistantRunStore = { ...createMemoryAssistantRunStore(), begin: () => (attempts++, Promise.reject(new Error('the store is down'))), beginCall: () => (attempts++, Promise.reject(new Error('the store is down'))), endCall: () => (attempts++, Promise.reject(new Error('the store is down'))), finish: () => (attempts++, Promise.reject(new Error('the store is down'))) };
     const records = recordsOver((job) => job.write());
     const recording = await turnWith(item, { runStore: failing, recordQueue: records.attached, auditCounts: records.auditCounts });
-    expect(recording.answer.json(), item.name).toEqual(plain.answer.json());
+    expect(sameButTokens(recording.answer.json()), item.name).toEqual(sameButTokens(plain.answer.json()));
     await vi.waitFor(() => expect(records.queue.counts().failed, item.name).toBe(attempts));
     expect(attempts, item.name).toBe(item.name === 'too-long' ? 2 : item.name === 'unplaced' ? 6 : 4);
     expect((await readyz(recording.rig)).audit.failed, item.name).toBe(attempts);
@@ -773,6 +776,112 @@ describe('the thread of an investigation in the running application', () => {
     for (const canary of [CANARY, 'key-canary-9', 'Choose the intent that answers the question']) expect(rows, canary).not.toContain(canary);
     const logs = JSON.stringify([records.logs, rig.events, rig.rig.events]);
     expect(logs).not.toContain(CANARY);
+    await rig.stop();
+  });
+
+  it('shows the router the earlier turn of the person with its element as a key and runs a follow-up that names that key, the thread keeping both turns', async () => {
+    current = FIRST;
+    let calls = 0;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: () => (++calls === 1 ? ASK : '{"route":"ask","intent":"widgetById","entities":{},"elements":{"id":"c1"}}'), threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    expect((await send(rig, 'Show W-1')).statusCode).toBe(200);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const second = await send(rig, 'and what else about it?');
+    expect(second.statusCode).toBe(200);
+    expect(assistantTurnAnswerSchema.parse(second.json())).toMatchObject({ status: 'answered', route: 'ask' });
+    const values = JSON.stringify(rig.stub.bodies[1]);
+    expect(values).toContain('Earlier turns of this thread, oldest first:');
+    expect(values).toMatch(/c1 \| .* \| /);
+    expect(JSON.stringify(rig.stub.bodies[0])).not.toContain('Earlier turns');
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(2));
+    expect(assistantThreadResponseSchema.parse((await readThread(rig)).json())).toMatchObject({ turns: [{ route: 'ask', outcome: 'answered' }, { route: 'ask', outcome: 'answered', intent: 'widgetById' }] });
+    await rig.stop();
+  });
+
+  it.each([
+    ['a stable ID in the key position', 'W-1'],
+    ['query text in the key position', 'c1); MATCH (n) DETACH DELETE n //'],
+    ['a client key', JSON.stringify(['node', 'demo', 'widget', 'W-1'])],
+  ])('lets %s reach the source in no form: the follow-up runs nothing and the gate sees only the read of the earlier turn’s elements', async (_name, key) => {
+    current = FIRST;
+    let calls = 0;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: () => (++calls === 1 ? ASK : JSON.stringify({ route: 'ask', intent: 'widgetById', entities: {}, elements: { id: key } })), threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    await send(rig, 'Show W-1');
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const before = rig.rig.executor.calls.length;
+    const second = assistantTurnAnswerSchema.parse((await send(rig, 'and what else about it?')).json());
+    expect(second).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    const after = rig.rig.executor.calls.slice(before);
+    expect(after.map((call) => call.templateId)).toEqual(['schema-indexes', 'entity-load-many']);
+    for (const call of after) expect(JSON.stringify(call)).not.toMatch(/DETACH|c9\b/);
+    await rig.stop();
+  });
+
+  it('asks which element is meant for a key that names nothing, from the elements of the thread, and the gate sees only reads of elements, none of the intent', async () => {
+    current = FIRST;
+    let calls = 0;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: () => (++calls === 1 ? ASK : '{"route":"ask","intent":"widgetById","entities":{},"elements":{"id":"c9"}}'), threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    await send(rig, 'Show W-1');
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const before = rig.rig.executor.calls.length;
+    const second = assistantTurnAnswerSchema.parse((await send(rig, 'and what else about it?')).json());
+    expect(second).toMatchObject({ status: 'clarification', question: 'Which widget do you mean?' });
+    expect(second.status === 'clarification' ? second.candidates.length : 0).toBeGreaterThan(0);
+    expect(rig.rig.executor.calls.slice(before).every((call) => call.templateId === 'schema-indexes' || call.templateId === 'entity-load-many')).toBe(true);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    expect(assistantThreadResponseSchema.parse((await readThread(rig)).json()).turns).toHaveLength(1);
+    await rig.stop();
+  });
+
+  it('runs the choice of a clarification through the gate with no model call, keeps it in the thread and refuses the same choice sent by another person', async () => {
+    current = FIRST;
+    let calls = 0;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: () => (++calls === 1 ? ASK : '{"route":"ask","intent":"widgetById","entities":{},"elements":{"id":"c9"}}'), threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    await send(rig, 'Show W-1');
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(1));
+    const clarification = assistantTurnAnswerSchema.parse((await send(rig, 'and what else about it?')).json());
+    if (clarification.status !== 'clarification') throw new Error('not a clarification');
+    const choice = clarification.candidates[0]?.choice;
+    const picked = await rig.post({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [], choice });
+    expect(picked.statusCode).toBe(200);
+    expect(assistantTurnAnswerSchema.parse(picked.json())).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(rig.stub.bodies).toHaveLength(2);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(2));
+    expect(assistantThreadResponseSchema.parse((await readThread(rig)).json()).turns).toHaveLength(2);
+    current = SECOND;
+    const stolen = await rig.post({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [], choice });
+    expect(stolen.statusCode).toBe(404);
+    await rig.stop();
+  });
+
+  it('suggests another template question of the folder for the elements of an answer and runs the one pressed through the gate with no model call, once, for the person it was made for', async () => {
+    current = FIRST;
+    const threads = createMemoryAssistantThreadStore();
+    const records = recordsOver();
+    const rig = await assistantRig({ reply: ASK, threadStore: threads, recordQueue: records.attached, principalId: () => current });
+    const answer = assistantTurnAnswerSchema.parse((await send(rig, 'Show W-1')).json());
+    if (answer.status !== 'answered' || answer.route !== 'ask') throw new Error('not an ask answer');
+    const chip = answer.followUps?.[0];
+    expect(answer.followUps?.map((held) => held.choice.intent)).toEqual(['sharedGadget']);
+    expect(chip?.choice.roles).toEqual(['id']);
+    const before = rig.rig.executor.calls.length;
+    const pressed = await rig.post({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [], choice: chip?.choice });
+    expect(pressed.statusCode).toBe(200);
+    expect(assistantTurnAnswerSchema.parse(pressed.json())).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(rig.stub.bodies).toHaveLength(1);
+    expect(rig.rig.executor.calls.length).toBeGreaterThan(before);
+    await vi.waitFor(() => expect(records.queue.counts().written).toBeGreaterThanOrEqual(2));
+    expect(assistantThreadResponseSchema.parse((await readThread(rig)).json()).turns).toHaveLength(2);
+    current = SECOND;
+    const stolen = await rig.post({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [], choice: chip?.choice });
+    expect(stolen.statusCode).toBe(404);
     await rig.stop();
   });
 
@@ -839,7 +948,7 @@ describe('the thread of an investigation in the running application', () => {
     const records = recordsOver();
     const rig = await assistantRig({ reply: ASK, threadStore: makeStore(), recordQueue: records.attached, auditCounts: records.auditCounts, principalId: () => current });
     const answer = await send(rig);
-    expect(answer.json()).toEqual(baseline.json());
+    expect(sameButTokens(answer.json())).toEqual(sameButTokens(baseline.json()));
     await vi.waitFor(() => expect(records.queue.counts().failed).toBe(1));
     const ready = (await rig.rig.app.inject({ method: 'GET', url: '/readyz' })).json();
     expect(ready.audit.failed).toBe(1);

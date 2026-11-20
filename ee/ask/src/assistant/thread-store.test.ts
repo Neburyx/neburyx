@@ -151,6 +151,33 @@ describe('the read of the Postgres store', () => {
   });
 });
 
+describe('the read of the context of the Postgres store', () => {
+  it('reads the caller’s own turns of the investigation in one statement, newest first and bounded, and answers them oldest first with their references', async () => {
+    const entities = [{ role: 'id', ref: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' } }];
+    const { held, statements } = pool({ turns: [{ route: 'refuse', outcome: 'refused', cause: 'verdict', intent: null, entities: [], citation_refs: [] }, { route: 'ask', outcome: 'answered', cause: null, intent: 'one', entities, citation_refs: [] }] });
+    const read = await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).readContext(INVESTIGATION, OWNER, 3);
+    expect(read).toEqual([{ route: 'ask', outcome: 'answered', intent: 'one', entities, citationRefs: [] }, { route: 'refuse', outcome: 'refused', cause: 'verdict', entities: [], citationRefs: [] }]);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]).toMatch(/h\.investigation_id = \$1 AND h\.user_id = \$2 ORDER BY t\.seq DESC LIMIT \$3/);
+  });
+
+  it('answers the fixed error, with no driver text, for a failing statement', async () => {
+    const { held } = pool({ failAt: /ORDER BY t.seq DESC/ });
+    const error = await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).readContext(INVESTIGATION, OWNER, 3).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(AssistantThreadStoreError);
+    expect(JSON.stringify(error) + String(error)).not.toContain('canary-secret-7f3');
+  });
+});
+
+describe('the read of the context of the memory store', () => {
+  it('gives the caller’s own last turns oldest first, and none for a person with no thread', async () => {
+    const store = createMemoryAssistantThreadStore();
+    for (const held of [turn({ intent: 'one' }), turn({ intent: 'two' }), turn({ intent: 'three' }), turn({ userId: OTHER, intent: 'theirs' })]) await store.append(held, 0);
+    expect((await store.readContext(INVESTIGATION, OWNER, 2)).map((held) => held.intent)).toEqual(['two', 'three']);
+    expect(await store.readContext(INVESTIGATION, '0192f000-0000-7000-8000-0000000000ff', 2)).toEqual([]);
+  });
+});
+
 describe('the memory store of the threads', () => {
   it('appends in order, per person, writes a turn once, and reads only the caller’s own thread', async () => {
     const store = createMemoryAssistantThreadStore();

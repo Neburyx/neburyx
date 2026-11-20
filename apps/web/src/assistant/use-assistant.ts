@@ -13,7 +13,8 @@ import { useStoreSelector } from '../state/store.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import type { Answered } from '../ask/ask-session.js';
 import { citationEntries, type CitationEntry } from '../summary/summary-model.js';
-import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type Outcome, type Retry, type ViewAnswer } from './assistant-session.js';
+import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type FollowUp, type Outcome, type Retry, type ViewAnswer } from './assistant-session.js';
+import { followUpLabel } from './follow-up-label.js';
 import { countWords } from './words.js';
 import { isAssistantOff } from './failure-kinds.js';
 
@@ -43,6 +44,19 @@ export interface AssistantModel {
   continueRun(turnId: number): void;
   askAgain(turnId: number): void;
   addToGraph(turnId: number): void;
+  cancelClarification(turnId: number): void;
+  pickCandidate(turnId: number, index: number): void;
+  pressFollowUp(turnId: number, index: number): void;
+  /** The turn whose follow-ups are shown: the last one that was answered. */
+  readonly followUpsTurn: number | undefined;
+  /** A turn is out, so a follow-up cannot be pressed. */
+  readonly busy: boolean;
+}
+
+/** A failure of a pick leaves the clarification on screen with the failure beside it, so the analyst can pick again; any other failure is the turn's own card. */
+function afterFailure(outcome: Outcome, retry: Retry): Outcome {
+  if (retry.kind !== 'choice' || outcome.kind !== 'failed' || outcome.failure.kind === 'choice-invalid') return outcome;
+  return { kind: 'clarification', question: retry.question, candidates: retry.candidates, failed: { failure: outcome.failure, index: retry.index } };
 }
 
 function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entriesOf: (answer: ViewAnswer) => readonly CitationEntry[]): Outcome | { readonly tooLong: { readonly words: number; readonly limit: number } } {
@@ -51,7 +65,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
       if (answer.route === 'refuse') return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence };
       if (answer.route === 'view') return { kind: 'view-answer', answer, entries: entriesOf(answer) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
-      return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, step: answer.step, coverage: answer.coverage } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
+      return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, step: answer.step, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
       return { kind: 'not-answered', sentence: answer.sentence };
     case 'unavailable':
@@ -62,6 +76,10 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, now: number, entri
       return { tooLong: { words: answer.words, limit: answer.limit } };
     case 'continue-invalid':
       return { kind: 'failed', failure: { kind: 'continue-invalid' }, retry };
+    case 'clarification':
+      return { kind: 'clarification', question: answer.question, candidates: answer.candidates };
+    case 'choice-invalid':
+      return { kind: 'failed', failure: { kind: retry.kind === 'chip' ? 'follow-up-invalid' : 'choice-invalid' }, retry };
     default: {
       const unreachable: never = answer;
       return unreachable;
@@ -134,7 +152,7 @@ export function useAssistant(): AssistantModel {
           }
           const wait = askFailureWords(result.failure, sourceId).waitMs;
           const failure: Failure = { kind: 'request', failure: result.failure, until: wait === undefined ? undefined : Date.now() + wait };
-          setOutcome(turnId, { kind: 'failed', failure, retry });
+          setOutcome(turnId, afterFailure({ kind: 'failed', failure, retry }, retry));
           if (retry.kind === 'message') restoreInput(retry.text);
           setFocus(turnId);
           return;
@@ -146,7 +164,7 @@ export function useAssistant(): AssistantModel {
           setFocus('input');
           return;
         }
-        setOutcome(turnId, outcome);
+        setOutcome(turnId, afterFailure(outcome, retry));
         if (outcome.kind === 'failed' && retry.kind === 'message') restoreInput(retry.text);
         setFocus(turnId);
       });
@@ -197,6 +215,36 @@ export function useAssistant(): AssistantModel {
     [base, setOutcome, settle, sourceChanged, store],
   );
 
+  const pickFrom = useCallback(
+    (turnId: number, index: number): void => {
+      const common = base();
+      const turn = store.getState().turns.find((held) => held.id === turnId);
+      if (turn?.outcome.kind !== 'clarification' || common === undefined || sourceChanged || keysRef.current.length > ASSISTANT_VIEW_KEYS_MAX || store.getState().turns.some((held) => held.outcome.kind === 'pending')) return;
+      const candidate = turn.outcome.candidates[index];
+      if (candidate === undefined) return;
+      const { question, candidates } = turn.outcome;
+      setOutcome(turnId, { kind: 'pending', call: 'choice', question, candidates });
+      settle(turnId, { ...common, choice: candidate.choice }, { kind: 'choice', question, candidates, index });
+    },
+    [base, setOutcome, settle, sourceChanged, store],
+  );
+
+  /** Runs a follow-up: a new turn whose message is the follow-up's label, sent as the choice the server sealed, or the same turn again when it failed. */
+  const pressFrom = useCallback(
+    (reuse: number | undefined, followUp: FollowUp): void => {
+      const common = base();
+      const held = store.getState();
+      if (common === undefined || sourceChanged || keysRef.current.length > ASSISTANT_VIEW_KEYS_MAX || held.turns.some((turn) => turn.outcome.kind === 'pending')) return;
+      let id = reuse;
+      if (id === undefined) {
+        id = held.nextId;
+        store.setState({ ...held, nextId: held.nextId + 1, notice: undefined, turns: [...held.turns, { id, message: followUpLabel(followUp), chip: true, outcome: { kind: 'pending', call: 'message' } }] });
+      } else setOutcome(id, { kind: 'pending', call: 'message' });
+      settle(id, { ...common, choice: followUp.choice }, { kind: 'chip', followUp });
+    },
+    [base, setOutcome, settle, sourceChanged, store],
+  );
+
   const words = countWords(view.input);
   const tooLong = limit !== undefined && words > limit;
   return {
@@ -209,6 +257,8 @@ export function useAssistant(): AssistantModel {
     sourceChanged,
     canSend: limit !== undefined && sourceId !== null && investigationId !== null && !sourceChanged && keys.length <= ASSISTANT_VIEW_KEYS_MAX && !view.turns.some((turn) => turn.outcome.kind === 'pending') && words > 0 && !tooLong,
     canCancel: view.turns.some((turn) => turn.outcome.kind === 'pending'),
+    busy: view.turns.some((turn) => turn.outcome.kind === 'pending'),
+    followUpsTurn: [...view.turns].reverse().find((turn) => turn.outcome.kind === 'answered')?.id,
     canAdd: principalId !== undefined && !sourceChanged,
     focus,
     setInput: (text) => patch({ input: text, notice: view.notice?.kind === 'too-long' ? undefined : view.notice }),
@@ -226,16 +276,26 @@ export function useAssistant(): AssistantModel {
         setFocus(turn.id);
         return;
       }
+      if (turn.outcome.kind === 'pending' && turn.outcome.call === 'choice') {
+        setOutcome(turn.id, { kind: 'clarification', question: turn.outcome.question, candidates: turn.outcome.candidates });
+        setFocus(turn.id);
+        return;
+      }
       setOutcome(turn.id, { kind: 'cancelled' });
-      restoreInput(turn.message);
+      if (turn.chip !== true) restoreInput(turn.message);
       setFocus('input');
     },
     retry: (turnId) => {
       const turn = turnOf(turnId);
+      if (turn?.outcome.kind === 'clarification' && turn.outcome.failed !== undefined) {
+        pickFrom(turnId, turn.outcome.failed.index);
+        return;
+      }
       if (turn?.outcome.kind !== 'failed') return;
       const { retry } = turn.outcome;
       if (retry.kind === 'continue') continueFrom(turnId, retry.heavy, retry.token);
-      else submit(retry.text, turnId);
+      else if (retry.kind === 'message') submit(retry.text, turnId);
+      else if (retry.kind === 'chip') pressFrom(turnId, retry.followUp);
     },
     continueRun: (turnId) => {
       const turn = turnOf(turnId);
@@ -244,6 +304,19 @@ export function useAssistant(): AssistantModel {
     askAgain: (turnId) => {
       const turn = turnOf(turnId);
       if (turn !== undefined) submit(turn.message, turnId);
+    },
+    pickCandidate: pickFrom,
+    pressFollowUp: (turnId, index) => {
+      const turn = turnOf(turnId);
+      const followUp = turn?.outcome.kind === 'answered' ? turn.outcome.followUps[index] : undefined;
+      if (followUp !== undefined) pressFrom(undefined, followUp);
+    },
+    cancelClarification: (turnId) => {
+      const turn = turnOf(turnId);
+      if (turn?.outcome.kind !== 'clarification') return;
+      setOutcome(turnId, { kind: 'cancelled' });
+      restoreInput(turn.message);
+      setFocus('input');
     },
     addToGraph: (turnId) => {
       const turn = turnOf(turnId);

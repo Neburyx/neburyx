@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { AssistantFailureKind, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
+import type { AssistantChoice, AssistantFailureKind, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
 import type { CitationEntry } from '../summary/summary-model.js';
 import type { ApiFailure } from '../api/client.js';
 import type { AddedOutcome } from '../patterns/add-to-graph.js';
@@ -7,26 +7,43 @@ import type { Answered, Refused } from '../ask/ask-session.js';
 import { createStore, type Store } from '../state/store.js';
 import { NO_STORED_THREAD, type StoredThreadState } from './stored-thread-state.js';
 
+export interface FollowUp {
+  readonly titles: readonly string[];
+  readonly choice: AssistantChoice;
+}
+
+export interface ClarificationCandidate {
+  readonly title: string;
+  readonly type: string;
+  readonly choice: AssistantChoice;
+}
+
 export type Retry =
   | { readonly kind: 'message'; readonly text: string }
+  | { readonly kind: 'chip'; readonly followUp: FollowUp }
+  | { readonly kind: 'choice'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly index: number }
   | { readonly kind: 'continue'; readonly intent: string; readonly entities: Answered['entities']; readonly token: string; readonly heavy: Answered };
 
 export type Failure =
   | { readonly kind: 'unavailable'; readonly why: AssistantFailureKind; readonly readStarted: boolean; readonly retryAfterSeconds: number | undefined; readonly until: number | undefined }
   | { readonly kind: 'too-large'; readonly sentence: string }
   | { readonly kind: 'request'; readonly failure: ApiFailure; readonly until: number | undefined }
-  | { readonly kind: 'continue-invalid' };
+  | { readonly kind: 'continue-invalid' }
+  | { readonly kind: 'choice-invalid' }
+  | { readonly kind: 'follow-up-invalid' };
 
 export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; route: 'view' }>;
 
 export type Outcome =
   | { readonly kind: 'pending'; readonly call: 'message' }
   | { readonly kind: 'pending'; readonly call: 'continue'; readonly heavy: Answered; readonly token: string }
+  | { readonly kind: 'pending'; readonly call: 'choice'; readonly question: string; readonly candidates: readonly ClarificationCandidate[] }
   | { readonly kind: 'cancelled' }
   | { readonly kind: 'refuse'; readonly cause: AssistantRefusalCause; readonly sentence: string }
   | { readonly kind: 'not-answered'; readonly sentence: string }
-  | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly step: Step | undefined; readonly coverage: string | undefined }
+  | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly step: Step | undefined; readonly coverage: string | undefined; readonly followUps: readonly FollowUp[] }
   | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[] }
+  | { readonly kind: 'clarification'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly failed?: { readonly failure: Failure; readonly index: number } }
   | { readonly kind: 'ask-refused'; readonly refused: Refused }
   | { readonly kind: 'heavy'; readonly answer: Answered; readonly token: string }
   | { readonly kind: 'failed'; readonly failure: Failure; readonly retry: Retry };
@@ -41,6 +58,8 @@ export interface Turn {
   readonly id: number;
   readonly message: string;
   readonly outcome: Outcome;
+  /** The turn was started by pressing a follow-up, so its message is the follow-up's label and is not the analyst's to type again. */
+  readonly chip?: true;
 }
 
 type Notice = { readonly kind: 'too-long'; readonly words: number; readonly limit: number } | { readonly kind: 'view-too-large' } | { readonly kind: 'access-lost' } | { readonly kind: 'masking-cleared' } | { readonly kind: 'source-changed' };

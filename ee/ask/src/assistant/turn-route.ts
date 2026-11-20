@@ -1,5 +1,6 @@
 import {
   ASK_SAVED_PATTERN_INTENT,
+  ASSISTANT_CHOICE_INVALID_SENTENCE,
   ASSISTANT_CONTINUE_INVALID_SENTENCE,
   ASSISTANT_NOT_ANSWERED_SENTENCE,
   ASSISTANT_REFUSAL_SENTENCES,
@@ -9,11 +10,15 @@ import {
   assistantTurnRequestSchema,
   readViewKeys,
   type AskAnswer,
+  type AskEntities,
   type AskFolder,
   type AskPatternOffer,
+  type AssistantChoice,
   type AssistantFailureKind,
+  type AssistantRouterReply,
   type AssistantTurnAnswer,
   type AssistantTurnRequest,
+  type ElementRefs,
   type ExtensionLogger,
   type ExtensionRequest,
   type ExtensionRoute,
@@ -28,9 +33,13 @@ import { canonicalText } from '../questions/canonical.js';
 import { verifyContinueToken } from '../questions/continue-token.js';
 import type { RouterInput, RouterOutcome } from './router.js';
 import type { AssistantRunStore } from './run-store.js';
+import { issueChoiceToken, verifyChoiceToken } from './choice-token.js';
+import { candidatesFor, candidatesOfReply, clarificationAnswer, roleEntityType, type Candidate } from './clarification.js';
+import { followUpsOf, type FollowUp } from './follow-ups.js';
+import { buildContext, type TurnContext } from './context.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
-import { noteTurn, noteTurnStarted, withTurnAudit } from './turn-audit.js';
+import { noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
 import { countWords } from './words.js';
 import type { ViewInput, ViewOutcome, ViewProgress } from './view-answer.js';
 
@@ -56,6 +65,8 @@ export interface TurnRouteOptions {
   /** The store of the threads and the queue of the records its writes go through; absent, no thread is kept. */
   readonly threads?: () => AssistantThreadStore | undefined;
   readonly records?: () => RecordQueue | undefined;
+  /** How many of the person's last turns of the thread the router is shown; absent, it is shown none. */
+  readonly contextTurns?: () => number | undefined;
   readonly now?: () => number;
 }
 
@@ -115,10 +126,36 @@ function viewTurn(outcome: ViewOutcome): AssistantTurnAnswer {
   }
 }
 
-async function runAndAnswer(run: Execution): Promise<AssistantTurnAnswer> {
+/** The values of an `ask` reply: the typed ones, and for each role the router named by a key of the context the stable ID of that key's element; or the roles whose key names nothing of this turn's context. */
+function entitiesOfReply(reply: Extract<AssistantRouterReply, { route: 'ask' }>, context: TurnContext | undefined): { readonly entities: AskEntities; readonly unheld?: undefined } | { readonly entities: AskEntities; readonly unheld: readonly string[] } {
+  const named = Object.entries(reply.elements ?? {});
+  const resolved: Record<string, string> = { ...reply.entities };
+  const unheld: string[] = [];
+  for (const [role, key] of named) {
+    const ref = context?.keys.get(key);
+    if (ref === undefined) unheld.push(role);
+    else resolved[role] = ref.stableId;
+  }
+  return unheld.length === 0 ? { entities: resolved } : { entities: resolved, unheld };
+}
+
+/** The values of a clarification's other roles: the typed ones, and each role named by a key of the context as the stable ID of that key's element. */
+function othersOfClarify(reply: Extract<AssistantRouterReply, { route: 'clarify' }>, context: TurnContext | undefined): AskEntities {
+  const resolved: Record<string, string> = { ...reply.entities };
+  for (const [role, key] of Object.entries(reply.elements ?? {})) {
+    const ref = context?.keys.get(key);
+    if (ref !== undefined) resolved[role] = ref.stableId;
+  }
+  return resolved;
+}
+
+async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => readonly FollowUp[]): Promise<AssistantTurnAnswer> {
   if (run.request.signal.aborted) throw new Error('the request was cancelled');
   try {
-    return answeredAsk(await execute(run));
+    const answer = await execute(run);
+    const turn = answeredAsk(answer);
+    const chips = followUps?.(answer) ?? [];
+    return turn.status === 'answered' && turn.route === 'ask' && chips.length > 0 ? { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) } : turn;
   } catch (error) {
     const unavailable = unavailableOf(error);
     if (unavailable === undefined) throw error;
@@ -128,6 +165,76 @@ async function runAndAnswer(run: Execution): Promise<AssistantTurnAnswer> {
 
 export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRoute {
   const runOptions = { folder: options.folder, runs: () => undefined, logger: options.logger, ...(options.now === undefined ? {} : { now: options.now }) };
+
+  /** The last turns of this person's thread as the router is shown them, read again through the gate; a failure of the gate's read is the caller's to answer. */
+  async function contextOf(body: Extract<AssistantTurnRequest, { message: string }>, readElements: ExtensionRequest['readElements'], signal: AbortSignal): Promise<TurnContext | undefined> {
+    const limit = options.contextTurns?.();
+    if (limit === undefined || readElements === undefined) return undefined;
+    const turns = await readTurnContext(limit);
+    return buildContext({ turns, sourceId: body.sourceId, read: (refs) => readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, refs) });
+  }
+
+  /** A key the router named that is not an element of the context: the elements it may mean, as a clarification, or the fixed refusal when there are none or more than one role is in doubt. */
+  async function clarifyUnheld(request: ExtensionRequest, reply: Extract<AssistantRouterReply, { route: 'ask' }>, unheld: readonly string[], others: AskEntities, context: TurnContext | undefined, body: Extract<AssistantTurnRequest, { message: string }>, readElements: ExtensionRequest['readElements'], signal: AbortSignal): Promise<AssistantTurnAnswer> {
+    const [role] = unheld;
+    const intent = options.folder()?.intent(body.sourceId, reply.intent);
+    const entityType = role === undefined || unheld.length > 1 || intent === undefined ? undefined : roleEntityType(intent, role);
+    if (entityType === undefined) return refused('unplaced');
+    const view = readViewKeys(body.viewElementKeys, body.sourceId);
+    const read = (refs: ElementRefs) => (readElements === undefined ? Promise.resolve({ nodes: [], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact' as const, scope: 'coverage' }, uncounted: 0 }) : readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, refs));
+    const candidates = await candidatesFor({ entityType, context, viewEntities: view.ok ? view.refs.entities : [], read });
+    return candidates.length === 0 || role === undefined ? refused('unplaced') : clarificationAnswer(candidates, choicesOf(request, body, reply.intent, role, others, Object.keys(reply.elements ?? {}).filter((held) => !unheld.includes(held))));
+  }
+
+  /** Seals what a choice or a follow-up sends: the intent, the roles whose value is an element, the values, and the token that binds them to this person, investigation, intent definition and masking. */
+  function sealOf(request: ExtensionRequest, body: { readonly sourceId: string; readonly investigationId: string; readonly mask?: boolean | undefined }): (intentName: string, roles: readonly string[], entities: AskEntities) => AssistantChoice {
+    const { signText } = capabilitiesOf(request);
+    return (intentName, roles, entities) => {
+      const found = options.folder()?.intent(body.sourceId, intentName);
+      const binding = { principalId: request.principalId, sourceId: body.sourceId, investigationId: body.investigationId, intent: intentName, definition: found === undefined ? '' : definitionOf(found), roles, entities, mask: body.mask === true };
+      return { intent: intentName, roles: [...roles], entities, choiceToken: issueChoiceToken(signText, binding, (options.now ?? Date.now)()) };
+    };
+  }
+
+  /** What each candidate of a clarification sends when it is picked: the values with the candidate's own for the role, and the roles that are elements. */
+  function choicesOf(request: ExtensionRequest, body: { readonly sourceId: string; readonly investigationId: string; readonly mask?: boolean | undefined }, intentName: string, role: string, others: AskEntities, elementRoles: readonly string[]): (candidate: Candidate) => AssistantChoice {
+    const seal = sealOf(request, body);
+    return (candidate) => seal(intentName, [role, ...elementRoles], { ...others, [role]: candidate.ref.stableId });
+  }
+
+  /** The follow-ups of an answered Ask turn: other template questions of the folder the elements of the answer can be put to, each sealed. */
+  function followUpsFor(request: ExtensionRequest, body: { readonly sourceId: string; readonly investigationId: string; readonly mask?: boolean | undefined }): (answer: AskAnswer) => readonly FollowUp[] {
+    const seal = sealOf(request, body);
+    return (answer) => followUpsOf({ answer, folder: options.folder(), sourceId: body.sourceId, seal });
+  }
+
+  /** A choice of a clarification or a follow-up: the token is checked against exactly what it binds, each element it fills is read again through the gate, and only then the intent runs, with no model call. */
+  async function choiceTurn(request: ExtensionRequest, body: Extract<AssistantTurnRequest, { choice: unknown }>, readElements: ExtensionRequest['readElements'], signal: AbortSignal, deadline: AbortSignal): Promise<AssistantTurnAnswer> {
+    const { choice } = body;
+    const found = options.folder()?.intent(body.sourceId, choice.intent);
+    const invalid: AssistantTurnAnswer = { status: 'choice-invalid', sentence: ASSISTANT_CHOICE_INVALID_SENTENCE };
+    if (found === undefined || readElements === undefined || new Set(choice.roles).size !== choice.roles.length) return invalid;
+    const wanted: { readonly sourceId: string; readonly entityType: string; readonly stableId: string }[] = [];
+    for (const role of choice.roles) {
+      const entityType = roleEntityType(found, role);
+      const value = choice.entities[role];
+      if (entityType === undefined || value === undefined || !found.parameters.includes(role)) return invalid;
+      wanted.push({ sourceId: body.sourceId, entityType, stableId: value });
+    }
+    const binding = { principalId: request.principalId, sourceId: body.sourceId, investigationId: body.investigationId, intent: choice.intent, definition: definitionOf(found), roles: choice.roles, entities: choice.entities, mask: body.mask === true };
+    if (!verifyChoiceToken(capabilitiesOf(request).signText, choice.choiceToken, binding, (options.now ?? Date.now)())) return invalid;
+    let reading;
+    try {
+      reading = await readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, { entities: wanted, edges: [], aggregates: [], derived: [] });
+    } catch (error) {
+      if (request.signal.aborted) throw new Error('the request was cancelled');
+      const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);
+      if (unavailable === undefined) throw error;
+      return unavailable;
+    }
+    if (!wanted.every((ref) => reading.nodes.some((node) => node.ref.entityType === ref.entityType && node.ref.stableId === ref.stableId))) return invalid;
+    return runAndAnswer({ request, capabilities: capabilitiesOf(request), options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: choice.intent, entities: choice.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId }, followUpsFor(request, body));
+  }
 
   async function continueTurn(request: ExtensionRequest, body: AssistantTurnRequest, asked: Extract<AssistantTurnRequest, { continue: unknown }>['continue']): Promise<AssistantTurnAnswer> {
     const capabilities = capabilitiesOf(request);
@@ -148,7 +255,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       await writeEvent(request, CONTINUE_ACTION, 'refused', body.sourceId, { kind: 'template', outcome: 'refused', cause: 'continue-invalid' });
       return { status: 'continue-invalid', sentence: ASSISTANT_CONTINUE_INVALID_SENTENCE };
     }
-    return runAndAnswer({ request, capabilities, options: runOptions, sourceId: body.sourceId, mask, intent: asked.intent, entities: asked.entities, continuing: true, action: CONTINUE_ACTION, investigationId: body.investigationId, ...(offer === undefined ? {} : { offer }) });
+    return runAndAnswer({ request, capabilities, options: runOptions, sourceId: body.sourceId, mask, intent: asked.intent, entities: asked.entities, continuing: true, action: CONTINUE_ACTION, investigationId: body.investigationId, ...(offer === undefined ? {} : { offer }) }, followUpsFor(request, body));
   }
 
   return {
@@ -167,6 +274,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       const body = assistantTurnRequestSchema.parse(request.body);
       await sourceReadable(body.sourceId);
       await investigationReadable(body.investigationId, body.sourceId);
+      if ('choice' in body) {
+        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-choice', 1, body.choice.intent]) });
+        return choiceTurn(request, body, readElements, AbortSignal.any([request.signal, deadline]), deadline);
+      }
       if ('continue' in body) {
         await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-continue', 1, body.continue.intent]) });
         return continueTurn(request, body, body.continue);
@@ -182,9 +293,18 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       if (options.viewAnswer?.() !== undefined && !readViewKeys(body.viewElementKeys, body.sourceId).ok) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'view-keys' });
       const listing = patterns === undefined ? undefined : await patterns(body.sourceId);
       const built = listing === undefined ? undefined : buildPatternCatalog(listing);
+      let context: TurnContext | undefined;
+      try {
+        context = await contextOf(body, readElements, AbortSignal.any([request.signal, deadline]));
+      } catch (error) {
+        if (request.signal.aborted) throw new Error('the request was cancelled');
+        const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);
+        if (unavailable === undefined) throw error;
+        return unavailable;
+      }
       let outcome: RouterOutcome;
       try {
-        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
+        outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(context === undefined ? {} : { context: context.text }), accepts: (reply) => reply.route !== 'clarify' || candidatesOfReply(reply, context, options.folder(), body.sourceId) !== undefined, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
       } catch (error) {
         // the model returned a prompt other than the one sent, so nothing of the call is kept
         if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
@@ -200,6 +320,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
         case 'routed': {
           const { reply } = outcome;
           if (reply.route === 'refuse') return refused(reply.cause);
+          if (reply.route === 'clarify') {
+            const candidates = candidatesOfReply(reply, context, options.folder(), body.sourceId);
+            return candidates === undefined ? refused('unplaced') : clarificationAnswer(candidates, choicesOf(request, body, reply.intent, reply.role, othersOfClarify(reply, context), Object.keys(reply.elements ?? {})));
+          }
           if (reply.route === 'view') {
             noteTurn({ route: 'view' });
             const answerView = options.viewAnswer?.();
@@ -221,7 +345,18 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
             await writeEvent(request, ASK_ACTION, 'refused', body.sourceId, { kind: 'template', outcome: 'refused', cause: 'no-ask-for-source' });
             return answeredAsk(refusal('no-ask-for-source'));
           }
-          return runAndAnswer({ request, capabilities, options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: reply.intent, entities: reply.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) });
+          const resolved = entitiesOfReply(reply, context);
+          if (resolved.unheld !== undefined) {
+            try {
+              return await clarifyUnheld(request, reply, resolved.unheld, resolved.entities, context, body, readElements, AbortSignal.any([request.signal, deadline]));
+            } catch (error) {
+              if (request.signal.aborted) throw new Error('the request was cancelled');
+              const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);
+              if (unavailable === undefined) throw error;
+              return unavailable;
+            }
+          }
+          return runAndAnswer({ request, capabilities, options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: reply.intent, entities: resolved.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) }, followUpsFor(request, body));
         }
         default: {
           const unreachable: never = outcome;

@@ -143,17 +143,19 @@ With no AI provider configured (and the older preview switch not set), the AI ex
 
 ## An assistant turn
 
-`POST /v1/assistant/turns` takes either `{ sourceId, investigationId, message, viewElementKeys, mask? }` or `{ sourceId, investigationId, continue: { intent, entities, continueToken }, viewElementKeys, mask? }`: one of the two, never both (the published schema has the two forms). `viewElementKeys` holds at most 300 keys. It always answers `200` with one body, or an error of the table:
+`POST /v1/assistant/turns` takes either `{ sourceId, investigationId, message, viewElementKeys, mask? }` or `{ sourceId, investigationId, continue: { intent, entities, continueToken }, viewElementKeys, mask? }`, or `{ sourceId, investigationId, choice: { intent, roles, entities, choiceToken }, viewElementKeys, mask? }` (the choice of an element a clarification or a follow-up offered): one of the three, never two (the published schema has the three forms). `viewElementKeys` holds at most 300 keys. It always answers `200` with one body, or an error of the table:
 
 | Answer | When |
 |---|---|
 | `{ status: "answered", route: "refuse", cause, sentence }` | the router refused (`verdict`, `raw-query`, `other-source`) or its reply was not a route (`unplaced`); the sentence is fixed and never the model's |
 | `{ status: "not-answered", route: "view", sentence }` | the router placed the message on the view; the cited answer from the view is not built yet |
-| `{ status: "answered", route: "ask", answer }` | the router placed it on an intent of the source's Ask folder; `answer` is the body `POST /v1/ask` answers (a result with its cited summary, a heavy stop with its token, or a refusal with its cause) |
+| `{ status: "answered", route: "ask", answer, followUps? }` | the router placed it on an intent of the source's Ask folder; `answer` is the body `POST /v1/ask` answers (a result with its cited summary, a heavy stop with its token, or a refusal with its cause); `followUps` holds at most three other template questions of the folder the elements of the answer can be put to, each with `titles` and the `choice` to send |
 | `{ status: "unavailable", kind, readStarted, retryAfterSeconds? }` | the model's service or the source failed; `readStarted` is false when no read began; `retryAfterSeconds` only when a wait is known |
 | `{ status: "too-large", sentence }` | the message and the view are over the input guard; nothing was sent |
 | `{ status: "too-long", words, limit }` | the message is over the word limit; nothing was sent and nothing was read |
 | `{ status: "continue-invalid", sentence }` | a continue whose token is expired, altered, another person's, another investigation's, or whose intent, entities, masking or definition changed |
+| `{ status: "clarification", question, candidates }` | the message cannot be placed on one element: the fixed question naming the entity type and, for each of at most five candidates, `title`, `type` and the `choice` to send when it is picked; nothing was read for the intent |
+| `{ status: "choice-invalid", sentence }` | a choice whose token is expired, altered, another person's, another investigation's or another masking's, whose intent changed since, or whose element the gate no longer reads; nothing was read |
 
 A heavy stop carries a `continueToken`: a signature over the person, the source, the investigation, the intent, a fingerprint of the intent's definition, the entities and the masking choice, valid 15 minutes and usable more than once. A continue reads one bounded first page with no model call. Errors: `ACCESS_DENIED` with the reason `ai-off` (the assistant is off, with no provider, or with every AI feature off), `NOT_FOUND` (the source or the investigation is not the caller's, or the investigation is not of that source), `INVALID_REQUEST` (a body that is not one of the two forms, or a message of white space only), `AUDIT_UNAVAILABLE` (only for a model answer that does not match what was sent), `RATE_LIMITED`, and the refusals of the gate that an intent run gives as `POST /v1/ask` gives them (for example `QUERY_BUDGET_EXCEEDED` or `INVALID_REQUEST` with the reason `file-query-result`).
 

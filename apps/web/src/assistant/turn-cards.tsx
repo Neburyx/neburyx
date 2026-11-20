@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { ASSISTANT_CHOICE_INVALID_SENTENCE } from '@neburyx/contracts';
 import { AnswerCard, HeavyCard } from '../ask/answer-card.js';
 import { hintOf, humanize } from '../ask/text.js';
 import { askFailureWords, isContinueInvalid } from '../ask/ask-failure.js';
@@ -6,6 +7,8 @@ import { isAssistantOff } from './failure-kinds.js';
 import { rateLimitedSentence } from '../patterns/failure-words.js';
 import { ASSISTANT_COPY, unavailableSentence } from './copy.js';
 import type { Failure, Step, Turn } from './assistant-session.js';
+import { ClarificationCard } from './clarification-card.js';
+import { FollowUps } from './follow-ups.js';
 import { ViewAnswerCard } from './view-answer-card.js';
 import { RefusalCard } from './refusal-card.js';
 
@@ -16,6 +19,11 @@ export interface TurnActions {
   continueRun(turnId: number): void;
   askAgain(turnId: number): void;
   addToGraph(turnId: number): void;
+  cancelClarification(turnId: number): void;
+  pickCandidate(turnId: number, index: number): void;
+  pressFollowUp(turnId: number, index: number): void;
+  readonly followUpsTurn: number | undefined;
+  readonly busy: boolean;
 }
 
 /** Try again, held back until the deadline of the wait a rate limit asks for; a card shown again counts the time left, not the whole wait. */
@@ -55,6 +63,10 @@ function failureView(failure: Failure, sourceId: string): FailureView {
       return { title: ASSISTANT_COPY.tooLargeTitle, text: failure.sentence, tone: 'caution', action: 'none' };
     case 'continue-invalid':
       return { title: ASSISTANT_COPY.continueInvalidTitle, text: ASSISTANT_COPY.continueInvalid, tone: 'caution', action: 'ask-again' };
+    case 'choice-invalid':
+      return { title: ASSISTANT_COPY.choiceInvalidTitle, text: ASSISTANT_CHOICE_INVALID_SENTENCE, tone: 'caution', action: 'ask-again' };
+    case 'follow-up-invalid':
+      return { title: ASSISTANT_COPY.followUpInvalidTitle, text: ASSISTANT_COPY.followUpInvalid, tone: 'caution', action: 'none' };
     case 'request': {
       if (isContinueInvalid(failure.failure)) return { title: ASSISTANT_COPY.continueInvalidTitle, text: ASSISTANT_COPY.continueInvalid, tone: 'caution', action: 'ask-again' };
       if (isAssistantOff(failure.failure)) return { title: ASSISTANT_COPY.serviceTitle, text: ASSISTANT_COPY.notAvailableNow, tone: 'caution', action: 'none' };
@@ -149,10 +161,18 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <Tag text={ASSISTANT_COPY.routeAsk} />
           <AnswerCard answer={outcome.answer} added={outcome.added} canAdd={actions.canAdd} onAdd={() => actions.addToGraph(turn.id)} />
           <StepsAndCoverage step={outcome.step} coverage={outcome.coverage} />
+          {actions.followUpsTurn === turn.id ? <FollowUps followUps={outcome.followUps} disabled={actions.busy} onPress={(index) => actions.pressFollowUp(turn.id, index)} /> : null}
         </>
       );
     case 'view-answer':
       return <ViewAnswerCard answer={outcome.answer} entries={outcome.entries} />;
+    case 'clarification':
+      return (
+        <>
+          <ClarificationCard question={outcome.question} candidates={outcome.candidates} onPick={(index) => actions.pickCandidate(turn.id, index)} onCancel={() => actions.cancelClarification(turn.id)} />
+          {outcome.failed === undefined ? null : <FailureCard failure={outcome.failed.failure} turnId={turn.id} actions={actions} />}
+        </>
+      );
     case 'ask-refused':
       return <RefusalCard sentence={outcome.refused.sentence} hint={hintOf(outcome.refused.cause)} />;
     case 'heavy':

@@ -97,6 +97,11 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
     continueRun: model.continueRun,
     askAgain: model.askAgain,
     addToGraph: model.addToGraph,
+    cancelClarification: model.cancelClarification,
+    pickCandidate: model.pickCandidate,
+    pressFollowUp: model.pressFollowUp,
+    followUpsTurn: model.followUpsTurn,
+    busy: model.busy,
   };
 
   return (

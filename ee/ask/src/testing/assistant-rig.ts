@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, type AskPatternOffer, type AskRun, type AskRunResult, type AuditEvent, type AuditSink, type ExtensionRequest, type ExtensionRoute, type RecordQueue } from '@neburyx/contracts';
+import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, type AskPatternOffer, type ElementRefs, type AskRun, type AskRunResult, type AuditEvent, type AuditSink, type ExtensionRequest, type ExtensionRoute, type RecordQueue } from '@neburyx/contracts';
 import { createAuditedModelCall, createCheckRunner, type CheckRunner, type ModelProvider } from '@neburyx/ee-ai-runtime';
 import { createFixtureProvider, replyKey, type FixtureReply, type FixtureReplies } from '../../../ai-runtime/src/testing/fixture.js';
 import { loadAskFolder } from '../folder/load.js';
@@ -82,6 +82,8 @@ export interface RigOptions {
   readonly viewProvider?: ModelProvider['complete'];
   /** The elements the stand-in of the gate reads for the view; two exportable ones when absent. */
   readonly viewNodes?: readonly ReturnType<typeof node>[];
+  /** The elements the stand-in of the gate gives back for the references it is asked for; absent, `viewNodes` or the two exportable ones whatever is asked. */
+  readonly readNodes?: (refs: ElementRefs, mask: boolean) => readonly ReturnType<typeof node>[];
 }
 
 export interface Rig {
@@ -120,7 +122,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const viewInstructions = buildSummaryInstructions('You answer from the view. SENTINEL-VIEW-PROMPT', 'SENTINEL-TYPOLOGY');
   const viewAnswer = options.view === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});
-  const route = createAssistantTurnRoute({ totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const route = createAssistantTurnRoute({ totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',
@@ -150,7 +152,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
       options.onViewRead?.();
       if (options.viewReadThrows !== undefined) throw options.viewReadThrows;
       if (options.viewReadHangs === true) return new Promise<never>(() => undefined);
-      return { nodes: [...(options.viewNodes ?? [node('A-1', options.viewTitle), node('A-2')])], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
+      return { nodes: [...(options.readNodes?.(refs, scope.mask) ?? options.viewNodes ?? [node('A-1', options.viewTitle), node('A-2')])], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
     },
     askRunner: (scope) => ({
       run: async (asked, runOptions) => {
@@ -164,6 +166,8 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   });
   return { route, expire: () => expiry.abort(), view: viewAnswer, events, reads, elementReads, runs, fixture, instructions, clock, request };
 }
+
+export const nodeOf = node;
 
 export const answerOf = async (promise: Promise<unknown>) => assistantTurnAnswerSchema.parse(await promise);
 

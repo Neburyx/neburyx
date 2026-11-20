@@ -23,6 +23,17 @@ export const ASSISTANT_COPY = {
   routeAsk: 'Read from the source',
   routeView: 'From the view',
   routeRefuse: 'Refused',
+<<<<<<< HEAD
+=======
+  refusalHeading: 'Refusal',
+  clarifyTitle: 'Do you mean …?',
+  choiceInvalidTitle: 'Choice no longer valid',
+  followUps: 'Follow-ups',
+  followUpInvalidTitle: 'Follow-up no longer valid',
+  followUpInvalid: 'This follow-up is no longer valid. Nothing was read.',
+  clarifyCandidates: 'Elements you may mean',
+  clarifyStatus: 'Awaiting your choice · nothing was read. These are elements of this investigation.',
+>>>>>>> 1ceab64b (Resolve follow-ups from the thread, ask which element is meant, and suggest follow-ups)
   notAnswered: 'Not answered',
   openFilters: 'Open Filters',
   summarizeView: 'Summarize this view',

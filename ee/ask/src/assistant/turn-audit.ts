@@ -14,6 +14,7 @@ import {
 } from '@neburyx/contracts';
 import type { ModelAnswer } from '@neburyx/ee-ai-runtime';
 import { createTurnRun, type CallRecord, type TurnRun, type TurnRunDeps } from './turn-run.js';
+import type { AssistantContextTurn } from './thread-store.js';
 import { openTurnThread, type TurnThread, type TurnThreadDeps } from './turn-thread.js';
 
 export const TURN_CLOSED_ACTION = 'assistant.turn.closed';
@@ -90,6 +91,9 @@ export const noteTurnStarted = async (started: { readonly sourceId: string; read
   if (started.questionHash !== undefined) notes.questionHash = started.questionHash;
   notes.thread = await notes.openThread(notes.started);
 };
+
+/** The caller's last `limit` turns of the thread of the turn that is running; none outside a turn, before the turn started or when the thread cannot be read. */
+export const readTurnContext = async (limit: number): Promise<readonly AssistantContextTurn[]> => (await scope.getStore()?.thread?.context(limit)) ?? [];
 
 /** The id of the run of the turn that is running, for the events it writes; absent outside a turn and before the turn started. */
 export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;
@@ -172,6 +176,10 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
       return { outcome: 'refused', result: 'refused', cause: 'too-long' };
     case 'continue-invalid':
       return { outcome: 'refused', result: 'refused', cause: 'continue-invalid' };
+    case 'clarification':
+      return { route: 'ask', outcome: 'clarification', result: 'success' };
+    case 'choice-invalid':
+      return { outcome: 'refused', result: 'refused', cause: 'choice-invalid' };
     default: {
       const unreachable: never = answer;
       return unreachable;

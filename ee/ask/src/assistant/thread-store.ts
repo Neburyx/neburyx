@@ -18,6 +18,16 @@ export class AssistantThreadStoreError extends Error {
 /** What an append did: the turn was stored, was already there (a retry), or was refused because its investigation is closed, deleted or was cleared since the turn began. */
 type AppendResult = 'stored' | 'duplicate' | 'refused';
 
+/** What a turn gives the router as context: its route, outcome, cause and intent and the references it ran and cited, never a text. */
+export interface AssistantContextTurn {
+  readonly route: AssistantThreadTurnWrite['route'];
+  readonly outcome: AssistantThreadTurnWrite['outcome'];
+  readonly cause?: string;
+  readonly intent?: string;
+  readonly entities: AssistantThreadTurnWrite['entities'];
+  readonly citationRefs: AssistantThreadTurnWrite['citationRefs'];
+}
+
 export interface AssistantThreadStore {
   /** How many times the investigation has been cleared; 0 when never. Read before a turn does any other work. */
   epoch(investigationId: string): Promise<number>;
@@ -25,6 +35,8 @@ export interface AssistantThreadStore {
   append(turn: AssistantThreadTurnWrite, epoch: number): Promise<AppendResult>;
   /** The caller's own thread of the investigation, its most recent `limit` turns and how many older ones there are, and when the caller's previous thread was cleared if they have no thread since. */
   read(investigationId: string, userId: string, limit: number): Promise<AssistantThreadResponse>;
+  /** The caller's own most recent `limit` turns of the investigation with the references they ran and cited, oldest first; none for a caller with no thread. */
+  readContext(investigationId: string, userId: string, limit: number): Promise<readonly AssistantContextTurn[]>;
   close(): Promise<void>;
 }
 
@@ -55,6 +67,8 @@ const INSERT_TURN =
   'INSERT INTO assistant_turns (id, thread_id, seq, at, route, outcome, cause, question_hash, intent, template_id, entities, citation_refs, steps, model_ref, prompt_version, tokens_in, tokens_out, run_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) ON CONFLICT (id) DO NOTHING';
 const READ_TURNS =
   'SELECT t.seq, t.at, t.route, t.outcome, t.cause, t.intent, t.steps, jsonb_array_length(t.citation_refs) AS cited, h.id AS thread_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
+const READ_CONTEXT =
+  'SELECT t.route, t.outcome, t.cause, t.intent, t.entities, t.citation_refs FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
 const COUNT_TURNS = 'SELECT count(*)::int AS n FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2';
 const READ_CLEARED = 'SELECT cleared_at FROM assistant_thread_clears WHERE investigation_id = $1 AND user_id = $2';
 const HAS_THREAD = 'SELECT 1 FROM assistant_threads WHERE investigation_id = $1 AND user_id = $2';
@@ -154,6 +168,18 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           throw error;
         }
       }),
+    readContext: (investigationId, userId, limit) =>
+      withClient(async (client) => {
+        const rows = (await client.query(READ_CONTEXT, [investigationId, userId, limit])).rows;
+        return [...rows].reverse().map((row) => ({
+          route: assistantThreadTurnWriteSchema.shape.route.parse(row['route']),
+          outcome: assistantThreadTurnWriteSchema.shape.outcome.parse(row['outcome']),
+          ...(row['cause'] === null || row['cause'] === undefined ? {} : { cause: String(row['cause']) }),
+          ...(row['intent'] === null || row['intent'] === undefined ? {} : { intent: String(row['intent']) }),
+          entities: assistantThreadTurnWriteSchema.shape.entities.parse(row['entities']),
+          citationRefs: assistantThreadTurnWriteSchema.shape.citationRefs.parse(row['citation_refs']),
+        }));
+      }),
     close: () => (closing ??= pool.end()),
   };
 }
@@ -247,6 +273,17 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
         earlierTurns: first,
         previousThreadClearedAt: thread === undefined && when !== undefined ? when.toISOString() : null,
       };
+    },
+    async readContext(investigationId, userId, limit) {
+      fail('read');
+      return (threads.get(key(investigationId, userId))?.turns ?? []).slice(-limit).map((turn) => ({
+        route: turn.route,
+        outcome: turn.outcome,
+        ...(turn.cause === undefined ? {} : { cause: turn.cause }),
+        ...(turn.intent === undefined ? {} : { intent: turn.intent }),
+        entities: turn.entities,
+        citationRefs: turn.citationRefs,
+      }));
     },
     async close() {},
   };

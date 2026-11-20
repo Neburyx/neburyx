@@ -42,6 +42,7 @@ interface Sent {
   investigationId: string;
   viewElementKeys: string[];
   continue?: { intent: string; entities: Record<string, string>; continueToken: string };
+  choice?: { intent: string; roles: string[]; entities: Record<string, string>; choiceToken: string };
 }
 
 async function answerWith(page: Page, answer: AssistantTurnAnswer | ((body: Sent) => AssistantTurnAnswer)): Promise<Sent[]> {
@@ -405,5 +406,81 @@ test.describe('the Assistant panel', () => {
       expect(box !== null && inner !== null && inner.x >= box.x && inner.x + inner.width <= box.x + box.width).toBe(true);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  for (const width of [1440, 1280]) test(`shows a clarification turn at ${width} pixels: the card in view with the focus on its title, the workspace in place, and Cancel gives the message back`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openWorkspace(page);
+    const choiceFor = (stableId: string) => ({ intent: 'shared', roles: ['id'], entities: { id: stableId }, choiceToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` });
+    const clarification: AssistantTurnAnswer = { status: 'clarification', question: 'Which account do you mean?', candidates: [{ title: 'AC-2', type: 'account', choice: choiceFor('AC-2') }, { title: 'AC-3', type: 'account', choice: choiceFor('AC-3') }] };
+    const sent = await answerWith(page, (body) => (body.choice === undefined ? clarification : REFUSE));
+    await open(page);
+    await page.getByLabel('Your message').fill('and the other one?');
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Do you mean …?' })).toBeFocused();
+    await expect(panel(page).getByText('Which account do you mean?')).toBeInViewport({ ratio: 1 });
+    await expect(panel(page).getByRole('list', { name: 'Elements you may mean' })).toBeInViewport({ ratio: 1 });
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeInViewport({ ratio: 1 });
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const box = await panel(page).boundingBox();
+    expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+    await panel(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByLabel('Your message')).toHaveValue('and the other one?');
+    await expect(page.getByLabel('Your message')).toBeFocused();
+    expect(sent).toHaveLength(1);
+  });
+
+  for (const width of [1440, 1280]) test(`picks a candidate of a clarification by keyboard at ${width} pixels: the choice is sent with no message and its answer takes the place of the card`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openWorkspace(page);
+    const choiceFor = (stableId: string) => ({ intent: 'shared', roles: ['id'], entities: { id: stableId }, choiceToken: `${'1'.repeat(10)}.${'a'.repeat(64)}` });
+    const clarification: AssistantTurnAnswer = { status: 'clarification', question: 'Which account do you mean?', candidates: [{ title: 'AC-2', type: 'account', choice: choiceFor('AC-2') }, { title: 'AC-3', type: 'account', choice: choiceFor('AC-3') }] };
+    const sent = await answerWith(page, (body) => (body.choice === undefined ? clarification : REFUSE));
+    await open(page);
+    await page.getByLabel('Your message').fill('and the other one?');
+    await page.keyboard.press('Enter');
+    const second = panel(page).getByRole('button', { name: /AC-3/ });
+    await second.focus();
+    await expect(second).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole('heading', { name: 'Do you mean …?' })).toHaveCount(0);
+    expect(sent).toHaveLength(2);
+    expect(sent[1]?.choice?.entities).toEqual({ id: 'AC-3' });
+    expect(sent[1]?.message).toBeUndefined();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const box = await panel(page).boundingBox();
+    expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
+  });
+
+  for (const width of [1440, 1280]) test(`shows follow-ups under an answer at ${width} pixels and runs a pressed one as a turn of its own by keyboard`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openWorkspace(page);
+    const token = `${'1'.repeat(10)}.${'a'.repeat(64)}`;
+    const answered: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'ask',
+      answer: answeredFor('banking-demo'),
+      followUps: [
+        { titles: ['Account AC-2'], choice: { intent: 'accounts-paid-to', roles: ['id'], entities: { id: 'AC-2' }, choiceToken: token } },
+        { titles: ['Account AC-2', 'Account AC-3'], choice: { intent: 'paths-between', roles: ['a', 'b'], entities: { a: 'AC-2', b: 'AC-3' }, choiceToken: token } },
+      ],
+    };
+    const sent = await answerWith(page, (body) => (body.choice === undefined ? answered : REFUSE));
+    await open(page);
+    await page.getByLabel('Your message').fill('show the account');
+    await page.keyboard.press('Enter');
+    const chip = panel(page).getByRole('button', { name: 'Paths between · Account AC-2, Account AC-3' });
+    await expect(chip).toBeInViewport({ ratio: 1 });
+    await chip.focus();
+    await expect(chip).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeInViewport({ ratio: 1 });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]?.choice?.entities).toEqual({ a: 'AC-2', b: 'AC-3' });
+    expect(sent[1]?.message).toBeUndefined();
+    expect(await page.evaluate(() => window.scrollY)).toBe(0);
+    const box = await panel(page).boundingBox();
+    expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
   });
 });

@@ -6352,6 +6352,78 @@
               "continue"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sourceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "investigationId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "mask": {
+                "type": "boolean"
+              },
+              "viewElementKeys": {
+                "maxItems": 300,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "choice": {
+                "type": "object",
+                "properties": {
+                  "intent": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+                  },
+                  "roles": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "entities": {
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "additionalProperties": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "choiceToken": {
+                    "type": "string",
+                    "pattern": "^[0-9]{1,16}\\.[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "intent",
+                  "roles",
+                  "entities",
+                  "choiceToken"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "sourceId",
+              "investigationId",
+              "viewElementKeys",
+              "choice"
+            ],
+            "additionalProperties": false
           }
         ]
       },
@@ -6508,6 +6580,70 @@
               "coverage": {
                 "type": "string",
                 "minLength": 1
+              },
+              "followUps": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "titles": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "choice": {
+                      "type": "object",
+                      "properties": {
+                        "intent": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+                        },
+                        "roles": {
+                          "minItems": 1,
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          }
+                        },
+                        "entities": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "choiceToken": {
+                          "type": "string",
+                          "pattern": "^[0-9]{1,16}\\.[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "intent",
+                        "roles",
+                        "entities",
+                        "choiceToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "titles",
+                    "choice"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
@@ -6532,6 +6668,108 @@
             "required": [
               "status",
               "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "choice-invalid"
+              },
+              "sentence": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "status",
+              "sentence"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "const": "clarification"
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1
+              },
+              "candidates": {
+                "minItems": 1,
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "type": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "choice": {
+                      "type": "object",
+                      "properties": {
+                        "intent": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+                        },
+                        "roles": {
+                          "minItems": 1,
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          }
+                        },
+                        "entities": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "choiceToken": {
+                          "type": "string",
+                          "pattern": "^[0-9]{1,16}\\.[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "intent",
+                        "roles",
+                        "entities",
+                        "choiceToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "type",
+                    "choice"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "status",
+              "question",
+              "candidates"
             ],
             "additionalProperties": false
           },

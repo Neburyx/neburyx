@@ -30,6 +30,10 @@ export interface RouterInput {
   readonly actorRole: Parameters<AuditedModelCall['call']>[1]['actorRole'];
   readonly traceId: string;
   readonly patternCatalog?: string;
+  /** The earlier turns of this person's thread as the router is shown them, with the elements they name by key; absent when there is none. */
+  readonly context?: string;
+  /** Whether a reply that was read fits this turn; one that does not is treated as a reply that is not a route. */
+  readonly accepts?: (reply: AssistantRouterReply) => boolean;
 }
 
 export type RouterOutcome =
@@ -38,9 +42,9 @@ export type RouterOutcome =
   | { readonly status: 'too-large' }
   | { readonly status: 'failed'; readonly code: FailureCode | 'refused' };
 
-/** What the call is given besides the instructions: the message as typed, the keys of the view and, with a catalog, the note and the catalog of the caller's own saved patterns. */
+/** What the call is given besides the instructions: the message as typed, the context of the thread, the keys of the view and, with a catalog, the note and the catalog of the caller's own saved patterns. */
 const valuesOf = (input: RouterInput): string =>
-  [`Message:\n${input.message}`, `Keys of the elements in view:\n${input.viewElementKeys.length === 0 ? NO_KEYS : input.viewElementKeys.join('\n')}`, ...(input.patternCatalog === undefined ? [] : [`${ASK_SAVED_PATTERN_NOTE}\n${input.patternCatalog}`])].join('\n\n');
+  [`Message:\n${input.message}`, ...(input.context === undefined ? [] : [input.context]), `Keys of the elements in view:\n${input.viewElementKeys.length === 0 ? NO_KEYS : input.viewElementKeys.join('\n')}`, ...(input.patternCatalog === undefined ? [] : [`${ASK_SAVED_PATTERN_NOTE}\n${input.patternCatalog}`])].join('\n\n');
 
 /**
  * One audited call of the router, with the router's prompt and the source's `classification.md` as the instructions (so the audit's instructions hash covers both) and the message as typed in the values.
@@ -88,6 +92,7 @@ async function routeOnce(options: RouterOptions, instructions: AssistantInstruct
     return answer.status === 'refused' ? { status: 'failed', code: 'refused' } : { status: 'failed', code: answer.code };
   }
   const read = readAssistantRoute(answer.text);
-  record.end({ aborted: signal.aborted, ...(read.ok ? {} : { notARoute: true }) });
-  return read.ok ? { status: 'routed', reply: read.reply, calls: call } : 'not-a-route';
+  const fits = read.ok && (input.accepts?.(read.reply) ?? true);
+  record.end({ aborted: signal.aborted, ...(fits ? {} : { notARoute: true }) });
+  return read.ok && fits ? { status: 'routed', reply: read.reply, calls: call } : 'not-a-route';
 }

@@ -127,7 +127,7 @@ export const notesAuditDetailSchema = z.strictObject({ runId: z.uuid().optional(
 export type NotesAuditDetail = z.infer<typeof notesAuditDetailSchema>;
 
 /** How an assistant turn ended, as its closing audit event records it. */
-export const ASSISTANT_TURN_OUTCOMES = ['answered', 'refused', 'failed', 'cancelled'] as const;
+export const ASSISTANT_TURN_OUTCOMES = ['answered', 'refused', 'failed', 'cancelled', 'clarification'] as const;
 export type AssistantTurnOutcome = (typeof ASSISTANT_TURN_OUTCOMES)[number];
 
 /**

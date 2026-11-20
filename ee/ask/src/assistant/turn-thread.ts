@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { assistantThreadTurnWriteSchema, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
-import { AssistantThreadStoreError, type AssistantThreadStore } from './thread-store.js';
+import { AssistantThreadStoreError, type AssistantContextTurn, type AssistantThreadStore } from './thread-store.js';
 
 export interface TurnThreadDeps {
   readonly threads: () => AssistantThreadStore | undefined;
@@ -17,6 +17,8 @@ export interface TurnThread {
   readonly turnId: string;
   /** Builds the write through the strict schema and hands it to the queue of the records; it never waits and never throws. */
   write(input: TurnThreadInput): void;
+  /** The person's last `limit` turns of the thread as the router's context; a thread that cannot be read is counted as a failed record and gives none, so the turn goes on without it. */
+  context(limit: number): Promise<readonly AssistantContextTurn[]>;
 }
 
 /**
@@ -50,6 +52,14 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
   }
   return {
     turnId,
+    async context(limit) {
+      try {
+        return await store.readContext(started.investigationId, request.principalId, limit);
+      } catch {
+        failed('context');
+        return [];
+      }
+    },
     write(input) {
       if (epoch === undefined) return;
       const known = epoch;

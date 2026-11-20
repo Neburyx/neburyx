@@ -202,6 +202,24 @@ describe('the store as the application role', () => {
     expect(await rows(database.ownerUrl, `SELECT model_ref, tokens_in FROM assistant_turns WHERE cause = 'verdict'`)).toEqual([{ model_ref: null, tokens_in: null }]);
   });
 
+  it('reads the caller’s last turns for the router with the references they ran and cited, oldest first, and nothing of another person, another investigation or older turns than the bound', async () => {
+    const database = await seeded();
+    const ref = (stableId: string) => ({ sourceId: 'demo', entityType: 'widget', stableId });
+    await withStore(database, async (store) => {
+      await store.append(turn({ at: new Date('2026-11-18T10:00:00Z'), intent: 'one' }), 0);
+      await store.append(turn({ at: new Date('2026-11-18T10:05:00Z'), intent: 'two', entities: [{ role: 'id', ref: ref('A-1') }], citationRefs: [ref('A-2')] }), 0);
+      await store.append(turn({ at: new Date('2026-11-18T10:10:00Z'), route: 'refuse', outcome: 'refused', cause: 'verdict', intent: undefined, steps: 0 }), 0);
+      await store.append(turn({ userId: OTHER, intent: 'theirs', entities: [{ role: 'id', ref: ref('A-9') }] }), 0);
+      await store.append(turn({ investigationId: SECOND, intent: 'elsewhere' }), 0);
+      const context = await store.readContext(FIRST, OWNER, 2);
+      expect(context.map((held) => [held.route, held.outcome, held.cause, held.intent])).toEqual([['ask', 'answered', undefined, 'two'], ['refuse', 'refused', 'verdict', undefined]]);
+      expect(context[0]?.entities).toEqual([{ role: 'id', ref: ref('A-1') }]);
+      expect(context[0]?.citationRefs).toEqual([ref('A-2')]);
+      expect(JSON.stringify(await store.readContext(FIRST, OWNER, 100))).not.toMatch(/theirs|elsewhere|A-9/);
+      expect(await store.readContext(FIRST, '0192f000-0000-7000-8000-0000000000ff', 100)).toEqual([]);
+    });
+  });
+
   it('refuses a turn for a closed or deleted investigation and for another epoch, writing nothing', async () => {
     const database = await seeded();
     await withStore(database, async (store) => {

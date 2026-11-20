@@ -12,10 +12,21 @@ export const ASSISTANT_VIEW_KEYS_MAX = SUMMARY_DEFAULTS.maxElements;
 /** `POST /v1/assistant/turns`: a message as typed, and the keys of the elements in view, never their content. */
 const turnBase = { sourceId: text, investigationId: text, mask: z.boolean().optional(), viewElementKeys: z.array(text).max(ASSISTANT_VIEW_KEYS_MAX) };
 
-/** A turn is a message, or the continue of a heavy stop (the intent, the entities and the token of the answer that stopped), never both: two forms, so the published schema says so. */
+/** What a clarification or a follow-up gives the panel to send when it is chosen: the intent, the roles whose value is an element (each read again through the gate), the entities, and the token that binds them to this person and investigation. */
+export const assistantChoiceSchema = z.strictObject({
+  intent: askContinueRequestSchema.shape.intent,
+  roles: z.array(z.string().min(1).max(64)).min(1).max(20),
+  entities: askContinueRequestSchema.shape.entities,
+  choiceToken: askContinueRequestSchema.shape.continueToken,
+});
+
+export type AssistantChoice = z.infer<typeof assistantChoiceSchema>;
+
+/** A turn is a message, the continue of a heavy stop (the intent, the entities and the token of the answer that stopped) or the choice of an element a clarification offered, never two of them: three forms, so the published schema says so. */
 export const assistantTurnRequestSchema = z.union([
   z.strictObject({ ...turnBase, message: text }),
   z.strictObject({ ...turnBase, continue: askContinueRequestSchema.pick({ intent: true, entities: true, continueToken: true }) }),
+  z.strictObject({ ...turnBase, choice: assistantChoiceSchema }),
 ]);
 
 export type AssistantTurnRequest = z.infer<typeof assistantTurnRequestSchema>;
@@ -31,6 +42,15 @@ export const ASSISTANT_REFUSAL_SENTENCES: Readonly<Record<AssistantRefusalCause,
   unplaced: 'I can’t place this message. Rephrase it, or use the manual tools.',
 };
 
+/** The most follow-ups an answer suggests. */
+export const ASSISTANT_FOLLOW_UPS_MAX = 3;
+
+/** The most elements a clarification offers to choose from. */
+export const ASSISTANT_CLARIFICATION_MAX_CANDIDATES = 5;
+
+/** The question of a clarification, naming the entity type as the profile calls it. */
+export const assistantClarificationQuestion = (typeName: string): string => `Which ${/^[A-Z][a-z]/.test(typeName) ? typeName.charAt(0).toLowerCase() + typeName.slice(1) : typeName} do you mean?`;
+
 export const ASSISTANT_NOT_ANSWERED_SENTENCE = 'I can’t support an answer from this investigation.';
 
 export const ASSISTANT_FAILURE_KINDS = ['service', 'source-unavailable', 'busy', 'timeout', 'rate-limit'] as const;
@@ -39,6 +59,8 @@ export type AssistantFailureKind = (typeof ASSISTANT_FAILURE_KINDS)[number];
 export const ASSISTANT_TOO_LARGE_SENTENCE = 'The message and the view are too large to send. Narrow the view or ask something smaller.';
 
 export const ASSISTANT_CONTINUE_INVALID_SENTENCE = 'This continue is no longer valid. Nothing was read.';
+
+export const ASSISTANT_CHOICE_INVALID_SENTENCE = 'This choice is no longer valid. Nothing was read.';
 
 export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
@@ -60,8 +82,18 @@ export const assistantTurnAnswerSchema = z.union([
     step: z.strictObject({ intent: z.string().min(1), rows: z.number().int().nonnegative(), outcome: z.enum(['complete', 'partial']) }).optional(),
     /** Written by the server for a result that was read: how much is shown and how much is not yet retrieved, with the quality of the count. */
     coverage: text.optional(),
+    /** Other template questions of the source's folder the answer's elements can be put to, each with the titles of the elements as the analyst sees them and what the panel sends to ask it. */
+    followUps: z.array(z.strictObject({ titles: z.array(text).min(1).max(20), choice: assistantChoiceSchema })).max(ASSISTANT_FOLLOW_UPS_MAX).optional(),
   }),
   z.strictObject({ status: z.literal('continue-invalid'), sentence: text }),
+  /** A choice whose token is altered, old, another person's, another investigation's or another masking's, whose intent changed, or whose element is no longer readable: nothing was read. */
+  z.strictObject({ status: z.literal('choice-invalid'), sentence: text }),
+  /** A message the assistant cannot place on one element: the fixed question naming the entity type, and each element it may mean as the analyst sees it, with what the panel sends when it is picked. Nothing was read for the intent. */
+  z.strictObject({
+    status: z.literal('clarification'),
+    question: text,
+    candidates: z.array(z.strictObject({ title: text, type: text, choice: assistantChoiceSchema })).min(1).max(ASSISTANT_CLARIFICATION_MAX_CANDIDATES),
+  }),
   /** The view route: sentences that each cite elements read again through the gate and kept by the checks, the citations they name, the model that wrote them and the calls the turn made. */
   z.strictObject({
     status: z.literal('answered'),

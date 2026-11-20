@@ -8,6 +8,33 @@ describe('the reading of a reply of the router', () => {
     expect(readAssistantRoute('{"route":"ask","intent":"byId","entities":{"id":"A-1"}}')).toEqual({ ok: true, reply: { route: 'ask', intent: 'byId', entities: { id: 'A-1' } } });
   });
 
+  it('reads an ask that names an element of the context by its key in a member of its own, beside typed values', () => {
+    expect(readAssistantRoute('{"route":"ask","intent":"byId","entities":{},"elements":{"id":"c1"}}')).toEqual({ ok: true, reply: { route: 'ask', intent: 'byId', entities: {}, elements: { id: 'c1' } } });
+    expect(readAssistantRoute('{"route":"ask","intent":"pair","entities":{"b":"A-9"},"elements":{"a":"c12"}}')).toEqual({ ok: true, reply: { route: 'ask', intent: 'pair', entities: { b: 'A-9' }, elements: { a: 'c12' } } });
+  });
+
+  it('reads a clarify: the intent, the one role awaiting the choice, the values of the other roles and the keys it may mean', () => {
+    expect(readAssistantRoute('{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1","c2"]}')).toEqual({ ok: true, reply: { route: 'clarify', intent: 'byId', role: 'id', entities: {}, candidates: ['c1', 'c2'] } });
+    expect(readAssistantRoute('{"route":"clarify","intent":"pair","role":"b","entities":{"a":"A-1"},"elements":{"c":"c3"},"candidates":["c1","c2","c4","c5","c6"]}')).toEqual({ ok: true, reply: { route: 'clarify', intent: 'pair', role: 'b', entities: { a: 'A-1' }, elements: { c: 'c3' }, candidates: ['c1', 'c2', 'c4', 'c5', 'c6'] } });
+  });
+
+  it.each([
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1","c2","c3","c4","c5","c6"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1","c1"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1","A-2"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1",2]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":"c1"}',
+    '{"route":"clarify","intent":"byId","entities":{},"candidates":["c1","c2"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{"id":"A-1"},"candidates":["c1","c2"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"elements":{"id":"c3"},"candidates":["c1","c2"]}',
+    '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1","c2"],"extra":1}',
+    '{"route":"clarify","intent":"byId","role":"1; DROP","entities":{},"candidates":["c1","c2"]}',
+    '{"route":"clarify","intent":"by Id","role":"id","entities":{},"candidates":["c1","c2"]}',
+  ])('does not read the clarify %j', (text) => {
+    expect(readAssistantRoute(text)).toEqual({ ok: false });
+  });
+
   it.each([
     '',
     'view',
@@ -21,6 +48,17 @@ describe('the reading of a reply of the router', () => {
     '{"route":"ask","intent":"byId","entities":{"id":"a"},"cause":"verdict"}',
     '{"route":"view","route":"view"}',
     '{"sentences":[]}',
+    '{"route":"ask","intent":"byId","entities":{"id":"A-1"},"elements":{"id":"c1"}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":1}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":null}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":"A-1"}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":"c0"}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":"c1 "}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":"[\\"node\\",\\"s\\",\\"widget\\",\\"A-1\\"]"}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":[]}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"__proto__":"c1"}}',
+    '{"route":"ask","intent":"byId","entities":{},"elements":{"id":"c1","id":"c2"}}',
+    '{"route":"view","elements":{}}',
   ])('does not read %j', (text) => {
     expect(readAssistantRoute(text)).toEqual({ ok: false });
   });
