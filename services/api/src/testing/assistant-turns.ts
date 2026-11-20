@@ -157,9 +157,9 @@ export async function startAssistantApp(options: AssistantAppOptions) {
       return { status: response.statusCode, body: response.json() as Record<string, unknown> };
     },
     /** One turn over the real connection, which the caller may abort. */
-    sendTurn: async (message: string, signal: AbortSignal, over: Record<string, unknown> = {}) => {
+    sendTurn: async (message: string, signal: AbortSignal, over: Record<string, unknown> = {}, headers: Record<string, string> = {}) => {
       address ??= await rig.app.listen({ host: '127.0.0.1', port: 0 });
-      return fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body(message, over)), signal }).catch(() => undefined);
+      return fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body(message, over)), signal }).catch(() => undefined);
     },
     close: async () => {
       await rig.stop();

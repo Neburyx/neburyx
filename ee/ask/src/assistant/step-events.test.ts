@@ -103,6 +103,13 @@ describe('the steps a streamed turn reports', () => {
     expect(phases(events).at(-1)).toBe('answering');
   });
 
+  it('ends a turn whose model call failed with the unavailable answer after its steps, and writes the closing event once', async () => {
+    const { t, events, answer } = await streamed({ view: { kind: 'failed', code: 'timeout' } });
+    expect(phases(events)).toEqual(['routing', 'reading-view', 'answering']);
+    expect(answer).toMatchObject({ status: 'unavailable' });
+    expect(t.events.filter((event) => event.action === 'assistant.turn.closed')).toHaveLength(1);
+  });
+
   it('ends a refused turn with its answer and no read step', async () => {
     const { events, answer } = await streamed({ reply: ok(JSON.stringify({ route: 'refuse', cause: 'verdict' })) }, { message: 'Is it fraud?' });
     expect(phases(events)).toEqual(['routing']);

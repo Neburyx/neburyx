@@ -144,7 +144,8 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             // the application's own tools throw its errors: they keep their code
             if (refusal === undefined && error instanceof AppError) throw error;
             if (refusal === undefined) {
-              request.log.error({ event: 'extension.handler_failed', extension: extension.name }, 'an extension handler failed');
+              // a handler that stops because the client gave up is a cancel, which the request's own log line already says (`aborted`), not a failure
+              if (mount.signalOf?.(request).aborted !== true) request.log.error({ event: 'extension.handler_failed', extension: extension.name }, 'an extension handler failed');
               throw new AppError('INTERNAL_ERROR');
             }
             if ('audited' in refusal && !refusal.audited) request.log.warn({ event: 'extension.audit_failed', extension: extension.name }, 'the audit event of a refusal could not be written');
