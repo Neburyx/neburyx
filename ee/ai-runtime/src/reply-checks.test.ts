@@ -71,5 +71,32 @@ describe('a conclusion that is denied is no verdict, and no other word of the ve
     'No conclusion can be drawn, but this is fraud.',
   ])('still counts %s', (text) => {
     expect(verdict(text)).toBe(true);
+
+describe('the checks of a sentence that cites a meaning line', () => {
+  const MEANING = 'm1: entity type Ledger: "A ledger holds up to 12 entries."';
+  const WITH_MEANING: CheckedText = {
+    ...TEXT,
+    keys: new Map([...TEXT.keys, ['m1', true]]),
+    lines: new Map([...TEXT.lines, ['m1', MEANING]]),
+    descriptionKeys: new Set(['m1']),
+  };
+
+  it('keeps a sentence that restates the meaning, the number in it included', () => {
+    expect(judgeSentences([{ text: 'A ledger holds up to 12 entries.', cites: ['m1'] }], WITH_MEANING).kept).toHaveLength(1);
+  });
+
+  it('removes a sentence that names what the meaning does not hold', () => {
+    expect(judgeSentences([{ text: 'A ledger holds Zeta entries.', cites: ['m1'] }], WITH_MEANING).kept).toEqual([]);
+  });
+
+  it('holds a number about an element to the element lines, not to the meaning', () => {
+    expect(judgeSentences([{ text: 'Ledger A holds 12 entries.', cites: ['n1', 'm1'] }], WITH_MEANING).kept).toEqual([]);
+  });
+
+  it('rejects a verdict word in a description and exempts only the type name', () => {
+    const verdict: CheckedText = { ...WITH_MEANING, lines: new Map([...WITH_MEANING.lines, ['m1', 'm1: entity type Ledger: "A ledger that is proof of fraud."']]) };
+    expect(judgeSentences([{ text: 'A ledger that is proof of fraud.', cites: ['m1'] }], verdict).verdictFound).toBe(true);
+    const named: CheckedText = { ...WITH_MEANING, lines: new Map([...WITH_MEANING.lines, ['m1', 'm1: entity type Fraud Ledger: "A book of entries."']]) };
+    expect(judgeSentences([{ text: 'A Fraud Ledger.', cites: ['m1'] }], named).verdictFound).toBe(false);
   });
 });

@@ -119,6 +119,9 @@ export const ASSISTANT_CONFIRMATION_INVALID_SENTENCE = 'This confirmation is no 
 /** The most characters of the title a citation of an answer after tool steps carries: a longer title is cut at a code point, so an element with a long title never fails the answer. */
 export const ASSISTANT_CITATION_TITLE_MAX = 400;
 
+/** The citation of a meaning line (`m1`): what the mapping says a type means, as the server wrote it into the call. It names no element and no record; `type` is the type's display name, or the relationship type's name. */
+export const assistantDescriptionCitationSchema = z.strictObject({ key: text, kind: z.literal('description'), typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) });
+
 /** What kind of tool a read was, as the registry names it: an intent of the source's folder, a catalog template, a pattern or the view. */
 export const ASSISTANT_READ_KINDS = ['intent', 'template', 'pattern', 'view'] as const;
 export type AssistantReadKind = (typeof ASSISTANT_READ_KINDS)[number];
@@ -210,7 +213,7 @@ export const assistantTurnAnswerSchema = z.union([
     status: z.literal('answered'),
     route: z.literal('view'),
     sentences: z.array(summarySentenceSchema).min(1).max(12),
-    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) })).min(1),
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema])).min(1),
     /** The two lines of coverage the server writes: what was read and what is not yet retrieved, and how much of what was read the sentences cite. */
     coverage: z.strictObject({ retrieval: text, summary: text, /** Written by the server when the answer rests on sentences of an attached summary: which of them, in words. */ summaryCited: text.optional() }),
     /** The positions (from 1, as the summary's sentences are numbered in the draft) of the attached summary's sentences the answer cites; present only when there are some. */
@@ -224,7 +227,7 @@ export const assistantTurnAnswerSchema = z.union([
     route: z.enum(['ask', 'view']),
     sentences: z.array(summarySentenceSchema).min(1).max(12),
     /** `title` is the element's title as the result gave it (masked as it was asked), so an element that is not drawn is still named. */
-    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() })).min(0),
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema])).min(0),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     model: text,
     calls: z.number().int().positive(),
@@ -239,3 +242,4 @@ export const assistantTurnAnswerSchema = z.union([
 ]);
 
 export type AssistantTurnAnswer = z.infer<typeof assistantTurnAnswerSchema>;
+export type AssistantDescriptionCitation = z.infer<typeof assistantDescriptionCitationSchema>;

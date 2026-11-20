@@ -400,7 +400,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     requestSchema: assistantTurnRequestSchema,
     responseSchema: assistantTurnAnswerSchema,
     handler: withTurnAudit({ logger: options.logger, ...(options.runs === undefined ? {} : { runs: options.runs }), ...(options.runSettings === undefined ? {} : { settings: options.runSettings }), ...(options.threads === undefined ? {} : { threads: options.threads }), ...(options.records === undefined ? {} : { records: options.records }), ...(options.now === undefined ? {} : { now: options.now }) }, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
-      const { sourceReadable, investigationReadable, patterns, readElements } = gateClientOf(request);
+      const { sourceReadable, investigationReadable, patterns, readElements, typeDescriptions: describe } = gateClientOf(request);
       const router = options.router();
       if (sourceReadable === undefined || investigationReadable === undefined || router === undefined) throw unsupported();
       const startedAt = (options.now ?? Date.now)();
@@ -409,6 +409,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       const body = assistantTurnRequestSchema.parse(request.body);
       await sourceReadable(body.sourceId);
       await investigationReadable(body.investigationId, body.sourceId);
+      const typeDescriptions = describe?.(body.sourceId);
       if ('choice' in body) {
         await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-choice', 1, body.choice.intent]) });
         return choiceTurn(request, body, readElements, AbortSignal.any([request.signal, deadline]), deadline);
@@ -494,7 +495,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
               const loop = options.toolLoop?.();
               const tools = loop !== undefined && options.viewTools?.() === true && options.folder()?.source(body.sourceId) !== undefined ? toolRegistryOf(scope, false) : undefined;
-              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }), ...(context === undefined ? {} : { context: context.text }) });
+              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }), ...(context === undefined ? {} : { context: context.text }), ...(typeDescriptions === undefined ? {} : { typeDescriptions }) });
               if (viewed.summary !== undefined) noteTurn({ summary: viewed.summary });
               if (viewed.status === 'tool' && loop !== undefined) {
                 // the view's reading is the first step of the loop; the model's request is the second

@@ -9,10 +9,11 @@ import { listedElements } from '../summary/index.js';
 import { coverageOf, inexactCountOf } from './coverage.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { StepScope } from './tool-step.js';
+import { descriptionCitationsOf, typeLinesOf, withTypeLines } from './type-lines.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const ANSWER_PROMPT_ID = 'assistant.answer';
-export const ANSWER_PROMPT_VERSION = 3;
+export const ANSWER_PROMPT_VERSION = 4;
 const ANSWER_AUDIT_ACTION = 'assistant.answer';
 
 export interface ToolAnswerOptions {
@@ -115,14 +116,15 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     const { assembled, readKeys } = assembleResults(input.reads, input.view?.assembled);
     if (assembled.keys.size === 0 && readKeys.length === 0) return { kind: 'unsupported', calls: 0 };
     const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${read.result === undefined ? 'found nothing' : coverageOf(read.result)}`)].join('; ');
-    const values = valuesOf(input.message, assembled, coverage, input.context);
+    const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message);
+    const values = valuesOf(input.message, assembled, coverage, input.context) + typeLines.section;
     const remaining = input.startedAt + options.totalTimeoutMs - now();
     if (remaining <= 0 || input.deadline.aborted) return { kind: 'limit', limit: 'time', calls: 0 };
     const allowed = input.maxCalls - input.callsUsed;
     if (allowed < 1) return { kind: 'limit', limit: 'calls', calls: 0 };
     if (estimateTokens(instructions.text, values) > input.maxInputTokens) return { kind: 'limit', limit: 'input', calls: 0 };
     const checkable = checkedTextOf(assembled);
-    const checkedText = { ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) };
+    const checkedText = withTypeLines({ ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) }, typeLines);
     const turnSignal = AbortSignal.any([input.signal, input.deadline]);
     let calls = 0;
     let drafted: Drafted;
@@ -175,7 +177,8 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
           const element = assembled.keys.get(key);
           return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref, ...(citationTitleOf(element.title) === undefined ? {} : { title: citationTitleOf(element.title) }) }];
         });
-        return { kind: 'sentences', sentences: drafted.sentences, citations, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls };
+        const withDescriptions = [...citations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
+        return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: options.model.modelRef, calls: drafted.calls };
       }
       default: {
         const unreachable: never = drafted;

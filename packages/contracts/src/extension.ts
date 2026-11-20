@@ -56,6 +56,14 @@ export interface ExtensionRequest {
   readonly askPatterns?: (sourceId: string) => Promise<AskPatternListing>;
   /** One of the caller's own saved patterns on a source, found by its id whatever the size of the listing: the same offer `askPatterns` would give, or undefined when it is not one the caller owns and may run now. */
   readonly askPatternFind?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
+  /** The plain-text descriptions the mapping gives the types of a source, read from the live mapping; mapping text only, never data. Absent, no description reaches a model. */
+  readonly typeDescriptions?: (sourceId: string) => TypeDescriptions;
+}
+
+/** The descriptions of the types of one source that have one; a type without a description is not listed. */
+export interface TypeDescriptions {
+  readonly entityTypes: readonly { readonly type: string; readonly label: string; readonly displayName: string; readonly description: string }[];
+  readonly relationshipTypes: readonly { readonly type: string; readonly description: string }[];
 }
 
 /** The investigation and source a view belongs to and whether the personal data of its nodes is masked. */

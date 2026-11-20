@@ -42,6 +42,8 @@ export interface ExtensionMount {
   readonly askPatternsFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatterns'];
   /** One saved pattern by its id, for one request; absent, a run that names a pattern is refused. */
   readonly askPatternFindFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatternFind'];
+  /** The descriptions of the types of a source, read from the live mapping. */
+  readonly typeDescriptions?: ExtensionRequest['typeDescriptions'];
   /** The signal that is aborted when the client gives up the request. */
   readonly signalOf?: (request: FastifyRequest) => AbortSignal;
 }
@@ -114,6 +116,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(askSourceReadable === undefined ? {} : { askSourceReadable }),
               ...(askPatterns === undefined ? {} : { askPatterns }),
               ...(askPatternFind === undefined ? {} : { askPatternFind }),
+              ...(mount.typeDescriptions === undefined ? {} : { typeDescriptions: mount.typeDescriptions }),
               ...(askRunner === undefined ? {} : { askRunner }),
               ...(readElements === undefined ? {} : { readElements }),
               ...(investigationReadable === undefined ? {} : { investigationReadable }),

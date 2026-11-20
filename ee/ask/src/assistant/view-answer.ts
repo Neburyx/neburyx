@@ -1,4 +1,4 @@
-import { ASSISTANT_VIEW_KEYS_MAX, readViewKeys, type AssistantFailureKind, type ElementRefs, type AssistantTurnAnswer, type ExtensionRequest, type SummaryReading } from '@neburyx/contracts';
+import { ASSISTANT_VIEW_KEYS_MAX, readViewKeys, type AssistantFailureKind, type ElementRefs, type AssistantTurnAnswer, type ExtensionRequest, type SummaryReading, type TypeDescriptions } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type CheckRunner, type Judged, type FailureCode, type GateClient } from '@neburyx/ee-ai-runtime';
 import { prepareSummary } from '../case-summary/prepare.js';
 import type { AssembledText } from '../case-summary/assemble.js';
@@ -12,14 +12,15 @@ import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { buildViewToolInstructions } from './step-instructions.js';
 import type { ToolRegistry } from './tool-registry.js';
+import { descriptionCitationsOf, typeLinesOf, withTypeLines } from './type-lines.js';
 import { readToolRequest, type ToolRequest } from './tool-request.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
-export const VIEW_PROMPT_VERSION = 4;
+export const VIEW_PROMPT_VERSION = 5;
 /** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 5;
+export const VIEW_TOOLS_PROMPT_VERSION = 6;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -68,6 +69,8 @@ export interface ViewInput {
   readonly summary?: SummaryAttachment;
   /** What the router was given of the person's earlier turns of the thread (references and titles only, read again through the gate): so that a follow-up such as "what does it mean" can be placed. Never a source of the checks. */
   readonly context?: string;
+  /** What the mapping says the types of the source mean; the ones that matter to this call reach it as `m` lines. Absent, the values are as they were. */
+  readonly typeDescriptions?: TypeDescriptions;
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -98,7 +101,7 @@ const summarySectionOf = (kept: readonly KeptSentence[]): string => (kept.length
 
 /** The key of a sentence of the attached summary as the model cites it: `s2`. */
 const SENTENCE_KEY = /^s(\d+)$/;
-const KEY_PART = String.raw`(?<![\p{L}\p{N}_-])[nes]\d+(?![\p{L}\p{N}_-])`;
+const KEY_PART = String.raw`(?<![\p{L}\p{N}_-])[nesm]\d+(?![\p{L}\p{N}_-])`;
 /** A group of keys in brackets, alone or in a list: `(s1)`, `[s1, n4]`, `(s1 and s2)`; a key in a longer id, such as `DEV-s12`, is not one. */
 const KEY_GROUP = new RegExp(String.raw`\s*[(\[]\s*${KEY_PART}(?:\s*(?:,|;|and|&)\s*${KEY_PART})*\s*[)\]]`, 'gu');
 /** A sentence key anywhere else in the text, which stands in the grammar for a name and so removes the sentence. */
@@ -210,7 +213,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const { assembled } = prepared;
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
-    const checkedText = checkedTextOf(assembled);
+    const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message);
+    const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
     const cited = new Set<number>();
     let drafted: DraftedOrAlternative;
     try {
@@ -218,7 +222,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         call: options.model,
         context: { action: VIEW_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
         instructions: sent.text,
-        values: valuesOf(input.message, assembled.text, section),
+        values: valuesOf(input.message, assembled.text + typeLines.section, section),
         prompt: { id: VIEW_PROMPT_ID, version: promptVersion },
         alternative: (text: string) => tools !== undefined && readToolRequest(text, tools).ok,
         maxInputTokens: settings.maxInputTokens,
@@ -306,10 +310,11 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         return drafted.kind === 'format' ? outcome({ status: 'unsupported' }) : outcome({ status: 'failed', kind: kindOf(drafted.kind === 'rate-limited' ? 'rate-limited' : drafted.kind === 'timeout' ? 'timeout' : 'provider-error') });
       case 'drafted': {
         if (drafted.sentences.length === 0 || drafted.verdictFound) return outcome({ status: 'unsupported' });
-        const citations = [...citationsOf(drafted.sentences, assembled)];
+        const elementCitations = [...citationsOf(drafted.sentences, assembled)];
+        const citations = [...elementCitations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);
         const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
-        return outcome({ status: 'answered', answer, cited: citations.length });
+        return outcome({ status: 'answered', answer, cited: elementCitations.length });
       }
       default: {
         const unreachable: never = drafted;

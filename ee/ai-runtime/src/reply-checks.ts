@@ -10,6 +10,8 @@ export interface CheckedText {
   readonly unknownCountKeys: ReadonlySet<string>;
   /** The keys of lines that state what a read found and are no element: a sentence that cites only these is checked for names against the lines it cites, so it cannot name an element it does not cite. */
   readonly readKeys?: ReadonlySet<string>;
+  /** The keys of the lines that say what a type means (`m1`): plain text the operator wrote, no element. A sentence that cites only these and reads is checked for names against the lines it cites; a sentence that cites an element is checked for its numbers against the element lines alone. */
+  readonly descriptionKeys?: ReadonlySet<string>;
 }
 
 const NUMBER_TOKEN = /[-+]?(?:\d[\d,]*(?:\.\d+)?|\.\d+)/g;
@@ -125,13 +127,21 @@ function titleAndIdOf(line: string): string[] {
   });
 }
 
+const TYPE_LINE = /^m\d+: (?:entity|relationship) type (.+?): "/u;
+
+/** The name of the type an `m` line is about: the type's own name is a name and not a verdict word, as an element's title is; the words of its description are not exempt. */
+const typeNameOf = (line: string): string[] => {
+  const found = TYPE_LINE.exec(line);
+  return found?.[1] === undefined ? [] : [found[1]];
+};
+
 /**
  * Whether a sentence states a verdict. The title and the id of an element the sentence cites are what the text sent says that element is called, so a word of the verdict list inside them (a business called
  * "Crimson Trading") is a name and not a verdict; the same word anywhere else in the sentence still is one. A title is taken out only as a whole (not as part of a longer word), longest first. The limit: an
  * element whose title or id is itself only a word of the list, cited by the sentence, hides that word wherever the sentence says it; the title comes from the source, and the sentence has to cite the element.
  */
 function holdsVerdict(sentence: SummarySentence, assembled: CheckedText): boolean {
-  const names = sentence.cites.flatMap((cite) => titleAndIdOf(assembled.lines.get(cite) ?? '')).sort((left, right) => right.length - left.length);
+  const names = sentence.cites.flatMap((cite) => [...titleAndIdOf(assembled.lines.get(cite) ?? ''), ...typeNameOf(assembled.lines.get(cite) ?? '')]).sort((left, right) => right.length - left.length);
   const left = names.reduce((text, name) => text.replace(new RegExp(`(?<![\\p{L}\\p{N}_-])${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'giu'), ' '), sentence.text);
   return VERDICT.test(left) || statesConclusion(left);
 }
@@ -144,7 +154,11 @@ function numbersHold(sentence: SummarySentence, assembled: CheckedText): boolean
   const numbers = numbersIn(sentence.text);
   if (numbers.length === 0) return true;
   if (sentence.cites.some((cite) => assembled.unknownCountKeys.has(cite))) return false;
-  const cited = new Set(sentence.cites.flatMap((cite) => numbersIn(assembled.lines.get(cite) ?? '')));
+  const descriptions = assembled.descriptionKeys;
+  const elementCites = descriptions === undefined ? sentence.cites : sentence.cites.filter((cite) => !descriptions.has(cite));
+  // a sentence that cites an element holds the numbers of the element lines alone; one that cites only meanings may restate their numbers
+  const numberCites = elementCites.length === 0 ? sentence.cites : elementCites;
+  const cited = new Set(numberCites.flatMap((cite) => numbersIn(assembled.lines.get(cite) ?? '')));
   if (!numbers.every((number) => cited.has(number))) return false;
   const standalone = numbersIn(sentence.text, true);
   return assembled.inexactCounts.every((count) => !standalone.includes(count.value) || sentence.text.includes(count.phrase));
@@ -153,7 +167,14 @@ function numbersHold(sentence: SummarySentence, assembled: CheckedText): boolean
 /** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
 function namesScopeOf(sentence: SummarySentence, assembled: CheckedText): CheckedText {
   const reads = assembled.readKeys;
-  if (reads === undefined || sentence.cites.length === 0 || !sentence.cites.every((cite) => reads.has(cite))) return assembled;
+  const descriptions = assembled.descriptionKeys;
+  const meanings = descriptions === undefined ? [] : sentence.cites.filter((cite) => descriptions.has(cite));
+  const onlyLines = sentence.cites.length > 0 && sentence.cites.every((cite) => reads?.has(cite) === true || descriptions?.has(cite) === true);
+  if (!onlyLines) {
+    // a sentence that cites an element and a meaning is checked against the text sent and the meanings it cites
+    if (meanings.length === 0) return assembled;
+    return { ...assembled, text: [assembled.text, ...meanings.map((cite) => assembled.lines.get(cite) ?? '')].join('\n') };
+  }
   const lines = new Map(sentence.cites.flatMap((cite) => (assembled.lines.has(cite) ? [[cite, assembled.lines.get(cite) ?? ''] as const] : [])));
   return { ...assembled, text: [...lines.values()].join('\n'), lines };
 }
@@ -184,7 +205,7 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   return true;
 }
 
-const KEY = '[ners]\\d+';
+const KEY = '[nersm]\\d+';
 const KEY_GROUP = new RegExp(`\\s*[(\\[]\\s*${KEY}(?:\\s*(?:,|;|and|&)\\s*${KEY})*\\s*[)\\]]`, 'gu');
 const KEY_WORD = new RegExp(`(?<![\\p{L}\\p{N}_-])${KEY}(?![\\p{L}\\p{N}_-])`, 'u');
 

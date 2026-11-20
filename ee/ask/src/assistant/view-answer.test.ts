@@ -563,7 +563,7 @@ describe('a tool request in the view reply', () => {
     expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered', route: 'view' });
     const views = t.fixture.calls.filter((call) => call.promptId === 'assistant.view');
     expect(views).toHaveLength(2);
-    expect(new Set(views.map((call) => call.version))).toEqual(new Set([4]));
+    expect(new Set(views.map((call) => call.version))).toEqual(new Set([5]));
     expect(views[0]?.instructions).not.toContain('# Tools you may ask for');
   });
 
@@ -573,15 +573,15 @@ describe('a tool request in the view reply', () => {
     expect(t.runs).toHaveLength(0);
   });
 
-  it('offers the tools and the third reply form in version 5 of the view prompt, audited with that version', async () => {
+  it('offers the tools and the third reply form in version 6 of the view prompt, audited with that version', async () => {
     const t = await rig({ view: sentences, step: sequence(DONE) });
     await answerOf(t.route.handler(t.request(VIEW_BODY)));
     const view = t.fixture.calls.find((call) => call.promptId === 'assistant.view');
-    expect(view?.version).toBe(5);
+    expect(view?.version).toBe(6);
     expect(view?.instructions).toContain('# Tools you may ask for');
     expect(view?.instructions).toContain('byId(id)');
     expect(view?.instructions).not.toContain('view()');
-    expect(JSON.stringify(t.events)).toContain('"promptVersion":"5"');
+    expect(JSON.stringify(t.events)).toContain('"promptVersion":"6"');
   });
 
   it('runs the request as the second step from the view’s reading, and answers over the view and what the tool returned, checked', async () => {

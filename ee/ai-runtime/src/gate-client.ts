@@ -1,4 +1,4 @@
-import type { AskPatternListing, AskPatternOffer, AskRunner, AskRunScope, ElementRefs, ElementsScope, ExtensionRequest, SummaryReading } from '@neburyx/contracts';
+import type { AskPatternListing, AskPatternOffer, AskRunner, AskRunScope, ElementRefs, ElementsScope, ExtensionRequest, SummaryReading, TypeDescriptions } from '@neburyx/contracts';
 
 /**
  * The one way AI code reaches the core. Every source read of an AI feature is one of these, each answered by the gate of the core for the caller of the request; a member is absent when the edition does not provide it.
@@ -12,9 +12,11 @@ export interface GateClient {
   readonly investigationReadable?: (investigationId: string, sourceId: string) => Promise<void>;
   readonly patterns?: (sourceId: string) => Promise<AskPatternListing>;
   readonly findPattern?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
+  /** The descriptions the mapping gives the types of a source; absent, none reaches a model. */
+  readonly typeDescriptions?: (sourceId: string) => TypeDescriptions;
 }
 
-type Capabilities = Pick<ExtensionRequest, 'askRunner' | 'readElements' | 'askSourceReadable' | 'investigationReadable' | 'askPatterns' | 'askPatternFind'>;
+type Capabilities = Pick<ExtensionRequest, 'askRunner' | 'readElements' | 'askSourceReadable' | 'investigationReadable' | 'askPatterns' | 'askPatternFind' | 'typeDescriptions'>;
 
 /** The gate client of a request: its capabilities and no other member of the request. */
 export function gateClientOf(request: Capabilities): GateClient {
@@ -25,5 +27,6 @@ export function gateClientOf(request: Capabilities): GateClient {
     investigationReadable: request.investigationReadable,
     patterns: request.askPatterns,
     findPattern: request.askPatternFind,
+    typeDescriptions: request.typeDescriptions,
   };
 }

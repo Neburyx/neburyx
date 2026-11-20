@@ -53,7 +53,7 @@ import { defaultCatalog } from './gate/default-catalog.js';
 import type { Gate, IndexReader, TemplateCatalog } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
-import { buildSourceProfile } from './registry/profile.js';
+import { buildSourceProfile, typeDescriptionsOf } from './registry/profile.js';
 import { matchesEntityTag } from './registry/etag.js';
 import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
@@ -427,6 +427,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       askSourceReadableFor: (context) => askSourceChecks.current?.(context),
       askPatternsFor: (context) => askPatternLists.current?.(context),
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
+      typeDescriptions: (sourceId) => typeDescriptionsOf(mapping.sources.find((source) => source.id === sourceId)),
       readElementsFor: (context) => elementReaders.current?.(context),
       investigationReadableFor: (context) => investigationChecks.current?.(context),
       aiNotesFor: (context) => aiNotesCapabilities.current?.(context),

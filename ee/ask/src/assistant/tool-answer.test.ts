@@ -157,3 +157,24 @@ describe('the answer after tool steps', () => {
     ).toEqual(['Account A-1 and the read found 0 matches.']);
   });
 });
+
+describe('the meaning lines of the answer after tool steps', () => {
+  const WIDGET = 'A widget is a small unit that holds up to 12 parts.';
+  const described = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'widget', description: WIDGET }], relationshipTypes: [] }) };
+
+  it('sends the description of a type the reads returned and keeps a sentence that cites it, with a description citation', async () => {
+    const r = await setup(sentences({ text: 'A widget is a small unit that holds up to 12 parts.', cites: ['m1'] }, { text: 'Account A-1 is listed.', cites: ['r1'] }));
+    const answer = await answerOf(r.route.handler(r.request(undefined, described)));
+    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
+    expect(call?.values).toContain(`m1: entity type widget: ${JSON.stringify(WIDGET)}`);
+    if (answer.status !== 'answered') throw new Error('not answered');
+    expect(answer.sentences).toHaveLength(2);
+    expect(answer.citations.map((citation) => citation.kind)).toEqual(['entity', 'description']);
+  });
+
+  it('sends nothing more when the mapping has no description', async () => {
+    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }));
+    await answerOf(r.route.handler(r.request()));
+    expect(r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer')?.values).not.toContain('What the types mean');
+  });
+});

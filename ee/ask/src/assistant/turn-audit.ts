@@ -274,7 +274,7 @@ function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { reado
 /** The things an accepted answer cited, as references: the element or relationship of each citation of an answer from the view, or of the summary of an Ask answer. */
 function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): AssistantThreadTurnWrite['citationRefs'] {
   if (notes.citedRefs !== undefined) return notes.citedRefs;
-  if ('answer' in outcome && outcome.answer.status === 'answered' && 'sentences' in outcome.answer) return outcome.answer.citations.map((citation) => citation.ref);
+  if ('answer' in outcome && outcome.answer.status === 'answered' && 'sentences' in outcome.answer) return outcome.answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref]));
   if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answer' in outcome.answer) || !('answered' in outcome.answer.answer)) return [];
   return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
 }

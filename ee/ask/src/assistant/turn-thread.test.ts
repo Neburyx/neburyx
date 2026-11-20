@@ -179,7 +179,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     const [kept] = stored(view);
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
-    expect(kept?.citationRefs).toEqual(answer.citations.map((citation) => citation.ref));
+    expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref])));
   });
 
   it('keeps nothing for a turn that failed, was cancelled, was too long or too large, a continue that is not valid, or a person who may not read', async () => {

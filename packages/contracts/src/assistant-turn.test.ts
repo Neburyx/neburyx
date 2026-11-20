@@ -53,6 +53,14 @@ describe('the assistant turn answer: the view route', () => {
     expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
   });
 
+  it('accepts a citation of a meaning line, alone or beside an element, and refuses one with a member it does not have', () => {
+    const description = { key: 'm1', kind: 'description', typeKind: 'entity', type: 'Widget', description: 'A widget is a small unit.' };
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: [{ text: 'A widget is a small unit.', cites: ['m1'] }], citations: [description] }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [...view.citations, description] }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [{ ...description, ref }] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [{ ...description, description: 'x'.repeat(301) }] }).success).toBe(false);
+  });
+
   it('refuses no sentence, more than 12, no citation, a citation of no known form and an unknown member', () => {
     expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: [] }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: Array.from({ length: 13 }, () => view.sentences[0]) }).success).toBe(false);

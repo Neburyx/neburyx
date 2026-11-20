@@ -1,4 +1,4 @@
-import type { FilterKind, SourceProfile } from '@neburyx/contracts';
+import type { FilterKind, SourceProfile, TypeDescriptions } from '@neburyx/contracts';
 import { isKeyed, type SourceModel } from '../mapping/model.js';
 import { entityProjection, relationshipProjection } from '../mapping/projection.js';
 import { canonicalBind, sortedEntries } from './canonical.js';
@@ -20,6 +20,13 @@ function filterKindsOf(filterable: readonly string[], kinds: Readonly<Record<str
   const declared = kinds ?? {};
   const names = [...filterable, ...Object.keys(declared).filter((property) => !filterable.includes(property))];
   return Object.fromEntries(names.map((property) => [property, Object.hasOwn(declared, property) ? (declared[property] ?? 'unknown') : 'unknown']));
+}
+
+/** The descriptions the mapping gives the types of a source: only the types that have one; none for an unknown source. */
+export function typeDescriptionsOf(source: SourceModel | undefined): TypeDescriptions {
+  const entityTypes = (source?.entities ?? []).flatMap((entity) => (entity.description === undefined ? [] : [{ type: entity.type, label: entity.label, displayName: entity.display.name ?? entity.label, description: entity.description }]));
+  const relationshipTypes = (source?.relationships ?? []).flatMap((relationship) => (relationship.description === undefined ? [] : [{ type: relationship.type, description: relationship.description }]));
+  return { entityTypes, relationshipTypes };
 }
 
 export function buildSourceProfile(source: SourceModel): SourceProfile {

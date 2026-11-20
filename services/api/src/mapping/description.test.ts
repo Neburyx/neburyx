@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSourceProfile } from '../registry/profile.js';
+import { buildSourceProfile, typeDescriptionsOf } from '../registry/profile.js';
 import { baseSource, fileOf } from '../testing/mapping.js';
 import { parseMapping } from './load.js';
 
@@ -52,5 +52,15 @@ describe('the description of a type', () => {
   ])('refuses %s', (_name, value) => {
     expect(refusal(value)).not.toBe('loaded');
     expect(refusal(undefined, value)).not.toBe('loaded');
+  });
+
+  it('is listed for the assistant for the types that have one, with the display name, and for no unknown source', () => {
+    const model = load('A thing that holds items.', 'Joins a thing to another.');
+    expect(typeDescriptionsOf(model.sources[0])).toEqual({
+      entityTypes: [{ type: 'node_a', label: 'NodeA', displayName: 'NodeA', description: 'A thing that holds items.' }],
+      relationshipTypes: [{ type: 'LINKS', description: 'Joins a thing to another.' }],
+    });
+    expect(typeDescriptionsOf(undefined)).toEqual({ entityTypes: [], relationshipTypes: [] });
+    expect(typeDescriptionsOf(load().sources[0])).toEqual({ entityTypes: [], relationshipTypes: [] });
   });
 });
