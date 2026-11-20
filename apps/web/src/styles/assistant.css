@@ -87,11 +87,6 @@
   font-weight: normal;
 }
 
-/* the page focuses the heading of a turn so that its card is read first; it is not in the tab order and draws no ring, as the headings of base.css */
-.assistant-turn h3[tabindex='-1']:focus-visible {
-  outline: none;
-}
-
 .assistant-chip-unavailable {
   border-color: var(--color-control-border);
   background: var(--color-neutral-surface);
