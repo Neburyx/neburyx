@@ -7,6 +7,7 @@ import { execute, patternOf, refusal, type Execution } from '../questions/questi
 import { summarizeRun } from '../questions/run-summary.js';
 import { rebuildNotesFor } from '../case-summary/notes-read-route.js';
 import { noteStep, noteSummaryCalls } from './turn-audit.js';
+import { stepsOf } from './steps.js';
 import type { ToolRequest } from './tool-request.js';
 import { withTemplateTools } from './tool-templates.js';
 
@@ -153,13 +154,25 @@ async function run(execution: Execution): Promise<StepResult> {
 export async function runToolStep(requested: ToolRequest, scope: StepScope, options: StepOptions = {}): Promise<StepResult> {
   if (scope.request.signal.aborted) throw new Error('the request was cancelled');
   const { tool, values } = requested;
-  if (tool.kind === 'view') return readView(scope);
-  if (tool.kind === 'ai-notes') return readNotes(scope);
-  if (tool.kind === 'ai-summary') return readSummary(scope, options);
+  const steps = stepsOf(scope.request);
+  if (tool.kind === 'view') {
+    steps.readingView();
+    return readView(scope);
+  }
+  if (tool.kind === 'ai-notes') {
+    steps.reading(tool.name, undefined);
+    return readNotes(scope);
+  }
+  if (tool.kind === 'ai-summary') {
+    steps.reading(tool.name, undefined);
+    return readSummary(scope, options);
+  }
   if (tool.kind === 'typology') {
+    steps.reading(tool.name, undefined);
     noteStep();
     return { status: 'typology', lines: scope.options.typology?.() ?? [] };
   }
+  steps.reading(tool.name, tool.kind === 'intent' ? tool.label : undefined, values);
   const common = { request: scope.request, capabilities: scope.capabilities, options: scope.options, sourceId: scope.sourceId, mask: scope.mask, continuing: options.continuing === true, action: scope.action, ...(scope.investigationId === undefined ? {} : { investigationId: scope.investigationId }) };
   if (tool.kind === 'pattern') {
     const entities = { pattern: tool.name, ...values };

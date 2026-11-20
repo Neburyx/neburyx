@@ -265,3 +265,32 @@ export const assistantTurnAnswerSchema = z.union([
 
 export type AssistantTurnAnswer = z.infer<typeof assistantTurnAnswerSchema>;
 export type AssistantDescriptionCitation = z.infer<typeof assistantDescriptionCitationSchema>;
+
+/** The longest a streamed turn stays open: the highest total time of a turn the settings accept (10 minutes) and a minute more. */
+export const ASSISTANT_STREAM_MAX_MS = 660_000;
+
+/** The phases of a turn a client is told about, in the order a turn goes through them. */
+export const ASSISTANT_STEP_PHASES = ['routing', 'reading-view', 'reading', 'answering'] as const;
+export type AssistantStepPhase = (typeof ASSISTANT_STEP_PHASES)[number];
+
+/**
+ * The members of a `step` event: which step of the turn is about to run. `tool`, `label` and `subject` belong to a read: the tool's name (the intent's name or the template's), the plain-words label the operator gave an intent (when it has one),
+ * and the values the registry's parameter check accepted for it, as the confirmation card shows them. Nothing a model wrote is in a step.
+ */
+export const assistantStepMembersSchema = z
+  .strictObject({
+    n: z.number().int().min(1).max(60),
+    phase: z.enum(ASSISTANT_STEP_PHASES),
+    tool: text.max(200).optional(),
+    label: text.max(80).optional(),
+    subject: text.max(400).optional(),
+  })
+  .refine((step) => step.phase === 'reading' || (step.tool === undefined && step.label === undefined && step.subject === undefined), { message: 'only a read names its tool, label and subject', path: ['phase'] });
+
+/** One line of a streamed turn. The first lines are steps, the last is the answer exactly as the JSON route gives it, or an error that has no turn answer. */
+export const assistantTurnStreamEventSchema = z.union([
+  assistantStepMembersSchema.safeExtend({ event: z.literal('step') }),
+  z.strictObject({ event: z.literal('answer'), answer: z.lazy(() => assistantTurnAnswerSchema) }),
+  z.object({ event: z.literal('error'), code: z.string().min(1), message: z.string(), retryable: z.boolean().optional(), traceId: z.string().min(1), details: z.record(z.string(), z.unknown()).optional() }),
+]);
+export type AssistantTurnStreamEvent = z.infer<typeof assistantTurnStreamEventSchema>;

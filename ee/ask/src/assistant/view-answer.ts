@@ -73,8 +73,10 @@ export interface ViewInput {
   readonly typeDescriptions?: TypeDescriptions;
   /** The names of types the router said the message also asks the meaning of. */
   readonly askedTypes?: readonly string[];
-  /** The entity types of the elements of the thread the router named by key. */
+  /** The entity types of the elements the router context lists. */
   readonly contextTypes?: readonly string[];
+  /** Told when the call that writes the answer is about to be made, so a streamed turn can say so. */
+  readonly onAnswering?: () => void;
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -221,6 +223,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
     const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message, input.askedTypes, input.contextTypes);
     const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
+    input.onAnswering?.();
     const cited = new Set<number>();
     // the names of the last reply that named types without a description, for the answer when it is the one accepted
     let lastNames: readonly string[] | undefined;

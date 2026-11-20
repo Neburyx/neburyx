@@ -389,3 +389,24 @@ describe('the label of a waiting intent', () => {
   });
 });
 
+describe('the steps a streamed decision reports', () => {
+  it('says a read for each earlier step it reads again and for the step it runs, then answering, with no routing', async () => {
+    const { r, first } = await waiting();
+    const events: { name: string; members: Record<string, unknown> }[] = [];
+    const answer = await answerOf(r.route.handler(r.request({ ...BODY, confirmation: { pendingId: first.pendingId, plan: first.plan, decision: 'confirm' } }, { emit: (name: string, members: unknown) => events.push({ name, members: members as Record<string, unknown> }) })));
+    expect(answer).toMatchObject({ status: 'answered' });
+    const phases = events.map((event) => event.members['phase']);
+    expect(phases).not.toContain('routing');
+    expect(phases.at(-1)).toBe('answering');
+    expect(events.filter((event) => event.members['phase'] === 'reading').map((event) => event.members['tool'])).toEqual(['shared', 'byId', 'byId']);
+  });
+
+  it('says a read and an answering for a skip, never routing', async () => {
+    const { r, first } = await waiting();
+    const events: Record<string, unknown>[] = [];
+    await answerOf(r.route.handler(r.request({ ...BODY, confirmation: { pendingId: first.pendingId, plan: first.plan, decision: 'skip' } }, { emit: (_name: string, members: unknown) => events.push(members as Record<string, unknown>) })));
+    expect(events.map((event) => event['phase'])).not.toContain('routing');
+    expect(events.at(-1)?.['phase']).toBe('answering');
+  });
+});
+

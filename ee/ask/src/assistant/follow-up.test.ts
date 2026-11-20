@@ -795,3 +795,30 @@ describe('the descriptions of the types of the thread, in play for a follow-up',
   });
 });
 
+describe('the steps a streamed clarification and a streamed choice report', () => {
+  const capture = () => {
+    const events: Record<string, unknown>[] = [];
+    return { events, emit: (_name: string, members: unknown) => void events.push(members as Record<string, unknown>) };
+  };
+
+  it('says only routing for a clarification, which ends the turn with the question', async () => {
+    const t = await follow(() => clarifying(['c1', 'c2']), { readNodes: everyone });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }], citationRefs: [widget('A-2')] }));
+    const steps = capture();
+    const answer = await t.send(FOLLOW_UP, { emit: steps.emit });
+    expect(answer).toMatchObject({ status: 'clarification' });
+    expect(steps.events.map((event) => event['phase'])).toEqual(['routing']);
+  });
+
+  it('says no routing for a choice, which starts with its read', async () => {
+    const t = await follow(() => clarifying(['c1', 'c2']), { readNodes: everyone });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }], citationRefs: [widget('A-2')] }));
+    const clarification = await t.send(FOLLOW_UP);
+    if (clarification.status !== 'clarification') throw new Error('not a clarification');
+    const steps = capture();
+    await answerOf(t.rig.route.handler(t.rig.request({ sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], choice: clarification.candidates[1]?.choice }, { principalId: PERSON, emit: steps.emit })));
+    expect(steps.events.map((event) => event['phase'])).toEqual(['reading']);
+    expect(steps.events[0]).toMatchObject({ tool: 'shared' });
+  });
+});
+

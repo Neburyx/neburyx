@@ -19,6 +19,8 @@ import {
   type AssistantFailureKind,
   type AssistantLimit,
   type AssistantRead,
+  ASSISTANT_STREAM_MAX_MS,
+  assistantStepMembersSchema,
   type AssistantRouterReply,
   type AssistantTurnAnswer,
   type AssistantTurnRequest,
@@ -31,6 +33,7 @@ import {
 import { withTemplateTools } from './tool-templates.js';
 import { AuditUnavailableError, gateClientOf, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { meaningAnswerOf } from './meaning.js';
+import { stepsOf } from './steps.js';
 import { buildPatternCatalog } from '../patterns/index.js';
 import { coverageOf } from './coverage.js';
 import { readOfAnswer } from './reads.js';
@@ -221,6 +224,8 @@ async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting
 
 async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => readonly FollowUp[], after?: (answer: AskAnswer) => Promise<AssistantTurnAnswer | undefined>): Promise<AssistantTurnAnswer> {
   if (run.request.signal.aborted) throw new Error('the request was cancelled');
+  const intent = run.options.folder()?.intent(run.sourceId, run.intent);
+  stepsOf(run.request).reading(run.intent, intent?.label, run.entities);
   try {
     const answer = await execute(run);
     const looped = after === undefined ? undefined : await after(answer);
@@ -408,6 +413,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     permission: 'principal',
     requestSchema: assistantTurnRequestSchema,
     responseSchema: assistantTurnAnswerSchema,
+    stream: { events: { step: assistantStepMembersSchema }, maxMs: ASSISTANT_STREAM_MAX_MS },
     handler: withTurnAudit({ logger: options.logger, ...(options.runs === undefined ? {} : { runs: options.runs }), ...(options.runSettings === undefined ? {} : { settings: options.runSettings }), ...(options.threads === undefined ? {} : { threads: options.threads }), ...(options.records === undefined ? {} : { records: options.records }), ...(options.now === undefined ? {} : { now: options.now }) }, async (request: ExtensionRequest): Promise<AssistantTurnAnswer> => {
       const { sourceReadable, investigationReadable, patterns, readElements, typeDescriptions: describe } = gateClientOf(request);
       const router = options.router();
@@ -451,6 +457,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       const built = listing === undefined ? undefined : buildPatternCatalog(listing);
       let context: TurnContext | undefined;
       try {
+        stepsOf(request).routing();
         context = await contextOf(body, readElements, AbortSignal.any([request.signal, deadline]));
       } catch (error) {
         if (request.signal.aborted) throw new Error('the request was cancelled');
@@ -518,7 +525,8 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               const scope = { request, capabilities, options: runOptions, action: ASK_ACTION, sourceId: body.sourceId, mask: body.mask === true, investigationId: body.investigationId, viewElementKeys: body.viewElementKeys, ...(askedTypes === undefined ? {} : { askedTypes }), ...(contextTypes === undefined ? {} : { contextTypes }), ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
               const loop = options.toolLoop?.();
               const tools = loop !== undefined && options.viewTools?.() === true && options.folder()?.source(body.sourceId) !== undefined ? toolRegistryOf(scope, false) : undefined;
-              const viewed = await answerView({ sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }), ...(context === undefined ? {} : { context: context.text }), ...(typeDescriptions === undefined ? {} : { typeDescriptions }), ...(askedTypes === undefined ? {} : { askedTypes }), ...(contextTypes === undefined ? {} : { contextTypes }) });
+              stepsOf(request).readingView();
+              const viewed = await answerView({ onAnswering: () => stepsOf(request).answering(), sourceId: body.sourceId, investigationId: body.investigationId, mask: body.mask === true, message, viewElementKeys: body.viewElementKeys, actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, readElements, signal: request.signal, deadline, callsUsed: outcome.calls, startedAt, progress, ...(summary === undefined ? {} : { summary }), ...(tools === undefined ? {} : { tools }), ...(context === undefined ? {} : { context: context.text }), ...(typeDescriptions === undefined ? {} : { typeDescriptions }), ...(askedTypes === undefined ? {} : { askedTypes }), ...(contextTypes === undefined ? {} : { contextTypes }) });
               if (viewed.summary !== undefined) noteTurn({ summary: viewed.summary });
               if (viewed.status === 'tool' && loop !== undefined) {
                 // the view's reading is the first step of the loop; the model's request is the second

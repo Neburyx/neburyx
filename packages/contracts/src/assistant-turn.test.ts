@@ -310,3 +310,26 @@ describe('the confirmation of a heavy step', () => {
   });
 });
 
+describe('the events of a streamed turn', () => {
+  it('accepts a step of each phase, with a tool, a label and a subject only for a read', async () => {
+    const { assistantStepMembersSchema, assistantTurnStreamEventSchema } = await import('./assistant-turn.js');
+    for (const phase of ['routing', 'reading-view', 'answering'] as const) expect(assistantStepMembersSchema.safeParse({ n: 1, phase }).success).toBe(true);
+    expect(assistantStepMembersSchema.safeParse({ n: 2, phase: 'reading', tool: 'shared', label: 'Shared', subject: 'A-1' }).success).toBe(true);
+    for (const bad of [{ n: 1, phase: 'routing', tool: 'x' }, { n: 0, phase: 'routing' }, { n: 1, phase: 'thinking' }, { n: 1, phase: 'reading', tool: 'x', text: 'hello' }, { n: 1, phase: 'reading', label: 'x'.repeat(81) }, { n: 1, phase: 'reading', subject: 'x'.repeat(401) }]) {
+      expect(assistantStepMembersSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'step', n: 1, phase: 'routing' }).success).toBe(true);
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'step', n: 1, phase: 'routing', extra: 1 }).success).toBe(false);
+  });
+
+  it('accepts the answer line only as exactly one turn answer, and an error line with its code and trace ID', async () => {
+    const { assistantTurnStreamEventSchema } = await import('./assistant-turn.js');
+    const refusal = { status: 'answered', route: 'refuse', cause: 'verdict', sentence: 'x' };
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'answer', answer: refusal }).success).toBe(true);
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'answer', answer: { status: 'nope' } }).success).toBe(false);
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'answer', answer: refusal, extra: 1 }).success).toBe(false);
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'error', code: 'INTERNAL_ERROR', message: 'm', traceId: 't' }).success).toBe(true);
+    expect(assistantTurnStreamEventSchema.safeParse({ event: 'error', code: 'INTERNAL_ERROR' }).success).toBe(false);
+  });
+});
+

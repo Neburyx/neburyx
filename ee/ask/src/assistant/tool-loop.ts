@@ -9,6 +9,7 @@ import type { ReadDone, ToolAnswerInput, ToolAnswerOutcome } from './tool-answer
 import type { PlanStep } from './plan-token.js';
 import { readNotRead, readOfAnswer, readOfNothing, readOfNotes, readOfSummary, readOfTypology, readOfView } from './reads.js';
 import { runToolStep, type StepResult, type StepScope } from './tool-step.js';
+import { stepsOf } from './steps.js';
 import { noteModelAnswer, noteReplaying, startModelCall } from './turn-audit.js';
 
 const STEP_AUDIT_ACTION = 'assistant.step';
@@ -176,8 +177,10 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
     // an Ask read stands as the answer when nothing came after it; a view's reading has no answer of its own, so a loop entered from it that cannot go on ends with a limit
     const stop = (limit: AssistantLimit): LoopOutcome | undefined => (steps === 1 && !fromView ? undefined : { kind: 'limit', limit, reads: entries });
     const finished = (stoppedAt?: AssistantLimit): LoopOutcome => (latest === undefined ? { kind: 'failed', why: 'service' } : { kind: 'finished', answer: latest, steps, reads: entries, ...(stoppedAt === undefined ? {} : { stoppedAt }) });
-    const finalAnswer = async (stoppedAt?: AssistantLimit): Promise<LoopOutcome> =>
-      answered(await options.answer({ scope, message: input.message, reads, ...(input.context === undefined ? {} : { context: input.context }), ...(view === undefined ? {} : { view }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls, entries, stoppedAt);
+    const finalAnswer = async (stoppedAt?: AssistantLimit): Promise<LoopOutcome> => {
+      stepsOf(scope.request).answering();
+      return answered(await options.answer({ scope, message: input.message, reads, ...(input.context === undefined ? {} : { context: input.context }), ...(view === undefined ? {} : { view }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls, entries, stoppedAt);
+    };
     /** What one step of the turn, made now or read again, adds to what the model sees and to the reads of the turn. */
     const apply = (request: ToolRequest, step: StepResult, how: { readonly confirmed?: boolean } = {}): void => {
       const { tool, values } = request;

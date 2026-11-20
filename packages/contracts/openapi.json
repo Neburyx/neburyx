@@ -407,7 +407,7 @@
       "post": {
         "operationId": "assistantTurn",
         "summary": "Send one message to the investigation assistant",
-        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Takes a message as typed and the keys of the elements in view, checks that the investigation is the caller's and belongs to the source, and answers in exactly one route (view, ask or refuse). A refusal carries a fixed sentence chosen by the server; no word of the model is returned.",
+        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. A client that sends `Accept: application/x-ndjson` gets the turn as a stream of lines (application/x-ndjson): `step` events that say which step is about to run (`routing`, `reading-view`, `reading` with the tool, its label and subject, `answering`), then one `answer` line that is exactly the JSON answer, or an `error` line for a failure that has no turn answer after the first line; a request refused before the handler runs is answered with its HTTP status as for any client, and a stream is never idempotent. No line holds anything a model wrote before the answer. Takes a message as typed and the keys of the elements in view, checks that the investigation is the caller's and belongs to the source, and answers in exactly one route (view, ask or refuse). A refusal carries a fixed sentence chosen by the server; no word of the model is returned.",
         "requestBody": {
           "required": true,
           "content": {
@@ -425,6 +425,11 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AssistantTurnAnswer"
+                }
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTurnStreamEvent"
                 }
               }
             }
@@ -8344,6 +8349,108 @@
               "status",
               "words",
               "limit"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "AssistantTurnStreamEvent": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "n": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 60
+              },
+              "phase": {
+                "type": "string",
+                "enum": [
+                  "routing",
+                  "reading-view",
+                  "reading",
+                  "answering"
+                ]
+              },
+              "tool": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80
+              },
+              "subject": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              },
+              "event": {
+                "type": "string",
+                "const": "step"
+              }
+            },
+            "required": [
+              "n",
+              "phase",
+              "event"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "answer"
+              },
+              "answer": {
+                "$ref": "#/components/schemas/AssistantTurnAnswer"
+              }
+            },
+            "required": [
+              "event",
+              "answer"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "event": {
+                "type": "string",
+                "const": "error"
+              },
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string"
+              },
+              "retryable": {
+                "type": "boolean"
+              },
+              "traceId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "details": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {}
+              }
+            },
+            "required": [
+              "event",
+              "code",
+              "message",
+              "traceId"
             ],
             "additionalProperties": false
           }
