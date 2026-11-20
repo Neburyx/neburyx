@@ -166,4 +166,73 @@ test.describe('the Assistant panel', () => {
     expect(box !== null && box.x + box.width <= 1280).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
+
+  const holdTurns = async (page: Page): Promise<{ failed: string[]; sent: () => number }> => {
+    const failed: string[] = [];
+    let sent = 0;
+    page.on('requestfailed', (request) => {
+      if (new URL(request.url()).pathname === '/v1/assistant/turns') failed.push(request.failure()?.errorText ?? '');
+    });
+    await page.route((url) => url.pathname === '/v1/assistant/turns', () => {
+      sent += 1;
+      return new Promise<void>(() => undefined);
+    });
+    return { failed, sent: () => sent };
+  };
+
+  test('cancels a held turn from the keyboard: the request fails in the browser, the Cancelled turn shows and the message is back in the focused input', async ({ page }) => {
+    await openWorkspace(page);
+    const { failed, sent: sentCount } = await holdTurns(page);
+    await open(page);
+    const field = page.getByLabel('Your message');
+    await field.fill('Which accounts share a device with AC-1?');
+    await field.press('Enter');
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeVisible();
+    await expect(panel(page).getByText('Cancel stops the request. Nothing more is read once it is stopped.')).toBeVisible();
+    await expect(field).toHaveAttribute('aria-disabled', 'true');
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('heading', { name: 'Cancelled' })).toBeVisible();
+    await expect(panel(page).getByText('Nothing more was read and nothing was added to the graph. Your message is back in the box.')).toBeVisible();
+    await expect(field).toHaveValue('Which accounts share a device with AC-1?');
+    await expect(field).toBeFocused();
+    await expect(panel(page).getByRole('button', { name: /Send/ })).toBeVisible();
+    await expect.poll(() => failed.length).toBe(1);
+    expect(sentCount()).toBe(1);
+  });
+
+  test('closes the held request when the page is reloaded and invents no answer or Cancelled turn afterwards', async ({ page }) => {
+    await openWorkspace(page);
+    const { sent: sentCount } = await holdTurns(page);
+    await open(page);
+    await page.getByLabel('Your message').fill('Which accounts share a device with AC-1?');
+    await page.getByLabel('Your message').press('Enter');
+    await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeVisible();
+    expect(sentCount()).toBe(1);
+    await page.reload();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '1');
+    await open(page);
+    await expect(panel(page).getByRole('heading', { name: 'Cancelled' })).toHaveCount(0);
+    await expect(panel(page).getByRole('list', { name: 'Conversation' })).toHaveCount(0);
+    expect(sentCount()).toBe(1);
+  });
+
+  test('shows Cancel and its hint inside the panel at 1280 pixels, without clipping', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await openWorkspace(page);
+    await holdTurns(page);
+    await open(page);
+    await page.getByLabel('Your message').fill('Which accounts share a device with AC-1?');
+    await page.getByLabel('Your message').press('Enter');
+    const cancel = panel(page).getByRole('button', { name: 'Cancel' });
+    const hint = panel(page).getByText('Cancel stops the request. Nothing more is read once it is stopped.');
+    await expect(cancel).toBeVisible();
+    await expect(hint).toBeVisible();
+    const box = await panel(page).boundingBox();
+    for (const target of [cancel, hint]) {
+      const inner = await target.boundingBox();
+      expect(box !== null && inner !== null && inner.x >= box.x && inner.x + inner.width <= box.x + box.width && inner.y + inner.height <= box.y + box.height).toBe(true);
+    }
+    expect(await hint.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
 });

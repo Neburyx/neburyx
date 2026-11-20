@@ -221,7 +221,7 @@ function closingEvent(request: ExtensionRequest, started: NonNullable<TurnNotes[
 
 function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): Ending {
   const ending: Ending = 'answer' in outcome ? endingOf(notes, outcome.answer) : endingOfError(outcome.error);
-  return request.signal.aborted ? { ...ending, outcome: 'cancelled', result: 'failed' } : ending;
+  return request.signal.aborted ? { ...ending, outcome: 'cancelled', result: 'failed', failureKind: 'cancelled' } : ending;
 }
 
 /** The things an accepted Ask answer cited, as references: the element or relationship of each citation of its summary. */

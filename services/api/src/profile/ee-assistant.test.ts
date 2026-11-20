@@ -392,6 +392,50 @@ describe('the closing event of a turn in the running application', () => {
     await rig.stop();
   });
 
+  const SHARED_REPLY = '{"route":"ask","intent":"sharedGadget","entities":{"id":"W-1"}}';
+  const heavyThenHang = (reads: { pending: number }) => (call: ExecuteCall): ExecuteOutcome | Promise<ExecuteOutcome> | undefined => {
+    if (call.templateId === 'shared-attribute-count') return { status: 'rows', rows: [{ matches: 1_000_000, anchorBounded: false, skipped: false }] };
+    if (call.templateId !== 'shared-attribute') return undefined;
+    return new Promise<ExecuteOutcome>((resolve) => {
+      reads.pending += 1;
+      call.signal?.addEventListener('abort', () => resolve({ status: 'cancelled' }));
+    });
+  };
+
+  it('ends a continue whose read is pending as one cancelled turn, with its run stored cancelled, when the client closes the real connection, and reads nothing more', async () => {
+    const reads = { pending: 0 };
+    const store = createMemoryAssistantRunStore();
+    const records = recordsFor();
+    const rig = await assistantRig({ reply: SHARED_REPLY, answer: heavyThenHang(reads), runStore: store, recordQueue: records.attached });
+    const stopped = (await rig.post({ ...rig.body, message: 'Which widgets share a gadget with W-1?' })).json();
+    const address = await rig.rig.app.listen({ host: '127.0.0.1', port: 0 });
+    const controller = new AbortController();
+    const sent = fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceId: 'demo', investigationId: rig.body.investigationId, viewElementKeys: [], continue: { intent: 'sharedGadget', entities: { id: 'W-1' }, continueToken: stopped.answer.answered.continueToken } }), signal: controller.signal }).catch(() => undefined);
+    await vi.waitFor(() => expect(reads.pending).toBe(1));
+    controller.abort();
+    await sent;
+    await vi.waitFor(() => expect(closed(everything(rig))).toHaveLength(2));
+    expect(closed(everything(rig))[1]).toMatchObject({ result: 'failed', detail: { turn: { outcome: 'cancelled', modelCalls: 0, steps: 1 } } });
+    expect(reads.pending).toBe(1);
+    await vi.waitFor(() => expect(store.runs).toHaveLength(2));
+    await vi.waitFor(() => expect(store.runs[1]?.outcome).toBeDefined());
+    expect(store.runs[1]).toMatchObject({ outcome: 'cancelled', calls: 0 });
+    await rig.stop();
+  });
+
+  it('changes nothing when the client closes the real connection after the answer was returned: one model call and one closing event, as the answer left it', async () => {
+    const rig = await assistantRig();
+    const address = await rig.rig.app.listen({ host: '127.0.0.1', port: 0 });
+    const controller = new AbortController();
+    const answered = await fetch(`${address}/v1/assistant/turns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(rig.body), signal: controller.signal });
+    await answered.json();
+    controller.abort();
+    await vi.waitFor(() => expect(closed(everything(rig))).toHaveLength(1));
+    expect(closed(everything(rig))[0]).toMatchObject({ result: 'refused', detail: { turn: { outcome: 'refused', modelCalls: 1 } } });
+    expect(rig.stub.bodies).toHaveLength(1);
+    await rig.stop();
+  });
+
   const stores = [
     ['a store that rejects every write', () => ({ record: () => Promise.reject(new Error('the store is down')) }), 100],
     ['a store that never answers, under a queue of one place', () => ({ record: () => new Promise<void>(() => undefined) }), 1],

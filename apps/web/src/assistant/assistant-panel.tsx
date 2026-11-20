@@ -58,6 +58,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const available = availability === 'available' && !off;
   const unavailable = availability === 'unavailable' || off;
   const field = useRef<HTMLTextAreaElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const { turns, notice, input } = model.state;
   const storedTurns = stored.kind === 'ready' ? stored.thread.turns : [];
@@ -67,6 +68,9 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
     if (model.focus.target === 'input') field.current?.focus();
     else body.current?.querySelector<HTMLElement>(`[data-assistant-turn="${model.focus.target}"] [data-ask-focus]`)?.focus();
   }, [model.focus]);
+  useEffect(() => {
+    if (model.canCancel) cancel.current?.focus();
+  }, [model.canCancel]);
   const canSend = model.canSend && available;
   const limit = model.limit;
   const announced = pending ? ASSISTANT_COPY.working : '';
@@ -140,6 +144,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           rows={3}
           value={unavailable ? '' : input}
           readOnly={pending}
+          aria-disabled={pending ? true : undefined}
           disabled={!available}
           className={tooLongNotice === undefined ? undefined : 'assistant-over'}
           placeholder={unavailable ? ASSISTANT_COPY.unavailableField : pending ? ASSISTANT_COPY.waitingPlaceholder : ASSISTANT_COPY.placeholder}
@@ -162,12 +167,18 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           <span id="assistant-counter" className={tooLongNotice === undefined ? 'ask-counter' : 'ask-counter ask-counter-limit'} aria-label={limit === undefined ? undefined : wordsSpoken(model.words, limit)}>
             {limit === undefined ? '' : wordsText(model.words, limit)}
           </span>
-          <button type="submit" className="ask-send" disabled={!canSend}>
-            {ASSISTANT_COPY.send} <span aria-hidden="true">▸</span>
-          </button>
+          {model.canCancel ? (
+            <button key="cancel" ref={cancel} type="button" className="ask-send ask-send-cancel" onClick={model.cancel}>
+              {ASSISTANT_COPY.cancel}
+            </button>
+          ) : (
+            <button key="send" type="submit" className="ask-send" disabled={!canSend}>
+              {ASSISTANT_COPY.send} <span aria-hidden="true">▸</span>
+            </button>
+          )}
         </div>
         <p id="assistant-keys" className="ask-keys">
-          {unavailable ? ASSISTANT_COPY.unavailableSend : tooLongNotice !== undefined ? TOO_LONG_NOTE : limit === undefined ? '' : hintText(limit)}
+          {model.canCancel ? ASSISTANT_COPY.cancelHint : unavailable ? ASSISTANT_COPY.unavailableSend : tooLongNotice !== undefined ? TOO_LONG_NOTE : limit === undefined ? '' : hintText(limit)}
         </p>
         {unavailable ? null : <StandingNote />}
         {model.sourceChanged ? <p className="ask-note">{ASSISTANT_COPY.sourceChanged}</p> : null}

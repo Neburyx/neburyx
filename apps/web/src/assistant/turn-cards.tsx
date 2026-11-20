@@ -122,6 +122,13 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <p>{ASSISTANT_COPY.workingBody}</p>
         </section>
       );
+    case 'cancelled':
+      return (
+        <section className="ask-cancelled" aria-labelledby={titleId}>
+          <h3 id={titleId}>{ASSISTANT_COPY.cancelledTitle}</h3>
+          <p>{ASSISTANT_COPY.cancelledBody}</p>
+        </section>
+      );
     case 'refuse':
       return (
         <section className="assistant-refusal" aria-labelledby={titleId}>

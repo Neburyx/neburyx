@@ -29,6 +29,7 @@ export interface AssistantModel {
   readonly words: number;
   readonly tooLong: boolean;
   readonly canSend: boolean;
+  readonly canCancel: boolean;
   readonly sourceChanged: boolean;
   readonly canAdd: boolean;
   readonly viewTooLarge: boolean;
@@ -36,6 +37,7 @@ export interface AssistantModel {
   readonly focus: { readonly target: 'input' | number; readonly tick: number };
   setInput(text: string): void;
   send(): void;
+  cancel(): void;
   retry(turnId: number): void;
   continueRun(turnId: number): void;
   askAgain(turnId: number): void;
@@ -82,6 +84,7 @@ export function useAssistant(): AssistantModel {
   const [focus, setFocusState] = useState<AssistantModel['focus']>({ target: 'input', tick: 0 });
   const setFocus = useCallback((target: AssistantModel['focus']['target']): void => setFocusState((held) => ({ target, tick: held.tick + 1 })), []);
   const keys = useMemo(() => [...drawnKeys(graph)], [graph]);
+  const requests = useRef(new Map<number, AbortController>());
   const keysRef = useRef(keys);
   keysRef.current = keys;
 
@@ -111,8 +114,10 @@ export function useAssistant(): AssistantModel {
       const epoch = store.getState().epoch;
       const controller = new AbortController();
       open.add(controller);
+      requests.current.set(turnId, controller);
       void client.assistantTurn(request, controller.signal).then((result: ApiResult<AssistantTurnAnswer>) => {
         open.delete(controller);
+        if (requests.current.get(turnId) === controller) requests.current.delete(turnId);
         if (controller.signal.aborted || store.getState().epoch !== epoch) return;
         if (!result.ok) {
           if (result.failure.code === 'ABORTED') {
@@ -184,7 +189,7 @@ export function useAssistant(): AssistantModel {
     (turnId: number, heavy: Answered, token: string): void => {
       const common = base();
       if (common === undefined || sourceChanged || keysRef.current.length > ASSISTANT_VIEW_KEYS_MAX || store.getState().turns.some((turn) => turn.outcome.kind === 'pending')) return;
-      setOutcome(turnId, { kind: 'pending', call: 'continue' });
+      setOutcome(turnId, { kind: 'pending', call: 'continue', heavy, token });
       settle(turnId, { ...common, continue: { intent: heavy.intent, entities: heavy.entities, continueToken: token } }, { kind: 'continue', intent: heavy.intent, entities: heavy.entities, token, heavy });
     },
     [base, setOutcome, settle, sourceChanged, store],
@@ -201,11 +206,28 @@ export function useAssistant(): AssistantModel {
     tooLong,
     sourceChanged,
     canSend: limit !== undefined && sourceId !== null && investigationId !== null && !sourceChanged && keys.length <= ASSISTANT_VIEW_KEYS_MAX && !view.turns.some((turn) => turn.outcome.kind === 'pending') && words > 0 && !tooLong,
+    canCancel: view.turns.some((turn) => turn.outcome.kind === 'pending'),
     canAdd: principalId !== undefined && !sourceChanged,
     focus,
     setInput: (text) => patch({ input: text, notice: view.notice?.kind === 'too-long' ? undefined : view.notice }),
     viewTooLarge: keys.length > ASSISTANT_VIEW_KEYS_MAX,
     send: () => submit(store.getState().input, undefined),
+    cancel: () => {
+      const turn = store.getState().turns.find((held) => held.outcome.kind === 'pending');
+      const controller = turn === undefined ? undefined : requests.current.get(turn.id);
+      if (turn === undefined || controller === undefined) return;
+      controller.abort();
+      open.delete(controller);
+      requests.current.delete(turn.id);
+      if (turn.outcome.kind === 'pending' && turn.outcome.call === 'continue') {
+        setOutcome(turn.id, { kind: 'heavy', answer: turn.outcome.heavy, token: turn.outcome.token });
+        setFocus(turn.id);
+        return;
+      }
+      setOutcome(turn.id, { kind: 'cancelled' });
+      restoreInput(turn.message);
+      setFocus('input');
+    },
     retry: (turnId) => {
       const turn = turnOf(turnId);
       if (turn?.outcome.kind !== 'failed') return;

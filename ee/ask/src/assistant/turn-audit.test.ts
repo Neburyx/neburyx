@@ -243,7 +243,7 @@ describe('the closing event of the other outcomes', () => {
     await pending;
     const { event, turn } = turnOf(r.events);
     expect(event?.result).toBe('failed');
-    expect(turn).toMatchObject({ outcome: 'cancelled', modelCalls: 1, promptId: 'assistant.route', modelRef: 'configured-model', tokensIn: 'unknown' });
+    expect(turn).toMatchObject({ outcome: 'cancelled', failureKind: 'cancelled', modelCalls: 1, promptId: 'assistant.route', modelRef: 'configured-model', tokensIn: 'unknown' });
   });
 
   it('closes a turn whose read is pending when the request is aborted as cancelled, with the route, the intent and the hash', async () => {
@@ -254,7 +254,7 @@ describe('the closing event of the other outcomes', () => {
     controller.abort();
     await pending;
     const { turn } = turnOf(r.events);
-    expect(turn).toMatchObject({ route: 'ask', outcome: 'cancelled', intent: 'shared', steps: 1 });
+    expect(turn).toMatchObject({ route: 'ask', outcome: 'cancelled', failureKind: 'cancelled', intent: 'shared', steps: 1 });
     expect(turn.paramsHash).toMatch(SHA);
   });
 
@@ -268,6 +268,72 @@ describe('the closing event of the other outcomes', () => {
     const { event, turn } = turnOf(r.events);
     expect(event?.result).toBe('failed');
     expect(turn).toMatchObject({ route: 'ask', outcome: 'cancelled', intent: 'shared', steps: 1, modelCalls: 1 });
+  });
+
+  it('starts no read and writes no run event when the router answers after the client has cancelled', async () => {
+    const controller = new AbortController();
+    const r = await rig({ reply: SHARED });
+    const answer = r.fixture.complete.bind(r.fixture);
+    Object.assign(r.fixture, {
+      complete: (request: Parameters<typeof answer>[0], signal: AbortSignal) => {
+        controller.abort();
+        return answer(request, signal);
+      },
+    });
+    expect(await run(r, BODY, { signal: controller.signal })).toMatchObject({ error: expect.any(Error) });
+    expect(r.runs).toHaveLength(0);
+    expect(r.events.some((event) => event.action === 'assistant.ask')).toBe(false);
+    const { event, turn } = turnOf(r.events);
+    expect(event?.result).toBe('failed');
+    expect(turn).toMatchObject({ outcome: 'cancelled', failureKind: 'cancelled', modelCalls: 1, steps: 0 });
+  });
+
+  it('starts no read for a continue the client has cancelled before its read begins', async () => {
+    const controller = new AbortController();
+    const r = await rig({ reply: SHARED, run: (continuing) => ({ status: 'ok', result: continuing ? okResult() : heavyResult() }) });
+    const first = await answerOf(r.route.handler(r.request()));
+    const token = first.status === 'answered' && first.route === 'ask' && 'answered' in first.answer ? first.answer.answered.continueToken : undefined;
+    r.events.length = 0;
+    r.runs.length = 0;
+    const body = { sourceId: 'demo', investigationId: 'inv-1', viewElementKeys: [], continue: { intent: 'shared', entities: { id: 'A-1' }, continueToken: token } };
+    const cancelling = async () => controller.abort();
+    expect(await run(r, body, { signal: controller.signal, investigationReadable: cancelling })).toMatchObject({ error: expect.any(Error) });
+    expect(r.runs).toHaveLength(0);
+    expect(r.events.some((event) => event.action === 'assistant.continue')).toBe(false);
+    expect(turnOf(r.events).turn).toMatchObject({ outcome: 'cancelled', modelCalls: 0 });
+  });
+
+  it('closes a continue whose read is pending when the request is aborted as cancelled, once', async () => {
+    const controller = new AbortController();
+    let pending = false;
+    const r = await rig({ reply: SHARED, run: (continuing) => (continuing ? (pending = true, hangUntilAborted(controller.signal, () => new ExtensionRefusal({ code: 'QUERY_TIMEOUT', timeoutMs: 1 }))) : { status: 'ok', result: heavyResult() }) });
+    const first = await answerOf(r.route.handler(r.request()));
+    const token = first.status === 'answered' && first.route === 'ask' && 'answered' in first.answer ? first.answer.answered.continueToken : undefined;
+    r.events.length = 0;
+    const body = { sourceId: 'demo', investigationId: 'inv-1', viewElementKeys: [], continue: { intent: 'shared', entities: { id: 'A-1' }, continueToken: token } };
+    const waiting = run(r, body, { signal: controller.signal });
+    await vi.waitFor(() => expect(pending).toBe(true));
+    controller.abort();
+    await waiting;
+    const { event, turn } = turnOf(r.events);
+    expect(event?.result).toBe('failed');
+    expect(turn).toMatchObject({ route: 'ask', outcome: 'cancelled', failureKind: 'cancelled', steps: 1, modelCalls: 0 });
+  });
+
+  it('closes a turn as the answer left it when the request is aborted while the closing event is being written', async () => {
+    const controller = new AbortController();
+    const r = await rig({ reply: SHARED });
+    const audit: ExtensionRequest['audit'] = {
+      record: (event) => {
+        r.events.push(event);
+        if (event.action === TURN_CLOSED_ACTION) controller.abort();
+        return Promise.resolve();
+      },
+    };
+    await run(r, BODY, { signal: controller.signal, audit });
+    const { event, turn } = turnOf(r.events);
+    expect(event?.result).toBe('success');
+    expect(turn).toMatchObject({ route: 'ask', outcome: 'answered', steps: 1 });
   });
 
   it('closes a partial result and a heavy stop as partial', async () => {

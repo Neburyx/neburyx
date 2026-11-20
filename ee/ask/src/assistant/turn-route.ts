@@ -85,6 +85,7 @@ const answeredAsk = (answer: AskAnswer): AssistantTurnAnswer => {
 };
 
 async function runAndAnswer(run: Execution): Promise<AssistantTurnAnswer> {
+  if (run.request.signal.aborted) throw new Error('the request was cancelled');
   try {
     return answeredAsk(await execute(run));
   } catch (error) {

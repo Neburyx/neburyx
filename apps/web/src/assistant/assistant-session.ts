@@ -17,7 +17,9 @@ export type Failure =
   | { readonly kind: 'continue-invalid' };
 
 export type Outcome =
-  | { readonly kind: 'pending'; readonly call: 'message' | 'continue' }
+  | { readonly kind: 'pending'; readonly call: 'message' }
+  | { readonly kind: 'pending'; readonly call: 'continue'; readonly heavy: Answered; readonly token: string }
+  | { readonly kind: 'cancelled' }
   | { readonly kind: 'refuse'; readonly cause: AssistantRefusalCause; readonly sentence: string }
   | { readonly kind: 'not-answered'; readonly sentence: string }
   | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly step: Step | undefined; readonly coverage: string | undefined }

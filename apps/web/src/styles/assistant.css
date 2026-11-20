@@ -177,3 +177,9 @@
 .assistant-stored-count {
   color: var(--color-text-muted);
 }
+
+.assistant-panel textarea[aria-disabled='true'] {
+  border-color: var(--color-control-border);
+  background: var(--color-neutral-surface);
+  color: var(--color-neutral-text);
+}
