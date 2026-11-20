@@ -52,6 +52,8 @@ const answeredSchema = z
     continueToken: z.string().regex(ASK_CONTINUE_TOKEN_PATTERN).optional(),
     /** The label of the saved pattern that ran, as its owner typed it; shown to the owner as data and never audited or logged. */
     patternName: savedPatternNameSchema.optional(),
+    /** The plain-words label the operator gave the folder intent in the Ask folder; none for a template, a pattern or an intent without one. */
+    label: z.string().min(1).max(80).optional(),
   })
   .refine((answer) => answer.patternName === undefined || answer.intent === ASK_SAVED_PATTERN_INTENT, { message: 'only the answer of a saved pattern names a pattern', path: ['patternName'] })
   .refine((answer) => isHeavyResult(answer.result) === (answer.continueToken !== undefined), { message: 'a heavy result comes with a continue token and no other result does', path: ['continueToken'] })

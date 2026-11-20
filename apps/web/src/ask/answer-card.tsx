@@ -45,7 +45,7 @@ function Understood({ answer }: { readonly answer: Answered }) {
     <>
       <div className="ask-understood">
         <span className="ask-understood-label">{ASK_COPY.understoodAs}</span>
-        <span className="ask-tag ask-tag-intent">{answer.patternName ?? humanize(answer.intent)}</span>
+        <span className="ask-tag ask-tag-intent">{answer.patternName ?? answer.label ?? humanize(answer.intent)}</span>
         {kind === undefined ? null : <span className="ask-tag ask-tag-kind">{kind}</span>}
       </div>
       {entries.length === 0 ? null : (

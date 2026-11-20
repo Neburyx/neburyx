@@ -144,6 +144,8 @@ interface Prepared {
   /** The element each parameter of the intent resolved to, found where the intent's settings place the parameter; a value that did not resolve to an element has none. */
   readonly bindings?: AssistantThreadTurnWrite['entities'];
   readonly patternName?: string;
+  /** The plain-words label the operator gave the folder intent, when it has one. */
+  readonly label?: string;
 }
 
 const PATTERN_ID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -172,11 +174,11 @@ async function prepareFolderIntent(run: Execution): Promise<Prepared | AskAnswer
   if (found.kind === 'query') {
     const bound = bindQueryIntent(found, entities);
     if (!bound.ok) return refusedBinding(run, base, bound);
-    return { base, input: { fileQuery: { intent: name, values: bound.values } }, params: bound.values, templateId: undefined, definition: definitionOf(found), entities };
+    return { base, input: { fileQuery: { intent: name, values: bound.values } }, params: bound.values, templateId: undefined, definition: definitionOf(found), entities, ...(found.label === undefined ? {} : { label: found.label }) };
   }
   const bound = bindTemplateIntent({ template: found.template as Parameters<typeof bindTemplateIntent>[0]['template'], parameters: found.parameters, settings: found.settings }, entities);
   if (!bound.ok) return refusedBinding(run, base, bound);
-  return { base, input: { templateId: bound.template, params: bound.params }, params: bound.params, templateId: bound.template, definition: definitionOf(found), entities, bindings: bindingsOf(sourceId, found.settings, bound.params) };
+  return { base, input: { templateId: bound.template, params: bound.params }, params: bound.params, templateId: bound.template, definition: definitionOf(found), entities, ...(found.label === undefined ? {} : { label: found.label }), bindings: bindingsOf(sourceId, found.settings, bound.params) };
 }
 
 /** Binds the entities of the intent `saved-pattern`: the key of a pattern of this question's catalog (or, on a continue, the id of the pattern the route found), and the anchor when the pattern asks for one. */
@@ -288,7 +290,7 @@ export async function execute(run: Execution): Promise<AskAnswer> {
   if (!heavy) await writeRow(options.runs(), logger, { actorId: request.principalId, intent: name, outcome: answerOutcome, rowCount, elapsedMs });
   const summary = heavy ? undefined : result.templateId === 'file-query' ? summaryOfFileQuery(result.result, sourceId, logger) : summaryOfRun(result, { sourceId, params }, logger);
   const continueToken = heavy ? issueContinueToken(capabilities.signText, { principalId: request.principalId, sourceId, intent: name, definition: prepared.definition, entities, mask: run.mask, ...(run.investigationId === undefined ? {} : { investigationId: run.investigationId }) }, (options.now ?? Date.now)()) : undefined;
-  return { answered: { intent: name, entities, outcome: answerOutcome, result, ...(summary === undefined ? {} : { summary }), ...(continueToken === undefined ? {} : { continueToken }), ...(prepared.patternName === undefined ? {} : { patternName: prepared.patternName }) } };
+  return { answered: { intent: name, entities, outcome: answerOutcome, result, ...(summary === undefined ? {} : { summary }), ...(continueToken === undefined ? {} : { continueToken }), ...(prepared.patternName === undefined ? {} : { patternName: prepared.patternName }), ...(prepared.label === undefined ? {} : { label: prepared.label }) } };
 }
 
 /** The code of an error as an audit cause: the lower-case form of its error code when it has one the product knows, and an internal error otherwise. */

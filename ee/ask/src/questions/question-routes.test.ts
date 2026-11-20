@@ -132,6 +132,14 @@ describe('a question of a template intent', () => {
     expect(rows).toEqual([]);
   });
 
+  it('answers with the label of the folder intent when it has one, and with none otherwise', async () => {
+    const shared = { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } };
+    const labelled = await rig({ intents: { shared: { label: 'Accounts at the same bank', ...shared } }, classify: async () => ({ ok: true, intent: 'shared', entities: { id: 'A-1' } }) });
+    expect(await labelled.route.handler(labelled.request(ASK))).toMatchObject({ answered: { intent: 'shared', label: 'Accounts at the same bank' } });
+    const plain = await rig({ intents: { shared }, classify: async () => ({ ok: true, intent: 'shared', entities: { id: 'A-1' } }) });
+    expect(await plain.route.handler(plain.request(ASK))).not.toHaveProperty('answered.label');
+  });
+
   it('passes the mask of the request to the run', async () => {
     const { route, request, runs } = await rig();
     await route.handler(request({ ...ASK, mask: true }));

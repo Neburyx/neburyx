@@ -437,6 +437,15 @@ describe('the Ask panel: the answer card', () => {
     expect(screen.getByText(ASK_COPY.patternPrivate)).toBeTruthy();
   });
 
+  it('shows the plain-words label of the intent as what the question was understood as, as text, and the humanized name without one', async () => {
+    const labelled = askAnswerSchema.parse({ answered: { intent: 'accounts-at-the-same-bank', label: 'Accounts <b>at</b> the same bank', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: ENTITY } } });
+    const h = harness(async () => ({ ok: true, value: labelled }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByText('Accounts <b>at</b> the same bank')).toBeTruthy();
+    expect(screen.queryByText('Accounts at the same bank')).toBeNull();
+  });
+
   it('shows the starting entity of a saved pattern as Start and never the id of the pattern', async () => {
     const answer = askAnswerSchema.parse({ answered: { intent: 'saved-pattern', patternName: 'Frozen payments', entities: { pattern: '0a1b2c3d-0000-4000-8000-000000000000', anchor: 'acc-1' }, outcome: 'complete', result: { templateId: 'entity', result: ENTITY } } });
     const h = harness(async () => ({ ok: true, value: answer }));

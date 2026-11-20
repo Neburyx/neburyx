@@ -61,6 +61,14 @@ describe('the answer to a question', () => {
     expect(askAnswerSchema.safeParse({ answered: { intent: 'byId', entities: {}, outcome: 'complete', result }, refused: { cause: 'no-intent', sentence: 'x' } }).success).toBe(false);
   });
 
+  it('takes a label of 1 to 80 characters on the answer of an intent, and refuses an empty or longer one', () => {
+    const answered = (label: string) => ({ answered: { intent: 'byId', entities: {}, outcome: 'complete', result, label } });
+    expect(askAnswerSchema.safeParse(answered('Account by id')).success).toBe(true);
+    expect(askAnswerSchema.safeParse(answered('x'.repeat(80))).success).toBe(true);
+    expect(askAnswerSchema.safeParse(answered('')).success).toBe(false);
+    expect(askAnswerSchema.safeParse(answered('x'.repeat(81))).success).toBe(false);
+  });
+
   it('names the saved pattern that ran only in the answer of the intent saved-pattern, and within the name limit', () => {
     const answered = (intent: string, patternName?: string) => ({ answered: { intent, entities: { pattern: '0195a000-0000-7000-8000-000000000001' }, outcome: 'complete', result, ...(patternName === undefined ? {} : { patternName }) } });
     expect(askAnswerSchema.safeParse(answered('saved-pattern', 'My ring')).success).toBe(true);

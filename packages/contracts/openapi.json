@@ -6157,6 +6157,11 @@
                   "patternName": {
                     "type": "string",
                     "maxLength": 100
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
                   }
                 },
                 "required": [
