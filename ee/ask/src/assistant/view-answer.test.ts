@@ -573,7 +573,7 @@ describe('a tool request in the view reply', () => {
     expect(t.runs).toHaveLength(0);
   });
 
-  it('offers the tools and the third reply form in version 7 of the view prompt, audited with that version', async () => {
+  it('offers the tools and the third reply form in version 8 of the view prompt, audited with that version', async () => {
     const t = await rig({ view: sentences, step: sequence(DONE) });
     await answerOf(t.route.handler(t.request(VIEW_BODY)));
     const view = t.fixture.calls.find((call) => call.promptId === 'assistant.view');
@@ -581,7 +581,7 @@ describe('a tool request in the view reply', () => {
     expect(view?.instructions).toContain('# Tools you may ask for');
     expect(view?.instructions).toContain('byId(id)');
     expect(view?.instructions).not.toContain('view()');
-    expect(JSON.stringify(t.events)).toContain('"promptVersion":"8"');
+    expect(JSON.stringify(t.events.find((event) => event.action === 'assistant.view'))).toContain('"promptVersion":"8"');
   });
 
   it('runs the request as the second step from the view’s reading, and answers over the view and what the tool returned, checked', async () => {

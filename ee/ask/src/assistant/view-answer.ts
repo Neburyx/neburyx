@@ -10,6 +10,7 @@ import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { MAX_SUMMARY_SENTENCES } from '../case-summary/instructions.js';
 import { rejudge, type KeptSentence } from '../case-summary/rejudge.js';
 import { canonicalText } from '../questions/canonical.js';
+import { selectedSectionOf } from './selected-section.js';
 import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { buildViewToolInstructions } from './step-instructions.js';
@@ -89,6 +90,8 @@ export interface ViewInput {
   readonly form?: 'table';
   /** The entity types of the elements the router context lists. */
   readonly contextTypes?: readonly string[];
+  /** The keys of the elements the person has selected on the canvas, all of them keys of the view: the call is told which of its elements they are. */
+  readonly selection?: readonly string[];
   /** Told when the call that writes the answer is about to be made, so a streamed turn can say so. */
   readonly onAnswering?: () => void;
   /** Told when the elements are about to be read, which is after every check that needs no read. */
@@ -259,7 +262,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         call: options.model,
         context: { action: auditAction, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
         instructions: sent.text,
-        values: valuesOf(input.message, assembled.text + typeLines.section, section + (input.form === 'table' ? TABLE_NOTE : '')),
+        values: valuesOf(input.message, assembled.text + typeLines.section + selectedSectionOf(input.selection, input.sourceId, assembled), section + (input.form === 'table' ? TABLE_NOTE : '')),
         prompt: { id: promptId, version: promptVersion },
         alternative: (text: string) => (tools !== undefined && readToolRequest(text, tools).ok) || noDescriptionReplyOf(text, typeLines) !== undefined,
         noDescription: (names: readonly string[]) => {
