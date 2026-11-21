@@ -112,7 +112,7 @@ describe('a verdict refusal with no overview to show', () => {
   it('is the plain refusal, not an unavailable turn, when the provider fails, answers with something that is not sentences, or the view cannot be read', async () => {
     expect((await noOverview({ overview: { kind: 'failed', code: 'timeout' } })).answer).toEqual(PLAIN);
     expect((await noOverview({ overview: ok('this is not sentences') })).answer).toEqual(PLAIN);
-    expect((await noOverview({ viewReadThrows: new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE' }) })).answer).toEqual(PLAIN);
+    expect((await noOverview({ viewReadThrows: new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE', reason: 'unreachable' }) })).answer).toEqual(PLAIN);
   });
 
   it('is the answer of the refusal without the overview step, whatever stopped the overview', async () => {
@@ -184,7 +184,7 @@ describe('the overview step when the view path stops it', () => {
     aborted.abort();
     await expect(verdictRefusal(input(new Error('the call was aborted'), aborted.signal))).rejects.toThrow('cancelled');
     await expect(verdictRefusal(input(new AuditUnavailableError()))).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await verdictRefusal(input(new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE' })))).toEqual(PLAIN);
+    expect(await verdictRefusal(input(new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE', reason: 'unreachable' })))).toEqual(PLAIN);
     // a failure that is not the gate's refusal is not hidden as a refusal that tried nothing
     await expect(verdictRefusal(input(new TypeError('a bug in the view path')))).rejects.toThrow('a bug in the view path');
   });
