@@ -14,16 +14,18 @@ export interface ModelStub {
 
 const NO_INTENT_REPLY = '{"intent":null,"entities":{}}';
 
-export async function startModelStub(): Promise<ModelStub> {
+/** `fallback` answers a request from its body when no reply is queued: a model that keeps asking for another read, whatever it is asked. */
+export async function startModelStub(fallback?: (body: string) => string): Promise<ModelStub> {
   const requests: string[] = [];
   const replies: string[] = [];
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
-      requests.push(Buffer.concat(chunks).toString('utf8'));
+      const body = Buffer.concat(chunks).toString('utf8');
+      requests.push(body);
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: replies.shift() ?? NO_INTENT_REPLY }], stop_reason: 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
+      response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: replies.shift() ?? fallback?.(body) ?? NO_INTENT_REPLY }], stop_reason: 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

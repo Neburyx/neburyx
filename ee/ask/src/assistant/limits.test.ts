@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
+import { summarizeRun } from '../questions/run-summary.js';
 import { answerOf, ok, okResult, rig, routeAsk } from '../testing/assistant-rig.js';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 
@@ -19,6 +20,7 @@ describe('the limits of a turn of the tool loop', () => {
         await answerOf(r.route.handler(r.request()));
         expect(r.runs.length).toBeLessThanOrEqual(steps);
         expect(r.fixture.calls.length).toBeLessThanOrEqual(maxCalls);
+        if (rows !== undefined) expect((r.runs.length - 1) * summarizeRun(okResult()).rowCount).toBeLessThan(rows);
       }),
       { numRuns: 60 },
     );
