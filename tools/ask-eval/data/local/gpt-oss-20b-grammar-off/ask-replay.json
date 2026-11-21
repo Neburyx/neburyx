@@ -1,0 +1,116 @@
+{
+  "model": "gpt-oss-20b",
+  "provider": "local",
+  "grammar": false,
+  "folders": {
+    "banking-demo": "208abb46e1d8ef91cabc6a009a1869336bf95e6998d5d2793b3de763842d8ac4",
+    "insurance-demo": "c97f04c42023ce6d270a0091337b8b4ab00311354d4e82748e8ea2c16dea6315"
+  },
+  "answers": {
+    "Which accounts use the same device as AC-0002000?": {
+      "reply": "{\"intent\":\"accounts-on-the-same-device\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts connect from the same address as AC-0002000?": {
+      "reply": "{\"intent\":\"accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts used the same device as AC-0002000 in the last 90 days?": {
+      "reply": "{\"intent\":\"same-device-in-the-last-90-days\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts share at least 2 devices with AC-0002000?": {
+      "reply": "{\"intent\":\"two-shared-devices\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Show 10 accounts that use the same address as AC-0002000.": {
+      "reply": "{\"intent\":\"ten-accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts has AC-0002000 transferred money to?": {
+      "reply": "{\"intent\":\"accounts-paid-by-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts sent money to AC-0002001?": {
+      "reply": "{\"intent\":\"accounts-that-paid-an-account\",\"entities\":{\"account\":\"AC-0002001\"}}"
+    },
+    "Which accounts are connected to AC-0002000 by transfers within 2 steps?": {
+      "reply": "{\"intent\":\"accounts-within-two-transfers\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which merchants has AC-0002000 paid?": {
+      "reply": "{\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which merchants did AC-0002000 pay in the last 30 days?": {
+      "reply": "{\"intent\":\"merchants-paid-in-the-last-30-days\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Show me AC-0002000.": {
+      "reply": "{\"intent\":\"show-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "How many devices and addresses is AC-0002000 connected to?": {
+      "reply": "{\"intent\":\"devices-and-addresses-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts use DV-000010?": {
+      "reply": "{\"intent\":\"accounts-using-a-device\",\"entities\":{\"device\":\"DV-000010\"}}"
+    },
+    "Show the latest transactions of AC-0002000.": {
+      "reply": "{\"intent\":\"latest-transactions-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Show the payments made to MR-0100.": {
+      "reply": "{\"intent\":\"payments-made-to-a-merchant\",\"entities\":{\"merchant\":\"MR-0100\"}}"
+    },
+    "Which devices did AC-0002000 use in the last 7 days?": {
+      "reply": "{\"intent\":\"devices-used-in-the-last-7-days\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Which accounts are linked to AC-0002000 by a shared device, and what chain shows it?": {
+      "reply": "{\"intent\":\"shared-device-chain\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
+    "Why are AC-0002000 and AC-0002001 linked through a shared device?": {
+      "reply": "{\"intent\":\"why-two-accounts-are-linked\",\"entities\":{\"first\":\"AC-0002000\",\"second\":\"AC-0002001\"}}"
+    },
+    "Which transactions have the payment reference PR-00000010?": {
+      "reply": "{\"intent\":\"transactions-with-a-payment-reference\",\"entities\":{\"reference\":\"PR-00000010\"}}"
+    },
+    "What is the shortest path between AC-0002000 and AC-0002001?": {
+      "reply": "{\"intent\":\"shortest-path-between-accounts\",\"entities\":{\"first\":\"AC-0002000\",\"second\":\"AC-0002001\"}}"
+    },
+    "Which accounts are related to AC-0002000?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Which accounts share both a device and an address with AC-0002000?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Which accounts were opened last month?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Is AC-0002000 fraudulent?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "How many accounts are on screen?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Who is the customer named Ada Alder?": {
+      "reply": "{\"intent\":\"customers-by-name\",\"entities\":{\"name\":\"Ada Alder\"}}"
+    },
+    "Which claimants live at the same address as CT-00100?": {
+      "reply": "{\"intent\":\"claimants-at-the-same-address\",\"entities\":{\"claimant\":\"CT-00100\"}}"
+    },
+    "Which claimants share a phone with CT-00100?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Which claims involve the same vehicle as CL-001007?": {
+      "reply": "{\"intent\":\"claims-on-the-same-vehicle\",\"entities\":{\"claim\":\"CL-001007\"}}"
+    },
+    "Which other claims did the same repairer repair as CL-001007?": {
+      "reply": "{\"intent\":\"claims-by-the-same-repairer\",\"entities\":{\"claim\":\"CL-001007\"}}"
+    },
+    "Which claims were filed by CT-00100?": {
+      "reply": "{\"intent\":\"claims-filed-by-a-claimant\",\"entities\":{\"claimant\":\"CT-00100\"}}"
+    },
+    "Which policies are the claims of CT-00100 under?": {
+      "reply": "{\"intent\":\"policies-of-a-claimants-claims\",\"entities\":{\"claimant\":\"CT-00100\"}}"
+    },
+    "Which addresses are duplicates of AD-00001?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Which of these claimants has the most claims?": {
+      "reply": "{\"intent\": null, \"entities\": {}}"
+    },
+    "Who is the claimant named Ada Alder?": {
+      "reply": "{\"intent\":\"claimants-by-name\",\"entities\":{\"name\":\"Ada Alder\"}}"
+    }
+  }
+}
