@@ -1,7 +1,8 @@
 import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { releaseCatalogue } from './catalogue.js';
+import { askPreviewCriteria } from './ask-preview.js';
+import { catalogueFor } from './catalogue.js';
 import { neo4jConnection } from './connection.js';
 import { createExec } from './exec.js';
 import { runRelease } from './run.js';
@@ -21,7 +22,8 @@ const code = await runRelease(process.argv.slice(2), {
   monotonicNowMs: () => performance.now(),
   out: (text) => process.stdout.write(text),
   err: (text) => process.stderr.write(text),
-  catalogue: (options) => releaseCatalogue(repoRoot, options.image),
+  catalogue: (options) => catalogueFor(options.gate, repoRoot, options.image),
+  criteria: (gate, results) => (gate === 'ask-preview' ? askPreviewCriteria(results) : undefined),
   extraSecrets: connection.ok ? connection.secrets : [],
   extraLogins: connection.ok ? [connection.login] : [],
 });

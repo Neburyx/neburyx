@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { parseArgs, USAGE, type RunOptions } from './args.js';
+import { parseArgs, USAGE, type Gate, type RunOptions } from './args.js';
 import { logsFolderName, recordBaseName, writeRecord } from './record.js';
 import { DATA_SECRET_ENV_NAMES, longEnough, SECRET_ENV_NAMES, secretValues } from './redact.js';
 import { runChecks } from './runner.js';
-import type { Check, Exec, RunEnvironment, RunRecord } from './types.js';
+import type { Check, CheckResult, CriterionResult, Exec, RunEnvironment, RunRecord } from './types.js';
 
 export const EXIT_PASSED = 0;
 export const EXIT_FAILED = 1;
@@ -22,6 +22,8 @@ export interface RunDeps {
   readonly out: (text: string) => void;
   readonly err: (text: string) => void;
   readonly catalogue: (options: RunOptions) => readonly Check[];
+  /** The criteria of a gate with their figures, written from the results of its checks; none for a gate that states none. */
+  readonly criteria?: (gate: Gate, results: readonly CheckResult[]) => readonly CriterionResult[] | undefined;
   /** The address and the password to mask besides those of the environment, for example those read from the settings file. */
   readonly extraSecrets?: readonly string[];
   /** Login names to mask in logs and details, but not in recorded figures: a common name would garble them. */
@@ -87,7 +89,8 @@ export async function runRelease(argv: readonly string[], deps: RunDeps): Promis
       return join(logsFolderName(base), `${checkId}.log`);
     },
   });
-  const record: RunRecord = { dryRun, result: results.every((result) => result.status === 'passed') ? 'PASS' : 'FAIL', startedAt: startedAt.toISOString(), finishedAt: deps.clock().toISOString(), commit, treeClean, environment, checks: results };
+  const criteria = deps.criteria?.(parsed.options.gate, results);
+  const record: RunRecord = { dryRun, result: results.every((result) => result.status === 'passed') ? 'PASS' : 'FAIL', startedAt: startedAt.toISOString(), finishedAt: deps.clock().toISOString(), commit, treeClean, environment, checks: results, ...(criteria === undefined ? {} : { criteria }), gate: parsed.options.gate };
   const written = await writeRecord(recordDir, base, record);
   const failed = results.filter((result) => result.status === 'failed');
   deps.out(`${dryRun ? 'Dry run: does not count.\n' : ''}record: ${written.markdown}\n`);

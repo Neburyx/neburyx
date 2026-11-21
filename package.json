@@ -24,6 +24,7 @@
     "test:image": "pnpm --fail-if-no-match --filter \"@neburyx/api...\" build && pnpm --fail-if-no-match --filter @neburyx/api test:image",
     "test:compose": "pnpm --fail-if-no-match --filter \"@neburyx/api...\" build && pnpm --fail-if-no-match --filter @neburyx/api test:compose",
     "check:release": "pnpm --fail-if-no-match --filter \"@neburyx/release-checks...\" build && node tools/release-checks/dist/main.js",
+    "check:ask-preview": "pnpm --fail-if-no-match --filter \"@neburyx/release-checks...\" build && node tools/release-checks/dist/main.js --gate ask-preview",
     "check:driver": "pnpm --fail-if-no-match --filter \"@neburyx/driver-check...\" build && pnpm --fail-if-no-match --filter @neburyx/driver-check check",
     "check:dco": "pnpm --fail-if-no-match --filter \"@neburyx/dco-check...\" build && node tools/dco-check/dist/main.js",
     "dev": "pnpm --fail-if-no-match --filter \"@neburyx/dev...\" build && node tools/dev/dist/main.js",

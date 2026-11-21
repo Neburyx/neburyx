@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { CheckResult, RunRecord } from './types.js';
+import type { CheckResult, CriterionResult, RunRecord } from './types.js';
 
 const DRY_RUN_LINE = 'Dry run: does not count.';
 const SHORT_COMMIT_LENGTH = 7;
@@ -27,11 +27,22 @@ function figures(result: CheckResult): readonly string[] {
   return result.data === undefined ? [] : [`## ${result.id}`, '', '```json', JSON.stringify(result.data, null, 2), '```', ''];
 }
 
+const cell = (text: string): string => text.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+
+function criterionRow(criterion: CriterionResult): string {
+  return `| ${[criterion.id, criterion.text, criterion.status, criterion.figure, criterion.checks.join(', ')].map(cell).join(' | ')} |`;
+}
+
+function criteriaTable(criteria: readonly CriterionResult[] | undefined): readonly string[] {
+  if (criteria === undefined) return [];
+  return ['## Criteria', '', '| Criterion | What it says | Status | Figure | Checks |', '|---|---|---|---|---|', ...criteria.map(criterionRow), ''];
+}
+
 function renderMarkdown(record: RunRecord): string {
   const failed = record.checks.filter((check) => check.status === 'failed');
   const lines = [
     ...(record.dryRun ? [DRY_RUN_LINE, ''] : []),
-    '# Release checks',
+    record.gate === undefined || record.gate === 'v0.1' ? '# Release checks' : `# Release checks (${record.gate})`,
     '',
     `Commit: ${record.commit}`,
     `Result: ${failed.length === 0 ? 'PASS' : 'FAIL'}`,
@@ -46,6 +57,7 @@ function renderMarkdown(record: RunRecord): string {
     `| Docker | ${record.environment.docker} |`,
     `| Failed checks | ${failed.length === 0 ? 'none' : failed.map((check) => check.id).join(', ')} |`,
     '',
+    ...criteriaTable(record.criteria),
     '| Check | Status | Exit code | Duration (ms) | Detail | Log |',
     '|---|---|---|---|---|---|',
     ...record.checks.map(row),
