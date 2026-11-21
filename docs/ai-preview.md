@@ -160,6 +160,15 @@ The tests of `tools/ask-safety-suite` prove these promises, each by a named test
 - The settings that once withheld a property from the model are refused as unknown keys of the mapping file.
 - Each check fails on a leaky input (a canary for each), and a case that never ran cannot pass.
 
+The same suite proves the assistant's guarantees through `POST /v1/assistant/turns` of the real application over a stand-in of the model service, and its table of named tests names, for each guarantee, the one kind of proof of each test (the real application, the `ee/ask` route rig, a single module or a static check) and fails when a guarantee has no test, when a row names a file that is gone, or when a test that CI does not run is not marked so:
+
+- A follow-up resolves only to an element the application gave, or asks: a forged or invented key, a stable id or query text where a key stands, a changed value, role, intent or token of a choice or a pressed follow-up, a choice made after its lifetime or under another masking, a Continue token offered as a choice and a choice token offered as a continue each run no read of the intent, make no model call beyond the router's one repeat, and are refused as the product refuses them (an invalid choice, or not found for another person or a source the person cannot read).
+- A message that asks for raw Cypher, another source or to "just run it" is refused with the fixed sentence of its cause, reads nothing and makes one model call; a router that was talked into a read passes the value only as a parameter of the folder's own statement.
+- Every read of every route (the view, Ask, the tool loop, a confirmed step, a continue) is a registered template, and each has a gate event of its own trace; a read sent straight to the executor has none and fails the check.
+- A turn stops at each of its limits (steps, calls, rows, the time of the turn, the input guard) and shows the router at most the number of earlier turns the setting names; a continue and a pressed follow-up make one read and no model call.
+- A streamed turn writes no line with the text the model wrote before its answer, and the answer line is the one the JSON route gives.
+- The assistant's checks on a reply (every sentence or row cites an element it was given, a number must be in the cited line, no verdict wording) are shown to fail when the product's own test of each is taken out, on the answer from the view, after tool steps and for a table (`tools/summary-suite`).
+
 The suite does not measure how well Ask classifies; that is `tools/ask-eval` (see [Checking it](#checking-it)).
 
 ### Asking for a saved pattern
