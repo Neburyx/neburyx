@@ -6,7 +6,6 @@ import type { Check, CheckOutcome } from './types.js';
 const NOT_IN_CI = /not in CI$/;
 const INVENTORY = 'docs/audit-events.md';
 
-/** Tests the preview's claim to run on any source rests on, by file in the repository and the words of a title. */
 const REQUIRED_TESTS = [
   { file: 'services/api/src/profile/preview-guard.test.ts', title: 'passes the hook and reaches the handler once, under a mapping that holds only' },
   { file: 'tools/ask-safety-suite/src/any-source.test.ts', title: 'answers a question of Ask the same under each setting of the flag' },
@@ -14,15 +13,12 @@ const REQUIRED_TESTS = [
   { file: 'tools/workspace-checks/src/architecture/audit-routing.test.ts', title: 'writes every audit event on the path the inventory says' },
 ] as const;
 
-/** The files of the safety suite's table whose rows are the data rules: what the provider receives and what no record holds. */
 const DATA_RULE_FILES = ['src/provider-input.test.ts', 'src/records.test.ts'] as const;
 
-/** The audited events of the preview that the inventory lists, counted in the file at the commit of the run. */
 function previewEvents(inventory: string): number {
   return (inventory.match(/^\| `(ask|ai|assistant)\./gm) ?? []).length;
 }
 
-/** C6: the preview runs on any source, under the data rules and the audit, shown by the tests that say so. */
 export function anySourceCheck(files: SuiteFiles): Check {
   const command = 'the preview guard, the any-source cases, the provider-input and record rows of the safety suite and the audit routing check, each in its own package';
   return {

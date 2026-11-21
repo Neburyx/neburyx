@@ -8,8 +8,8 @@ import type { CheckContext, ExecRequest, ExecResult } from './types.js';
 const NO_FILE = '/no-such-settings-file.env';
 const CONNECTION = { NBX_EE_URI: 'bolt://neo4j.example:7687', NBX_EE_USER: 'reader', NBX_EE_PASSWORD: 'pw-for-test' };
 const OWN = '/repo/tools/ask-safety-suite';
-const G1 = 'a follow-up resolves only to an element the application gave, or asks';
-const G2 = 'a turn stops at each of its limits';
+const FOLLOW_UP_GUARANTEE = 'a follow-up resolves only to an element the application gave, or asks';
+const LIMITS_GUARANTEE = 'a turn stops at each of its limits';
 
 const row = (guarantee: string, kind: string, file: string, title: string): string => `| What it proves | ${guarantee} | ${kind} | \`${file}\` | ${title} |`;
 const README = (...rows: string[]): string => ['# suite', '', '## Named tests', '', '| What it proves | Guarantee | Kind | File | Test |', '|---|---|---|---|---|', ...rows, ''].join('\n');
@@ -40,8 +40,8 @@ function suites(setup: Setup) {
 }
 
 const ROWS = [
-  row(G1, 'real application', 'src/a.test.ts', 'runs nothing for'),
-  row(G2, 'route rig', '../../ee/ask/src/x.test.ts', 'stops at the steps setting'),
+  row(FOLLOW_UP_GUARANTEE, 'real application', 'src/a.test.ts', 'runs nothing for'),
+  row(LIMITS_GUARANTEE, 'route rig', '../../ee/ask/src/x.test.ts', 'stops at the steps setting'),
   row('the Ask route', 'real application, not in CI', 'src/b.neo4j.test.ts', 'is refused by the explicit'),
 ];
 const OWN_REPORT = report({ name: `${OWN}/src/a.test.ts`, tests: [passed('runs nothing for an invented key'), passed('another')] });
@@ -55,7 +55,8 @@ describe('the check of the Ask safety suite and the tests its table names (C2)',
   };
 
   it('runs the suite whole and the files its table names in their own packages, leaves a test that CI does not run to its own check, and passes with its figures', async () => {
-    const { outcome, requests } = await run(GOOD);
+    const { outcome, requests: all } = await run(GOOD);
+    const requests = all.filter((request) => request.args.includes('vitest'));
     expect(outcome).toMatchObject({ status: 'passed' });
     expect(outcome.data).toMatchObject({ tests: 3, rows: 2, guarantees: 2 });
     expect(requests.map((request) => request.args.slice(0, 4))).toEqual([['--filter', '@neburyx/ask-safety-suite', 'exec', 'vitest'], ['--filter', '@neburyx/ee-ask', 'exec', 'vitest']]);
@@ -64,7 +65,7 @@ describe('the check of the Ask safety suite and the tests its table names (C2)',
   });
 
   it('finds a row whose words are in the middle of a title and an it.each row with %s', async () => {
-    const readme = README(row(G1, 'real application', 'src/a.test.ts', 'for an invented'), row(G2, 'real application', 'src/a.test.ts', 'refuses a start for %s, naming'));
+    const readme = README(row(FOLLOW_UP_GUARANTEE, 'real application', 'src/a.test.ts', 'for an invented'), row(LIMITS_GUARANTEE, 'real application', 'src/a.test.ts', 'refuses a start for %s, naming'));
     const reports = { 'ask-safety-suite': report({ name: `${OWN}/src/a.test.ts`, tests: [passed('runs nothing for an invented key'), passed('refuses a start for a write, naming the file')] }) };
     expect((await run({ readme, reports })).outcome.status).toBe('passed');
   });
@@ -72,7 +73,7 @@ describe('the check of the Ask safety suite and the tests its table names (C2)',
   it('fails a test that failed, with no further run', async () => {
     const { outcome, requests } = await run({ ...GOOD, reports: { ...GOOD.reports, 'ask-safety-suite': report({ name: `${OWN}/src/a.test.ts`, tests: [passed('runs nothing for', 'failed')] }) } });
     expect(outcome).toMatchObject({ status: 'failed', detail: '1 tests did not pass in @neburyx/ask-safety-suite' });
-    expect(requests).toHaveLength(1);
+    expect(requests.filter((request) => request.args.includes('vitest'))).toHaveLength(1);
   });
 
   it('fails a row whose test is missing, and a row whose file ran but has no matching passed test', async () => {
@@ -86,13 +87,29 @@ describe('the check of the Ask safety suite and the tests its table names (C2)',
     const skipped = await run({ ...GOOD, reports: { ...GOOD.reports, 'named--neburyx-ee-ask': report({ name: '/repo/ee/ask/src/x.test.ts', tests: [passed('stops at the steps setting', 'skipped'), passed('another')] }) } });
     expect(skipped.outcome.detail).toContain('named tests were not found');
     expect((await run({ ...GOOD, reports: {} })).outcome.detail).toBe('no test report');
-    expect((await run({ ...GOOD, exit: () => execResult({ exitCode: 1 }) })).outcome.detail).toBe('exited with code 1');
+    expect((await run({ ...GOOD, exit: (request) => (request.args.includes('vitest') ? execResult({ exitCode: 1 }) : execResult()) })).outcome.detail).toBe('exited with code 1');
   });
 
   it('fails a guarantee of the assistant whose only row is one that CI does not run, and a table with no row', async () => {
-    const readme = README(row(G1, 'real application', 'src/a.test.ts', 'runs nothing for'), row(G2, 'real application, not in CI', 'src/b.neo4j.test.ts', 'only here'));
-    expect((await run({ readme, reports: { 'ask-safety-suite': OWN_REPORT } })).outcome.detail).toContain(`a guarantee of the assistant has no passed row: ${G2}`);
+    const readme = README(row(FOLLOW_UP_GUARANTEE, 'real application', 'src/a.test.ts', 'runs nothing for'), row(LIMITS_GUARANTEE, 'real application, not in CI', 'src/b.neo4j.test.ts', 'only here'));
+    expect((await run({ readme, reports: { 'ask-safety-suite': OWN_REPORT } })).outcome.detail).toContain(`a guarantee of the assistant has no passed row: ${LIMITS_GUARANTEE}`);
     expect((await run({ readme: '# nothing\n', reports: {} })).outcome.detail).toBe('the table of named tests holds no row');
+  });
+});
+
+describe('the build before the suite checks', () => {
+  it('builds before the first test run, once for the whole run, and a failed build fails the check with the build’s reason and starts no test run', async () => {
+    const { fake, files, context } = suites(GOOD);
+    await askSafetyCheck(files).run(context);
+    await askSafetyReadTransactionCheck(files, NO_FILE).run({ ...context, env: CONNECTION });
+    const first = fake.requests.findIndex((request) => request.args.includes('vitest'));
+    expect(fake.requests.slice(0, first).map((request) => request.args.join(' '))).toEqual(['build:deps', '--filter @neburyx/summary-suite build']);
+    expect(fake.requests.filter((request) => request.args[0] === 'build:deps')).toHaveLength(1);
+    const broken = suites({ ...GOOD, exit: (request) => (request.args[0] === 'build:deps' ? execResult({ exitCode: 1 }) : execResult()) });
+    const outcome = await askSafetyCheck(broken.files).run(broken.context);
+    expect(outcome.status).toBe('failed');
+    expect(outcome.detail).toContain('build failed: exited with code 1 (pnpm build:deps)');
+    expect(broken.fake.requests.filter((request) => request.args.includes('vitest'))).toEqual([]);
   });
 });
 
@@ -130,7 +147,7 @@ describe('the Neo4j checks of C2 and C3', () => {
     expect((await askCitedSummaryCheck(unreadable.files, NO_FILE).run(unreadable.context)).detail).toBe('the figure of the check could not be read');
     const zero = connected({ 'ask-cited-summary': CHAIN }, askEval(0));
     expect((await askCitedSummaryCheck(zero.files, NO_FILE).run(zero.context)).detail).toBe('the figure of the check could not be read');
-    const failing = connected({ 'ask-safety-read-transaction': TRANSACTION }, () => execResult({ exitCode: 1 }));
+    const failing = connected({ 'ask-safety-read-transaction': TRANSACTION }, (request) => (request.args.includes('vitest') ? execResult({ exitCode: 1 }) : execResult()));
     expect((await askSafetyReadTransactionCheck(failing.files, NO_FILE).run(failing.context)).detail).toBe('exited with code 1');
   });
 });

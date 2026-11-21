@@ -30,12 +30,10 @@ async function diskPackageOf(path: string): Promise<{ readonly name: string; rea
 
 export const diskSuiteFiles: SuiteFiles = { ...diskFiles, packageOf: diskPackageOf };
 
-/** One row of the table with its file resolved in the repository. */
 export interface LocatedRow extends NamedRow {
   readonly absolute: string;
 }
 
-/** The rows of the safety suite's table with their files resolved in the repository. */
 export async function rowsOf(context: CheckContext, files: SuiteFiles): Promise<readonly LocatedRow[]> {
   const folder = join(context.repoRoot, SUITE);
   const readme = await files.readText(join(folder, 'README.md'));
@@ -63,7 +61,6 @@ export async function runNamedRows(context: CheckContext, files: SuiteFiles, row
   return undefined;
 }
 
-/** C2: every test the safety suite's table names ran and passed, each in its own package, with the suite's own tests, and each guarantee of the assistant that the table names has a passed row. */
 export function askSafetyCheck(files: SuiteFiles = diskSuiteFiles): Check {
   const command = `pnpm --filter ${SAFETY_PACKAGE} exec vitest run, and the files its table of named tests names in their own packages`;
   return {
@@ -99,7 +96,6 @@ export function askSafetyCheck(files: SuiteFiles = diskSuiteFiles): Check {
   };
 }
 
-/** A check that runs one Neo4j test file of a package and requires its named test to have passed; a missing connection fails it. */
 function neo4jTestCheck(options: { readonly id: string; readonly name: string; readonly package: string; readonly config: string; readonly file: string; readonly words: string; readonly files: SuiteFiles; readonly settingsFile?: string; readonly figure: (context: CheckContext) => Promise<string | undefined> }): Check {
   const request: ExecRequest = { command: 'pnpm', args: ['--filter', options.package, 'exec', 'vitest', 'run', '--config', options.config, options.file] };
   const command = describeCommand(request);
@@ -121,7 +117,6 @@ function neo4jTestCheck(options: { readonly id: string; readonly name: string; r
   };
 }
 
-/** C2, the one case of the safety suite that needs a real Neo4j: a write that passed every text check is refused by the explicit read transaction. */
 export function askSafetyReadTransactionCheck(files: SuiteFiles = diskSuiteFiles, settingsFile?: string): Check {
   return neo4jTestCheck({
     id: 'ask-safety-read-transaction',
@@ -151,7 +146,6 @@ async function demoQuestions(context: CheckContext): Promise<string | undefined>
   }
 }
 
-/** C3: Ask's own cited summary, end to end over the demo questions on the Neo4j dev server. */
 export function askCitedSummaryCheck(files: SuiteFiles = diskSuiteFiles, settingsFile?: string): Check {
   return neo4jTestCheck({
     id: 'ask-cited-summary',

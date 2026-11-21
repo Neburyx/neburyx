@@ -38,7 +38,6 @@ function criteriaTable(criteria: readonly CriterionResult[] | undefined): readon
   return ['## Criteria', '', '| Criterion | What it says | Status | Figure | Checks |', '|---|---|---|---|---|', ...criteria.map(criterionRow), ''];
 }
 
-/** What the record says first about the criteria that were dropped: none, or each of them with its reason. */
 function droppedLines(criteria: readonly CriterionResult[] | undefined): readonly string[] {
   if (criteria === undefined) return [];
   const dropped = criteria.filter((criterion) => criterion.dropped !== undefined);

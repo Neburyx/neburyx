@@ -1,12 +1,10 @@
 import type { Feature } from './args.js';
 import type { CheckResult, CriterionResult } from './types.js';
 
-/** One criterion of a gate: what it says, the checks it rests on, the feature a check belongs to when it belongs to one, and how its figure is written from their data. */
 export interface CriterionDefinition {
   readonly id: string;
   readonly text: string;
   readonly checks: readonly string[];
-  /** The feature each check rests on, for a check that rests on one: a cut feature drops it. */
   readonly features?: Readonly<Record<string, Feature>>;
   readonly figure: (results: ReadonlyMap<string, CheckResult>) => string;
 }
@@ -16,7 +14,6 @@ const figureOf = (result: CheckResult | undefined): string => {
   return typeof data?.figure === 'string' ? data.figure : (result?.detail ?? 'not run');
 };
 
-/** The figure of a criterion that rests on one check or more: the checks' own, joined. */
 export const figureOfChecks =
   (checks: readonly string[]) =>
   (results: ReadonlyMap<string, CheckResult>): string =>
@@ -24,7 +21,6 @@ export const figureOfChecks =
 
 const wordsOf = (feature: Feature): string => (feature === 'summary' ? 'AI case summary' : 'assistant');
 
-/** The checks a gate runs once the cut features are left out. */
 export function checksKept(definitions: readonly CriterionDefinition[], cut: readonly Feature[]): ReadonlySet<string> {
   return new Set(definitions.flatMap((definition) => definition.checks.filter((id) => !cut.includes(definition.features?.[id] as Feature))));
 }

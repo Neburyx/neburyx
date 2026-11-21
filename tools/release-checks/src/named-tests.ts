@@ -1,4 +1,3 @@
-/** One row of a suite's table of named tests: the file (relative to the suite's folder) and the words of a test's title; the safety suite's table also names the guarantee and the kind of proof. */
 export interface NamedRow {
   readonly file: string;
   readonly title: string;
@@ -9,7 +8,6 @@ export interface NamedRow {
 const FIVE_COLUMNS = /^\| .* \| ([^|`]+) \| ([^|`]+) \| `([^`]+)` \| (.+) \|$/;
 const THREE_COLUMNS = /^\| .* \| `([^`]+)` \| (.+) \|$/;
 
-/** The rows of a README's table of named tests, in either form: the file and the test are the last two columns, with a guarantee and a kind before them in the safety suite's. */
 export function parseNamedTests(markdown: string): readonly NamedRow[] {
   const section = markdown.includes('## Named tests') ? markdown.slice(markdown.indexOf('## Named tests')) : markdown;
   return section.split('\n').flatMap((line): NamedRow[] => {

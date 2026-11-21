@@ -1,11 +1,11 @@
 import { join, relative } from 'node:path';
 import { z } from 'zod';
 import { describeCommand, execFailure } from './command-check.js';
+import { builtOnce } from './suite-build.js';
 import type { Files } from './files.js';
 import type { CheckContext, ExecRequest } from './types.js';
 import { wordsPattern, type NamedRow } from './named-tests.js';
 
-/** What the suite checks read from the repository, beyond the files of the accuracy checks: the package a file belongs to. */
 export interface SuiteFiles extends Files {
   readonly packageOf: (path: string) => Promise<{ readonly name: string; readonly root: string }>;
 }
@@ -31,8 +31,9 @@ export interface SuiteRun {
   readonly tests: readonly ReportedTest[];
 }
 
-/** Runs vitest in one package (all of it, or the files given) and reads its JSON report: the tests that passed, the tests that did not, and whether the run ended as a run. */
 export async function runPackage(context: CheckContext, files: SuiteFiles, spec: { readonly label: string; readonly package: string; readonly args: readonly string[]; readonly env?: Readonly<Record<string, string>> }): Promise<SuiteRun> {
+  const built = await builtOnce(context);
+  if (!built.ok) return { ok: false, detail: built.detail, command: built.command, exitCode: built.exitCode, output: built.output, tests: [] };
   const reportFile = join(context.workDir, `${spec.label}.json`);
   const request: ExecRequest = { command: 'pnpm', args: ['--filter', spec.package, 'exec', 'vitest', 'run', ...spec.args, '--reporter=default', '--reporter=json', `--outputFile.json=${reportFile}`], cwd: context.repoRoot, ...(spec.env === undefined ? {} : { env: spec.env }) };
   const command = describeCommand(request);

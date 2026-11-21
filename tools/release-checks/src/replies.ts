@@ -16,18 +16,15 @@ const REQUIRED_CANARIES = [
   { kind: 'leakage', file: 'src/injection.test.ts', words: 'canary: the log check fails when a log line holds the text' },
 ] as const;
 
-/** The guarantees of the safety suite's table that are about a reply and what it is sent through. */
 const REPLY_GUARANTEES = ['a reply cites what it was given, states no number its lines do not hold and holds no verdict word', 'a streamed turn carries no model text'] as const;
 const RECORD_ROWS_FILE = 'src/records.test.ts';
 
-/** The views of the labelled set and how many of them restate a case of a demo pack, counted in the file that holds them. */
 function viewsOf(cases: string): { readonly views: number; readonly demo: number } | undefined {
   const views = (cases.match(/^ {2}- id: /gm) ?? []).length;
   const demo = (cases.match(/^ {4}source_case: /gm) ?? []).length;
   return views > 0 && demo > 0 ? { views, demo } : undefined;
 }
 
-/** C4, the summary: its suite passed whole, with a canary of the citation, numeric and leakage checks found by name, on the views the labelled set holds. */
 export function summarySuitesCheck(files: SuiteFiles): Check {
   const command = `pnpm --filter ${SUMMARY_PACKAGE} exec vitest run`;
   return {
@@ -55,7 +52,6 @@ export function summarySuitesCheck(files: SuiteFiles): Check {
   };
 }
 
-/** C4, the assistant's replies: the passed rows of the safety suite's table about a reply, a streamed turn and the records, each run in its own package. */
 export function assistantRepliesCheck(files: SuiteFiles): Check {
   const command = `the files of the safety suite's table rows about a reply, a streamed turn and the records, in their own packages`;
   return {

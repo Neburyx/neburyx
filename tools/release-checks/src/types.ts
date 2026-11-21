@@ -63,15 +63,12 @@ export interface CheckResult {
   readonly data?: unknown;
 }
 
-/** One criterion of a release gate with the figure the checks it rests on measured. */
 export interface CriterionResult {
   readonly id: string;
   readonly text: string;
   readonly status: 'passed' | 'failed' | 'dropped';
   readonly figure: string;
-  /** The parts of the criterion that were dropped because their feature is cut. */
   readonly dropped?: readonly string[];
-  /** The ids of the checks the criterion rests on. */
   readonly checks: readonly string[];
 }
 
@@ -91,9 +88,7 @@ export interface RunRecord {
   readonly treeClean: boolean;
   readonly environment: RunEnvironment;
   readonly checks: readonly CheckResult[];
-  /** The criteria of the gate with their figures, when the gate states them. */
   readonly criteria?: readonly CriterionResult[];
   readonly gate?: string;
-  /** The features that were cut for this run. */
   readonly cut?: readonly string[];
 }

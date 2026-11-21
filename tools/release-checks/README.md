@@ -49,6 +49,8 @@ The markdown of the record has a *Criteria* table: one row for each criterion wi
 | C5 | Assistant route accuracy meets its baseline | `assistant-route-accuracy`: the assistant's scoring once for each model replay committed with a folder of its own, each against its baseline |
 | C6 | The preview runs on any source, under the data rules and the audit | `any-source`: the preview guard, Ask and an assistant turn answering the same whatever a source says of `synthetic`, the safety suite's provider-input and record rows, and the audit routing check, with the audited events of the preview counted in `docs/audit-events.md` |
 
+The suite checks build first (`pnpm build:deps` and the summary suite's own build), once for the run, because the tests import built output that git does not hold; a failed build fails them with its reason.
+
 `ask-safety-read-transaction` and `ask-cited-summary` need the Neo4j connection the other Neo4j checks use and make their own `nbx-test-` databases; without the connection they fail, they are never skipped. A required test is found by the words of its title in the JSON report of its file, so a test that was removed, skipped or renamed fails the check.
 
 `--cut summary` and `--cut assistant` drop the criteria that rest only on a feature that is cut: the summary's part of C4 for the first, C5 and the assistant's part of C4 for the second. A dropped criterion shows `dropped: the feature is cut`, is never counted as passed, and the `Result:` line is judged on what remains; C1, C2, C3 and C6 are never dropped.

@@ -73,7 +73,6 @@ async function measure(label: string, score: Score, baselineText: string | undef
   return { status: 'passed', detail: figure, figure: `${figure}; baseline refusals ${held.refusals}, plans ${held.plans}`, data: { label, model: score.model, refusals: score.refusals, plans: score.plans, baseline: { refusals: held.refusals, plans: held.plans } } };
 }
 
-/** Runs one scoring command and reads its JSON, or says why it could not be read. */
 async function scored(context: CheckContext, request: ExecRequest): Promise<{ readonly score?: Score; readonly failure?: string; readonly output: string; readonly exitCode: number | null }> {
   const result = await context.exec({ ...request, cwd: context.repoRoot });
   const score = scoreOf(result.output);
@@ -82,7 +81,6 @@ async function scored(context: CheckContext, request: ExecRequest): Promise<{ re
   return { failure: failure === undefined ? 'the output holds no score' : `${failure}: ${refusalOf(result.output)}`, output: result.output, exitCode: result.exitCode };
 }
 
-/** C1: Ask's intent scoring over the committed recording of the demo packs' questions, judged against its committed baseline. */
 export function askAccuracyCheck(files: Files = diskFiles): Check {
   const request: ExecRequest = { command: 'pnpm', args: ['ask-eval', '--packs', 'domain-packs', '--replay', `${ASK_EVAL}/replay.json`, '--baseline', `${ASK_EVAL}/baseline.json`, '--json'] };
   const command = describeCommand(request);
@@ -100,7 +98,6 @@ export function askAccuracyCheck(files: Files = diskFiles): Check {
   };
 }
 
-/** C5: the assistant's route accuracy, once for each model replay committed with a folder of its own, each judged against its baseline. */
 export function assistantRouteAccuracyCheck(files: Files = diskFiles): Check {
   const command = `pnpm ask-eval assistant --packs domain-packs --replay ${ASK_EVAL}/assistant/<model>/replay.json --baseline ${ASK_EVAL}/assistant/<model>/baseline.json --json`;
   return {
@@ -133,7 +130,6 @@ export function assistantRouteAccuracyCheck(files: Files = diskFiles): Check {
   };
 }
 
-/** The criteria of gate 2 that the catalogue covers, in the order the gate states them. */
 const ASK_PREVIEW_CRITERIA: readonly CriterionDefinition[] = [
   { id: 'C1', text: 'Ask meets the targets of the evaluation tool and its committed baseline on the demo packs\u2019 questions', checks: ['ask-accuracy'], figure: figureOfChecks(['ask-accuracy']) },
   { id: 'C2', text: 'The Ask safety suite passes', checks: ['ask-safety', 'ask-safety-read-transaction'], figure: figureOfChecks(['ask-safety', 'ask-safety-read-transaction']) },

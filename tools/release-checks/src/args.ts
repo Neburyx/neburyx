@@ -2,14 +2,11 @@ const GATES = ['v0.1', 'ask-preview'] as const;
 export type Gate = (typeof GATES)[number];
 
 const FEATURES = ['summary', 'assistant'] as const;
-/** A feature that is cut from the product, whose criteria the Ask-preview check then drops. */
 export type Feature = (typeof FEATURES)[number];
 
 export interface RunOptions {
   readonly recordDir: string;
-  /** The release gate whose checks run; gate 1 when none is given. */
   readonly gate: Gate;
-  /** The features that are cut; their criteria are dropped, and the record says so. */
   readonly cut: readonly Feature[];
   readonly dryRun: boolean;
   /** A product image that is already built; the demo install then does not time a build. */

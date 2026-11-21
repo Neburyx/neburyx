@@ -22,7 +22,6 @@ export interface RunDeps {
   readonly out: (text: string) => void;
   readonly err: (text: string) => void;
   readonly catalogue: (options: RunOptions) => readonly Check[];
-  /** The criteria of a gate with their figures, written from the results of its checks; none for a gate that states none. */
   readonly criteria?: (gate: Gate, results: readonly CheckResult[], cut: readonly Feature[]) => readonly CriterionResult[] | undefined;
   /** The address and the password to mask besides those of the environment, for example those read from the settings file. */
   readonly extraSecrets?: readonly string[];

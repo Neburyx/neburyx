@@ -25,7 +25,6 @@ export function releaseCatalogue(repoRoot: string, image?: string): readonly Che
   return [fuzzCheck(repoRoot), neutralityCheck(), supernodeSuiteCheck(), fuzzRealServerCheck(repoRoot), demoInstallCheck(image === undefined ? {} : { image })];
 }
 
-/** The checks of a gate, in the order they run. */
 export function catalogueFor(gate: Gate, repoRoot: string, image?: string, cut: readonly Feature[] = []): readonly Check[] {
   return gate === 'ask-preview' ? askPreviewCatalogue(undefined, undefined, cut) : releaseCatalogue(repoRoot, image);
 }
