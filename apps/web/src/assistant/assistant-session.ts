@@ -1,3 +1,4 @@
+import type { TurnStep } from '../api/turn-stream.js';
 import { createContext, useContext } from 'react';
 import type { AssistantChoice, AssistantFailureKind, AssistantLimit, AssistantRead, AssistantRefusalCause, AssistantTurnAnswer, AskAnswer } from '@neburyx/contracts';
 import type { CitationEntry } from '../summary/summary-model.js';
@@ -49,10 +50,10 @@ export type Failure =
 export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>;
 
 export type Outcome =
-  | { readonly kind: 'pending'; readonly call: 'message' }
-  | { readonly kind: 'pending'; readonly call: 'continue'; readonly heavy: Answered; readonly token: string }
-  | { readonly kind: 'pending'; readonly call: 'choice'; readonly question: string; readonly candidates: readonly ClarificationCandidate[] }
-  | { readonly kind: 'pending'; readonly call: 'decide'; readonly waiting: Waiting; readonly decision: 'confirm' | 'skip' }
+  | { readonly kind: 'pending'; readonly call: 'message'; readonly step?: TurnStep }
+  | { readonly kind: 'pending'; readonly call: 'continue'; readonly heavy: Answered; readonly token: string; readonly step?: TurnStep }
+  | { readonly kind: 'pending'; readonly call: 'choice'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly step?: TurnStep }
+  | { readonly kind: 'pending'; readonly call: 'decide'; readonly waiting: Waiting; readonly decision: 'confirm' | 'skip'; readonly step?: TurnStep }
   | { readonly kind: 'waiting'; readonly waiting: Waiting }
   /** A confirmation that is no longer open (another message was sent, or the panel was reloaded): the reads stay, the buttons are gone. */
   | { readonly kind: 'waiting-closed'; readonly reads: readonly AssistantRead[] }

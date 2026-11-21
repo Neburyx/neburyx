@@ -1,3 +1,4 @@
+import type { TurnStep } from '../api/turn-stream.js';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, type AssistantThreadResponse, type AssistantTurnAnswer, type AssistantTurnRequest } from '@neburyx/contracts';
@@ -17,7 +18,7 @@ export const RECORD = { title: 'Suspicious linked accounts', caseRef: null, stat
 export const REFUSE: AssistantTurnAnswer = { status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict };
 export const VIEW: AssistantTurnAnswer = { status: 'not-answered', route: 'view', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE };
 
-export type TurnCall = (request: AssistantTurnRequest, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantTurnAnswer>>;
+export type TurnCall = (request: AssistantTurnRequest, signal: AbortSignal | undefined, onStep?: (step: TurnStep) => void) => Promise<ApiResult<AssistantTurnAnswer>>;
 
 export type ThreadCall = (investigationId: string, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadResponse>>;
 const EMPTY_THREAD: ThreadCall = async () => ({ ok: true, value: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
@@ -31,9 +32,9 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
   const sent: AssistantTurnRequest[] = [];
   const reads: string[] = [];
   const client = fakeClient({
-    assistantTurn: async (request, signal) => {
+    assistantTurn: async (request, signal, onStep) => {
       sent.push(request);
-      return turn(request, signal);
+      return turn(request, signal, onStep);
     },
     assistantThread: async (investigationId, signal) => {
       reads.push(investigationId);

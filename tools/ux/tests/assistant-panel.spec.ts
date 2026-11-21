@@ -122,6 +122,23 @@ test.describe('the Assistant panel', () => {
     expect(sent[0]).toMatchObject({ sourceId: 'banking-demo', viewElementKeys: expect.any(Array) });
   });
 
+  test('reads a streamed turn: asks for the stream, shows the answer as the JSON route is shown, and keeps the page inside the window', async ({ page }) => {
+    await openWorkspace(page);
+    let accept: string | undefined;
+    await page.route((url) => url.pathname === '/v1/assistant/turns', async (route) => {
+      accept = route.request().headers()['accept'];
+      const lines = [{ event: 'step', n: 1, phase: 'routing' }, { event: 'step', n: 2, phase: 'answering' }, { event: 'answer', answer: REFUSE }].map((line) => `${JSON.stringify(line)}\n`).join('');
+      await route.fulfill({ status: 200, contentType: 'application/x-ndjson', body: lines });
+    });
+    await open(page);
+    await page.getByLabel('Your message').fill('is it fraud?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    expect(accept).toBe('application/x-ndjson');
+    await expect(panel(page).getByText('Writing the answer…')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
   test('shows the answer of the ask route with its sources, and a heavy stop that continues with the kept token', async ({ page }) => {
     await openWorkspace(page);
     const sent = await answerWith(page, (body) => (body.continue === undefined ? inAsk(heavyFor('banking-demo')) : inAsk(answeredFor('banking-demo'))));

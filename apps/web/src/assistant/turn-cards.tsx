@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_LIMIT_SENTENCES, type AssistantLimit, type AssistantRead } from '@neburyx/contracts';
 import { AnswerCard, HeavyCard } from '../ask/answer-card.js';
 import { hintOf, humanize } from '../ask/text.js';
+import type { TurnStep } from '../api/turn-stream.js';
 import { askFailureWords, isContinueInvalid } from '../ask/ask-failure.js';
 import { isAssistantOff } from './failure-kinds.js';
 import { rateLimitedSentence } from '../patterns/failure-words.js';
@@ -154,7 +155,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <div className="ask-progress" aria-hidden="true">
             <span />
           </div>
-          <p>{ASSISTANT_COPY.workingBody}</p>
+          {outcome.step === undefined ? <p>{ASSISTANT_COPY.workingBody}</p> : <p role="status" className="assistant-step">{stepSentenceOf(outcome.step)}</p>}
         </section>
       );
     case 'cancelled':
@@ -256,6 +257,20 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
       const unreachable: never = outcome;
       return unreachable;
     }
+  }
+}
+
+/** The words of the step in progress: a fixed sentence for a phase, and for a read the label of the intent or the humanized tool, with its subject; all of it text. */
+export function stepSentenceOf(step: TurnStep): string {
+  switch (step.phase) {
+    case 'routing':
+      return ASSISTANT_COPY.stepRouting;
+    case 'reading-view':
+      return ASSISTANT_COPY.stepReadingView;
+    case 'reading':
+      return `${ASSISTANT_COPY.stepReading} ${step.label ?? humanize(step.tool ?? '')}${step.subject === undefined ? '' : ` for ${step.subject}`}…`;
+    case 'answering':
+      return ASSISTANT_COPY.stepAnswering;
   }
 }
 

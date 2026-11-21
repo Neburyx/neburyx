@@ -17,6 +17,11 @@ export const ASSISTANT_COPY = {
   cancelHint: 'Cancel stops the request. Nothing more is read once it is stopped.',
   cancelledTitle: 'Cancelled',
   cancelledBody: 'Nothing more was read and nothing was added to the graph. Your message is back in the box.',
+  // the sentence of the step in progress; the wording is to be confirmed against frame AS12
+  stepRouting: 'Placing your message…',
+  stepReadingView: 'Reading your view…',
+  stepReading: 'Reading',
+  stepAnswering: 'Writing the answer…',
   working: 'Working on it…',
   workingBody: 'Understanding your message and reading the source. This can take a moment.',
   continuing: 'Reading a first page…',
