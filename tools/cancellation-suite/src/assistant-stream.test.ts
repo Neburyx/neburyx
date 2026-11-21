@@ -120,7 +120,7 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     const before = saved();
     model.replies.push(JSON.stringify({ route: 'refuse', cause: 'verdict' }), HOLD);
     const controller = new AbortController();
-    const response = await app.sendTurn('Is this customer laundering money?', controller.signal, { viewElementKeys: [JSON.stringify(['node', 'demo', 'widget', 'W-1'])] }, NDJSON);
+    const response = await app.sendTurn('Is this customer laundering money?', controller.signal, { viewElementKeys: [JSON.stringify(['node', 'demo', 'widget', 'W-1']), JSON.stringify(['edge', 'demo', 'stored', 'MADE_FROM', 'widget', 'gadget', 'L-1'])] }, NDJSON);
     await readUntil(response, (seen) => steps(seen).includes('answering'));
     await until(() => model.held() > 0, 'the overview call to be pending');
     const atCancel = started();
