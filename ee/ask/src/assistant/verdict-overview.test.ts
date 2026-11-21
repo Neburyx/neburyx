@@ -85,8 +85,10 @@ describe('a verdict refusal with an overview', () => {
   });
 
   it('gives the plain refusal when no relationship is in view, whatever the draft says', async () => {
-    const { answer } = await turn({ overview: sentences({ text: 'No relationships are in view.', cites: ['n1'] }) }, VIEW_BODY_NO_EDGE);
+    const { t, answer } = await turn({ overview: sentences({ text: 'No relationships are in view.', cites: ['n1'] }) }, VIEW_BODY_NO_EDGE);
     expect(answer).toEqual(PLAIN);
+    // nothing could be cited, so the call that would be thrown away is not made
+    expect(t.fixture.calls.map((call) => call.promptId)).toEqual(['assistant.route']);
   });
 
   it('asks the model for connections only, in the shipped prompt and the request the server writes', () => {

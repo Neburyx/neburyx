@@ -228,6 +228,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
       return stopped;
     }
     progress.read = reading.nodes.length + reading.edges.length;
+    // an overview of connections has nothing to cite when no relationship is in view: no call is made for it
+    if (options.prompt?.connectionsOnly === true && reading.edges.length === 0) return outcome({ status: 'unsupported' });
     const judgedSummary = input.summary === undefined ? undefined : rejudge(input.summary.payload, reading);
     const kept = (judgedSummary?.kept ?? []).slice(0, MAX_SUMMARY_SENTENCES);
     if (input.summary !== undefined) counts = { kept: kept.length, dropped: input.summary.payload.sentences.length - kept.length };
