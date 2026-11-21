@@ -54,3 +54,12 @@ export function expectNoNoteWrite(before: { readonly version: number; readonly a
   if (after === undefined) return fail('the draft is gone, so nothing was checked');
   if (after.version !== before.version || JSON.stringify(after.aiNotes ?? null) !== JSON.stringify(before.aiNotes ?? null)) fail('the notes of the draft changed during a turn');
 }
+
+/** No sentence of an answer holds a text (a planted amount): the sentences of the answer body are read, nothing else. */
+export function expectNoSentenceWith(answer: Record<string, unknown>, texts: readonly string[]): void {
+  const sentences = Array.isArray(answer['sentences']) ? answer['sentences'] : [];
+  for (const sentence of sentences) {
+    const text = typeof sentence === 'object' && sentence !== null && 'text' in sentence && typeof sentence.text === 'string' ? sentence.text : '';
+    for (const planted of texts) if (text.includes(planted)) fail('a sentence of the answer holds a planted text');
+  }
+}

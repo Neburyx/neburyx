@@ -253,7 +253,7 @@ export const assistantTurnAnswerSchema = z.union([
     noDescription: text.optional(),
     model: text,
     calls: z.number().int().positive(),
-    steps: z.number().int().min(2),
+    steps: z.number().int().min(1),
     /** Each read of the turn in order, written by the server. */
     reads: z.array(assistantReadSchema).min(1).max(20),
     /** The limit that ended the reading of the turn, when it did. */

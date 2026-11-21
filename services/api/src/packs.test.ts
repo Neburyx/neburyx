@@ -8,6 +8,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { parse, stringify } from 'yaml';
 import { z } from 'zod';
 import { parseMapping } from './mapping/load.js';
+import { entityProjection } from './mapping/projection.js';
 import type { SourceModel } from './mapping/model.js';
 import { mappingFileSchema, type RawMappingFile, type RawSource } from './mapping/schema.js';
 import { start, type StartIo } from './start.js';
@@ -217,6 +218,12 @@ describe.each(packs)('the %s pack: the mapping file', (pack) => {
     expect(source.vocabulary.caseRef).toBeTruthy();
     const expected = SHIPPED_ENTITY_TYPES.get(pack);
     if (expected !== undefined) expect(source.entities).toHaveLength(expected);
+  });
+
+  it('projects every key property of every entity type, so that a node a tool returns carries it into the line the assistant cites', () => {
+    for (const entity of modelOf(pack).entities) {
+      expect(entity.display.keyProperties.filter((key) => !entityProjection(entity).includes(key))).toEqual([]);
+    }
   });
 
   it('shows the mapping features the pack is built to show', () => {

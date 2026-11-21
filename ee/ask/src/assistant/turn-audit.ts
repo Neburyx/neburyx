@@ -37,6 +37,8 @@ interface TurnNotes {
   calls: number;
   /** The model calls an application tool made outside the turn's own recording (the AI case summary's), counted in the turn's calls and in no other field of it. */
   summaryCalls?: number;
+  /** Whether any text a model call of the turn was given held the value of a property of an element. */
+  propertyValuesSent?: boolean;
   modelRef?: string;
   promptId?: string;
   promptVersion?: string;
@@ -109,6 +111,9 @@ export const currentRunId = (): string | undefined => scope.getStore()?.run?.id;
 
 /** Notes the model calls of an AI case summary drafted in this turn: the closing event counts them in the turn's calls; its model, prompt and token fields hold only the calls the turn made through its own recording. */
 export const noteSummaryCalls = (calls: number): void => note((notes) => void (notes.summaryCalls = (notes.summaryCalls ?? 0) + calls));
+
+/** Notes that the text of a model call of this turn is about to be sent, and whether it holds the value of a property (`AssembledText.carriesPropertyValues`): the closing event says whether any did, and never what a value was. */
+export const notePropertyValuesSent = (carries: boolean): void => note((notes) => void (notes.propertyValuesSent = notes.propertyValuesSent === true || carries));
 
 /** Marks the reads that follow as made again to carry on a turn after the analyst's decision (their events say so), or no longer. */
 export const noteReplaying = (replaying: boolean): void => note((notes) => void (notes.replaying = replaying));
@@ -265,6 +270,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls + (notes.summaryCalls ?? 0),
+    ...(notes.calls + (notes.summaryCalls ?? 0) > 0 ? { propertyValuesSent: notes.propertyValuesSent === true } : {}),
     ...(notes.run === undefined ? {} : { runId: notes.run.id }),
     ...(notes.resumes === undefined ? {} : { resumes: notes.resumes }),
     ...call,

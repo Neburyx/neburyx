@@ -126,6 +126,15 @@ messages:
   - id: summary-word-in-a-question
     wording: "In summary, which accounts use the same device as AC-0002000?"
     expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002000 } }
+  - id: largest-of-the-transactions-in-view
+    wording: "Which of the transactions on screen is the largest?"
+    expect: { route: view, view: [{ entityType: transaction, stableId: TX-0300001 }, { entityType: transaction, stableId: TX-0300002 }, { entityType: transaction, stableId: TX-0300003 }] }
+  - id: what-a-merchant-received
+    wording: "What did MR-0100 receive, and how large was each payment?"
+    expect: { route: ask, intent: payments-made-to-a-merchant, entities: { merchant: MR-0100 } }
+  - id: what-an-account-sent
+    wording: "Which transactions did AC-0002000 send, with their amounts?"
+    expect: { route: ask, intent: latest-transactions-of-an-account, entities: { account: AC-0002000 } }
 
 threads:
   - id: device-then-merchants

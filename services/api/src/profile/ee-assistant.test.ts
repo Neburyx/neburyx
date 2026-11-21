@@ -1149,7 +1149,8 @@ describe('a follow-up about an attached summary, through the real application', 
     const rig = await assistantRig({ withSummary: true, runStore: createMemoryAssistantRunStore(), reply: () => DRAFT });
     const drafted = await rig.rig.app.inject({ method: 'POST', url: '/v1/summary', payload: { investigationId: rig.body.investigationId, sourceId: 'demo', entities: [{ sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, { sourceId: 'demo', entityType: 'widget', stableId: 'W-2' }] }, headers: { 'idempotency-key': 'key-0000000000000002' } });
     const { summaryToken } = drafted.json() as { summaryToken: string };
-    const altered = `${summaryToken.slice(0, -2)}${summaryToken.endsWith('A') ? 'B' : 'A'}A`;
+    const at = summaryToken.length - 8;
+    const altered = `${summaryToken.slice(0, at)}${summaryToken[at] === 'A' ? 'B' : 'A'}${summaryToken.slice(at + 1)}`;
     const calls = rig.stub.bodies.length;
     const before = rig.rig.executor.calls.length;
     const answer = await rig.post({ ...rig.body, message: 'Which widgets does the summary list?', viewElementKeys: [key('W-1')], summaryToken: altered });
@@ -1283,6 +1284,74 @@ describe('the application tools through the real application', () => {
     expect(JSON.stringify(answer.json())).toContain('"kind":"ai-summary"');
     expect(rig.stub.bodies).toHaveLength(5);
     await rig.stop();
+  });
+});
+
+describe('the properties in the lines of a tool result, through the real application', () => {
+  const ROUTE = '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}';
+  const sequence = (...replies: string[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? '{"done":true}';
+  };
+  const ANSWER = JSON.stringify({ sentences: [{ text: 'Widget W-1 is listed.', cites: ['r1'] }] });
+  const run = async (mask: boolean) => {
+    const rig = await assistantRig({ maxSteps: 4, threadStore: createMemoryAssistantThreadStore(), reply: sequence(ROUTE, '{"tool":"typology","values":{}}', '{"done":true}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const answer = await rig.post({ ...rig.body, message: 'Show W-1', mask });
+    const closing = [...rig.events, ...rig.rig.events].find((event) => event.action === 'assistant.turn.closed');
+    const answerCall = rig.stub.bodies.at(-1) ?? '';
+    await rig.stop();
+    return { answer, closing, answerCall, bodies: rig.stub.bodies };
+  };
+
+  it('writes the value of a property that is not masked into the answer call, and records that property values were sent', async () => {
+    const { answer, closing, answerCall } = await run(false);
+    expect(answer.statusCode).toBe(200);
+    expect(answerCall).toContain('widgetId: ');
+    expect(answerCall).toContain('Ana Silva');
+    expect(closing).toMatchObject({ detail: { turn: { propertyValuesSent: true } } });
+  });
+
+  it('with masking on, never sends the unmasked value of a masked property to the model service, and writes its masked form with the mark', async () => {
+    const { answer, closing, answerCall, bodies } = await run(true);
+    expect(answer.statusCode).toBe(200);
+    expect(answerCall).toContain('(masked)');
+    for (const body of bodies) expect(body).not.toContain('Ana Silva');
+    expect(closing).toMatchObject({ detail: { turn: { propertyValuesSent: true } } });
+    expect(JSON.stringify(closing)).not.toContain('Ana Silva');
+  });
+});
+
+describe('the larger of two amounts in the lines of a tool result, through the real application', () => {
+  const REPLY = '{"route":"ask","intent":"queryById","entities":{"id":"W-1"}}';
+  const named = (id: string, name: string) => ({ $type: 'node', elementId: `4:s:${id}`, labels: ['Widget'], properties: { widgetId: id, ownerName: name } });
+  const sequence = (...replies: string[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? '{"done":true}';
+  };
+  const turn = async (sentences: { text: string; cites: string[] }[]) => {
+    const answerJson = JSON.stringify({ sentences });
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(REPLY, '{"tool":"typology","values":{}}', '{"done":true}', answerJson, answerJson), fileQuery: { status: 'rows', rows: [{ n: named('W-1', '4200') }, { n: named('W-2', '5000') }] } });
+    const answer = await rig.post({ ...rig.body, message: 'Query widget W-1' });
+    const answerCall = rig.stub.bodies.find((body) => body.includes('What the reads returned')) ?? '';
+    await rig.stop();
+    return { answer: answer.json() as Record<string, unknown>, answerCall };
+  };
+
+  it('writes the values of each element into its own line, and says that the read listed no relationship', async () => {
+    const { answerCall } = await turn([{ text: 'The larger is 5000, against 4200.', cites: ['r1', 'r2'] }]);
+    expect(answerCall).toContain('ownerName: \\"4200\\"');
+    expect(answerCall).toContain('ownerName: \\"5000\\"');
+    expect(answerCall).toContain('no relationship listed');
+  });
+
+  it('keeps the larger named from two lines that both show an amount, and the largest named from one line only with the line of the read', async () => {
+    expect(await turn([{ text: 'The larger is 5000, against 4200.', cites: ['r1', 'r2'] }])).toMatchObject({ answer: { status: 'answered', sentences: [{ cites: ['r1', 'r2'] }] } });
+    expect(await turn([{ text: '5000 is the largest of those shown.', cites: ['r2', 's1'] }])).toMatchObject({ answer: { status: 'answered' } });
+  });
+
+  it('drops the largest named from one line while another element of the read is not cited, and an amount that no cited line holds', async () => {
+    expect(JSON.stringify((await turn([{ text: '5000 is the largest.', cites: ['r2'] }])).answer)).not.toContain('5000 is the largest.');
+    expect(JSON.stringify((await turn([{ text: 'The larger is 5000, against 4300.', cites: ['r1', 'r2'] }])).answer)).not.toContain('against 4300');
   });
 });
 

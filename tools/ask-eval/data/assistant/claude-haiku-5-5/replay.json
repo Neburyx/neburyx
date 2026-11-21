@@ -418,6 +418,15 @@
     },
     "Message:\nAnd their policies?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n2. ask \"claims-filed-by-a-claimant\"; ran for claimant = c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002090\" | \"claim\"\nc2 | \"CT-00290\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-002090\" (also in the earlier turns)\nc2 | \"claimant\" | \"CT-00290\" (also in the earlier turns)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"entities\":{},\"elements\":{\"claimant\":\"c2\"}}"
+    },
+    "Message:\nWhich of the transactions on screen is the largest?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"transaction\" | \"TX-0300001\"\nc2 | \"transaction\" | \"TX-0300002\"\nc3 | \"transaction\" | \"TX-0300003\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat did MR-0100 receive, and how large was each payment?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"payments-made-to-a-merchant\",\"entities\":{\"merchant\":\"MR-0100\"}}"
+    },
+    "Message:\nWhich transactions did AC-0002000 send, with their amounts?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
     }
   }
 }

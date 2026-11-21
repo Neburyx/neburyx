@@ -556,14 +556,14 @@ describe('a tool request in the view reply', () => {
     return () => replies[Math.min(next++, replies.length - 1)] ?? DONE;
   };
   const closedOf = (t: Awaited<ReturnType<typeof rig>>) => (t.events.find((event) => event.action === 'assistant.turn.closed')?.detail as { turn: Record<string, unknown> }).turn;
-  const sentences = ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view, and another account was read.', cites: ['n1', 'n2', 'r1'] }] }));
+  const sentences = ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view, and another account was read.', cites: ['n1', 'n2'] }] }));
 
   it('treats a tool request as a reply that does not fit when the loop is off, and gives the fixed sentence after the repeat', async () => {
     const t = await rig({ view: TOOL, loopSteps: 1, step: sequence(DONE) });
     expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered', route: 'view' });
     const views = t.fixture.calls.filter((call) => call.promptId === 'assistant.view');
     expect(views).toHaveLength(2);
-    expect(new Set(views.map((call) => call.version))).toEqual(new Set([5]));
+    expect(new Set(views.map((call) => call.version))).toEqual(new Set([6]));
     expect(views[0]?.instructions).not.toContain('# Tools you may ask for');
   });
 
@@ -573,11 +573,11 @@ describe('a tool request in the view reply', () => {
     expect(t.runs).toHaveLength(0);
   });
 
-  it('offers the tools and the third reply form in version 6 of the view prompt, audited with that version', async () => {
+  it('offers the tools and the third reply form in version 7 of the view prompt, audited with that version', async () => {
     const t = await rig({ view: sentences, step: sequence(DONE) });
     await answerOf(t.route.handler(t.request(VIEW_BODY)));
     const view = t.fixture.calls.find((call) => call.promptId === 'assistant.view');
-    expect(view?.version).toBe(6);
+    expect(view?.version).toBe(7);
     expect(view?.instructions).toContain('# Tools you may ask for');
     expect(view?.instructions).toContain('byId(id)');
     expect(view?.instructions).not.toContain('view()');
@@ -591,7 +591,7 @@ describe('a tool request in the view reply', () => {
     expect(t.runs.map((run) => JSON.stringify(run.asked))).toEqual([expect.stringContaining('"fileQuery"')]);
     expect(answer).toMatchObject({ status: 'answered', route: 'view', steps: 2, calls: 4 });
     if (answer.status !== 'answered' || !('sentences' in answer)) throw new Error('not a sentences answer');
-    expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2', 'r1']);
+    expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
     expect(closedOf(t)).toMatchObject({ route: 'view', modelCalls: 4, steps: 2, outcome: 'answered' });
     expect(t.fixture.calls.filter((call) => call.promptId === 'assistant.step')).toHaveLength(1);
   });

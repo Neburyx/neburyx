@@ -320,7 +320,7 @@ describe('a decision reads the earlier steps again, and meets what changed', () 
 
   it('reads the view again from the keys that were sent when the turn began from the view, and goes on from it', async () => {
     const pending = createMemoryAssistantPendingStore();
-    const r = await rig({ reply: ok('{"route":"view"}'), view: ok(JSON.stringify({ tool: 'byId', values: { id: 'A-9' } })), step: sequence(DONE), answer: GOOD, pending, run: runOf() });
+    const r = await rig({ reply: ok('{"route":"view"}'), view: ok(JSON.stringify({ tool: 'byId', values: { id: 'A-9' } })), step: sequence(DONE), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['n1', 'n2'] }] })), pending, run: runOf() });
     const first = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     if (first.status !== 'confirmation') throw new Error(`not waiting: ${JSON.stringify(first).slice(0, 160)}`);
     expect(first.reads).toMatchObject([{ tool: 'view', kind: 'view' }]);

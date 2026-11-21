@@ -128,6 +128,15 @@
     "Message:\nIn summary, which accounts use the same device as AC-0002000?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-device\",\"entities\":{\"account\":\"AC-0002000\"}}"
     },
+    "Message:\nWhich of the transactions on screen is the largest?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"transaction\" | \"TX-0300001\"\nc2 | \"transaction\" | \"TX-0300002\"\nc3 | \"transaction\" | \"TX-0300003\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat did MR-0100 receive, and how large was each payment?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"payments-made-to-a-merchant\",\"entities\":{\"merchant\":\"MR-0100\"}}"
+    },
+    "Message:\nWhich transactions did AC-0002000 send, with their amounts?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"latest-transactions-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
     "Message:\nAnd which merchants has it paid?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-on-the-same-device\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
     },

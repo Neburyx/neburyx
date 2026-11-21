@@ -6,8 +6,9 @@ import { endTitle, nodeTitle } from '../summary/title.js';
 import { execute, patternOf, refusal, type Execution } from '../questions/question-routes.js';
 import { summarizeRun } from '../questions/run-summary.js';
 import { rebuildNotesFor } from '../case-summary/notes-read-route.js';
-import { noteStep, noteSummaryCalls } from './turn-audit.js';
+import { notePropertyValuesSent, noteStep, noteSummaryCalls } from './turn-audit.js';
 import { stepsOf } from './steps.js';
+import { assembleText } from '../case-summary/assemble.js';
 import type { ToolRequest } from './tool-request.js';
 import { withTemplateTools } from './tool-templates.js';
 
@@ -107,11 +108,14 @@ async function readSummary(scope: StepScope, options: StepOptions): Promise<Step
     if (error instanceof AuditUnavailableError) throw error;
     if (error instanceof SummaryHandled) {
       noteSummaryCalls(error.calls);
+      if (error.calls > 0) notePropertyValuesSent(assembleText(reading).carriesPropertyValues);
       throw error.handled;
     }
     throw error;
   }
   noteSummaryCalls('calls' in outcome ? outcome.calls : 0);
+  // the text of the view was sent only when the summarizer made a call
+  if ('calls' in outcome && outcome.calls > 0) notePropertyValuesSent(assembleText(reading).carriesPropertyValues);
   if (outcome.status !== 'ok' && outcome.status !== 'partial') return { status: 'no-summary', calls: 'calls' in outcome ? outcome.calls : 0 };
   const nodes = new Map(reading.nodes.map((node) => [canonicalText(node.ref), node]));
   const edgeOf = new Map(reading.edges.map((edge) => [canonicalText(edge.ref), edge]));

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, assistantTurnAuditDetailSchema, auditDetailSchema, type AskRunResult, type AssistantTurnAnswer, type AuditEvent, type ExtensionRequest } from '@neburyx/contracts';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -181,6 +183,7 @@ describe('the closing event of the other outcomes', () => {
     const long = await rig({ maxMessageWords: 2 });
     await run(long, { ...BODY, message: 'one two three' });
     expect(turnOf(long.events).turn).toEqual({ outcome: 'refused', cause: 'too-long', steps: 0, modelCalls: 0, runId: expect.stringMatching(UUID) });
+    expect(turnOf(long.events).turn).not.toHaveProperty('propertyValuesSent');
     const large = await rig({ maxInputTokens: 10 });
     await run(large);
     expect(turnOf(large.events).turn).toEqual({ outcome: 'refused', cause: 'too-large', steps: 0, modelCalls: 0, runId: expect.stringMatching(UUID) });
@@ -425,7 +428,7 @@ describe('turns that overlap', () => {
     await noteTurnStarted({ sourceId: 'leaked', investigationId: 'leaked' });
     const next = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}') });
     await run(next);
-    expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '6', instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10, runId: expect.stringMatching(UUID) });
+    expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '6', propertyValuesSent: false, instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10, runId: expect.stringMatching(UUID) });
     expect(closing(next.events)[0]).toMatchObject({ sourceId: 'demo', investigationId: 'inv-1' });
     expect(closing(r.events)).toHaveLength(1);
   });
@@ -503,5 +506,14 @@ describe('the closing event that cannot be built or written', () => {
       const failing = await rig({ reply: SHARED, runThrows: new Error('boom') });
       await expect(failing.route.handler({ ...failing.request(), audit })).rejects.toThrow('boom');
     }
+  });
+});
+
+describe('the documentation of the closing event', () => {
+  it('lists the field that says property values were sent, with what sets it and that it never holds a value', () => {
+    const doc = readFileSync(fileURLToPath(new URL('../../../../docs/audit-events.md', import.meta.url)), 'utf8');
+    expect(doc).toContain('`propertyValuesSent`');
+    expect(doc).toContain('it says that values were sent and never holds one');
+    expect(doc).toContain('absent when the turn made no model call');
   });
 });

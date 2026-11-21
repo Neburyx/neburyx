@@ -1,20 +1,20 @@
-import { ASSISTANT_CITATION_TITLE_MAX, type AskRunResult, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
+import { ASSISTANT_CITATION_TITLE_MAX, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type CheckRunner } from '@neburyx/ee-ai-runtime';
-import { type AssembledText, estimateTokens } from '../case-summary/assemble.js';
+import { type AssembledText, edgeDetailOf, estimateTokens, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
 import { retrievalLine } from '../case-summary/coverage.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { listedElements } from '../summary/index.js';
 import { coverageOf, inexactCountOf } from './coverage.js';
-import { noteModelAnswer, startModelCall } from './turn-audit.js';
+import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-audit.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import { refId } from '../summary/title.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const ANSWER_PROMPT_ID = 'assistant.answer';
-export const ANSWER_PROMPT_VERSION = 5;
+export const ANSWER_PROMPT_VERSION = 6;
 const ANSWER_AUDIT_ACTION = 'assistant.answer';
 
 export interface ToolAnswerOptions {
@@ -118,13 +118,45 @@ export interface AssembledResults {
   readonly noteElements: ReadonlyMap<string, readonly string[]>;
 }
 
+/** Whether a result lists an element with a property value besides what the fixed Ask sentence already names (its id and its title): an amount, a status, a time; a relationship with any property value counts. */
+export function readsCarryMoreThanNames(reads: readonly ReadDone[]): boolean {
+  return reads.some((read) =>
+    [...((read.result === undefined ? undefined : listedElements(read.result))?.values() ?? [])].some((listed) => {
+      if (listed.edge !== undefined) return listed.edge.properties.some((property) => property.value !== undefined);
+      const { node } = listed;
+      return node !== undefined && node.properties.some((property) => property.value !== undefined && String(property.value) !== node.ref.stableId && String(property.value) !== node.display.title && String(property.value) !== listed.title);
+    }),
+  );
+}
+
 export function assembleResults(reads: readonly ReadDone[], view?: AssembledText): AssembledResults {
   const inexactCounts = [...(view?.inexactCounts ?? [])];
   const unknownCountKeys = new Set(view?.unknownCountKeys);
   const keys = new Map<string, ElementKey>(view?.keys);
   const lines = new Map<string, string>(view?.lines);
-  const seen = new Map<string, string>();
+  // an element the view already holds keeps the view's key and its one line
+  const seen = new Map<string, string>([...(view?.keys ?? [])].map(([key, held]) => [refId(held.ref as never), key]));
+  let carriesPropertyValues = view?.carriesPropertyValues ?? false;
   let number = 0;
+  const propertyPart = (listed: { readonly node?: GraphNode | undefined }): string => {
+    const properties = listed.node === undefined ? undefined : propertiesOf(listed.node.properties);
+    if (properties === undefined || properties.text === '') return '';
+    carriesPropertyValues ||= properties.carriesValue;
+    return ` | ${properties.text}`;
+  };
+  // what follows a relationship's ends in the line: how the source holds it, its times, its member count and its properties, as the view writes them
+  const edgePart = (listed: { readonly edge?: GraphEdge | undefined }, key: string): string => {
+    if (listed.edge === undefined) return '';
+    const detail = edgeDetailOf(listed.edge);
+    carriesPropertyValues ||= detail.carriesValue;
+    if (detail.inexact !== undefined) inexactCounts.push(detail.inexact);
+    if (detail.unknownCount) unknownCountKeys.add(key);
+    return detail.parts.length === 0 ? '' : ` | ${detail.parts.join(' | ')}`;
+  };
+  // the reads whose result lists elements and no relationship: their line says so, and a direction is not known from them
+  const noRelationship = new Set<number>();
+  const propertyKeys = new Map<string, readonly string[]>(view?.propertyKeys);
+  const readElements = new Map<string, string[]>();
   const keyFor = (id: string, element: ElementKey['ref'], type: string, title: string): string => {
     const held = seen.get(id);
     if (held !== undefined) return held;
@@ -135,9 +167,17 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
     lines.set(key, 'entityType' in element ? `${key}: ${type}: ${title}` : `${key}: ${title}`);
     return key;
   };
-  for (const read of reads) {
-    for (const [id, listed] of (read.result === undefined ? undefined : listedElements(read.result)) ?? []) {
-      if (seen.has(id)) continue;
+  reads.forEach((read, readIndex) => {
+    const listedOfRead = read.result === undefined ? undefined : listedElements(read.result);
+    if (listedOfRead !== undefined && listedOfRead.size > 0 && ![...listedOfRead.values()].some((item) => !('entityType' in item.element))) noRelationship.add(readIndex);
+    const listedKeys: string[] = [];
+    readElements.set(`s${readIndex + 1}`, listedKeys);
+    for (const [id, listed] of listedOfRead ?? []) {
+      if (seen.has(id)) {
+        const held = seen.get(id);
+        if (held !== undefined && held !== '') listedKeys.push(held);
+        continue;
+      }
       seen.set(id, '');
       number += 1;
       const key = `r${number}`;
@@ -145,9 +185,12 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
       // the title the result gave, masked as it was asked, goes with the key: an element the person has not drawn is still named
       keys.set(key, 'entityType' in listed.element ? { kind: 'entity', ref: listed.element, title: listed.title } : { kind: 'relationship', ref: listed.element, title: listed.title });
       // a relationship's title already begins with its type
-      lines.set(key, 'entityType' in listed.element ? `${key}: ${listed.type}: ${listed.title}` : `${key}: ${listed.title}`);
+      lines.set(key, 'entityType' in listed.element ? `${key}: ${listed.type}: ${listed.title}${propertyPart(listed)}` : `${key}: ${listed.title}${edgePart(listed, key)}`);
+      listedKeys.push(key);
+      const held = listed.node ?? listed.edge;
+      if (held !== undefined) propertyKeys.set(key, valueKeysOf(held.properties));
     }
-  }
+  });
   // the lines of the typology: operator text, each with a key of its own that is no element
   let typologyNumber = 0;
   const typologyKeys: string[] = [];
@@ -174,12 +217,12 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
   }
   const readKeys = [...reads.map((_, index) => `s${index + 1}`), ...typologyKeys];
   reads.forEach((read, index) => {
-    lines.set(`s${index + 1}`, readLine(`s${index + 1}`, read));
+    lines.set(`s${index + 1}`, `${readLine(`s${index + 1}`, read)}${noRelationship.has(index) ? ' · no relationship listed' : ''}`);
     const inexact = read.result === undefined ? undefined : inexactCountOf(read.result);
     if (inexact === 'unknown') unknownCountKeys.add(`s${index + 1}`);
     else if (inexact !== undefined) inexactCounts.push(inexact);
   });
-  return { assembled: { text: [...lines.values()].join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues: view?.carriesPropertyValues ?? false }, readKeys, noteLines, noteElements };
+  return { assembled: { text: [...lines.values()].join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, readElements }, readKeys, noteLines, noteElements };
 }
 
 const NOTES_HEADING = "Sentences written by a model: the AI notes the person copied into this investigation's draft, or an AI case summary drafted for this turn (each lists the elements it rests on; cite those elements, or its a key, and never copy a name, a figure or a claim from it that the elements do not state)";
@@ -205,6 +248,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     const allowed = input.maxCalls - input.callsUsed;
     if (allowed < 1) return { kind: 'limit', limit: 'calls', calls: 0 };
     if (estimateTokens(instructions.text, values) > input.maxInputTokens) return { kind: 'limit', limit: 'input', calls: 0 };
+    notePropertyValuesSent(assembled.carriesPropertyValues);
     const checkable = checkedTextOf(assembled);
     const checkedText = withTypeLines({ ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) }, typeLines);
     const turnSignal = AbortSignal.any([input.signal, input.deadline]);

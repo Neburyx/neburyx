@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectedBody, expectNoNoteWrite, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
+import { expectedBody, expectNoNoteWrite, expectNoSentenceWith, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
 
 const TEXT = 'MATCH (n) WHERE n.id = $id AND n.x = $x RETURN n';
 const read = (cypher: string, parameters: Record<string, unknown>) => ({ cypher, parameters });
@@ -72,5 +72,16 @@ describe('the check that a turn wrote no AI notes', () => {
     expect(() => expectNoNoteWrite(before, { version: 4, aiNotes: { entries: [] } })).toThrow(SafetyCheckFailed);
     expect(() => expectNoNoteWrite(before, { version: 3, aiNotes: { entries: [{ tokenId: 'x' }] } })).toThrow(SafetyCheckFailed);
     expect(() => expectNoNoteWrite(before, undefined)).toThrow(SafetyCheckFailed);
+  });
+});
+
+describe('the check that no sentence of an answer holds a planted text', () => {
+  it('passes an answer whose sentences do not hold it, and an answer with no sentence', () => {
+    expect(() => expectNoSentenceWith({ sentences: [{ text: 'Widget W-1 is listed.', cites: ['r1'] }] }, ['7311'])).not.toThrow();
+    expect(() => expectNoSentenceWith({ status: 'not-answered' }, ['7311'])).not.toThrow();
+  });
+
+  it('canary: fails a sentence that holds the planted text', () => {
+    expect(() => expectNoSentenceWith({ sentences: [{ text: 'Widget W-1 has a figure of 7311.', cites: ['r1'] }] }, ['7311'])).toThrow(SafetyCheckFailed);
   });
 });

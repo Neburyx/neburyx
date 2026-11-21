@@ -8188,7 +8188,7 @@
               },
               "steps": {
                 "type": "integer",
-                "minimum": 2,
+                "minimum": 1,
                 "maximum": 9007199254740991
               },
               "reads": {

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -205,7 +205,7 @@ describe('the router scored over a replay', () => {
     const out = io();
     await runCli(['assistant', '--packs', PACKS, '--replay', SCRIPTED, '--json'], out.io, hooks());
     const text = out.out.join('\n');
-    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 116, right: 116 }, scripted: true });
+    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 119, right: 119 }, scripted: true });
     for (const secret of ['guilty', 'AC-0002000', 'same device', 'CT-00100', 'fraudster']) expect(text).not.toContain(secret);
   });
 
@@ -350,7 +350,7 @@ describe('the threads scored over a replay', { timeout: 30_000 }, () => {
     const out = io();
     await runCli(['assistant', '--packs', PACKS, '--replay', SCRIPTED, '--json'], out.io, hooks());
     const text = out.out.join('\n');
-    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 116, right: 116 } });
+    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 119, right: 119 } });
     for (const secret of ['AC-0002050', 'CT-00230', 'Which merchants', 'that account']) expect(text).not.toContain(secret);
   });
 });
@@ -385,8 +385,8 @@ describe('the first replies of the router', () => {
     replay.answers[at('insurance-claims/filed-then-policies#2').first] = { failure: 'timeout' };
     delete replay.answers[at('insurance-claims/vehicle-then-repairer#2').first];
     const counted = await json(replay);
-    expect(counted.result.firstReplies).toMatchObject({ counted: 141, bare: 137, textAround: 2, wrongForm: 1, didNotFit: 1, failed: 1, noFirstReply: 1, rescued: 2, unplaced: 1, notBare: 4 });
-    expect(counted.result.firstReplies['rate']).toBeCloseTo(4 / 141, 6);
+    expect(counted.result.firstReplies).toMatchObject({ counted: 144, bare: 140, textAround: 2, wrongForm: 1, didNotFit: 1, failed: 1, noFirstReply: 1, rescued: 2, unplaced: 1, notBare: 4 });
+    expect(counted.result.firstReplies['rate']).toBeCloseTo(4 / 144, 6);
     expect(counted.result.firstReplies['ids']).toEqual(expect.arrayContaining([{ name: 'banking-fraud/device-then-merchants#2', kind: 'text-around' }, { name: 'banking-fraud/two-accounts-then-which#3', kind: 'did-not-fit' }]));
   });
 
@@ -412,7 +412,29 @@ describe('the first replies of the router', () => {
     const found = await requests();
     delete replay.answers[found.get('banking-fraud/address-then-show#2')?.first ?? ''];
     const counted = await json(replay);
-    expect(counted.result.firstReplies).toMatchObject({ noFirstReply: 1, counted: 142, bare: 142 });
+    expect(counted.result.firstReplies).toMatchObject({ noFirstReply: 1, counted: 145, bare: 145 });
+  });
+});
+
+describe('the committed replays of the models', () => {
+  const DATA = join(ROOT, 'tools', 'ask-eval', 'data', 'assistant');
+  const models = readdirSync(DATA).filter((name) => name !== 'scripted' && existsSync(join(DATA, name, 'replay.json')));
+
+  it('are the recordings of two models at least', () => {
+    expect(models.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it.each(models)('keep, for %s, the hash of the router text of each pack as it is now, so that no answer of the replay was recorded under another text', async (model) => {
+    const replay = JSON.parse(readFileSync(join(DATA, model, 'replay.json'), 'utf8')) as { folders: Record<string, string>; answers: Record<string, unknown> };
+    const given = hooks();
+    for (const set of await loadAssistantSets(PACKS, given)) expect(replay.folders[set.source.sourceId]).toBe(await given.routerTextSha256(set.source));
+  });
+
+  it.each(models)('score, for %s, against their own baseline of the questions as they are now, with every request answered', async (model) => {
+    const out = io();
+    const code = await runCli(['assistant', '--packs', PACKS, '--replay', join(DATA, model, 'replay.json'), '--baseline', join(DATA, model, 'baseline.json')], out.io, hooks());
+    expect(code, out.out.join('\n') + out.err.join('\n')).toBe(0);
+    expect(out.out.join('\n')).toContain('requests with no first reply: 0');
   });
 });
 

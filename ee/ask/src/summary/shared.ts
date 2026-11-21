@@ -7,9 +7,9 @@ export const SHOWN_NAMES = 5;
 
 export const nodeMap = (nodes: readonly GraphNode[]): Map<string, GraphNode> => new Map(nodes.map((node) => [refId(node.ref), node]));
 
-export const nodeItem = (node: GraphNode): Listed => ({ element: node.ref, type: node.display.type, title: nodeTitle(node) });
+export const nodeItem = (node: GraphNode): Listed => ({ element: node.ref, type: node.display.type, title: nodeTitle(node), node });
 
-export const edgeItem = (edge: GraphEdge, nodes: ReadonlyMap<string, GraphNode>): Listed => ({ element: edge.ref, type: edge.type, title: edgeTitle(edge, nodes) });
+export const edgeItem = (edge: GraphEdge, nodes: ReadonlyMap<string, GraphNode>): Listed => ({ element: edge.ref, type: edge.type, title: edgeTitle(edge, nodes), edge });
 
 /** The anchor of a result that names it by reference: the title of the node the result lists for it, or its stable ID. */
 export function anchorItem(ref: ElementRef, nodes: ReadonlyMap<string, GraphNode>): Listed {

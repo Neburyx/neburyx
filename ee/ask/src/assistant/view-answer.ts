@@ -14,13 +14,13 @@ import { buildViewToolInstructions } from './step-instructions.js';
 import type { ToolRegistry } from './tool-registry.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import { readToolRequest, type ToolRequest } from './tool-request.js';
-import { noteModelAnswer, startModelCall } from './turn-audit.js';
+import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
-export const VIEW_PROMPT_VERSION = 5;
+export const VIEW_PROMPT_VERSION = 6;
 /** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 6;
+export const VIEW_TOOLS_PROMPT_VERSION = 7;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -221,6 +221,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const { assembled } = prepared;
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
+    notePropertyValuesSent(assembled.carriesPropertyValues);
     const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message, input.askedTypes, input.contextTypes);
     const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
     input.onAnswering?.();

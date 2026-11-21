@@ -67,7 +67,8 @@ describe('the next step after an ask read', () => {
   });
 
   it('reads the view again when the model asks for it, and counts it as a step', async () => {
-    const r = await rig({ reply: SHARED, step: sequence(VIEW_TOOL, DONE), answer: GOOD });
+    // the elements of the result are those of the view: they keep the view's keys
+    const r = await rig({ reply: SHARED, step: sequence(VIEW_TOOL, DONE), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['n1', 'n2'] }] })) });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ reads: [{ tool: 'shared' }, { tool: 'view', kind: 'view', read: true, quality: 'exact' }] });
     expect(r.elementReads).toHaveLength(1);

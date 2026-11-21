@@ -219,6 +219,8 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `sortable` | no | Properties a page may be ranked by |
 | `evidence_link` | no | An `https` template for opening an evidence record in your own system; see [links](../domain-packs/README.md#links-to-a-source-record) |
 
+**What the assistant shows of a property.** The assistant (the AI preview) cites lines the server writes from what the gate returned, and the line of an element it reads through a tool carries the same properties as the line of an element in the view: the properties the mapping projects for the type, masked as the view is masked. An amount is therefore shown when its property is listed among the entity type's `key_properties` or `filterable` properties. An amount on a stored relationship (one with a `stable_id`) is shown when it is listed as the relationship type's `filterable`; a relationship with no `stable_id` is an aggregate and shows no property. The mapping needs no other key for it.
+
 ### Derived relationships and presets
 
 <!-- keys: derived -->

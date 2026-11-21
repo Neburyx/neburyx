@@ -12,6 +12,12 @@ export interface CheckedText {
   readonly readKeys?: ReadonlySet<string>;
   /** The keys of the lines that say what a type means (`m1`): plain text the operator wrote, no element. A sentence that cites only these and reads is checked for names against the lines it cites; a sentence that cites an element is checked for its numbers against the element lines alone. */
   readonly descriptionKeys?: ReadonlySet<string>;
+  /** The type of each element key (an entity type, or a relationship type), so that the comparison check knows which elements are of one type without the references a worker thread would have to copy. */
+  readonly elementTypes?: ReadonlyMap<string, string>;
+  /** The keys of the properties each element's line holds a value for, by the element's key. */
+  readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
+  /** The keys of the elements each read listed, by the key of the read's own line: only a line of a read that listed an element speaks for it. */
+  readonly readElements?: ReadonlyMap<string, readonly string[]>;
 }
 
 const NUMBER_TOKEN = /[-+]?(?:\d[\d,]*(?:\.\d+)?|\.\d+)/g;
@@ -173,6 +179,50 @@ function numbersHold(sentence: SummarySentence, assembled: CheckedText): boolean
   return assembled.inexactCounts.every((count) => !standalone.includes(count.value) || sentence.text.includes(count.phrase));
 }
 
+/** The superlatives and comparatives the comparison check looks for: fixed lists of the code. "most" and "more than" are on neither: they are ordinary words of a count. */
+const SUPERLATIVE = /(?<![\p{L}\p{N}_-])(?:largest|biggest|greatest|smallest|highest|lowest|maximum|minimum)(?![\p{L}\p{N}_-])/iu;
+const COMPARATIVE = /(?<![\p{L}\p{N}_-])(?:larger|bigger|greater|smaller|higher|lower)(?![\p{L}\p{N}_-])/iu;
+
+const ELEMENT_KEY = /^[ner]\d+$/;
+
+const sameKeys = (left: readonly string[], right: readonly string[]): boolean => left.length === right.length && left.every((key) => right.includes(key));
+
+/**
+ * A sentence with a word of comparison names the larger or the largest of what it cites, so it may do so only from lines that all show what is compared. It is removed when it cites two or more elements of one type
+ * (an entity type, or a relationship type) that do not all hold a value for the same properties, which are read from what the lines were written from and never from their text; and when it names the largest,
+ * smallest and the like (a superlative), or cites a single element, while the text sent holds another element of that type that it does not cite, unless it also cites a line of a read that listed the element
+ * (which states how many that read returned and did not show). A date does not make a line carry an amount: the properties are compared by their keys.
+ */
+function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const superlative = SUPERLATIVE.test(sentence.text);
+  if (!superlative && !COMPARATIVE.test(sentence.text)) return true;
+  const types = assembled.elementTypes;
+  if (types === undefined) return true;
+  const cited = new Map<string, string[]>();
+  for (const key of new Set(sentence.cites)) {
+    const type = ELEMENT_KEY.test(key) ? types.get(key) : undefined;
+    if (type !== undefined) cited.set(type, [...(cited.get(type) ?? []), key]);
+  }
+  const reads = sentence.cites.filter((key) => key.startsWith('s') && assembled.readKeys?.has(key) === true);
+  // the types compared are those whose cited lines hold a number the sentence states; with no number stated, those with two or more cited elements; with none of those, every type: an element of another type is context
+  const stated = new Set(numbersIn(sentence.text));
+  const holdsStated = (keys: readonly string[]): boolean => keys.some((key) => numbersIn(assembled.lines.get(key) ?? '').some((number) => stated.has(number)));
+  const byNumber = [...cited].filter(([, keys]) => stated.size > 0 && holdsStated(keys)).map(([type]) => type);
+  const byCount = [...cited].filter(([, keys]) => stated.size === 0 && keys.length >= 2).map(([type]) => type);
+  const compared = new Set(byNumber.length > 0 ? byNumber : byCount.length > 0 ? byCount : [...cited.keys()]);
+  for (const [type, keys] of cited) {
+    const [first] = keys;
+    if (first === undefined || !compared.has(type)) continue;
+    const shown = (key: string): readonly string[] => assembled.propertyKeys?.get(key) ?? [];
+    if (keys.length >= 2 && !keys.every((key) => sameKeys(shown(key), shown(first)))) return false;
+    if (!superlative && keys.length !== 1) continue;
+    const others = [...types].filter(([key, other]) => ELEMENT_KEY.test(key) && other === type && !keys.includes(key));
+    const excused = reads.some((read) => keys.every((key) => assembled.readElements?.get(read)?.includes(key) === true));
+    if (others.length > 0 && !excused) return false;
+  }
+  return true;
+}
+
 /** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
 function namesScopeOf(sentence: SummarySentence, assembled: CheckedText): CheckedText {
   const reads = assembled.readKeys;
@@ -203,7 +253,8 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
     if (SHAPE_WORDS.has(token.toLowerCase()) || !/\d/.test(token) || !/[\p{L}_-]/u.test(token)) continue;
     if (!sentTokens.has(token)) return false;
   }
-  const withoutIdentifiers = unquoted.replace(IDENTIFIER_LIKE, (token) => (/\d/.test(token) ? ' '.repeat(token.length) : token));
+  // a key of a property written with a capital inside (`paidValue`) is a name the text sent gave when it holds that word whole: its capital is not the start of a name
+  const withoutIdentifiers = unquoted.replace(IDENTIFIER_LIKE, (token) => (/\d/.test(token) || (/\p{Ll}\p{Lu}/u.test(token) && sentTokens.has(token)) ? ' '.repeat(token.length) : token));
   for (const found of withoutIdentifiers.matchAll(CAPITALISED)) {
     const lower = found[0].toLowerCase();
     if (STRUCTURAL_VOCABULARY.has(lower) || known.has(lower)) continue;
@@ -257,7 +308,7 @@ export function judgeSentences(sentences: readonly SummarySentence[], assembled:
       continue;
     }
     const sentence = clean.stripped ? { ...original, text: clean.text } : original;
-    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled))) removed += 1;
+    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !comparisonHolds(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled))) removed += 1;
     else {
       kept.push(sentence);
       if (clean.stripped) keysStripped += 1;

@@ -195,6 +195,12 @@ describe('the closing event of an assistant turn', () => {
   const FULL = { route: 'ask', outcome: 'answered', intent: 'widgetById', templateId: 'entity', paramsHash: SHA, steps: 1, citedElements: 2, modelCalls: 1, modelRef: 'model-a', promptId: 'assistant.route', promptVersion: '1', instructionsSha256: SHA, tokensIn: 20, tokensOut: 'unknown', runId: '01939999-0000-7000-8000-0000000000ff' };
   const parses = (turn: unknown): boolean => auditDetailSchema.safeParse({ turn }).success;
 
+  it('takes property values sent as a boolean only, never a value', () => {
+    expect(parses({ ...MINIMAL, modelCalls: 1, propertyValuesSent: true })).toBe(true);
+    expect(parses({ ...MINIMAL, modelCalls: 1, propertyValuesSent: false })).toBe(true);
+    for (const bad of ['true', 1, 0, null, { amount: 4200 }, 'Name-1']) expect(parses({ ...MINIMAL, modelCalls: 1, propertyValuesSent: bad })).toBe(false);
+  });
+
   it('takes the minimal and the full shape', () => {
     expect(parses(MINIMAL)).toBe(true);
     expect(parses(FULL)).toBe(true);

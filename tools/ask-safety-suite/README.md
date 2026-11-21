@@ -60,6 +60,8 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 | Another person's notes never reach the model | `src/assistant-tools.test.ts` | never reaches the model from another person |
 | A reply that cites a key the application tools did not return is dropped | `src/assistant-tools.test.ts` | drops a reply that cites a key the application tools did not return |
 | A sentence of an AI case summary drafted in the turn that holds an instruction runs nothing | `src/assistant-tools.test.ts` | is data for the model; the tool it names is refused |
+| An amount a reply states that no cited line holds is dropped (the check fails a sentence that holds it) | `src/assistant-tools.test.ts` | drops a sentence that states a planted amount for an element the result lists |
+| No sentence of an answer holds a planted text (the check fails one that does) | `src/checks.test.ts` | canary: fails a sentence that holds the planted text |
 | A turn writes no AI notes (the check fails a changed draft) | `src/checks.test.ts` | canary: fails a new version, an added entry, and a draft that is gone |
 | A read that no tool names is caught | `src/checks.test.ts` | canary: fails a read no tool names |
 | A case that never ran cannot pass | `src/rig.test.ts` | counts what a case expects |

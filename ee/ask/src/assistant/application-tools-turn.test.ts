@@ -161,3 +161,19 @@ describe('the steps limit and the application tools', () => {
     expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.step')).toHaveLength(1);
   });
 });
+
+describe('the closing event does not say property values were sent for a text that no call was made on', () => {
+  it('says false when the summary made no call', async () => {
+    const caseSummarizer: CaseSummarizer = { maxElements: 300, availability: () => ({ available: true }), summarize: async () => ({ status: 'tooLarge', limit: 'text', estimatedTokens: 10, cap: 5 }) };
+    const r = await rig({ reply: SHARED, maxCalls: 10, step: sequence(tool('ai-summary'), DONE), answer: GOOD });
+    await answerOf(r.route.handler(r.request(VIEW_BODY, { caseSummarizer })));
+    expect(closings(r)[0]).toMatchObject({ propertyValuesSent: false });
+  });
+
+  it('says false when the view answer was stopped by the input limit before its call', async () => {
+    const r = await rig({ reply: ok('{"route":"view"}'), viewMaxInputTokens: 1, view: DONE, step: sequence(DONE), answer: GOOD });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'too-large' });
+    expect(closings(r)[0]).toMatchObject({ propertyValuesSent: false });
+  });
+});
+

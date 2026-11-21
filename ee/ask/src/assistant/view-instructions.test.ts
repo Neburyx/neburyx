@@ -80,3 +80,17 @@ describe('the shipped prompts for a meaning question', () => {
     expect(view).toContain('only for a type with no m line');
   });
 });
+
+describe('the shipped prompt of the answer from the view and after tool steps', () => {
+  it('says what a direction in a line means, that an amount is copied as written, that no sum is ever written, and when the largest may be named', async () => {
+    const result = await loadViewInstructions({ env: {} });
+    if (!result.ok) throw new Error(result.problems.join('; '));
+    const { text } = result.instructions;
+    expect(text).toContain('the first end is the one the link starts from');
+    expect(text).toContain('Copy an amount exactly as the line writes it');
+    expect(text).toContain('Never write a sum, an average or a total of amounts');
+    expect(text).toContain('Name "the largest" or "the smallest" of several elements only when you cite every one of them');
+    expect(text).toContain('never write a count of elements you do not see');
+    expect(text).toContain('An element whose line shows no amount is named as such');
+  });
+});

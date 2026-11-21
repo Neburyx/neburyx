@@ -5,7 +5,7 @@ import { summarizeRun } from '../questions/run-summary.js';
 import { buildStepInstructions, STEP_PROMPT_ID, STEP_PROMPT_VERSION } from './step-instructions.js';
 import { buildToolRegistry } from './tool-registry.js';
 import { decideToolReply, readToolRequest, type ToolRequest } from './tool-request.js';
-import type { ReadDone, ToolAnswerInput, ToolAnswerOutcome } from './tool-answer.js';
+import { readsCarryMoreThanNames, type ReadDone, type ToolAnswerInput, type ToolAnswerOutcome } from './tool-answer.js';
 import type { PlanStep } from './plan-token.js';
 import { readNotRead, readOfAnswer, readOfNothing, readOfNotes, readOfSummary, readOfTypology, readOfView } from './reads.js';
 import { runToolStep, type StepResult, type StepScope } from './tool-step.js';
@@ -341,7 +341,15 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
         const reply = await askForStep(options.model, instructions, values, scope, AbortSignal.any([scope.request.signal, input.deadline]));
         calls += 1;
         if (reply === undefined) return finished();
-        if (isDone(reply)) return steps === 1 ? finished() : finalAnswer();
+        if (isDone(reply)) {
+          if (steps !== 1) return finalAnswer();
+          // the first read of an Ask turn stands as the answer, unless its lines carry a property value beyond the id and the title (an amount) that the fixed sentence leaves out and a call is left: then the model answers over them; an answer that cannot be made leaves the Ask answer as it was
+          if (!fromView && settings.maxCalls - calls >= 1 && readsCarryMoreThanNames(reads)) {
+            const outcome = await finalAnswer();
+            return outcome.kind === 'unsupported' || outcome.kind === 'failed' || outcome.kind === 'limit' ? finished() : outcome;
+          }
+          return finished();
+        }
         read = readToolRequest(reply, registry);
         const decision = decideToolReply(read, { callsUsed: calls, maxCalls: settings.maxCalls, repeated: note !== '' });
         if (decision === 'repeat') {

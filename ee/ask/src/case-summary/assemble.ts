@@ -30,7 +30,14 @@ export interface AssembledText {
   readonly unknownCountKeys: ReadonlySet<string>;
   /** Whether any line carries the value of a property of an element, masked or not, as opposed to its name, type and structure. */
   readonly carriesPropertyValues: boolean;
+  /** The keys of the properties each element's line holds a value for, by the element's key: what the comparison check reads, so that it parses no line. */
+  readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
+  /** The keys of the elements each read listed, by the key of the read's own line (`s1`, …): a line of a read that listed an element states how many that read returned and did not show. */
+  readonly readElements?: ReadonlyMap<string, readonly string[]>;
 }
+
+/** The keys of the properties that hold a value, a masked form included. */
+export const valueKeysOf = (properties: readonly GraphProperty[]): string[] => properties.filter((property) => property.value !== undefined).map((property) => property.key);
 
 /** A count as a ready phrase with its quality, so the model copies a label and computes none. */
 export function countPhrase(count: Count): string {
@@ -45,7 +52,7 @@ export function countPhrase(count: Count): string {
   }
 }
 
-function propertiesOf(properties: readonly GraphProperty[]): { readonly text: string; readonly carriesValue: boolean } {
+export function propertiesOf(properties: readonly GraphProperty[]): { readonly text: string; readonly carriesValue: boolean } {
   let carriesValue = false;
   const parts = properties.map((property) => {
     if (property.value === undefined) return `${property.key}: (not shown)`;
@@ -63,6 +70,32 @@ const times = (edge: GraphEdge): string[] => {
   return parts;
 };
 
+/** What follows a relationship's type and ends in its line, in the order the view writes it: how the source holds it, its times, the rule that derived it, its member count as a ready phrase, and its projected properties. */
+export interface EdgeDetail {
+  readonly parts: readonly string[];
+  readonly carriesValue: boolean;
+  /** The member count when it is not exact: the sentence that states its number must copy the phrase. */
+  readonly inexact?: InexactCount;
+  /** Whether the member count is not known. */
+  readonly unknownCount: boolean;
+}
+
+export function edgeDetailOf(edge: GraphEdge): EdgeDetail {
+  const properties = propertiesOf(edge.properties);
+  const parts: string[] = [edge.semantics, ...times(edge)];
+  if (edge.derivation !== undefined) parts.push(`derived by rule ${JSON.stringify(edge.derivation.ruleId)} version ${edge.derivation.ruleVersion}`);
+  let inexact: InexactCount | undefined;
+  let unknownCount = false;
+  if (edge.memberCount !== undefined) {
+    const phrase = countPhrase(edge.memberCount);
+    parts.push(`members: ${phrase}`);
+    if (edge.memberCount.quality === 'unknown' || edge.memberCount.value === undefined) unknownCount = true;
+    else if (edge.memberCount.quality !== 'exact') inexact = { phrase, value: String(edge.memberCount.value) };
+  }
+  if (properties.text !== '') parts.push(properties.text);
+  return { parts, carriesValue: properties.carriesValue, ...(inexact === undefined ? {} : { inexact }), unknownCount };
+}
+
 /**
  * The one text a summary call is given, built from what the gate returned: entities keyed `n1`…, relationships keyed `e1`…, in the order of their references so the same input gives the same text.
  * Strings are quoted, so what an element says stays a value on its own line. An end of a relationship that was not read has no key and cannot be cited.
@@ -73,6 +106,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
   const inexactCounts: InexactCount[] = [];
   const unknownCountKeys = new Set<string>();
   let carriesPropertyValues = false;
+  const propertyKeys = new Map<string, readonly string[]>();
   const nodes = [...reading.nodes].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const edges = [...reading.edges].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const nodeKeys = new Map<string, string>();
@@ -83,6 +117,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
     nodeKeys.set(canonicalText(node.ref), key);
     const properties = propertiesOf(node.properties);
     carriesPropertyValues ||= properties.carriesValue;
+    propertyKeys.set(key, valueKeysOf(node.properties));
     const line = `${key} | ${JSON.stringify(node.display.type)} | title: ${JSON.stringify(node.display.title)} | id: ${JSON.stringify(node.ref.stableId)}${properties.text === '' ? '' : ` | ${properties.text}`}`;
     lines.set(key, line);
     out.push(line);
@@ -93,22 +128,16 @@ export function assembleText(reading: SummaryReading): AssembledText {
   edges.forEach((edge, index) => {
     const key = `e${index + 1}`;
     keys.set(key, { kind: 'relationship', ref: edge.ref });
-    const properties = propertiesOf(edge.properties);
-    carriesPropertyValues ||= properties.carriesValue;
-    const parts = [`${key}`, JSON.stringify(edge.type), `${endOf(edge.from)} -> ${endOf(edge.to)}`, edge.semantics, ...times(edge)];
-    if (edge.derivation !== undefined) parts.push(`derived by rule ${JSON.stringify(edge.derivation.ruleId)} version ${edge.derivation.ruleVersion}`);
-    if (edge.memberCount !== undefined) {
-      const phrase = countPhrase(edge.memberCount);
-      parts.push(`members: ${phrase}`);
-      if (edge.memberCount.quality === 'unknown' || edge.memberCount.value === undefined) unknownCountKeys.add(key);
-      else if (edge.memberCount.quality !== 'exact') inexactCounts.push({ phrase, value: String(edge.memberCount.value) });
-    }
-    if (properties.text !== '') parts.push(properties.text);
-    const line = parts.join(' | ');
+    const detail = edgeDetailOf(edge);
+    carriesPropertyValues ||= detail.carriesValue;
+    propertyKeys.set(key, valueKeysOf(edge.properties));
+    if (detail.inexact !== undefined) inexactCounts.push(detail.inexact);
+    if (detail.unknownCount) unknownCountKeys.add(key);
+    const line = [key, JSON.stringify(edge.type), `${endOf(edge.from)} -> ${endOf(edge.to)}`, ...detail.parts].join(' | ');
     lines.set(key, line);
     out.push(line);
   });
   if (edges.length === 0) out.push('(none)');
   if (reading.unresolved > 0) out.push(`${reading.unresolved} references could not be read.`);
-  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues };
+  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys };
 }

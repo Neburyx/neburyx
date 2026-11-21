@@ -1,4 +1,4 @@
-import { ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_SENTENCE_LENGTH, ASK_SUMMARY_MAX_SENTENCES, type AskSummary, type AskSummaryCitation, type EdgeRef, type ElementRef } from '@neburyx/contracts';
+import { ASK_SUMMARY_MAX_CITATIONS, ASK_SUMMARY_MAX_SENTENCE_LENGTH, ASK_SUMMARY_MAX_SENTENCES, type AskSummary, type AskSummaryCitation, type EdgeRef, type ElementRef, type GraphEdge, type GraphNode } from '@neburyx/contracts';
 import { refId } from './title.js';
 
 /** An element a result lists, with what a citation holds of it. */
@@ -6,6 +6,9 @@ export interface Listed {
   readonly element: ElementRef | EdgeRef;
   readonly type: string;
   readonly title: string;
+  /** The node or the relationship the result holds for the element, when it holds one: its projected properties, as the gate returned them. */
+  readonly node?: GraphNode;
+  readonly edge?: GraphEdge;
 }
 
 export type ListedElements = ReadonlyMap<string, Listed>;

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
 import { startAssistantRig, type AssistantRig } from './assistant-rig.js';
-import { expectNoNoteWrite, expectNoValue, expectOnlyRegisteredReads } from './checks.js';
+import { expectNoNoteWrite, expectNoSentenceWith, expectNoValue, expectOnlyRegisteredReads } from './checks.js';
 import { startModelStub, type ModelStub } from './stub.js';
 
 const ROUTE = JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: 'W-1' } });
@@ -101,6 +101,19 @@ describe('a sentence of an AI case summary drafted in the turn that holds an ins
     expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
     expectNoNoteWrite(before ?? { version: -1 }, rig.store.drafts[0]);
     expectNoValue([rig.events(), rig.logs], ['zzsummarymark']);
+    await rig.close();
+  });
+});
+
+describe('an amount a reply states that no cited line holds is dropped, with the lines of the result as they are', () => {
+  it('drops a sentence that states a planted amount for an element the result lists, and keeps the sentence that holds none', async () => {
+    const rig = await rigWithNotes('is mine');
+    const planted = JSON.stringify({ sentences: [{ text: 'Widget W-1 has a figure of 7311.', cites: ['r1'] }, { text: 'Ana Silva is listed.', cites: ['r1'] }] });
+    const answer = await rig.turn('Show W-1', [ROUTE, tool('typology', {}), DONE, planted, planted]);
+    expect(answer.status).toBe(200);
+    expect(answer.body).toMatchObject({ status: 'answered', sentences: [{ text: 'Ana Silva is listed.' }] });
+    expectNoSentenceWith(answer.body, ['7311']);
+    expectNoValue([rig.events(), rig.logs], ['7311']);
     await rig.close();
   });
 });

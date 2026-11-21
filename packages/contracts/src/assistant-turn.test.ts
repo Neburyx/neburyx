@@ -239,8 +239,9 @@ describe('the answer of the ask route after tool steps', () => {
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, reads: [] }).success).toBe(false);
   });
 
-  it('accepts no citation of an element (a sentence may cite the line of a read only), and refuses one step, no sentence, an extra member, and the answer of Ask together with the sentences', () => {
-    expect(assistantTurnAnswerSchema.safeParse({ ...answer, steps: 1 }).success).toBe(false);
+  it('accepts no citation of an element (a sentence may cite the line of a read only), and refuses no step, no sentence, an extra member, and the answer of Ask together with the sentences', () => {
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, steps: 1 }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...answer, steps: 0 }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, sentences: [] }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, extra: 1 }).success).toBe(false);

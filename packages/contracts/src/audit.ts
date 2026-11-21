@@ -150,6 +150,8 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   summarySentencesKept: wholeCount.optional(),
   summarySentencesDropped: wholeCount.optional(),
   modelCalls: wholeCount,
+  /** Whether any text the turn sent to a model held the value of a property of an element (a masked form included), as opposed to names, types and structure; absent when the turn made no model call; never a value. */
+  propertyValuesSent: z.boolean().optional(),
   modelRef: label.optional(),
   promptId: label.optional(),
   promptVersion: label.optional(),
