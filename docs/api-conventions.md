@@ -160,6 +160,16 @@ With no AI provider configured (and the older preview switch not set), the AI ex
 
 A heavy stop carries a `continueToken`: a signature over the person, the source, the investigation, the intent, a fingerprint of the intent's definition, the entities and the masking choice, valid 15 minutes and usable more than once. A continue reads one bounded first page with no model call. Errors: `ACCESS_DENIED` with the reason `ai-off` (the assistant is off, with no provider, or with every AI feature off), `NOT_FOUND` (the source or the investigation is not the caller's, or the investigation is not of that source), `INVALID_REQUEST` (a body that is not one of the two forms, or a message of white space only), `AUDIT_UNAVAILABLE` (only for a model answer that does not match what was sent), `RATE_LIMITED`, and the refusals of the gate that an intent run gives as `POST /v1/ask` gives them (for example `QUERY_BUDGET_EXCEEDED` or `INVALID_REQUEST` with the reason `file-query-result`).
 
+### A streamed assistant turn
+
+A client that sends `Accept: application/x-ndjson` on `POST /v1/assistant/turns` gets the turn as a stream: `200`, `Content-Type: application/x-ndjson`, `Cache-Control: no-store`, one JSON object a line, never compressed. Any other client gets the JSON answer above, unchanged.
+
+- **`{"event":"step","n":1,"phase":"routing"}`** says which step is about to run. `n` counts from 1. `phase` is `routing` (the message is being placed), `reading-view` (the elements in view are read again), `reading` (a read of the source, with `tool`, the plain-words `label` when the operator gave the intent one, and `subject`, the values accepted for it as the confirmation card shows them) or `answering` (the answer is being written). A turn sends at most the step limit plus four of them. A step holds nothing a model wrote.
+- **`{"event":"answer","answer":…}`** is the last line: exactly the answer the JSON route gives for the turn.
+- **`{"event":"error","code":…,"message":…,"traceId":…}`** is the last line instead, for a failure that has no turn answer after the first line; it carries what the HTTP error body would have. A failure of the model's service is an `answer` line with the `unavailable` answer, as in JSON.
+
+A request refused before the handler runs (an invalid body, no access, a rate limit, the feature off) is answered with its HTTP status and error body, as for any client; the stream starts with its first line. Closing the connection cancels the turn exactly as cancelling the JSON request does. A stream is never idempotent and ends with an `error` line after the longest a turn may take. A reverse proxy in front of the application must not buffer `application/x-ndjson` (for nginx, `proxy_buffering off`; the response also sends `X-Accel-Buffering: no`), or the steps arrive together with the answer.
+
 ## Field limits
 
 Every request is checked against a strict schema: unknown fields are rejected, and a violation is `INVALID_REQUEST`.

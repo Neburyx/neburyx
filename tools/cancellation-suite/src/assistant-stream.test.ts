@@ -139,6 +139,7 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     const response = await app.sendTurn('Show W-1', controller.signal, {}, NDJSON);
     const lines = await readUntil(response, (seen) => seen.some((line) => line['event'] === 'answer'));
     expect(lines.at(-1)).toMatchObject({ event: 'answer' });
+    expect(steps(lines).slice(0, 2)).toEqual(['routing', 'reading']);
     controller.abort();
     await pause();
     expect(closing()).toMatchObject([{ detail: { turn: { outcome: 'answered' } } }]);
