@@ -1,4 +1,4 @@
-import type { AskPatternListing, AskPatternOffer, AskRunner, AskRunScope, ElementRefs, ElementsScope, ExtensionRequest, SummaryReading, TypeDescriptions } from '@neburyx/contracts';
+import type { AskPatternListing, AskPatternOffer, AskRunner, AskRunScope, ElementRefs, ElementsScope, ExtensionRequest, SourceElementsScope, SummaryReading, TypeDescriptions } from '@neburyx/contracts';
 
 /**
  * The one way AI code reaches the core. Every source read of an AI feature is one of these, each answered by the gate of the core for the caller of the request; a member is absent when the edition does not provide it.
@@ -7,6 +7,8 @@ export interface GateClient {
   /** Runs an intent or a template on one source as the caller. */
   readonly runner?: (scope: AskRunScope) => AskRunner;
   readonly readElements?: (scope: ElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
+  /** The same read of elements for a route with no investigation (Ask's). */
+  readonly readSourceElements?: (scope: SourceElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
   /** Resolves when the caller may read the source; rejects with the `NOT_FOUND` refusal otherwise. */
   readonly sourceReadable?: (sourceId: string) => Promise<void>;
   readonly investigationReadable?: (investigationId: string, sourceId: string) => Promise<void>;
@@ -16,13 +18,14 @@ export interface GateClient {
   readonly typeDescriptions?: (sourceId: string) => TypeDescriptions;
 }
 
-type Capabilities = Pick<ExtensionRequest, 'askRunner' | 'readElements' | 'askSourceReadable' | 'investigationReadable' | 'askPatterns' | 'askPatternFind' | 'typeDescriptions'>;
+type Capabilities = Pick<ExtensionRequest, 'askRunner' | 'readElements' | 'readSourceElements' | 'askSourceReadable' | 'investigationReadable' | 'askPatterns' | 'askPatternFind' | 'typeDescriptions'>;
 
 /** The gate client of a request: its capabilities and no other member of the request. */
 export function gateClientOf(request: Capabilities): GateClient {
   return {
     runner: request.askRunner,
     readElements: request.readElements,
+    readSourceElements: request.readSourceElements,
     sourceReadable: request.askSourceReadable,
     investigationReadable: request.investigationReadable,
     patterns: request.askPatterns,

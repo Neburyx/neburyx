@@ -1,4 +1,5 @@
-import { MAX_READ_REFS, valueNotFitSentence, type AskAnswer, type AskValueNotFitKind, type ElementRefs, type SummaryReading } from '@neburyx/contracts';
+import { MAX_READ_REFS, valueNotFitSentence, type AskAnswer, type AskEntities, type AskIntent, type AskValueNotFitKind, type ElementRefs, type ExtensionRequest, type SummaryReading } from '@neburyx/contracts';
+import { roleEntityType } from '../assistant/clarification.js';
 
 /** A value the person wrote for a role of an intent, and the entity type that role needs. */
 export interface WrittenValue {
@@ -67,4 +68,35 @@ export function valueNotFitAnswer(misfit: ReturnType<typeof firstMisfit> & objec
   const first = verdict.kind === 'other-type' ? verdict.found[0] : undefined;
   const fit = first === undefined ? { kind, needed } : { kind, needed, found: first.type, citation: { ref: first.ref, title: first.title, type: first.type } };
   return { refused: { cause: 'value-not-fit', sentence: valueNotFitSentence({ kind, needed, found: first?.type, title: first?.title }), ...(intent === undefined ? {} : { intent }), valueNotFit: fit } };
+}
+
+export interface IntentValuesInput {
+  readonly sourceId: string;
+  readonly mask: boolean;
+  readonly signal: AbortSignal;
+  readonly intent: AskIntent;
+  /** The values the person wrote, by role: not the ones the server resolved from a key, which are checked already. */
+  readonly written: AskEntities;
+  /** The entity types of the source's mapping, in the mapping's order; absent, only the type each role needs is looked up. */
+  readonly types?: readonly string[] | undefined;
+  /** The read of elements for a route with no investigation; absent (an edition without it), the values are not checked. */
+  readonly readSource: ExtensionRequest['readSourceElements'];
+}
+
+/**
+ * The written values of an intent that have an entity type their role needs (a role no setting places has none and is not checked), looked up through the gate. The refusal of the first that does not fit, in the order of the
+ * intent's parameters, or undefined when every one fits, when no value has a type or when the edition gives no read. A read that fails rejects, for the caller to answer as it answers any read of the turn.
+ */
+export async function checkIntentValues(input: IntentValuesInput): Promise<AskAnswer | undefined> {
+  const { intent, readSource } = input;
+  if (readSource === undefined) return undefined;
+  const values = intent.parameters.flatMap((role) => {
+    const value = input.written[role];
+    const needed = value === undefined ? undefined : roleEntityType(intent, role);
+    return value === undefined || needed === undefined ? [] : [{ role, value, needed }];
+  });
+  if (values.length === 0) return undefined;
+  const types = input.types !== undefined && input.types.length > 0 ? input.types : [...new Set(values.map((entry) => entry.needed))];
+  const misfit = firstMisfit(await lookupWrittenValues({ sourceId: input.sourceId, types, values, read: (refs) => readSource({ sourceId: input.sourceId, mask: input.mask, signal: input.signal }, refs) }));
+  return misfit === undefined ? undefined : valueNotFitAnswer(misfit, intent.name);
 }

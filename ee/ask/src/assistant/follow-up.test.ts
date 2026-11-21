@@ -989,22 +989,46 @@ describe('the one element a message needs and does not name', () => {
   });
 });
 
-/** What a written value does today when a clarification is answered (the checking stories of the feature turn this). */
-describe('a written value that travels through a clarification, today', () => {
+/** A value the person wrote for another role of a clarification is checked before the choices are offered, and again when a choice is made. */
+describe('a written value that travels through a clarification', () => {
   const PAIR = {
     pair: { parameters: ['first', 'second'], template: 'shortest-paths', settings: { ends: [{ entityType: 'widget', stableId: '$first' }, { entityType: 'widget', stableId: '$second' }], relTypes: ['LINK_A'], maxHops: 3, limit: 5, direction: 'both' } },
   };
-
-  it('seals the written value of another role into the choice, re-reads only the role the choice fills, and runs the intent with the unchecked value, which ends nothing found', async () => {
-    const t = await follow(() => clarifying(['c1', 'c2'], { intent: 'pair', role: 'first', entities: { second: 'K-1' } }), { readNodes: everyone, intents: PAIR, run: () => ({ status: 'refused', refusal: { code: 'NOT_FOUND' } }) });
+  const TYPES = ['widget', 'gadget'];
+  const NOT_FOUND = { run: () => ({ status: 'refused' as const, refusal: { code: 'NOT_FOUND' as const } }) };
+  const clarified = async (held: string[]) => {
+    const t = await follow(() => clarifying(['c1', 'c2'], { intent: 'pair', role: 'first', entities: { second: 'K-1' } }), { readNodes: everyone, intents: PAIR, source: held, types: TYPES, ...NOT_FOUND });
     await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }], citationRefs: [widget('A-2')] }));
+    return t;
+  };
+
+  it('offers no choice for an intent whose other written value is an element of another type: the refusal says so and nothing is read for the intent', async () => {
+    const t = await clarified(['gadget/K-1']);
+    const answer = await t.send(FOLLOW_UP);
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'value-not-fit', valueNotFit: { kind: 'other-type', needed: 'widget', found: 'gadget' } } } });
+    expect(ranFor(t.rig)).toHaveLength(0);
+  });
+
+  it('offers the choices when the written value fits, seals it, and reads it again when a choice is made: an element that is gone by then answers a value that does not fit, not an invalid choice, and nothing runs', async () => {
+    const held = ['widget/K-1'];
+    const t = await clarified(held);
     const clarification = await t.send(FOLLOW_UP);
     if (clarification.status !== 'clarification') throw new Error('not a clarification');
     const choice = clarification.candidates[1]?.choice as AssistantChoice;
     expect(choice.entities).toEqual({ first: 'A-2', second: 'K-1' });
-    t.rig.elementReads.length = 0;
+    t.rig.sourceReads.length = 0;
+    held.length = 0;
     const answer = await answerOf(t.rig.route.handler(t.rig.request({ sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], choice }, { principalId: PERSON })));
-    expect(JSON.stringify(t.rig.elementReads.map((read) => read.refs))).not.toContain('K-1');
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'value-not-fit', valueNotFit: { kind: 'not-found', needed: 'widget' } } } });
+    expect(t.rig.sourceReads.flatMap((read) => read.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`))).toEqual(['widget/K-1', 'gadget/K-1']);
+    expect(ranFor(t.rig)).toHaveLength(0);
+  });
+
+  it('runs the intent after a choice when the written value still fits', async () => {
+    const t = await clarified(['widget/K-1']);
+    const clarification = await t.send(FOLLOW_UP);
+    if (clarification.status !== 'clarification') throw new Error('not a clarification');
+    const answer = await answerOf(t.rig.route.handler(t.rig.request({ sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], choice: clarification.candidates[1]?.choice }, { principalId: PERSON })));
     expect(ranFor(t.rig)[0]).toContain('K-1');
     expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'nothing-found' } } });
   });

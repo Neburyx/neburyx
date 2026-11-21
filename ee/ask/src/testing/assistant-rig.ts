@@ -139,6 +139,12 @@ export interface RigOptions {
   readonly answer?: FixtureReplies[string];
   readonly loopSteps?: number;
   readonly loopRows?: number;
+  /** The elements the source holds, as `type/id`, for the read of a source's elements that checks a written value; absent, every reference asked for is found. */
+  readonly source?: readonly string[];
+  /** The read of a source's elements leaves something out. */
+  readonly sourceOmits?: boolean;
+  /** The entity types of the source's mapping, in order, as the descriptions of the mapping give them; absent, the request has no descriptions. */
+  readonly types?: readonly string[];
 }
 
 export interface Rig {
@@ -150,6 +156,8 @@ export interface Rig {
   /** The view answer alone, when `view` is given. */
   readonly view: ReturnType<typeof createViewAnswer> | undefined;
   readonly elementReads: { refs: unknown; mask: boolean; signal: AbortSignal | undefined }[];
+  /** The reads of a source's elements that checked a written value. */
+  readonly sourceReads: { refs: ElementRefs; mask: boolean }[];
   readonly runs: { asked: unknown; options: unknown; mask: boolean }[];
   readonly fixture: ReturnType<typeof createFixtureProvider>;
   readonly instructions: ReturnType<typeof buildAssistantInstructions>;
@@ -166,6 +174,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const reads: string[] = [];
   const runs: Rig['runs'] = [];
   const elementReads: Rig['elementReads'] = [];
+  const sourceReads: Rig['sourceReads'] = [];
   const clock = { now: NOW };
   const sink: AuditSink = { record: (event) => (options.sink === 'fails' ? Promise.reject(new Error('down')) : (events.push(event), Promise.resolve())) };
   const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view, [replyKey(VIEW_PROMPT_ID, VIEW_TOOLS_PROMPT_VERSION)]: options.view }), ...(options.overview === undefined ? {} : { [replyKey(OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION)]: options.overview }), ...(options.step === undefined ? {} : { [replyKey(STEP_PROMPT_ID, STEP_PROMPT_VERSION)]: options.step }), ...(options.answer === undefined ? {} : { [replyKey(ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION)]: options.answer }) } });
@@ -212,6 +221,12 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
       if (options.viewReadHangs === true) return new Promise<never>(() => undefined);
       return { nodes: [...(options.readNodes?.(refs, scope.mask) ?? options.viewNodes ?? [node('A-1', options.viewTitle), node('A-2')])], edges: [...(options.readEdges?.(refs) ?? [])] as never, unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
     },
+    readSourceElements: async (scope, refs) => {
+      sourceReads.push({ refs, mask: scope.mask });
+      const held = (ref: { entityType: string; stableId: string }): boolean => options.source === undefined || options.source.includes(`${ref.entityType}/${ref.stableId}`);
+      return { nodes: refs.entities.filter(held).map((ref) => ({ ref: { sourceId: SOURCE, entityType: ref.entityType, stableId: ref.stableId }, display: { title: `${ref.entityType} ${ref.stableId}`, type: ref.entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } })), edges: [], unresolved: refs.entities.filter((ref) => !held(ref)).length, omitted: options.sourceOmits === true, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
+    },
+    ...(options.types === undefined ? {} : { typeDescriptions: () => ({ entityTypes: (options.types ?? []).map((type) => ({ type, label: type, displayName: type })), relationshipTypes: [] }) }),
     askRunner: (scope) => ({
       run: async (asked, runOptions) => {
         runs.push({ asked, options: runOptions, mask: scope.mask });
@@ -222,7 +237,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
     body,
     ...over,
   });
-  return { route, expire: () => expiry.abort(), view: viewAnswer, events, reads, elementReads, runs, fixture, instructions, clock, request };
+  return { route, expire: () => expiry.abort(), view: viewAnswer, events, reads, elementReads, sourceReads, runs, fixture, instructions, clock, request };
 }
 
 export const nodeOf = node;

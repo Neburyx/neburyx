@@ -44,6 +44,7 @@ import { verifyContinueToken } from '../questions/continue-token.js';
 import type { RouterInput, RouterOutcome } from './router.js';
 import type { AssistantRunStore } from './run-store.js';
 import { issueChoiceToken, verifyChoiceToken } from './choice-token.js';
+import { checkIntentValues } from '../questions/written-values.js';
 import { candidatesFor, candidatesOfReply, clarificationAnswer, roleEntityType, type Candidate } from './clarification.js';
 import { followUpsOf, type FollowUp } from './follow-ups.js';
 import { buildContext, canonical, withView, type TurnContext } from './context.js';
@@ -261,6 +262,26 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     return buildContext({ turns, sourceId: body.sourceId, read: (refs) => readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, refs) });
   }
 
+  /**
+   * The values the person wrote for the roles of an intent, looked up through the gate before the intent runs (or a choice is offered): Ask's refusal for the first that is not an element of the type its role needs, or undefined
+   * when every one fits. The lookup is a read of the turn under its time bound; a read that fails ends the turn as any read of it does.
+   */
+  async function writtenValuesRefusal(request: ExtensionRequest, body: { readonly sourceId: string; readonly mask?: boolean | undefined }, intentName: string, written: AskEntities, signal: AbortSignal, deadline: AbortSignal): Promise<AssistantTurnAnswer | undefined> {
+    const { readSourceElements, typeDescriptions } = gateClientOf(request);
+    const intent = options.folder()?.intent(body.sourceId, intentName);
+    if (intent === undefined || Object.keys(written).length === 0) return undefined;
+    try {
+      const refusal = await checkIntentValues({ sourceId: body.sourceId, mask: body.mask === true, signal, intent, written, types: typeDescriptions?.(body.sourceId).entityTypes.map((entry) => entry.type), readSource: readSourceElements });
+      return refusal === undefined ? undefined : answeredAsk(refusal);
+    } catch (error) {
+      if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
+      if (request.signal.aborted) throw new Error('the request was cancelled');
+      const unavailable = unavailableOf(error) ?? (deadline.aborted ? ({ status: 'unavailable', kind: 'timeout', readStarted: true } as const) : undefined);
+      if (unavailable === undefined) throw error;
+      return unavailable;
+    }
+  }
+
   /** A key the router named that is not an element of the context: the elements it may mean, as a clarification, or the fixed refusal when there are none or more than one role is in doubt. */
   async function clarifyUnheld(request: ExtensionRequest, reply: Extract<AssistantRouterReply, { route: 'ask' }>, unheld: readonly string[], others: AskEntities, context: TurnContext | undefined, body: Extract<AssistantTurnRequest, { message: string }>, readElements: ExtensionRequest['readElements'], signal: AbortSignal): Promise<AssistantTurnAnswer> {
     const [role] = unheld;
@@ -310,6 +331,9 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     }
     const binding = { principalId: request.principalId, sourceId: body.sourceId, investigationId: body.investigationId, intent: choice.intent, definition: definitionOf(found), roles: choice.roles, entities: choice.entities, mask: body.mask === true };
     if (!verifyChoiceToken(capabilitiesOf(request).signText, choice.choiceToken, binding, (options.now ?? Date.now)())) return invalid;
+    // the values the person wrote for the other roles were sealed with the choice, and are checked as any written value is before anything runs
+    const unfit = await writtenValuesRefusal(request, body, choice.intent, Object.fromEntries(Object.entries(choice.entities).filter(([role]) => !choice.roles.includes(role))), signal, deadline);
+    if (unfit !== undefined) return unfit;
     let reading;
     try {
       reading = await readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, { entities: wanted, edges: [], aggregates: [], derived: [] });
@@ -512,6 +536,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           }
           if (reply.route === 'clarify') {
             const found = candidatesOfReply(reply, routed, options.folder(), body.sourceId);
+            if (found !== undefined) {
+              const unfit = await writtenValuesRefusal(request, body, reply.intent, reply.entities, AbortSignal.any([request.signal, deadline]), deadline);
+              if (unfit !== undefined) return unfit;
+            }
             let candidates: readonly Candidate[] | undefined;
             try {
               candidates = found === undefined ? undefined : await titledFromView(found, routed, body, readElements, AbortSignal.any([request.signal, deadline]));
@@ -566,6 +594,8 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           }
           const intentOfReply = options.folder()?.intent(body.sourceId, reply.intent);
           const resolved = entitiesOfReply(reply, routed, (role) => (intentOfReply === undefined ? undefined : roleEntityType(intentOfReply, role)));
+          const unfit = await writtenValuesRefusal(request, body, reply.intent, reply.entities, AbortSignal.any([request.signal, deadline]), deadline);
+          if (unfit !== undefined) return unfit;
           if (resolved.unheld !== undefined) {
             try {
               return await clarifyUnheld(request, reply, resolved.unheld, resolved.entities, routed, body, readElements, AbortSignal.any([request.signal, deadline]));

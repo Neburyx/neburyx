@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { gateClientOf } from './gate-client.js';
 
 describe('the gate client of a request', () => {
-  it('carries the seven capabilities of the request and nothing else', async () => {
+  it('carries the eight capabilities of the request and nothing else', async () => {
     const sourceReadable = async (): Promise<void> => undefined;
     const request: Pick<ExtensionRequest, 'askSourceReadable' | 'investigationReadable'> = { askSourceReadable: sourceReadable };
     const client = gateClientOf(request);
-    expect(Object.keys(client).sort()).toEqual(['findPattern', 'investigationReadable', 'patterns', 'readElements', 'runner', 'sourceReadable', 'typeDescriptions']);
+    expect(Object.keys(client).sort()).toEqual(['findPattern', 'investigationReadable', 'patterns', 'readElements', 'readSourceElements', 'runner', 'sourceReadable', 'typeDescriptions']);
     expect(client.sourceReadable).toBe(sourceReadable);
     await expect(client.sourceReadable?.('s')).resolves.toBeUndefined();
   });
