@@ -30,15 +30,37 @@ async function diskPackageOf(path: string): Promise<{ readonly name: string; rea
 
 export const diskSuiteFiles: SuiteFiles = { ...diskFiles, packageOf: diskPackageOf };
 
-interface Located extends NamedRow {
+/** One row of the table with its file resolved in the repository. */
+export interface LocatedRow extends NamedRow {
   readonly absolute: string;
 }
 
 /** The rows of the safety suite's table with their files resolved in the repository. */
-async function rowsOf(context: CheckContext, files: SuiteFiles): Promise<readonly Located[]> {
+export async function rowsOf(context: CheckContext, files: SuiteFiles): Promise<readonly LocatedRow[]> {
   const folder = join(context.repoRoot, SUITE);
   const readme = await files.readText(join(folder, 'README.md'));
   return parseNamedTests(readme).map((row) => ({ ...row, absolute: resolve(folder, row.file) }));
+}
+
+
+/** Runs the files of the rows that are not in the safety suite's own package, each package once with only those files; returns the failure of the first run that failed, or nothing, and keeps each run and its output. */
+export async function runNamedRows(context: CheckContext, files: SuiteFiles, rows: readonly LocatedRow[], runs: SuiteRun[], outputs: string[], includeOwn = false): Promise<{ readonly detail: string; readonly exitCode: number | null } | undefined> {
+  const byPackage = new Map<string, { root: string; files: Set<string> }>();
+  for (const row of rows) {
+    const owner = await files.packageOf(row.absolute).catch(() => undefined);
+    if (owner === undefined) return { detail: `no package holds ${relative(context.repoRoot, row.absolute)}`, exitCode: null };
+    if (owner.name === SAFETY_PACKAGE && !includeOwn) continue;
+    const group = byPackage.get(owner.name) ?? { root: owner.root, files: new Set<string>() };
+    group.files.add(relative(owner.root, row.absolute));
+    byPackage.set(owner.name, group);
+  }
+  for (const [name, group] of [...byPackage].sort(([left], [right]) => left.localeCompare(right))) {
+    const run = await runPackage(context, files, { label: `named-${name.replace(/[^\w]/g, '-')}`, package: name, args: [...group.files].sort() });
+    runs.push(run);
+    outputs.push(run.output);
+    if (!run.ok) return { detail: run.detail, exitCode: run.exitCode };
+  }
+  return undefined;
 }
 
 /** C2: every test the safety suite's table names ran and passed, each in its own package, with the suite's own tests, and each guarantee of the assistant that the table names has a passed row. */
@@ -50,7 +72,7 @@ export function askSafetyCheck(files: SuiteFiles = diskSuiteFiles): Check {
     command,
     run: async (context): Promise<CheckOutcome> => {
       const fail = (detail: string, output = ''): CheckOutcome => ({ status: 'failed', detail, command, exitCode: null, output });
-      let rows: readonly Located[];
+      let rows: readonly LocatedRow[];
       try {
         rows = await rowsOf(context, files);
       } catch {
@@ -62,21 +84,8 @@ export function askSafetyCheck(files: SuiteFiles = diskSuiteFiles): Check {
       const runs: SuiteRun[] = [own];
       const outputs = [own.output];
       if (!own.ok) return { status: 'failed', detail: own.detail, command, exitCode: own.exitCode, output: outputs.join('') };
-      const byPackage = new Map<string, { root: string; files: Set<string> }>();
-      for (const row of toRun) {
-        const owner = await files.packageOf(row.absolute).catch(() => undefined);
-        if (owner === undefined) return fail(`no package holds ${relative(context.repoRoot, row.absolute)}`, outputs.join(''));
-        if (owner.name === SAFETY_PACKAGE) continue;
-        const group = byPackage.get(owner.name) ?? { root: owner.root, files: new Set<string>() };
-        group.files.add(relative(owner.root, row.absolute));
-        byPackage.set(owner.name, group);
-      }
-      for (const [name, group] of [...byPackage].sort(([left], [right]) => left.localeCompare(right))) {
-        const run = await runPackage(context, files, { label: `named-${name.replace(/[^\w]/g, '-')}`, package: name, args: [...group.files].sort() });
-        runs.push(run);
-        outputs.push(run.output);
-        if (!run.ok) return { status: 'failed', detail: run.detail, command, exitCode: run.exitCode, output: outputs.join('') };
-      }
+      const others = await runNamedRows(context, files, toRun, runs, outputs);
+      if (others !== undefined) return { status: 'failed', detail: others.detail, command, exitCode: others.exitCode, output: outputs.join('') };
       const missing = rowsNotFound(toRun, runs, context.repoRoot);
       if (missing.length > 0) return fail(`${missing.length} named tests were not found among the passed tests, first: ${missing[0]?.file ?? ''} “${missing[0]?.title ?? ''}”`, outputs.join(''));
       const found = toRun.filter((row) => !missing.includes(row));
