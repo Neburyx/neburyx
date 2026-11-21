@@ -122,6 +122,20 @@ export async function runAdmin(server: RunningNeo4j, cypher: string, parameters:
   }
 }
 
+/** The version the server reports for itself (not the tag of an image), printed once so that the output of a suite carries the version it ran against. */
+export async function announceServerVersion(server: RunningNeo4j): Promise<string> {
+  const session = server.admin.session({ database: server.database });
+  try {
+    const result = await session.run('CALL dbms.components() YIELD name, versions RETURN name, versions');
+    const kernel = result.records.find((record) => record.get('name') === 'Neo4j Kernel');
+    const version = String((kernel?.get('versions') as string[] | undefined)?.[0] ?? 'unknown');
+    process.stdout.write(`server version: ${version}\n`);
+    return version;
+  } finally {
+    await session.close();
+  }
+}
+
 export async function transactionIsListed(server: RunningNeo4j, traceId: string): Promise<boolean> {
   const session = server.admin.session({ database: 'system' });
   try {

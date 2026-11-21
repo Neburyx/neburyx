@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { ProfiledPlan } from 'neo4j-driver';
 import { prepareParameters } from '../sources/parameters.js';
-import { NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
+import { announceServerVersion, NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { patternAllowlist } from '../testing/pattern-fixtures.js';
 import { LOOKUP_INVENTORY } from '../testing/stable-id-lookups.js';
 import { defaultCatalog } from './assemble.js';
@@ -17,6 +17,7 @@ const catalog = defaultCatalog();
 
 beforeAll(async () => {
   server = await startNeo4j();
+  await announceServerVersion(server);
   for (const [label, property] of [['Maker', 'makerId'], ['Tool', 'toolId'], ['Shop', 'shopId']] as const) await runAdmin(server, `CREATE INDEX x_${label.toLowerCase()} FOR (n:${label}) ON (n.${property})`);
   for (const [type, property] of [['LINKS', 'linkId'], ['ALLIES', 'allyId'], ['TRUSTS', 'trustId'], ['USES_TOOL', 'useId'], ['ENDORSES', 'endorseId']] as const) {
     await runAdmin(server, `CREATE INDEX x_${type.toLowerCase()} FOR ()-[r:${type}]-() ON (r.${property})`);

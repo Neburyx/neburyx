@@ -6,7 +6,7 @@ import { renderTemplate } from './render.js';
 import { prepareParameters } from '../sources/parameters.js';
 import { DERIVED_RULE } from '../testing/derived-fixtures.js';
 import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
-import { NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
+import { announceServerVersion, NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
 import { PATTERN_ENTITIES, PATTERN_RELATIONSHIPS, patternParams, step } from '../testing/pattern-fixtures.js';
 import { LOOKUP_INVENTORY } from '../testing/stable-id-lookups.js';
 
@@ -65,6 +65,7 @@ const CASES: readonly (readonly [string, string, Record<string, unknown>])[] = [
 
 beforeAll(async () => {
   server = await startNeo4j();
+  await announceServerVersion(server);
   // the node stable ID indexes (the anchors' hints name them), the indexes of the filtered and ranked neighbor properties, the relationship stable ID indexes, the filtered relationship property and the observed time
   for (const [name, label, property] of [['x_maker', 'Maker', 'makerId'], ['x_tool', 'Tool', 'toolId'], ['x_shop', 'Shop', 'shopId'], ['x_region', 'Maker', 'region'], ['x_rank', 'Maker', 'rank'], ['x_kind', 'Tool', 'kind']] as const) {
     await runAdmin(server, `CREATE INDEX ${name} FOR (n:${label}) ON (n.${property})`);
