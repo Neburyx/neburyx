@@ -21,9 +21,9 @@ import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
-export const VIEW_PROMPT_VERSION = 7;
+export const VIEW_PROMPT_VERSION = 8;
 /** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 8;
+export const VIEW_TOOLS_PROMPT_VERSION = 9;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {

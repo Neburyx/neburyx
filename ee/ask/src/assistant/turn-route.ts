@@ -480,6 +480,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       // the elements the analyst has selected on the canvas that are in the view: a hint, marked on their lines for the router
       const selectedKeys = selectedKeysOf(body.viewElementKeys, 'selectionKeys' in body ? body.selectionKeys : undefined);
       const selectedRead = selectedKeys.length === 0 ? undefined : readViewKeys(selectedKeys, body.sourceId);
+      noteTurn({ selectedElements: selectedKeys.length });
       const routed = withView(context, viewRead.ok ? viewRead.refs : { entities: [], edges: [], aggregates: [], derived: [] }, body.sourceId, selectedRead?.ok === true ? selectedRead.refs : undefined);
       let outcome: RouterOutcome;
       try {

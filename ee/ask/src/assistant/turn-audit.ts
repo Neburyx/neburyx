@@ -51,6 +51,7 @@ interface TurnNotes {
   route?: Route;
   answered?: boolean;
   citedElements?: number;
+  selectedElements?: number;
   cause?: string;
   summary?: { readonly kept: number; readonly dropped: number };
   /** That the reads being made are made again after a decision; and the record of the waiting turn this turn goes on from. */
@@ -70,6 +71,8 @@ export interface TurnNote {
   readonly route?: Route;
   readonly answered?: boolean;
   readonly citedElements?: number;
+  /** How many elements the person selected that the turn kept; a count and nothing of them. */
+  readonly selectedElements?: number;
   /** The things the accepted answer cited, which the thread keeps as references; their number is `citedElements` unless that is given. */
   readonly citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   readonly cause?: string;
@@ -87,6 +90,7 @@ export function noteTurn(change: TurnNote): void {
       notes.citedElements ??= change.citedRefs.length;
     }
     if (change.citedElements !== undefined) notes.citedElements = change.citedElements;
+    if (change.selectedElements !== undefined) notes.selectedElements = change.selectedElements;
     if (change.cause !== undefined) notes.cause = change.cause;
     if (change.summary !== undefined) notes.summary = change.summary;
   });
@@ -273,6 +277,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
     ...(ending.table === undefined ? {} : { form: 'table' as const, tableRowsShown: ending.table.shown, ...(ending.table.dropped === undefined ? {} : { tableRowsDropped: ending.table.dropped }), ...(ending.table.notShown === undefined ? {} : { tableRowsNotShown: ending.table.notShown }) }),
+    ...(notes.selectedElements === undefined || notes.selectedElements === 0 ? {} : { selectedElements: notes.selectedElements }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls + (notes.summaryCalls ?? 0),
     ...(notes.calls + (notes.summaryCalls ?? 0) > 0 ? { propertyValuesSent: notes.propertyValuesSent === true } : {}),

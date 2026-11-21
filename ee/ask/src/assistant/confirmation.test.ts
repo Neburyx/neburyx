@@ -410,3 +410,13 @@ describe('the steps a streamed decision reports', () => {
   });
 });
 
+describe('a plan that waits for a decision and the selection on the canvas', () => {
+  it('is valid for a decision sent after the selection changed, because the plan is bound to the view and holds no selection', async () => {
+    const pending = createMemoryAssistantPendingStore();
+    const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), byId('A-9'), DONE), answer: GOOD, pending, run: runOf() });
+    const first = await answerOf(r.route.handler(r.request({ ...BODY, selectionKeys: [BODY.viewElementKeys[0] ?? ''] })));
+    if (first.status !== 'confirmation') throw new Error('not waiting');
+    const decided = await decide(r, first, 'skip');
+    expect(decided).not.toMatchObject({ status: 'confirmation-invalid' });
+  });
+});

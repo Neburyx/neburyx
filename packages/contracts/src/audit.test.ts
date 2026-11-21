@@ -212,6 +212,11 @@ describe('the closing event of an assistant turn', () => {
     expect(parseAuditDetail({ turn: FULL })).toEqual({ turn: FULL });
   });
 
+  it('takes the number of selected elements the turn kept, and nothing of them', () => {
+    expect(parses({ ...FULL, selectedElements: 2 })).toBe(true);
+    expect(parses({ ...FULL, selectedElements: 0 })).toBe(true);
+  });
+
   it.each([
     ['no outcome', { modelCalls: 0 }],
     ['no count of calls', { outcome: 'answered' }],
@@ -219,6 +224,9 @@ describe('the closing event of an assistant turn', () => {
     ['a further member', { ...MINIMAL, message: 'x' }],
     ['a free string as a cause', { ...MINIMAL, cause: 'a sentence with spaces' }],
     ['a fractional count', { ...MINIMAL, citedElements: 1.5 }],
+    ['a fractional count of selected elements', { ...MINIMAL, selectedElements: 1.5 }],
+    ['a negative count of selected elements', { ...MINIMAL, selectedElements: -1 }],
+    ['a selected element given as a key', { ...MINIMAL, selectedElements: ['n1'] }],
     ['a negative count', { ...MINIMAL, steps: -1 }],
     ['a plain decimal token count', { ...MINIMAL, tokensIn: 1.5 }],
     ['a malformed hash', { ...MINIMAL, paramsHash: 'abc' }],
