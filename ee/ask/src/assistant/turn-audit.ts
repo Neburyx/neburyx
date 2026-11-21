@@ -191,7 +191,7 @@ const tableOf = (answer: { readonly table: { readonly rows: readonly unknown[]; 
 function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
   switch (answer.status) {
     case 'answered':
-      if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause };
+      if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause, ...(answer.overview === undefined ? {} : { citedElements: answer.overview.citations.length }) };
       if ('table' in answer) return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length, table: tableOf(answer), ...(answer.status === 'answered' && 'stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
       if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
       if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(answer.stoppedAt === undefined ? {} : { cause: `limit-${answer.stoppedAt}` }) };
