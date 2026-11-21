@@ -101,7 +101,7 @@ describe('a verdict refusal with an overview', () => {
   });
 
   it('shows one sentence that groups several relationships, citing each of them, and asks for grouping in the shipped prompt', async () => {
-    const grouped = sentences({ text: 'Account A-1 sent to Account A-2 twice.', cites: ['e1', 'e2', 'n1', 'n2'] });
+    const grouped = sentences({ text: 'Account A-1 is linked to Account A-2 by both transfers.', cites: ['e1', 'e2', 'n1', 'n2'] });
     const { answer } = await turn({ overview: grouped }, { ...LINKED_BODY, viewElementKeys: [...LINKED_BODY.viewElementKeys, EDGE_KEY_2] });
     const overview = overviewOf(answer);
     expect(overview.sentences).toHaveLength(1);
@@ -109,7 +109,10 @@ describe('a verdict refusal with an overview', () => {
     expect(overview.citations).toHaveLength(4);
     expect(overview.citations.filter((citation) => citation.kind === 'relationship')).toHaveLength(2);
     const prompt = readFileSync(fileURLToPath(new URL('../../prompts/assistant-overview.md', import.meta.url)), 'utf8');
-    expect(prompt).toContain('three to five short neutral sentences');
+    expect(prompt).toContain('at most five short neutral sentences');
+    expect(prompt).toContain('never a sentence only to reach a number');
+    expect(prompt).toContain('never counts what it groups');
+    expect(prompt).not.toContain('four accounts');
     expect(prompt).toContain('never one for each relationship');
     expect(prompt).toContain('two or more elements link to the same element');
     expect(prompt).toContain('lists the key of every relationship it states');

@@ -61,7 +61,7 @@ let reachable: Promise<void> | undefined;
 function postgresReachableFromContainer(): Promise<void> {
   reachable ??= (async () => {
     const { port } = postgres.address();
-    const probe = `require('node:net').connect(${port}, '${HOST_ALIAS}').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000)`;
+    const probe = `require('node:net').connect(${port}, '${HOST_ALIAS}').on('connect',()=>process.exit(0)).on('error',(e)=>{console.error(e.code);process.exit(1)});setTimeout(()=>process.exit(1),3000)`;
     const deadline = Date.now() + REACHABLE_WITHIN_MS;
     let last = '';
     while (Date.now() < deadline) {
