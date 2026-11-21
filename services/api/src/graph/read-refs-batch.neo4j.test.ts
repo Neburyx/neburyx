@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MAX_READ_REFS } from '@neburyx/contracts';
+import { AppError } from '../errors.js';
 import { type ProfiledPlan } from 'neo4j-driver';
 import { allowlistFromMapping } from '../gate/allowlist.js';
 import { assembleGate } from '../gate/assemble.js';
@@ -248,6 +249,29 @@ describe(`the plan of a read of many references in one statement, on ${NEO4J_SER
   it('is refused by the server, never answered as missing, when the only index holds text (the gate refuses such a read first when it can list the indexes)', async () => {
     for (const id of ['5', 'tx1']) await expect(run(entityLoadManyTemplate, { entityType: 'texty', refs: [el('texty', id)] }, 1)).rejects.toMatchObject({ code: 'Neo.DatabaseError.Statement.ExecutionFailed' });
     for (const id of ['5', 'tu1']) await expect(run(edgeLoadManyTemplate, { type: 'TEXTONLY', from: 'maker', to: 'tool', refs: [{ stableId: id }] }, 1)).rejects.toMatchObject({ code: 'Neo.DatabaseError.Statement.ExecutionFailed' });
+  });
+
+  it('answers a read of a type whose only index holds text, when the source cannot list its indexes, with the same mapped error for a single read as for a batched one, and none of the server\u2019s text', async () => {
+    const runs: [string, string, Record<string, unknown>][] = [
+      ['entity single', entityLoadTemplate.id, { entityType: 'texty', stableId: 'tx1' }],
+      ['entity batched', entityLoadManyTemplate.id, { entityType: 'texty', refs: [el('texty', 'tx1')] }],
+      ['edge single', edgeLoadTemplate.id, { type: 'TEXTONLY', from: 'maker', to: 'tool', stableId: 'tu1' }],
+      ['edge batched', edgeLoadManyTemplate.id, { type: 'TEXTONLY', from: 'maker', to: 'tool', refs: [{ stableId: 'tu1' }] }],
+    ];
+    const answers = new Map<string, string>();
+    for (const [name, templateId, params] of runs) {
+      const error: unknown = await rig.gate.run({ traceId: 'tr-text', principal: LOCAL_PRINCIPAL, sourceId: 'graph', templateId, params, limit: 1, mask: false, indexes: 'unverified' }).then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+      expect(error, name).toBeInstanceOf(AppError);
+      const mapped = error as AppError;
+      expect(JSON.stringify([mapped.message, mapped.reason, mapped.details])).not.toMatch(/Neo\.|XTexty|textyId|TEXTONLY|textUseId|INDEX SEEK/);
+      answers.set(name, `${mapped.code}:${mapped.reason ?? ''}`);
+    }
+    expect(answers.get('entity single')).toBe(answers.get('entity batched'));
+    expect(answers.get('edge single')).toBe(answers.get('edge batched'));
+    expect(answers.get('entity single')).not.toMatch(/^INTERNAL_ERROR:$/);
   });
 
   it('reads the relationship of an ID at the end of a tool with thousands of relationships by the index too, at a cost of a few database hits for each ID', async () => {
