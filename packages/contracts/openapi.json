@@ -8395,7 +8395,10 @@
                   "intent",
                   "template",
                   "pattern",
-                  "view"
+                  "view",
+                  "typology",
+                  "ai-notes",
+                  "ai-summary"
                 ]
               },
               "read": {
@@ -8419,7 +8422,10 @@
                           "intent",
                           "template",
                           "pattern",
-                          "view"
+                          "view",
+                          "typology",
+                          "ai-notes",
+                          "ai-summary"
                         ]
                       },
                       "subject": {
@@ -8447,6 +8453,11 @@
                       },
                       "partial": {
                         "type": "boolean"
+                      },
+                      "lines": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
@@ -8477,7 +8488,10 @@
                           "intent",
                           "template",
                           "pattern",
-                          "view"
+                          "view",
+                          "typology",
+                          "ai-notes",
+                          "ai-summary"
                         ]
                       },
                       "read": {
