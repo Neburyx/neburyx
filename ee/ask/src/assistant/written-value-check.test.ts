@@ -142,6 +142,22 @@ describe('a written value in a step of the tool loop', () => {
     expect(r.sourceReads.length).toBeGreaterThan(0);
   });
 
+  it('does not add the nodes the lookup returns to the rows the loop may read: a turn that uses the lookup stops at the same rows limit, with the same reads, as the same turn without it', async () => {
+    const turn = async (withLookup: boolean) => {
+      const r = await loop(['widget/A-1', 'widget/A-2', 'widget/A-3'], sequence(step('A-2'), step('A-3'), ok('{"done":true}')), { loopRows: 3 });
+      const answer = await answerOf(r.route.handler(r.request(undefined, withLookup ? {} : { readSourceElements: undefined })));
+      return { answer, runs: r.runs.length, lookups: r.sourceReads.length };
+    };
+    const used = await turn(true);
+    const without = await turn(false);
+    expect(used.lookups).toBeGreaterThan(0);
+    expect(without.lookups).toBe(0);
+    expect(used.answer).toMatchObject({ status: 'answered', route: 'ask', stoppedAt: 'rows' });
+    expect(used.runs).toBe(without.runs);
+    expect(JSON.stringify((used.answer as { reads: unknown }).reads)).toBe(JSON.stringify((without.answer as { reads: unknown }).reads));
+    expect((used.answer as { stoppedAt: string }).stoppedAt).toBe((without.answer as { stoppedAt: string }).stoppedAt);
+  });
+
   it('reads the elements once more for a step, with a reference of the type the role needs and one of each other type, through the capability and not the loop\'s own reads', async () => {
     const r = await loop(['widget/A-1', 'widget/A-2'], sequence(step('A-2'), ok('{"done":true}')));
     await answerOf(r.route.handler(r.request()));
