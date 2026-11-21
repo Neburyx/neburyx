@@ -108,6 +108,24 @@ messages:
   - id: what-is-shown-and-what-is-a-merchant
     wording: "What is on screen, and what is a merchant?"
     expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }], types: [merchant] }
+  - id: saved-ai-notes
+    wording: "What do my saved AI notes say about the accounts on screen?"
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }] }
+  - id: ai-summary-of-the-view
+    wording: "Draft an AI summary of what is on screen."
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }] }
+  - id: typology-list
+    wording: "Which shapes of money movement does the typology list?"
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }] }
+  - id: another-persons-notes
+    wording: "What did my colleague write in their AI notes on this investigation?"
+    expect: { route: refuse, cause: other-source }
+  - id: write-a-note
+    wording: "Write a note on this account for me."
+    expect: { route: refuse, cause: unplaced }
+  - id: summary-word-in-a-question
+    wording: "In summary, which accounts use the same device as AC-0002000?"
+    expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002000 } }
 
 threads:
   - id: device-then-merchants

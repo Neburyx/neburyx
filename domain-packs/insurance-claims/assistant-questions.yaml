@@ -66,6 +66,24 @@ messages:
   - id: what-is-shown-and-what-is-a-claimant
     wording: "What is shown here, and what is a claimant?"
     expect: { route: view, view: [{ entityType: claimant, stableId: CT-00100 }, { entityType: claim, stableId: CL-001007 }], types: [claimant] }
+  - id: saved-ai-notes
+    wording: "What do my saved AI notes say about the claimants and claims on screen?"
+    expect: { route: view, view: [{ entityType: claimant, stableId: CT-00100 }, { entityType: claim, stableId: CL-001007 }] }
+  - id: ai-summary-of-the-view
+    wording: "Draft an AI summary of what is on screen."
+    expect: { route: view, view: [{ entityType: claim, stableId: CL-001007 }, { entityType: claim, stableId: CL-001008 }] }
+  - id: typology-list
+    wording: "Which shapes of money movement does the typology list?"
+    expect: { route: view, view: [{ entityType: claimant, stableId: CT-00100 }, { entityType: claim, stableId: CL-001007 }] }
+  - id: another-persons-notes
+    wording: "What did my colleague write in their AI notes on this investigation?"
+    expect: { route: refuse, cause: other-source }
+  - id: write-a-note
+    wording: "Write a note on this claim for me."
+    expect: { route: refuse, cause: unplaced }
+  - id: summary-word-in-a-question
+    wording: "In summary, which claimants live at the same address as CT-00100?"
+    expect: { route: ask, intent: claimants-at-the-same-address, entities: { claimant: CT-00100 } }
 
 threads:
   - id: address-then-phone

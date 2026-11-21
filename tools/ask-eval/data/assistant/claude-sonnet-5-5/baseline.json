@@ -1,8 +1,8 @@
 {
   "replay": {
     "model": "claude-sonnet-5-5",
-    "questions": "d48c1a5c9c954e5979dbc2a1f6dd455043a45c303fd24ca807ca297b503359f3",
-    "refusals": 23,
-    "plans": 107
+    "questions": "0cc7aa8bea7e46a20e4443b1c5dd87354dbfa6b4e47fe20d6669d6fcc88da563",
+    "refusals": 27,
+    "plans": 113
   }
 }

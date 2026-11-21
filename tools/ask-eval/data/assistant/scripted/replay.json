@@ -1,8 +1,8 @@
 {
   "note": "scripted",
   "folders": {
-    "banking-demo": "6bb8ef28d53e6dfc0e66481b9931b0f7b434949294948f26d8bb26eeef452540",
-    "insurance-demo": "f0f66d69b25380cc9a2d9750376659bf3edbca6d5e879ef9d700deb159d87c67"
+    "banking-demo": "fbcea199d82433bf6fa68d972c8ecb8c92557afe7dc6b69377dc858fe4850b02",
+    "insurance-demo": "3116bf156d10237c465f1209fe698b1cfd31c74973002f6f2c2f1371ef85fa75"
   },
   "answers": {
     "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
@@ -109,6 +109,24 @@
     },
     "Message:\nWhat is on screen, and what is a merchant?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
       "reply": "{\"route\":\"view\",\"types\":[\"merchant\"]}"
+    },
+    "Message:\nWhat do my saved AI notes say about the accounts on screen?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nDraft an AI summary of what is on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich shapes of money movement does the typology list?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat did my colleague write in their AI notes on this investigation?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"other-source\"}"
+    },
+    "Message:\nWrite a note on this account for me.\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nIn summary, which accounts use the same device as AC-0002000?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-device\",\"entities\":{\"account\":\"AC-0002000\"}}"
     },
     "Message:\nAnd which merchants has it paid?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-on-the-same-device\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"merchants-an-account-paid\",\"entities\":{\"account\":\"AC-0002000\"}}"
@@ -277,6 +295,21 @@
     },
     "Message:\nWhat is shown here, and what is a claimant?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"\nc2 | \"claim\" | \"CL-001007\"": {
       "reply": "{\"route\":\"view\",\"types\":[\"claimant\"]}"
+    },
+    "Message:\nWhat do my saved AI notes say about the claimants and claims on screen?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"\nc2 | \"claim\" | \"CL-001007\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nDraft an AI summary of what is on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001007\"\nc2 | \"claim\" | \"CL-001008\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich shapes of money movement does the typology list?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"\nc2 | \"claim\" | \"CL-001007\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWrite a note on this claim for me.\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    },
+    "Message:\nIn summary, which claimants live at the same address as CT-00100?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"entities\":{\"claimant\":\"CT-00100\"}}"
     },
     "Message:\nWhich claimants live at the same address as CT-00200?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"entities\":{\"claimant\":\"CT-00200\"}}"

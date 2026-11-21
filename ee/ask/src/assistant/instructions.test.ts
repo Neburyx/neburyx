@@ -99,6 +99,15 @@ describe('the shipped router prompt and the reply format', () => {
     }
   });
 
+  it('sends a message about the analyst\'s own notes, an AI summary or the typology to the view route, never names a tool, refuses writing a note as unplaced, and keeps the word summary in a listed question an ask', async () => {
+    const { prompt } = await shippedText();
+    expect(prompt).toContain("or asks what the analyst's own saved AI notes of this investigation say, for an AI summary of what is shown, or what the typology (the list of shapes of money movement) lists. Choose this route for all of these");
+    expect(prompt).toContain('to write, save or change a note, or to change anything else, is not something the assistant does: choose `refuse` with the cause `unplaced`');
+    expect(prompt).toContain('The word summary in a question one of the listed intents answers does not make it a request for an AI summary: that question is `ask`.');
+    // the router chooses a route only: no tool of the loop is named in its text
+    for (const tool of ['ai-notes', 'ai-summary', '"tool"']) expect(prompt).not.toContain(tool);
+  });
+
   it('places a message that needs several reads on its first read only when the loop is on, and otherwise leaves it unplaced, with a different instructions hash', async () => {
     const { prompt } = await shippedText();
     const on = buildAssistantInstructions(prompt, true);
