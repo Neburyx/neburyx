@@ -1,4 +1,4 @@
-import { ASK_ENTITY_TEXT_MAX_LENGTH, type AskEntities, type AskRefusalCause } from './ask.js';
+import { ASK_ENTITY_TEXT_MAX_LENGTH, type AskEntities, type AskRefusalCause, type AskValueNotFitKind } from './ask.js';
 import { ASK_FOLDER_LIMITS, hasDuplicateKeys, isParameterName } from './ask-folder.js';
 import { codePoints } from './investigations.js';
 
@@ -15,7 +15,20 @@ export const ASK_REFUSAL_SENTENCES: Readonly<Record<AskRefusalCause, string>> = 
   'extra-inputs': 'This question has a value this question type does not use.',
   'invalid-inputs': 'A value in this question is not valid for this question type.',
   'nothing-found': 'The question ran and nothing in this source matches.',
+  'value-not-fit': 'A value in this question is not the kind of element this question needs. Nothing was run.',
 };
+
+const withArticle = (type: string): string => `${/^[aeiou]/i.test(type) ? 'an' : 'a'} ${type}`;
+
+/**
+ * The fixed sentence of a value that does not fit the type its role needs, built from the type the question needs and, for another type, the type found and the title the gate gave the element (masked when the
+ * request masks). `hidden` says nothing about whether an element exists. No word of the model or of the question's text is in it.
+ */
+export function valueNotFitSentence(fit: { readonly kind: AskValueNotFitKind; readonly needed: string; readonly found?: string | undefined; readonly title?: string | undefined }): string {
+  if (fit.kind === 'other-type' && fit.found !== undefined && fit.title !== undefined) return `${fit.title} is ${withArticle(fit.found)}; this question needs ${withArticle(fit.needed)}. Nothing was run.`;
+  if (fit.kind === 'not-found') return `There is no ${fit.needed} with that id. Nothing was run.`;
+  return `That value does not give ${withArticle(fit.needed)} this question can use. Nothing was run.`;
+}
 
 /** A reply longer than this is not read: a reply of the form is far shorter (20 entities of 256 characters and their keys), and a text written with escapes beyond this size is refused as one that does not fit. */
 export const REPLY_MAX_CHARACTERS = 100_000;

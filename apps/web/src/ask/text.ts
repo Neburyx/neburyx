@@ -24,6 +24,7 @@ const CAUSE_LABELS: Readonly<Record<AskRefusalCause, string>> = {
   'extra-inputs': 'Extra inputs',
   'invalid-inputs': 'Invalid inputs',
   'nothing-found': 'Nothing found',
+  'value-not-fit': 'Value does not fit',
 };
 
 /** The tag of a refusal card: the cause's number in the list of causes and its label. */
@@ -38,6 +39,7 @@ const HINTS: Readonly<Partial<Record<AskRefusalCause, string>>> = {
   'extra-inputs': 'Try leaving out what is not needed.',
   'invalid-inputs': 'Check the ID and try again.',
   'nothing-found': 'Try another ID, or search by hand.',
+  'value-not-fit': 'Check the ID, or name the kind of thing the question needs.',
 };
 
 export const hintOf = (cause: AskRefusalCause): string | undefined => HINTS[cause];

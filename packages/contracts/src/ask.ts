@@ -197,7 +197,7 @@ export interface AskPatternOffer {
   readonly projection: AskPatternProjection;
 }
 
-/** Why Ask did not answer a question. Each cause has one fixed sentence (`ASK_REFUSAL_SENTENCES`); no sentence holds a word of the model, the question or the folder. */
+/** Why Ask did not answer a question. Each cause has one fixed sentence (`ASK_REFUSAL_SENTENCES`; the sentence of `value-not-fit` is built from a type and a title by `valueNotFitSentence`); no sentence holds a word of the model, the question or the folder. */
 export const ASK_REFUSAL_CAUSES = [
   'no-intent',
   'unknown-intent',
@@ -210,9 +210,15 @@ export const ASK_REFUSAL_CAUSES = [
   'extra-inputs',
   'invalid-inputs',
   'nothing-found',
+  'value-not-fit',
 ] as const;
 
 export type AskRefusalCause = (typeof ASK_REFUSAL_CAUSES)[number];
+
+/** How a value the person wrote failed the type its role needs: it is an element of another type, no element of the mapping has that id, or what the read showed does not say whether one exists. */
+export const ASK_VALUE_NOT_FIT_KINDS = ['other-type', 'not-found', 'hidden'] as const;
+
+export type AskValueNotFitKind = (typeof ASK_VALUE_NOT_FIT_KINDS)[number];
 
 /** The values the classifier extracted from a question, named as the parameters of the intent it chose. */
 export type AskEntities = Readonly<Record<string, string>>;

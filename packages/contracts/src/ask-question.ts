@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_QUESTION_MAX_CODE_POINTS, ASK_REFUSAL_CAUSES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, askRunResultSchema, askSummarySchema, isHeavyResult } from './ask.js';
+import { ASK_ENTITY_TEXT_MAX_LENGTH, ASK_QUESTION_MAX_CODE_POINTS, ASK_REFUSAL_CAUSES, ASK_SUMMARY_MAX_SENTENCE_LENGTH, ASK_VALUE_NOT_FIT_KINDS, askRunResultSchema, askSummarySchema, isHeavyResult } from './ask.js';
 import { ASK_FOLDER_LIMITS, ASK_SAVED_PATTERN_INTENT, isParameterName } from './ask-folder.js';
 import { savedPatternNameSchema } from './saved-pattern.js';
 import { codePoints } from './investigations.js';
+import { elementRefSchema } from './graph.js';
 
 /** The label that opens the canonical text a run's parameters are signed under, so no other use of the signing capability signs the same text. */
 export const ASK_RUN_PARAMS_LABEL = 'ask-run-params';
@@ -63,15 +64,35 @@ const answeredSchema = z
  * A refusal of the question: the cause and its fixed sentence, and, when the intent is known, the names of the intent's inputs and of the ones found, missing and extra. The names and the entities of an answer are data
  * the person typed or the model named, shown as data; no field holds free text of the model.
  */
-const refusedSchema = z.strictObject({
-  cause: z.enum(ASK_REFUSAL_CAUSES),
-  sentence: z.string().min(1).max(ASK_SUMMARY_MAX_SENTENCE_LENGTH),
-  intent: intentName.optional(),
-  parameters: names.optional(),
-  found: names.optional(),
-  missing: names.optional(),
-  extra: names.optional(),
-});
+const typeName = z.string().min(1).max(64);
+
+/**
+ * A value the person wrote that does not fit the entity type its role needs: how it failed, the type the question needs and, for another type, the type found and the element, cited with the title the gate gave it
+ * (masked when the request masks). `hidden` carries nothing more, so it says nothing of whether an element exists.
+ */
+const valueNotFitSchema = z
+  .strictObject({
+    kind: z.enum(ASK_VALUE_NOT_FIT_KINDS),
+    needed: typeName,
+    found: typeName.optional(),
+    citation: z.strictObject({ ref: elementRefSchema, title: z.string(), type: typeName }).optional(),
+  })
+  .refine((fit) => (fit.kind === 'other-type') === (fit.found !== undefined && fit.citation !== undefined), { message: 'another type names the type found and cites the element; no other kind does', path: ['kind'] })
+  .refine((fit) => fit.kind === 'other-type' || (fit.found === undefined && fit.citation === undefined), { message: 'only another type names a type found', path: ['found'] });
+
+const refusedSchema = z
+  .strictObject({
+    cause: z.enum(ASK_REFUSAL_CAUSES),
+    sentence: z.string().min(1).max(ASK_SUMMARY_MAX_SENTENCE_LENGTH),
+    intent: intentName.optional(),
+    parameters: names.optional(),
+    found: names.optional(),
+    missing: names.optional(),
+    extra: names.optional(),
+    /** Present exactly when the cause is `value-not-fit`. */
+    valueNotFit: valueNotFitSchema.optional(),
+  })
+  .refine((refused) => (refused.cause === 'value-not-fit') === (refused.valueNotFit !== undefined), { message: 'a value that does not fit comes with its kind and types, and no other cause does', path: ['valueNotFit'] });
 
 /** What both routes answer: the answered question with its result, or the refusal with its cause. */
 export const askAnswerSchema = z.union([z.strictObject({ answered: answeredSchema }), z.strictObject({ refused: refusedSchema })]);

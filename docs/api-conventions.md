@@ -313,6 +313,9 @@ The answer is `200` with one of two shapes:
 | `extra-inputs` | This question has a value this question type does not use. |
 | `invalid-inputs` | A value in this question is not valid for this question type. |
 | `nothing-found` | The question ran and nothing in this source matches. |
+| `value-not-fit` | Built from a kind and types (below), for example "Account A-1 is an account; this question needs a customer. Nothing was run." |
+
+**A value that does not fit.** A refusal of the cause `value-not-fit` also carries `valueNotFit` (and no other cause does): `kind` is `other-type` (the value is an element of another type than the one the question needs; the refusal then names the type `found` and a `citation` of the element, with the title the gate gave it, masked when the request masks), `not-found` (no element of the source's mapping has that id: "There is no customer with that id. Nothing was run.") or `hidden` (what the read showed does not say whether an element exists, so the sentence does not either: "That value does not give a customer this question can use. Nothing was run."); `needed` is the type the question needs. The sentences are fixed text built from types and a title, never from a model's words; none says that nothing was found, because nothing was run. In the assistant's turn the same refusal is the `answer` of the `ask` route and may list the `reads` of the earlier steps of a tool loop that it ended.
 
 `unavailable` is not sent as a refusal: it is answered as the existing `ASK_UNSUPPORTED` error (422, reason `not-in-this-edition`). An anchor that is not there is the cause `nothing-found`. A refusal of the gate or of the source (`SOURCE_UNAVAILABLE`, a read that timed out, a budget) keeps its own code and is not turned into a cause.
 

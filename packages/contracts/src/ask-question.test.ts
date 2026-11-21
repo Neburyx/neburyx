@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { askRunAuditDetailSchema, parseAuditDetail } from './audit.js';
 import { ASK_REFUSAL_CAUSES } from './ask.js';
-import { ASK_REFUSAL_SENTENCES } from './ask-classify.js';
+import { ASK_REFUSAL_SENTENCES, valueNotFitSentence } from './ask-classify.js';
 import { askAnswerSchema, askContinueRequestSchema, askQuestionRequestSchema } from './ask-question.js';
 import { INVALID_REQUEST_ENTRIES } from './error-table.js';
 
@@ -50,7 +50,8 @@ describe('the answer to a question', () => {
   const result = { templateId: 'entity' as const, result: NODE };
   it('is an answered question with its result, or a refusal with a cause and a fixed sentence', () => {
     expect(askAnswerSchema.safeParse({ answered: { intent: 'byId', entities: { id: 'A-1' }, outcome: 'complete', result } }).success).toBe(true);
-    for (const cause of ASK_REFUSAL_CAUSES) expect(askAnswerSchema.safeParse({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause] } }).success, cause).toBe(true);
+    // the cause of a value that does not fit also carries its kind and types (below)
+    for (const cause of ASK_REFUSAL_CAUSES.filter((each) => each !== 'value-not-fit')) expect(askAnswerSchema.safeParse({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause] } }).success, cause).toBe(true);
     expect(askAnswerSchema.safeParse({ refused: { cause: 'missing-inputs', sentence: ASK_REFUSAL_SENTENCES['missing-inputs'], intent: 'byId', parameters: ['id'], found: [], missing: ['id'], extra: [] } }).success).toBe(true);
   });
 
@@ -103,5 +104,43 @@ describe('the audit detail of a question and the reason of a bad token', () => {
 
   it('has a sentence for the reason continue-invalid', () => {
     expect(INVALID_REQUEST_ENTRIES['continue-invalid'].message).toContain('continue');
+  });
+});
+
+describe('a value that does not fit the type its role needs', () => {
+  const REF = { sourceId: 'demo', entityType: 'account', stableId: 'A-1' };
+  const refusal = (valueNotFit?: unknown, cause = 'value-not-fit') => ({ refused: { cause, sentence: 'x', intent: 'shared', ...(valueNotFit === undefined ? {} : { valueNotFit }) } });
+  const OTHER = { kind: 'other-type', needed: 'customer', found: 'account', citation: { ref: REF, title: 'Account A-1', type: 'account' } };
+
+  it('is a refusal of the cause `value-not-fit` that names the kind, the type the question needs and, for another type, the type found and the cited element', () => {
+    expect(ASK_REFUSAL_CAUSES).toContain('value-not-fit');
+    for (const fit of [OTHER, { kind: 'not-found', needed: 'customer' }, { kind: 'hidden', needed: 'customer' }]) expect(askAnswerSchema.safeParse(refusal(fit)).success, JSON.stringify(fit)).toBe(true);
+  });
+
+  it('is refused when the cause has no kind, another cause carries one, another type has no type found or no citation, or another kind names a type found', () => {
+    for (const bad of [
+      refusal(undefined),
+      refusal(OTHER, 'nothing-found'),
+      refusal({ kind: 'other-type', needed: 'customer' }),
+      refusal({ kind: 'other-type', needed: 'customer', found: 'account' }),
+      refusal({ kind: 'not-found', needed: 'customer', found: 'account' }),
+      refusal({ kind: 'hidden', needed: 'customer', citation: OTHER.citation }),
+      refusal({ kind: 'guess', needed: 'customer' }),
+      refusal({ ...OTHER, extra: 1 }),
+    ]) expect(askAnswerSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+  });
+
+  it('has one sentence for each kind, built from types and a title only: the type found and the type needed for another type, "no <type> with that id" for none, and a neutral one for hidden', () => {
+    const other = valueNotFitSentence({ kind: 'other-type', needed: 'customer', found: 'account', title: 'Account A-1' });
+    expect(other).toBe('Account A-1 is an account; this question needs a customer. Nothing was run.');
+    expect(valueNotFitSentence({ kind: 'not-found', needed: 'customer' })).toBe('There is no customer with that id. Nothing was run.');
+    const hidden = valueNotFitSentence({ kind: 'hidden', needed: 'customer' });
+    expect(hidden).toBe('That value does not give a customer this question can use. Nothing was run.');
+    for (const sentence of [other, hidden, valueNotFitSentence({ kind: 'not-found', needed: 'customer' }), ASK_REFUSAL_SENTENCES['value-not-fit']]) expect(sentence).not.toMatch(/nothing (was )?found|nothing matches|no (one|match)/i);
+    expect(hidden).not.toMatch(/exist|no customer|not found/i);
+  });
+
+  it('uses the masked title the gate gave and no other text of the request', () => {
+    expect(valueNotFitSentence({ kind: 'other-type', needed: 'customer', found: 'account', title: '••••• 42' })).toContain('••••• 42 is an account');
   });
 });

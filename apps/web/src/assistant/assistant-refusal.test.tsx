@@ -150,7 +150,7 @@ describe('the Assistant thread: Open Paths', () => {
 });
 
 describe('the Assistant thread: the refusal of an Ask question', () => {
-  const askRefusal = (cause: (typeof ASK_REFUSAL_CAUSES)[number]): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: askAnswerSchema.parse({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause], parameters: ['kind-a'], missing: ['kind-a'] } }) });
+  const askRefusal = (cause: (typeof ASK_REFUSAL_CAUSES)[number]): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: askAnswerSchema.parse({ refused: { cause, sentence: ASK_REFUSAL_SENTENCES[cause], parameters: ['kind-a'], missing: ['kind-a'], ...(cause === 'value-not-fit' ? { valueNotFit: { kind: 'not-found', needed: 'widget' } } : {}) } }) });
 
   it.each(ASK_REFUSAL_CAUSES)('shows the %s refusal titled Not answered with Ask’s fixed sentence, its hint where Ask gives one and the chips, and none of Ask’s own lines or tag', async (cause) => {
     setup({ answers: [askRefusal(cause)], paths: 'action' });

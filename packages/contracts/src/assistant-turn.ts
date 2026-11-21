@@ -243,7 +243,7 @@ export const assistantTurnAnswerSchema = z.union([
     status: z.literal('answered'),
     route: z.literal('ask'),
     answer: askAnswerSchema,
-    /** Written by the server for a result that was read: each read of the turn in order, with its kind, subject, rows and the quality of that count. Absent for a refusal and for a heavy stop. */
+    /** Written by the server for a result that was read: each read of the turn in order, with its kind, subject, rows and the quality of that count. Absent for a refusal and for a heavy stop, except the refusal of a value that does not fit (`value-not-fit`) that ends a tool loop, which lists the reads the earlier steps made. */
     reads: z.array(assistantReadSchema).min(1).max(20).optional(),
     /** The limit that ended the reading of the turn, when it did: the answer is over what was read, and the panel shows the stop sentence of the limit under it. */
     stoppedAt: z.enum(ASSISTANT_LIMITS).optional(),

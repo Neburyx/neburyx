@@ -6202,7 +6202,8 @@
                       "missing-inputs",
                       "extra-inputs",
                       "invalid-inputs",
-                      "nothing-found"
+                      "nothing-found",
+                      "value-not-fit"
                     ]
                   },
                   "sentence": {
@@ -6249,6 +6250,76 @@
                       "minLength": 1,
                       "maxLength": 64
                     }
+                  },
+                  "valueNotFit": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "other-type",
+                          "not-found",
+                          "hidden"
+                        ]
+                      },
+                      "needed": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "found": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "citation": {
+                        "type": "object",
+                        "properties": {
+                          "ref": {
+                            "type": "object",
+                            "properties": {
+                              "sourceId": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "entityType": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "stableId": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            },
+                            "required": [
+                              "sourceId",
+                              "entityType",
+                              "stableId"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          }
+                        },
+                        "required": [
+                          "ref",
+                          "title",
+                          "type"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "needed"
+                    ],
+                    "additionalProperties": false
                   }
                 },
                 "required": [
