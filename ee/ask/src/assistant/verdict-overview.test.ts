@@ -64,6 +64,14 @@ describe('a verdict refusal with an overview', () => {
     expect(overviewOf(mixed.answer).sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is in view.']);
   });
 
+  it('drops a sentence that cites a key the call was not sent, and shows the cited sentence beside it', async () => {
+    const { answer } = await turn({ overview: sentences({ text: 'Account A-1 is in view.', cites: ['n1'] }, { text: 'Account A-2 is linked to Account A-9.', cites: ['n99'] }) });
+    expect(overviewOf(answer).sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is in view.']);
+    expect(overviewOf(answer).citations.map((citation) => citation.key)).toEqual(['n1']);
+    const onlyForeign = await turn({ overview: sentences({ text: 'Account A-2 is linked to Account A-9.', cites: ['n99'] }) });
+    expect(onlyForeign.answer).toEqual(PLAIN);
+  });
+
   it('reads the elements of the view once, through the gate, with the masking of the request', async () => {
     const masked = await turn({}, { ...VIEW_BODY, mask: true });
     expect(masked.t.elementReads).toHaveLength(1);
