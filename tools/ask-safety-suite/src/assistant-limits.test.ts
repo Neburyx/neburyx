@@ -166,6 +166,58 @@ describe('the turns that start without a typed message are bound too, through th
     await plain.close();
   });
 
+  /** How a turn without a typed message is started: a continue of a heavy stop, or the press of a follow-up, over a source that answers its page `read`. */
+  type Entry = (read: (call: ExecuteCall) => ExecuteOutcome | undefined) => Promise<{ readonly body: Record<string, unknown>; readonly pageReads: ExecuteCall[] }>;
+  const bigPage = (call: ExecuteCall): ExecuteOutcome | undefined => {
+    if (call.templateId !== 'shared-attribute') return source(call);
+    const row = (id: string) => ({ a: widget('W-1'), b: widget(id), xs: [gadget], ras: [plainRelationship('MADE_FROM', widget('W-1'), gadget, { linkId: 'L-1' }, '5:s:L-1')], rbs: [plainRelationship('MADE_FROM', widget(id), gadget, { linkId: `L-${id}` }, `5:s:L-${id}`)] });
+    return { status: 'rows', rows: Array.from({ length: 300 }, (_unused, index) => row(`W-${index + 2}`)) };
+  };
+  const timingOut = (call: ExecuteCall): ExecuteOutcome | undefined => (call.templateId === 'shared-attribute' ? { status: 'timeout' } : source(call));
+  const ENTRIES: readonly (readonly [string, Entry])[] = [
+    ['a continue', async (read) => {
+      const plain = await startModelStub();
+      const rig = await startAssistantRig({ stub: plain, respond: read, settings: TIGHT });
+      const heavy = await rig.turn('Show the widgets that share a gadget with W-1', [SHARED]);
+      const token = ((heavy.body['answer'] as { answered?: { continueToken?: string } } | undefined)?.answered?.continueToken) ?? '';
+      const continued = await rig.post({ sourceId: 'demo', investigationId: rig.investigationId, viewElementKeys: [], continue: { intent: 'sharedGadget', entities: { id: 'W-1' }, continueToken: token } });
+      const pageReads = rig.reads().filter((call) => call.templateId === 'shared-attribute');
+      await rig.close();
+      await plain.close();
+      return { body: continued.body, pageReads };
+    }],
+    ['a pressed follow-up', async (read) => {
+      const plain = await startModelStub();
+      const counted = (call: ExecuteCall): ExecuteOutcome | undefined => (call.templateId === 'shared-attribute-count' ? { status: 'rows', rows: [{ matches: 2, anchorBounded: false, skipped: false }] } : read(call));
+      const rig = await startAssistantRig({ stub: plain, respond: counted, settings: TIGHT, threads: true, maxSteps: 1, principalId: () => '0192f000-0000-7000-8000-000000000001' });
+      const first = await rig.turn('Show W-1', [JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: 'W-1' } })]);
+      const chip = ((first.body['followUps'] as { choice: unknown }[] | undefined) ?? [])[0]?.choice;
+      await rig.threadWritten(1);
+      const pressed = await rig.post({ sourceId: 'demo', investigationId: rig.investigationId, viewElementKeys: [], choice: chip });
+      const pageReads = rig.reads().filter((call) => call.templateId === 'shared-attribute');
+      await rig.close();
+      await plain.close();
+      return { body: pressed.body, pageReads };
+    }],
+  ];
+
+  it.each(ENTRIES)('bounds the read of %s by the gate: one page of the source\u2019s size, the row limit one over it, whatever the loop\u2019s rows setting says', async (_name, enter) => {
+    const entered = await enter(bigPage);
+    expect(entered.pageReads).toHaveLength(1);
+    expect(entered.pageReads[0]?.rowLimit).toBe(26);
+    expect(entered.body).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { outcome: 'partial' } } });
+    const listed = ((entered.body['answer'] as { answered: { result: { result: { matchIds: unknown[] } } } }).answered.result.result.matchIds).length;
+    expect(listed).toBeLessThanOrEqual(25);
+  });
+
+  it.each(ENTRIES)('ends the read of %s that runs past the gate\u2019s own timeout as the gate\u2019s timeout, not as a limit of the turn, whatever the loop\u2019s time setting says', async (_name, enter) => {
+    const entered = await enter(timingOut);
+    expect(entered.pageReads).toHaveLength(1);
+    expect(entered.pageReads[0]?.timeoutMs).toBeGreaterThan(1000);
+    expect(entered.body).toMatchObject({ status: 'unavailable', kind: 'timeout' });
+    expect(entered.body).not.toHaveProperty('limit');
+  });
+
   it('keeps a confirmed step inside the calls setting: the model calls of the turn and of its confirmation together never pass it', async () => {
     const plain = await startModelStub();
     const rig = await startAssistantRig({ stub: plain, respond: source, stores: true, maxSteps: 4, maxCalls: 3 });
