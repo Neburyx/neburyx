@@ -127,7 +127,7 @@ const summaryInvalid = (): AssistantTurnAnswer => ({ status: 'summary-invalid', 
 const answeredAsk = (answer: AskAnswer, reads?: readonly AssistantRead[], stoppedAt?: AssistantLimit): AssistantTurnAnswer => {
   if ('refused' in answer || answer.answered.continueToken !== undefined) return { status: 'answered', route: 'ask', answer };
   const { result, intent } = answer.answered;
-  return { status: 'answered', route: 'ask', answer, reads: [...(reads ?? [readOfAnswer(answer.answered.patternName === undefined ? 'intent' : 'pattern', intent, answer.answered)])], coverage: coverageOf(result), ...(stoppedAt === undefined ? {} : { stoppedAt }) };
+  return { status: 'answered', route: 'ask', answer, reads: [...(reads ?? [readOfAnswer(answer.answered.patternName === undefined ? 'intent' : 'pattern', answer.answered.patternName ?? intent, answer.answered)])], coverage: coverageOf(result), ...(stoppedAt === undefined ? {} : { stoppedAt }) };
 };
 
 /** The answer of a turn for what the view answer came to; every exit has one. */

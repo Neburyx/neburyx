@@ -2,7 +2,7 @@ import { assistantStepMembersSchema, assistantTurnAnswerSchema } from '@neburyx/
 import { afterAll, describe, expect, it } from 'vitest';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { VIEW_BODY, answerOf, ok, okResult, rig, routeAsk, type Rig, type RigOptions } from '../testing/assistant-rig.js';
+import { VIEW_BODY, answerOf, offerOf, ok, okResult, rig, routeAsk, type Rig, type RigOptions } from '../testing/assistant-rig.js';
 
 afterAll(removeAskFolders);
 
@@ -124,6 +124,17 @@ describe('the steps a streamed turn reports', () => {
     expect(phases(events)).toEqual(['routing', 'reading', 'read-done']);
     if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an answer of the ask route with reads');
     expect(events.at(-1)?.members['read']).toEqual(answer.reads[0]);
+  });
+
+  it('tells the read of a saved pattern under the pattern name the answer lists, whether the loop goes on from it or not', async () => {
+    const pattern = offerOf('22222222-2222-4222-8222-222222222222', 'Mine');
+    for (const step of [sequence(TOOL, DONE), sequence(DONE)]) {
+      const { events, answer } = await streamed(loopOptions({ patterns: [pattern], reply: routeAsk('saved-pattern', { pattern: 'pat_1' }), step }), { message: 'Run mine' });
+      if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an answer of the ask route with reads');
+      const told = events.filter((event) => event.members['phase'] === 'read-done');
+      expect(told[0]?.members['read']).toEqual(answer.reads[0]);
+      expect(answer.reads[0]).toMatchObject({ kind: 'pattern', tool: 'Mine' });
+    }
   });
 
   it('sends at most twice maxSteps + 4 events in a turn that reads as often as it may', async () => {
