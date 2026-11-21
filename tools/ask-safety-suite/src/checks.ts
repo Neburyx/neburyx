@@ -7,13 +7,16 @@ export function expectOnlyRegisteredReads(reads: readonly Pick<ExecuteCall, 'tem
   for (const read of reads) if (!allowed.includes(read.templateId)) fail('a read ran that no registered tool names');
 }
 
-/** Every read that reached the source has a gate event of its own turn: for each trace of a read, the gate recorded at least as many events (the gate's, not the assistant's or the schema reads') as the source saw reads, so a read made around the gate, which records none, fails. */
+/** The audit actions the gate's own templates record for a read; an event of the assistant, of the model call, of Ask's question or of a schema read is not one. */
+const GATE_ACTION = /^(entity|edge|graph|pattern)\.|^ask\.file_query$|^gate\.read$/;
+
+/** Every read that reached the source has a gate event of its own turn: for each trace of a read, the gate recorded at least as many events as the source saw reads (only the gate's actions count, whatever else the turn's trace holds), so a read made around the gate, which records none, fails. */
 export function expectEveryReadHasGateEvent(reads: readonly Pick<ExecuteCall, 'traceId' | 'templateId'>[], events: readonly Pick<AuditEvent, 'action' | 'traceId'>[]): void {
   if (reads.length === 0) fail('no read reached the source, so nothing was checked');
   const traces = new Set(reads.map((read) => read.traceId));
   for (const trace of traces) {
     const seen = reads.filter((read) => read.traceId === trace).length;
-    const recorded = events.filter((event) => event.traceId === trace && !event.action.startsWith('assistant.') && !event.action.startsWith('source.schema')).length;
+    const recorded = events.filter((event) => event.traceId === trace && GATE_ACTION.test(event.action)).length;
     if (recorded < seen) fail(`a read of the trace ${trace ?? 'none'} has no gate event`);
   }
 }

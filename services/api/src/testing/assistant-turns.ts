@@ -126,7 +126,8 @@ export type AssistantApp = Awaited<ReturnType<typeof startAssistantApp>>;
 
 /** The real application with the real enterprise extension and the assistant on (its tool loop from two steps), over a model service the test gives and the real gate over a scripted source. */
 export async function startAssistantApp(options: AssistantAppOptions) {
-  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
+  const threadStore = createMemoryAssistantThreadStore();
+  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => threadStore, assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
   const records = options.threads === true ? createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => job.write() } }], idFields: (job) => job.ids, settings: { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: () => undefined } }) : undefined;
   if (records !== undefined) extension.attachRecordQueue?.({ enqueue: (job) => void records.sink.record(job) });
   const env = {
@@ -163,8 +164,10 @@ export async function startAssistantApp(options: AssistantAppOptions) {
     /** One turn through the application's own route. */
     turn: async (message: string, over: Record<string, unknown> = {}) => {
       const response = await rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: body(message, over) });
-      return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+      return { status: response.statusCode, body: response.json() as Record<string, unknown>, headers: response.headers };
     },
+    /** What the person's thread holds, as stored: the rows a test scans for text that must not be kept. */
+    threadRows: (): string => JSON.stringify([...threadStore.threads.values()]),
     /** The investigation the turns are made in. */
     investigationId: investigation.id,
     /** Opens another investigation of the same person on the same source. */
@@ -172,7 +175,7 @@ export async function startAssistantApp(options: AssistantAppOptions) {
     /** A request of any form to the turn route, as given (a choice, a continue or a decision has no message). */
     post: async (payload: Record<string, unknown>) => {
       const response = await rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload });
-      return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+      return { status: response.statusCode, body: response.json() as Record<string, unknown>, headers: response.headers };
     },
     /** Waits until the thread holds `count` turns written by the queue of the records. */
     threadWritten: async (count: number): Promise<void> => {

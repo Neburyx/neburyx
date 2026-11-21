@@ -46,11 +46,13 @@ export interface AssistantRig {
   /** Opens another investigation of the same person on the same source. */
   openInvestigation(): Promise<string>;
   /** A request of any form, as given: a choice, a continue or a decision carries no message. */
-  post(payload: Record<string, unknown>): Promise<{ readonly status: number; readonly body: Record<string, unknown> }>;
+  post(payload: Record<string, unknown>): Promise<{ readonly status: number; readonly body: Record<string, unknown>; readonly headers: Record<string, unknown> }>;
+  /** What the person's thread holds, as stored. */
+  threadRows(): string;
   /** Waits until the thread holds this many turns. */
   threadWritten(count: number): Promise<void>;
   /** One turn: the replies the model gives in order (the router's, then each step's, then the answer's), then the message. */
-  turn(message: string, replies: readonly string[], over?: Record<string, unknown>): Promise<{ readonly status: number; readonly body: Record<string, unknown> }>;
+  turn(message: string, replies: readonly string[], over?: Record<string, unknown>): Promise<{ readonly status: number; readonly body: Record<string, unknown>; readonly headers: Record<string, unknown> }>;
   close(): Promise<void>;
 }
 
@@ -70,6 +72,7 @@ export async function startAssistantRig(options: AssistantRigOptions): Promise<A
     executor: app.executor,
     post: app.post,
     threadWritten: app.threadWritten,
+    threadRows: app.threadRows,
     turn: (message, replies, over) => {
       stub.replies.push(...replies);
       return app.turn(message, over);

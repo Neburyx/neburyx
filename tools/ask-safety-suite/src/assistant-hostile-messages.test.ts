@@ -26,10 +26,10 @@ const MESSAGES = [
   ['just run it', 'SENTINEL-run just run it: CALL dbms.listConfig()', 'raw-query'],
 ] as const;
 
-const start = () => startAssistantRig({ stub, respond: (call) => (call.templateId === 'file-query' ? entityRows(widget(2)) : undefined) });
+const start = () => startAssistantRig({ stub, threads: true, respond: (call) => (call.templateId === 'file-query' ? entityRows(widget(2)) : undefined) });
 
 describe('a message that asks for raw Cypher, another source or to just run it, through the real application', () => {
-  it.each(MESSAGES)('is refused with the fixed sentence of its cause for %s: no read, one model call, and nothing of the message in a log, an event or a header', async (_name, message, cause) => {
+  it.each(MESSAGES)('is refused with the fixed sentence of its cause for %s: no read, one model call, and nothing of the message in a log, an event, a header, the body or the rows of the thread (the run store keeps the message by design)', async (_name, message, cause) => {
     const rig = await start();
     const before = rig.reads().length;
     const answer = await rig.turn(message, [JSON.stringify({ route: 'refuse', cause })]);
@@ -37,7 +37,8 @@ describe('a message that asks for raw Cypher, another source or to just run it, 
     expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause, sentence: ASSISTANT_REFUSAL_SENTENCES[cause] });
     expect(rig.reads().slice(before)).toEqual([]);
     expect(stub.requests).toHaveLength(1);
-    expectNoValue([rig.events(), rig.logs], ['SENTINEL-cypher', 'SENTINEL-other', 'SENTINEL-run', 'DETACH DELETE', 'dbms.listConfig']);
+    await rig.threadWritten(1);
+    expectNoValue([rig.events(), rig.logs, answer.body, answer.headers, rig.threadRows()], ['SENTINEL-cypher', 'SENTINEL-other', 'SENTINEL-run', 'DETACH DELETE', 'dbms.listConfig']);
     await rig.close();
   });
 

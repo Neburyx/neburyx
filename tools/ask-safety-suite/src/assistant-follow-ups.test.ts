@@ -42,12 +42,13 @@ interface Setup {
   readonly clock: { now: number };
 }
 
-async function start(): Promise<Setup> {
+async function start(over: { maxSteps?: number } = {}): Promise<Setup> {
   const person = { current: FIRST };
   const clock = { now: Date.now() };
   const rig = await startAssistantRig({
     stub,
     threads: true,
+    ...(over.maxSteps === undefined ? {} : { maxSteps: over.maxSteps }),
     principalId: () => person.current,
     now: () => clock.now,
     respond: (call) => {
@@ -78,7 +79,7 @@ describe('a hostile key in the reply of the router, through the real application
     ['a key of a relationship under a role', 'e1'],
   ] as const;
 
-  it.each(HOSTILE)('runs nothing for %s: no read of the intent, at most the router’s call and its one repeat, and the value reaches no log or record', async (_name, forged) => {
+  it.each(HOSTILE)('runs nothing for %s: no read of the intent, at most the router’s call and its one repeat, and the value reaches no log, event, header, body or row of the thread', async (_name, forged) => {
     const setup = await start();
     await earlierTurn(setup);
     const before = setup.rig.reads().length;
@@ -88,7 +89,7 @@ describe('a hostile key in the reply of the router, through the real application
     expect(asksOrRefuses(answer.body), JSON.stringify(answer.body).slice(0, 200)).toBe(true);
     expectNoIntentRead(setup.rig.reads().slice(before));
     expect(stub.requests.length - calls).toBeLessThanOrEqual(2);
-    expectNoValue([setup.rig.events(), setup.rig.logs], ['DETACH DELETE']);
+    expectNoValue([setup.rig.events(), setup.rig.logs, answer.body, answer.headers, setup.rig.threadRows()], ['DETACH DELETE']);
     await setup.rig.close();
   });
 
@@ -191,6 +192,57 @@ describe('a changed choice, chip or token, through the real application', () => 
     const asContinue = await setup.rig.post({ sourceId: 'demo', investigationId: setup.rig.investigationId, viewElementKeys: VIEW, continue: { intent: 'sharedGadget', entities: { id: 'W-1' }, continueToken: String(choice['choiceToken']) } });
     expect(asContinue.body).toMatchObject({ status: 'continue-invalid' });
     expectNoIntentRead(setup.rig.reads().slice(before));
+    await setup.rig.close();
+  });
+});
+
+describe('a changed follow-up chip, through the real application', () => {
+  /** A rig with no tool loop, whose first answer carries follow-up chips, and the choice of the first chip. */
+  async function chip() {
+    const setup = await start({ maxSteps: 1 });
+    const first = await setup.rig.turn('Show W-1', [ASK], { viewElementKeys: VIEW });
+    const choice = ((first.body['followUps'] as { choice: Record<string, unknown> }[] | undefined) ?? [])[0]?.choice;
+    if (choice === undefined) throw new Error(`no follow-up chip: ${JSON.stringify(first.body).slice(0, 200)}`);
+    await setup.rig.threadWritten(1);
+    return { setup, choice };
+  }
+  const pressed = (setup: Setup, choice: unknown, over: Record<string, unknown> = {}) => setup.rig.post({ sourceId: 'demo', investigationId: setup.rig.investigationId, viewElementKeys: VIEW, choice, ...over });
+  const CHIP_CHANGES = [
+    ['a changed value', (choice: Record<string, unknown>) => ({ ...choice, entities: { id: 'W-2' } })],
+    ['a changed role', (choice: Record<string, unknown>) => ({ ...choice, roles: ['other'] })],
+    ['a changed intent', (choice: Record<string, unknown>) => ({ ...choice, intent: 'byId' })],
+    ['a changed token', (choice: Record<string, unknown>) => ({ ...choice, choiceToken: `${String(choice['choiceToken']).slice(0, -1)}${String(choice['choiceToken']).endsWith('a') ? 'b' : 'a'}` })],
+  ] as const;
+
+  it.each(CHIP_CHANGES)('refuses a chip with %s as an invalid choice, with no model call and no read of the intent', async (_name, change) => {
+    const { setup, choice } = await chip();
+    const before = setup.rig.reads().length;
+    const calls = stub.requests.length;
+    expect((await pressed(setup, change(choice))).body).toMatchObject({ status: 'choice-invalid' });
+    expect(stub.requests.length).toBe(calls);
+    expectNoIntentRead(setup.rig.reads().slice(before));
+    await setup.rig.close();
+  });
+
+  it('refuses a chip pressed under another masking as invalid, and a chip pressed by another person as not found, reading nothing of the intent', async () => {
+    const { setup, choice } = await chip();
+    const before = setup.rig.reads().length;
+    const calls = stub.requests.length;
+    expect((await pressed(setup, choice, { mask: true })).body).toMatchObject({ status: 'choice-invalid' });
+    setup.person.current = SECOND;
+    expect((await pressed(setup, choice)).status).toBe(404);
+    expect(stub.requests.length).toBe(calls);
+    expectNoIntentRead(setup.rig.reads().slice(before));
+    await setup.rig.close();
+  });
+
+  it('canary: the same chip, untouched, runs the intent through the gate with no model call, so the check that the intent ran no read fails on it', async () => {
+    const { setup, choice } = await chip();
+    const before = setup.rig.reads().length;
+    const calls = stub.requests.length;
+    expect((await pressed(setup, choice)).body).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(stub.requests.length).toBe(calls);
+    expect(() => expectNoIntentRead(setup.rig.reads().slice(before))).toThrow(/the intent ran/);
     await setup.rig.close();
   });
 });

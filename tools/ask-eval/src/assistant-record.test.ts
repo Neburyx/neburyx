@@ -159,6 +159,34 @@ describe('the run log and the resume of the recorder of the assistant\'s router'
     for (const secret of ['Show thing one.', 'What is shown?', 'guilty', 'T-1', '{"route"']) expect(text).not.toContain(secret);
   });
 
+  it('forwards the abort signal of each call to the provider, so a call that is stuck can still be given up', async () => {
+    const fixture = privateSet();
+    const given = hooksWith(answerRoutes);
+    const signals: unknown[] = [];
+    const spied = {
+      ...given,
+      liveAssistantProvider: async (env: Readonly<Record<string, string | undefined>>, folder: string, model?: string) => {
+        const live = await given.liveAssistantProvider(env, folder, model);
+        const provider = live.provider as { complete: (request: unknown, signal?: AbortSignal) => Promise<unknown> };
+        return { ...live, provider: { ...provider, complete: (request: unknown, signal?: AbortSignal) => (signals.push(signal), provider.complete(request, signal)) } };
+      },
+    };
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', join(scratch(), 'run')], io().io, spied)).toBe(0);
+    expect(signals).toHaveLength(3);
+    for (const signal of signals) expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('gives the budgeted provider only what the log leaves of the budget when it resumes, as its last guard against spending more', async () => {
+    const fixture = privateSet();
+    const out = join(scratch(), 'run');
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out], io().io, failingAtThird())).toBe(1);
+    const given = hooksWith(answerRoutes);
+    const budgets: number[] = [];
+    const spied = { ...given, recordingProvider: (provider: unknown, budget: number) => (budgets.push(budget), given.recordingProvider(provider, budget)) };
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out, '--resume'], io().io, spied)).toBe(0);
+    expect(budgets).toEqual([4]);
+  });
+
   it('counts a call that was sent and never came back, from the log', async () => {
     const fixture = privateSet();
     const out = join(scratch(), 'run');

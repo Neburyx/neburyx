@@ -38,7 +38,7 @@ const source = (call: ExecuteCall): ExecuteOutcome | undefined => {
   const row = (id: string) => ({ a: widget('W-1'), b: widget(id), xs: [gadget], ras: [plainRelationship('MADE_FROM', widget('W-1'), gadget, { linkId: 'L-1' }, '5:s:L-1')], rbs: [plainRelationship('MADE_FROM', widget(id), gadget, { linkId: `L-${id}` }, `5:s:L-${id}`)] });
   return { status: 'rows', rows: [row('W-2'), row('W-3')] };
 };
-const start = (): Promise<AssistantRig> => startAssistantRig({ stub, respond: source, stores: true, maxSteps: 4 });
+const start = (over: { summary?: boolean } = {}): Promise<AssistantRig> => startAssistantRig({ stub, respond: source, stores: true, maxSteps: 4, ...over });
 
 /** Every read the source recorded is a registered template and has a gate event of its own trace. */
 function expectGateOnly(rig: AssistantRig): void {
@@ -47,7 +47,7 @@ function expectGateOnly(rig: AssistantRig): void {
 }
 
 describe('every route of a turn reads only through the gate, through the real application', () => {
-  it('is so for the view route, the ask route, the tool loop, the notes tool, a confirmation and a continue', async () => {
+  it('is so for the view route, the ask route, the tool loop, the notes, summary and typology tools, a confirmation and a continue', async () => {
     const view = await start();
     expect((await view.turn('What is in view?', [JSON.stringify({ route: 'view', form: 'table' }), VIEW_TABLE], { viewElementKeys: VIEW })).body).toMatchObject({ status: 'answered', route: 'view' });
     expectGateOnly(view);
@@ -69,6 +69,19 @@ describe('every route of a turn reads only through the gate, through the real ap
     expectGateOnly(notes);
     await notes.close();
 
+    const summarized = await start({ summary: true });
+    const draft = JSON.stringify({ sentences: [{ text: 'There is one widget in view.', cites: ['n1'] }] });
+    expect((await summarized.turn('Show W-1 and summarize the view', [ROUTE, JSON.stringify({ tool: 'ai-summary', values: {} }), draft, DONE, ANSWER], { viewElementKeys: VIEW })).status).toBe(200);
+    expectGateOnly(summarized);
+    await summarized.close();
+
+    const typology = await start();
+    const read = typology.reads().length;
+    expect((await typology.turn('Show W-1 and the shapes of money movement', [ROUTE, JSON.stringify({ tool: 'typology', values: {} }), DONE, '{"sentences":[]}'])).status).toBe(200);
+    expectGateOnly(typology);
+    expect(typology.reads().slice(read).filter((entry) => entry.templateId === 'entity-load')).toHaveLength(1);
+    await typology.close();
+
     const confirm = await start();
     const waiting = (await confirm.turn(MESSAGE, [ROUTE, HEAVY_STEP])).body as { status: string; pendingId: string; plan: string };
     expect(waiting.status).toBe('confirmation');
@@ -88,14 +101,16 @@ describe('every route of a turn reads only through the gate, through the real ap
     await heavy.close();
   });
 
-  it('canary: a read sent straight to the executor during a turn has no gate event, and the check fails on it', async () => {
+  it('canary: a read sent straight to the executor under the turn’s own trace has no gate event of its own, and the check fails on it', async () => {
     const rig = await start();
     await rig.turn('Show W-1', [ROUTE, DONE]);
     expect(() => expectGateOnly(rig)).not.toThrow();
     const known = rig.reads()[0];
     if (known === undefined) throw new Error('no read to copy');
-    await rig.executor.execute({ ...known, traceId: 'tr-around-the-gate', signal: new AbortController().signal });
-    expect(rig.reads().some((read) => read.traceId === 'tr-around-the-gate')).toBe(true);
+    const reads = rig.reads().length;
+    await rig.executor.execute({ ...known, signal: new AbortController().signal });
+    expect(rig.reads()).toHaveLength(reads + 1);
+    expect(rig.reads().filter((read) => read.traceId === known.traceId).length).toBeGreaterThan(1);
     expect(() => expectEveryReadHasGateEvent(rig.reads(), rig.events())).toThrow(SafetyCheckFailed);
     await rig.close();
   });

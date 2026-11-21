@@ -120,16 +120,16 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
   } else {
     appendLog(logPath, { resumed: { callsBefore } });
   }
-  const recording = hooks.recordingProvider(live.provider, options.budget);
+  const recording = hooks.recordingProvider(live.provider, options.budget - callsBefore);
   let current = '';
   let made = callsBefore;
-  const asked = Object.create(recording.provider as object) as { complete: (request: unknown) => Promise<unknown> };
-  asked.complete = async (request) => {
+  const asked = Object.create(recording.provider as object) as { complete: (request: unknown, signal?: AbortSignal) => Promise<unknown> };
+  asked.complete = async (request, signal) => {
     made += 1;
     const number = made;
     appendLog(logPath, { call: number, request: current, state: 'sent' });
     try {
-      const result = await (recording.provider as { complete: (request: unknown) => Promise<unknown> }).complete(request);
+      const result = await (recording.provider as { complete: (request: unknown, signal?: AbortSignal) => Promise<unknown> }).complete(request, signal);
       appendLog(logPath, { call: number, request: current, state: (result as { status?: string } | undefined)?.status === 'ok' ? 'ok' : 'failed' });
       return result;
     } catch (error) {

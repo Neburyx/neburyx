@@ -67,6 +67,12 @@ describe('the check that every read of the source has a gate event', () => {
     expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }], [gateEvent, { action: 'assistant.ask', traceId: 'tr-1' }, { action: 'source.schema_indexes', traceId: 'tr-1' }])).not.toThrow();
   });
 
+  it('canary: fails a read whose trace holds only events that are not the gate\u2019s, however many', () => {
+    const others = [{ action: 'ask.question', traceId: 'tr-1' }, { action: 'ai.model_call', traceId: 'tr-1' }, { action: 'assistant.ask', traceId: 'tr-1' }, { action: 'source.schema_indexes', traceId: 'tr-1' }];
+    expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }], others)).toThrow(SafetyCheckFailed);
+    expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }], [...others, gateEvent])).not.toThrow();
+  });
+
   it('canary: fails a read of a trace with no gate event, one with fewer events than reads, and a case that read nothing', () => {
     expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-direct' }], [gateEvent])).toThrow(SafetyCheckFailed);
     expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }, { templateId: 'entity-load', traceId: 'tr-1' }], [gateEvent])).toThrow(SafetyCheckFailed);
