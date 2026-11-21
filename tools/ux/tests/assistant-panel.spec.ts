@@ -135,9 +135,66 @@ test.describe('the Assistant panel', () => {
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
     expect(accept).toBe('application/x-ndjson');
-    await expect(panel(page).getByText('Writing the answer…')).toHaveCount(0);
+    await expect(panel(page).getByText('Checking the answer…')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
+
+  for (const width of [1440, 1280]) {
+    test(`shows the steps of a streamed turn as they arrive at ${width} pixels: each finished read as a box, the read in progress dashed, the checking of the answer, no progress bar, then the answer`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      // the turn is answered by a response whose body the test writes a line at a time
+      await page.addInitScript(() => {
+        const original = window.fetch.bind(window);
+        const lines: { push: (line: unknown) => void; end: () => void } = { push: () => undefined, end: () => undefined };
+        (window as unknown as { __turn: typeof lines }).__turn = lines;
+        window.fetch = (input, init) => {
+          const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+          if (!url.endsWith('/v1/assistant/turns')) return original(input, init);
+          const encoder = new TextEncoder();
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              lines.push = (line) => controller.enqueue(encoder.encode(`${JSON.stringify(line)}\n`));
+              lines.end = () => controller.close();
+            },
+          });
+          return Promise.resolve(new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } }));
+        };
+      });
+      await openWorkspace(page);
+      await open(page);
+      await page.getByLabel('Your message').fill('Which accounts share a device with AC-1?');
+      await page.keyboard.press('Enter');
+      const push = (line: unknown) => page.evaluate((value) => (window as unknown as { __turn: { push: (line: unknown) => void } }).__turn.push(value), line);
+      await expect(panel(page).locator('.assistant-current')).toContainText('Understanding your message');
+      await push({ event: 'step', n: 1, phase: 'reading', tool: 'accounts-of-a-device', label: 'Devices of an account', subject: 'AC-1', kind: 'template' });
+      await expect(panel(page).locator('.assistant-current')).toContainText('Reading Devices of an account');
+      await expect(panel(page).locator('.assistant-current')).toContainText('AC-1 …');
+      await push({ event: 'step', n: 2, phase: 'read-done', read: { tool: 'accounts-of-a-device', label: 'Devices of an account', kind: 'template', subject: 'AC-1', read: true, rows: 2, quality: 'exact', partial: false } });
+      await push({ event: 'step', n: 3, phase: 'reading', tool: 'accounts-using-a-device', label: 'Accounts using a device', subject: 'DEV-884', kind: 'template' });
+      await expect(panel(page).locator('.assistant-read')).toHaveCount(1);
+      await expect(panel(page).locator('.assistant-read')).toContainText('Ran Devices of an account');
+      await expect(panel(page).locator('.assistant-read')).toContainText('AC-1 · 2 rows · complete');
+      await expect(panel(page).locator('.assistant-current')).toContainText('Reading Accounts using a device');
+      await expect(panel(page).locator('.assistant-state')).toHaveText('Reading');
+      await push({ event: 'step', n: 4, phase: 'read-done', read: { tool: 'accounts-using-a-device', label: 'Accounts using a device', kind: 'template', subject: 'DEV-884', read: true, rows: 3, quality: 'exact', partial: false } });
+      await push({ event: 'step', n: 5, phase: 'answering' });
+      await expect(panel(page).locator('.assistant-read')).toHaveCount(2);
+      await expect(panel(page).locator('.assistant-current')).toContainText('Checking the answer…');
+      await expect(panel(page).locator('.assistant-current')).toContainText('Every sentence must cite something that was read.');
+      await expect(panel(page).locator('.assistant-state')).toHaveText('Checking the answer');
+      await expect(panel(page).locator('.ask-progress, progress, [role="progressbar"]')).toHaveCount(0);
+      const box = await panel(page).boundingBox();
+      for (const target of [panel(page).locator('.assistant-current'), panel(page).getByRole('button', { name: 'Cancel' })]) {
+        const inner = await target.boundingBox();
+        expect(box !== null && inner !== null && inner.x >= box.x && inner.x + inner.width <= box.x + box.width).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      await push({ event: 'answer', answer: REFUSE });
+      await page.evaluate(() => (window as unknown as { __turn: { end: () => void } }).__turn.end());
+      await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+      await expect(panel(page).locator('.assistant-progress')).toHaveCount(0);
+    });
+  }
 
   test('shows the answer of the ask route with its sources, and a heavy stop that continues with the kept token', async ({ page }) => {
     await openWorkspace(page);
@@ -218,7 +275,7 @@ test.describe('the Assistant panel', () => {
     await field.fill('Which accounts share a device with AC-1?');
     await field.press('Enter');
     await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeVisible();
-    await expect(panel(page).getByText('Cancel stops the request. Nothing more is read once it is stopped.')).toBeVisible();
+    await expect(panel(page).getByText('Input is disabled while it runs. Cancel stops the request; nothing more is read once it is stopped.')).toBeVisible();
     await expect(field).toHaveAttribute('aria-disabled', 'true');
     await expect(panel(page).getByRole('button', { name: 'Cancel' })).toBeFocused();
     await page.keyboard.press('Enter');
@@ -255,7 +312,7 @@ test.describe('the Assistant panel', () => {
     await page.getByLabel('Your message').fill('Which accounts share a device with AC-1?');
     await page.getByLabel('Your message').press('Enter');
     const cancel = panel(page).getByRole('button', { name: 'Cancel' });
-    const hint = panel(page).getByText('Cancel stops the request. Nothing more is read once it is stopped.');
+    const hint = panel(page).getByText('Input is disabled while it runs. Cancel stops the request; nothing more is read once it is stopped.');
     await expect(cancel).toBeVisible();
     await expect(hint).toBeVisible();
     const box = await panel(page).boundingBox();

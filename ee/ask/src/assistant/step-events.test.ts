@@ -58,10 +58,10 @@ describe('the steps a streamed turn reports', () => {
     const { events } = await streamed(loopOptions({ intents: LABELLED }), { message: 'Show A-1 and A-2' });
     const reads = events.filter((event) => event.members['phase'] === 'reading').map((event) => event.members);
     expect(reads).toEqual([
-      { n: 2, phase: 'reading', tool: 'shared', label: 'Accounts at the same bank', subject: 'A-1' },
-      { n: 3, phase: 'reading', tool: 'byId', label: 'Account by id', subject: 'A-2' },
+      { n: 2, phase: 'reading', tool: 'shared', label: 'Accounts at the same bank', subject: 'A-1', kind: 'intent' },
+      { n: 4, phase: 'reading', tool: 'byId', label: 'Account by id', subject: 'A-2', kind: 'intent' },
     ]);
-    expect(phases(events)).toEqual(['routing', 'reading', 'reading', 'answering']);
+    expect(phases(events)).toEqual(['routing', 'reading', 'read-done', 'reading', 'read-done', 'answering']);
   });
 
   it('shows the id as the tool and no label for an intent without one', async () => {
@@ -113,16 +113,16 @@ describe('the steps a streamed turn reports', () => {
     expect(JSON.stringify(looped.events)).not.toContain(CANARY);
   });
 
-  it('says that a view call that asks for a read has already said answering: the order is pinned, routing, the view, answering, the read, answering', async () => {
+  it('says that a view call that asks for a read has already said answering: the order is pinned, routing, the view, answering, the view read, the read, its read, answering', async () => {
     const asksRead = ok(JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }));
     const { events } = await streamed(loopOptions({ reply: ok(JSON.stringify({ route: 'view' })), view: asksRead, step: sequence(DONE), intents: LABELLED }), { message: 'What is in view, and read A-2' });
-    expect(phases(events)).toEqual(['routing', 'reading-view', 'answering', 'reading', 'answering']);
+    expect(phases(events)).toEqual(['routing', 'reading-view', 'answering', 'read-done', 'reading', 'read-done', 'answering']);
   });
 
-  it('sends at most maxSteps + 4 events in a turn that reads as often as it may', async () => {
+  it('sends at most twice maxSteps + 4 events in a turn that reads as often as it may', async () => {
     const many = sequence(...Array.from({ length: 12 }, (_unused, index) => ok(JSON.stringify({ tool: 'byId', values: { id: `A-${index + 2}` } }))));
     const { events } = await streamed(loopOptions({ step: many, loopSteps: 4 }), { message: 'Show A-1 and everything' });
-    expect(events.length).toBeLessThanOrEqual(4 + 4);
+    expect(events.length).toBeLessThanOrEqual(2 * 4 + 4);
     expect(phases(events).at(-1)).toBe('answering');
   });
 

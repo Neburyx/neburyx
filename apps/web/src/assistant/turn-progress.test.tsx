@@ -17,40 +17,65 @@ function held() {
   const h = harness((_request, signal, onStep) => new Promise((resolve) => void turns.push({ signal, onStep, finish: resolve })));
   return { h, turns };
 }
-const cardStep = () => document.querySelector('.assistant-step')?.textContent;
+const progress = () => document.querySelector('.assistant-progress');
 const field = () => screen.getByLabelText(ASSISTANT_COPY.fieldLabel) as HTMLTextAreaElement;
 
 describe('the Assistant panel: the step in progress', () => {
-  it('shows the step the server reports, replaced by the next, then the answer card in its place', async () => {
+  it('shows each finished read as a box, the read in progress as a dashed row and the checking of the answer, then the answer card with the steps collapsed, and no progress bar', async () => {
     const { h, turns } = held();
     render(h.tree());
     await typeAndSend('hello');
-    expect(screen.getByText(ASSISTANT_COPY.workingBody)).toBeTruthy();
+    expect(progress()?.textContent).toContain(ASSISTANT_COPY.workingBody);
     const turn = turns[0];
     if (turn?.onStep === undefined) throw new Error('the client was given no listener');
     await act(async () => turn.onStep?.({ n: 1, phase: 'routing' }));
-    expect(cardStep()).toBe(ASSISTANT_COPY.stepRouting);
-    expect(screen.queryByText(ASSISTANT_COPY.workingBody)).toBeNull();
-    await act(async () => turn.onStep?.({ n: 2, phase: 'reading', tool: 'shared-attribute', label: 'Accounts at the same bank', subject: 'A-1' }));
-    expect(cardStep()).toBe('Reading Accounts at the same bank for A-1…');
-    expect(screen.queryByText(ASSISTANT_COPY.stepRouting)).toBeNull();
-    await act(async () => turn.onStep?.({ n: 3, phase: 'answering' }));
-    expect(cardStep()).toBe(ASSISTANT_COPY.stepAnswering);
+    expect(progress()?.textContent).toContain(ASSISTANT_COPY.stepRouting);
+    expect(progress()?.textContent).not.toContain(ASSISTANT_COPY.workingBody);
+    await act(async () => turn.onStep?.({ n: 2, phase: 'reading', tool: 'shared-attribute', label: 'Accounts at the same bank', subject: 'A-1', kind: 'intent' }));
+    const current = progress()?.querySelector('.assistant-current');
+    expect(current?.textContent).toContain('Reading Accounts at the same bank');
+    expect(current?.textContent).toContain('Folder intent');
+    expect(current?.textContent).toContain('A-1 …');
+    expect(progress()?.querySelectorAll('.assistant-read')).toHaveLength(0);
+    await act(async () => turn.onStep?.({ n: 3, phase: 'read-done', read: { tool: 'shared-attribute', label: 'Accounts at the same bank', kind: 'intent', subject: 'A-1', read: true, rows: 2, quality: 'exact', partial: false } }));
+    const done = progress()?.querySelector('.assistant-read');
+    expect(done?.textContent).toContain('Ran Accounts at the same bank');
+    expect(done?.textContent).toContain('A-1 · 2 rows · complete');
+    expect(done?.textContent).toContain('Exact');
+    expect(progress()?.querySelector('.assistant-current')).toBeNull();
+    await act(async () => turn.onStep?.({ n: 4, phase: 'answering' }));
+    expect(progress()?.querySelector('.assistant-current')?.textContent).toContain(ASSISTANT_COPY.stepAnswering);
+    expect(progress()?.textContent).toContain(ASSISTANT_COPY.stepAnsweringBody);
+    expect(progress()?.querySelectorAll('.assistant-read')).toHaveLength(1);
+    expect(document.querySelector('.ask-progress, [role="progressbar"], progress')).toBeNull();
     await act(async () => turn.finish({ ok: true, value: REFUSAL }));
     expect(await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
-    expect(screen.queryByText(ASSISTANT_COPY.stepAnswering)).toBeNull();
+    expect(progress()).toBeNull();
   });
 
-  it('says the humanized tool when the intent has no label, and shows a label or subject with markup as text', async () => {
+  it('says the humanized tool when the intent has no label, shows a label or subject with markup as text, and shows no figure it was not sent', async () => {
     const { h, turns } = held();
     render(h.tree());
     await typeAndSend('hello');
     const turn = turns[0];
     await act(async () => turn?.onStep?.({ n: 1, phase: 'reading', tool: 'accounts-using-a-device' }));
-    expect(cardStep()).toBe('Reading Accounts using a device…');
-    await act(async () => turn?.onStep?.({ n: 2, phase: 'reading', tool: 'x', label: '<img src=x onerror=alert(1)>', subject: '<b>A-1</b>' }));
-    expect(cardStep()).toBe('Reading <img src=x onerror=alert(1)> for <b>A-1</b>…');
-    expect(document.querySelector('.assistant-step img, .assistant-step b')).toBeNull();
+    expect(progress()?.querySelector('.assistant-current')?.textContent).toBe('Reading Accounts using a device');
+    await act(async () => turn?.onStep?.({ n: 2, phase: 'reading', tool: 'x', label: '<img src=x onerror=alert(1)>', subject: '<b>A-1</b>', kind: 'template' }));
+    expect(progress()?.querySelector('.assistant-current')?.textContent).toContain('<img src=x onerror=alert(1)>');
+    expect(progress()?.querySelector('.assistant-current')?.textContent).toContain('<b>A-1</b> …');
+    expect(progress()?.querySelector('img, b')).toBeNull();
+    await act(async () => turn?.onStep?.({ n: 3, phase: 'read-done', read: { tool: 'x', kind: 'template', read: true, quality: 'unknown', partial: false } }));
+    expect(progress()?.querySelector('.assistant-read-line')?.textContent).toContain('no row count');
+    expect(progress()?.textContent).not.toMatch(/\d+ rows?/);
+  });
+
+  it('says the state of the turn at the right of the header: Reading, then Checking the answer', async () => {
+    const { h, turns } = held();
+    render(h.tree());
+    await typeAndSend('hello');
+    expect(document.querySelector('.assistant-state')?.textContent).toBe(ASSISTANT_COPY.stateReading);
+    await act(async () => turns[0]?.onStep?.({ n: 1, phase: 'answering' }));
+    expect(document.querySelector('.assistant-state')?.textContent).toBe(ASSISTANT_COPY.stateChecking);
   });
 
   it('announces the step in the panel’s one live region, which holds the waiting sentence first and one step at a time after', async () => {
@@ -64,6 +89,8 @@ describe('the Assistant panel: the step in progress', () => {
     await act(async () => turns[0]?.onStep?.({ n: 2, phase: 'reading-view' }));
     expect(screen.getByRole('status')).toBe(region);
     expect(region.textContent).toBe(ASSISTANT_COPY.stepReadingView);
+    await act(async () => turns[0]?.onStep?.({ n: 3, phase: 'read-done', read: { tool: 'view', kind: 'view', read: true, rows: 3, quality: 'exact', partial: false } }));
+    expect(region.textContent).toBe(`${ASSISTANT_COPY.stepReadDone} View.`);
   });
 
   it('closes the request when Cancel is pressed during the steps, shows the Cancelled turn and gives the message back', async () => {
@@ -77,7 +104,7 @@ describe('the Assistant panel: the step in progress', () => {
     expect(field().value).toBe('keep me');
     // a step that arrives after the cancel is dropped
     await act(async () => turns[0]?.onStep?.({ n: 2, phase: 'reading-view' }));
-    expect(screen.queryByText(ASSISTANT_COPY.stepReadingView)).toBeNull();
+    expect(progress()).toBeNull();
   });
 
   it('shows the failure card of the code for an error line or an HTTP error body, as for the JSON route', async () => {
@@ -86,7 +113,7 @@ describe('the Assistant panel: the step in progress', () => {
     await typeAndSend('hello');
     await act(async () => turns[0]?.onStep?.({ n: 1, phase: 'routing' }));
     await act(async () => turns[0]?.finish({ ok: false, failure: { code: 'NETWORK_UNAVAILABLE' } as never }));
-    expect(screen.queryByText(ASSISTANT_COPY.stepRouting)).toBeNull();
+    expect(progress()).toBeNull();
     expect(await screen.findByRole('button', { name: /try again/i })).toBeTruthy();
   });
 
@@ -94,6 +121,6 @@ describe('the Assistant panel: the step in progress', () => {
     const { h } = held();
     render(h.tree());
     await typeAndSend('hello');
-    expect(screen.getByText(ASSISTANT_COPY.workingBody)).toBeTruthy();
+    expect(progress()?.textContent).toBe(ASSISTANT_COPY.workingBody);
   });
 });

@@ -6,7 +6,7 @@ const figure = (value: number): string => value.toLocaleString('en-US');
 const rowsOf = (value: number): string => `${figure(value)} ${value === 1 ? 'row' : 'rows'}`;
 
 /** The tag of a kind, as the registry names it: a folder intent, a catalog template, a pattern of the person, the view, or one of the application's own reads. */
-const KIND_TAGS: Readonly<Record<AssistantRead['kind'], string>> = { intent: 'Folder intent', template: 'Template', pattern: 'Your pattern', view: 'View', typology: 'Typology', 'ai-notes': 'Your AI notes', 'ai-summary': 'AI case summary' };
+export const READ_KIND_TAGS: Readonly<Record<AssistantRead['kind'], string>> = { intent: 'Folder intent', template: 'Template', pattern: 'Your pattern', view: 'View', typology: 'Typology', 'ai-notes': 'Your AI notes', 'ai-summary': 'AI case summary' };
 
 const linesOf = (value: number): string => `${figure(value)} ${value === 1 ? 'line' : 'lines'}`;
 
@@ -22,12 +22,13 @@ export function readLine(entry: AssistantRead): string {
   return parts.filter((part): part is string => part !== undefined).join(' · ');
 }
 
-function ReadBox({ entry }: { readonly entry: AssistantRead }) {
+/** One read as the frame draws it: Ran or Did not run, the tag of its kind, and the line of its subject, rows, state and the quality chip. */
+export function ReadBox({ entry }: { readonly entry: AssistantRead }) {
   return (
     <li className="assistant-read">
       <p className="assistant-read-title">
         <span>{entry.read ? `Ran ${entry.label ?? humanize(entry.tool)}` : `Did not run ${entry.label ?? humanize(entry.tool)}`}</span>
-        <span className="ask-tag">{KIND_TAGS[entry.kind]}</span>
+        <span className="ask-tag">{READ_KIND_TAGS[entry.kind]}</span>
       </p>
       <p className="assistant-read-line">
         <span>{readLine(entry)}</span>

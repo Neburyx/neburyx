@@ -8370,6 +8370,7 @@
                   "routing",
                   "reading-view",
                   "reading",
+                  "read-done",
                   "answering"
                 ]
               },
@@ -8387,6 +8388,111 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 400
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "intent",
+                  "template",
+                  "pattern",
+                  "view"
+                ]
+              },
+              "read": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "intent",
+                          "template",
+                          "pattern",
+                          "view"
+                        ]
+                      },
+                      "subject": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 400
+                      },
+                      "read": {
+                        "type": "boolean",
+                        "const": true
+                      },
+                      "rows": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "quality": {
+                        "type": "string",
+                        "enum": [
+                          "exact",
+                          "estimated",
+                          "lowerBound",
+                          "unknown"
+                        ]
+                      },
+                      "partial": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "kind",
+                      "read",
+                      "quality",
+                      "partial"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "tool": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 80
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "intent",
+                          "template",
+                          "pattern",
+                          "view"
+                        ]
+                      },
+                      "read": {
+                        "type": "boolean",
+                        "const": false
+                      }
+                    },
+                    "required": [
+                      "tool",
+                      "kind",
+                      "read"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
               },
               "event": {
                 "type": "string",

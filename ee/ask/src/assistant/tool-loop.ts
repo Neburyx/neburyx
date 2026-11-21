@@ -147,7 +147,11 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       const found = registry.find(tool);
       return found?.kind === 'intent' && found.label !== undefined ? { label: found.label } : {};
     };
-    const put = (entry: AssistantRead): void => void entries.push({ ...entry, ...(entry.kind === 'intent' ? labelFor(entry.tool) : {}) });
+    const put = (entry: AssistantRead): void => {
+      const listed = { ...entry, ...(entry.kind === 'intent' ? labelFor(entry.tool) : {}) };
+      entries.push(listed);
+      stepsOf(scope.request).readDone(listed);
+    };
     // the steps of the turn that a decision reads again: each tool and the values the gate accepted for it
     const done: PlanStep[] = [];
     let latest: Answered | undefined;

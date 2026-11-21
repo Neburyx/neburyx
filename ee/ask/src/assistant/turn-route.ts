@@ -225,12 +225,15 @@ async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting
 async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => readonly FollowUp[], after?: (answer: AskAnswer) => Promise<AssistantTurnAnswer | undefined>): Promise<AssistantTurnAnswer> {
   if (run.request.signal.aborted) throw new Error('the request was cancelled');
   const intent = run.options.folder()?.intent(run.sourceId, run.intent);
-  stepsOf(run.request).reading(run.intent, intent?.label, run.entities);
+  const kind = run.intent === ASK_SAVED_PATTERN_INTENT ? 'pattern' : 'intent';
+  stepsOf(run.request).reading(run.intent, intent?.label, run.entities, kind);
   try {
     const answer = await execute(run);
     const looped = after === undefined ? undefined : await after(answer);
     if (looped !== undefined) return looped;
     const turn = answeredAsk(answer);
+    // the read the answer lists, told to a streamed turn as it finishes
+    if (turn.status === 'answered' && turn.route === 'ask' && turn.reads?.[0] !== undefined) stepsOf(run.request).readDone({ ...turn.reads[0], ...(turn.reads[0].kind === 'intent' && intent?.label !== undefined ? { label: intent.label } : {}) });
     const chips = followUps?.(answer) ?? [];
     return turn.status === 'answered' && turn.route === 'ask' && chips.length > 0 ? { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) } : turn;
   } catch (error) {

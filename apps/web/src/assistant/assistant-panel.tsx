@@ -86,8 +86,11 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   const canSend = model.canSend && available;
   const limit = model.limit;
   // the one live region of the panel says the step in progress when the server reports one, and the waiting sentence until then
-  const step = turns.flatMap((turn) => (turn.outcome.kind === 'pending' && turn.outcome.step !== undefined ? [turn.outcome.step] : []))[0];
+  const step = turns.flatMap((turn) => (turn.outcome.kind === 'pending' ? (turn.outcome.steps ?? []).slice(-1) : []))[0];
   const announced = pending ? (step === undefined ? ASSISTANT_COPY.working : stepSentenceOf(step)) : '';
+  // the state of the turn, at the right of the header: reading, checking the answer, or the checked answer once it is settled
+  const lastTurn = turns.at(-1);
+  const stateLabel = pending ? (step?.phase === 'answering' ? ASSISTANT_COPY.stateChecking : ASSISTANT_COPY.stateReading) : lastTurn?.outcome.kind === 'answered' || lastTurn?.outcome.kind === 'view-answer' ? ASSISTANT_COPY.stateChecked : undefined;
   const close = (): void => {
     onClose();
     focusAssistantControl();
@@ -125,6 +128,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           <h2>{ASSISTANT_COPY.title}</h2>
           <p>{model.title}</p>
         </div>
+        {stateLabel === undefined ? null : <span className="assistant-state">{stateLabel}</span>}
         <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} onClick={close}>
           ×
         </button>

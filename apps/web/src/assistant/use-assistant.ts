@@ -159,11 +159,11 @@ export function useAssistant(): AssistantModel {
       const controller = new AbortController();
       open.add(controller);
       requests.current.set(turnId, controller);
-      // each step the server reports replaces the one shown on the pending turn; a step that arrives after the turn has settled is dropped
+      // each step the server reports is added to the pending turn, which shows the finished reads and the one in progress; a step that arrives after the turn has settled is dropped
       const onStep = (step: TurnStep): void => {
         if (controller.signal.aborted || store.getState().epoch !== epoch) return;
         const turn = store.getState().turns.find((held) => held.id === turnId);
-        if (turn?.outcome.kind === 'pending') setOutcome(turnId, { ...turn.outcome, step });
+        if (turn?.outcome.kind === 'pending') setOutcome(turnId, { ...turn.outcome, steps: [...(turn.outcome.steps ?? []), step] });
       };
       void client.assistantTurn(request, controller.signal, onStep).then((result: ApiResult<AssistantTurnAnswer>) => {
         open.delete(controller);

@@ -160,19 +160,19 @@ export async function runToolStep(requested: ToolRequest, scope: StepScope, opti
     return readView(scope);
   }
   if (tool.kind === 'ai-notes') {
-    steps.reading(tool.name, undefined);
+    steps.reading(tool.name, undefined, undefined, tool.kind);
     return readNotes(scope);
   }
   if (tool.kind === 'ai-summary') {
-    steps.reading(tool.name, undefined);
+    steps.reading(tool.name, undefined, undefined, tool.kind);
     return readSummary(scope, options);
   }
   if (tool.kind === 'typology') {
-    steps.reading(tool.name, undefined);
+    steps.reading(tool.name, undefined, undefined, tool.kind);
     noteStep();
     return { status: 'typology', lines: scope.options.typology?.() ?? [] };
   }
-  steps.reading(tool.name, tool.kind === 'intent' ? tool.label : undefined, values);
+  steps.reading(tool.name, tool.kind === 'intent' ? tool.label : undefined, values, tool.kind);
   const common = { request: scope.request, capabilities: scope.capabilities, options: scope.options, sourceId: scope.sourceId, mask: scope.mask, continuing: options.continuing === true, action: scope.action, ...(scope.investigationId === undefined ? {} : { investigationId: scope.investigationId }) };
   if (tool.kind === 'pattern') {
     const entities = { pattern: tool.name, ...values };

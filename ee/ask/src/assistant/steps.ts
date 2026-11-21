@@ -1,4 +1,4 @@
-import type { ExtensionRequest } from '@neburyx/contracts';
+import type { AssistantRead, AssistantReadKind, ExtensionRequest } from '@neburyx/contracts';
 import { subjectOf } from './reads.js';
 
 /** Tells the client of a streamed turn which step is about to run. Every method does nothing for a request that is not streamed, and nothing here can fail a turn. */
@@ -6,7 +6,9 @@ export interface StepEmitter {
   routing(): void;
   readingView(): void;
   /** A read: the tool's name, the plain-words label of an intent that has one, and the values the registry's parameter check accepted for it (the subject, as the confirmation card shows it). */
-  reading(tool: string, label: string | undefined, values?: Readonly<Record<string, string>>): void;
+  reading(tool: string, label: string | undefined, values?: Readonly<Record<string, string>>, kind?: AssistantReadKind): void;
+  /** A read that has finished, as the answer will list it. */
+  readDone(read: AssistantRead): void;
   answering(): void;
 }
 
@@ -14,7 +16,7 @@ const emitters = new WeakMap<ExtensionRequest, StepEmitter>();
 
 function create(request: ExtensionRequest): StepEmitter {
   let n = 0;
-  const send = (phase: 'routing' | 'reading-view' | 'reading' | 'answering', rest: Record<string, string> = {}): void => {
+  const send = (phase: 'routing' | 'reading-view' | 'reading' | 'read-done' | 'answering', rest: Record<string, unknown> = {}): void => {
     if (request.emit === undefined) return;
     n += 1;
     try {
@@ -26,10 +28,11 @@ function create(request: ExtensionRequest): StepEmitter {
   return {
     routing: () => send('routing'),
     readingView: () => send('reading-view'),
-    reading: (tool, label, values) => {
+    reading: (tool, label, values, kind) => {
       const subject = values === undefined ? undefined : subjectOf(values);
-      send('reading', { tool: tool.slice(0, 200), ...(label === undefined ? {} : { label }), ...(subject === undefined ? {} : { subject }) });
+      send('reading', { tool: tool.slice(0, 200), ...(label === undefined ? {} : { label }), ...(subject === undefined ? {} : { subject }), ...(kind === undefined ? {} : { kind }) });
     },
+    readDone: (read) => send('read-done', { read }),
     answering: () => send('answering'),
   };
 }

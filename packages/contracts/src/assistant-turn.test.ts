@@ -318,6 +318,14 @@ describe('the events of a streamed turn', () => {
     for (const bad of [{ n: 1, phase: 'routing', tool: 'x' }, { n: 0, phase: 'routing' }, { n: 1, phase: 'thinking' }, { n: 1, phase: 'reading', tool: 'x', text: 'hello' }, { n: 1, phase: 'reading', label: 'x'.repeat(81) }, { n: 1, phase: 'reading', subject: 'x'.repeat(401) }]) {
       expect(assistantStepMembersSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
     }
+    expect(assistantStepMembersSchema.safeParse({ n: 2, phase: 'reading', tool: 'shared', kind: 'intent' }).success).toBe(true);
+    const read = { tool: 'shared', kind: 'intent', subject: 'A-1', read: true, rows: 2, quality: 'exact', partial: false };
+    expect(assistantStepMembersSchema.safeParse({ n: 3, phase: 'read-done', read }).success).toBe(true);
+    expect(assistantStepMembersSchema.safeParse({ n: 3, phase: 'read-done', read: { tool: 'x', kind: 'view', read: false } }).success).toBe(true);
+    // a finished read always carries its record, and nothing else carries one; a count that is not known has no number, as in the answer
+    for (const bad of [{ n: 3, phase: 'read-done' }, { n: 3, phase: 'reading', tool: 'x', read }, { n: 3, phase: 'answering', read }, { n: 3, phase: 'read-done', tool: 'x', read }, { n: 3, phase: 'read-done', read: { ...read, quality: 'unknown' } }, { n: 2, phase: 'routing', kind: 'intent' }]) {
+      expect(assistantStepMembersSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
+    }
     expect(assistantTurnStreamEventSchema.safeParse({ event: 'step', n: 1, phase: 'routing' }).success).toBe(true);
     expect(assistantTurnStreamEventSchema.safeParse({ event: 'step', n: 1, phase: 'routing', extra: 1 }).success).toBe(false);
   });

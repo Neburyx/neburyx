@@ -22,6 +22,19 @@ const read = async (body: ReadableStream<Uint8Array> | null, signal?: AbortSigna
 };
 
 describe('the reader of a streamed turn', () => {
+  it('hands a finished read over with its record, as the answer will list it', async () => {
+    const readRecord = { tool: 'shared', kind: 'intent', subject: 'A-1', read: true, rows: 2, quality: 'exact', partial: false };
+    const { outcome, steps } = await read(bodyOf(line(STEP(1, 'reading', { tool: 'shared', kind: 'intent' })), line(STEP(2, 'read-done', { read: readRecord })), line(ANSWER)));
+    expect(steps).toEqual([{ n: 1, phase: 'reading', tool: 'shared', kind: 'intent' }, { n: 2, phase: 'read-done', read: readRecord }]);
+    expect(outcome).toEqual({ kind: 'answer', answer: REFUSAL });
+  });
+
+  it('breaks on a finished read without its record, or on a record of a read with a number that is not known', async () => {
+    for (const bad of [line(STEP(1, 'read-done')), line(STEP(1, 'read-done', { read: { tool: 'x', kind: 'intent', read: true, rows: 1, quality: 'unknown', partial: false } }))]) {
+      expect((await read(bodyOf(bad, line(ANSWER)))).outcome).toEqual({ kind: 'broken' });
+    }
+  });
+
   it('hands each step over in order and ends with the answer exactly as the JSON route gives it', async () => {
     const { outcome, steps } = await read(bodyOf(line(STEP(1)), line(STEP(2, 'reading', { tool: 'shared', label: 'Shared', subject: 'A-1' })), line(ANSWER)));
     expect(steps).toEqual([{ n: 1, phase: 'routing' }, { n: 2, phase: 'reading', tool: 'shared', label: 'Shared', subject: 'A-1' }]);

@@ -539,3 +539,44 @@
   font-weight: 600;
   font-size: var(--font-size-small);
 }
+
+/* the turn in progress: the reads that have finished are boxes, the step under them is dashed */
+.assistant-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.assistant-progress .assistant-reads {
+  margin: 0;
+}
+
+.assistant-current {
+  border: var(--border-width) dashed var(--color-accent);
+  border-radius: var(--radius);
+  padding: var(--space-8) var(--space-12);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: var(--font-size-small);
+}
+
+.assistant-current p {
+  margin: 0;
+}
+
+.assistant-current .assistant-step {
+  color: var(--color-accent);
+}
+
+.assistant-current-checking {
+  background: var(--color-surface-muted);
+  border-color: var(--color-border);
+}
+
+.assistant-state {
+  margin-left: auto;
+  font-size: var(--font-size-small);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}

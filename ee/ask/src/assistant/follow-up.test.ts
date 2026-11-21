@@ -817,8 +817,8 @@ describe('the steps a streamed clarification and a streamed choice report', () =
     if (clarification.status !== 'clarification') throw new Error('not a clarification');
     const steps = capture();
     await answerOf(t.rig.route.handler(t.rig.request({ sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], choice: clarification.candidates[1]?.choice }, { principalId: PERSON, emit: steps.emit })));
-    expect(steps.events.map((event) => event['phase'])).toEqual(['reading']);
-    expect(steps.events[0]).toMatchObject({ tool: 'shared' });
+    expect(steps.events.map((event) => event['phase'])).toEqual(['reading', 'read-done']);
+    expect(steps.events[0]).toMatchObject({ tool: 'shared', kind: 'intent' });
   });
 });
 

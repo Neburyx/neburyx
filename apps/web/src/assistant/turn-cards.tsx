@@ -8,7 +8,7 @@ import { isAssistantOff } from './failure-kinds.js';
 import { rateLimitedSentence } from '../patterns/failure-words.js';
 import { ASSISTANT_COPY, unavailableSentence } from './copy.js';
 import { ConfirmationCard } from './confirmation-card.js';
-import { ReadSteps } from './read-steps.js';
+import { READ_KIND_TAGS, ReadBox, ReadSteps } from './read-steps.js';
 import type { Failure, Turn } from './assistant-session.js';
 import { ClarificationCard } from './clarification-card.js';
 import { FollowUps } from './follow-ups.js';
@@ -150,12 +150,8 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
   switch (outcome.kind) {
     case 'pending':
       return (
-        <section className="ask-asking" aria-label={outcome.call === 'continue' ? ASSISTANT_COPY.continuing : ASSISTANT_COPY.working}>
-          <p className="ask-asking-title">{outcome.call === 'continue' ? ASSISTANT_COPY.continuing : ASSISTANT_COPY.working}</p>
-          <div className="ask-progress" aria-hidden="true">
-            <span />
-          </div>
-          <p className="assistant-step">{outcome.step === undefined ? ASSISTANT_COPY.workingBody : stepSentenceOf(outcome.step)}</p>
+        <section className="assistant-progress" aria-label={outcome.call === 'continue' ? ASSISTANT_COPY.continuing : ASSISTANT_COPY.working}>
+          <PendingSteps steps={outcome.steps ?? []} />
         </section>
       );
     case 'cancelled':
@@ -260,9 +256,51 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
   }
 }
 
+/** The reads that have finished, each as a box, and the step in progress under them: a dashed box for a read (its title, its kind and its subject, "…" after it), the checking of the answer, or a fixed sentence for the first steps. No figure is shown that the server did not send. */
+function PendingSteps({ steps }: { readonly steps: readonly TurnStep[] }) {
+  const finished = steps.flatMap((step) => (step.read === undefined ? [] : [step.read]));
+  const last = steps.at(-1);
+  const current = last === undefined || last.phase === 'read-done' ? undefined : last;
+  return (
+    <>
+      {finished.length === 0 ? null : (
+        <ul className="assistant-reads assistant-reads-streamed">
+          {finished.map((entry, index) => (
+            <ReadBox key={`${index}-${entry.tool}`} entry={entry} />
+          ))}
+        </ul>
+      )}
+      {last === undefined ? (
+        <div className="assistant-current">
+          <p className="assistant-read-title assistant-step">{ASSISTANT_COPY.workingBody}</p>
+        </div>
+      ) : current === undefined ? null : current.phase === 'reading' ? (
+        <div className="assistant-current">
+          <p className="assistant-read-title">
+            <span className="assistant-step">{`${ASSISTANT_COPY.stepReading} ${current.label ?? humanize(current.tool ?? '')}`}</span>
+            {current.kind === undefined ? null : <span className="ask-tag">{READ_KIND_TAGS[current.kind]}</span>}
+          </p>
+          {current.subject === undefined ? null : <p className="assistant-read-line">{`${current.subject} …`}</p>}
+        </div>
+      ) : current.phase === 'answering' ? (
+        <div className="assistant-current assistant-current-checking">
+          <p className="assistant-read-title assistant-step">{ASSISTANT_COPY.stepAnswering}</p>
+          <p className="assistant-read-line">{ASSISTANT_COPY.stepAnsweringBody}</p>
+        </div>
+      ) : (
+        <div className="assistant-current">
+          <p className="assistant-read-title assistant-step">{stepSentenceOf(current)}</p>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** The words of the step in progress: a fixed sentence for a phase, and for a read the label of the intent or the humanized tool, with its subject; all of it text. */
 export function stepSentenceOf(step: TurnStep): string {
   switch (step.phase) {
+    case 'read-done':
+      return `${ASSISTANT_COPY.stepReadDone} ${step.read === undefined ? '' : (step.read.label ?? humanize(step.read.tool))}`.trim() + '.';
     case 'routing':
       return ASSISTANT_COPY.stepRouting;
     case 'reading-view':

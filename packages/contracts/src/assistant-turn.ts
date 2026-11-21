@@ -270,11 +270,11 @@ export type AssistantDescriptionCitation = z.infer<typeof assistantDescriptionCi
 export const ASSISTANT_STREAM_MAX_MS = 660_000;
 
 /** The phases of a turn a client is told about, in the order a turn goes through them. */
-export const ASSISTANT_STEP_PHASES = ['routing', 'reading-view', 'reading', 'answering'] as const;
+export const ASSISTANT_STEP_PHASES = ['routing', 'reading-view', 'reading', 'read-done', 'answering'] as const;
 
 /**
  * The members of a `step` event: which step of the turn is about to run. `tool`, `label` and `subject` belong to a read: the tool's name (the intent's name or the template's), the plain-words label the operator gave an intent (when it has one),
- * and the values the registry's parameter check accepted for it, as the confirmation card shows them. Nothing a model wrote is in a step.
+ * and the values the registry's parameter check accepted for it, as the confirmation card shows them; `read-done` follows each read with its record (rows, the quality of the count, partial). Nothing a model wrote is in a step.
  */
 export const assistantStepMembersSchema = z
   .strictObject({
@@ -283,8 +283,13 @@ export const assistantStepMembersSchema = z
     tool: text.max(200).optional(),
     label: text.max(80).optional(),
     subject: text.max(400).optional(),
+    /** The kind of the tool of a read that is starting, for its tag. */
+    kind: z.enum(ASSISTANT_READ_KINDS).optional(),
+    /** The read that has just finished, exactly as the answer will list it in its steps. */
+    read: assistantReadSchema.optional(),
   })
-  .refine((step) => step.phase === 'reading' || (step.tool === undefined && step.label === undefined && step.subject === undefined), { message: 'only a read names its tool, label and subject', path: ['phase'] });
+  .refine((step) => step.phase === 'reading' || (step.tool === undefined && step.label === undefined && step.subject === undefined && step.kind === undefined), { message: 'only a read that is starting names its tool, label, subject and kind', path: ['phase'] })
+  .refine((step) => (step.phase === 'read-done') === (step.read !== undefined), { message: 'only a finished read carries its record, and it always does', path: ['read'] });
 
 /** One line of a streamed turn. The first lines are steps, the last is the answer exactly as the JSON route gives it, or an error that has no turn answer. */
 export const assistantTurnStreamEventSchema = z.union([
