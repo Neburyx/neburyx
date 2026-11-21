@@ -97,6 +97,17 @@ describe('a written value in a step of the tool loop', () => {
     expect(r.fixture.calls.map((call) => call.promptId)).toEqual(['assistant.route', 'assistant.step']);
   });
 
+  it.each([
+    ['another type', ['widget/A-1', 'gadget/K-1'], false, 'K-1', 'gadget K-1 is a gadget; this question needs a widget. That step was not run; the results above stand.'],
+    ['an id that exists as nothing', ['widget/A-1'], false, 'NOBODY', 'There is no widget with that id. That step was not run; the results above stand.'],
+    ['an element the read left out', ['widget/A-1'], true, 'NOBODY', 'That value does not give a widget this question can use. That step was not run; the results above stand.'],
+  ])('says that the step was not run and the results above stand, not that nothing was run, when a step after a read that ran does not fit: %s', async (_name, source, omits, id, sentence) => {
+    const r = await loop(source, sequence(step(id), ok('{"done":true}')), { sourceOmits: omits });
+    const answer = await answerOf(r.route.handler(r.request()));
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'value-not-fit', sentence } }, reads: [{ tool: 'shared', read: true }] });
+    expect(JSON.stringify(answer)).not.toContain('Nothing was run');
+  });
+
   it('ends the same way for an id that exists as nothing', async () => {
     const r = await loop(['widget/A-1'], sequence(step('NOBODY')));
     expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ answer: { refused: { valueNotFit: { kind: 'not-found', needed: 'widget' } } } });

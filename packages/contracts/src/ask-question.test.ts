@@ -108,39 +108,47 @@ describe('the audit detail of a question and the reason of a bad token', () => {
 });
 
 describe('a value that does not fit the type its role needs', () => {
-  const REF = { sourceId: 'demo', entityType: 'account', stableId: 'A-1' };
+  const REF = { sourceId: 'demo', entityType: 'gadget', stableId: 'A-1' };
   const refusal = (valueNotFit?: unknown, cause = 'value-not-fit') => ({ refused: { cause, sentence: 'x', intent: 'shared', ...(valueNotFit === undefined ? {} : { valueNotFit }) } });
-  const OTHER = { kind: 'other-type', needed: 'customer', found: 'account', citation: { ref: REF, title: 'Account A-1', type: 'account' } };
+  const OTHER = { kind: 'other-type', needed: 'widget', found: 'gadget', citation: { ref: REF, title: 'Gadget A-1', type: 'gadget' } };
 
   it('is a refusal of the cause `value-not-fit` that names the kind, the type the question needs and, for another type, the type found and the cited element', () => {
     expect(ASK_REFUSAL_CAUSES).toContain('value-not-fit');
-    for (const fit of [OTHER, { kind: 'not-found', needed: 'customer' }, { kind: 'hidden', needed: 'customer' }]) expect(askAnswerSchema.safeParse(refusal(fit)).success, JSON.stringify(fit)).toBe(true);
+    for (const fit of [OTHER, { kind: 'not-found', needed: 'widget' }, { kind: 'hidden', needed: 'widget' }]) expect(askAnswerSchema.safeParse(refusal(fit)).success, JSON.stringify(fit)).toBe(true);
   });
 
   it('is refused when the cause has no kind, another cause carries one, another type has no type found or no citation, or another kind names a type found', () => {
     for (const bad of [
       refusal(undefined),
       refusal(OTHER, 'nothing-found'),
-      refusal({ kind: 'other-type', needed: 'customer' }),
-      refusal({ kind: 'other-type', needed: 'customer', found: 'account' }),
-      refusal({ kind: 'not-found', needed: 'customer', found: 'account' }),
-      refusal({ kind: 'hidden', needed: 'customer', citation: OTHER.citation }),
-      refusal({ kind: 'guess', needed: 'customer' }),
+      refusal({ kind: 'other-type', needed: 'widget' }),
+      refusal({ kind: 'other-type', needed: 'widget', found: 'gadget' }),
+      refusal({ kind: 'not-found', needed: 'widget', found: 'gadget' }),
+      refusal({ kind: 'hidden', needed: 'widget', citation: OTHER.citation }),
+      refusal({ kind: 'guess', needed: 'widget' }),
       refusal({ ...OTHER, extra: 1 }),
     ]) expect(askAnswerSchema.safeParse(bad).success, JSON.stringify(bad)).toBe(false);
   });
 
   it('has one sentence for each kind, built from types and a title only: the type found and the type needed for another type, "no <type> with that id" for none, and a neutral one for hidden', () => {
-    const other = valueNotFitSentence({ kind: 'other-type', needed: 'customer', found: 'account', title: 'Account A-1' });
-    expect(other).toBe('Account A-1 is an account; this question needs a customer. Nothing was run.');
-    expect(valueNotFitSentence({ kind: 'not-found', needed: 'customer' })).toBe('There is no customer with that id. Nothing was run.');
-    const hidden = valueNotFitSentence({ kind: 'hidden', needed: 'customer' });
-    expect(hidden).toBe('That value does not give a customer this question can use. Nothing was run.');
-    for (const sentence of [other, hidden, valueNotFitSentence({ kind: 'not-found', needed: 'customer' }), ASK_REFUSAL_SENTENCES['value-not-fit']]) expect(sentence).not.toMatch(/nothing (was )?found|nothing matches|no (one|match)/i);
-    expect(hidden).not.toMatch(/exist|no customer|not found/i);
+    const other = valueNotFitSentence({ kind: 'other-type', needed: 'widget', found: 'gadget', title: 'Gadget A-1' });
+    expect(other).toBe('Gadget A-1 is a gadget; this question needs a widget. Nothing was run.');
+    expect(valueNotFitSentence({ kind: 'not-found', needed: 'widget' })).toBe('There is no widget with that id. Nothing was run.');
+    const hidden = valueNotFitSentence({ kind: 'hidden', needed: 'widget' });
+    expect(hidden).toBe('That value does not give a widget this question can use. Nothing was run.');
+    for (const sentence of [other, hidden, valueNotFitSentence({ kind: 'not-found', needed: 'widget' }), ASK_REFUSAL_SENTENCES['value-not-fit']]) expect(sentence).not.toMatch(/nothing (was )?found|nothing matches|no (one|match)/i);
+    expect(hidden).not.toMatch(/exist|no widget|not found/i);
+  });
+
+  it('says of a step of a tool loop after reads that ran that the step was not run and the results above stand, for each kind', () => {
+    const later = (kind: 'other-type' | 'not-found' | 'hidden') => valueNotFitSentence({ kind, needed: 'widget', found: 'gadget', title: 'Gadget A-1', laterStep: true });
+    expect(later('other-type')).toBe('Gadget A-1 is a gadget; this question needs a widget. That step was not run; the results above stand.');
+    expect(later('not-found')).toBe('There is no widget with that id. That step was not run; the results above stand.');
+    expect(later('hidden')).toBe('That value does not give a widget this question can use. That step was not run; the results above stand.');
+    for (const kind of ['other-type', 'not-found', 'hidden'] as const) expect(later(kind)).not.toContain('Nothing was run');
   });
 
   it('uses the masked title the gate gave and no other text of the request', () => {
-    expect(valueNotFitSentence({ kind: 'other-type', needed: 'customer', found: 'account', title: '••••• 42' })).toContain('••••• 42 is an account');
+    expect(valueNotFitSentence({ kind: 'other-type', needed: 'widget', found: 'gadget', title: '••••• 42' })).toContain('••••• 42 is a gadget');
   });
 });

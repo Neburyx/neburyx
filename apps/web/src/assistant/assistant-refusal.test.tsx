@@ -171,24 +171,24 @@ describe('the Assistant thread: the refusal of an Ask question', () => {
   });
 
   const misfit = (valueNotFit: Record<string, unknown>, sentence: string, reads?: readonly Record<string, unknown>[]): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: askAnswerSchema.parse({ refused: { cause: 'value-not-fit', sentence, intent: 'shared', valueNotFit } }), ...(reads === undefined ? {} : { reads: reads as never }) });
-  const ACCOUNT = { ref: { sourceId: 'demo', entityType: 'account', stableId: 'A-1' }, title: 'Account A-1', type: 'account' };
+  const ACCOUNT = { ref: { sourceId: 'demo', entityType: 'gadget', stableId: 'A-1' }, title: 'Gadget A-1', type: 'gadget' };
 
   it.each([
-    ['another type, with the element cited', { kind: 'other-type', needed: 'customer', found: 'account', citation: ACCOUNT }, valueNotFitSentence({ kind: 'other-type', needed: 'customer', found: 'account', title: 'Account A-1' })],
-    ['no element', { kind: 'not-found', needed: 'customer' }, valueNotFitSentence({ kind: 'not-found', needed: 'customer' })],
-    ['an element the read left out', { kind: 'hidden', needed: 'customer' }, valueNotFitSentence({ kind: 'hidden', needed: 'customer' })],
+    ['another type, with the element cited', { kind: 'other-type', needed: 'widget', found: 'gadget', citation: ACCOUNT }, valueNotFitSentence({ kind: 'other-type', needed: 'widget', found: 'gadget', title: 'Gadget A-1' })],
+    ['no element', { kind: 'not-found', needed: 'widget' }, valueNotFitSentence({ kind: 'not-found', needed: 'widget' })],
+    ['an element the read left out', { kind: 'hidden', needed: 'widget' }, valueNotFitSentence({ kind: 'hidden', needed: 'widget' })],
   ])('shows the sentence the server wrote for a value that does not fit: %s', async (_name, fit, sentence) => {
     setup({ answers: [misfit(fit, sentence)] });
     await typeAndSend('a message as typed');
     await screen.findByRole('heading', { name: ASSISTANT_COPY.notAnswered });
     expect(screen.getByText(sentence)).toBeTruthy();
-    if ('citation' in fit) expect(screen.getByText(`${ASSISTANT_COPY.citedElement} Account A-1 (account)`)).toBeTruthy();
+    if ('citation' in fit) expect(screen.getByText(`${ASSISTANT_COPY.citedElement} Gadget A-1 (gadget)`)).toBeTruthy();
     else expect(screen.queryByText(new RegExp(ASSISTANT_COPY.citedElement))).toBeNull();
   });
 
   it('shows the reads of the earlier steps of a tool loop that the refusal ended, above the refusal', async () => {
-    const sentence = valueNotFitSentence({ kind: 'not-found', needed: 'customer' });
-    setup({ answers: [misfit({ kind: 'not-found', needed: 'customer' }, sentence, [{ tool: 'shared', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }])] });
+    const sentence = valueNotFitSentence({ kind: 'not-found', needed: 'widget', laterStep: true });
+    setup({ answers: [misfit({ kind: 'not-found', needed: 'widget' }, sentence, [{ tool: 'shared', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }])] });
     await typeAndSend('a message as typed');
     await screen.findByRole('heading', { name: ASSISTANT_COPY.notAnswered });
     expect(document.querySelector('.assistant-reads')).not.toBeNull();

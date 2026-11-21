@@ -458,7 +458,7 @@ describe('the table answers', () => {
 
 
 describe('the ask route answering a value that does not fit', () => {
-  const refused = { cause: 'value-not-fit', sentence: 'There is no customer with that id. Nothing was run.', intent: 'shared', valueNotFit: { kind: 'not-found', needed: 'customer' } };
+  const refused = { cause: 'value-not-fit', sentence: 'There is no widget with that id. Nothing was run.', intent: 'shared', valueNotFit: { kind: 'not-found', needed: 'widget' } };
   const read = { tool: 'a', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false };
 
   it('carries the refusal, with the reads of the earlier steps when a tool loop ended with it, and no limit', () => {

@@ -1,4 +1,4 @@
-import { ASK_TEMPLATE_IDS, hasDuplicateKeys, type AskAnswer, type AskRunResult, type AssistantRead, type SummaryReading, type AssistantFailureKind, type AssistantLimit } from '@neburyx/contracts';
+import { ASK_TEMPLATE_IDS, hasDuplicateKeys, valueNotFitSentence, type AskAnswer, type AskRunResult, type AssistantRead, type SummaryReading, type AssistantFailureKind, type AssistantLimit } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { summarizeRun } from '../questions/run-summary.js';
@@ -23,6 +23,10 @@ export const toolRegistryOf = (scope: Pick<StepScope, 'options' | 'sourceId' | '
   buildToolRegistry({ source: scope.options.folder()?.source(scope.sourceId), patterns: scope.patterns?.built, viewReadable, templateRunnable: (template) => TEMPLATES.includes(template), notes: scope.request.aiNotes !== undefined, summary: scope.viewElementKeys.length > 0 && scope.request.caseSummarizer.availability().available, ...(typologyOf(scope) === undefined ? {} : { typology: typologyOf(scope) }) });
 
 type Answered = Extract<AskAnswer, { answered: unknown }>['answered'];
+type Refused = Extract<AskAnswer, { refused: unknown }>['refused'];
+
+/** The refusal of a step that came after reads that did run: the same fixed sentence, saying that this step was not run and that the results above stand, not that nothing was run. */
+const afterReads = (refused: Refused): Refused => (refused.valueNotFit === undefined ? refused : { ...refused, sentence: valueNotFitSentence({ kind: refused.valueNotFit.kind, needed: refused.valueNotFit.needed, found: refused.valueNotFit.found, title: refused.valueNotFit.citation?.title, laterStep: true }) });
 
 interface ToolLoopSettings {
   readonly maxCalls: number;
@@ -83,7 +87,7 @@ export type LoopOutcome =
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind }
   /** A step whose value the model wrote is not an element of the type its role needs: the turn ends here with the fixed refusal, and the reads the earlier steps made are the ones it lists. The model is not asked again. */
-  | { readonly kind: 'misfit'; readonly refused: Extract<AskAnswer, { refused: unknown }>['refused']; readonly reads: readonly AssistantRead[] }
+  | { readonly kind: 'misfit'; readonly refused: Refused; readonly reads: readonly AssistantRead[] }
   | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly reads: readonly AssistantRead[] }
   /** A tool request that is malformed after its repeat, or names a tool that is no longer available. */
   | { readonly kind: 'ended'; readonly because: 'malformed' | 'unavailable' };
@@ -211,7 +215,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'refused':
-          if (step.refused.cause === 'value-not-fit') return { kind: 'misfit', refused: step.refused, reads: entries };
+          if (step.refused.cause === 'value-not-fit') return { kind: 'misfit', refused: entries.length === 0 ? step.refused : afterReads(step.refused), reads: entries };
           if (step.refused.cause === 'nothing-found') reads.push({ tool: tool.name, ...labelFor(tool.name) });
           put(step.refused.cause === 'nothing-found' ? readOfNothing(tool.kind, tool.name, values) : readNotRead(tool.kind, tool.name));
           lines.push(`${tool.name}: ${step.refused.cause === 'nothing-found' ? 'nothing found' : 'not read, its values did not fit'}`);

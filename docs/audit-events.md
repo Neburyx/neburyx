@@ -49,7 +49,7 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `export.download` | refused | queued | `services/api/src/exports/export-service.ts` | A refusal is not the action: its event is queued through `refusalAudit`, so a refusal is never withheld for it. |
 | `gate.read` | any | queued | `services/api/src/gate/audit.ts` | A read or a system read: the response does not depend on its event, which is queued. |
 | `graph.expand` | any | queued | `services/api/src/gate/templates/expand-count.ts`, `services/api/src/gate/templates/expand-neighbors.ts` | A read or a system read: the response does not depend on its event, which is queued. |
-| `graph.read_refs` | any | queued | `services/api/src/graph/read-refs-service.ts` | A read or a system read: the response does not depend on its event, which is queued. |
+| `graph.read_refs` | any | queued | `services/api/src/graph/read-refs-service.ts`, `services/api/src/graph/elements-reader.ts` | A read or a system read: the response does not depend on its event, which is queued. |
 | `graph.shortest_paths_count` | any | queued | `services/api/src/gate/templates/shortest-paths-count.ts` | A read or a system read: the response does not depend on its event, which is queued. |
 | `graph.shortest_paths_run` | any | queued | `services/api/src/gate/templates/shortest-paths.ts` | A read or a system read: the response does not depend on its event, which is queued. |
 | `investigation.archive` | any | privileged | `services/api/src/investigations/status-change.ts` | Investigation status, delete and restore are privileged (TAS section 10): the event commits with the change and fails with it. |

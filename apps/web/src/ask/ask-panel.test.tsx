@@ -117,18 +117,18 @@ describe('the Ask panel: a refusal', () => {
   });
 
   it.each([
-    ['another type', { kind: 'other-type', needed: 'customer', found: 'account', citation: { ref: { sourceId: 'demo', entityType: 'account', stableId: 'A-1' }, title: 'Account A-1', type: 'account' } }],
-    ['no element', { kind: 'not-found', needed: 'customer' }],
-    ['an element the read left out', { kind: 'hidden', needed: 'customer' }],
+    ['another type', { kind: 'other-type', needed: 'widget', found: 'gadget', citation: { ref: { sourceId: 'demo', entityType: 'gadget', stableId: 'A-1' }, title: 'Gadget A-1', type: 'gadget' } }],
+    ['no element', { kind: 'not-found', needed: 'widget' }],
+    ['an element the read left out', { kind: 'hidden', needed: 'widget' }],
   ])('shows the fixed sentence of a value that does not fit (%s), the tag of its cause, and for another type the element cited with its title and type', async (_name, valueNotFit) => {
-    const sentence = valueNotFitSentence({ kind: valueNotFit.kind as 'other-type' | 'not-found' | 'hidden', needed: 'customer', found: 'found' in valueNotFit ? valueNotFit.found : undefined, title: 'citation' in valueNotFit ? valueNotFit.citation.title : undefined });
+    const sentence = valueNotFitSentence({ kind: valueNotFit.kind as 'other-type' | 'not-found' | 'hidden', needed: 'widget', found: 'found' in valueNotFit ? valueNotFit.found : undefined, title: 'citation' in valueNotFit ? valueNotFit.citation.title : undefined });
     const h = harness(async () => ({ ok: true, value: { refused: { cause: 'value-not-fit', sentence, valueNotFit } } as never }));
     render(h.tree(true));
     await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
     expect(await screen.findByRole('heading', { name: 'Ask did not answer' })).toBeTruthy();
     expect(screen.getByText(sentence)).toBeTruthy();
     expect(screen.getByText(causeTag('value-not-fit'))).toBeTruthy();
-    if ('citation' in valueNotFit) expect(screen.getByText('Account A-1 (account)')).toBeTruthy();
+    if ('citation' in valueNotFit) expect(screen.getByText('Gadget A-1 (gadget)')).toBeTruthy();
     else expect(screen.queryByText('Element')).toBeNull();
   });
 

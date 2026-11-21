@@ -24,10 +24,12 @@ const withArticle = (type: string): string => `${/^[aeiou]/i.test(type) ? 'an' :
  * The fixed sentence of a value that does not fit the type its role needs, built from the type the question needs and, for another type, the type found and the title the gate gave the element (masked when the
  * request masks). `hidden` says nothing about whether an element exists. No word of the model or of the question's text is in it.
  */
-export function valueNotFitSentence(fit: { readonly kind: AskValueNotFitKind; readonly needed: string; readonly found?: string | undefined; readonly title?: string | undefined }): string {
-  if (fit.kind === 'other-type' && fit.found !== undefined && fit.title !== undefined) return `${fit.title} is ${withArticle(fit.found)}; this question needs ${withArticle(fit.needed)}. Nothing was run.`;
-  if (fit.kind === 'not-found') return `There is no ${fit.needed} with that id. Nothing was run.`;
-  return `That value does not give ${withArticle(fit.needed)} this question can use. Nothing was run.`;
+export function valueNotFitSentence(fit: { readonly kind: AskValueNotFitKind; readonly needed: string; readonly found?: string | undefined; readonly title?: string | undefined; readonly laterStep?: boolean | undefined }): string {
+  // a step of a tool loop that came after reads that did run: what was run before stands, and only this step was not run
+  const ending = fit.laterStep === true ? 'That step was not run; the results above stand.' : 'Nothing was run.';
+  if (fit.kind === 'other-type' && fit.found !== undefined && fit.title !== undefined) return `${fit.title} is ${withArticle(fit.found)}; this question needs ${withArticle(fit.needed)}. ${ending}`;
+  if (fit.kind === 'not-found') return `There is no ${fit.needed} with that id. ${ending}`;
+  return `That value does not give ${withArticle(fit.needed)} this question can use. ${ending}`;
 }
 
 /** A reply longer than this is not read: a reply of the form is far shorter (20 entities of 256 characters and their keys), and a text written with escapes beyond this size is refused as one that does not fit. */

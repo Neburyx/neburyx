@@ -132,7 +132,7 @@ test.describe('the Assistant panel', () => {
   for (const [name, fit, title, loop] of MISFITS) {
     test(`shows the sentence of a value that does not fit, ${name}, titled Not answered, and keeps the page inside the window`, async ({ page }) => {
       await openWorkspace(page);
-      const sentence = valueNotFitSentence({ kind: fit.kind, needed: 'customer', found: 'found' in fit ? fit.found : undefined, title });
+      const sentence = valueNotFitSentence({ kind: fit.kind, needed: 'customer', found: 'found' in fit ? fit.found : undefined, title, laterStep: loop });
       const reads = loop ? { reads: [{ tool: 'find-account', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }] } : {};
       await answerWith(page, { status: 'answered', route: 'ask', answer: askAnswerSchema.parse({ refused: { cause: 'value-not-fit', sentence, intent: 'find-customer', valueNotFit: fit } }), ...reads } as AssistantTurnAnswer);
       await open(page);
