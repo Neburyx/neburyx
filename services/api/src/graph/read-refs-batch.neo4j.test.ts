@@ -7,7 +7,7 @@ import { createTemplateCatalog } from '../gate/catalog.js';
 import { renderTemplate } from '../gate/render.js';
 import { EDGE_LOAD_ID, edgeLoadTemplate } from '../gate/templates/edge-load.js';
 import { edgeLoadManyTemplate } from '../gate/templates/edge-load-many.js';
-import { ENTITY_LOAD_ID } from '../gate/templates/entity-load.js';
+import { ENTITY_LOAD_ID, entityLoadTemplate } from '../gate/templates/entity-load.js';
 import { entityLoadManyTemplate } from '../gate/templates/entity-load-many.js';
 import type { Gate } from '../gate/types.js';
 import { makeToken } from '../reference/token.js';
@@ -229,6 +229,11 @@ describe(`the plan of a read of many references in one statement, on ${NEO4J_SER
     const plan = await profile(edgeLoadTemplate, { type: 'USES_TOOL', from: 'maker', to: 'tool', stableId: 'hu1' }, 1);
     expectSeekOnly(plan, /RelationshipIndexSeek/);
     expect(dbHitsOf(plan)).toBeLessThan(40);
+  });
+
+  it('seeks the single node of an ID in the stable ID index, and scans no label or index', async () => {
+    const plan = await profile(entityLoadTemplate, { entityType: 'maker', stableId: 'm1' }, 1);
+    expectSeekOnly(plan, /NodeIndexSeek|NodeUniqueIndexSeek/);
   });
 
   it('is answered by the server, with a warning and a scan, when the index named by the hint does not exist (the gate refuses such a read first when it can list the indexes)', async () => {
