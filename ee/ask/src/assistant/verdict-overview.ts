@@ -64,6 +64,8 @@ export async function verdictRefusal(input: VerdictOverviewInput): Promise<Assis
   if (outcome.status === 'cancelled') throw new Error('the request was cancelled');
   if (outcome.status !== 'answered') return plain();
   const { answer } = outcome;
+  // a table answer has no sentences: the overview is never asked for one
+  if (!('sentences' in answer)) return plain();
   const citations = answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation]));
   const drawn = { ...plain(), overview: { sentences: [...answer.sentences], citations, coverage: { retrieval: answer.coverage.retrieval, summary: answer.coverage.summary }, model: answer.model } };
   const checked = assistantTurnAnswerSchema.safeParse(drawn);
