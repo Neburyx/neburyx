@@ -49,6 +49,15 @@ describe('the selection and the records of a turn', () => {
     for (const selection of [undefined, [], [JSON.stringify(['node', 'demo', 'widget', 'A-9'])]]) expect(closed((await turn(selection)).r), JSON.stringify(selection)).not.toHaveProperty('selectedElements');
   });
 
+  it('counts nothing and marks nothing when the keys of the view cannot be read, even with a selection', async () => {
+    const r: Rig = await rig({ reply: ok('{"route":"refuse","cause":"unplaced"}') });
+    const unreadable = 'not-a-key';
+    await answerOf(r.route.handler(r.request({ ...VIEW_BODY, viewElementKeys: [unreadable], selectionKeys: [unreadable] }, { principalId: PERSON })));
+    await drain();
+    expect(closed(r)).not.toHaveProperty('selectedElements');
+    expect(JSON.stringify(r.fixture.calls.map((call) => call.values))).not.toContain('(selected)');
+  });
+
   it('changes no hash, no thread entry and no audit event of the turn, apart from the count and the calls’ own figures, for the same replies', async () => {
     const without = await turn();
     const withSelection = await turn([VIEW_KEYS[0] ?? '', VIEW_KEYS[1] ?? '']);

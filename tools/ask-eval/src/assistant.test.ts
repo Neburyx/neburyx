@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
-import { assistantSetHash, readAssistantFile, unitsOf, type AssistantSet } from './assistant-questions.js';
+import { assistantSetHash, checkAssistantSets, readAssistantFile, unitsOf, type AssistantSet } from './assistant-questions.js';
 import { loadAssistantSets } from './assistant-run.js';
 import { requestsOf } from './assistant-replay.js';
 import { runCli } from './cli.js';
@@ -79,6 +79,19 @@ describe('the file of labelled assistant messages', () => {
     ])('refuses a selection of %s', (_name, text) => {
       expect(() => readAssistantFile(text, 3)).toThrow(UsageError);
     });
+  });
+
+  it('refuses a turn that selects an element and expects an ask for an element that is not in its view', async () => {
+    const sets = await loadAssistantSets(PACKS, hooks());
+    expect(() => checkAssistantSets(sets)).not.toThrow();
+    const broken = sets.map((set) => ({
+      ...set,
+      threads: set.threads.map((thread) => ({
+        ...thread,
+        turns: thread.turns.map((turn) => (turn.selected !== undefined && turn.expect.route === 'ask' ? { ...turn, expect: { ...turn.expect, entities: Object.fromEntries(Object.keys(turn.expect.entities).map((role) => [role, 'NOT-IN-VIEW'])) } } : turn)),
+      })),
+    }));
+    expect(() => checkAssistantSets(broken)).toThrow(/not in the view of its turn/);
   });
 
   it('hashes the messages: the same under the order of the file, different when a wording changes', async () => {

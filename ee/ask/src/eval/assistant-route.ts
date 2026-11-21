@@ -89,7 +89,7 @@ export async function routeMessage(source: LoadedSource, provider: ModelProvider
   const thread = await contextOf(source, input.earlier);
   // the elements in view get keys of the table of the thread's context, as the product's turn gives them
   const view = readViewKeys(input.viewElementKeys, source.sourceId);
-  const selectedKeys = selectedKeysOf(input.viewElementKeys, input.selectionKeys);
+  const selectedKeys = view.ok ? selectedKeysOf(input.viewElementKeys, input.selectionKeys) : [];
   const selected = selectedKeys.length === 0 ? undefined : readViewKeys(selectedKeys, source.sourceId);
   const context = withView(thread, view.ok ? view.refs : { entities: [], edges: [], aggregates: [], derived: [] }, source.sourceId, selected?.ok === true ? selected.refs : undefined);
   const accepts = (reply: AssistantRouterReply): boolean => reply.route !== 'clarify' || candidatesOfReply(reply, context, source.folder, source.sourceId) !== undefined;

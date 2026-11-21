@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { ASK_SAVED_PATTERN_NOTE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_TOO_LARGE_SENTENCE, type ExtensionRequest } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { BODY, MESSAGE, answerOf, offerOf, ok, refusalOf, rig } from '../testing/assistant-rig.js';
-import { ROUTER_AUDIT_ACTION } from './router.js';
+import { ROUTER_AUDIT_ACTION, ROUTER_PROMPT_VERSION } from './router.js';
 
 const PATTERN = offerOf('11111111-1111-4111-8111-111111111111', 'Mine');
 const codeOf = async (promise: Promise<unknown>): Promise<string | undefined> => (await refusalOf(promise))?.code;
@@ -62,7 +62,7 @@ describe('an assistant turn: what the router is sent', () => {
     expect(fixture.calls).toHaveLength(1);
     const [call] = fixture.calls;
     expect(call?.promptId).toBe('assistant.route');
-    expect(call?.version).toBe(8);
+    expect(call?.version).toBe(ROUTER_PROMPT_VERSION);
     expect(call?.instructions).toContain('SENTINEL-PROMPT');
     expect(call?.instructions).toContain('SENTINEL-CLASSIFICATION');
     expect(call?.instructions?.endsWith(instructions.text.slice(instructions.text.indexOf('# Reply format')))).toBe(true);
@@ -74,7 +74,7 @@ describe('an assistant turn: what the router is sent', () => {
     expect(routed).toHaveLength(1);
     const event = routed[0];
     expect(event?.action).toBe(ROUTER_AUDIT_ACTION);
-    expect(event?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '8', promptSha256: createHash('sha256').update(call?.instructions ?? '', 'utf8').digest('hex') } });
+    expect(event?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: String(ROUTER_PROMPT_VERSION), promptSha256: createHash('sha256').update(call?.instructions ?? '', 'utf8').digest('hex') } });
     expect(JSON.stringify(event)).not.toContain('SENTINEL-MESSAGE');
   });
 
@@ -151,7 +151,7 @@ describe('an assistant turn: replies that are not a route, and failures', () => 
       await route.handler(request());
       const routed = events.filter((candidate) => candidate.action === ROUTER_AUDIT_ACTION);
       expect(routed).toHaveLength(1);
-      expect(routed[0]?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: '8' } });
+      expect(routed[0]?.detail).toMatchObject({ ai: { promptId: 'assistant.route', promptVersion: String(ROUTER_PROMPT_VERSION) } });
     }
   });
 });

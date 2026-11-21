@@ -3,6 +3,7 @@ import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, auditD
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, sign, type Rig, type RigOptions } from '../testing/assistant-rig.js';
+import { ROUTER_PROMPT_VERSION } from './router.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { createMemoryAssistantThreadStore, type AssistantThreadStore, type MemoryAssistantThreadStore } from './thread-store.js';
 import { TURN_CLOSED_ACTION, noteTurn, noteTurnStarted, withTurnAudit } from './turn-audit.js';
@@ -78,7 +79,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     await run(turn);
     const [kept] = stored(turn);
     expect(stored(turn)).toHaveLength(1);
-    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '8', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
+    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: String(ROUTER_PROMPT_VERSION), tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
     expect(kept?.questionHash).toMatch(SHA);
     expect(kept?.entities).toEqual([{ role: 'id', ref: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' } }]);
     expect(kept?.citationRefs).toEqual([

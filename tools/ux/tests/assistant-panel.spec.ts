@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, askAnswerSchema, summaryResponseSchema, type AskAnswer, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
-import { canvasOf } from './support/workspace.ts';
+import { canvasOf, openWithDraft, screenOf } from './support/workspace.ts';
 
 const accountOf = (sourceId: string) => ({ ref: { sourceId, entityType: 'account', stableId: 'AC-2' }, display: { title: 'Account AC-2', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
 const TOKEN = `${'1'.repeat(10)}.${'a'.repeat(64)}`;
@@ -196,24 +196,28 @@ test.describe('the Assistant panel', () => {
     });
   }
 
-  test('sends the keys of the elements selected on the canvas with a typed message, each message with the selection it was typed with, and the page stays inside the window', async ({ page }) => {
+  test('sends the keys of the elements selected on the canvas with a typed message, each message with the selection it was typed with, and the page stays inside the window at the width of each project', async ({ page }) => {
     await openWorkspace(page);
+    await openWithDraft(page, ['AC-1', 'AC-2'], (index) => ({ x: -index * 200, y: index * 120 }));
+    await page.reload();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
     const sent = await answerWith(page, REFUSE);
-    const canvas = await canvasOf(page).boundingBox();
-    if (canvas === null) throw new Error('no canvas');
-    await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    const keyOf = (id: string) => JSON.stringify(['node', 'banking-demo', 'account', id]);
+    const first = await screenOf(page, 'AC-1');
+    await page.mouse.click(first.x, first.y);
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
     await open(page);
     await page.getByLabel('Your message').fill('what is this?');
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
-    expect((sent[0] as { selectionKeys?: string[] } | undefined)?.selectionKeys).toEqual([JSON.stringify(['node', 'banking-demo', 'account', 'AC-1'])]);
-    expect(sent[0]?.viewElementKeys).toContain(JSON.stringify(['node', 'banking-demo', 'account', 'AC-1']));
-    await page.mouse.click(canvas.x + 160, canvas.y + 200);
-    await page.getByLabel('Your message').fill('and now?');
+    expect((sent[0] as { selectionKeys?: string[] } | undefined)?.selectionKeys).toEqual([keyOf('AC-1')]);
+    expect(sent[0]?.viewElementKeys).toEqual(expect.arrayContaining([keyOf('AC-1'), keyOf('AC-2')]));
+    const second = await screenOf(page, 'AC-2');
+    await page.mouse.click(second.x, second.y);
+    await page.getByLabel('Your message').fill('and this one?');
     await page.keyboard.press('Enter');
     await expect.poll(() => sent.length).toBe(2);
-    expect('selectionKeys' in (sent[1] ?? {})).toBe(false);
+    expect((sent[1] as { selectionKeys?: string[] } | undefined)?.selectionKeys).toEqual([keyOf('AC-2')]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 

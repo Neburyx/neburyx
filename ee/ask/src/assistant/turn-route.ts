@@ -478,7 +478,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       // the elements in view get keys of the same table as the thread's context, so that "this account" can be named; a key resolves only to a reference of the view or the thread
       const viewRead = readViewKeys(body.viewElementKeys, body.sourceId);
       // the elements the analyst has selected on the canvas that are in the view: a hint, marked on their lines for the router
-      const selectedKeys = selectedKeysOf(body.viewElementKeys, 'selectionKeys' in body ? body.selectionKeys : undefined);
+      const selectedKeys = viewRead.ok ? selectedKeysOf(body.viewElementKeys, 'selectionKeys' in body ? body.selectionKeys : undefined) : [];
       const selectedRead = selectedKeys.length === 0 ? undefined : readViewKeys(selectedKeys, body.sourceId);
       noteTurn({ selectedElements: selectedKeys.length });
       const routed = withView(context, viewRead.ok ? viewRead.refs : { entities: [], edges: [], aggregates: [], derived: [] }, body.sourceId, selectedRead?.ok === true ? selectedRead.refs : undefined);

@@ -171,6 +171,7 @@ describe('the selection a turn request may carry', () => {
     const forms = [
       { ...base, continue: { intent: 'shared-devices', entities: { id: 'A-1' }, continueToken: token } },
       { ...base, choice: { intent: 'shared', roles: ['id'], entities: { id: 'A-1' }, choiceToken: token } },
+      { ...base, message: 'who else?', confirmation: { pendingId: '0192f000-0000-7000-8000-0000000000a1', plan: `${'1'.repeat(10)}.${'a'.repeat(120)}.${'b'.repeat(64)}`, decision: 'confirm' } },
     ];
     for (const form of forms) {
       expect(parses(form), 'without').toBe(true);

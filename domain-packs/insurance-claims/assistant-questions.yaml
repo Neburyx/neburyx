@@ -182,7 +182,7 @@ threads:
         expect: { route: view, view: [{ entityType: claim, stableId: CL-00120 }, { entityType: claim, stableId: CL-00121 }, { entityType: claimant, stableId: CT-00120 }] }
       - message: "Which claims are on the same vehicle as this claim?"
         selected: [{ entityType: claim, stableId: CL-00121 }]
-        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-001201 } }
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-00121 } }
   - id: two-claims-same-vehicle-none-selected
     turns:
       - message: "Describe the two claims and the claimant on screen."

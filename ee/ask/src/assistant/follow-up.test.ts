@@ -673,6 +673,21 @@ describe('a follow-up on the view route, placed by the thread', () => {
     expect(JSON.stringify(answer)).not.toContain('"key":"c1"');
   });
 
+  it('gives the step and answer calls of a loop that the view entered neither the selected section nor a mark', async () => {
+    const steps = [ok('{"tool":"shared","values":{"id":"A-2"}}'), ok('{"done":true}')];
+    let next = 0;
+    const t = await follow(() => ok('{"route":"view"}'), { view: ok('{"tool":"shared","values":{"id":"A-2"}}'), step: () => steps[Math.min(next++, 1)] ?? ok('{"done":true}'), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['c1'] }] })), run: () => ({ status: 'ok', result: okResult() }) });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
+    await t.send('what is it?', undefined, VIEW_KEYS, undefined, [VIEW_KEYS[0] ?? '']);
+    const later = t.rig.fixture.calls.filter((call) => call.promptId === 'assistant.step' || call.promptId === 'assistant.answer');
+    expect(later.length).toBeGreaterThan(0);
+    for (const call of later) {
+      expect(call.values, call.promptId).not.toContain('selected these elements');
+      expect(call.values, call.promptId).not.toContain('(selected)');
+    }
+    expect(t.rig.fixture.calls.find((call) => call.promptId === 'assistant.view')?.values).toContain('selected these elements in view, by key: n1');
+  });
+
   it('counts the context in the input guard of the view call: a limit that fits the call without it is over with it, and nothing is sent', async () => {
     const probe = await follow(() => ok('{"route":"view"}'), { view: viewReply });
     await probe.send('what is it?', undefined, VIEW_KEYS);

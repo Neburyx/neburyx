@@ -158,6 +158,10 @@ export function checkAssistantSets(sets: readonly AssistantSet[]): void {
     const wanted = expect.route === 'ask' ? [...intent.parameters] : intent.parameters.filter((role) => role !== expect.role);
     if (expect.route === 'clarify' && !intent.parameters.includes(expect.role)) throw new UsageError(`the request ${name} names a role that its intent does not have`);
     if (Object.keys(expect.entities).sort().join('\u0000') !== wanted.sort().join('\u0000')) throw new UsageError(`the request ${name} expects entities that are not exactly the parameters of its intent`);
+    if (expect.route === 'ask' && unit.selectedKeys.length > 0) {
+      const inView = new Set(unit.viewKeys.map((key) => (JSON.parse(key) as string[])[3]));
+      for (const value of Object.values(expect.entities)) if (!inView.has(value)) throw new UsageError(`the request ${name} expects an element that is not in the view of its turn`);
+    }
   }
 }
 
