@@ -88,9 +88,9 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   // the one live region of the panel says the step in progress when the server reports one, and the waiting sentence until then
   const step = turns.flatMap((turn) => (turn.outcome.kind === 'pending' ? (turn.outcome.steps ?? []).slice(-1) : []))[0];
   const announced = pending ? (step === undefined ? ASSISTANT_COPY.working : stepSentenceOf(step)) : '';
-  // the state of the turn, at the right of the header: reading, checking the answer, or the checked answer once it is settled
+  // the state of the turn, at the right of the header: reading, checking the answer, or the checked answer once an answer of cited sentences is settled (a refusal, a stop or an Ask answer is not one)
   const lastTurn = turns.at(-1);
-  const stateLabel = pending ? (step?.phase === 'answering' ? ASSISTANT_COPY.stateChecking : ASSISTANT_COPY.stateReading) : lastTurn?.outcome.kind === 'answered' || lastTurn?.outcome.kind === 'view-answer' ? ASSISTANT_COPY.stateChecked : undefined;
+  const stateLabel = pending ? (step?.phase === 'answering' ? ASSISTANT_COPY.stateChecking : ASSISTANT_COPY.stateReading) : lastTurn?.outcome.kind === 'view-answer' ? ASSISTANT_COPY.stateChecked : undefined;
   const close = (): void => {
     onClose();
     focusAssistantControl();

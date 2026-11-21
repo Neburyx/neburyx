@@ -119,6 +119,13 @@ describe('the steps a streamed turn reports', () => {
     expect(phases(events)).toEqual(['routing', 'reading-view', 'answering', 'read-done', 'reading', 'read-done', 'answering']);
   });
 
+  it('tells the first read of an Ask turn once when the loop is on and the model has nothing more to read, and what it tells is what the answer lists', async () => {
+    const { events, answer } = await streamed(loopOptions({ step: sequence(DONE) }), { message: 'Show A-1' });
+    expect(phases(events)).toEqual(['routing', 'reading', 'read-done']);
+    if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an answer of the ask route with reads');
+    expect(events.at(-1)?.members['read']).toEqual(answer.reads[0]);
+  });
+
   it('sends at most twice maxSteps + 4 events in a turn that reads as often as it may', async () => {
     const many = sequence(...Array.from({ length: 12 }, (_unused, index) => ok(JSON.stringify({ tool: 'byId', values: { id: `A-${index + 2}` } }))));
     const { events } = await streamed(loopOptions({ step: many, loopSteps: 4 }), { message: 'Show A-1 and everything' });

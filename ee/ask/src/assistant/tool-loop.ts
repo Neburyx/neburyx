@@ -147,10 +147,11 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       const found = registry.find(tool);
       return found?.kind === 'intent' && found.label !== undefined ? { label: found.label } : {};
     };
-    const put = (entry: AssistantRead): void => {
+    // the read a turn arrives with was told to a streamed turn when it finished, by the route that ran it
+    const put = (entry: AssistantRead, told = false): void => {
       const listed = { ...entry, ...(entry.kind === 'intent' ? labelFor(entry.tool) : {}) };
       entries.push(listed);
-      stepsOf(scope.request).readDone(listed);
+      if (!told) stepsOf(scope.request).readDone(listed);
     };
     // the steps of the turn that a decision reads again: each tool and the values the gate accepted for it
     const done: PlanStep[] = [];
@@ -169,7 +170,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       const firstTool = answer.patternName === undefined ? input.first.tool : (pattern ?? input.first.tool);
       lines.push(resultLine(input.first.tool, answer));
       reads.push({ tool: input.first.tool, result: answer.result, ...labelFor(input.first.tool) });
-      put(readOfAnswer(answer.patternName === undefined ? 'intent' : 'pattern', answer.patternName ?? input.first.tool, answer));
+      put(readOfAnswer(answer.patternName === undefined ? 'intent' : 'pattern', answer.patternName ?? input.first.tool, answer), true);
       done.push({ tool: firstTool, values: answer.patternName === undefined ? answer.entities : ownValues });
       latest = input.first.answer;
       rows = summarizeRun(input.first.answer.result).rowCount;

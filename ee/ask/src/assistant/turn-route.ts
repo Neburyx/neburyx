@@ -229,11 +229,11 @@ async function runAndAnswer(run: Execution, followUps?: (answer: AskAnswer) => r
   stepsOf(run.request).reading(run.intent, intent?.label, run.entities, kind);
   try {
     const answer = await execute(run);
+    const turn = answeredAsk(answer);
+    // the read the answer lists is told to a streamed turn as soon as it has finished, before the loop that may go on from it (which does not tell it again)
+    if (turn.status === 'answered' && turn.route === 'ask' && turn.reads?.[0] !== undefined) stepsOf(run.request).readDone({ ...turn.reads[0], ...(turn.reads[0].kind === 'intent' && intent?.label !== undefined ? { label: intent.label } : {}) });
     const looped = after === undefined ? undefined : await after(answer);
     if (looped !== undefined) return looped;
-    const turn = answeredAsk(answer);
-    // the read the answer lists, told to a streamed turn as it finishes
-    if (turn.status === 'answered' && turn.route === 'ask' && turn.reads?.[0] !== undefined) stepsOf(run.request).readDone({ ...turn.reads[0], ...(turn.reads[0].kind === 'intent' && intent?.label !== undefined ? { label: intent.label } : {}) });
     const chips = followUps?.(answer) ?? [];
     return turn.status === 'answered' && turn.route === 'ask' && chips.length > 0 ? { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) } : turn;
   } catch (error) {
