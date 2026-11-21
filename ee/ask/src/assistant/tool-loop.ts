@@ -225,30 +225,30 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           break;
         case 'ai-notes':
           rows += step.rows;
-          entries.push(readOfNotes(step.rows, step.notRead > 0));
+          put(readOfNotes(step.rows, step.notRead > 0));
           lines.push(`ai-notes: ${step.sentences.length} ${step.sentences.length === 1 ? 'sentence' : 'sentences'}${step.notRead > 0 ? `, ${step.notRead} ${step.notRead === 1 ? 'entry' : 'entries'} not read` : ''}${step.sentences.map((sentence) => `\n- ${sentence.text}`).join('')}`);
           reads.push({ tool: tool.name, written: { sentences: step.sentences, notRead: step.notRead } });
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'ai-summary':
           rows += step.rows;
-          entries.push(readOfSummary(step.rows));
+          put(readOfSummary(step.rows));
           lines.push(`ai-summary: ${step.sentences.length} ${step.sentences.length === 1 ? 'sentence' : 'sentences'}${step.sentences.map((sentence) => `\n- ${sentence.text}`).join('')}`);
           reads.push({ tool: tool.name, written: { sentences: step.sentences, notRead: 0 } });
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'no-summary':
-          entries.push(readNotRead('ai-summary', 'ai-summary'));
+          put(readNotRead('ai-summary', 'ai-summary'));
           lines.push('ai-summary: not drafted');
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'no-notes':
-          entries.push(readNotRead('ai-notes', 'ai-notes'));
+          put(readNotRead('ai-notes', 'ai-notes'));
           lines.push('ai-notes: not read');
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'typology':
-          entries.push(readOfTypology(step.lines.length));
+          put(readOfTypology(step.lines.length));
           lines.push(`typology:\n${step.lines.map((line) => `- ${line}`).join('\n')}`);
           reads.push({ tool: tool.name, typology: step.lines });
           done.push({ tool: tool.name, values, ...mark });
@@ -287,7 +287,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           }
           if (tool.kind === 'ai-summary') {
             // a summary costs model calls and may differ: it is not drafted again after a wait
-            entries.push(readNotRead('ai-summary', 'ai-summary'));
+            put(readNotRead('ai-summary', 'ai-summary'));
             lines.push('ai-summary: not read, it is not drafted again after a wait');
             continue;
           }

@@ -137,6 +137,17 @@ describe('the steps a streamed turn reports', () => {
     }
   });
 
+  it('tells the application’s own reads, such as the typology, as a read with its kind, and tells the finished read with the record the answer lists', async () => {
+    const { events, answer } = await streamed(loopOptions({ typology: ['Fan-in: many sources send money to one receiver.'], step: sequence(ok(JSON.stringify({ tool: 'typology', values: {} })), DONE) }), { message: 'Show the typology' });
+    const reading = events.map((event) => event.members).find((members) => members['phase'] === 'reading' && members['kind'] === 'typology');
+    expect(reading).toBeDefined();
+    const told = events.map((event) => event.members).filter((members) => members['phase'] === 'read-done' && (members['read'] as { kind?: string }).kind === 'typology');
+    expect(told).toHaveLength(1);
+    if (answer.status !== 'answered' || !('reads' in answer) || answer.reads === undefined) throw new Error('no reads');
+    expect(answer.reads.filter((entry) => entry.kind === 'typology')).toEqual([told[0]?.['read']]);
+    for (const event of events) expect(assistantStepMembersSchema.safeParse(event.members).success).toBe(true);
+  });
+
   it('sends at most twice maxSteps + 4 events in a turn that reads as often as it may', async () => {
     const many = sequence(...Array.from({ length: 12 }, (_unused, index) => ok(JSON.stringify({ tool: 'byId', values: { id: `A-${index + 2}` } }))));
     const { events } = await streamed(loopOptions({ step: many, loopSteps: 4 }), { message: 'Show A-1 and everything' });
