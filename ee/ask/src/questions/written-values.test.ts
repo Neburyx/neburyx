@@ -59,19 +59,28 @@ describe('what a written value is', () => {
 });
 
 describe('the references of the lookup', () => {
-  it('are a reference of the needed type and one of each other type for every value, as ids in the elements of one read and nothing else', async () => {
+  it('are, first, a reference of the type each role needs, one for each value, and, only for the values that are not of that type, one reference of each other type, as ids in the elements of a read and nothing else', async () => {
     const { s, done } = run([], [widget, { role: 'b', value: 'X-2', needed: 'gadget' }]);
     await done;
+    expect(s.reads).toHaveLength(2);
+    expect(s.reads[0]?.entities.map((ref) => `${ref.entityType}/${ref.stableId}`)).toEqual(['widget/1:800042CB0', 'gadget/X-2']);
+    expect(s.reads[1]?.entities.map((ref) => `${ref.entityType}/${ref.stableId}`)).toEqual(['gadget/1:800042CB0', 'gizmo/1:800042CB0', 'widget/X-2', 'gizmo/X-2']);
+    for (const read of s.reads) expect([read.edges, read.aggregates, read.derived]).toEqual([[], [], []]);
+  });
+
+  it('make one read, of the needed type only, when every value fits', async () => {
+    const { s, done } = run(['widget/1:800042CB0']);
+    expect((await done)[0]?.verdict).toEqual({ kind: 'fits' });
     expect(s.reads).toHaveLength(1);
-    expect(s.reads[0]?.entities.map((ref) => `${ref.entityType}/${ref.stableId}`)).toEqual(['widget/1:800042CB0', 'gadget/1:800042CB0', 'gizmo/1:800042CB0', 'widget/X-2', 'gadget/X-2', 'gizmo/X-2']);
-    expect([s.reads[0]?.edges, s.reads[0]?.aggregates, s.reads[0]?.derived]).toEqual([[], [], []]);
+    expect(s.reads[0]?.entities.map((ref) => ref.entityType)).toEqual(['widget']);
   });
 
   it.each([
-    [MAX_READ_REFS / 4, 1],
-    [MAX_READ_REFS / 4 + 1, 2],
-    [(MAX_READ_REFS / 4) * 2 + 1, 3],
-  ])('split into reads of at most %s values by 4 types (%s values make %s reads), the references of a value always together', async (count, reads) => {
+    [33, 2],
+    [34, 3],
+    [100, 5],
+    [101, 6],
+  ])('split %s values of four types that are all unknown into %s reads: the needed type by 100 values, then the three other types by 33 values, a value\'s references always together', async (count, reads) => {
     const four = ['widget', 'gadget', 'gizmo', 'sprocket'];
     const values = Array.from({ length: count }, (_unused, index) => ({ role: `r${index}`, value: `V-${index}`, needed: 'widget' }));
     const { s, done } = run([], values, { types: four });
@@ -79,7 +88,9 @@ describe('the references of the lookup', () => {
     expect(s.reads).toHaveLength(reads);
     for (const read of s.reads) {
       expect(read.entities.length).toBeLessThanOrEqual(MAX_READ_REFS);
-      for (const id of new Set(read.entities.map((ref) => ref.stableId))) expect(read.entities.filter((ref) => ref.stableId === id)).toHaveLength(four.length);
+      const ids = new Set(read.entities.map((ref) => ref.stableId));
+      const perId = read.entities.length / ids.size;
+      for (const id of ids) expect(read.entities.filter((ref) => ref.stableId === id)).toHaveLength(perId);
     }
   });
 
@@ -163,7 +174,7 @@ describe('a mapping with a keyed type', () => {
     const s = source([]);
     const checked = await lookupWrittenValues({ sourceId: 'demo', types, keyed: new Set(['phone']), values: [{ role: 'id', value: 'NOBODY', needed: 'widget' }], read: s.read });
     expect(checked[0]?.verdict).toEqual({ kind: 'none' });
-    expect(s.reads[0]?.entities.map((ref) => ref.entityType)).toEqual(['widget', 'gadget']);
+    expect(s.reads.map((read) => read.entities.map((ref) => ref.entityType))).toEqual([['widget'], ['gadget']]);
   });
 
   it('still tells another type apart and still fits', async () => {
@@ -177,7 +188,7 @@ describe('a mapping with a keyed type', () => {
     const s = source([]);
     const checked = await lookupWrittenValues({ sourceId: 'demo', types, keyed: new Set(['phone']), values: [{ role: 'number', value: '+1 555 0100', needed: 'phone' }, { role: 'id', value: 'W-1', needed: 'widget' }], read: s.read });
     expect(checked.map((entry) => entry.verdict.kind)).toEqual(['hidden', 'none']);
-    expect(s.reads).toHaveLength(1);
+    expect(s.reads.map((read) => read.entities.map((ref) => ref.entityType))).toEqual([['widget'], ['gadget']]);
     expect(JSON.stringify(s.reads)).not.toContain('555');
   });
 });

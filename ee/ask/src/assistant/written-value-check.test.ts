@@ -24,13 +24,12 @@ describe('a written value on the ask route', () => {
     ['a value of another mapped type', 'K-1', ['gadget/K-1'], false, { kind: 'other-type', needed: 'widget', found: 'gadget' }, 'gadget K-1 is a gadget; this question needs a widget. Nothing was run.'],
     ['an id that exists as nothing', 'NOBODY', [], false, { kind: 'not-found', needed: 'widget' }, 'There is no widget with that id. Nothing was run.'],
     ['an id the read left something out for', 'NOBODY', [], true, { kind: 'hidden', needed: 'widget' }, 'That value does not give a widget this question can use. Nothing was run.'],
-  ])('answers %s with the fixed refusal, runs nothing and reads the elements once through the gate', async (_name, value, source, omits, fit, sentence) => {
+  ])('answers %s with the fixed refusal, runs nothing and reads the elements through the gate, the needed type and then the other types', async (_name, value, source, omits, fit, sentence) => {
     const { route, request, runs, sourceReads } = await rig({ reply: routeAsk('shared', { id: value }), source, sourceOmits: omits, types: TYPES, ...NO_ANCHOR });
     const answer = askOf(await answerOf(route.handler(request())));
     expect(answer).toMatchObject({ refused: { cause: 'value-not-fit', intent: 'shared', sentence, valueNotFit: fit } });
     expect(runs).toHaveLength(0);
-    expect(sourceReads).toHaveLength(1);
-    expect(sourceReads[0]?.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`)).toEqual([`widget/${value}`, `gadget/${value}`]);
+    expect(sourceReads.map((read) => read.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`))).toEqual([[`widget/${value}`], [`gadget/${value}`]]);
   });
 
   it('runs the intent as it did for a value that is an element of the type its role needs', async () => {
@@ -71,7 +70,7 @@ describe('a written value on the ask route', () => {
   it('says there is no element on a mapping with a keyed type, looking up only the types a typed value can stand for', async () => {
     const { route, request, sourceReads } = await rig({ reply: routeAsk('shared', { id: 'NOBODY' }), source: [], types: ['widget', 'gadget', 'phone'], keyed: ['phone'] });
     expect(askOf(await answerOf(route.handler(request())))).toMatchObject({ refused: { valueNotFit: { kind: 'not-found' } } });
-    expect(sourceReads[0]?.refs.entities.map((ref) => ref.entityType)).toEqual(['widget', 'gadget']);
+    expect(sourceReads.flatMap((read) => read.refs.entities.map((ref) => ref.entityType))).toEqual(['widget', 'gadget']);
   });
 });
 
@@ -83,7 +82,7 @@ describe('a written value on the saved-pattern anchor', () => {
     const { route, request, runs, sourceReads } = await rig({ patterns: [asked], reply: routeAsk('saved-pattern', { pattern: 'pat_1', anchor: 'K-1' }), source: ['gadget/K-1'], types: TYPES, ...NO_ANCHOR });
     expect(askOf(await answerOf(route.handler(request())))).toMatchObject({ refused: { cause: 'value-not-fit', valueNotFit: { kind: 'other-type', needed: 'widget', found: 'gadget' } } });
     expect(runs).toHaveLength(0);
-    expect(sourceReads).toHaveLength(1);
+    expect(sourceReads).toHaveLength(2);
   });
 
   it('runs the pattern for an anchor of the right type', async () => {
@@ -161,6 +160,9 @@ describe('a written value in a step of the tool loop', () => {
   it('reads the elements once more for a step, with a reference of the type the role needs and one of each other type, through the capability and not the loop\'s own reads', async () => {
     const r = await loop(['widget/A-1', 'widget/A-2'], sequence(step('A-2'), ok('{"done":true}')));
     await answerOf(r.route.handler(r.request()));
-    expect(r.sourceReads.flatMap((read) => read.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`))).toEqual(expect.arrayContaining(['widget/A-2', 'gadget/A-2']));
+    expect(r.sourceReads.flatMap((read) => read.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`))).toEqual(['widget/A-1', 'widget/A-2']);
+    const other = await loop(['widget/A-1', 'gadget/K-1'], sequence(step('K-1'), ok('{"done":true}')));
+    await answerOf(other.route.handler(other.request()));
+    expect(other.sourceReads.flatMap((read) => read.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`))).toEqual(expect.arrayContaining(['widget/K-1', 'gadget/K-1']));
   });
 });

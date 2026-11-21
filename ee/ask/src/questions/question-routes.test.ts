@@ -713,11 +713,11 @@ describe('a written value on Ask', () => {
     ['another mapped type', 'K-1', ['gadget/K-1'], false, 'other-type', 'gadget K-1 is a gadget; this question needs a widget. Nothing was run.'],
     ['an id that exists as nothing', 'NOBODY', [], false, 'not-found', 'There is no widget with that id. Nothing was run.'],
     ['an id the read left something out for', 'NOBODY', [], true, 'hidden', 'That value does not give a widget this question can use. Nothing was run.'],
-  ])('answers a value of %s with the fixed refusal, runs nothing, reads once with a reference of each mapped type, and writes one refused event and no row', async (_name, value, source, omits, kind, sentence) => {
+  ])('answers a value of %s with the fixed refusal, runs nothing, reads the needed type and then the other mapped types, and writes one refused event and no row', async (_name, value, source, omits, kind, sentence) => {
     const { route, request, runs, lookups, events, rows } = await rig({ ...classifying(value), source, sourceOmits: omits, types: TYPES, ...NO_ANCHOR });
     expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'value-not-fit', intent: 'shared', sentence, valueNotFit: expect.objectContaining({ kind, needed: 'widget' }) }) });
     expect(runs).toHaveLength(0);
-    expect(lookups).toEqual([[`widget/${value}`, `gadget/${value}`]]);
+    expect(lookups).toEqual([[`widget/${value}`], [`gadget/${value}`]]);
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ result: 'refused' });
     expect(detailOf(events[0])).toMatchObject({ intent: 'shared', outcome: 'refused', cause: 'value-not-fit' });
@@ -748,7 +748,7 @@ describe('a written value on Ask', () => {
   it('is asked of the gate masked as the question is and ends as any read does when it fails', async () => {
     const masked = await rig({ ...classifying('K-1'), source: ['gadget/K-1'], types: TYPES });
     await masked.route.handler(masked.request({ ...ASK, mask: true }));
-    expect(masked.lookups).toHaveLength(1);
+    expect(masked.lookups).toHaveLength(2);
     const failing = await rig({ ...classifying('K-1'), types: TYPES });
     await expect(failing.route.handler(failing.request(ASK, { readSourceElements: () => Promise.reject(new ExtensionRefusal({ code: 'SOURCE_BUSY' } as never)) }))).rejects.toBeInstanceOf(ExtensionRefusal);
     expect(failing.runs).toHaveLength(0);
@@ -766,7 +766,7 @@ describe('a written value on Ask', () => {
   it('says there is no element, not that the read left something out, on a mapping with a keyed type: only the types a typed value can stand for are looked up', async () => {
     const mapped = await rig({ ...classifying('NOBODY'), source: [], types: ['widget', 'gadget', 'phone'], keyed: ['phone'] });
     expect(await mapped.route.handler(mapped.request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'value-not-fit', valueNotFit: expect.objectContaining({ kind: 'not-found' }) }) });
-    expect(mapped.lookups).toEqual([['widget/NOBODY', 'gadget/NOBODY']]);
+    expect(mapped.lookups).toEqual([['widget/NOBODY'], ['gadget/NOBODY']]);
   });
 
   it('looks the anchor of an asked saved pattern up against the type the pattern starts at', async () => {

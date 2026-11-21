@@ -43,22 +43,32 @@ export interface LookupInput {
 export async function lookupWrittenValues(input: LookupInput): Promise<readonly CheckedValue[]> {
   const { sourceId, values } = input;
   const keyed = input.keyed ?? new Set<string>();
+  if (values.length === 0) return [];
   // the other types looked up are the ones whose identifiers a typed value can stand for; a value whose own type is keyed cannot be looked up at all
   const types = input.types.filter((type) => !keyed.has(type));
   const looked = values.filter((entry) => !keyed.has(entry.needed));
-  const left = new Set(values.filter((entry) => keyed.has(entry.needed)));
-  if (values.length === 0) return [];
-  const perValue = Math.max(1, types.length);
-  const perRead = Math.max(1, Math.floor(MAX_READ_REFS / perValue));
-  const byValue = new Map<WrittenValue, CheckedValue>(values.filter((entry) => left.has(entry)).map((entry) => [entry, { ...entry, verdict: { kind: 'hidden' } }]));
-  for (let start = 0; start < looked.length; start += perRead) {
-    const group = looked.slice(start, start + perRead);
-    const reading = await input.read({ entities: group.flatMap((entry) => types.map((entityType) => ({ sourceId, entityType, stableId: entry.value }))), edges: [], aggregates: [], derived: [] });
+  const byValue = new Map<WrittenValue, CheckedValue>(values.filter((entry) => keyed.has(entry.needed)).map((entry) => [entry, { ...entry, verdict: { kind: 'hidden' } }]));
+  const read = (entities: ElementRefs['entities']) => input.read({ entities, edges: [], aggregates: [], derived: [] });
+  // first the type the role needs, one reference for each value: a value that fits is settled by that one read, which is the common case
+  const left: { readonly entry: WrittenValue; readonly omitted: boolean }[] = [];
+  for (let start = 0; start < looked.length; start += MAX_READ_REFS) {
+    const group = looked.slice(start, start + MAX_READ_REFS);
+    const reading = await read(group.map((entry) => ({ sourceId, entityType: entry.needed, stableId: entry.value })));
     for (const entry of group) {
+      if (reading.nodes.some((node) => node.ref.entityType === entry.needed && node.ref.stableId === entry.value)) byValue.set(entry, { ...entry, verdict: { kind: 'fits' } });
+      else left.push({ entry, omitted: reading.omitted });
+    }
+  }
+  // then, only for the values that are not of that type, one reference of each other type, a value's references always together so that the flag a read gives that something was left out applies to the values it holds
+  const perRead = Math.max(1, Math.floor(MAX_READ_REFS / Math.max(1, types.length - 1)));
+  for (let start = 0; start < left.length; start += perRead) {
+    const group = left.slice(start, start + perRead);
+    const refs = group.flatMap(({ entry }) => types.filter((type) => type !== entry.needed).map((entityType) => ({ sourceId, entityType, stableId: entry.value })));
+    const reading = refs.length === 0 ? { nodes: [], omitted: false } : await read(refs);
+    for (const { entry, omitted } of group) {
       const nodes = reading.nodes.filter((node) => node.ref.stableId === entry.value);
-      const same = nodes.find((node) => node.ref.entityType === entry.needed);
       const others = types.flatMap((type) => (type === entry.needed ? [] : nodes.filter((node) => node.ref.entityType === type).slice(0, 1))).map((node) => ({ ref: { sourceId: node.ref.sourceId, entityType: node.ref.entityType, stableId: node.ref.stableId }, title: node.display.title, type: node.display.type }));
-      byValue.set(entry, { ...entry, verdict: same !== undefined ? { kind: 'fits' } : others.length > 0 ? { kind: 'other-type', found: others } : reading.omitted ? { kind: 'hidden' } : { kind: 'none' } });
+      byValue.set(entry, { ...entry, verdict: others.length > 0 ? { kind: 'other-type', found: others } : omitted || reading.omitted ? { kind: 'hidden' } : { kind: 'none' } });
     }
   }
   return values.flatMap((entry) => byValue.get(entry) ?? []);
