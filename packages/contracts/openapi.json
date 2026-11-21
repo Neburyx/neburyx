@@ -6296,6 +6296,14 @@
               "summaryToken": {
                 "type": "string",
                 "minLength": 1
+              },
+              "selectionKeys": {
+                "maxItems": 300,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
               }
             },
             "required": [

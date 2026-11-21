@@ -146,6 +146,39 @@ describe('the overview of a verdict refusal', () => {
   });
 });
 
+describe('the selection a turn request may carry', () => {
+  const parses = (value: unknown) => assistantTurnRequestSchema.safeParse(value).success;
+
+  it('is an optional list of keys on a typed message, at most the keys of a view', () => {
+    expect(parses({ ...body, selectionKeys: ['n1'] })).toBe(true);
+    expect(parses({ ...body, selectionKeys: [] })).toBe(true);
+    expect(parses(body)).toBe(true);
+    const keys = (count: number): string[] => Array.from({ length: count }, (_unused, index) => `k${index}`);
+    expect(parses({ ...body, selectionKeys: keys(ASSISTANT_VIEW_KEYS_MAX) })).toBe(true);
+    expect(parses({ ...body, selectionKeys: keys(ASSISTANT_VIEW_KEYS_MAX + 1) })).toBe(false);
+  });
+
+  it('refuses a value that is not a string, an empty string and an unknown member', () => {
+    expect(parses({ ...body, selectionKeys: [1] })).toBe(false);
+    expect(parses({ ...body, selectionKeys: [''] })).toBe(false);
+    expect(parses({ ...body, selectionKeys: 'n1' })).toBe(false);
+    expect(parses({ ...body, selection: ['n1'] })).toBe(false);
+  });
+
+  it('is refused by the continue and choice forms, which parse without it', () => {
+    const token = `${'1'.repeat(10)}.${'a'.repeat(64)}`;
+    const base = { sourceId: 'banking', investigationId: 'inv-1', viewElementKeys: ['n1'] };
+    const forms = [
+      { ...base, continue: { intent: 'shared-devices', entities: { id: 'A-1' }, continueToken: token } },
+      { ...base, choice: { intent: 'shared', roles: ['id'], entities: { id: 'A-1' }, choiceToken: token } },
+    ];
+    for (const form of forms) {
+      expect(parses(form), 'without').toBe(true);
+      expect(parses({ ...form, selectionKeys: ['n1'] }), 'with').toBe(false);
+    }
+  });
+});
+
 describe('the assistant turn answer', () => {
   it('accepts a refusal of each cause with its fixed sentence', () => {
     for (const cause of ASSISTANT_REFUSAL_CAUSES) {

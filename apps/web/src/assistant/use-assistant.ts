@@ -247,9 +247,12 @@ export function useAssistant(): AssistantModel {
       } else setOutcome(id, { kind: 'pending', call: 'message' });
       closeWaiting(id);
       const attached = held.summary?.status === 'attached' ? held.summary.token : undefined;
-      settle(id, { ...common, message: text, ...(attached === undefined ? {} : { summaryToken: attached }) }, retry);
+      // the elements selected on the canvas that are drawn, in the order of the view's keys
+      const selected = state.presentation.view.getState().selection;
+      const selectionKeys = keysRef.current.filter((key) => selected.has(key));
+      settle(id, { ...common, message: text, ...(attached === undefined ? {} : { summaryToken: attached }), ...(selectionKeys.length === 0 ? {} : { selectionKeys }) }, retry);
     },
-    [base, closeWaiting, limit, patch, setOutcome, settle, sourceChanged, store],
+    [base, closeWaiting, limit, patch, setOutcome, settle, sourceChanged, state, store],
   );
 
   const turnOf = (turnId: number) => store.getState().turns.find((turn) => turn.id === turnId);

@@ -64,7 +64,14 @@ export const assistantConfirmationSchema = z.strictObject({
 
 /** A turn is a message, the continue of a heavy stop (the intent, the entities and the token of the answer that stopped), the choice of an element a clarification offered or the decision of a waiting confirmation (with the message and the view of the waiting turn), never two of them: four forms, so the published schema says so. */
 export const assistantTurnRequestSchema = z.union([
-  z.strictObject({ ...turnBase, message: text, /** The token of an AI case summary the person keeps attached to the thread; the server opens it for every turn. */ summaryToken: text.optional() }),
+  z.strictObject({
+    ...turnBase,
+    message: text,
+    /** The token of an AI case summary the person keeps attached to the thread; the server opens it for every turn. */
+    summaryToken: text.optional(),
+    /** The keys of the elements selected on the canvas, a hint for what "this" and "it" mean; the server keeps only those that are also in `viewElementKeys`. Only a typed message carries it. */
+    selectionKeys: z.array(text).max(ASSISTANT_VIEW_KEYS_MAX).optional(),
+  }),
   z.strictObject({ ...turnBase, message: text, confirmation: assistantConfirmationSchema }),
   z.strictObject({ ...turnBase, continue: askContinueRequestSchema.pick({ intent: true, entities: true, continueToken: true }) }),
   z.strictObject({ ...turnBase, choice: assistantChoiceSchema }),
