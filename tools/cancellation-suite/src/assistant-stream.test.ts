@@ -67,7 +67,7 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     const response = await app.sendTurn('Show W-1 and W-2', controller.signal, {}, NDJSON);
     expect(response?.headers.get('content-type')).toBe('application/x-ndjson');
     const lines = await readUntil(response, (seen) => steps(seen).filter((phase) => phase === 'reading').length >= 2);
-    expect(steps(lines)).toEqual(['routing', 'reading', 'reading']);
+    expect(steps(lines)).toEqual(['routing', 'reading', 'read-done', 'reading']);
     await until(() => held.length > 0, 'the read of the step to be pending');
     const atCancel = started();
     controller.abort();
