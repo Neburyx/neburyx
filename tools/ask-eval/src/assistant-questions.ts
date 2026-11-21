@@ -20,7 +20,8 @@ const askSchema = z.strictObject({ route: z.literal('ask'), intent: z.string().m
 const clarifySchema = z.strictObject({ route: z.literal('clarify'), intent: z.string().min(1), role: z.string().min(1), entities: z.record(z.string(), z.string()), candidates: z.array(elementSchema).min(2) });
 
 const messageSchema = z.strictObject({ id: z.string().min(1), wording: z.string(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema]) });
-const turnSchema = z.strictObject({ message: z.string(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema, clarifySchema]) });
+/** `selected` names elements of the thread's view the person has selected on the canvas when the turn's message is sent. */
+const turnSchema = z.strictObject({ message: z.string(), selected: z.array(elementSchema).min(1).optional(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema, clarifySchema]) });
 const threadSchema = z.strictObject({ id: z.string().min(1), turns: z.array(turnSchema) });
 const fileSchema = z.strictObject({ messages: z.array(messageSchema), threads: z.array(threadSchema).optional() });
 
@@ -71,6 +72,10 @@ export function readAssistantFile(text: string, window: number): AssistantFile {
     if (thread.turns.length < MIN_TURNS || thread.turns.length > MAX_TURNS) throw new UsageError(`the thread ${thread.id} has ${thread.turns.length} turns: it needs ${MIN_TURNS} to ${MAX_TURNS}`);
     thread.turns.forEach((turn, index) => {
       wording(`${thread.id}#${index + 1}`, turn.message);
+      if (turn.selected !== undefined) {
+        const shown = viewOfThread(thread.turns.slice(0, index));
+        for (const element of turn.selected) if (!shown.some((held) => held.entityType === element.entityType && held.stableId === element.stableId)) throw new UsageError(`the thread ${thread.id} turn ${index + 1} selects an element that the view of its thread does not hold`);
+      }
       if (turn.expect.route !== 'clarify') return;
       if (index === 0) throw new UsageError(`the thread ${thread.id} asks for a clarification in its first turn, which has no context`);
       const inWindow = thread.turns.slice(0, index).filter((earlier) => earlier.expect.route !== 'clarify').slice(-window);
@@ -97,6 +102,8 @@ export interface Unit {
   readonly earlier: readonly LabelledTurn[];
   /** The keys of the elements in view when the message is sent: the view of the message itself, or the latest view of its thread, as the panel sends the current view with every message. */
   readonly viewKeys: readonly string[];
+  /** The keys of the elements selected on the canvas when the message is sent: a subset of `viewKeys`. */
+  readonly selectedKeys: readonly string[];
 }
 
 const labelled = (expect: AssistantExpect): LabelledTurn | undefined => {
@@ -110,13 +117,13 @@ const labelled = (expect: AssistantExpect): LabelledTurn | undefined => {
 export function unitsOf(sets: readonly AssistantSet[]): readonly Unit[] {
   const units: Unit[] = [];
   for (const set of sets) {
-    for (const message of set.messages) units.push({ name: `${set.label}/${message.id}`, set, message: message.wording, expect: message.expect, earlier: [], viewKeys: viewKeysOf(set.source.sourceId, message.expect) });
+    for (const message of set.messages) units.push({ name: `${set.label}/${message.id}`, set, message: message.wording, expect: message.expect, earlier: [], viewKeys: viewKeysOf(set.source.sourceId, message.expect), selectedKeys: [] });
     for (const thread of set.threads) {
       const earlier: LabelledTurn[] = [];
       let view: readonly string[] = [];
       thread.turns.forEach((turn, index) => {
         if (turn.expect.route === 'view') view = viewKeysOf(set.source.sourceId, turn.expect);
-        units.push({ name: `${set.label}/${thread.id}#${index + 1}`, set, message: turn.message, expect: turn.expect, earlier: [...earlier], viewKeys: view });
+        units.push({ name: `${set.label}/${thread.id}#${index + 1}`, set, message: turn.message, expect: turn.expect, earlier: [...earlier], viewKeys: view, selectedKeys: (turn.selected ?? []).map((element) => nodeKeyOf(set.source.sourceId, element)) });
         const kept = labelled(turn.expect);
         if (kept !== undefined) earlier.push(kept);
       });
@@ -164,4 +171,10 @@ export function assistantSetHash(sets: readonly AssistantSet[]): string {
 }
 
 /** The keys of the elements a request is asked over, as the product's panel sends them. */
-const viewKeysOf = (sourceId: string, expect: AssistantExpect): readonly string[] => (expect.route === 'view' ? expect.view.map((element) => JSON.stringify(['node', sourceId, element.entityType, element.stableId])) : []);
+const nodeKeyOf = (sourceId: string, element: { readonly entityType: string; readonly stableId: string }): string => JSON.stringify(['node', sourceId, element.entityType, element.stableId]);
+const viewKeysOf = (sourceId: string, expect: AssistantExpect): readonly string[] => (expect.route === 'view' ? expect.view.map((element) => nodeKeyOf(sourceId, element)) : []);
+/** The elements in view when a turn is sent: those of the latest view turn before it, as the panel sends the current view with every message. */
+function viewOfThread(turns: readonly AssistantThread['turns'][number][]): readonly { readonly entityType: string; readonly stableId: string }[] {
+  const latest = [...turns].reverse().find((turn) => turn.expect.route === 'view');
+  return latest?.expect.route === 'view' ? latest.expect.view : [];
+}

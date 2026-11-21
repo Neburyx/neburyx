@@ -260,6 +260,54 @@
     "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000120\" | \"device\"\nc2 | \"DV-000121\" | \"device\"\nc3 | \"AC-0002120\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000120\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000121\" (also in the earlier turns)\nc3 | \"account\" | \"AC-0002120\" (also in the earlier turns)": {
       "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
     },
+    "Message:\nDescribe the two devices and the account on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000130\"\nc2 | \"device\" | \"DV-000131\"\nc3 | \"account\" | \"AC-0002130\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000130\" | \"device\"\nc2 | \"DV-000131\" | \"device\"\nc3 | \"AC-0002130\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000130\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000131\" (also in the earlier turns) (selected)\nc3 | \"account\" | \"AC-0002130\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-using-a-device\",\"entities\":{\"device\":\"DV-000131\"}}"
+    },
+    "Message:\nDescribe the three devices on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000140\"\nc2 | \"device\" | \"DV-000141\"\nc3 | \"device\" | \"DV-000142\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000140\" | \"device\"\nc2 | \"DV-000141\" | \"device\"\nc3 | \"DV-000142\" | \"device\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000140\" (also in the earlier turns) (selected)\nc2 | \"device\" | \"DV-000141\" (also in the earlier turns) (selected)\nc3 | \"device\" | \"DV-000142\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nDescribe the three devices on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000143\"\nc2 | \"device\" | \"DV-000144\"\nc3 | \"device\" | \"DV-000145\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000143\" | \"device\"\nc2 | \"DV-000144\" | \"device\"\nc3 | \"DV-000145\" | \"device\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000143\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000144\" (also in the earlier turns)\nc3 | \"device\" | \"DV-000145\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
+    },
+    "Message:\nDescribe the two devices and the account on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000150\"\nc2 | \"device\" | \"DV-000151\"\nc3 | \"account\" | \"AC-0002150\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000150\" | \"device\"\nc2 | \"DV-000151\" | \"device\"\nc3 | \"AC-0002150\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000150\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000151\" (also in the earlier turns)\nc3 | \"account\" | \"AC-0002150\" (also in the earlier turns) (selected)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nDescribe the two devices and the account on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000152\"\nc2 | \"device\" | \"DV-000153\"\nc3 | \"account\" | \"AC-0002152\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000152\" | \"device\"\nc2 | \"DV-000153\" | \"device\"\nc3 | \"AC-0002152\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000152\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000153\" (also in the earlier turns)\nc3 | \"account\" | \"AC-0002152\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nWhich accounts use DV-000160?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-using-a-device\",\"entities\":{\"device\":\"DV-000160\"}}"
+    },
+    "Message:\nDescribe the two devices on screen.\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-using-a-device\"; ran for device = c1\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000160\" | \"device\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000160\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000161\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-using-a-device\"; ran for device = c1\n2. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000160\" | \"device\"\nc2 | \"DV-000161\" | \"device\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000160\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000161\" (also in the earlier turns) (selected)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nWhich accounts use DV-000162?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-using-a-device\",\"entities\":{\"device\":\"DV-000162\"}}"
+    },
+    "Message:\nDescribe the two devices on screen.\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-using-a-device\"; ran for device = c1\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000162\" | \"device\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000162\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000163\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-using-a-device\"; ran for device = c1\n2. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000162\" | \"device\"\nc2 | \"DV-000163\" | \"device\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000162\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000163\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
     "Message:\nWhat is shown here, claimants and claims?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"\nc2 | \"claim\" | \"CL-001007\"": {
       "reply": "{\"route\":\"view\"}"
     },
@@ -430,6 +478,60 @@
     },
     "Message:\nAnd their policies?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n2. ask \"claims-filed-by-a-claimant\"; ran for claimant = c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002090\" | \"claim\"\nc2 | \"CT-00290\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-002090\" (also in the earlier turns)\nc2 | \"claimant\" | \"CT-00290\" (also in the earlier turns)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"entities\":{\"claimant\":\"CT-00290\"}}"
+    },
+    "Message:\nDescribe the two claims and the claimant on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-00120\"\nc2 | \"claim\" | \"CL-00121\"\nc3 | \"claimant\" | \"CT-00120\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims are on the same vehicle as this claim?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"CL-00120\" | \"claim\"\nc2 | \"CL-00121\" | \"claim\"\nc3 | \"CT-00120\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-00120\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-00121\" (also in the earlier turns) (selected)\nc3 | \"claimant\" | \"CT-00120\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"claims-on-the-same-vehicle\",\"entities\":{\"claim\":\"CL-001201\"}}"
+    },
+    "Message:\nDescribe the two claims and the claimant on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-00122\"\nc2 | \"claim\" | \"CL-00123\"\nc3 | \"claimant\" | \"CT-00121\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims are on the same vehicle as this claim?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"CL-00122\" | \"claim\"\nc2 | \"CL-00123\" | \"claim\"\nc3 | \"CT-00121\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-00122\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-00123\" (also in the earlier turns)\nc3 | \"claimant\" | \"CT-00121\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-on-the-same-vehicle\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nDescribe the three claims on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001210\"\nc2 | \"claim\" | \"CL-001211\"\nc3 | \"claim\" | \"CL-001212\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims went through the same repairer as this one?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001210\" | \"claim\"\nc2 | \"CL-001211\" | \"claim\"\nc3 | \"CL-001212\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001210\" (also in the earlier turns) (selected)\nc2 | \"claim\" | \"CL-001211\" (also in the earlier turns) (selected)\nc3 | \"claim\" | \"CL-001212\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-by-the-same-repairer\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nDescribe the three claims on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001213\"\nc2 | \"claim\" | \"CL-001214\"\nc3 | \"claim\" | \"CL-001215\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims went through the same repairer as this one?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001213\" | \"claim\"\nc2 | \"CL-001214\" | \"claim\"\nc3 | \"CL-001215\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001213\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001214\" (also in the earlier turns)\nc3 | \"claim\" | \"CL-001215\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-by-the-same-repairer\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
+    },
+    "Message:\nDescribe the two claims and the claimant on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001220\"\nc2 | \"claim\" | \"CL-001221\"\nc3 | \"claimant\" | \"CT-00122\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims are on the same vehicle as this?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001220\" | \"claim\"\nc2 | \"CL-001221\" | \"claim\"\nc3 | \"CT-00122\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001220\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001221\" (also in the earlier turns)\nc3 | \"claimant\" | \"CT-00122\" (also in the earlier turns) (selected)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-on-the-same-vehicle\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nDescribe the two claims and the claimant on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001222\"\nc2 | \"claim\" | \"CL-001223\"\nc3 | \"claimant\" | \"CT-00123\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims are on the same vehicle as this?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001222\" | \"claim\"\nc2 | \"CL-001223\" | \"claim\"\nc3 | \"CT-00123\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001222\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001223\" (also in the earlier turns)\nc3 | \"claimant\" | \"CT-00123\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-on-the-same-vehicle\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nWhich claims are on the same vehicle as CL-001230?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"claims-on-the-same-vehicle\",\"entities\":{\"claim\":\"CL-001230\"}}"
+    },
+    "Message:\nDescribe the two claims on screen.\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001230\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001230\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001231\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims went through the same repairer as this one?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n2. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001230\" | \"claim\"\nc2 | \"CL-001231\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001230\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001231\" (also in the earlier turns) (selected)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-by-the-same-repairer\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
+    "Message:\nWhich claims are on the same vehicle as CL-001232?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"claims-on-the-same-vehicle\",\"entities\":{\"claim\":\"CL-001232\"}}"
+    },
+    "Message:\nDescribe the two claims on screen.\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001232\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001232\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001233\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich claims went through the same repairer as this one?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n2. view; cited c1, c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-001232\" | \"claim\"\nc2 | \"CL-001233\" | \"claim\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-001232\" (also in the earlier turns)\nc2 | \"claim\" | \"CL-001233\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"claims-by-the-same-repairer\",\"role\":\"claim\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
     }
   }
 }

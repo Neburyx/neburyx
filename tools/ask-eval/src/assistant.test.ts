@@ -47,6 +47,40 @@ describe('the file of labelled assistant messages', () => {
     }
   });
 
+  describe('the elements selected on the canvas', () => {
+    it('builds the router request of a selection case with the product’s own marks, and none for its twin without a selection', async () => {
+      const found = await requestsOf(await loadAssistantSets(PACKS, hooks()), hooks());
+      const selected = found.get('banking-fraud/selected-device-which-accounts#2')?.first ?? '';
+      const twin = found.get('banking-fraud/two-devices-which-accounts#2')?.first ?? '';
+      expect(selected).toContain('"DV-000131" (also in the earlier turns) (selected)');
+      expect(selected).not.toContain('"DV-000130" (also in the earlier turns) (selected)');
+      expect(twin).not.toContain('(selected)');
+    });
+
+    const two = '{ route: view, view: [{ entityType: thing, stableId: T-1 }, { entityType: thing, stableId: T-2 }] }';
+    const thread = (...turns: string[]) => `messages: []\nthreads:\n  - id: t\n    turns:\n${turns.join('\n')}\n`;
+    const turn = (wording: string, expect: string, selected?: string) => `      - message: "${wording}"\n${selected === undefined ? '' : `        selected: ${selected}\n`}        expect: ${expect}`;
+
+    it('reads a thread turn that selects elements of the view of its thread, and gives its unit their keys', () => {
+      const read = readAssistantFile(thread(turn('first', two), turn('second', '{ route: ask, intent: byId, entities: { id: T-2 } }', '[{ entityType: thing, stableId: T-2 }]')), 3);
+      expect(read.threads[0]?.turns[1]?.selected).toEqual([{ entityType: 'thing', stableId: 'T-2' }]);
+    });
+
+    it('accepts a clarification whose candidates are elements of the view, in the turn after the view', () => {
+      const read = readAssistantFile(thread(turn('first', two), turn('second', '{ route: clarify, intent: byId, role: id, entities: {}, candidates: [{ entityType: thing, stableId: T-1 }, { entityType: thing, stableId: T-2 }] }')), 3);
+      expect(read.threads[0]?.turns[1]?.expect.route).toBe('clarify');
+    });
+
+    it.each([
+      ['an element that the view does not hold', thread(turn('first', two), turn('second', '{ route: ask, intent: byId, entities: { id: T-1 } }', '[{ entityType: thing, stableId: T-9 }]'))],
+      ['a selection in a thread with no view', thread(turn('first', '{ route: ask, intent: byId, entities: { id: T-1 } }'), turn('second', '{ route: ask, intent: byId, entities: { id: T-1 } }', '[{ entityType: thing, stableId: T-1 }]'))],
+      ['an empty list', thread(turn('first', two), turn('second', '{ route: ask, intent: byId, entities: { id: T-1 } }', '[]'))],
+      ['a clarification candidate that neither the view nor an earlier turn names', thread(turn('first', two), turn('second', '{ route: clarify, intent: byId, role: id, entities: {}, candidates: [{ entityType: thing, stableId: T-1 }, { entityType: thing, stableId: T-9 }] }'))],
+    ])('refuses a selection of %s', (_name, text) => {
+      expect(() => readAssistantFile(text, 3)).toThrow(UsageError);
+    });
+  });
+
   it('hashes the messages: the same under the order of the file, different when a wording changes', async () => {
     const sets = await loadAssistantSets(PACKS, hooks());
     const [first, ...rest] = sets;
@@ -148,12 +182,12 @@ describe('the router scored over a replay', () => {
     for (const entry of (await requestsOf(await loadAssistantSets(PACKS, hooks()), hooks())).values()) shared.set(entry.first, (shared.get(entry.first) ?? 0) + 1);
     // a request that two units make (the same first turns of two threads) would count as two misses when removed
     const plans = Object.keys(replay.answers).filter((values) => shared.get(values) === 1 && values.includes('Earlier turns') && replay.answers[values]?.reply.includes('"route":"ask"') === true);
-    for (const values of plans.slice(0, 9)) delete replay.answers[values];
+    for (const values of plans.slice(0, 12)) delete replay.answers[values];
     const within = await run(replay);
-    expect(within.text).toContain('at most 9 may miss');
+    expect(within.text).toContain('at most 12 may miss');
     expect(within.text).toContain('no-reply');
     expect(within.code, within.text).toBe(0);
-    delete replay.answers[plans[9] ?? ''];
+    delete replay.answers[plans[12] ?? ''];
     const over = await run(replay);
     expect(over.code).toBe(1);
     expect(over.text).toContain('result: fail');
@@ -205,7 +239,7 @@ describe('the router scored over a replay', () => {
     const out = io();
     await runCli(['assistant', '--packs', PACKS, '--replay', SCRIPTED, '--json'], out.io, hooks());
     const text = out.out.join('\n');
-    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 123, right: 123 }, scripted: true });
+    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 157, right: 157 }, scripted: true });
     for (const secret of ['guilty', 'AC-0002000', 'same device', 'CT-00100', 'fraudster']) expect(text).not.toContain(secret);
   });
 
@@ -350,7 +384,7 @@ describe('the threads scored over a replay', { timeout: 30_000 }, () => {
     const out = io();
     await runCli(['assistant', '--packs', PACKS, '--replay', SCRIPTED, '--json'], out.io, hooks());
     const text = out.out.join('\n');
-    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 123, right: 123 } });
+    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 157, right: 157 } });
     for (const secret of ['AC-0002050', 'CT-00230', 'Which merchants', 'that account']) expect(text).not.toContain(secret);
   });
 });
@@ -385,8 +419,8 @@ describe('the first replies of the router', () => {
     replay.answers[at('insurance-claims/filed-then-policies#2').first] = { failure: 'timeout' };
     delete replay.answers[at('insurance-claims/vehicle-then-repairer#2').first];
     const counted = await json(replay);
-    expect(counted.result.firstReplies).toMatchObject({ counted: 148, bare: 144, textAround: 2, wrongForm: 1, didNotFit: 1, failed: 1, noFirstReply: 1, rescued: 2, unplaced: 1, notBare: 4 });
-    expect(counted.result.firstReplies['rate']).toBeCloseTo(4 / 148, 6);
+    expect(counted.result.firstReplies).toMatchObject({ counted: 182, bare: 178, textAround: 2, wrongForm: 1, didNotFit: 1, failed: 1, noFirstReply: 1, rescued: 2, unplaced: 1, notBare: 4 });
+    expect(counted.result.firstReplies['rate']).toBeCloseTo(4 / 182, 6);
     expect(counted.result.firstReplies['ids']).toEqual(expect.arrayContaining([{ name: 'banking-fraud/device-then-merchants#2', kind: 'text-around' }, { name: 'banking-fraud/two-accounts-then-which#3', kind: 'did-not-fit' }]));
   });
 
@@ -412,7 +446,7 @@ describe('the first replies of the router', () => {
     const found = await requests();
     delete replay.answers[found.get('banking-fraud/address-then-show#2')?.first ?? ''];
     const counted = await json(replay);
-    expect(counted.result.firstReplies).toMatchObject({ noFirstReply: 1, counted: 149, bare: 149 });
+    expect(counted.result.firstReplies).toMatchObject({ noFirstReply: 1, counted: 183, bare: 183 });
   });
 });
 

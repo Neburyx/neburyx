@@ -263,3 +263,53 @@ threads:
         expect: { route: view, view: [{ entityType: device, stableId: DV-000120 }, { entityType: device, stableId: DV-000121 }, { entityType: account, stableId: AC-0002120 }] }
       - message: "Which accounts use this device?"
         expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000120 }, { entityType: device, stableId: DV-000121 }] }
+  - id: selected-device-which-accounts
+    turns:
+      - message: "Describe the two devices and the account on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000130 }, { entityType: device, stableId: DV-000131 }, { entityType: account, stableId: AC-0002130 }] }
+      - message: "Which accounts use this device?"
+        selected: [{ entityType: device, stableId: DV-000131 }]
+        expect: { route: ask, intent: accounts-using-a-device, entities: { device: DV-000131 } }
+  - id: two-selected-devices-which-accounts
+    turns:
+      - message: "Describe the three devices on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000140 }, { entityType: device, stableId: DV-000141 }, { entityType: device, stableId: DV-000142 }] }
+      - message: "Which accounts use this device?"
+        selected: [{ entityType: device, stableId: DV-000140 }, { entityType: device, stableId: DV-000141 }]
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000140 }, { entityType: device, stableId: DV-000141 }] }
+  - id: three-devices-none-selected
+    turns:
+      - message: "Describe the three devices on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000143 }, { entityType: device, stableId: DV-000144 }, { entityType: device, stableId: DV-000145 }] }
+      - message: "Which accounts use this device?"
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000143 }, { entityType: device, stableId: DV-000144 }, { entityType: device, stableId: DV-000145 }] }
+  - id: selected-account-which-devices-accounts
+    turns:
+      - message: "Describe the two devices and the account on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000150 }, { entityType: device, stableId: DV-000151 }, { entityType: account, stableId: AC-0002150 }] }
+      - message: "Which accounts use this?"
+        selected: [{ entityType: account, stableId: AC-0002150 }]
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000150 }, { entityType: device, stableId: DV-000151 }] }
+  - id: two-devices-an-account-none-selected
+    turns:
+      - message: "Describe the two devices and the account on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000152 }, { entityType: device, stableId: DV-000153 }, { entityType: account, stableId: AC-0002152 }] }
+      - message: "Which accounts use this?"
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000152 }, { entityType: device, stableId: DV-000153 }] }
+  - id: selected-and-earlier-device
+    turns:
+      - message: "Which accounts use DV-000160?"
+        expect: { route: ask, intent: accounts-using-a-device, entities: { device: DV-000160 } }
+      - message: "Describe the two devices on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000160 }, { entityType: device, stableId: DV-000161 }] }
+      - message: "Which accounts use this device?"
+        selected: [{ entityType: device, stableId: DV-000161 }]
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000160 }, { entityType: device, stableId: DV-000161 }] }
+  - id: earlier-device-and-view-none-selected
+    turns:
+      - message: "Which accounts use DV-000162?"
+        expect: { route: ask, intent: accounts-using-a-device, entities: { device: DV-000162 } }
+      - message: "Describe the two devices on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000162 }, { entityType: device, stableId: DV-000163 }] }
+      - message: "Which accounts use this device?"
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000162 }, { entityType: device, stableId: DV-000163 }] }

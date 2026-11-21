@@ -176,3 +176,59 @@ threads:
         expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00290 } }
       - message: "And their policies?"
         expect: { route: ask, intent: policies-of-a-claimants-claims, entities: { claimant: CT-00290 } }
+  - id: selected-claim-same-vehicle
+    turns:
+      - message: "Describe the two claims and the claimant on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-00120 }, { entityType: claim, stableId: CL-00121 }, { entityType: claimant, stableId: CT-00120 }] }
+      - message: "Which claims are on the same vehicle as this claim?"
+        selected: [{ entityType: claim, stableId: CL-00121 }]
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-001201 } }
+  - id: two-claims-same-vehicle-none-selected
+    turns:
+      - message: "Describe the two claims and the claimant on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-00122 }, { entityType: claim, stableId: CL-00123 }, { entityType: claimant, stableId: CT-00121 }] }
+      - message: "Which claims are on the same vehicle as this claim?"
+        expect: { route: clarify, intent: claims-on-the-same-vehicle, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-00122 }, { entityType: claim, stableId: CL-00123 }] }
+  - id: two-selected-claims-same-repairer
+    turns:
+      - message: "Describe the three claims on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001210 }, { entityType: claim, stableId: CL-001211 }, { entityType: claim, stableId: CL-001212 }] }
+      - message: "Which claims went through the same repairer as this one?"
+        selected: [{ entityType: claim, stableId: CL-001210 }, { entityType: claim, stableId: CL-001211 }]
+        expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001210 }, { entityType: claim, stableId: CL-001211 }] }
+  - id: three-claims-same-repairer-none-selected
+    turns:
+      - message: "Describe the three claims on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001213 }, { entityType: claim, stableId: CL-001214 }, { entityType: claim, stableId: CL-001215 }] }
+      - message: "Which claims went through the same repairer as this one?"
+        expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001213 }, { entityType: claim, stableId: CL-001214 }, { entityType: claim, stableId: CL-001215 }] }
+  - id: selected-claimant-same-vehicle
+    turns:
+      - message: "Describe the two claims and the claimant on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001220 }, { entityType: claim, stableId: CL-001221 }, { entityType: claimant, stableId: CT-00122 }] }
+      - message: "Which claims are on the same vehicle as this?"
+        selected: [{ entityType: claimant, stableId: CT-00122 }]
+        expect: { route: clarify, intent: claims-on-the-same-vehicle, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001220 }, { entityType: claim, stableId: CL-001221 }] }
+  - id: two-claims-a-claimant-same-vehicle-none-selected
+    turns:
+      - message: "Describe the two claims and the claimant on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001222 }, { entityType: claim, stableId: CL-001223 }, { entityType: claimant, stableId: CT-00123 }] }
+      - message: "Which claims are on the same vehicle as this?"
+        expect: { route: clarify, intent: claims-on-the-same-vehicle, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001222 }, { entityType: claim, stableId: CL-001223 }] }
+  - id: selected-and-earlier-claim
+    turns:
+      - message: "Which claims are on the same vehicle as CL-001230?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-001230 } }
+      - message: "Describe the two claims on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001230 }, { entityType: claim, stableId: CL-001231 }] }
+      - message: "Which claims went through the same repairer as this one?"
+        selected: [{ entityType: claim, stableId: CL-001231 }]
+        expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001230 }, { entityType: claim, stableId: CL-001231 }] }
+  - id: earlier-claim-and-view-none-selected
+    turns:
+      - message: "Which claims are on the same vehicle as CL-001232?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-001232 } }
+      - message: "Describe the two claims on screen."
+        expect: { route: view, view: [{ entityType: claim, stableId: CL-001232 }, { entityType: claim, stableId: CL-001233 }] }
+      - message: "Which claims went through the same repairer as this one?"
+        expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001232 }, { entityType: claim, stableId: CL-001233 }] }

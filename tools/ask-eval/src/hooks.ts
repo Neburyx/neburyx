@@ -56,6 +56,8 @@ export interface LabelledTurn {
 interface RouteInput {
   readonly message: string;
   readonly viewElementKeys: readonly string[];
+  /** The keys of the elements selected on the canvas when the message is sent, a subset of `viewElementKeys`. */
+  readonly selectionKeys?: readonly string[];
   readonly earlier?: readonly LabelledTurn[];
 }
 

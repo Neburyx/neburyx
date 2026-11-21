@@ -1,6 +1,7 @@
 import { createAuditedModelCall, promptRecordOf, type ModelProvider } from '@neburyx/ee-ai-runtime';
 import { readViewKeys, type AssistantRouterReply, type ElementRefs, type SummaryReading } from '@neburyx/contracts';
 import { buildContext, withView, type TurnContext } from '../assistant/context.js';
+import { selectedKeysOf } from '../assistant/selection.js';
 import { candidatesOfReply, roleEntityType } from '../assistant/clarification.js';
 import type { AssistantContextTurn } from '../assistant/thread-store.js';
 import { createAssistantRouter, type RouterOutcome } from '../assistant/router.js';
@@ -23,6 +24,8 @@ interface LabelledTurn {
 export interface RouteInput {
   readonly message: string;
   readonly viewElementKeys: readonly string[];
+  /** The keys of the elements the person selected on the canvas, as the panel sends them; the product's own code drops those that are not in the view. */
+  readonly selectionKeys?: readonly string[];
   readonly earlier?: readonly LabelledTurn[];
 }
 
@@ -86,7 +89,9 @@ export async function routeMessage(source: LoadedSource, provider: ModelProvider
   const thread = await contextOf(source, input.earlier);
   // the elements in view get keys of the table of the thread's context, as the product's turn gives them
   const view = readViewKeys(input.viewElementKeys, source.sourceId);
-  const context = withView(thread, view.ok ? view.refs : { entities: [], edges: [], aggregates: [], derived: [] }, source.sourceId);
+  const selectedKeys = selectedKeysOf(input.viewElementKeys, input.selectionKeys);
+  const selected = selectedKeys.length === 0 ? undefined : readViewKeys(selectedKeys, source.sourceId);
+  const context = withView(thread, view.ok ? view.refs : { entities: [], edges: [], aggregates: [], derived: [] }, source.sourceId, selected?.ok === true ? selected.refs : undefined);
   const accepts = (reply: AssistantRouterReply): boolean => reply.route !== 'clarify' || candidatesOfReply(reply, context, source.folder, source.sourceId) !== undefined;
   const outcome = await route({ sourceId: source.sourceId, investigationId: INVESTIGATION, message: input.message, viewElementKeys: input.viewElementKeys, ...(context.viewText === undefined ? {} : { viewText: context.viewText }), actorId: ACTOR, actorRole: 'investigator', traceId: 'route-eval', ...(thread === undefined ? {} : { context: thread.text }), accepts }, new AbortController().signal);
   return { ...outcome, keys: Object.fromEntries([...context.keys].map(([key, ref]) => [key, ref.stableId])) };

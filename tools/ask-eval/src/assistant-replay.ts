@@ -7,7 +7,7 @@ import { unitsOf, type AssistantSet, type Unit } from './assistant-questions.js'
 export type Hooks = EvalHooks & AssistantHooks;
 
 /** The input a unit gives the router: its message, the keys of its view and the labelled turns of its context. */
-export const inputOf = (unit: Unit) => ({ message: unit.message, viewElementKeys: unit.viewKeys, earlier: unit.earlier });
+export const inputOf = (unit: Unit) => ({ message: unit.message, viewElementKeys: unit.viewKeys, earlier: unit.earlier, ...(unit.selectedKeys.length === 0 ? {} : { selectionKeys: unit.selectedKeys }) });
 
 /** The reply a router would give for what a unit expects: the scripted answer. A clarification names its candidates by the keys of the thread's context. */
 async function scriptedReply(unit: Unit, hooks: AssistantHooks): Promise<string> {
