@@ -66,7 +66,7 @@ describe('the recorder of the assistant\'s router', () => {
   it('names the source of each pack in the recording, so that the recording of the committed packs is accepted when it is scored', async () => {
     const out = join(scratch(), 'packs');
     const packs = join(ROOT, 'domain-packs');
-    expect(await runCli(['assistant', 'record', '--packs', packs, '--budget', '368', '--out', out], io().io, hooksWith(answerRoutes))).toBe(0);
+    expect(await runCli(['assistant', 'record', '--packs', packs, '--budget', '372', '--out', out], io().io, hooksWith(answerRoutes))).toBe(0);
     const recorded = JSON.parse(readFileSync(join(out, 'recording.json'), 'utf8')) as { folders: Record<string, string> };
     expect(Object.keys(recorded.folders).sort()).toEqual(['banking-demo', 'insurance-demo']);
     const scored = io();
