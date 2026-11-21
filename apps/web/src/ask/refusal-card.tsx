@@ -41,7 +41,9 @@ export function RefusalCard({ refused, question }: { readonly refused: Refused; 
       ]
     : refused.cause === 'nothing-found' && refused.intent !== undefined
       ? [{ label: ASK_COPY.used, text: humanize(refused.intent), problem: false }]
-      : [];
+      : refused.valueNotFit?.citation === undefined
+        ? []
+        : [{ label: ASK_COPY.element, text: `${refused.valueNotFit.citation.title} (${refused.valueNotFit.citation.type})`, problem: false }];
   const advice = hintOf(refused.cause);
   return (
     <section className="ask-refusal" aria-labelledby={titleId} role="alert">
@@ -51,7 +53,7 @@ export function RefusalCard({ refused, question }: { readonly refused: Refused; 
         </h3>
         <span className="ask-tag ask-tag-cause">{causeTag(refused.cause)}</span>
       </div>
-      <p className="ask-refusal-sentence">{ASK_REFUSAL_SENTENCES[refused.cause]}</p>
+      <p className="ask-refusal-sentence">{refused.cause === 'value-not-fit' ? refused.sentence : ASK_REFUSAL_SENTENCES[refused.cause]}</p>
       {question === '' ? null : (
         <div className="ask-typed">
           <p className="ask-typed-title">{ASK_COPY.yourQuestion}</p>

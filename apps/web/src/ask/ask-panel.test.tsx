@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ASK_REFUSAL_CAUSES, ASK_REFUSAL_SENTENCES, askAnswerSchema, type AskAnswer, type AskContinueRequest, type AskQuestionRequest } from '@neburyx/contracts';
+import { ASK_REFUSAL_CAUSES, ASK_REFUSAL_SENTENCES, valueNotFitSentence, askAnswerSchema, type AskAnswer, type AskContinueRequest, type AskQuestionRequest } from '@neburyx/contracts';
 import { fakeClient } from '../api/fake-client.js';
 import type { ApiResult } from '../api/client.js';
 import { ApiClientProvider } from '../api/client-context.js';
@@ -114,6 +114,22 @@ describe('the Ask panel: a refusal', () => {
     expect(document.querySelector('.ask-typed-text')?.textContent).toBe('q');
     expect([...document.querySelectorAll('.ask-chip')].map((chip) => chip.textContent)).toEqual(['Open Filters', 'Search by stable ID', 'Expand']);
     expect((screen.getByLabelText('Your question') as HTMLTextAreaElement).value).toBe('q');
+  });
+
+  it.each([
+    ['another type', { kind: 'other-type', needed: 'customer', found: 'account', citation: { ref: { sourceId: 'demo', entityType: 'account', stableId: 'A-1' }, title: 'Account A-1', type: 'account' } }],
+    ['no element', { kind: 'not-found', needed: 'customer' }],
+    ['an element the read left out', { kind: 'hidden', needed: 'customer' }],
+  ])('shows the fixed sentence of a value that does not fit (%s), the tag of its cause, and for another type the element cited with its title and type', async (_name, valueNotFit) => {
+    const sentence = valueNotFitSentence({ kind: valueNotFit.kind as 'other-type' | 'not-found' | 'hidden', needed: 'customer', found: 'found' in valueNotFit ? valueNotFit.found : undefined, title: 'citation' in valueNotFit ? valueNotFit.citation.title : undefined });
+    const h = harness(async () => ({ ok: true, value: { refused: { cause: 'value-not-fit', sentence, valueNotFit } } as never }));
+    render(h.tree(true));
+    await userEvent.type(screen.getByLabelText('Your question'), 'q{Enter}');
+    expect(await screen.findByRole('heading', { name: 'Ask did not answer' })).toBeTruthy();
+    expect(screen.getByText(sentence)).toBeTruthy();
+    expect(screen.getByText(causeTag('value-not-fit'))).toBeTruthy();
+    if ('citation' in valueNotFit) expect(screen.getByText('Account A-1 (account)')).toBeTruthy();
+    else expect(screen.queryByText('Element')).toBeNull();
   });
 
   it('puts Open Paths first only when the Paths tool is registered as an action, and runs it', async () => {

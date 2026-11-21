@@ -78,7 +78,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: Assistant
         return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence, ...(overview === undefined ? {} : { overview, entries: entriesOf(overview) }) };
       }
       if ('sentences' in answer || 'table' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
-      if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
+      if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused, reads: answer.reads };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, reads: answer.reads, stoppedAt: answer.stoppedAt, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
       return { kind: 'not-answered', sentence: answer.sentence };

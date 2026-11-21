@@ -52,6 +52,7 @@ export const ASSISTANT_COPY = {
   clarifyCandidates: 'Elements you may mean',
   clarifyStatus: 'Awaiting your choice · nothing was read. These are elements of this investigation.',
   notAnswered: 'Not answered',
+  citedElement: 'Element:',
   noDescriptionTitle: 'About these types',
   aboutType: 'About',
   meaningTitle: 'What these types mean',

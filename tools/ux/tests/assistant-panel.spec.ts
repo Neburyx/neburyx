@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, askAnswerSchema, summaryResponseSchema, type AskAnswer, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
+import { ERROR_TABLE, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, askAnswerSchema, summaryResponseSchema, valueNotFitSentence, type AskAnswer, type AssistantThreadResponse, type AssistantTurnAnswer } from '@neburyx/contracts';
 import { canvasOf, openWithDraft, screenOf } from './support/workspace.ts';
 
 const accountOf = (sourceId: string) => ({ ref: { sourceId, entityType: 'account', stableId: 'AC-2' }, display: { title: 'Account AC-2', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
@@ -121,6 +121,32 @@ test.describe('the Assistant panel', () => {
     expect(sent.map((body) => body.message)).toEqual(['is this guilty?', 'what is this?']);
     expect(sent[0]).toMatchObject({ sourceId: 'banking-demo', viewElementKeys: expect.any(Array) });
   });
+
+  const MISFITS = [
+    ['another type', { kind: 'other-type', needed: 'customer', found: 'account', citation: { ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-2' }, title: 'Account AC-2', type: 'account' } }, 'Account AC-2', false],
+    ['no element', { kind: 'not-found', needed: 'customer' }, undefined, false],
+    ['an element the read left out', { kind: 'hidden', needed: 'customer' }, undefined, false],
+    ['a step of a tool loop, with the reads of the earlier steps', { kind: 'not-found', needed: 'customer' }, undefined, true],
+  ] as const;
+
+  for (const [name, fit, title, loop] of MISFITS) {
+    test(`shows the sentence of a value that does not fit, ${name}, titled Not answered, and keeps the page inside the window`, async ({ page }) => {
+      await openWorkspace(page);
+      const sentence = valueNotFitSentence({ kind: fit.kind, needed: 'customer', found: 'found' in fit ? fit.found : undefined, title });
+      const reads = loop ? { reads: [{ tool: 'find-account', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }] } : {};
+      await answerWith(page, { status: 'answered', route: 'ask', answer: askAnswerSchema.parse({ refused: { cause: 'value-not-fit', sentence, intent: 'find-customer', valueNotFit: fit } }), ...reads } as AssistantTurnAnswer);
+      await open(page);
+      await page.getByLabel('Your message').fill('which customers share a phone with AC-2?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByText(sentence)).toBeVisible();
+      await expect(panel(page).getByRole('heading', { name: 'Not answered' }).first()).toBeVisible();
+      if (title !== undefined) await expect(panel(page).getByText(`Element: ${title} (account)`)).toBeVisible();
+      if (loop) await expect(panel(page).locator('.assistant-reads').first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      const shot = process.env['NEBURYX_UX_SHOT'];
+      if (shot !== undefined) await page.screenshot({ path: shot.replace(/\.png$/, `-assistant-${loop ? 'loop' : fit.kind}.png`) });
+    });
+  }
 
   test('reads a streamed turn: asks for the stream, shows the answer as the JSON route is shown, and keeps the page inside the window', async ({ page }) => {
     await openWorkspace(page);

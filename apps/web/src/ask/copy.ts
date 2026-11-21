@@ -35,6 +35,7 @@ export const ASK_COPY = {
   missing: 'Missing',
   extra: 'Extra',
   used: 'Used',
+  element: 'Element',
   tryAgain: 'Try again',
   askAgain: 'Ask again',
   maskingCleared: 'Masking changed, so this answer is cleared. Ask again to see it.',

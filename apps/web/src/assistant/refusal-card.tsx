@@ -51,7 +51,7 @@ function ToolChip({ tool, label }: { readonly tool: RegisteredTool; readonly lab
 }
 
 /** A refusal of the assistant: the title, the fixed sentence of the cause, and the manual ways on. The words of the model never reach it. */
-export function RefusalCard({ sentence, hint, overview, entries }: { readonly sentence: string; readonly hint?: string | undefined; readonly overview?: ViewAnswer | undefined; readonly entries?: readonly CitationEntry[] | undefined }) {
+export function RefusalCard({ sentence, hint, overview, entries, element }: { readonly sentence: string; readonly hint?: string | undefined; readonly overview?: ViewAnswer | undefined; readonly entries?: readonly CitationEntry[] | undefined; readonly element?: { readonly title: string; readonly type: string } | undefined }) {
   const titleId = useId();
   const tools = useTools();
   const filters = tools.find((tool) => tool.id === FILTERS_TOOL_ID);
@@ -71,6 +71,11 @@ export function RefusalCard({ sentence, hint, overview, entries }: { readonly se
           {ASSISTANT_COPY.notAnswered}
         </h3>
         <p>{sentence}</p>
+        {element === undefined ? null : (
+          <p className="ask-hint">
+            {ASSISTANT_COPY.citedElement} {element.title} ({element.type})
+          </p>
+        )}
         {overview === undefined ? chips : null}
       </div>
       {overview === undefined ? null : (

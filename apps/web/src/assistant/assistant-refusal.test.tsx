@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ASK_REFUSAL_CAUSES, ASK_REFUSAL_SENTENCES, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantTurnAnswer } from '@neburyx/contracts';
+import { ASK_REFUSAL_CAUSES, ASK_REFUSAL_SENTENCES, valueNotFitSentence, ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, askAnswerSchema, type AssistantTurnAnswer } from '@neburyx/contracts';
 import { AiActionsProvider, createAiActions } from '../ai/ai-actions.js';
 import { UNAVAILABLE_REASON } from '../ai/copy.js';
 import { registerPathsTool } from '../paths/paths-tool.js';
@@ -168,6 +168,31 @@ describe('the Assistant thread: the refusal of an Ask question', () => {
     expect(screen.queryByText('Missing')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Search by stable ID' })).toBeNull();
     expect(document.activeElement).toBe(title);
+  });
+
+  const misfit = (valueNotFit: Record<string, unknown>, sentence: string, reads?: readonly Record<string, unknown>[]): AssistantTurnAnswer => ({ status: 'answered', route: 'ask', answer: askAnswerSchema.parse({ refused: { cause: 'value-not-fit', sentence, intent: 'shared', valueNotFit } }), ...(reads === undefined ? {} : { reads: reads as never }) });
+  const ACCOUNT = { ref: { sourceId: 'demo', entityType: 'account', stableId: 'A-1' }, title: 'Account A-1', type: 'account' };
+
+  it.each([
+    ['another type, with the element cited', { kind: 'other-type', needed: 'customer', found: 'account', citation: ACCOUNT }, valueNotFitSentence({ kind: 'other-type', needed: 'customer', found: 'account', title: 'Account A-1' })],
+    ['no element', { kind: 'not-found', needed: 'customer' }, valueNotFitSentence({ kind: 'not-found', needed: 'customer' })],
+    ['an element the read left out', { kind: 'hidden', needed: 'customer' }, valueNotFitSentence({ kind: 'hidden', needed: 'customer' })],
+  ])('shows the sentence the server wrote for a value that does not fit: %s', async (_name, fit, sentence) => {
+    setup({ answers: [misfit(fit, sentence)] });
+    await typeAndSend('a message as typed');
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.notAnswered });
+    expect(screen.getByText(sentence)).toBeTruthy();
+    if ('citation' in fit) expect(screen.getByText(`${ASSISTANT_COPY.citedElement} Account A-1 (account)`)).toBeTruthy();
+    else expect(screen.queryByText(new RegExp(ASSISTANT_COPY.citedElement))).toBeNull();
+  });
+
+  it('shows the reads of the earlier steps of a tool loop that the refusal ended, above the refusal', async () => {
+    const sentence = valueNotFitSentence({ kind: 'not-found', needed: 'customer' });
+    setup({ answers: [misfit({ kind: 'not-found', needed: 'customer' }, sentence, [{ tool: 'shared', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }])] });
+    await typeAndSend('a message as typed');
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.notAnswered });
+    expect(document.querySelector('.assistant-reads')).not.toBeNull();
+    expect(screen.getByText(sentence)).toBeTruthy();
   });
 
   it('keeps the earlier turns on screen when an Ask question is refused', async () => {

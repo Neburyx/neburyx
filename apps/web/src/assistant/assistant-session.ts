@@ -74,7 +74,8 @@ export type Outcome =
   | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly reads: readonly AssistantRead[] | undefined; readonly stoppedAt: AssistantLimit | undefined; readonly coverage: string | undefined; readonly followUps: readonly FollowUp[] }
   | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[] }
   | { readonly kind: 'clarification'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly failed?: { readonly failure: Failure; readonly index: number } }
-  | { readonly kind: 'ask-refused'; readonly refused: Refused }
+  /** A refusal of Ask inside a turn; the reads the earlier steps of a tool loop made, when the refusal ended the loop. */
+  | { readonly kind: 'ask-refused'; readonly refused: Refused; readonly reads?: readonly AssistantRead[] | undefined }
   | { readonly kind: 'heavy'; readonly answer: Answered; readonly token: string }
   | { readonly kind: 'failed'; readonly failure: Failure; readonly retry: Retry };
 

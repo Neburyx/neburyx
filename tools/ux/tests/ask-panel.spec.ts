@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ASK_REFUSAL_SENTENCES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, askAnswerSchema, type AskAnswer } from '@neburyx/contracts';
+import { ASK_REFUSAL_SENTENCES, ERROR_TABLE, INVALID_REQUEST_ENTRIES, askAnswerSchema, valueNotFitSentence, type AskAnswer } from '@neburyx/contracts';
 import { canvasOf } from './support/workspace.ts';
 
 const accountOf = (sourceId: string) => ({ ref: { sourceId, entityType: 'account', stableId: 'AC-2' }, display: { title: 'Account AC-2', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
@@ -72,6 +72,28 @@ test.describe('the Ask panel', () => {
     await panel(page).getByRole('button', { name: /^Add / }).click();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '2');
   });
+
+  const MISFITS = [
+    ['another type', { kind: 'other-type', needed: 'customer', found: 'account', citation: { ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-2' }, title: 'Account AC-2', type: 'account' } }, 'Account AC-2'],
+    ['no element', { kind: 'not-found', needed: 'customer' }, undefined],
+    ['an element the read left out', { kind: 'hidden', needed: 'customer' }, undefined],
+  ] as const;
+
+  for (const [name, fit, title] of MISFITS) {
+    test(`shows the fixed sentence of a value that does not fit, ${name}, with the element cited for another type, and keeps the page inside the window`, async ({ page }) => {
+      await openWorkspace(page);
+      const sentence = valueNotFitSentence({ kind: fit.kind, needed: 'customer', found: 'found' in fit ? fit.found : undefined, title });
+      await answerWith(page, askAnswerSchema.parse({ refused: { cause: 'value-not-fit', sentence, intent: 'find-customer', valueNotFit: fit } }));
+      await open(page);
+      await page.getByLabel('Your question').fill('which customers share a phone with AC-2?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByText(sentence)).toBeVisible();
+      if (title !== undefined) await expect(panel(page).getByText(`${title} (account)`)).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      const shot = process.env['NEBURYX_UX_SHOT'];
+      if (shot !== undefined) await page.screenshot({ path: shot.replace(/\.png$/, `-ask-${fit.kind}.png`) });
+    });
+  }
 
   test('shows a refusal with its fixed sentence, the rewording line and the manual alternatives', async ({ page }) => {
     await openWorkspace(page);

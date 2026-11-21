@@ -239,7 +239,12 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
         </>
       );
     case 'ask-refused':
-      return <RefusalCard sentence={outcome.refused.sentence} hint={hintOf(outcome.refused.cause)} />;
+      return (
+        <>
+          {outcome.reads === undefined ? null : <ReadSteps reads={outcome.reads} open />}
+          <RefusalCard sentence={outcome.refused.sentence} hint={hintOf(outcome.refused.cause)} {...(outcome.refused.valueNotFit?.citation === undefined ? {} : { element: outcome.refused.valueNotFit.citation })} />
+        </>
+      );
     case 'heavy':
       return (
         <>
