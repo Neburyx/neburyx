@@ -44,7 +44,7 @@ export function derivedRuleStatementOf(allowlist: SourceAllowlist, rule: Rule): 
   if (label === undefined || stableId === undefined) throw new AppError('INVALID_REQUEST');
   const condition = conditionOf(rule);
   return [
-    `MATCH (a:${quoteName(label)}) WHERE a.${quoteName(stableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (a:${quoteName(label)}) USING INDEX SEEK a:${quoteName(label)}(${quoteName(stableId)}) WHERE a.${quoteName(stableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     `CALL { WITH a MATCH ${chainOf(rule, allowlist, false)} WHERE ${condition} RETURN DISTINCT b LIMIT $limit + 1 }`,
     `CALL { WITH a, b MATCH ${chainOf(rule, allowlist, true)} WHERE ${condition} RETURN p LIMIT 1 }`,
     'RETURN p',
@@ -64,8 +64,8 @@ export function derivedSupportStatementOf(allowlist: SourceAllowlist, rule: Rule
   const condition = conditionOf(rule);
   const bound = ['a', 'b', ...middles].join(', ');
   return [
-    `MATCH (a:${quoteName(fromLabel)}) WHERE a.${quoteName(fromId)} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
-    `MATCH (b:${quoteName(toLabel)}) WHERE b.${quoteName(toId)} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
+    `MATCH (a:${quoteName(fromLabel)}) USING INDEX SEEK a:${quoteName(fromLabel)}(${quoteName(fromId)}) WHERE a.${quoteName(fromId)} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (b:${quoteName(toLabel)}) USING INDEX SEEK b:${quoteName(toLabel)}(${quoteName(toId)}) WHERE b.${quoteName(toId)} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
     `CALL { WITH a, b MATCH ${chainOf(rule, allowlist, false)} WHERE ${condition} RETURN DISTINCT ${middles.join(', ')} LIMIT $limit + 1 }`,
     `CALL { WITH ${bound} MATCH ${chainOf(rule, allowlist, true)} RETURN p LIMIT 1 }`,
     'RETURN p',

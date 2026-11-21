@@ -92,7 +92,7 @@ describe('GET /v1/entities/{sourceId}/{entityType}/{stableId}', () => {
     const { app, executor } = await started();
     await get(app, '/v1/entities/demo/widget/AC-1');
     const [call] = entityCalls(executor.calls);
-    expect(call?.cypher).toBe('MATCH (n:`Widget`) WHERE n.`widgetId` IN [$stableId, $stableInteger] RETURN n ORDER BY elementId(n) LIMIT $limit + 1');
+    expect(call?.cypher).toBe('MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`widgetId`) WHERE n.`widgetId` IN [$stableId, $stableInteger] RETURN n ORDER BY elementId(n) LIMIT $limit + 1');
     expect(call?.parameters).toMatchObject({ stableId: 'AC-1', stableInteger: null, limit: 1 });
     await app.close();
   });

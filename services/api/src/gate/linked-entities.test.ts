@@ -47,7 +47,7 @@ describe('the statement of a one-hop linked-entities run', () => {
     const [call] = dataCalls(executor);
     expect(call?.cypher).toBe(
       [
-        'MATCH (a:`Maker`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
+        'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
         'CALL { WITH a CALL { WITH a MATCH (a)-[r:`LINKS`]->(n:`Maker`) WHERE n <> a RETURN n, r, true AS isTarget } WITH n, r, isTarget LIMIT $countCap + 1 WITH collect({n: n, r: r, isTarget: isTarget}) AS found RETURN size(found) > $countCap AS cutFirst, found[..$countCap] AS nbs }',
         'WITH a, nbs, cutFirst, [] AS heavy, false AS stopListed, false AS cutSecond, [] AS second',
         'WITH a, cutFirst OR cutSecond AS bounded, heavy, stopListed, [e IN nbs WHERE e.isTarget | {x: e.n, hops: 1, m: null, r1: e.r, r2: null}] + [h IN second | {x: h.x, hops: 2, m: h.m, r1: [e IN nbs WHERE e.n = h.m][0].r, r2: h.r2}] AS entries',

@@ -51,8 +51,8 @@ export function shortestPathsStatementOf(allowlist: SourceAllowlist, request: Pa
   const [from, to] = [labelAndKeyOf(allowlist, request.from), labelAndKeyOf(allowlist, request.to)];
   const types = request.via.map((type) => quoteName(type)).join('|');
   return [
-    `MATCH (a:${from.label}) WHERE a.${from.key} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
-    `OPTIONAL MATCH (b:${to.label}) WHERE b.${to.key} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
+    `MATCH (a:${from.label}) USING INDEX SEEK a:${from.label}(${from.key}) WHERE a.${from.key} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `OPTIONAL MATCH (b:${to.label}) USING INDEX SEEK b:${to.label}(${to.key}) WHERE b.${to.key} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
     `OPTIONAL MATCH p = allShortestPaths(${walkOf(request.direction, `[:${types}*1..${request.maxHops}]`)})`,
     'RETURN a, b, p LIMIT $limit + 1',
   ].join('\n');
@@ -73,8 +73,8 @@ function endPatternOf(request: PathsRequest, end: 'a' | 'b'): string {
 export function shortestPathsCountStatementOf(allowlist: SourceAllowlist, request: PathsRequest): string {
   const [from, to] = [labelAndKeyOf(allowlist, request.from), labelAndKeyOf(allowlist, request.to)];
   return [
-    `MATCH (a:${from.label}) WHERE a.${from.key} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
-    `OPTIONAL MATCH (b:${to.label}) WHERE b.${to.key} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
+    `MATCH (a:${from.label}) USING INDEX SEEK a:${from.label}(${from.key}) WHERE a.${from.key} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `OPTIONAL MATCH (b:${to.label}) USING INDEX SEEK b:${to.label}(${to.key}) WHERE b.${to.key} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
     `CALL { WITH a OPTIONAL MATCH ${endPatternOf(request, 'a')} WITH r LIMIT $countCap + 1 RETURN count(r) AS fromDegree }`,
     `CALL { WITH b OPTIONAL MATCH ${endPatternOf(request, 'b')} WITH r LIMIT $countCap + 1 RETURN count(r) AS toDegree }`,
     'RETURN b IS NOT NULL AS toFound, fromDegree, toDegree',

@@ -1,4 +1,4 @@
-MATCH (a:`Maker`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1
+MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1
 CALL { WITH a CALL { WITH a MATCH (a)-[r1:`LINKS`]->(n1:`Maker`) WHERE n1 <> a AND (n1.`region` IS :: STRING NOT NULL AND n1.`region` IN [v IN $steps[0].conditions[0].values | v.value]) RETURN n1, r1 } WITH n1, r1 LIMIT $countCap + 1 WITH collect({n1: n1, r1: r1}) AS found RETURN size(found) > $countCap AS cut1, found[..$countCap] AS f1 }
 WITH a, cut1 AS bounded, [] AS heavy, false AS stopListed, f1 AS paths
 CALL { WITH paths UNWIND paths AS p WITH p ORDER BY p.n1.`makerId` WITH p.n1 AS x, collect(p)[0] AS best WHERE ((x.`makerId` IS :: STRING NOT NULL AND x.`makerId` <> '') OR x.`makerId` IS :: INTEGER NOT NULL) WITH x, best, toString(x.`makerId`) AS key WHERE $cursor IS NULL OR key > $cursor.endKey OR (key = $cursor.endKey AND elementId(x) > $cursor.endElement) WITH x, best, key ORDER BY key, elementId(x) LIMIT $limit + 1 RETURN collect(best) AS ms }

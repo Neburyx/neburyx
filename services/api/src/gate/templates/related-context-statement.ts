@@ -41,11 +41,11 @@ function branchOf(branch: ContextBranch, position: number, allowlist: SourceAllo
   return [
     'UNWIND range(0, size($hits) - 1) AS hi',
     `WITH hi, $hits[hi] AS h WHERE h.entityType = ${own}.hitType`,
-    `MATCH (a:${quoteName(hitLabel)}) WHERE a.${quoteName(hitId)} IN [h.stableId, h.stableInteger]`,
+    `MATCH (a:${quoteName(hitLabel)}) USING INDEX SEEK a:${quoteName(hitLabel)}(${quoteName(hitId)}) WHERE a.${quoteName(hitId)} IN [h.stableId, h.stableInteger]`,
     'WITH hi, a',
     'UNWIND range(0, size($exact) - 1) AS ei',
     `WITH hi, a, ei, $exact[ei] AS e WHERE e.entityType = ${own}.exactType`,
-    `MATCH (m:${quoteName(exactLabel)}) WHERE m.${quoteName(exactId)} IN [e.stableId, e.stableInteger] AND a <> m AND EXISTS { ${pattern} }`,
+    `MATCH (m:${quoteName(exactLabel)}) USING INDEX SEEK m:${quoteName(exactLabel)}(${quoteName(exactId)}) WHERE m.${quoteName(exactId)} IN [e.stableId, e.stableInteger] AND a <> m AND EXISTS { ${pattern} }`,
     `RETURN hi, ${position} AS bi, ei, ${own}.type AS rtype, ${own}.direction AS dir`,
   ].join(' ');
 }

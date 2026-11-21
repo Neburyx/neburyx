@@ -75,7 +75,7 @@ describe('an edge read the gate runs', () => {
     await gate.run(load(REF));
     expect(executor.calls).toHaveLength(1);
     const [call] = executor.calls;
-    expect(call?.cypher).toBe('MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) WHERE r.`linkId` IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1');
+    expect(call?.cypher).toBe('MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING INDEX SEEK r:`MADE_FROM`(`linkId`) WHERE r.`linkId` IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1');
     expect(call?.cypher).not.toContain('L-1');
     expect(call?.parameters['stableId']).toBe('L-1');
     expect(call?.parameters['stableInteger']).toBeNull();

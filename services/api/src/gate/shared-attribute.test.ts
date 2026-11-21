@@ -38,7 +38,7 @@ describe('the statement of a shared-attribute run', () => {
     const [call] = dataCalls(executor);
     expect(call?.cypher).toBe(
       [
-        'MATCH (a:`Maker`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
+        'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
         'CALL { WITH a OPTIONAL MATCH (a)-[:`USES_TOOL`]->(s:`Tool`) WHERE coalesce(s.`isCommon`, false) = true WITH s LIMIT 1 RETURN count(s) > 0 AS skipped }',
         'CALL { WITH a MATCH (a)-[ra:`USES_TOOL`]->(x:`Tool`) WHERE coalesce(x.`isCommon`, false) <> true WITH DISTINCT x LIMIT $countCap + 1 WITH collect(x) AS mine RETURN size(mine) > $countCap AS anchorBounded, mine[..$countCap] AS xs }',
         'CALL { WITH a, xs UNWIND xs AS x MATCH (x)<-[rb:`USES_TOOL`]-(b:`Maker`) WHERE b <> a WITH DISTINCT b, x LIMIT $countCap + 1 WITH collect({b: b, x: x}) AS pairs RETURN size(pairs) > $countCap AS pairsBounded, pairs[..$countCap] AS kept }',

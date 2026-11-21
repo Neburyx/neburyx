@@ -165,7 +165,7 @@ function partsOf(allowlist: SourceAllowlist, request: LinkedEntitiesRequest): Pa
   const counts = degreePatterns(request).map((text, index) => `CALL { WITH n MATCH ${text} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);
   const total = degreePatterns(request).map((_text, index) => `c${index}`).join(' + ');
   return {
-    anchorLine: `MATCH (a:${quoteName(anchorLabel)}) WHERE a.${quoteName(anchorStableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    anchorLine: `MATCH (a:${quoteName(anchorLabel)}) USING INDEX SEEK a:${quoteName(anchorLabel)}(${quoteName(anchorStableId)}) WHERE a.${quoteName(anchorStableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     neighbors: (targetOnly) =>
       request.first
         .filter((step) => !targetOnly || step.far === request.target)

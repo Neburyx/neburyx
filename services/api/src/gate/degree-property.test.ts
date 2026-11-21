@@ -60,7 +60,7 @@ describe('the bounded read of a type with declared degree properties', () => {
     const [call] = dataCalls(executor);
     expect(call?.cypher).toBe(
       [
-        'MATCH (n:`Widget`) WHERE n.`widgetId` IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1',
+        'MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`widgetId`) WHERE n.`widgetId` IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1',
         'CALL { WITH n MATCH (n)-[:`LINKS`]->() WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c0 }',
         'CALL { WITH n MATCH (n)<-[:`LINKS`]-() WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c1 }',
         'CALL { WITH n MATCH (n)<-[:`KNOWS`]-() WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c2 }',

@@ -55,7 +55,7 @@ function piecesOf(allowlist: SourceAllowlist, request: SharedAttributeRequest): 
       ? 'WITH a, false AS skipped'
       : `CALL { WITH a OPTIONAL MATCH (a)-[:${via}]->(s:${attribute}) WHERE ${stopListed} WITH s LIMIT 1 RETURN count(s) > 0 AS skipped }`;
   const head = [
-    `MATCH (a:${anchor}) WHERE a.${quoteName(stableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (a:${anchor}) USING INDEX SEEK a:${anchor}(${quoteName(stableId)}) WHERE a.${quoteName(stableId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     skipped,
     `CALL { WITH a MATCH (a)-[ra:${via}]->(x:${attribute})${where([...stopFree('x'), ...withinWindow('ra')])} WITH DISTINCT x LIMIT $countCap + 1 WITH collect(x) AS mine RETURN size(mine) > $countCap AS anchorBounded, mine[..$countCap] AS xs }`,
   ];

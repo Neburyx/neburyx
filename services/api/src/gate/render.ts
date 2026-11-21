@@ -195,7 +195,7 @@ function facetProbesOf(template: Template, params: Params, allowlist: SourceAllo
   return `${calls.join('\n')}\nRETURN ${list.data.map((_probe, index) => `c${index}`).join(', ')}`;
 }
 
-const ANCHOR = 'MATCH (n:@label) WHERE n.@stableId IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1';
+const ANCHOR = 'MATCH (n:@label) USING INDEX SEEK n:@label(@stableId) WHERE n.@stableId IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1';
 
 /**
  * The statement of a degree read: the anchor lookup of the entity read (the node found by its label and `stable_id` property, the first by element ID, one row more than asked for to learn whether another
@@ -214,7 +214,7 @@ function degreeCountsOf(template: Template, params: Params, allowlist: SourceAll
     if (template.readsNothing?.(params, allowlist) === true) return '';
     throw new AppError('INVALID_REQUEST');
   }
-  const anchor = ANCHOR.replace('@label', quoteName(label)).replace('@stableId', quoteName(stableId));
+  const anchor = ANCHOR.replaceAll('@label', quoteName(label)).replaceAll('@stableId', quoteName(stableId));
   const patterns = pairs.map((pair) => (pair.direction === 'out' ? `(n)-[:${quoteName(pair.relationshipType)}]->()` : `(n)<-[:${quoteName(pair.relationshipType)}]-()`));
   if (spec.form === 'cheap') return `${anchor}\nRETURN ${patterns.map((pattern, index) => `COUNT { ${pattern} } AS c${index}`).join(', ')}`;
   const calls = patterns.map((pattern, index) => `CALL { WITH n MATCH ${pattern} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);
@@ -343,7 +343,7 @@ function edgeLoadOf(template: Template, params: Params, allowlist: SourceAllowli
     // one statement for a list of IDs: each ID reads at most two relationships (the second only says that another has the ID) and answers its first by element ID; the hint makes the planner seek the ID in the index whatever the statistics say, and never scan the index or start from an end
     return `UNWIND range(0, size($${spec.listParam}) - 1) AS i CALL { WITH i MATCH ${pattern} USING INDEX SEEK r:${quoteName(row.type)}(${quoteName(row.stableId)}) WHERE r.${quoteName(row.stableId)} IN [$${spec.listParam}[i].stableId, $${spec.listParam}[i].stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT 2 } WITH i, collect([r, a, b]) AS found RETURN i, found[0][0] AS r, found[0][1] AS a, found[0][2] AS b, size(found) > 1 AS dup ORDER BY i LIMIT $limit + 1`;
   }
-  return `MATCH ${pattern} WHERE r.${quoteName(row.stableId)} IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1`;
+  return `MATCH ${pattern} USING INDEX SEEK r:${quoteName(row.type)}(${quoteName(row.stableId)}) WHERE r.${quoteName(row.stableId)} IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1`;
 }
 
 /** The statement of one aggregate read (see `Template.aggregateRead`): the mapping row that joins the two ends' entity types by the type is looked up in the allowlist, and a request that names none is refused before any read. */

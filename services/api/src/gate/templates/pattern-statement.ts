@@ -135,7 +135,7 @@ function stopCondition(request: PatternRequest, type: string): string {
 
 /** The anchor: the first node by element ID of the anchor's type with the stable ID. */
 function anchorLineOf(allowlist: SourceAllowlist, request: PatternRequest): string {
-  return `MATCH (a:${labelOf(allowlist, request.anchor)}) WHERE a.${stableIdOf(allowlist, request.anchor)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`;
+  return `MATCH (a:${labelOf(allowlist, request.anchor)}) USING INDEX SEEK a:${labelOf(allowlist, request.anchor)}(${stableIdOf(allowlist, request.anchor)}) WHERE a.${stableIdOf(allowlist, request.anchor)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`;
 }
 
 const firstHop = (allowlist: SourceAllowlist, request: PatternRequest): string =>

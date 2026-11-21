@@ -35,8 +35,8 @@ export function aggregateStatementOf(allowlist: SourceAllowlist, type: unknown, 
   const members = row.stableId === undefined ? '' : ` WHERE NOT ${usable(`r.${quoteName(row.stableId)}`)}`;
   const pattern = `(a)-[r:${quoteName(row.type)}]->(b)`;
   const anchors = [
-    `MATCH (a:${quoteName(fromLabel)}) WHERE a.${quoteName(fromId)} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
-    `MATCH (b:${quoteName(toLabel)}) WHERE b.${quoteName(toId)} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
+    `MATCH (a:${quoteName(fromLabel)}) USING INDEX SEEK a:${quoteName(fromLabel)}(${quoteName(fromId)}) WHERE a.${quoteName(fromId)} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (b:${quoteName(toLabel)}) USING INDEX SEEK b:${quoteName(toLabel)}(${quoteName(toId)}) WHERE b.${quoteName(toId)} IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1`,
   ];
   const observed = row.observedAt === undefined ? undefined : `r.${quoteName(row.observedAt)}`;
   if (form === 'summary') {

@@ -19,8 +19,8 @@ describe('the statement of the shortest-paths template', () => {
   it('is written from the mapping: both ends by stable ID, the optional second end, the paths bounded by the hop count and the limit', () => {
     expect(shortestPathsStatementOf(allowlist, pathsRequestOf(allowlist, params()))).toBe(
       [
-        'MATCH (a:`Maker`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
-        'OPTIONAL MATCH (b:`Maker`) WHERE b.`makerId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
+        'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
+        'OPTIONAL MATCH (b:`Maker`) USING INDEX SEEK b:`Maker`(`makerId`) WHERE b.`makerId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
         'OPTIONAL MATCH p = allShortestPaths((a)-[:`LINKS`*1..3]-(b))',
         'RETURN a, b, p LIMIT $limit + 1',
       ].join('\n'),
@@ -72,8 +72,8 @@ describe('the statement of the probe of the shortest-paths template', () => {
   it('counts the relationships at each end in the direction the search expands, each up to the count cap plus one', () => {
     expect(count()).toBe(
       [
-        'MATCH (a:`Maker`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
-        'OPTIONAL MATCH (b:`Maker`) WHERE b.`makerId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
+        'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
+        'OPTIONAL MATCH (b:`Maker`) USING INDEX SEEK b:`Maker`(`makerId`) WHERE b.`makerId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
         'CALL { WITH a OPTIONAL MATCH (a)-[r:`LINKS`]-() WITH r LIMIT $countCap + 1 RETURN count(r) AS fromDegree }',
         'CALL { WITH b OPTIONAL MATCH (b)-[r:`LINKS`]-() WITH r LIMIT $countCap + 1 RETURN count(r) AS toDegree }',
         'RETURN b IS NOT NULL AS toFound, fromDegree, toDegree',

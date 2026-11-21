@@ -79,7 +79,7 @@ describe('the statement of an expansion', () => {
     const { read, executor } = rig();
     await read();
     const [call] = dataCalls(executor);
-    expect(call?.cypher).toContain('MATCH (a:`Hub`) WHERE a.`hubId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1');
+    expect(call?.cypher).toContain('MATCH (a:`Hub`) USING INDEX SEEK a:`Hub`(`hubId`) WHERE a.`hubId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1');
     expect(call?.cypher).toContain('(a)-[r:`LINKED`]->(m:`Leaf`)');
     expect(call?.cypher).toContain('(a)<-[r:`TIED`]-(m:`Leaf`)');
     expect(call?.cypher).toContain('r.`seenAt`');

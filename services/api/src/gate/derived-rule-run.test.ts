@@ -45,7 +45,7 @@ describe('the statement of a rule run', () => {
     const [call] = dataCalls(executor);
     expect(call?.cypher).toBe(
       [
-        'MATCH (a:`Maker`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
+        'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
         'CALL { WITH a MATCH (a)-[:`USES_TOOL`]-(m1:`Tool`)-[:`USES_TOOL`]-(b:`Maker`) WHERE b <> a AND coalesce(m1.`isCommon`, false) <> true RETURN DISTINCT b LIMIT $limit + 1 }',
         'CALL { WITH a, b MATCH p = (a)-[:`USES_TOOL`]-(m1:`Tool`)-[:`USES_TOOL`]-(b:`Maker`) WHERE b <> a AND coalesce(m1.`isCommon`, false) <> true RETURN p LIMIT 1 }',
         'RETURN p',

@@ -39,8 +39,8 @@ const codeOf = async (promise: Promise<unknown>): Promise<string> => {
 };
 
 const ANCHORS = [
-  'MATCH (a:`Maker`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
-  'MATCH (b:`Tool`) WHERE b.`toolId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
+  'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
+  'MATCH (b:`Tool`) USING INDEX SEEK b:`Tool`(`toolId`) WHERE b.`toolId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
 ];
 const SEEN = 'r.`seenAt`';
 

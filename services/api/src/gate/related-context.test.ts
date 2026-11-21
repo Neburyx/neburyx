@@ -88,8 +88,8 @@ describe('the statement of the relationship context read', () => {
     const { read, executor } = rig();
     await read();
     const [call] = dataCalls(executor);
-    expect(call?.cypher).toContain('MATCH (a:`Maker`) WHERE a.`makerId` IN [h.stableId, h.stableInteger]');
-    expect(call?.cypher).toContain('MATCH (m:`Piece`) WHERE m.`pieceId` IN [e.stableId, e.stableInteger] AND a <> m AND EXISTS { (a)-[:`OWNS`]->(m) }');
+    expect(call?.cypher).toContain('MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [h.stableId, h.stableInteger]');
+    expect(call?.cypher).toContain('MATCH (m:`Piece`) USING INDEX SEEK m:`Piece`(`pieceId`) WHERE m.`pieceId` IN [e.stableId, e.stableInteger] AND a <> m AND EXISTS { (a)-[:`OWNS`]->(m) }');
     expect(call?.cypher).toMatch(/LIMIT \$limit \+ 1\s*$/);
     for (const value of ['C-1', 'C-2', 'A-1', 'A-2']) expect(call?.cypher).not.toContain(value);
     expect(call?.parameters['hits']).toMatchObject([{ entityType: 'maker', stableId: 'C-1' }, { entityType: 'maker', stableId: 'C-2' }]);

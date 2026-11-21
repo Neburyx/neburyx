@@ -158,7 +158,7 @@ describe('POST /v1/graph/preview-expansion', () => {
       expect(preview.ref).toEqual({ sourceId: 'demo', entityType, stableId: 'T-1' });
       expect(preview.byType.map((entry) => [entry.relationshipType, entry.direction, entry.count.value])).toEqual([['TWINNED', entityType === 'twin_a' ? 'out' : 'in', 3]]);
       expect(preview.warnings.map((warning) => warning.code)).not.toContain('duplicate-stable-id');
-      expect(degreeCalls(executor)[0]?.cypher).toContain('MATCH (n:`Twin`) WHERE n.`twinId` IN [$stableId, $stableInteger]');
+      expect(degreeCalls(executor)[0]?.cypher).toContain('MATCH (n:`Twin`) USING INDEX SEEK n:`Twin`(`twinId`) WHERE n.`twinId` IN [$stableId, $stableInteger]');
       await app.close();
     }
   });

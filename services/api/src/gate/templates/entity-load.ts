@@ -32,7 +32,7 @@ export const entityLoadTemplate: TemplateDefinition = {
   id: ENTITY_LOAD_ID,
   version: '1',
   auditAction: 'entity.load',
-  cypher: 'MATCH (n:@entity(entityType)) WHERE n.@stableId(entityType) IN [$stableId, $stableInteger] RETURN n ORDER BY elementId(n) LIMIT $limit + 1',
+  cypher: 'MATCH (n:@entity(entityType)) USING INDEX SEEK n:@entity(entityType)(@stableId(entityType)) WHERE n.@stableId(entityType) IN [$stableId, $stableInteger] RETURN n ORDER BY elementId(n) LIMIT $limit + 1',
   paramsSchema: z.strictObject({ entityType: z.string().min(1), stableId: referenceValueSchema }).transform((params) => ({ ...params, stableInteger: integerCandidateOf(params.stableId) })),
   scope: 'user',
   paged: false,

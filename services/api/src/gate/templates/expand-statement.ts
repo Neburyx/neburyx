@@ -195,7 +195,7 @@ export function expandStatementOf(allowlist: SourceAllowlist, anchorType: string
     ];
   });
   return [
-    `MATCH (a:${quoteName(anchorLabel)}) WHERE a.${quoteName(anchorId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (a:${quoteName(anchorLabel)}) USING INDEX SEEK a:${quoteName(anchorLabel)}(${quoteName(anchorId)}) WHERE a.${quoteName(anchorId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     `OPTIONAL CALL { ${parts.join(' UNION ALL ')} }`,
     `RETURN a, ${(rank === undefined ? COLUMNS : RANKED_COLUMNS).join(', ')} ORDER BY phase, ${order.kind}, ${order.value} ${order.direction}, id DESC, rtype DESC, dir DESC LIMIT $limit + 1`,
   ].join('\n');
@@ -223,7 +223,7 @@ export function expandCountStatementOf(allowlist: SourceAllowlist, anchorType: s
     return `${match} RETURN count(CASE WHEN ${inWindow('r', time).join(' AND ')} THEN r END) AS c, count(CASE WHEN ${instantOf('r', time)} IS NULL THEN r END) AS u`;
   });
   return [
-    `MATCH (a:${quoteName(anchorLabel)}) WHERE a.${quoteName(anchorId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
+    `MATCH (a:${quoteName(anchorLabel)}) USING INDEX SEEK a:${quoteName(anchorLabel)}(${quoteName(anchorId)}) WHERE a.${quoteName(anchorId)} IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,
     `CALL { ${parts.join(' UNION ALL ')} }`,
     windowed ? 'RETURN sum(c) AS total, sum(u) AS undated' : 'RETURN sum(c) AS total',
   ].join('\n');

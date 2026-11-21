@@ -65,7 +65,7 @@ describe('a bounded degree read the gate runs', () => {
     const [call] = dataCalls(executor);
     expect(call?.cypher).toBe(
       [
-        'MATCH (n:`Widget`) WHERE n.`widgetId` IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1',
+        'MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`widgetId`) WHERE n.`widgetId` IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1',
         'CALL { WITH n MATCH (n)-[:`LINKS`]->() WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c0 }',
         'CALL { WITH n MATCH (n)<-[:`LINKS`]-() WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c1 }',
         'CALL { WITH n MATCH (n)<-[:`KNOWS`]-() WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c2 }',
@@ -177,7 +177,7 @@ describe('a cheap degree read the gate runs', () => {
     const [call] = dataCalls(executor, DEGREE_PREVIEW_CHEAP_ID);
     expect(call?.cypher).toBe(
       [
-        'MATCH (n:`Widget`) WHERE n.`widgetId` IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1',
+        'MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`widgetId`) WHERE n.`widgetId` IN [$stableId, $stableInteger] WITH n ORDER BY elementId(n) LIMIT $limit + 1',
         'RETURN COUNT { (n)-[:`LINKS`]->() } AS c0, COUNT { (n)<-[:`LINKS`]-() } AS c1, COUNT { (n)<-[:`KNOWS`]-() } AS c2',
       ].join('\n'),
     );
@@ -240,7 +240,7 @@ describe('the degree read of an entity type whose label another type shares', ()
     const { read, executor } = rig(() => rowOf(4), shared);
     expect(await read({ entityType: 'twin', stableId: 'T-1' })).toMatchObject({ items: [{ found: true, counts: [{ value: 4, quality: 'exact' }], duplicate: false }] });
     const [call] = dataCalls(executor);
-    expect(call?.cypher).toContain('MATCH (n:`Widget`) WHERE n.`twinId` IN [$stableId, $stableInteger]');
+    expect(call?.cypher).toContain('MATCH (n:`Widget`) USING INDEX SEEK n:`Widget`(`twinId`) WHERE n.`twinId` IN [$stableId, $stableInteger]');
     expect(call?.cypher).toContain('(n)-[:`PAIRS`]->()');
     expect(call?.cypher).not.toContain('`LINKS`');
   });

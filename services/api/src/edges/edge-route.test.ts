@@ -74,7 +74,7 @@ describe('GET /v1/edges/{ref}', () => {
     expect(detail.evidence).toEqual({ status: 'available', records: [{ sourceRecordId: 'R-1', linkable: true }] });
     const [call] = edgeCalls();
     expect(call).toMatchObject({ templateId: 'edge-load', accessMode: 'READ', rowLimit: 2 });
-    expect(call?.cypher).toBe('MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) WHERE r.`linkId` IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1');
+    expect(call?.cypher).toBe('MATCH (a:`Widget`)-[r:`MADE_FROM`]->(b:`Gadget`) USING INDEX SEEK r:`MADE_FROM`(`linkId`) WHERE r.`linkId` IN [$stableId, $stableInteger] RETURN r, a, b ORDER BY elementId(r) LIMIT $limit + 1');
     expect(events.filter((event) => event.action === 'edge.load')).toEqual([expect.objectContaining({ result: 'success', sourceId: 'demo' })]);
     await app.close();
   });
