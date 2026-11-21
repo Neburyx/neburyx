@@ -254,6 +254,12 @@
     "Message:\nWhich accounts sent money to it?\n\nEarlier turns of this thread, oldest first:\n1. ask \"merchants-an-account-paid\"; ran for account = c1\n2. refused (unplaced)\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002110\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-that-paid-an-account\",\"entities\":{\"account\":\"AC-0002110\"}}"
     },
+    "Message:\nDescribe the two devices and the account on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000120\"\nc2 | \"device\" | \"DV-000121\"\nc3 | \"account\" | \"AC-0002120\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhich accounts use this device?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2, c3\n\nElements of those turns, by key | title | type:\nc1 | \"DV-000120\" | \"device\"\nc2 | \"DV-000121\" | \"device\"\nc3 | \"AC-0002120\" | \"account\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"device\" | \"DV-000120\" (also in the earlier turns)\nc2 | \"device\" | \"DV-000121\" (also in the earlier turns)\nc3 | \"account\" | \"AC-0002120\" (also in the earlier turns)": {
+      "reply": "{\"route\":\"clarify\",\"intent\":\"accounts-using-a-device\",\"role\":\"device\",\"entities\":{},\"candidates\":[\"c1\",\"c2\"]}"
+    },
     "Message:\nWhat is shown here, claimants and claims?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claimant\" | \"CT-00100\"\nc2 | \"claim\" | \"CL-001007\"": {
       "reply": "{\"route\":\"view\"}"
     },

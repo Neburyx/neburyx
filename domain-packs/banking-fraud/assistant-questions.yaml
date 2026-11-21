@@ -257,3 +257,9 @@ threads:
         expect: { route: refuse, cause: unplaced }
       - message: "Which accounts sent money to it?"
         expect: { route: ask, intent: accounts-that-paid-an-account, entities: { account: AC-0002110 } }
+  - id: two-devices-which-accounts
+    turns:
+      - message: "Describe the two devices and the account on screen."
+        expect: { route: view, view: [{ entityType: device, stableId: DV-000120 }, { entityType: device, stableId: DV-000121 }, { entityType: account, stableId: AC-0002120 }] }
+      - message: "Which accounts use this device?"
+        expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000120 }, { entityType: device, stableId: DV-000121 }] }
