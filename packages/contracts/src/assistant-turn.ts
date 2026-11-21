@@ -179,13 +179,42 @@ export const assistantTableSchema = z
 
 export type AssistantTable = z.infer<typeof assistantTableSchema>;
 
+/** The most sentences of the overview that may stand beside a verdict refusal. */
+export const ASSISTANT_OVERVIEW_SENTENCES_MAX = 12;
+
+/**
+ * A neutral overview of the elements in view, drafted and checked as a view answer is: sentences that each cite elements kept by the checks, the citations they name (and no others), the two lines of coverage the server writes, and the model that wrote
+ * the sentences. It says what is connected and holds no assessment.
+ */
+const assistantOverviewSchema = z
+  .strictObject({
+    sentences: z.array(summarySentenceSchema).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX),
+    citations: z.array(z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) })).min(1),
+    coverage: z.strictObject({ retrieval: text, summary: text }),
+    model: text,
+  })
+  .refine((overview) => overview.sentences.every((sentence) => sentence.cites.length > 0), { message: 'every sentence of an overview cites an element', path: ['sentences'] })
+  .refine(
+    (overview) => {
+      const known = new Set(overview.citations.map((citation) => citation.key));
+      const cited = new Set(overview.sentences.flatMap((sentence) => sentence.cites));
+      return [...cited].every((key) => known.has(key)) && [...known].every((key) => cited.has(key));
+    },
+    { message: 'the citations of an overview are exactly the keys its sentences cite', path: ['citations'] },
+  );
+export type AssistantOverview = z.infer<typeof assistantOverviewSchema>;
+
 export const assistantTurnAnswerSchema = z.union([
-  z.strictObject({
-    status: z.literal('answered'),
-    route: z.literal('refuse'),
-    cause: z.enum(ASSISTANT_REFUSAL_CAUSES),
-    sentence: text,
-  }),
+  z
+    .strictObject({
+      status: z.literal('answered'),
+      route: z.literal('refuse'),
+      cause: z.enum(ASSISTANT_REFUSAL_CAUSES),
+      sentence: text,
+      /** A refusal of a verdict may carry what the investigation connects, beside its fixed sentence; no other cause carries one. */
+      overview: assistantOverviewSchema.optional(),
+    })
+    .refine((answer) => answer.overview === undefined || (answer.cause === 'verdict' && answer.sentence === ASSISTANT_REFUSAL_SENTENCES.verdict), { message: 'only a verdict refusal carries an overview, and its sentence stays the fixed one', path: ['overview'] }),
   z.strictObject({ status: z.literal('not-answered'), route: z.enum(['ask', 'view']), sentence: text }),
   /**
    * A question that asks only what types or links mean, answered by the server from the operator's text: each type the mapping describes with its description as the operator wrote it, and the fixed sentence for the types it does not. No model wrote any of it.

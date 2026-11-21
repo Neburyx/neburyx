@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+import { ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
 
 const body = { sourceId: 'banking', investigationId: 'inv-1', message: 'Which accounts share a device?', viewElementKeys: ['n1', 'n2'] };
 
@@ -97,6 +97,52 @@ describe('the assistant turn answer: failures', () => {
     expect(assistantTurnAnswerSchema.safeParse({ status: 'unavailable', kind: 'service' }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ status: 'too-large', sentence: 'x' }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ status: 'too-long', words: 1243, limit: 1000 }).success).toBe(true);
+  });
+});
+
+describe('the overview of a verdict refusal', () => {
+  const ref = (stableId: string) => ({ sourceId: 'demo', entityType: 'widget', stableId });
+  const overview = (over: Record<string, unknown> = {}) => ({
+    sentences: [{ text: 'W-1 is linked to W-2.', cites: ['n1', 'n2'] }],
+    citations: [{ key: 'n1', kind: 'entity', ref: ref('W-1') }, { key: 'n2', kind: 'entity', ref: ref('W-2') }],
+    coverage: { retrieval: '2 shown · exact', summary: 'The overview cites 2 of the 2 shown elements.' },
+    model: 'stub-model',
+    ...over,
+  });
+  const verdict = (over: Record<string, unknown> = {}) => ({ status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict, overview: overview(), ...over });
+  const parses = (value: unknown) => assistantTurnAnswerSchema.safeParse(value).success;
+
+  it('is carried by a verdict refusal with one sentence and with the most sentences, and keeps every member', () => {
+    expect(parses(verdict())).toBe(true);
+    const many = Array.from({ length: ASSISTANT_OVERVIEW_SENTENCES_MAX }, (_unused, index) => ({ text: `Sentence ${index}.`, cites: ['n1'] }));
+    expect(parses(verdict({ overview: overview({ sentences: many, citations: [{ key: 'n1', kind: 'entity', ref: ref('W-1') }] }) }))).toBe(true);
+    expect(parses(verdict({ overview: overview({ sentences: [...many, { text: 'One more.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref: ref('W-1') }] }) }))).toBe(false);
+    const parsed = assistantTurnAnswerSchema.parse(verdict());
+    expect(parsed).toMatchObject({ overview: { model: 'stub-model', coverage: { retrieval: '2 shown · exact' } } });
+  });
+
+  it('is refused on a refusal of any other cause', () => {
+    for (const cause of ASSISTANT_REFUSAL_CAUSES.filter((held) => held !== 'verdict')) {
+      expect(parses(verdict({ cause, sentence: ASSISTANT_REFUSAL_SENTENCES[cause] })), cause).toBe(false);
+    }
+  });
+
+  it('is refused when it has no sentence, a sentence citing nothing, a citation no sentence cites, a cited key with no citation, an unknown member, or a sentence that is not the fixed one', () => {
+    for (const bad of [
+      verdict({ overview: overview({ sentences: [] }) }),
+      verdict({ overview: overview({ sentences: [{ text: 'W-1 exists.', cites: [] }], citations: [] }) }),
+      verdict({ overview: overview({ sentences: [{ text: 'W-1 exists.', cites: ['n1'] }] }) }),
+      verdict({ overview: overview({ sentences: [{ text: 'W-1 is linked to W-2.', cites: ['n1', 'n2', 'n3'] }] }) }),
+      verdict({ overview: overview({ extra: 1 }) }),
+      verdict({ sentence: 'It is not guilty.' }),
+    ]) {
+      expect(parses(bad), JSON.stringify(bad).slice(0, 120)).toBe(false);
+    }
+  });
+
+  it('leaves a refusal without an overview as it was, and the fixed sentence of a refusal is only checked when an overview is present', () => {
+    expect(parses({ status: 'answered', route: 'refuse', cause: 'verdict', sentence: ASSISTANT_REFUSAL_SENTENCES.verdict })).toBe(true);
+    expect(parses({ status: 'answered', route: 'refuse', cause: 'verdict', sentence: 'x' })).toBe(true);
   });
 });
 

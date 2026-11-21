@@ -6531,6 +6531,306 @@
               "sentence": {
                 "type": "string",
                 "minLength": 1
+              },
+              "overview": {
+                "type": "object",
+                "properties": {
+                  "sentences": {
+                    "minItems": 1,
+                    "maxItems": 12,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "cites": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        }
+                      },
+                      "required": [
+                        "text",
+                        "cites"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "citations": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "entity",
+                            "relationship"
+                          ]
+                        },
+                        "ref": {
+                          "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "sourceId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "entityType": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "stableId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "sourceId",
+                                "entityType",
+                                "stableId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "type": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "from": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "to": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "stableId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "type",
+                                    "from",
+                                    "to",
+                                    "stableId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "aggregate": {
+                                      "type": "object",
+                                      "properties": {
+                                        "type": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "from": {
+                                          "type": "object",
+                                          "properties": {
+                                            "sourceId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "entityType": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "stableId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "sourceId",
+                                            "entityType",
+                                            "stableId"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "to": {
+                                          "type": "object",
+                                          "properties": {
+                                            "sourceId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "entityType": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "stableId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "sourceId",
+                                            "entityType",
+                                            "stableId"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "type",
+                                        "from",
+                                        "to"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "aggregate"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "sourceId": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "derived": {
+                                      "type": "object",
+                                      "properties": {
+                                        "ruleId": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "from": {
+                                          "type": "object",
+                                          "properties": {
+                                            "sourceId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "entityType": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "stableId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "sourceId",
+                                            "entityType",
+                                            "stableId"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        "to": {
+                                          "type": "object",
+                                          "properties": {
+                                            "sourceId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "entityType": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            },
+                                            "stableId": {
+                                              "type": "string",
+                                              "minLength": 1
+                                            }
+                                          },
+                                          "required": [
+                                            "sourceId",
+                                            "entityType",
+                                            "stableId"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      },
+                                      "required": [
+                                        "ruleId",
+                                        "from",
+                                        "to"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  },
+                                  "required": [
+                                    "sourceId",
+                                    "derived"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "key",
+                        "kind",
+                        "ref"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "coverage": {
+                    "type": "object",
+                    "properties": {
+                      "retrieval": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "summary": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "required": [
+                      "retrieval",
+                      "summary"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "model": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "sentences",
+                  "citations",
+                  "coverage",
+                  "model"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
