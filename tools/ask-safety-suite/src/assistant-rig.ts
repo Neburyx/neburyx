@@ -10,6 +10,10 @@ export interface AssistantRigOptions {
   readonly name?: (id: string) => string;
   /** The most steps a turn may make; the loop is on from two. */
   readonly maxSteps?: number;
+  /** The most model calls a turn may make. */
+  readonly maxCalls?: number;
+  /** Settings of the assistant, by name (`NEBURYX_ASSISTANT_*`). */
+  readonly settings?: Readonly<Record<string, string>>;
   /** Mounts the stores of the extension, for a turn that may wait for a confirmation. */
   readonly stores?: boolean;
   /** A description for a type of the source's mapping, by the name of the type. */
@@ -35,6 +39,8 @@ export interface AssistantRig {
   reads(): ExecuteCall[];
   /** The investigation the turns are made in. */
   readonly investigationId: string;
+  /** One streamed turn (`Accept: application/x-ndjson`): the replies as for `turn`, and every line the stream wrote. */
+  stream(message: string, replies: readonly string[], over?: Record<string, unknown>): Promise<{ readonly status: number; readonly contentType: string | null; readonly lines: Record<string, unknown>[]; readonly text: string }>;
   /** The scripted source's executor: a call made on it directly is a read around the gate. */
   readonly executor: AssistantApp['executor'];
   /** Opens another investigation of the same person on the same source. */
@@ -52,7 +58,7 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.maxCalls === undefined ? {} : { maxCalls: options.maxCalls }), ...(options.settings === undefined ? {} : { settings: options.settings }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
   return {
     stub,
     store: app.store,
@@ -67,6 +73,13 @@ export async function startAssistantRig(options: AssistantRigOptions): Promise<A
     turn: (message, replies, over) => {
       stub.replies.push(...replies);
       return app.turn(message, over);
+    },
+    stream: async (message, replies, over) => {
+      stub.replies.push(...replies);
+      const response = await app.sendTurn(message, new AbortController().signal, over, { accept: 'application/x-ndjson' });
+      if (response === undefined) throw new Error('the stream did not open');
+      const text = await response.text();
+      return { status: response.status, contentType: response.headers.get('content-type'), lines: text.split('\n').filter((line) => line !== '').map((line) => JSON.parse(line) as Record<string, unknown>), text };
     },
     close: app.close,
   };
