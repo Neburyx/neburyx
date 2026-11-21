@@ -116,6 +116,24 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     expect(saved()).toBe(before);
   });
 
+  it('makes no further call when the stream is closed while the overview beside a verdict refusal is pending, and leaves what the person has as it was', async () => {
+    const before = saved();
+    model.replies.push(JSON.stringify({ route: 'refuse', cause: 'verdict' }), HOLD);
+    const controller = new AbortController();
+    const response = await app.sendTurn('Is this customer laundering money?', controller.signal, { viewElementKeys: [JSON.stringify(['node', 'demo', 'widget', 'W-1'])] }, NDJSON);
+    await readUntil(response, (seen) => steps(seen).includes('answering'));
+    await until(() => model.held() > 0, 'the overview call to be pending');
+    const atCancel = started();
+    controller.abort();
+    await until(() => model.held() === 0, 'the held call to be given up by the application');
+    model.release('{"sentences":[]}');
+    await pause();
+    expectNothingStartedSince(atCancel, started());
+    expect(model.requests).toHaveLength(2);
+    expect(closing()).toMatchObject([{ detail: { turn: { outcome: 'cancelled' } } }]);
+    expect(saved()).toBe(before);
+  });
+
   it('closes the turn as cancelled when the stream is closed before its first line, and a later turn on the same application is read as usual', async () => {
     model.replies.push(HOLD);
     const controller = new AbortController();

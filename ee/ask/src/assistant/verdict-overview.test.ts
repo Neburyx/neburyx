@@ -130,6 +130,11 @@ describe('a verdict refusal with no overview to show', () => {
     expect(overviewCalls(t)).toHaveLength(0);
   });
 
+  it('still shows the overview, unblocked, when the sink of audit events is failing', async () => {
+    const { answer } = await turn({ sink: 'fails' });
+    expect(overviewOf(answer).sentences).toHaveLength(1);
+  });
+
   it('is the plain refusal when no overview is configured, with the router call only', async () => {
     const t = await rig({ reply: VERDICT });
     expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toEqual(PLAIN);
