@@ -100,17 +100,22 @@ export async function buildContext(options: { readonly turns: readonly Assistant
 }
 
 const NO_VIEW = '(none)';
+/** What ends the line of an element in view that the analyst has selected on the canvas. */
+const SELECTED_MARK = ' (selected)';
 
 /**
  * The elements in view as the router names them: each entity not already in the thread's context gets the next key of the same table (`c4`), with its type and its id as the client sent them, and each relationship a key
  * of its own with its type and the two ends the client's key holds; at most as many as a view may name. A key resolves only to a reference that came from the view or from the thread: nothing the model writes is taken for one. No element is read, so
  * nothing here is a title. A relationship's key names nothing a role can take. The thread's own text is left as it was, for the calls that are given the elements themselves.
  */
-export function withView(context: TurnContext | undefined, view: ElementRefs, sourceId: string): TurnContext {
+export function withView(context: TurnContext | undefined, view: ElementRefs, sourceId: string, selected?: ElementRefs): TurnContext {
   const keys = new Map(context?.keys);
   const shown = new Map(context?.shown);
   const heldKey = new Map([...keys].map(([key, ref]) => [canonical(ref), key]));
   const fromView = new Set<string>();
+  // the elements the analyst has selected: their lines end in the mark the router's prompt explains
+  const marked = new Set([...(selected?.entities ?? []), ...(selected?.edges ?? []), ...(selected?.aggregates ?? []), ...(selected?.derived ?? [])].map((ref) => canonicalText(ref)));
+  const markOf = (ref: object): string => (marked.has(canonicalText(ref)) ? SELECTED_MARK : '');
   let number = Math.max(0, ...[...keys.keys()].map((key) => Number(key.slice(1))));
   const lines: string[] = [];
   const entities: string[] = [];
@@ -118,7 +123,7 @@ export function withView(context: TurnContext | undefined, view: ElementRefs, so
     if (ref.sourceId !== sourceId || lines.length + entities.length >= ASSISTANT_VIEW_KEYS_MAX) continue;
     const held = heldKey.get(canonical(ref));
     if (held !== undefined) {
-      entities.push(`${held} | ${JSON.stringify(ref.entityType)} | ${JSON.stringify(ref.stableId)} (also in the earlier turns)`);
+      entities.push(`${held} | ${JSON.stringify(ref.entityType)} | ${JSON.stringify(ref.stableId)} (also in the earlier turns)${markOf(ref)}`);
       continue;
     }
     number += 1;
@@ -127,16 +132,16 @@ export function withView(context: TurnContext | undefined, view: ElementRefs, so
     shown.set(key, { title: ref.stableId, type: ref.entityType });
     heldKey.set(canonical(ref), key);
     fromView.add(key);
-    entities.push(`${key} | ${JSON.stringify(ref.entityType)} | ${JSON.stringify(ref.stableId)}`);
+    entities.push(`${key} | ${JSON.stringify(ref.entityType)} | ${JSON.stringify(ref.stableId)}${markOf(ref)}`);
   }
-  const relationship = (detail: string): void => {
+  const relationship = (detail: string, ref: object): void => {
     if (lines.length + entities.length >= ASSISTANT_VIEW_KEYS_MAX) return;
     number += 1;
-    lines.push(`c${number} | ${detail}`);
+    lines.push(`c${number} | ${detail}${markOf(ref)}`);
   };
-  for (const edge of view.edges) if (edge.sourceId === sourceId) relationship(`relationship | ${JSON.stringify(edge.type)} | ${JSON.stringify(edge.from)} → ${JSON.stringify(edge.to)} | ${JSON.stringify(edge.stableId)}`);
-  for (const edge of view.aggregates) if (edge.sourceId === sourceId) relationship(`relationship | ${JSON.stringify(edge.aggregate.type)} | ${JSON.stringify(edge.aggregate.from.stableId)} → ${JSON.stringify(edge.aggregate.to.stableId)} | aggregate`);
-  for (const edge of view.derived) if (edge.sourceId === sourceId) relationship(`relationship | ${JSON.stringify(edge.derived.ruleId)} | ${JSON.stringify(edge.derived.from.stableId)} → ${JSON.stringify(edge.derived.to.stableId)} | derived`);
+  for (const edge of view.edges) if (edge.sourceId === sourceId) relationship(`relationship | ${JSON.stringify(edge.type)} | ${JSON.stringify(edge.from)} → ${JSON.stringify(edge.to)} | ${JSON.stringify(edge.stableId)}`, edge);
+  for (const edge of view.aggregates) if (edge.sourceId === sourceId) relationship(`relationship | ${JSON.stringify(edge.aggregate.type)} | ${JSON.stringify(edge.aggregate.from.stableId)} → ${JSON.stringify(edge.aggregate.to.stableId)} | aggregate`, edge);
+  for (const edge of view.derived) if (edge.sourceId === sourceId) relationship(`relationship | ${JSON.stringify(edge.derived.ruleId)} | ${JSON.stringify(edge.derived.from.stableId)} → ${JSON.stringify(edge.derived.to.stableId)} | derived`, edge);
   const listed = [...entities, ...lines];
   const viewText = listed.length === 0 ? NO_VIEW : ['Elements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):', ...listed].join('\n');
   return { text: context?.text ?? '', keys, shown, recent: context?.recent ?? [], viewText, fromView };

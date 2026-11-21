@@ -129,4 +129,10 @@ describe('the shipped router prompt and the reply format', () => {
     const { prompt } = await shippedText();
     for (const multiRead of [false, true]) expect(buildAssistantInstructions(prompt, multiRead).text).toContain('its first character is { and its last is }');
   });
+
+  it('tells the model what a selected element is and how it narrows what "this" and "it" mean, and lets a clarification offer the elements in view', async () => {
+    const { prompt } = await shippedText();
+    for (const phrase of ['ends in `(selected)`', '"This", "it" and "the selected one" mean the selected elements', 'when exactly one selected element is of the type the intent needs and no element of the earlier turns also fits', 'when two or more selected elements fit, or a selected element and an element of the earlier turns both fit, choose `clarify` with all of them as candidates and never choose one yourself', 'a selected element of another type than the role needs is no referent for that role', 'When nothing is selected']) expect(prompt).toContain(phrase);
+    for (const multiRead of [false, true]) expect(buildAssistantInstructions(prompt, multiRead).text).toContain('2 to 5 keys of elements of earlier turns or of the elements in view that the message may mean');
+  });
 });

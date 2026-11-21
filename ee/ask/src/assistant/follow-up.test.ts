@@ -34,7 +34,7 @@ const keyOf = (values: string, title: string): string | undefined => new RegExp(
 interface Follow {
   readonly rig: Rig;
   readonly threads: MemoryAssistantThreadStore;
-  readonly send: (message: string, over?: Parameters<Rig['request']>[1], viewElementKeys?: readonly string[], summaryToken?: string) => ReturnType<typeof answerOf>;
+  readonly send: (message: string, over?: Parameters<Rig['request']>[1], viewElementKeys?: readonly string[], summaryToken?: string, selectionKeys?: readonly string[]) => ReturnType<typeof answerOf>;
 }
 
 /** A rig whose router answers each call from a script: the first turn runs the intent for A-1, the next ones are what the test names. */
@@ -42,8 +42,8 @@ async function follow(reply: (values: string, call: number) => FixtureReply, opt
   failures.length = 0;
   let call = 0;
   const made = await rig({ ...options, threadStore: threads, records: immediate, reply: (request) => reply(request.values, call++) });
-  const send: Follow['send'] = async (message, over, viewElementKeys = BASE.viewElementKeys, summaryToken) => {
-    const answer = answerOf(made.route.handler(made.request({ ...BASE, message, viewElementKeys, ...(summaryToken === undefined ? {} : { summaryToken }) }, { principalId: PERSON, ...over })));
+  const send: Follow['send'] = async (message, over, viewElementKeys = BASE.viewElementKeys, summaryToken, selectionKeys) => {
+    const answer = answerOf(made.route.handler(made.request({ ...BASE, message, viewElementKeys, ...(summaryToken === undefined ? {} : { summaryToken }), ...(selectionKeys === undefined ? {} : { selectionKeys }) }, { principalId: PERSON, ...over })));
     await drain();
     return answer;
   };
@@ -835,3 +835,92 @@ describe('the subject of a step for an element of the thread', () => {
   });
 });
 
+const gadgetKey = (id: string): string => JSON.stringify(['node', 'demo', 'gadget', id]);
+/** The key the router was shown for an element of the view, found by the id on its line. */
+const keyInView = (values: string, id: string): string => {
+  const found = new RegExp(`^(c\\d+) \\| "[a-z]+" \\| "${id}"`, 'm').exec(values);
+  if (found?.[1] === undefined) throw new Error(`no line for ${id}`);
+  return found[1];
+};
+const routerValuesOf = (t: Follow): string => t.rig.fixture.calls.find((call) => call.promptId === 'assistant.route')?.values ?? '';
+
+describe('the elements selected on the canvas, as the router is shown them and as it names them', () => {
+  const VIEW = [widgetKey('W-1'), widgetKey('W-2'), widgetKey('W-3')];
+
+  it('ends the line of each selected element in the view with the mark, and no other', async () => {
+    const t = await follow(() => naming('c99'), { readNodes: everyone });
+    await t.send(FOLLOW_UP, undefined, VIEW, undefined, [widgetKey('W-2')]);
+    const values = routerValuesOf(t);
+    expect(values).toContain('"widget" | "W-2" (selected)');
+    expect(values).not.toContain('"W-1" (selected)');
+    expect(values).not.toContain('"W-3" (selected)');
+  });
+
+  it('puts the mark on the one line of an element that is also in the earlier turns', async () => {
+    const t = await follow(() => naming('c99'), { readNodes: everyone });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('W-2') }] }));
+    await t.send(FOLLOW_UP, undefined, VIEW, undefined, [widgetKey('W-2')]);
+    const lines = routerValuesOf(t).split('\n').filter((line) => line.includes('"W-2"') && line.startsWith('c'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('(also in the earlier turns) (selected)');
+  });
+
+  it('gives the router the values it had before when nothing is selected, an empty list is sent, or every key is dropped', async () => {
+    const without = await follow(() => naming('c99'), { readNodes: everyone });
+    await without.send(FOLLOW_UP, undefined, VIEW);
+    const baseline = routerValuesOf(without);
+    for (const selection of [[], [widgetKey('W-9')], [JSON.stringify(['node', 'other', 'widget', 'W-1'])]]) {
+      const t = await follow(() => naming('c99'), { readNodes: everyone });
+      await t.send(FOLLOW_UP, undefined, VIEW, undefined, selection);
+      expect(routerValuesOf(t), JSON.stringify(selection)).toBe(baseline);
+    }
+    expect(baseline).not.toContain('(selected)');
+  });
+
+  it('(a) runs the intent for the one selected element the router names', async () => {
+    const t = await follow((values) => naming(keyInView(values, 'W-2')), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, VIEW, undefined, [widgetKey('W-2')]);
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(ranFor(t.rig)).toHaveLength(1);
+    expect(ranFor(t.rig)[0]).toContain('"stableId":"W-2"');
+  });
+
+  it('(b) asks which when the router asks for a choice between two selected elements, listing exactly those two', async () => {
+    const t = await follow((values) => clarifying([keyInView(values, 'W-2'), keyInView(values, 'W-3')]), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, VIEW, undefined, [widgetKey('W-2'), widgetKey('W-3')]);
+    expect(answer.status === 'clarification' ? answer.candidates.map((candidate) => candidate.title) : []).toEqual(['Account W-2', 'Account W-3']);
+    expect(t.rig.runs).toHaveLength(0);
+  });
+
+  it('(c) asks among the elements of the role’s type when the router names a selected element of another type', async () => {
+    const t = await follow((values) => naming(keyInView(values, 'Z-0')), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, [widgetKey('W-1'), widgetKey('W-2'), gadgetKey('Z-0')], undefined, [gadgetKey('Z-0')]);
+    expect(answer.status === 'clarification' ? answer.candidates.map((candidate) => candidate.title) : []).toEqual(['Account W-1', 'Account W-2']);
+    expect(t.rig.runs).toHaveLength(0);
+  });
+
+  it('(c) ends as not placed when no element of the role’s type is in view or in the thread', async () => {
+    const t = await follow((values) => naming(keyInView(values, 'Z-0')), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, [gadgetKey('Z-0')], undefined, [gadgetKey('Z-0')]);
+    expect(answer).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+  });
+
+  it('(d) asks which when a selected element and an element of an earlier turn both fit, listing both', async () => {
+    const t = await follow((values) => clarifying([keyInView(values, 'W-1'), keyInView(values, 'W-2')]), { readNodes: everyone });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('W-1') }] }));
+    const answer = await t.send(FOLLOW_UP, undefined, [widgetKey('W-1'), widgetKey('W-2')], undefined, [widgetKey('W-2')]);
+    expect(answer.status === 'clarification' ? answer.candidates.map((candidate) => candidate.title).sort() : []).toEqual(['Account W-1', 'Account W-2']);
+  });
+
+  it('(twin) asks which between two elements of the type in view when nothing is selected, as the selection narrows only when it is there', async () => {
+    const t = await follow((values) => clarifying([keyInView(values, 'W-2'), keyInView(values, 'W-3')]), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, VIEW);
+    expect(answer).toMatchObject({ status: 'clarification' });
+  });
+
+  it('reads a title that looks like a mark as data: it marks nothing', async () => {
+    const t = await follow(() => naming('c99'), { readNodes: everyone });
+    await t.send(FOLLOW_UP, undefined, [widgetKey('W-1 (selected)'), widgetKey('W-2')]);
+    expect(routerValuesOf(t)).not.toContain('"W-2" (selected)');
+  });
+});

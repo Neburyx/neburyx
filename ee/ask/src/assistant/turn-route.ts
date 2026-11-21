@@ -34,6 +34,7 @@ import { withTemplateTools } from './tool-templates.js';
 import { AuditUnavailableError, gateClientOf, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { meaningAnswerOf } from './meaning.js';
 import { stepsOf } from './steps.js';
+import { selectedKeysOf } from './selection.js';
 import { buildPatternCatalog } from '../patterns/index.js';
 import { coverageOf } from './coverage.js';
 import { readOfAnswer } from './reads.js';
@@ -476,7 +477,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       }
       // the elements in view get keys of the same table as the thread's context, so that "this account" can be named; a key resolves only to a reference of the view or the thread
       const viewRead = readViewKeys(body.viewElementKeys, body.sourceId);
-      const routed = withView(context, viewRead.ok ? viewRead.refs : { entities: [], edges: [], aggregates: [], derived: [] }, body.sourceId);
+      // the elements the analyst has selected on the canvas that are in the view: a hint, marked on their lines for the router
+      const selectedKeys = selectedKeysOf(body.viewElementKeys, 'selectionKeys' in body ? body.selectionKeys : undefined);
+      const selectedRead = selectedKeys.length === 0 ? undefined : readViewKeys(selectedKeys, body.sourceId);
+      const routed = withView(context, viewRead.ok ? viewRead.refs : { entities: [], edges: [], aggregates: [], derived: [] }, body.sourceId, selectedRead?.ok === true ? selectedRead.refs : undefined);
       let outcome: RouterOutcome;
       try {
         outcome = await router({ sourceId: body.sourceId, investigationId: body.investigationId, message, viewElementKeys: body.viewElementKeys, ...(routed.viewText === undefined ? {} : { viewText: routed.viewText }), actorId: request.principalId, actorRole: request.principalRole, traceId: request.traceId, ...(context === undefined && summary === undefined ? {} : { context: [context?.text, summary === undefined ? undefined : ATTACHED_SUMMARY_LINE].filter((part) => part !== undefined).join('\n\n') }), accepts: (reply) => reply.route !== 'clarify' || candidatesOfReply(reply, routed, options.folder(), body.sourceId) !== undefined, ...(built === undefined ? {} : { patternCatalog: built.catalog.text }) }, AbortSignal.any([request.signal, deadline]));
