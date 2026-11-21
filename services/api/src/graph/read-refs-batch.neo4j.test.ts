@@ -246,6 +246,18 @@ describe(`the plan of a read of many references in one statement, on ${NEO4J_SER
     expect(edge.summary.notifications.some((notice) => /hint|index/i.test(`${notice.title} ${notice.description}`))).toBe(true);
   });
 
+  it('answers a single read the same way when the index named by the hint does not exist: the node or the edge is found, with a warning and a scan, as for the batched read', async () => {
+    const hinted = (summary: { readonly notifications: readonly { readonly title: string; readonly description: string }[] }) => summary.notifications.some((notice) => /hint|index/i.test(`${notice.title} ${notice.description}`));
+    for (const stableId of ['b1', '5']) {
+      const entity = await run(entityLoadTemplate, { entityType: 'bare', stableId }, 1);
+      expect(entity.records, stableId).toHaveLength(1);
+      expect(hinted(entity.summary), stableId).toBe(true);
+    }
+    const edge = await run(edgeLoadTemplate, { type: 'NOINDEX', from: 'maker', to: 'tool', stableId: 'n1' }, 1);
+    expect(edge.records).toHaveLength(1);
+    expect(hinted(edge.summary)).toBe(true);
+  });
+
   it('is refused by the server, never answered as missing, when the only index holds text (the gate refuses such a read first when it can list the indexes)', async () => {
     for (const id of ['5', 'tx1']) await expect(run(entityLoadManyTemplate, { entityType: 'texty', refs: [el('texty', id)] }, 1)).rejects.toMatchObject({ code: 'Neo.DatabaseError.Statement.ExecutionFailed' });
     for (const id of ['5', 'tu1']) await expect(run(edgeLoadManyTemplate, { type: 'TEXTONLY', from: 'maker', to: 'tool', refs: [{ stableId: id }] }, 1)).rejects.toMatchObject({ code: 'Neo.DatabaseError.Statement.ExecutionFailed' });
@@ -271,7 +283,8 @@ describe(`the plan of a read of many references in one statement, on ${NEO4J_SER
     }
     expect(answers.get('entity single')).toBe(answers.get('entity batched'));
     expect(answers.get('edge single')).toBe(answers.get('edge batched'));
-    expect(answers.get('entity single')).not.toMatch(/^INTERNAL_ERROR:$/);
+    // the mapped error of a read the source failed: the gate's own code and reason, audited, with none of the server's text
+    for (const answer of answers.values()) expect(answer).toBe('INTERNAL_ERROR:read-failed');
   });
 
   it('reads the relationship of an ID at the end of a tool with thousands of relationships by the index too, at a cost of a few database hits for each ID', async () => {

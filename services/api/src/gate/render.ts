@@ -214,7 +214,7 @@ function degreeCountsOf(template: Template, params: Params, allowlist: SourceAll
     if (template.readsNothing?.(params, allowlist) === true) return '';
     throw new AppError('INVALID_REQUEST');
   }
-  const anchor = ANCHOR.replaceAll('@label', quoteName(label)).replaceAll('@stableId', quoteName(stableId));
+  const anchor = ANCHOR.replaceAll('@label', () => quoteName(label)).replaceAll('@stableId', () => quoteName(stableId));
   const patterns = pairs.map((pair) => (pair.direction === 'out' ? `(n)-[:${quoteName(pair.relationshipType)}]->()` : `(n)<-[:${quoteName(pair.relationshipType)}]-()`));
   if (spec.form === 'cheap') return `${anchor}\nRETURN ${patterns.map((pattern, index) => `COUNT { ${pattern} } AS c${index}`).join(', ')}`;
   const calls = patterns.map((pattern, index) => `CALL { WITH n MATCH ${pattern} WITH 1 AS hit LIMIT $countCap + 1 RETURN count(*) AS c${index} }`);

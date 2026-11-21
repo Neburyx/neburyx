@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { patternAllowlist } from '../testing/pattern-fixtures.js';
-import { LOOKUP_INVENTORY } from '../testing/stable-id-lookups.js';
+import { LOOKUP_ALLOWLIST, LOOKUP_INVENTORY, LOOKUP_SHAPES } from '../testing/stable-id-lookups.js';
 import { defaultCatalog } from './assemble.js';
 import { renderTemplate } from './render.js';
 
@@ -10,7 +9,7 @@ import { renderTemplate } from './render.js';
  * the elements that have no value for the property. The wrapped read has the same value and no index can serve it. The one exception is a lookup that a `USING INDEX SEEK` hint serves: the hint needs the direct read.
  * The check renders every template of the inventory and fails for a condition with a direct read, so that a statement added later cannot bring it back; the oracle suite of the Neo4j tests is the guard on the server.
  */
-const allowlist = patternAllowlist();
+const allowlist = LOOKUP_ALLOWLIST;
 const catalog = defaultCatalog();
 
 const KEYWORD = /^(WITH|RETURN|MATCH|OPTIONAL|CALL|UNWIND|UNION|ORDER|LIMIT|SKIP)\b/;
@@ -80,6 +79,10 @@ const statementOf = (id: string, params: Record<string, unknown>) => {
 
 describe('no condition of a match with an anchor reads a property directly', () => {
   it.each(Object.entries(LOOKUP_INVENTORY))('%s', (id, params) => {
+    expect(directReads(statementOf(id, params))).toEqual([]);
+  });
+
+  it.each(LOOKUP_SHAPES.map(([name, id, params]) => [name, id, params] as const))('%s (a filter, a rank, a window, a condition)', (_name, id, params) => {
     expect(directReads(statementOf(id, params))).toEqual([]);
   });
 

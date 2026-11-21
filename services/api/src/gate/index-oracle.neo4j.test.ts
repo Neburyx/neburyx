@@ -1,14 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { isInt, type ProfiledPlan } from 'neo4j-driver';
-import { allowlistFromMapping } from './allowlist.js';
 import { defaultCatalog } from './assemble.js';
 import { renderTemplate } from './render.js';
 import { prepareParameters } from '../sources/parameters.js';
-import { DERIVED_RULE } from '../testing/derived-fixtures.js';
-import { linkedMappingOf } from '../testing/linked-entities-fixtures.js';
 import { announceServerVersion, NEO4J_SERIES, runAdmin, runAll, startNeo4j, type RunningNeo4j } from '../testing/neo4j-server.js';
-import { PATTERN_ENTITIES, PATTERN_RELATIONSHIPS, patternParams, step } from '../testing/pattern-fixtures.js';
-import { LOOKUP_INVENTORY } from '../testing/stable-id-lookups.js';
+import { LOOKUP_ALLOWLIST, LOOKUP_INVENTORY, LOOKUP_SEARCHES, LOOKUP_SHAPES } from '../testing/stable-id-lookups.js';
 
 /**
  * Every statement of the catalog, on data built to make the planner pick an index scan on a plain property read, returns what the server's meaning says and expands from its anchor, in four states of the same
@@ -19,49 +15,11 @@ import { LOOKUP_INVENTORY } from '../testing/stable-id-lookups.js';
  */
 let server: RunningNeo4j;
 
-const mapping = linkedMappingOf({
-  entities: PATTERN_ENTITIES.map((entity) => (entity.type === 'maker' ? { ...entity, sortable: ['rank'] } : entity)),
-  relationships: PATTERN_RELATIONSHIPS.map((row) => (row.type === 'USES_TOOL' ? { ...row, observed_at: 'seenAt' } : row)),
-  derived: [DERIVED_RULE],
-  patterns: [],
-});
-const [source] = mapping.sources;
-if (source === undefined) throw new Error('the mapping has no source');
-const allowlist = allowlistFromMapping(source);
+const allowlist = LOOKUP_ALLOWLIST;
 const catalog = defaultCatalog();
 
-const WINDOW = { windowFrom: '2026-01-01T00:00:00Z', windowTo: '2026-12-31T00:00:00Z' };
-const regionIs = { on: 'neighbor', property: 'region', op: 'eq', value: { kind: 'text', value: 'north' } };
-const rankBetween = { on: 'neighbor', property: 'rank', op: 'between', from: { kind: 'number', value: 2 }, to: { kind: 'number', value: 9 } };
-const laneIs = { on: 'relationship', property: 'lane', op: 'eq', value: { kind: 'text', value: 'x' } };
-const maker = (stableId: string) => ({ sourceId: 'demo', entityType: 'maker', stableId });
-const EXPAND = { entityType: 'maker', stableId: 'A-1', neighborType: 'maker', direction: 'both', sort: 'observed' };
-const COUNT = { entityType: 'maker', stableId: 'A-1', neighborType: 'maker', direction: 'both' };
-
-/** The inventory of the lookups, and the shapes of expand, pattern, shared-attribute and linked-entities that add conditions, windows, filters and ranks. */
-const CASES: readonly (readonly [string, string, Record<string, unknown>])[] = [
-  ...Object.entries(LOOKUP_INVENTORY).map(([id, params]) => [id, id, params] as const),
-  ['expand out', 'expand-neighbors', { ...EXPAND, direction: 'out' }],
-  ['expand in', 'expand-neighbors', { ...EXPAND, direction: 'in' }],
-  ['expand to the other type', 'expand-neighbors', { ...EXPAND, neighborType: 'tool' }],
-  ['expand windowed', 'expand-neighbors', { ...EXPAND, ...WINDOW }],
-  ['expand filtered by a neighbor value', 'expand-neighbors', { ...EXPAND, filters: [regionIs] }],
-  ['expand filtered by a neighbor range', 'expand-neighbors', { ...EXPAND, filters: [rankBetween] }],
-  ['expand filtered by a relationship value', 'expand-neighbors', { ...EXPAND, relTypes: ['LINKS'], filters: [laneIs] }],
-  ['expand ranked by the neighbor, descending', 'expand-neighbors', { ...EXPAND, rank: { on: 'neighbor', property: 'rank', order: 'desc' } }],
-  ['expand ranked by the observed time, ascending', 'expand-neighbors', { ...EXPAND, relTypes: ['LINKS'], rank: { on: 'relationship', property: 'seenAt', order: 'asc' } }],
-  ['expand count windowed', 'expand-count', { ...COUNT, ...WINDOW }],
-  ['expand count filtered', 'expand-count', { ...COUNT, filters: [regionIs] }],
-  ['aggregate sample of a type with an ID', 'aggregate-sample', { type: 'LINKS', ends: [maker('A-1'), maker('A-2')] }],
-  ['aggregate summary of a type with an ID', 'aggregate-summary', { type: 'LINKS', ends: [maker('A-1'), maker('A-2')] }],
-  ['aggregate summary of the pair with no ID on a member', 'aggregate-summary', { type: 'USES_TOOL', ends: [maker('A-1'), { sourceId: 'demo', entityType: 'tool', stableId: 'D-1' }] }],
-  ['pattern with a neighbor condition', 'pattern', patternParams([step({ conditions: [regionIs] })])],
-  ['pattern with a relationship condition', 'pattern', patternParams([step({ conditions: [laneIs] })])],
-  ['pattern with a window', 'pattern', patternParams([step({ ...WINDOW })])],
-  ['pattern count with a neighbor condition', 'pattern-count', patternParams([step({ conditions: [regionIs] })])],
-  ['shared attribute with a window', 'shared-attribute', { ...LOOKUP_INVENTORY['shared-attribute'], ...WINDOW }],
-  ['linked entities with a window', 'linked-entities', { ...LOOKUP_INVENTORY['linked-entities'], ...WINDOW }],
-];
+/** The inventory of the lookups, and the shapes that add conditions, windows, filters, ranks and searches. */
+const CASES: readonly (readonly [string, string, Record<string, unknown>])[] = [...Object.entries(LOOKUP_INVENTORY).map(([id, params]) => [id, id, params] as const), ...LOOKUP_SHAPES, ...LOOKUP_SEARCHES];
 
 beforeAll(async () => {
   server = await startNeo4j();
@@ -91,6 +49,8 @@ const textOf = (value: unknown): string =>
   JSON.stringify(value, (_key, field: unknown) => (isInt(field) ? field.toString() : field !== null && typeof field === 'object' && 'elementId' in field ? (field as { elementId: string }).elementId : field));
 
 interface Outcome {
+  /** Whether the statement orders its rows last, so that the order is part of the answer. */
+  readonly ordered: boolean;
   readonly rows: readonly string[];
   readonly operators: readonly string[];
 }
@@ -106,7 +66,7 @@ async function run(phase: 'profile' | 'plain'): Promise<Map<string, Outcome>> {
     try {
       const result = await session.run(`${phase === 'profile' ? 'PROFILE ' : ''}${rendered.cypher}`, parameters);
       const rows = result.records.map((record) => textOf(record.toObject()));
-      outcomes.set(name, { rows, operators: phase === 'profile' && result.summary.profile !== false ? opsOf(result.summary.profile as ProfiledPlan) : [] });
+      outcomes.set(name, { ordered: /\bORDER BY\b/.test(rendered.cypher.slice(rendered.cypher.lastIndexOf('RETURN '))), rows, operators: phase === 'profile' && result.summary.profile !== false ? opsOf(result.summary.profile as ProfiledPlan) : [] });
     } finally {
       await session.close();
     }
@@ -114,19 +74,49 @@ async function run(phase: 'profile' | 'plain'): Promise<Map<string, Outcome>> {
   return outcomes;
 }
 
-/** Waits for the server to have taken the statistics of every property index: no index is left with updates since its last estimation. */
+/** The indexes the data was built with, and the count of the elements that hold a value for each: what the server's statistics must show once they were taken. */
+const INDEXES: readonly (readonly [string, string, string])[] = [
+  ['x_maker', 'Maker', 'makerId'], ['x_tool', 'Tool', 'toolId'], ['x_shop', 'Shop', 'shopId'], ['x_region', 'Maker', 'region'], ['x_rank', 'Maker', 'rank'], ['x_kind', 'Tool', 'kind'],
+  ['x_links', 'LINKS', 'linkId'], ['x_allies', 'ALLIES', 'allyId'], ['x_trusts', 'TRUSTS', 'trustId'], ['x_uses', 'USES_TOOL', 'useId'], ['x_endorses', 'ENDORSES', 'endorseId'], ['x_lane', 'LINKS', 'lane'], ['x_seen', 'LINKS', 'seenAt'], ['x_seen_use', 'USES_TOOL', 'seenAt'],
+];
+const NODE_LABELS = new Set(['Maker', 'Tool', 'Shop']);
+
+async function scalar(cypher: string): Promise<number> {
+  const session = server.admin.session({ database: server.database });
+  try {
+    const result = await session.run(cypher);
+    return Number(String(result.records[0]?.get('c')));
+  } finally {
+    await session.close();
+  }
+}
+
+/**
+ * Waits for the server to have taken the statistics of every index the test built: each of the named indexes is in the server's graph counts with no updates since its last estimation and a total size that equals
+ * the number of elements holding a value for its property, which the test counts itself. An index missing from the answer, or an answer with no index, is not "taken": the wait ends in an error.
+ */
 async function statisticsTaken(): Promise<void> {
+  const expected = new Map<string, number>();
+  for (const [name, target, property] of INDEXES) {
+    expected.set(name, await scalar(NODE_LABELS.has(target) ? `MATCH (n:${target}) WHERE n.${property} IS NOT NULL RETURN count(n) AS c` : `MATCH ()-[r:${target}]->() WHERE r.${property} IS NOT NULL RETURN count(r) AS c`));
+  }
   const deadline = Date.now() + 120_000;
   for (;;) {
     const session = server.admin.session({ database: server.database });
+    let waiting = 'no answer';
     try {
       const result = await session.run("CALL db.stats.retrieve('GRAPH COUNTS') YIELD data RETURN data.indexes AS indexes");
-      const indexes = (result.records[0]?.get('indexes') ?? []) as { indexType: string; updatesSinceEstimation: unknown }[];
-      if (indexes.filter((index) => index.indexType !== 'LOOKUP').every((index) => Number(String(index.updatesSinceEstimation)) === 0)) return;
+      const indexes = (result.records[0]?.get('indexes') ?? []) as { labels?: string[]; relationshipTypes?: string[]; properties: string[]; updatesSinceEstimation: unknown; totalSize: unknown }[];
+      const pending = INDEXES.filter(([name, target, property]) => {
+        const entry = indexes.find((index) => (index.labels?.[0] ?? index.relationshipTypes?.[0]) === target && index.properties[0] === property);
+        return entry === undefined || Number(String(entry.updatesSinceEstimation)) !== 0 || Number(String(entry.totalSize)) !== expected.get(name);
+      });
+      if (pending.length === 0) return;
+      waiting = pending.map(([name]) => name).join(', ');
     } finally {
       await session.close();
     }
-    if (Date.now() > deadline) throw new Error('the statistics were not taken');
+    if (Date.now() > deadline) throw new Error(`the statistics were not taken for: ${waiting}`);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
 }
@@ -137,7 +127,8 @@ const scansOf = (outcomes: Map<string, Outcome> | undefined): string[] => [...(o
 
 describe(`every template returns the rows of the oracle and expands from its anchor, with and without statistics, on ${NEO4J_SERIES}`, () => {
   it('has a case for each template of the lookup inventory, and for the shapes that add conditions, windows, filters and ranks', () => {
-    expect(new Set(CASES.map(([, id]) => id))).toEqual(new Set(Object.keys(LOOKUP_INVENTORY)));
+    // the related-records and facet statements are not in the oracle: they need reference properties and facet targets that the fixture mapping does not declare (a residual risk the docs name)
+    expect(new Set(CASES.map(([, id]) => id))).toEqual(new Set([...Object.keys(LOOKUP_INVENTORY), ...LOOKUP_SEARCHES.map(([, id]) => id)]));
     expect(CASES.length).toBeGreaterThan(Object.keys(LOOKUP_INVENTORY).length + 15);
   });
 
@@ -158,11 +149,12 @@ describe(`every template returns the rows of the oracle and expands from its anc
     for (const name of ['x_region', 'x_rank', 'x_kind', 'x_links', 'x_allies', 'x_trusts', 'x_uses', 'x_endorses', 'x_lane', 'x_seen', 'x_seen_use']) await runAdmin(server, `DROP INDEX ${name}`);
     await runAdmin(server, 'CALL db.clearQueryCaches()');
     const oracle = await run('plain');
-    const sorted = (rows: readonly string[]) => [...rows].sort();
+    // as sets, and in order where the statement orders its rows
+    const shaped = (outcome: Outcome | undefined) => (outcome?.ordered === true ? outcome.rows : [...(outcome?.rows ?? [])].sort());
     const differences = CASES.flatMap(([name]) => {
-      const expected = sorted(oracle.get(name)?.rows ?? []);
+      const expected = shaped(oracle.get(name));
       return (['fresh', 'sampled'] as const).flatMap((state) => {
-        const got = sorted(states[state]?.get(name)?.rows ?? []);
+        const got = shaped(states[state]?.get(name));
         return JSON.stringify(got) === JSON.stringify(expected) ? [] : [`${name}, ${state}: ${got.length} rows, the oracle ${expected.length}`];
       });
     });
