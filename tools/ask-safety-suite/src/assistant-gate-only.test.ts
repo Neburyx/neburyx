@@ -71,13 +71,15 @@ describe('every route of a turn reads only through the gate, through the real ap
 
     const summarized = await start({ summary: true });
     const draft = JSON.stringify({ sentences: [{ text: 'There is one widget in view.', cites: ['n1'] }] });
-    expect((await summarized.turn('Show W-1 and summarize the view', [ROUTE, JSON.stringify({ tool: 'ai-summary', values: {} }), draft, DONE, ANSWER], { viewElementKeys: VIEW })).status).toBe(200);
+    const summaryTurn = await summarized.turn('Show W-1 and summarize the view', [ROUTE, JSON.stringify({ tool: 'ai-summary', values: {} }), draft, DONE, ANSWER], { viewElementKeys: VIEW });
+    expect(summaryTurn.body).toMatchObject({ status: 'answered', reads: expect.arrayContaining([expect.objectContaining({ tool: 'ai-summary' })]) });
     expectGateOnly(summarized);
     await summarized.close();
 
     const typology = await start();
     const read = typology.reads().length;
-    expect((await typology.turn('Show W-1 and the shapes of money movement', [ROUTE, JSON.stringify({ tool: 'typology', values: {} }), DONE, '{"sentences":[]}'])).status).toBe(200);
+    const typologyTurn = await typology.turn('Show W-1 and the shapes of money movement', [ROUTE, JSON.stringify({ tool: 'typology', values: {} }), DONE, JSON.stringify({ sentences: [{ text: 'The widget W-1 was read.', cites: ['r1'] }] })]);
+    expect(typologyTurn.body).toMatchObject({ status: 'answered', reads: expect.arrayContaining([expect.objectContaining({ tool: 'typology' })]) });
     expectGateOnly(typology);
     expect(typology.reads().slice(read).filter((entry) => entry.templateId === 'entity-load')).toHaveLength(1);
     await typology.close();
