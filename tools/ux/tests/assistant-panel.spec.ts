@@ -196,6 +196,27 @@ test.describe('the Assistant panel', () => {
     });
   }
 
+  test('sends the keys of the elements selected on the canvas with a typed message, each message with the selection it was typed with, and the page stays inside the window', async ({ page }) => {
+    await openWorkspace(page);
+    const sent = await answerWith(page, REFUSE);
+    const canvas = await canvasOf(page).boundingBox();
+    if (canvas === null) throw new Error('no canvas');
+    await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+    await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+    await open(page);
+    await page.getByLabel('Your message').fill('what is this?');
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+    expect((sent[0] as { selectionKeys?: string[] } | undefined)?.selectionKeys).toEqual([JSON.stringify(['node', 'banking-demo', 'account', 'AC-1'])]);
+    expect(sent[0]?.viewElementKeys).toContain(JSON.stringify(['node', 'banking-demo', 'account', 'AC-1']));
+    await page.mouse.click(canvas.x + 160, canvas.y + 200);
+    await page.getByLabel('Your message').fill('and now?');
+    await page.keyboard.press('Enter');
+    await expect.poll(() => sent.length).toBe(2);
+    expect('selectionKeys' in (sent[1] ?? {})).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
   test('shows the answer of the ask route with its sources, and a heavy stop that continues with the kept token', async ({ page }) => {
     await openWorkspace(page);
     const sent = await answerWith(page, (body) => (body.continue === undefined ? inAsk(heavyFor('banking-demo')) : inAsk(answeredFor('banking-demo'))));
