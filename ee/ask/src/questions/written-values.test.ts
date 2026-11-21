@@ -146,7 +146,7 @@ describe('the sentence of a refusal', () => {
 
   it('names both types as the mapping names them for a person: the display name of the needed type next to the one of the element found, and a name of any length is cut to what a refusal holds', async () => {
     const reading = { nodes: [node('K-1', 'IP address')], omitted: false };
-    const checked = await lookupWrittenValues({ sourceId: 'demo', types: ['ip_address', 'gadget'], values: [{ role: 'id', value: 'K-1', needed: 'ip_address', neededLabel: 'Shop owner account '.repeat(10) }], read: async () => reading as never });
+    const checked = await lookupWrittenValues({ sourceId: 'demo', types: ['network_unit', 'gadget'], values: [{ role: 'id', value: 'K-1', needed: 'network_unit', neededLabel: 'Shop owner account '.repeat(10) }], read: async () => reading as never });
     const misfit = firstMisfit(checked);
     if (misfit === undefined) throw new Error('every value fit');
     const answer = valueNotFitAnswer(misfit, undefined);
