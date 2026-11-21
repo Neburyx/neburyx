@@ -122,6 +122,14 @@ describe('a written value in a step of the tool loop', () => {
     expect(JSON.stringify(answer)).not.toContain('Nothing was run');
   });
 
+  it('keeps the sentence within what a refusal holds for an element with a very long title: the answer parses and the sentence is at most 300 characters, with the ending of a step', async () => {
+    const r = await loop(['widget/A-1', 'gadget/K-1'], sequence(step('K-1'), ok('{"done":true}')), { titles: 'T'.repeat(400) });
+    const answer = await answerOf(r.route.handler(r.request()));
+    const refused = (answer as { answer: { refused: { sentence: string } } }).answer.refused;
+    expect(refused.sentence.length).toBeLessThanOrEqual(300);
+    expect(refused.sentence.endsWith('That step was not run; the results above stand.')).toBe(true);
+  });
+
   it('ends the same way for an id that exists as nothing', async () => {
     const r = await loop(['widget/A-1'], sequence(step('NOBODY')));
     expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ answer: { refused: { valueNotFit: { kind: 'not-found', needed: 'widget' } } } });

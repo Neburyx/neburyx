@@ -147,6 +147,8 @@ export interface RigOptions {
   readonly types?: readonly string[];
   /** Of those types, the ones whose identifiers are tokens the server made. */
   readonly keyed?: readonly string[];
+  /** The title the source gives each element the lookup finds; absent, the type and the id. */
+  readonly titles?: string;
 }
 
 export interface Rig {
@@ -226,7 +228,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
     readSourceElements: async (scope, refs) => {
       sourceReads.push({ refs, mask: scope.mask });
       const held = (ref: { entityType: string; stableId: string }): boolean => options.source === undefined || options.source.includes(`${ref.entityType}/${ref.stableId}`);
-      return { nodes: refs.entities.filter(held).map((ref) => ({ ref: { sourceId: SOURCE, entityType: ref.entityType, stableId: ref.stableId }, display: { title: `${ref.entityType} ${ref.stableId}`, type: ref.entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } })), edges: [], unresolved: refs.entities.filter((ref) => !held(ref)).length, omitted: options.sourceOmits === true, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
+      return { nodes: refs.entities.filter(held).map((ref) => ({ ref: { sourceId: SOURCE, entityType: ref.entityType, stableId: ref.stableId }, display: { title: options.titles ?? `${ref.entityType} ${ref.stableId}`, type: ref.entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } })), edges: [], unresolved: refs.entities.filter((ref) => !held(ref)).length, omitted: options.sourceOmits === true, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 };
     },
     ...(options.types === undefined ? {} : { typeDescriptions: () => ({ entityTypes: (options.types ?? []).map((type) => ({ type, label: type, displayName: type, ...(options.keyed?.includes(type) === true ? { keyed: true } : {}) })), relationshipTypes: [] }) }),
     askRunner: (scope) => ({
