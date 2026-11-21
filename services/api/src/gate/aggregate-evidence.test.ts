@@ -78,7 +78,7 @@ describe('the statement of an aggregate read', () => {
     const { read, executor } = rig(undefined, mappingOf({ ...ROW, stable_id: 'useId' }));
     await read(AGGREGATE_SAMPLE_ID, params);
     await read(AGGREGATE_SUMMARY_ID, params, 1);
-    for (const id of [AGGREGATE_SAMPLE_ID, AGGREGATE_SUMMARY_ID]) expect(dataCalls(executor, id)[0]?.cypher).toContain("MATCH (a)-[r:`USES_TOOL`]->(b) WHERE NOT ((r.`useId` IS :: STRING NOT NULL AND r.`useId` <> '') OR r.`useId` IS :: INTEGER NOT NULL)");
+    for (const id of [AGGREGATE_SAMPLE_ID, AGGREGATE_SUMMARY_ID]) expect(dataCalls(executor, id)[0]?.cypher).toContain("MATCH (a)-[r:`USES_TOOL`]->(b) WHERE NOT ((head([r.`useId`]) IS :: STRING NOT NULL AND head([r.`useId`]) <> '') OR head([r.`useId`]) IS :: INTEGER NOT NULL)");
   });
 
   it('names no property but the row\'s filterable ones other than its observed time and evidence, and holds no write clause, SKIP or request text', async () => {

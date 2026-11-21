@@ -2,6 +2,7 @@ import { AppError } from '../../errors.js';
 import { quoteName } from '../render.js';
 import type { SourceAllowlist } from '../types.js';
 import { kindRank, supported, usable } from './expand-statement.js';
+import { predicateRead } from './predicate-read.js';
 
 export type AggregateForm = 'sample' | 'summary';
 
@@ -32,7 +33,7 @@ export function aggregateStatementOf(allowlist: SourceAllowlist, type: unknown, 
   const [fromLabel, toLabel] = [typeof from === 'string' ? allowlist.entityLabels.get(from) : undefined, typeof to === 'string' ? allowlist.entityLabels.get(to) : undefined];
   const [fromId, toId] = [typeof from === 'string' ? allowlist.stableIds.get(from) : undefined, typeof to === 'string' ? allowlist.stableIds.get(to) : undefined];
   if (row === undefined || fromLabel === undefined || toLabel === undefined || fromId === undefined || toId === undefined) throw new AppError('INVALID_REQUEST');
-  const members = row.stableId === undefined ? '' : ` WHERE NOT ${usable(`r.${quoteName(row.stableId)}`)}`;
+  const members = row.stableId === undefined ? '' : ` WHERE NOT ${usable(predicateRead(`r.${quoteName(row.stableId)}`))}`;
   const pattern = `(a)-[r:${quoteName(row.type)}]->(b)`;
   const anchors = [
     `MATCH (a:${quoteName(fromLabel)}) USING INDEX SEEK a:${quoteName(fromLabel)}(${quoteName(fromId)}) WHERE a.${quoteName(fromId)} IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1`,

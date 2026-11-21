@@ -34,7 +34,9 @@ interface Abstract {
 function abstractOf(statement: string, allowlist: SourceAllowlist): Abstract {
   const kinds = kindsOf(allowlist);
   const unmapped: string[] = [];
+  // a wrapped read (`head([x.p])`, see `predicateRead`) is read as the read it wraps, so that the wrapper does not push the variable out of the window of a token; the check of the gate folder is the one that requires the wrapper
   const text = statement
+    .replaceAll(/head\(\[([^[\]]*)\]\)/g, '$1')
     .replaceAll(/`([^`]*)`/g, (_whole, name: string) => {
       const kind = kinds.get(name);
       if (kind === undefined) {

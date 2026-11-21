@@ -1,4 +1,5 @@
 import { AppError } from '../../errors.js';
+import { predicateRead } from './predicate-read.js';
 import { quoteName } from '../render.js';
 import { inWindow } from './window-condition.js';
 import type { Params, SourceAllowlist } from '../types.js';
@@ -48,8 +49,8 @@ function piecesOf(allowlist: SourceAllowlist, request: SharedAttributeRequest): 
   const [anchor, attribute, via] = [quoteName(anchorLabel), quoteName(attributeLabel), quoteName(request.via)];
   const time = request.observedAt === undefined ? '' : quoteName(request.observedAt);
   const withinWindow = (variable: string): readonly string[] => (request.windowed ? inWindow(variable, time) : []);
-  const stopFree = (variable: string): readonly string[] => request.stopListProperties.map((property) => `coalesce(${variable}.${quoteName(property)}, false) <> true`);
-  const stopListed = request.stopListProperties.map((property) => `coalesce(s.${quoteName(property)}, false) = true`).join(' OR ');
+  const stopFree = (variable: string): readonly string[] => request.stopListProperties.map((property) => `coalesce(${predicateRead(`${variable}.${quoteName(property)}`)}, false) <> true`);
+  const stopListed = request.stopListProperties.map((property) => `coalesce(${predicateRead(`s.${quoteName(property)}`)}, false) = true`).join(' OR ');
   const skipped =
     request.stopListProperties.length === 0
       ? 'WITH a, false AS skipped'

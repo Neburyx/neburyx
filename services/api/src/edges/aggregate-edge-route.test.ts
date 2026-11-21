@@ -161,8 +161,8 @@ describe('GET /v1/edges/{ref} for an aggregate', () => {
   it('reads a type that has a stable_id only for the relationships with no usable ID and flags the answer', async () => {
     const mapping = mappingOf({}, { ...AGGREGATE_ROW, stable_id: 'useId' });
     const run = await answered({ mapping });
-    expect(readsOf(run.executor, AGGREGATE_SAMPLE_ID)[0]?.cypher).toContain('WHERE NOT ((r.`useId` IS :: STRING NOT NULL');
-    expect(readsOf(run.executor, AGGREGATE_SUMMARY_ID)[0]?.cypher).toContain('WHERE NOT ((r.`useId` IS :: STRING NOT NULL');
+    expect(readsOf(run.executor, AGGREGATE_SAMPLE_ID)[0]?.cypher).toContain('WHERE NOT ((head([r.`useId`]) IS :: STRING NOT NULL');
+    expect(readsOf(run.executor, AGGREGATE_SUMMARY_ID)[0]?.cypher).toContain('WHERE NOT ((head([r.`useId`]) IS :: STRING NOT NULL');
     expect(aggregateEdgeDetailSchema.parse(run.response.json()).qualityFlags).toContain('no-stable-id');
     const plain = await answered();
     expect(aggregateEdgeDetailSchema.parse(plain.response.json()).qualityFlags).not.toContain('no-stable-id');

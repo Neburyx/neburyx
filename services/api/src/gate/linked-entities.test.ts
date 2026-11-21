@@ -80,7 +80,7 @@ describe('the statement of a one-hop linked-entities run', () => {
 
   it('compares the mapped time property as an instant, to the hops whose type has one, only when a window is given', async () => {
     const cypher = await cypherOf({ ...params, windowFrom: '2026-01-01T00:00:00.000Z', windowTo: '2026-02-01T00:00:00.000Z' });
-    expect(cypher).toContain('`seenAt` IS :: ZONED DATETIME');
+    expect(cypher).toContain('`seenAt`]) IS :: ZONED DATETIME');
     expect(cypher).toContain('>= datetime($windowFrom)');
     expect(cypher).toContain('< datetime($windowTo)');
     expect(cypher).not.toContain('2026');

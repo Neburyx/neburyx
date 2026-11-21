@@ -1,4 +1,5 @@
 import { AppError } from '../../errors.js';
+import { predicateRead } from './predicate-read.js';
 import { quoteName } from '../render.js';
 import type { SourceAllowlist } from '../types.js';
 import { conditionPredicateOf, usable, type ExpandBranch } from './expand-statement.js';
@@ -194,7 +195,7 @@ export function patternStatementOf(allowlist: SourceAllowlist, request: PatternR
   const after = `$cursor IS NULL OR key > $cursor.endKey OR (key = $cursor.endKey AND elementId(x) > $cursor.endElement)`;
   lines.push(
     `WITH a, ${bounded} AS bounded, ${heavy} AS heavy, ${stopped} AS stopListed, f${count} AS paths`,
-    `CALL { WITH paths UNWIND paths AS p WITH p ORDER BY ${order} WITH p.n${count} AS x, collect(p)[0] AS best WHERE ${usable(endId)} WITH x, best, toString(${endId}) AS key WHERE ${after} WITH x, best, key ORDER BY key, elementId(x) LIMIT $limit + 1 RETURN collect(best) AS ms }`,
+    `CALL { WITH paths UNWIND paths AS p WITH p ORDER BY ${order} WITH p.n${count} AS x, collect(p)[0] AS best WHERE ${usable(predicateRead(endId))} WITH x, best, toString(${endId}) AS key WHERE ${after} WITH x, best, key ORDER BY key, elementId(x) LIMIT $limit + 1 RETURN collect(best) AS ms }`,
     'UNWIND CASE WHEN size(ms) = 0 THEN [null] ELSE ms END AS m',
   );
   const members = membersOf(request);

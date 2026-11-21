@@ -2,6 +2,7 @@ import type { ExpandFilter, ExpandRank, FilterKind } from '@neburyx/contracts';
 import { AppError } from '../../errors.js';
 import { quoteName } from '../render.js';
 import type { SourceAllowlist } from '../types.js';
+import { predicateRead } from './predicate-read.js';
 import { inWindow, instantOf } from './window-condition.js';
 
 export type ExpandDirection = 'out' | 'in' | 'both';
@@ -72,7 +73,7 @@ export function undeclaredRank(allowlist: SourceAllowlist, neighborType: string,
  * filter in the request. A stored value of another kind than the filter's makes the condition false.
  */
 export function conditionPredicateOf(filter: ExpandFilter, variables: { readonly neighbor: string; readonly relationship: string }, at: string): string {
-  const stored = `${filter.on === 'neighbor' ? variables.neighbor : variables.relationship}.${quoteName(filter.property)}`;
+  const stored = predicateRead(`${filter.on === 'neighbor' ? variables.neighbor : variables.relationship}.${quoteName(filter.property)}`);
   if (filter.op === 'eq') return `(${kindGuard(filter.value.kind, stored)} AND ${stored} = ${kindValue(filter.value.kind, `${at}.value.value`)})`;
   if (filter.op === 'in') return `(${kindGuard(filter.values[0]?.kind ?? 'text', stored)} AND ${stored} IN [v IN ${at}.values | ${kindValue(filter.values[0]?.kind ?? 'text', 'v.value')}])`;
   const kind = (filter.from ?? filter.to)?.kind ?? 'text';
@@ -140,7 +141,8 @@ function storedBranch(branch: ExpandBranch, neighborLabel: string, stableId: str
   const given = sortOf(branch, order);
   const sort = given ?? 'null';
   const phase = dated ? PHASE.storedDated : PHASE.storedUndated;
-  const where = [usable(id), ...(given === undefined ? [] : [dated ? supported(sort) : `NOT coalesce(${supported(sort)}, false)`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...conditionsOf(branch, filters, windowed), afterCursor(phase, dated, sort, `toString(${id})`, 'type(r)', `'${branch.direction}'`, order)];
+  const [readId, readSort] = [predicateRead(id), given === undefined ? 'null' : predicateRead(given)];
+  const where = [usable(readId), ...(given === undefined ? [] : [dated ? supported(readSort) : `NOT coalesce(${supported(readSort)}, false)`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...conditionsOf(branch, filters, windowed), afterCursor(phase, dated, readSort, `toString(${readId})`, 'type(r)', `'${branch.direction}'`, order)];
   return [
     `WITH a MATCH ${patternOf(branch, neighborLabel)} WHERE ${where.join(' AND ')}`,
     `WITH a, r, m ORDER BY ${dated ? `${kindRank(sort)}, ${sort} ${order.direction}, ` : ''}toString(${id}) DESC LIMIT $limit + 1`,
@@ -151,7 +153,7 @@ function storedBranch(branch: ExpandBranch, neighborLabel: string, stableId: str
 function aggregateBranch(branch: ExpandBranch, neighborLabel: string, neighborStableId: string, dated: boolean, fallbackForId: string | undefined, filters: readonly ExpandFilter[], order: Order, windowed: boolean): string {
   const observed = branch.observedAt === undefined ? 'null' : `r.${quoteName(branch.observedAt)}`;
   const phase = dated ? PHASE.aggregateDated : PHASE.aggregateUndated;
-  const members = [...(fallbackForId === undefined ? [] : [`NOT ${usable(`r.${quoteName(fallbackForId)}`)}`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...conditionsOf(branch, filters, windowed)];
+  const members = [...(fallbackForId === undefined ? [] : [`NOT ${usable(predicateRead(`r.${quoteName(fallbackForId)}`))}`]), ...(branch.excludesLoops ? ['m <> a'] : []), ...conditionsOf(branch, filters, windowed)];
   const id = `coalesce(toString(m.${quoteName(neighborStableId)}), '')`;
   const observedTimes = `${branch.observedAt === undefined ? 'null' : `max(CASE WHEN ${supported(observed)} THEN ${observed} END)`} AS ts, ${branch.observedAt === undefined ? 'null' : `min(CASE WHEN ${supported(observed)} THEN ${observed} END)`} AS first`;
   if (order.rank === undefined) {

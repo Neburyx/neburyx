@@ -39,8 +39,8 @@ describe('the statement of a shared-attribute run', () => {
     expect(call?.cypher).toBe(
       [
         'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
-        'CALL { WITH a OPTIONAL MATCH (a)-[:`USES_TOOL`]->(s:`Tool`) WHERE coalesce(s.`isCommon`, false) = true WITH s LIMIT 1 RETURN count(s) > 0 AS skipped }',
-        'CALL { WITH a MATCH (a)-[ra:`USES_TOOL`]->(x:`Tool`) WHERE coalesce(x.`isCommon`, false) <> true WITH DISTINCT x LIMIT $countCap + 1 WITH collect(x) AS mine RETURN size(mine) > $countCap AS anchorBounded, mine[..$countCap] AS xs }',
+        'CALL { WITH a OPTIONAL MATCH (a)-[:`USES_TOOL`]->(s:`Tool`) WHERE coalesce(head([s.`isCommon`]), false) = true WITH s LIMIT 1 RETURN count(s) > 0 AS skipped }',
+        'CALL { WITH a MATCH (a)-[ra:`USES_TOOL`]->(x:`Tool`) WHERE coalesce(head([x.`isCommon`]), false) <> true WITH DISTINCT x LIMIT $countCap + 1 WITH collect(x) AS mine RETURN size(mine) > $countCap AS anchorBounded, mine[..$countCap] AS xs }',
         'CALL { WITH a, xs UNWIND xs AS x MATCH (x)<-[rb:`USES_TOOL`]-(b:`Maker`) WHERE b <> a WITH DISTINCT b, x LIMIT $countCap + 1 WITH collect({b: b, x: x}) AS pairs RETURN size(pairs) > $countCap AS pairsBounded, pairs[..$countCap] AS kept }',
         'CALL { WITH a, kept UNWIND kept AS q WITH a, q.b AS b, collect(q.x) AS xs WHERE size(xs) >= $minShared WITH a, b, xs ORDER BY elementId(b) LIMIT $limit + 1 CALL { WITH a, b, xs UNWIND xs[..5] AS x CALL { WITH a, x MATCH (a)-[ra:`USES_TOOL`]->(x) RETURN ra LIMIT 1 } CALL { WITH b, x MATCH (b)-[rb:`USES_TOOL`]->(x) RETURN rb LIMIT 1 } RETURN collect(x) AS shown, collect(ra) AS ras, collect(rb) AS rbs } RETURN collect({b: b, shown: shown, ras: ras, rbs: rbs, shared: size(xs), cut: size(xs) > 5}) AS ms }',
         'UNWIND CASE WHEN size(ms) = 0 THEN [null] ELSE ms END AS m',
@@ -59,9 +59,9 @@ describe('the statement of a shared-attribute run', () => {
     const { read, executor } = rig();
     await read({ ...params, windowFrom: '2026-01-01T00:00:00.000Z', windowTo: '2026-02-01T00:00:00.000Z', minShared: 3 });
     const [call] = dataCalls(executor);
-    expect(call?.cypher).toContain('`seenAt` IS :: ZONED DATETIME');
-    expect(call?.cypher).toContain('`seenAt` IS :: LOCAL DATETIME THEN datetime({datetime: ra.`seenAt`, timezone: \'UTC\'})');
-    expect(call?.cypher).toContain('`seenAt` IS :: DATE THEN datetime({date: rb.`seenAt`, timezone: \'UTC\'})');
+    expect(call?.cypher).toContain('`seenAt`]) IS :: ZONED DATETIME');
+    expect(call?.cypher).toContain('`seenAt`]) IS :: LOCAL DATETIME THEN datetime({datetime: head([ra.`seenAt`]), timezone: \'UTC\'})');
+    expect(call?.cypher).toContain('`seenAt`]) IS :: DATE THEN datetime({date: head([rb.`seenAt`]), timezone: \'UTC\'})');
     expect(call?.cypher).toContain(">= datetime($windowFrom)");
     expect(call?.cypher).toContain('< datetime($windowTo)');
     expect(call?.cypher).not.toContain('2026');
@@ -83,7 +83,7 @@ describe('the statement of a shared-attribute run', () => {
     const { read, executor } = rig(sharedMappingOf({ derived: [DERIVED_RULE, other, longer] }));
     await read(params);
     const cypher = dataCalls(executor)[0]?.cypher ?? '';
-    expect(cypher).toContain('coalesce(x.`isCommon`, false) <> true AND coalesce(x.`isOther`, false) <> true');
+    expect(cypher).toContain('coalesce(head([x.`isCommon`]), false) <> true AND coalesce(head([x.`isOther`]), false) <> true');
     expect(cypher).not.toContain('isLong');
   });
 });

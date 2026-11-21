@@ -1,4 +1,5 @@
 import { AppError } from '../../errors.js';
+import { predicateRead } from './predicate-read.js';
 import { quoteName } from '../render.js';
 import type { SourceAllowlist } from '../types.js';
 
@@ -29,7 +30,7 @@ function chainOf(rule: Rule, allowlist: SourceAllowlist, path: boolean): string 
 }
 
 function conditionOf(rule: Rule): string {
-  const stops = rule.stopListProperty === undefined ? [] : middleTypesOf(rule).map((_type, index) => `coalesce(m${index + 1}.${quoteName(rule.stopListProperty ?? '')}, false) <> true`);
+  const stops = rule.stopListProperty === undefined ? [] : middleTypesOf(rule).map((_type, index) => `coalesce(${predicateRead(`m${index + 1}.${quoteName(rule.stopListProperty ?? '')}`)}, false) <> true`);
   return ['b <> a', ...stops].join(' AND ');
 }
 

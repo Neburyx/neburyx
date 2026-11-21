@@ -37,7 +37,7 @@ describe('the statement of a filtered expansion', () => {
 
   it('puts a neighbor condition in every branch, stored and aggregate, with the name from the mapping and the value as a parameter', () => {
     const text = expandStatementOf(allowlist, 'hub', 'leaf', branches, [eq('neighbor', 'band', 'SECRET-VALUE-1')]);
-    expect(text).toContain('m.`band` IS :: STRING NOT NULL AND m.`band` = $filters[0].value.value');
+    expect(text).toContain('head([m.`band`]) IS :: STRING NOT NULL AND head([m.`band`]) = $filters[0].value.value');
     expect(text).not.toContain('SECRET-VALUE-1');
     const parts = text.split('UNION ALL');
     expect(parts.length).toBeGreaterThan(2);
@@ -46,9 +46,9 @@ describe('the statement of a filtered expansion', () => {
 
   it('puts a relationship condition before an aggregate groups, so its members are the matching ones', () => {
     const text = expandStatementOf(allowlist, 'hub', 'leaf', expandBranchesOf(allowlist, 'hub', 'leaf', ['MET'], 'out'), [{ on: 'relationship', property: 'weight', op: 'between', from: { kind: 'number', value: 1 } }]);
-    expect(text).toContain('WHERE ((r.`weight`');
+    expect(text).toContain('WHERE ((head([r.`weight`])');
     expect(text.indexOf('r.`weight`')).toBeLessThan(text.indexOf('count(r)'));
-    expect(text).toContain('r.`weight` >= $filters[0].from.value');
+    expect(text).toContain('head([r.`weight`]) >= $filters[0].from.value');
     expect(text).not.toContain('<=');
   });
 
@@ -61,14 +61,14 @@ describe('the statement of a filtered expansion', () => {
   ] as const)('compares %s with a value of that kind, and only a stored value of that kind', (kind, converted, type) => {
     const value = { date: '2024-03-01', dateTime: '2024-03-01T10:00:00Z', localDateTime: '2024-03-01T10:00:00', time: '10:00:00Z', localTime: '10:00:00' }[kind];
     const text = expandStatementOf(allowlist, 'hub', 'leaf', branches, [{ on: 'neighbor', property: 'band', op: 'eq', value: { kind, value } }]);
-    expect(text).toContain(`m.\`band\` IS :: ${type} NOT NULL`);
+    expect(text).toContain(`head([m.\`band\`]) IS :: ${type} NOT NULL`);
     expect(text).toContain(converted);
   });
 
   it('reads a number from an integer or a float, and a list from the parameter', () => {
     const text = expandStatementOf(allowlist, 'hub', 'leaf', branches, [{ on: 'neighbor', property: 'size', op: 'in', values: [{ kind: 'number', value: 1 }, { kind: 'number', value: 2 }] }]);
-    expect(text).toContain('(m.`size` IS :: INTEGER NOT NULL OR m.`size` IS :: FLOAT NOT NULL)');
-    expect(text).toContain('m.`size` IN [v IN $filters[0].values | v.value]');
+    expect(text).toContain('(head([m.`size`]) IS :: INTEGER NOT NULL OR head([m.`size`]) IS :: FLOAT NOT NULL)');
+    expect(text).toContain('head([m.`size`]) IN [v IN $filters[0].values | v.value]');
   });
 });
 
@@ -155,17 +155,17 @@ describe('the statement of a ranked expansion', () => {
     const text = expandStatementOf(allowlist, 'hub', 'leaf', linked, [], rank('desc'));
     expect(text).toContain('r.`score` DESC, toString(r.`relId`) DESC');
     expect(text).toContain('ORDER BY phase, sk, sv DESC, id DESC, rtype DESC, dir DESC');
-    expect(text).toContain('r.`score` < CASE $cursor.tk');
-    expect(text).not.toContain('r.`score` > CASE $cursor.tk');
+    expect(text).toContain('head([r.`score`]) < CASE $cursor.tk');
+    expect(text).not.toContain('head([r.`score`]) > CASE $cursor.tk');
   });
 
   it('flips the sort value in all three places when ascending, and nothing else: kinds still go up and ties still go down', () => {
     const text = expandStatementOf(allowlist, 'hub', 'leaf', linked, [], rank('asc'));
     expect(text).toContain('r.`score` ASC, toString(r.`relId`) DESC');
     expect(text).toContain('ORDER BY phase, sk, sv ASC, id DESC, rtype DESC, dir DESC');
-    expect(text).toContain('r.`score` > CASE $cursor.tk');
+    expect(text).toContain('head([r.`score`]) > CASE $cursor.tk');
     expect(text).toContain('> $cursor.tk');
-    expect(text).not.toContain('r.`score` < CASE $cursor.tk');
+    expect(text).not.toContain('head([r.`score`]) < CASE $cursor.tk');
   });
 
   it('keeps the observed times of an aggregate in their own columns and ranks by the largest (descending) or smallest (ascending) member', () => {

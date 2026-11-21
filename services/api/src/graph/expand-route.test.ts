@@ -269,8 +269,8 @@ describe('POST /v1/graph/expand', () => {
       const [call] = expandCalls(executor);
       expect(call?.parameters['filters']).toHaveLength(2);
       expect(call?.cypher).not.toContain('PRIVATE-BAND');
-      expect(call?.cypher).toContain('m.`band` IS :: STRING NOT NULL');
-      expect(call?.cypher).toContain('r.`score` >= $filters[0].from.value');
+      expect(call?.cypher).toContain('head([m.`band`]) IS :: STRING NOT NULL');
+      expect(call?.cypher).toContain('head([r.`score`]) >= $filters[0].from.value');
       await app.close();
     });
 

@@ -58,7 +58,7 @@ describe('the statement of the supports of a derived relationship', () => {
       [
         'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$ends[0].stableId, $ends[0].stableInteger] WITH a ORDER BY elementId(a) LIMIT 1',
         'MATCH (b:`Maker`) USING INDEX SEEK b:`Maker`(`makerId`) WHERE b.`makerId` IN [$ends[1].stableId, $ends[1].stableInteger] WITH a, b ORDER BY elementId(b) LIMIT 1',
-        'CALL { WITH a, b MATCH (a)-[:`USES_TOOL`]-(m1:`Tool`)-[:`USES_TOOL`]-(b:`Maker`) WHERE b <> a AND coalesce(m1.`isCommon`, false) <> true RETURN DISTINCT m1 LIMIT $limit + 1 }',
+        'CALL { WITH a, b MATCH (a)-[:`USES_TOOL`]-(m1:`Tool`)-[:`USES_TOOL`]-(b:`Maker`) WHERE b <> a AND coalesce(head([m1.`isCommon`]), false) <> true RETURN DISTINCT m1 LIMIT $limit + 1 }',
         'CALL { WITH a, b, m1 MATCH p = (a)-[:`USES_TOOL`]-(m1:`Tool`)-[:`USES_TOOL`]-(b:`Maker`) RETURN p LIMIT 1 }',
         'RETURN p',
       ].join('\n'),
