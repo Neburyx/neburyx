@@ -1429,7 +1429,7 @@ is configured as its own source. Together they produce:
 1. **Community v0.1.** Demo-graph install ≤ 15 min; supernode suite
    passes; domain-neutrality suite passes (both packs); the author completes the demo case and the mapping task.
 2. **Ask preview [W2].** Ask meets the targets of the evaluation tool and its committed baseline on the demo packs' questions, and the Ask safety suite passes; every summary statement
-   cites returned elements; [design of the unbuilt case summary and assistant:] the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline [end of the unbuilt design]; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit.
+   cites returned elements; the AI case summary and the assistant's replies pass the citation, numeric and leakage suites on the demo views; assistant route accuracy meets its baseline; the preview itself runs on any source (decided 2026-11-12), under the data rules of §9.4 and the audit. `pnpm check:ask-preview` runs these checks, writes a record with a figure for each criterion (no model call: the figures come from the committed recordings and baselines and from the suites) and drops, with a note, the criteria of a feature that is cut (`tools/release-checks/README.md`).
 3. **Enterprise build [Later].** Evidence-pack suite (`verify-pack`, tamper,
    partial); OIDC/RBAC/audit/PII suites; image signing and SBOM; security checklist; install
    runbook; documented limitations.

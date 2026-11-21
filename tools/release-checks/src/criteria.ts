@@ -1,10 +1,13 @@
+import type { Feature } from './args.js';
 import type { CheckResult, CriterionResult } from './types.js';
 
-/** One criterion of a gate: what it says, the checks it rests on, and how its figure is written from their data. */
+/** One criterion of a gate: what it says, the checks it rests on, the feature a check belongs to when it belongs to one, and how its figure is written from their data. */
 export interface CriterionDefinition {
   readonly id: string;
   readonly text: string;
   readonly checks: readonly string[];
+  /** The feature each check rests on, for a check that rests on one: a cut feature drops it. */
+  readonly features?: Readonly<Record<string, Feature>>;
   readonly figure: (results: ReadonlyMap<string, CheckResult>) => string;
 }
 
@@ -13,22 +16,36 @@ const figureOf = (result: CheckResult | undefined): string => {
   return typeof data?.figure === 'string' ? data.figure : (result?.detail ?? 'not run');
 };
 
-/** The figure of a criterion that rests on one check or more: the check's own, joined. */
+/** The figure of a criterion that rests on one check or more: the checks' own, joined. */
 export const figureOfChecks =
   (checks: readonly string[]) =>
   (results: ReadonlyMap<string, CheckResult>): string =>
-    checks.map((id) => figureOf(results.get(id))).join('; ');
+    checks.filter((id) => results.has(id)).map((id) => figureOf(results.get(id))).join('; ');
 
-/** The criteria a catalogue covers: a criterion is shown only when every check it rests on was run, and is passed only when each of them passed. */
-export function criteriaOf(definitions: readonly CriterionDefinition[], results: readonly CheckResult[]): readonly CriterionResult[] {
+const wordsOf = (feature: Feature): string => (feature === 'summary' ? 'AI case summary' : 'assistant');
+
+/** The checks a gate runs once the cut features are left out. */
+export function checksKept(definitions: readonly CriterionDefinition[], cut: readonly Feature[]): ReadonlySet<string> {
+  return new Set(definitions.flatMap((definition) => definition.checks.filter((id) => !cut.includes(definition.features?.[id] as Feature))));
+}
+
+/**
+ * The criteria a catalogue covers: a criterion is shown only when every check it still rests on was run and is passed only when each of them passed. A check that rests on a cut feature is dropped with it; a criterion with no check left is `dropped`, and one that keeps some says which part was dropped.
+ */
+export function criteriaOf(definitions: readonly CriterionDefinition[], results: readonly CheckResult[], cut: readonly Feature[] = []): readonly CriterionResult[] {
   const byId = new Map(results.map((result) => [result.id, result]));
-  return definitions
-    .filter((definition) => definition.checks.every((id) => byId.has(id)))
-    .map((definition) => ({
+  return definitions.flatMap((definition): CriterionResult[] => {
+    const left = definition.checks.filter((id) => !cut.includes(definition.features?.[id] as Feature));
+    const droppedParts = definition.checks.filter((id) => !left.includes(id)).map((id) => `the ${wordsOf(definition.features?.[id] as Feature)} part: the feature is cut`);
+    if (left.length === 0) return [{ id: definition.id, text: definition.text, checks: definition.checks, status: 'dropped', figure: 'dropped: the feature is cut', dropped: droppedParts }];
+    if (!left.every((id) => byId.has(id))) return [];
+    return [{
       id: definition.id,
       text: definition.text,
-      checks: definition.checks,
-      status: definition.checks.every((id) => byId.get(id)?.status === 'passed') ? ('passed' as const) : ('failed' as const),
-      figure: definition.figure(byId),
-    }));
+      checks: left,
+      status: left.every((id) => byId.get(id)?.status === 'passed') ? 'passed' : 'failed',
+      figure: [definition.figure(byId), ...droppedParts.map((part) => `dropped: ${part}`)].filter((part) => part !== '').join('; '),
+      ...(droppedParts.length === 0 ? {} : { dropped: droppedParts }),
+    }];
+  });
 }

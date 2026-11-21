@@ -22,8 +22,8 @@ const code = await runRelease(process.argv.slice(2), {
   monotonicNowMs: () => performance.now(),
   out: (text) => process.stdout.write(text),
   err: (text) => process.stderr.write(text),
-  catalogue: (options) => catalogueFor(options.gate, repoRoot, options.image),
-  criteria: (gate, results) => (gate === 'ask-preview' ? askPreviewCriteria(results) : undefined),
+  catalogue: (options) => catalogueFor(options.gate, repoRoot, options.image, options.cut),
+  criteria: (gate, results, cut) => (gate === 'ask-preview' ? askPreviewCriteria(results, cut) : undefined),
   extraSecrets: connection.ok ? connection.secrets : [],
   extraLogins: connection.ok ? [connection.login] : [],
 });

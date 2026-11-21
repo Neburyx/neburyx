@@ -4,7 +4,7 @@ import { neutralityCheck } from './neutrality.js';
 import { demoInstallCheck } from './demo-install.js';
 import { fuzzRealServerCheck, supernodeSuiteCheck } from './supernode.js';
 import { askPreviewCatalogue } from './ask-preview.js';
-import type { Gate } from './args.js';
+import type { Feature, Gate } from './args.js';
 import type { Check } from './types.js';
 
 function fuzzCheck(repoRoot: string): Check {
@@ -26,6 +26,6 @@ export function releaseCatalogue(repoRoot: string, image?: string): readonly Che
 }
 
 /** The checks of a gate, in the order they run. */
-export function catalogueFor(gate: Gate, repoRoot: string, image?: string): readonly Check[] {
-  return gate === 'ask-preview' ? askPreviewCatalogue() : releaseCatalogue(repoRoot, image);
+export function catalogueFor(gate: Gate, repoRoot: string, image?: string, cut: readonly Feature[] = []): readonly Check[] {
+  return gate === 'ask-preview' ? askPreviewCatalogue(undefined, undefined, cut) : releaseCatalogue(repoRoot, image);
 }

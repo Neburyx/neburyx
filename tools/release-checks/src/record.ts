@@ -38,6 +38,14 @@ function criteriaTable(criteria: readonly CriterionResult[] | undefined): readon
   return ['## Criteria', '', '| Criterion | What it says | Status | Figure | Checks |', '|---|---|---|---|---|', ...criteria.map(criterionRow), ''];
 }
 
+/** What the record says first about the criteria that were dropped: none, or each of them with its reason. */
+function droppedLines(criteria: readonly CriterionResult[] | undefined): readonly string[] {
+  if (criteria === undefined) return [];
+  const dropped = criteria.filter((criterion) => criterion.dropped !== undefined);
+  if (dropped.length === 0) return ['No criterion was dropped.'];
+  return [`Dropped criteria: ${dropped.map((criterion) => `${criterion.id} (${(criterion.dropped ?? []).join(', ')})`).join('; ')}. A dropped criterion is not counted as passed.`];
+}
+
 function renderMarkdown(record: RunRecord): string {
   const failed = record.checks.filter((check) => check.status === 'failed');
   const lines = [
@@ -46,6 +54,7 @@ function renderMarkdown(record: RunRecord): string {
     '',
     `Commit: ${record.commit}`,
     `Result: ${failed.length === 0 ? 'PASS' : 'FAIL'}`,
+    ...droppedLines(record.criteria),
     '',
     '| | |',
     '|---|---|',

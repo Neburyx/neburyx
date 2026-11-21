@@ -1,4 +1,6 @@
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -99,6 +101,11 @@ describe('the check of the assistant’s route accuracy (C5)', () => {
 });
 
 describe('the gate-2 catalogue and its record', () => {
+  it('names every check id of the gate in the tool guide', () => {
+    const guide = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../README.md'), 'utf8');
+    for (const id of ASK_PREVIEW_CHECK_IDS) expect(guide, id).toContain(`\`${id}\``);
+  });
+
   it('is the gate-2 one for `ask-preview`, with gate 1 unchanged', () => {
     expect(catalogueFor('ask-preview', '/repo').map((check) => check.id)).toEqual([...ASK_PREVIEW_CHECK_IDS]);
     expect(catalogueFor('v0.1', '/repo').map((check) => check.id)).toEqual([...CHECK_IDS]);
@@ -144,3 +151,66 @@ describe('the gate-2 catalogue and its record', () => {
     expect(criteria[0]?.figure).toContain('not met');
   });
 });
+
+describe('a cut feature drops its criteria', () => {
+  const result = (id: string, status: 'passed' | 'failed' = 'passed') => ({ id, name: id, command: 'c', status, exitCode: 0, durationMs: 1, detail: 'ok', log: '', data: { figure: `figure of ${id}` } });
+  const ALL = ['ask-accuracy', 'ask-safety', 'ask-safety-read-transaction', 'ask-cited-summary', 'summary-suites', 'assistant-replies', 'assistant-route-accuracy', 'any-source'];
+  const ids = (cut: readonly ('summary' | 'assistant')[]) => askPreviewCatalogue(undefined, undefined, cut).map((check) => check.id);
+  const shown = (cut: readonly ('summary' | 'assistant')[]) => askPreviewCriteria(ids(cut).map((id) => result(id)), cut).map((criterion) => [criterion.id, criterion.status]);
+
+  it('runs every check and states every criterion when no feature is cut', () => {
+    expect(ids([])).toEqual(ALL);
+    expect(shown([])).toEqual([['C1', 'passed'], ['C2', 'passed'], ['C3', 'passed'], ['C4', 'passed'], ['C5', 'passed'], ['C6', 'passed']]);
+    expect(askPreviewCriteria(ALL.map((id) => result(id))).some((criterion) => criterion.dropped !== undefined)).toBe(false);
+  });
+
+  it('drops the summary part of C4 and keeps the criterion on its assistant part, naming what was dropped', () => {
+    expect(ids(['summary'])).toEqual(ALL.filter((id) => id !== 'summary-suites'));
+    const c4 = askPreviewCriteria(ids(['summary']).map((id) => result(id)), ['summary']).find((criterion) => criterion.id === 'C4');
+    expect(c4).toMatchObject({ status: 'passed', checks: ['assistant-replies'], dropped: ['the AI case summary part: the feature is cut'] });
+    expect(c4?.figure).toContain('dropped: the AI case summary part: the feature is cut');
+  });
+
+  it('drops C5 and the assistant part of C4 when the assistant is cut, and C4 and C5 both when both are cut, leaving C1, C2, C3 and C6 as they were', () => {
+    expect(ids(['assistant'])).toEqual(ALL.filter((id) => id !== 'assistant-replies' && id !== 'assistant-route-accuracy'));
+    expect(shown(['assistant'])).toEqual([['C1', 'passed'], ['C2', 'passed'], ['C3', 'passed'], ['C4', 'passed'], ['C5', 'dropped'], ['C6', 'passed']]);
+    expect(ids(['summary', 'assistant'])).toEqual(['ask-accuracy', 'ask-safety', 'ask-safety-read-transaction', 'ask-cited-summary', 'any-source']);
+    expect(shown(['summary', 'assistant'])).toEqual([['C1', 'passed'], ['C2', 'passed'], ['C3', 'passed'], ['C4', 'dropped'], ['C5', 'dropped'], ['C6', 'passed']]);
+  });
+
+  it('never counts a dropped criterion as passed, and judges what remains: a failed check of a kept criterion fails it', () => {
+    const results = ids(['assistant']).map((id) => result(id, id === 'any-source' ? 'failed' : 'passed'));
+    expect(askPreviewCriteria(results, ['assistant']).map((criterion) => [criterion.id, criterion.status])).toEqual([['C1', 'passed'], ['C2', 'passed'], ['C3', 'passed'], ['C4', 'passed'], ['C5', 'dropped'], ['C6', 'failed']]);
+  });
+
+  it('says in the first lines of the record that no criterion was dropped, or which were, and a Result that does not count them', async () => {
+    const held = { [ASK_BASELINE]: baseline('claude-haiku-5-5', 7, 28) };
+    const recordFor = async (cut: readonly string[]) => {
+      const recordDir = mkdtempSync(join(tmpdir(), 'gate-cut-'));
+      const deps: RunDeps = {
+        exec: fakeExec((request) => (request.command === 'git' && request.args[0] === 'rev-parse' ? execResult({ output: `${'a'.repeat(40)}\n` }) : request.command === 'git' ? execResult({ output: '' }) : request.command === 'pnpm' && request.args[0] === 'ask-eval' ? reply(ASK) : execResult({ output: '1.0.0\n' }))).exec,
+        signal: new AbortController().signal,
+        repoRoot: '/repo',
+        env: {},
+        clock: () => new Date(Date.UTC(2026, 10, 21, 8, 0, 0)),
+        monotonicNowMs: () => 0,
+        out: () => undefined,
+        err: () => undefined,
+        catalogue: () => [askAccuracyCheck(files(held))],
+        criteria: (_gate, results, kept) => askPreviewCriteria(results, kept),
+      };
+      expect(await runRelease(['--record-dir', recordDir, '--gate', 'ask-preview', '--dry-run', ...cut.flatMap((feature) => ['--cut', feature])], deps)).toBe(0);
+      return readFileSync(join(recordDir, readdirSync(recordDir).find((name) => name.endsWith('.md')) ?? ''), 'utf8');
+    };
+    const none = await recordFor([]);
+    expect(none.split('\n').slice(0, 9).join('\n')).toContain('No criterion was dropped.');
+    const both = await recordFor(['summary', 'assistant']);
+    const first = both.split('\n').slice(0, 9).join('\n');
+    expect(first).toContain('Result: PASS');
+    expect(first).toContain('Dropped criteria: C4 (the AI case summary part: the feature is cut, the assistant part: the feature is cut); C5 (the assistant part: the feature is cut). A dropped criterion is not counted as passed.');
+    expect(both).toMatch(/\| C5 \| .* \| dropped \| dropped: the feature is cut \|/);
+    const private_ = [['E', 'P-'], ['D', 'W'], ['G', '2'], ['fou', 'nder'], ['orchest', 'rator']].map((parts) => parts.join(''));
+    for (const text of [none, both]) for (const word of private_) expect(text.toLowerCase(), word).not.toContain(word.toLowerCase());
+  });
+});
+
