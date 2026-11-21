@@ -2,7 +2,8 @@ import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ASK_PREVIEW_CHECK_IDS, askAccuracyCheck, askPreviewCatalogue, askPreviewCriteria, assistantRouteAccuracyCheck, type Files } from './ask-preview.js';
+import { ASK_PREVIEW_CHECK_IDS, askAccuracyCheck, askPreviewCatalogue, askPreviewCriteria, assistantRouteAccuracyCheck } from './ask-preview.js';
+import type { Files } from './files.js';
 import { CHECK_IDS, catalogueFor, releaseCatalogue } from './catalogue.js';
 import { runRelease, type RunDeps } from './run.js';
 import { execResult, fakeExec, testContext } from './testing.js';
@@ -123,7 +124,7 @@ describe('the gate-2 catalogue and its record', () => {
       monotonicNowMs: () => 0,
       out: (text) => out.push(text),
       err: () => undefined,
-      catalogue: () => askPreviewCatalogue(files(held, ['claude-haiku-5-5'])),
+      catalogue: () => [askAccuracyCheck(files(held)), assistantRouteAccuracyCheck(files(held, ['claude-haiku-5-5']))],
       criteria: (_gate, results) => askPreviewCriteria(results),
     };
     expect(await runRelease(['--record-dir', recordDir, '--gate', 'ask-preview', '--dry-run'], deps)).toBe(0);

@@ -1,23 +1,14 @@
-import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { describeCommand, execFailure } from './command-check.js';
+import { askCitedSummaryCheck, askSafetyCheck, askSafetyReadTransactionCheck, diskSuiteFiles } from './ask-safety.js';
+import { diskFiles, type Files } from './files.js';
+import type { SuiteFiles } from './suite-run.js';
 import { criteriaOf, figureOfChecks, type CriterionDefinition } from './criteria.js';
 import type { Check, CheckContext, CheckOutcome, CriterionResult, CheckResult, ExecRequest } from './types.js';
 
 const ASK_EVAL = 'tools/ask-eval/data';
 const SCRIPTED = 'scripted';
-
-/** What the checks read from the repository: injected so the tests need no checkout. */
-export interface Files {
-  readonly readText: (path: string) => Promise<string>;
-  readonly folders: (path: string) => Promise<readonly string[]>;
-}
-
-const diskFiles: Files = {
-  readText: (path) => readFile(path, 'utf8'),
-  folders: async (path) => (await readdir(path, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name),
-};
 
 const scoreSchema = z.looseObject({
   model: z.string().optional(),
@@ -139,16 +130,18 @@ export function assistantRouteAccuracyCheck(files: Files = diskFiles): Check {
   };
 }
 
-/** The criteria of gate 2 that the catalogue covers so far, in the order the gate states them. */
+/** The criteria of gate 2 that the catalogue covers, in the order the gate states them. */
 const ASK_PREVIEW_CRITERIA: readonly CriterionDefinition[] = [
-  { id: 'C1', text: 'Ask meets the targets of the evaluation tool and its committed baseline on the demo packs’ questions', checks: ['ask-accuracy'], figure: figureOfChecks(['ask-accuracy']) },
+  { id: 'C1', text: 'Ask meets the targets of the evaluation tool and its committed baseline on the demo packs\u2019 questions', checks: ['ask-accuracy'], figure: figureOfChecks(['ask-accuracy']) },
+  { id: 'C2', text: 'The Ask safety suite passes', checks: ['ask-safety', 'ask-safety-read-transaction'], figure: figureOfChecks(['ask-safety', 'ask-safety-read-transaction']) },
+  { id: 'C3', text: 'Every summary statement cites returned elements', checks: ['ask-cited-summary'], figure: figureOfChecks(['ask-cited-summary']) },
   { id: 'C5', text: 'Assistant route accuracy meets its baseline', checks: ['assistant-route-accuracy'], figure: figureOfChecks(['assistant-route-accuracy']) },
 ];
 
-export const ASK_PREVIEW_CHECK_IDS = ['ask-accuracy', 'assistant-route-accuracy'] as const;
+export const ASK_PREVIEW_CHECK_IDS = ['ask-accuracy', 'ask-safety', 'ask-safety-read-transaction', 'ask-cited-summary', 'assistant-route-accuracy'] as const;
 
-export function askPreviewCatalogue(files: Files = diskFiles): readonly Check[] {
-  return [askAccuracyCheck(files), assistantRouteAccuracyCheck(files)];
+export function askPreviewCatalogue(files: Files = diskFiles, suites: SuiteFiles = diskSuiteFiles): readonly Check[] {
+  return [askAccuracyCheck(files), askSafetyCheck(suites), askSafetyReadTransactionCheck(suites), askCitedSummaryCheck(suites), assistantRouteAccuracyCheck(files)];
 }
 
 export function askPreviewCriteria(results: readonly CheckResult[]): readonly CriterionResult[] {
