@@ -208,3 +208,11 @@ Limits of the method: phrases are matched as lower-case text, so a paraphrase is
 | An export drops the sentences that quote a value it masks | `src/export-cases.test.ts` | drops the sentences that quote a value the export masks |
 | Every unusable token gives the same single refusal | `src/export-cases.test.ts` | gives the same single refusal for an expired token |
 | A rule of the export taken out of the product is caught | `src/removed-export-rules.test.ts` | fails the suite when the source of the export no longer tests |
+| Over the answer from the view and the answer after tool steps: a sentence that cites nothing or a key nobody sent is dropped | `src/assistant-answers.test.ts` | drops a sentence that cites nothing and one that cites a key nobody sent |
+| The same two paths drop a sentence with a number its cited line does not hold, and the canary shows it with the test of the numbers taken out | `src/assistant-answers.test.ts` | drops a sentence with a number its cited line does not hold |
+| The same two paths reject a reply with verdict wording whole, and the canary shows it with the verdict test taken out | `src/assistant-answers.test.ts` | rejects a reply with verdict wording whole |
+| The same two paths: with the citation test taken out a sentence that cites a key nobody sent is shown | `src/assistant-answers.test.ts` | canary: with the citation test taken out, a sentence that cites a key nobody sent is shown |
+| The table answer from the view and after tool steps keeps the row that copies its element and drops a row with an unsent key | `src/assistant-answers.test.ts` | keeps the row that copies the element it cites and drops a row that cites a key nobody sent |
+| A table row with a number its element does not hold is dropped, and the canary shows it with the test of the numbers taken out | `src/assistant-answers.test.ts` | drops a row with a number its cited element does not hold |
+| A table with a verdict word in a cell is refused, and the canary shows it with the verdict test taken out | `src/assistant-answers.test.ts` | refuses a table with a verdict word in a cell |
+| A table row citing a key nobody sent is shown with the citation test taken out (from the view) | `src/assistant-answers.test.ts` | canary: with the citation test taken out, a row that cites a key nobody sent is shown |
