@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
 import { describeCommand, execFailure } from './command-check.js';
+import { anySourceCheck } from './any-source.js';
 import { assistantRepliesCheck, summarySuitesCheck } from './replies.js';
 import { askCitedSummaryCheck, askSafetyCheck, askSafetyReadTransactionCheck, diskSuiteFiles } from './ask-safety.js';
 import { diskFiles, type Files } from './files.js';
@@ -138,12 +139,13 @@ const ASK_PREVIEW_CRITERIA: readonly CriterionDefinition[] = [
   { id: 'C3', text: 'Every summary statement cites returned elements', checks: ['ask-cited-summary'], figure: figureOfChecks(['ask-cited-summary']) },
   { id: 'C4', text: 'The AI case summary and the assistant\u2019s replies pass the citation, numeric and leakage suites on the demo views', checks: ['summary-suites', 'assistant-replies'], figure: figureOfChecks(['summary-suites', 'assistant-replies']) },
   { id: 'C5', text: 'Assistant route accuracy meets its baseline', checks: ['assistant-route-accuracy'], figure: figureOfChecks(['assistant-route-accuracy']) },
+  { id: 'C6', text: 'The preview runs on any source, under the data rules and the audit', checks: ['any-source'], figure: figureOfChecks(['any-source']) },
 ];
 
-export const ASK_PREVIEW_CHECK_IDS = ['ask-accuracy', 'ask-safety', 'ask-safety-read-transaction', 'ask-cited-summary', 'summary-suites', 'assistant-replies', 'assistant-route-accuracy'] as const;
+export const ASK_PREVIEW_CHECK_IDS = ['ask-accuracy', 'ask-safety', 'ask-safety-read-transaction', 'ask-cited-summary', 'summary-suites', 'assistant-replies', 'assistant-route-accuracy', 'any-source'] as const;
 
 export function askPreviewCatalogue(files: Files = diskFiles, suites: SuiteFiles = diskSuiteFiles): readonly Check[] {
-  return [askAccuracyCheck(files), askSafetyCheck(suites), askSafetyReadTransactionCheck(suites), askCitedSummaryCheck(suites), summarySuitesCheck(suites), assistantRepliesCheck(suites), assistantRouteAccuracyCheck(files)];
+  return [askAccuracyCheck(files), askSafetyCheck(suites), askSafetyReadTransactionCheck(suites), askCitedSummaryCheck(suites), summarySuitesCheck(suites), assistantRepliesCheck(suites), assistantRouteAccuracyCheck(files), anySourceCheck(suites)];
 }
 
 export function askPreviewCriteria(results: readonly CheckResult[]): readonly CriterionResult[] {

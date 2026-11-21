@@ -30,9 +30,9 @@ const ENTITIES = [
 ];
 const RELATIONSHIPS = [{ type: 'MADE_FROM', from: 'widget', to: 'gadget', stable_id: 'linkId' }];
 
-const exportMapping = (extra: { readonly descriptions?: Readonly<Record<string, string>>; readonly userConcurrency?: number; readonly requestsPerMinute?: number; readonly retention?: { readonly exports_days: number } } = {}) => {
+const exportMapping = (extra: { readonly synthetic?: boolean; readonly descriptions?: Readonly<Record<string, string>>; readonly userConcurrency?: number; readonly requestsPerMinute?: number; readonly retention?: { readonly exports_days: number } } = {}) => {
   const described = <T extends { readonly type: string }>(rows: readonly T[]) => rows.map((row) => (extra.descriptions?.[row.type] === undefined ? row : { ...row, description: extra.descriptions[row.type] }));
-  const source = baseSource({ id: 'demo', entities: described(ENTITIES), relationships: described(RELATIONSHIPS), ...(extra.userConcurrency === undefined && extra.requestsPerMinute === undefined ? {} : { budgets: { ...(extra.userConcurrency === undefined ? {} : { user_concurrency: extra.userConcurrency }), ...(extra.requestsPerMinute === undefined ? {} : { requests_per_minute: extra.requestsPerMinute }) } }) });
+  const source = baseSource({ id: 'demo', ...(extra.synthetic === undefined ? {} : { synthetic: extra.synthetic }), entities: described(ENTITIES), relationships: described(RELATIONSHIPS), ...(extra.userConcurrency === undefined && extra.requestsPerMinute === undefined ? {} : { budgets: { ...(extra.userConcurrency === undefined ? {} : { user_concurrency: extra.userConcurrency }), ...(extra.requestsPerMinute === undefined ? {} : { requests_per_minute: extra.requestsPerMinute }) } }) });
   const text = extra.retention === undefined ? fileOf(source) : stringify({ sources: [source], retention: extra.retention }, { aliasDuplicateObjects: false, blockQuote: false });
   return parseMapping(text, 'neburyx.yaml');
 };
@@ -44,6 +44,8 @@ export const el = (entityType: string, stableId: string) => ({ sourceId: 'demo',
 export const linkRef = (id: string) => ({ sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: id });
 
 export interface ExportRigOptions {
+  /** The `synthetic` flag of the source in the mapping; absent, the mapping does not set it. */
+  readonly synthetic?: boolean;
   readonly widgets?: readonly string[] | ((id: string) => boolean);
   readonly links?: readonly string[];
   readonly name?: (id: string) => string;
@@ -87,7 +89,7 @@ const json = { 'content-type': 'application/json' };
 let sequence = 0;
 
 export async function startExportRig(options: ExportRigOptions = {}) {
-  const mapping = exportMapping({ ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), ...(options.userConcurrency === undefined ? {} : { userConcurrency: options.userConcurrency }), ...(options.requestsPerMinute === undefined ? {} : { requestsPerMinute: options.requestsPerMinute }), ...(options.retention === undefined ? {} : { retention: options.retention }) });
+  const mapping = exportMapping({ ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), ...(options.userConcurrency === undefined ? {} : { userConcurrency: options.userConcurrency }), ...(options.requestsPerMinute === undefined ? {} : { requestsPerMinute: options.requestsPerMinute }), ...(options.retention === undefined ? {} : { retention: options.retention }) });
   const [source] = mapping.sources;
   if (source === undefined) throw new Error('the mapping has a source');
   const known = (id: string): boolean => (typeof options.widgets === 'function' ? options.widgets(id) : (options.widgets ?? ['W-1', 'W-2']).includes(id));

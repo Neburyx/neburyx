@@ -100,6 +100,8 @@ export interface AssistantAppOptions {
   readonly settings?: Readonly<Record<string, string>>;
   /** A description for a type of the source's mapping, by the name of the type. */
   readonly descriptions?: Readonly<Record<string, string>>;
+  /** The `synthetic` flag of the source in the mapping; absent, the mapping does not set it. */
+  readonly synthetic?: boolean;
   /** The person each request is made by: a second person is a function that answers another id. */
   readonly principalId?: () => string;
   /** The clock of the extension (the lifetime of a choice or follow-up token is read from it). */
@@ -147,7 +149,7 @@ export async function startAssistantApp(options: AssistantAppOptions) {
   extension.attachAudit?.({ record: (event) => (modelEvents.push(event), Promise.resolve()) });
   const logs: string[] = [];
   const armed = { open: false };
-  const rig = await startExportRig({ extension, ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() ?? '' }) }), ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
+  const rig = await startExportRig({ extension, ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() ?? '' }) }), ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
   const investigation = await rig.open();
   armed.open = true;
   const body = (message: string, over: Record<string, unknown> = {}) => ({ sourceId: 'demo', investigationId: investigation.id, message, viewElementKeys: [], ...over });

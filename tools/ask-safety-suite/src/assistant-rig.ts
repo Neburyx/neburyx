@@ -20,6 +20,8 @@ export interface AssistantRigOptions {
   readonly descriptions?: Readonly<Record<string, string>>;
   /** Turns the AI case summary on. */
   readonly summary?: boolean;
+  /** The `synthetic` flag of the source in the mapping; absent, the mapping does not set it. */
+  readonly synthetic?: boolean;
   /** The person each request is made by; a function so a test can change the person between requests. */
   readonly principalId?: () => string;
   /** The clock of the extension, which a token's lifetime is read from. */
@@ -60,7 +62,7 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.maxCalls === undefined ? {} : { maxCalls: options.maxCalls }), ...(options.settings === undefined ? {} : { settings: options.settings }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.maxCalls === undefined ? {} : { maxCalls: options.maxCalls }), ...(options.settings === undefined ? {} : { settings: options.settings }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
   return {
     stub,
     store: app.store,
