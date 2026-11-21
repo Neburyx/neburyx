@@ -35,7 +35,7 @@ export const LOOKUP_INVENTORY: Record<string, Record<string, unknown>> = {
  * The mapping the shapes below are written for: the pattern fixtures' entity and relationship types, a rank the maker type can be sorted by, an observed time on the tool relationship, a search property on the maker
  * type and an evidence property on the link relationship.
  */
-export const LOOKUP_MAPPING = linkedMappingOf({
+const LOOKUP_MAPPING = linkedMappingOf({
   entities: PATTERN_ENTITIES.map((entity) => (entity.type === 'maker' ? { ...entity, sortable: ['rank'], search: ['region'] } : entity.type === 'tool' ? { ...entity, reference: ['kind'] } : entity)),
   relationships: PATTERN_RELATIONSHIPS.map((row) => (row.type === 'USES_TOOL' ? { ...row, observed_at: 'seenAt' } : row.type === 'LINKS' ? { ...row, evidence: ['lane'] } : row)),
   derived: [DERIVED_RULE],
