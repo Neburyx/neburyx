@@ -155,7 +155,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
           <div className="ask-progress" aria-hidden="true">
             <span />
           </div>
-          {outcome.step === undefined ? <p>{ASSISTANT_COPY.workingBody}</p> : <p role="status" className="assistant-step">{stepSentenceOf(outcome.step)}</p>}
+          <p className="assistant-step">{outcome.step === undefined ? ASSISTANT_COPY.workingBody : stepSentenceOf(outcome.step)}</p>
         </section>
       );
     case 'cancelled':
@@ -261,14 +261,14 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
 }
 
 /** The words of the step in progress: a fixed sentence for a phase, and for a read the label of the intent or the humanized tool, with its subject; all of it text. */
-function stepSentenceOf(step: TurnStep): string {
+export function stepSentenceOf(step: TurnStep): string {
   switch (step.phase) {
     case 'routing':
       return ASSISTANT_COPY.stepRouting;
     case 'reading-view':
       return ASSISTANT_COPY.stepReadingView;
     case 'reading':
-      return `${ASSISTANT_COPY.stepReading} ${step.label ?? humanize(step.tool ?? '')}${step.subject === undefined ? '' : ` for ${step.subject}`}…`;
+      return `${ASSISTANT_COPY.stepReading} ${step.label ?? humanize(step.tool ?? '')}${step.subject === undefined ? '' : ` ${ASSISTANT_COPY.stepReadingFor} ${step.subject}`}…`;
     case 'answering':
       return ASSISTANT_COPY.stepAnswering;
   }

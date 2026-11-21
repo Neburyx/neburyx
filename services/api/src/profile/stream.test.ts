@@ -80,6 +80,20 @@ describe('a streamed response of an extension route', () => {
     await app.close();
   });
 
+  it('stops the handler through the abort signal after an event that does not fit, so nothing more is done for a turn the client was told failed', async () => {
+    let seen!: (aborted: boolean) => void;
+    const aborted = new Promise<boolean>((resolve) => { seen = resolve; });
+    const app = await started(route(async (request) => {
+      request.emit?.('step', { n: 'nope' });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      seen(request.signal.aborted);
+      return { status: 'done' };
+    }));
+    await post(app);
+    expect(await aborted).toBe(true);
+    await app.close();
+  });
+
   it('refuses an event name that is not the route’s, and an event of the core’s own names', async () => {
     for (const name of ['unknown', 'answer', 'error', '__proto__']) {
       const app = await started(route(async (request) => {

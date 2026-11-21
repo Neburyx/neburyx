@@ -11,8 +11,8 @@ export type TurnStreamOutcome =
   | { readonly kind: 'broken' }
   | { readonly kind: 'stopped' };
 
-/** The longest line the reader takes: a line is one answer, which is bounded far below this. */
-const LINE_MAX_BYTES = 1_048_576;
+/** The longest line the reader takes, in characters: a line is one answer, which is bounded far below this. */
+const LINE_MAX_CHARACTERS = 1_048_576;
 
 /**
  * Reads the body of a streamed turn (one JSON object a line) and hands each step to `onStep` in order. The last line is the answer or an error; a line that is not JSON or does not fit the contract, a line after the last one, a line that is too
@@ -63,12 +63,12 @@ export async function readTurnStream(body: ReadableStream<Uint8Array> | null, on
       rest = parts.pop() ?? '';
       for (const part of parts) {
         if (part === '') continue;
-        if (part.length > LINE_MAX_BYTES || !take(part)) {
+        if (part.length > LINE_MAX_CHARACTERS || !take(part)) {
           await reader.cancel();
           return { kind: 'broken' };
         }
       }
-      if (rest.length > LINE_MAX_BYTES) {
+      if (rest.length > LINE_MAX_CHARACTERS) {
         await reader.cancel();
         return { kind: 'broken' };
       }

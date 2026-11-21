@@ -822,3 +822,16 @@ describe('the steps a streamed clarification and a streamed choice report', () =
   });
 });
 
+describe('the subject of a step for an element of the thread', () => {
+  it('shows the reference the router named, which is a token for a keyed type, and never the title the analyst sees or any value of the element', async () => {
+    const token = 'tok_9f2c';
+    const t = await follow((values) => naming(keyOf(values, 'Ana Silva')), { readNodes: (refs) => refs.entities.map((ref) => nodeOf(ref.stableId, 'Ana Silva')) });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: { sourceId: 'demo', entityType: 'widget', stableId: token } }] }));
+    const events: Record<string, unknown>[] = [];
+    await t.send(FOLLOW_UP, { emit: (_name: string, members: unknown) => void events.push(members as Record<string, unknown>) });
+    const read = events.find((event) => event['phase'] === 'reading');
+    expect(read?.['subject']).toBe(token);
+    expect(JSON.stringify(events)).not.toContain('Ana Silva');
+  });
+});
+

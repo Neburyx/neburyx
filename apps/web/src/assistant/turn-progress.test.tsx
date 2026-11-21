@@ -17,6 +17,7 @@ function held() {
   const h = harness((_request, signal, onStep) => new Promise((resolve) => void turns.push({ signal, onStep, finish: resolve })));
   return { h, turns };
 }
+const cardStep = () => document.querySelector('.assistant-step')?.textContent;
 const field = () => screen.getByLabelText(ASSISTANT_COPY.fieldLabel) as HTMLTextAreaElement;
 
 describe('the Assistant panel: the step in progress', () => {
@@ -28,13 +29,13 @@ describe('the Assistant panel: the step in progress', () => {
     const turn = turns[0];
     if (turn?.onStep === undefined) throw new Error('the client was given no listener');
     await act(async () => turn.onStep?.({ n: 1, phase: 'routing' }));
-    expect(screen.getByText(ASSISTANT_COPY.stepRouting)).toBeTruthy();
+    expect(cardStep()).toBe(ASSISTANT_COPY.stepRouting);
     expect(screen.queryByText(ASSISTANT_COPY.workingBody)).toBeNull();
     await act(async () => turn.onStep?.({ n: 2, phase: 'reading', tool: 'shared-attribute', label: 'Accounts at the same bank', subject: 'A-1' }));
-    expect(screen.getByText('Reading Accounts at the same bank for A-1…')).toBeTruthy();
+    expect(cardStep()).toBe('Reading Accounts at the same bank for A-1…');
     expect(screen.queryByText(ASSISTANT_COPY.stepRouting)).toBeNull();
     await act(async () => turn.onStep?.({ n: 3, phase: 'answering' }));
-    expect(screen.getByText(ASSISTANT_COPY.stepAnswering)).toBeTruthy();
+    expect(cardStep()).toBe(ASSISTANT_COPY.stepAnswering);
     await act(async () => turn.finish({ ok: true, value: REFUSAL }));
     expect(await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeTruthy();
     expect(screen.queryByText(ASSISTANT_COPY.stepAnswering)).toBeNull();
@@ -46,21 +47,23 @@ describe('the Assistant panel: the step in progress', () => {
     await typeAndSend('hello');
     const turn = turns[0];
     await act(async () => turn?.onStep?.({ n: 1, phase: 'reading', tool: 'accounts-using-a-device' }));
-    expect(screen.getByText('Reading Accounts using a device…')).toBeTruthy();
+    expect(cardStep()).toBe('Reading Accounts using a device…');
     await act(async () => turn?.onStep?.({ n: 2, phase: 'reading', tool: 'x', label: '<img src=x onerror=alert(1)>', subject: '<b>A-1</b>' }));
-    expect(screen.getByText('Reading <img src=x onerror=alert(1)> for <b>A-1</b>…')).toBeTruthy();
+    expect(cardStep()).toBe('Reading <img src=x onerror=alert(1)> for <b>A-1</b>…');
     expect(document.querySelector('.assistant-step img, .assistant-step b')).toBeNull();
   });
 
-  it('announces the step in a status region that holds one step at a time', async () => {
+  it('announces the step in the panel’s one live region, which holds the waiting sentence first and one step at a time after', async () => {
     const { h, turns } = held();
     render(h.tree());
     await typeAndSend('hello');
+    const region = screen.getByRole('status');
+    expect(region.textContent).toBe(ASSISTANT_COPY.working);
     await act(async () => turns[0]?.onStep?.({ n: 1, phase: 'routing' }));
+    expect(region.textContent).toBe(ASSISTANT_COPY.stepRouting);
     await act(async () => turns[0]?.onStep?.({ n: 2, phase: 'reading-view' }));
-    const regions = document.querySelectorAll('.assistant-step[role="status"]');
-    expect(regions).toHaveLength(1);
-    expect(regions[0]?.textContent).toBe(ASSISTANT_COPY.stepReadingView);
+    expect(screen.getByRole('status')).toBe(region);
+    expect(region.textContent).toBe(ASSISTANT_COPY.stepReadingView);
   });
 
   it('closes the request when Cancel is pressed during the steps, shows the Cancelled turn and gives the message back', async () => {

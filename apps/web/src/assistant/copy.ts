@@ -21,6 +21,7 @@ export const ASSISTANT_COPY = {
   stepRouting: 'Placing your message…',
   stepReadingView: 'Reading your view…',
   stepReading: 'Reading',
+  stepReadingFor: 'for',
   stepAnswering: 'Writing the answer…',
   working: 'Working on it…',
   workingBody: 'Understanding your message and reading the source. This can take a moment.',

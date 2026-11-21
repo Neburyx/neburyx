@@ -4,7 +4,7 @@ import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, word
 import { MaskingCard, NewThreadCard, StandingNote, StoredTurns } from './thread-notices.js';
 import { useStoredThread } from './stored-thread.js';
 import { SummaryContext } from './summary-context.js';
-import { TurnView } from './turn-cards.js';
+import { TurnView, stepSentenceOf } from './turn-cards.js';
 import { useAssistant } from './use-assistant.js';
 
 function Chat() {
@@ -85,7 +85,9 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
   }, [model.canCancel]);
   const canSend = model.canSend && available;
   const limit = model.limit;
-  const announced = pending ? ASSISTANT_COPY.working : '';
+  // the one live region of the panel says the step in progress when the server reports one, and the waiting sentence until then
+  const step = turns.flatMap((turn) => (turn.outcome.kind === 'pending' && turn.outcome.step !== undefined ? [turn.outcome.step] : []))[0];
+  const announced = pending ? (step === undefined ? ASSISTANT_COPY.working : stepSentenceOf(step)) : '';
   const close = (): void => {
     onClose();
     focusAssistantControl();

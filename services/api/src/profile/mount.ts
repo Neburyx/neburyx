@@ -162,7 +162,11 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
           return parsed.data;
           };
           if (route.stream !== undefined && live && wantsStream(request.headers.accept)) {
-            const writer = createStreamWriter(request, replyOut, route.stream, () => request.log.error({ event: 'extension.event_invalid', extension: extension.name }, 'an extension event did not match its schema'));
+            const writer = createStreamWriter(request, replyOut, route.stream, () => {
+              request.log.error({ event: 'extension.event_invalid', extension: extension.name }, 'an extension event did not match its schema');
+              // the client was told the turn failed: the turn stops, so nothing more is read or sent for it
+              mount.abortOf?.(request);
+            });
             const timer = setTimeout(() => {
               writer.fail('QUERY_TIMEOUT');
               mount.abortOf?.(request);

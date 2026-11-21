@@ -87,13 +87,36 @@ describe('the steps a streamed turn reports', () => {
     expect(JSON.stringify(events)).not.toContain('Account A-1');
   });
 
-  it('puts nothing a model wrote in any event: a canary in the answer, the router reply and the step reply never reaches one', async () => {
-    const CANARY = 'CANARY-7f3a';
-    const { events, answer } = await streamed(loopOptions({ answer: sentences({ text: `Account A-1 is listed ${CANARY}.`, cites: ['r1'] }) }), { message: 'Show A-1 and A-2' });
-    expect(JSON.stringify(events)).not.toContain(CANARY);
-    expect(JSON.stringify(answer)).not.toContain('CANARY-7f3b');
-    const view = await streamed({ view: sentences({ text: `Account A-1 is in view ${CANARY}.`, cites: ['n1'] }) });
-    expect(JSON.stringify(view.events)).not.toContain(CANARY);
+  it('puts nothing a model wrote in any event: a canary in the router reply, the step reply and the answer, each sent by the model and none in an event', async () => {
+    const CANARY = 'zzcanaryzz';
+    const given: string[] = [];
+    const say = (text: string): FixtureReply => {
+      if (text.includes(CANARY)) given.push(text);
+      return ok(text);
+    };
+    const bareView = JSON.stringify({ route: 'view' });
+    // the router: a reply with the canary around the route is asked for again; the answer carries the canary too
+    let routed = 0;
+    const viewed = await streamed({ routerMaxCalls: 3, maxCalls: 6, reply: () => say(routed++ === 0 ? `${CANARY} ${bareView}` : bareView), view: sentences({ text: `Account A-1 is in view ${CANARY}.`, cites: ['n1'] }) });
+    expect(given.length).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(viewed.answer)).toContain(CANARY);
+    expect(viewed.events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(viewed.events)).not.toContain(CANARY);
+    // the step reply: a reply with the canary around the request is asked for again; the answer carries the canary
+    given.length = 0;
+    let stepped = 0;
+    const step = () => say(stepped++ === 0 ? `${CANARY} ${JSON.stringify({ tool: 'byId', values: { id: 'A-2' } })}` : stepped === 2 ? JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }) : '{"done":true}');
+    const looped = await streamed(loopOptions({ step, answer: sentences({ text: `Account A-1 is listed ${CANARY}.`, cites: ['r1'] }) }), { message: 'Show A-1 and A-2' });
+    expect(given.length).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(looped.answer)).toContain(CANARY);
+    expect(looped.events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(looped.events)).not.toContain(CANARY);
+  });
+
+  it('says that a view call that asks for a read has already said answering: the order is pinned, routing, the view, answering, the read, answering', async () => {
+    const asksRead = ok(JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }));
+    const { events } = await streamed(loopOptions({ reply: ok(JSON.stringify({ route: 'view' })), view: asksRead, step: sequence(DONE), intents: LABELLED }), { message: 'What is in view, and read A-2' });
+    expect(phases(events)).toEqual(['routing', 'reading-view', 'answering', 'reading', 'answering']);
   });
 
   it('sends at most maxSteps + 4 events in a turn that reads as often as it may', async () => {
