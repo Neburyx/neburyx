@@ -171,6 +171,17 @@ The same suite proves the assistant's guarantees through `POST /v1/assistant/tur
 
 The suite does not measure how well Ask classifies; that is `tools/ask-eval` (see [Checking it](#checking-it)).
 
+### A value you write is checked against the type its question needs
+
+When a question or a message writes an id for a role that needs a type of entity (a customer, an account), Neburyx looks the id up through the gate before the question runs, in one read by reference of the source: a reference of the needed type and one of each other type of the mapping, with the id as a parameter of the read and no query text. This holds for Ask, for the assistant's `ask` and `clarify` replies and the choice that follows a clarification, for the anchor of a saved pattern and for each step of the assistant's tool loop. A value of a role that has no type (a payment reference, a name to search for) is not looked up, and an id of a type whose identifiers are tokens the server made (a type whose id is also a personal field) cannot be looked up from a typed value and is answered as left out.
+
+- If the id is an element of another type, the answer is a fixed sentence that names both types and cites the element with the title the gate gave it ("Account AC-2 is an account; this question needs a customer. Nothing was run."). Masking applies to the title as to any read.
+- If no element of the mapping has the id, the sentence says so ("There is no customer with that id. Nothing was run.").
+- If the read left something out (what you may not see or export), the sentence does not say whether the element exists ("That value does not give a customer this question can use. Nothing was run."). One such element in a read makes every id of that read answer this way, which is the cautious answer.
+- If a step of the tool loop writes such a value, the turn ends there with the sentence and the reads the earlier steps made; the model is not asked again.
+
+The sentences are fixed text built from type names and a title, never words of the model. The lookup is a read through the gate like any other, audited as the read by references and by the gate's own event for each run; the closing event of the turn and the event of the question name the cause (`value-not-fit`) and how it failed (`valueKind`), never the value. It counts toward the turn's time and your rate on the source, but it is not a step or a model call of the turn and is not listed among the reads of an answer. A key the model names for an element is checked as before, against the elements of the turn's context.
+
 ### Asking for a saved pattern
 
 A question may name one of the person's own saved patterns on the source (the shared patterns of other people are never offered). When the person has any, the model is sent, after the question, one fixed sentence that says how to name a pattern and a list with a key for each pattern, its label as the person typed it and a description of its structure (types, directions and kinds of condition, never a value or an ID); it answers with the reserved intent `saved-pattern` and the entity `pattern` (the key), and `anchor` (the stable ID the question gives) for a pattern that starts from an entity the question names. Ask then runs the saved pattern through the gate as the person's own saved run would, with the person's masking. The answer names the pattern by its ID in `entities` and by its label in `patternName`, and an unknown pattern is the refusal `nothing found`. A saved pattern is never built from a name in the question, only from an ID.
