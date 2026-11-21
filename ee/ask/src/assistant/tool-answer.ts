@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_TITLE_MAX, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
+import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { type AssembledText, edgeDetailOf, estimateTokens, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
 import { retrievalLine } from '../case-summary/coverage.js';
@@ -6,7 +6,8 @@ import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.j
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { listedElements } from '../summary/index.js';
-import { coverageOf, inexactCountOf } from './coverage.js';
+import { countOf, coverageOf, inexactCountOf } from './coverage.js';
+import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE } from './table.js';
 import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-audit.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
@@ -14,7 +15,7 @@ import { refId } from '../summary/title.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const ANSWER_PROMPT_ID = 'assistant.answer';
-export const ANSWER_PROMPT_VERSION = 6;
+export const ANSWER_PROMPT_VERSION = 7;
 const ANSWER_AUDIT_ACTION = 'assistant.answer';
 
 export interface ToolAnswerOptions {
@@ -57,6 +58,8 @@ export interface ToolAnswerInput {
 
 export type ToolAnswerOutcome =
   | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string }
+  /** The answer as a table (the router chose the form): rows that each cite an element a read returned. */
+  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string }
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote and the names of the profile. */
   | { readonly kind: 'noDescription'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported'; readonly calls: number }
@@ -242,7 +245,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     if (assembled.keys.size === 0 && readKeys.length === 0) return { kind: 'unsupported', calls: 0 };
     const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read)}`)].join('; ');
     const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes, input.scope.contextTypes);
-    const values = valuesOf(input.message, assembled, coverage, input.context, noteLines) + typeLines.section;
+    const values = valuesOf(input.message, assembled, coverage, input.context, noteLines) + typeLines.section + (input.scope.form === 'table' ? TABLE_NOTE : '');
     const remaining = input.startedAt + options.totalTimeoutMs - now();
     if (remaining <= 0 || input.deadline.aborted) return { kind: 'limit', limit: 'time', calls: 0 };
     const allowed = input.maxCalls - input.callsUsed;
@@ -254,6 +257,7 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
     const turnSignal = AbortSignal.any([input.signal, input.deadline]);
     let calls = 0;
     let lastNames: readonly string[] | undefined;
+    let keptRows: readonly number[] = [];
     let drafted: DraftedOrAlternative;
     try {
       drafted = await draftSummary({
@@ -269,7 +273,15 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
           lastNames = found;
           return found === undefined ? undefined : noDescriptionSentence(found);
         },
-        judge: async (sentences, signal) => {
+        ...(input.scope.form === 'table' ? { form: 'table' as const } : {}),
+        judge: async (sentences, signal, table) => {
+          if (input.scope.form === 'table') {
+            // each row alone; a row that cites anything but an element a read returned (a line of a read, a typology line, a note) is removed unjudged, so that no cell rests on text the card does not show
+            const judged = await judgeTableRows({ rows: sentences, columns: table?.columns, checks: options.checks, judge: judgeCheck, text: checkedText, timeoutMs: options.timeoutMs, signal, drop: (row) => row.cites.some((key) => !assembled.keys.has(key)) });
+            if ('refused' in judged) return { refused: judged.refused };
+            keptRows = judged.positions;
+            return { kept: judged.kept, removed: judged.removed, verdictFound: judged.verdictFound, keysStripped: judged.keysStripped, keysRemoved: judged.keysRemoved };
+          }
           const checked = await options.checks.run(judgeCheck, { sentences: withElementsOfNotes(sentences, noteElements), text: checkedText }, { timeoutMs: options.timeoutMs, signal });
           return checked.status === 'refused' ? { refused: checked.reason } : checked.value;
         },
@@ -312,6 +324,41 @@ export function createToolAnswer(options: ToolAnswerOptions): (input: ToolAnswer
       case 'drafted': {
         const fixed = undescribedOf(drafted.noDescription === undefined ? undefined : lastNames, typeLines);
         if (drafted.sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? { kind: 'noDescription', sentence: noDescriptionSentence(fixed), names: fixed, calls: drafted.calls } : { kind: 'unsupported', calls: drafted.calls };
+        if (drafted.table !== undefined) {
+          const draft = drafted.table;
+          const rows = keptRows.flatMap((index) => (draft.rows[index] === undefined ? [] : [draft.rows[index]]));
+          const shown = rows.slice(0, ASSISTANT_TABLE_ROWS_MAX).map((row) => ({ cells: [...row.cells], cites: [...row.cites] }));
+          const cut = rows.length - shown.length;
+          const tableCited = [...new Set(shown.flatMap((row) => row.cites))];
+          const tableCitations = tableCited.flatMap((key) => {
+            const element = assembled.keys.get(key);
+            return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref, ...(citationTitleOf(element.title) === undefined ? {} : { title: citationTitleOf(element.title) }) }];
+          });
+          const subject = subjectTypeOf(shown, assembled);
+          const plural = subjectPluralOf(subject, input.scope.request.typeDescriptions?.(input.scope.sourceId));
+          // one read that listed every row's first element, from an expand of one titled element: the title of that element
+          const withResult = input.reads.filter((read) => read.result !== undefined);
+          const only = withResult.length === 1 ? withResult[0] : undefined;
+          const readIndex = only === undefined ? -1 : input.reads.indexOf(only);
+          const listed = assembled.readElements?.get(`s${readIndex + 1}`);
+          let anchorTitle: string | undefined;
+          if (only?.result?.templateId === 'expand' && listed !== undefined && shown.every((row) => row.cites[0] !== undefined && listed.includes(row.cites[0]))) {
+            const anchorId = refId(only.result.result.ref);
+            anchorTitle = citationTitleOf(listedElements(only.result)?.get(anchorId)?.title);
+          }
+          const title = `${plural}${anchorTitle === undefined ? '' : ` of ${anchorTitle}`} · ${rowsPhrase(shown.length)}`;
+          let shownOf: string;
+          const ofSubject = (key: string): boolean => subject !== undefined && subjectTypeOf([{ cites: [key] }], assembled)?.text === subject.text;
+          const inReads = subject === undefined ? (listed ?? [...assembled.keys.keys()]).length : (listed ?? [...assembled.keys.keys()]).filter(ofSubject).length;
+          if (only?.result !== undefined && listed !== undefined && subject !== undefined && listed.every(ofSubject)) {
+            // the read's own count is of the subject type only when the read listed nothing else
+            const count = countOf(only.result);
+            shownOf = count.value === undefined ? `${shown.length} ${plural.toLowerCase()} read shown · the count is not known` : `${shown.length} of ${count.value} ${plural.toLowerCase()} read shown · ${count.quality === 'lowerBound' ? 'lower bound' : count.quality}`;
+          } else {
+            shownOf = `${shown.length} of ${inReads} ${plural.toLowerCase()} read shown · exact`;
+          }
+          return { kind: 'table', table: { title, columns: [...draft.columns], rows: shown, ...(rows.length < draft.rows.length ? { droppedRows: draft.rows.length - rows.length } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: options.model.modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
+        }
         const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
         const citations = [...cited].flatMap((key) => {
           const element = assembled.keys.get(key);

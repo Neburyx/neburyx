@@ -4,8 +4,8 @@ import { ASK_FOLDER_LIMITS, hasDuplicateKeys, isParameterName } from './ask-fold
 import { ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_MEANING_NAMES_MAX, ASSISTANT_MEANING_NAME_MAX, ASSISTANT_REFUSAL_CAUSES, type AssistantRefusalCause } from './assistant-turn.js';
 
 export type AssistantRouterReply =
-  /** `types`: the names of types the message also asks the meaning of, as the analyst wrote them; the server adds the fixed sentence for those that have no description. */
-  | { readonly route: 'view'; readonly types?: readonly string[] }
+  /** `types`: the names of types the message also asks the meaning of, as the analyst wrote them; the server adds the fixed sentence for those that have no description. `form`: `table` when the message asks for its answer as a table; the server never reads the message's words for it. */
+  | { readonly route: 'view'; readonly types?: readonly string[]; readonly form?: 'table' }
   /** The message asks only what named types or links mean: the names as the analyst wrote them, for the server to match and answer. */
   | { readonly route: 'meaning'; readonly types: readonly string[] }
   | { readonly route: 'refuse'; readonly cause: AssistantRefusalCause }
@@ -57,7 +57,7 @@ function elementsOf(value: unknown): Readonly<Record<string, string>> | undefine
 }
 
 /**
- * Reads the text of a reply of the router strictly: exactly one JSON object with a `route` of `view` (no other key), `refuse` (and a `cause` of the closed list) or `ask` (and an `intent` of
+ * Reads the text of a reply of the router strictly: exactly one JSON object with a `route` of `view` (and optionally `types`, and `form` of `table`, no other key), `refuse` (and a `cause` of the closed list) or `ask` (and an `intent` of
  * the name of an intent and its `entities`, and optionally `elements`, the roles whose value is a context key instead of typed text, never a role of `entities` too; whether the intent exists is for the route to say). Anything else, a duplicate key included, does not fit; nothing of the reply is repeated.
  */
 export function readAssistantRoute(text: string): ReadAssistantRoute {
@@ -72,9 +72,11 @@ export function readAssistantRoute(text: string): ReadAssistantRoute {
   if (!isRecord(data)) return bad;
   const route = data['route'];
   if (route === 'view') {
-    if (hasExactly(data, ['route'])) return { ok: true, reply: { route } };
-    const asked = hasExactly(data, ['route', 'types']) ? meaningNamesOf(data['types']) : undefined;
-    return asked === undefined ? bad : { ok: true, reply: { route, types: asked } };
+    if (Object.keys(data).some((key) => key !== 'route' && key !== 'types' && key !== 'form')) return bad;
+    const types = 'types' in data ? meaningNamesOf(data['types']) : undefined;
+    if ('types' in data && types === undefined) return bad;
+    if ('form' in data && data['form'] !== 'table') return bad;
+    return { ok: true, reply: { route, ...(types === undefined ? {} : { types }), ...('form' in data ? { form: 'table' as const } : {}) } };
   }
   if (route === 'meaning') {
     const names = hasExactly(data, ['route', 'types']) ? meaningNamesOf(data['types']) : undefined;

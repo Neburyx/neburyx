@@ -78,7 +78,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     await run(turn);
     const [kept] = stored(turn);
     expect(stored(turn)).toHaveLength(1);
-    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '6', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
+    expect(kept).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, modelRef: 'fixture-model', promptVersion: '7', tokensIn: 20, tokensOut: 10, runId: runs.runs[0]?.id, investigationId: INVESTIGATION, userId: PERSON });
     expect(kept?.questionHash).toMatch(SHA);
     expect(kept?.entities).toEqual([{ role: 'id', ref: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' } }]);
     expect(kept?.citationRefs).toEqual([
@@ -180,6 +180,24 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
     expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref])));
+  });
+
+  it('keeps an answered table turn with the references its rows cited and the count the audit event holds, and no cell', async () => {
+    const view = await turnRig({ reply: ok('{"route":"view","form":"table"}'), view: ok(JSON.stringify({ table: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }, { cells: ['Account A-2'], cites: ['n2'] }] } })) });
+    const result = await run(view, { ...VIEW_BODY, investigationId: INVESTIGATION });
+    const answer = 'value' in result ? assistantTurnAnswerSchema.parse(result.value) : undefined;
+    if (answer?.status !== 'answered' || answer.route !== 'view' || !('table' in answer)) throw new Error('not a table answer');
+    const [kept] = stored(view);
+    expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
+    expect(kept?.citationRefs).toHaveLength(2);
+    expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref])));
+    expect(JSON.stringify(kept)).not.toContain('Account A-1');
+    const closed = view.r.events.find((event) => event.action === TURN_CLOSED_ACTION);
+    expect(closed?.detail).toMatchObject({ turn: { route: 'view', outcome: 'answered', citedElements: 2, form: 'table', tableRowsShown: 2 } });
+    expect((closed?.detail as { turn: Record<string, unknown> }).turn).not.toHaveProperty('tableRowsDropped');
+    expect((closed?.detail as { turn: Record<string, unknown> }).turn).not.toHaveProperty('tableRowsNotShown');
+    // no cell, column label or title in the event
+    for (const text of ['Account A-1', '"Element"', 'widgets']) expect(JSON.stringify(closed)).not.toContain(text);
   });
 
   it('keeps nothing for a turn that failed, was cancelled, was too long or too large, a continue that is not valid, or a person who may not read', async () => {

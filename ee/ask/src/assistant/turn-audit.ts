@@ -183,12 +183,16 @@ interface Ending {
   readonly failureKind?: string;
   readonly intent?: string;
   readonly citedElements?: number;
+  readonly table?: { readonly shown: number; readonly dropped?: number; readonly notShown?: number };
 }
+
+const tableOf = (answer: { readonly table: { readonly rows: readonly unknown[]; readonly droppedRows?: number; readonly moreNotShown?: number } }): NonNullable<Ending['table']> => ({ shown: answer.table.rows.length, ...(answer.table.droppedRows === undefined ? {} : { dropped: answer.table.droppedRows }), ...(answer.table.moreNotShown === undefined ? {} : { notShown: answer.table.moreNotShown }) });
 
 function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause };
+      if ('table' in answer) return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length, table: tableOf(answer), ...(answer.status === 'answered' && 'stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
       if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
       if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(answer.stoppedAt === undefined ? {} : { cause: `limit-${answer.stoppedAt}` }) };
       if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
@@ -268,6 +272,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(notes.paramsHash === undefined ? {} : { paramsHash: notes.paramsHash }),
     ...(notes.steps === undefined ? {} : { steps: notes.steps }),
     ...(ending.citedElements === undefined ? {} : { citedElements: ending.citedElements }),
+    ...(ending.table === undefined ? {} : { form: 'table' as const, tableRowsShown: ending.table.shown, ...(ending.table.dropped === undefined ? {} : { tableRowsDropped: ending.table.dropped }), ...(ending.table.notShown === undefined ? {} : { tableRowsNotShown: ending.table.notShown }) }),
     ...(notes.summary === undefined ? {} : { summarySentencesKept: notes.summary.kept, summarySentencesDropped: notes.summary.dropped }),
     modelCalls: notes.calls + (notes.summaryCalls ?? 0),
     ...(notes.calls + (notes.summaryCalls ?? 0) > 0 ? { propertyValuesSent: notes.propertyValuesSent === true } : {}),
@@ -289,7 +294,7 @@ function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { reado
 /** The things an accepted answer cited, as references: the element or relationship of each citation of an answer from the view, or of the summary of an Ask answer. */
 function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): AssistantThreadTurnWrite['citationRefs'] {
   if (notes.citedRefs !== undefined) return notes.citedRefs;
-  if ('answer' in outcome && outcome.answer.status === 'answered' && 'sentences' in outcome.answer) return outcome.answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref]));
+  if ('answer' in outcome && outcome.answer.status === 'answered' && ('sentences' in outcome.answer || 'table' in outcome.answer)) return outcome.answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref]));
   if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answer' in outcome.answer) || !('answered' in outcome.answer.answer)) return [];
   return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
 }

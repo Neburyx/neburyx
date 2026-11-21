@@ -355,6 +355,38 @@ test.describe('the Assistant panel', () => {
     });
   }
 
+  for (const width of [1440, 1280, 390]) {
+    test(`has the structure of a table answer at ${width} pixels: the title, a header with a Cite column, a chip on every row, the fold line, the notice, the sources and the coverage, and never scrolls the page sideways`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+      const answer: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'view',
+        table: { title: 'Accounts · 12 rows', columns: ['Element', 'A rather long column label to widen it', 'Another long column label'], rows: Array.from({ length: 12 }, (_, index) => ({ cells: [`row-${index + 1}`, `a long cell text for row ${index + 1} of the table`, 'value'], cites: ['n1'] })), moreNotShown: 3, droppedRows: 1 },
+        citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+        coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '12 of 15 accounts in view shown · exact' },
+        model: 'claude-sonnet-5-5',
+        calls: 2,
+      };
+      await answerWith(page, answer);
+      await open(page);
+      await page.getByLabel('Your message').fill('show them as a table');
+      await page.keyboard.press('Enter');
+      const table = panel(page).getByRole('table', { name: 'Accounts · 12 rows' });
+      await expect(table).toBeVisible();
+      await expect(table.getByRole('columnheader', { name: 'Cite' })).toBeVisible();
+      await expect(table.getByRole('row')).toHaveCount(1 + 3 + 1 + 1);
+      await expect(table.getByRole('button', { name: /^Citation 1, / })).toHaveCount(4);
+      await expect(table.getByRole('button', { name: '… 8 more rows …' })).toBeVisible();
+      await expect(panel(page).getByText('More not shown')).toBeVisible();
+      await expect(panel(page).getByText('12 rows are shown. 3 more rows were not shown. Narrow the view or ask for a smaller set.')).toBeVisible();
+      await expect(panel(page).getByText('Sources · 1')).toBeVisible();
+      await expect(panel(page).getByText('12 of 15 accounts in view shown · exact')).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
+  }
+
   for (const width of [1440, 1280]) {
     test(`shows an About chip for the meaning of a type at ${width} pixels, opens the operator's description as text and selects nothing, and shows the plain card of a type with no description`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });

@@ -94,3 +94,28 @@ describe('the names a view reply may carry', () => {
     for (const text of ['{"route":"view","types":[]}', '{"route":"view","types":[5]}', '{"route":"view","types":["a"],"extra":1}', '{"route":"view","types":"widget"}']) expect(readAssistantRoute(text)).toEqual({ ok: false });
   });
 });
+
+describe('the form field of a reply of the router', () => {
+  it('reads a view with the form table, alone or with types', () => {
+    expect(readAssistantRoute('{"route":"view","form":"table"}')).toEqual({ ok: true, reply: { route: 'view', form: 'table' } });
+    expect(readAssistantRoute('{"route":"view","types":["lane"],"form":"table"}')).toEqual({ ok: true, reply: { route: 'view', types: ['lane'], form: 'table' } });
+    expect(readAssistantRoute('{"route":"view","form":"table","types":["lane"]}')).toEqual({ ok: true, reply: { route: 'view', types: ['lane'], form: 'table' } });
+  });
+
+  it('refuses any other value of the form, a form on another route, an unknown key and a duplicate key', () => {
+    for (const text of [
+      '{"route":"view","form":"list"}',
+      '{"route":"view","form":"Table"}',
+      '{"route":"view","form":true}',
+      '{"route":"view","form":null}',
+      '{"route":"view","form":["table"]}',
+      '{"route":"view","form":"table","extra":1}',
+      '{"route":"view","form":"table","form":"table"}',
+      '{"route":"meaning","types":["lane"],"form":"table"}',
+      '{"route":"refuse","cause":"verdict","form":"table"}',
+      '{"route":"ask","intent":"byId","entities":{},"form":"table"}',
+      '{"route":"clarify","intent":"byId","role":"id","entities":{},"candidates":["c1","c2"],"form":"table"}',
+    ]) expect(readAssistantRoute(text), text).toEqual({ ok: false });
+  });
+});
+

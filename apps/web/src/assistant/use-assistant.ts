@@ -73,7 +73,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: Assistant
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence };
-      if (answer.route === 'view' || 'sentences' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
+      if ('sentences' in answer || 'table' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, reads: answer.reads, stoppedAt: answer.stoppedAt, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
@@ -187,7 +187,7 @@ export function useAssistant(): AssistantModel {
           setFocus(turnId);
           return;
         }
-        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ ...answer, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation])) }, state.visibleGraph()));
+        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: 'table' in answer ? answer.table.rows : answer.sentences, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation])) }, state.visibleGraph()));
         if ('tooLong' in outcome) {
           store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId), notice: { kind: 'too-long', ...outcome.tooLong } });
           if (retry.kind === 'message') restoreInput(retry.text);

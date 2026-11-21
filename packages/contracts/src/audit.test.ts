@@ -201,6 +201,11 @@ describe('the closing event of an assistant turn', () => {
     for (const bad of ['true', 1, 0, null, { amount: 4200 }, 'Name-1']) expect(parses({ ...MINIMAL, modelCalls: 1, propertyValuesSent: bad })).toBe(false);
   });
 
+  it('takes the table form with counts only, and refuses any other form or a count that is not a count', () => {
+    expect(parses({ ...MINIMAL, outcome: 'answered', form: 'table', tableRowsShown: 3, tableRowsDropped: 1, tableRowsNotShown: 2 })).toBe(true);
+    for (const bad of [{ form: 'list' }, { form: 'table', tableRowsShown: -1 }, { form: 'table', tableRowsShown: 'three' }, { form: 'table', tableRowsDropped: 1.5 }, { form: 'table', cells: ['x'] }, { form: 'table', title: 'Accounts' }]) expect(parses({ ...MINIMAL, ...bad })).toBe(false);
+  });
+
   it('takes the minimal and the full shape', () => {
     expect(parses(MINIMAL)).toBe(true);
     expect(parses(FULL)).toBe(true);

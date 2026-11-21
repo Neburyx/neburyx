@@ -63,7 +63,10 @@ function missOf(expect: AssistantExpect, outcome: RouteOutcome): string | undefi
   const { reply } = outcome;
   if (reply.route !== expect.route) return 'wrong-route';
   if (expect.route === 'meaning' && reply.route === 'meaning') return sameNames(reply.types, expect.types) ? undefined : 'wrong-types';
-  if (expect.route === 'view' && reply.route === 'view') return sameNames(reply.types ?? [], expect.types ?? []) ? undefined : 'wrong-types';
+  if (expect.route === 'view' && reply.route === 'view') {
+    if ((reply.form ?? 'sentences') !== (expect.form ?? 'sentences')) return 'wrong-form';
+    return sameNames(reply.types ?? [], expect.types ?? []) ? undefined : 'wrong-types';
+  }
   if (expect.route === 'refuse' && reply.route === 'refuse') return reply.cause === expect.cause ? undefined : 'wrong-cause';
   if (expect.route === 'ask' && reply.route === 'ask') {
     if (reply.intent !== expect.intent) return 'wrong-intent';

@@ -1,15 +1,27 @@
 {
   "model": "claude-haiku-5-5",
   "folders": {
-    "banking-demo": "fbcea199d82433bf6fa68d972c8ecb8c92557afe7dc6b69377dc858fe4850b02",
-    "insurance-demo": "3116bf156d10237c465f1209fe698b1cfd31c74973002f6f2c2f1371ef85fa75"
+    "banking-demo": "347b74a8ea3af13b04adc7587bde77ab04811d176705498774da35f638e4ff33",
+    "insurance-demo": "5ce9481a650b3cdbb1dcce25e901df89eb6f6252383dbfa249c584b43c2f4513"
   },
   "answers": {
     "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
       "reply": "{\"route\":\"view\"}"
     },
+    "Message:\nShow the accounts and the device on screen as a table.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
+    },
+    "Message:\nPut the accounts in view into a table with their ids.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\",\"elements\":{},\"form\":\"table\"}"
+    },
+    "Message:\nPut the accounts in view into a table with their ids.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"\n\nYour last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
+    },
+    "Message:\nI have the table panel open: describe the accounts and the device on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
+    },
     "Message:\nDescribe the accounts and the device on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
-      "reply": "{\"route\":\"view\",\"types\":[\"account\",\"device\"]}"
+      "reply": "{\"route\":\"view\"}"
     },
     "Message:\nWhich accounts use the same device as AC-0002000?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-device\",\"entities\":{\"account\":\"AC-0002000\"}}"
@@ -128,6 +140,15 @@
     "Message:\nIn summary, which accounts use the same device as AC-0002000?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-device\",\"entities\":{\"account\":\"AC-0002000\"}}"
     },
+    "Message:\nWhich of the transactions on screen is the largest?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"transaction\" | \"TX-0300001\"\nc2 | \"transaction\" | \"TX-0300002\"\nc3 | \"transaction\" | \"TX-0300003\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nWhat did MR-0100 receive, and how large was each payment?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"payments-made-to-a-merchant\",\"entities\":{\"merchant\":\"MR-0100\"}}"
+    },
+    "Message:\nWhich transactions did AC-0002000 send, with their amounts?\n\nIn view:\n(none)": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"latest-transactions-of-an-account\",\"entities\":{\"account\":\"AC-0002000\"}}"
+    },
     "Message:\nAnd which merchants has it paid?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-on-the-same-device\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002000\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"merchants-an-account-paid\",\"entities\":{},\"elements\":{\"account\":\"c1\"}}"
     },
@@ -135,13 +156,13 @@
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-on-the-same-address\",\"entities\":{\"account\":\"AC-0002010\"}}"
     },
     "Message:\nShow me that account.\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-on-the-same-address\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002010\" | \"account\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"show-an-account\",\"elements\":{\"account\":\"c1\"},\"entities\":{}}"
+      "reply": "{\"route\":\"ask\",\"intent\":\"show-an-account\",\"entities\":{},\"elements\":{\"account\":\"c1\"}}"
     },
     "Message:\nWhich accounts has AC-0002020 transferred money to?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"accounts-paid-by-an-account\",\"entities\":{\"account\":\"AC-0002020\"}}"
     },
     "Message:\nAnd which accounts sent money to it?\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-paid-by-an-account\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002020\" | \"account\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-that-paid-an-account\",\"entities\":{},\"elements\":{\"account\":\"c1\"}}"
+      "reply": "{\"route\":\"ask\",\"intent\":\"accounts-that-paid-an-account\",\"elements\":{\"account\":\"c1\"},\"entities\":{}}"
     },
     "Message:\nShow its latest transactions.\n\nEarlier turns of this thread, oldest first:\n1. ask \"accounts-paid-by-an-account\"; ran for account = c1\n2. ask \"accounts-that-paid-an-account\"; ran for account = c1\n\nElements of those turns, by key | title | type:\nc1 | \"AC-0002020\" | \"account\"\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"latest-transactions-of-an-account\",\"entities\":{},\"elements\":{\"account\":\"c1\"}}"
@@ -324,22 +345,19 @@
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-sharing-a-phone\",\"elements\":{\"claimant\":\"c1\"}}"
     },
     "Message:\nAnd which claimants share a phone with them?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00200\" | \"claimant\"\n\nIn view:\n(none)\n\nYour last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"elements\":{\"claimant\":\"c1\"},\"entities\":{}}"
+      "reply": "{\"route\":\"ask\",\"intent\":\"claimants-sharing-a-phone\",\"elements\":{\"claimant\":\"c1\"}}"
     },
     "Message:\nWhich claims were filed by CT-00210?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claims-filed-by-a-claimant\",\"entities\":{\"claimant\":\"CT-00210\"}}"
     },
     "Message:\nWhich policies do their claims sit on?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-filed-by-a-claimant\"; ran for claimant = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00210\" | \"claimant\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"elements\":{\"claimant\":\"c1\"}}"
-    },
-    "Message:\nWhich policies do their claims sit on?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-filed-by-a-claimant\"; ran for claimant = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00210\" | \"claimant\"\n\nIn view:\n(none)\n\nYour last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.": {
       "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"entities\":{},\"elements\":{\"claimant\":\"c1\"}}"
     },
     "Message:\nWhich claims involve the same vehicle as CL-002020?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claims-on-the-same-vehicle\",\"entities\":{\"claim\":\"CL-002020\"}}"
     },
     "Message:\nWhich claims went through the same repairer?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002020\" | \"claim\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"claims-by-the-same-repairer\",\"elements\":{\"claim\":\"c1\"},\"entities\":{}}"
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
     },
     "Message:\nWhich claims were filed by CT-00230?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claims-filed-by-a-claimant\",\"entities\":{\"claimant\":\"CT-00230\"}}"
@@ -375,7 +393,7 @@
       "reply": "{\"route\":\"refuse\",\"cause\":\"raw-query\"}"
     },
     "Message:\nWhich claims went through the same repairer?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claims-on-the-same-vehicle\"; ran for claim = c1\n2. refused (raw-query)\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002060\" | \"claim\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"claims-by-the-same-repairer\",\"entities\":{},\"elements\":{\"claim\":\"c1\"}}"
+      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
     },
     "Message:\nWhich claimants live at the same address as CT-00270?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"entities\":{\"claimant\":\"CT-00270\"}}"
@@ -393,10 +411,13 @@
       "reply": "{\"route\":\"clarify\",\"intent\":\"policies-of-a-claimants-claims\",\"role\":\"claimant\",\"entities\":{},\"candidates\":[\"c1\",\"c2\",\"c3\"]}"
     },
     "Message:\nWho shares a phone with the last claimant I asked about?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n3. ask \"claimants-at-the-same-address\"; ran for claimant = c3\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00270\" | \"claimant\"\nc2 | \"CT-00271\" | \"claimant\"\nc3 | \"CT-00272\" | \"claimant\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"claimants-sharing-a-phone\",\"entities\":{},\"elements\":{\"claimant\":\"c3\"}}"
+      "reply": "{\"route\":\"ask\",\"intent\":\"claimants-sharing-a-phone\",\"elements\":{\"claimant\":\"c3\"},\"entities\":{}}"
     },
     "Message:\nAnd which policies do the claims of that last claimant sit on?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n3. ask \"claimants-sharing-a-phone\"; ran for claimant = c2\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00271\" | \"claimant\"\nc2 | \"CT-00272\" | \"claimant\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"entities\":{},\"elements\":{\"claimant\":\"c2\"}}"
+      "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"elements\":{\"claimant\":\"c2\"}}"
+    },
+    "Message:\nAnd which policies do the claims of that last claimant sit on?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-at-the-same-address\"; ran for claimant = c1\n2. ask \"claimants-at-the-same-address\"; ran for claimant = c2\n3. ask \"claimants-sharing-a-phone\"; ran for claimant = c2\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00271\" | \"claimant\"\nc2 | \"CT-00272\" | \"claimant\"\n\nIn view:\n(none)\n\nYour last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.": {
+      "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"elements\":{\"claimant\":\"c2\"}}"
     },
     "Message:\nWhich claimants share a phone with CT-00280?\n\nIn view:\n(none)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-sharing-a-phone\",\"entities\":{\"claimant\":\"CT-00280\"}}"
@@ -405,9 +426,6 @@
       "reply": "{\"route\":\"refuse\",\"cause\":\"other-source\"}"
     },
     "Message:\nBack here: who shares an address with them?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-sharing-a-phone\"; ran for claimant = c1\n2. refused (other-source)\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00280\" | \"claimant\"\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"elements\":{\"claimant\":\"c1\"}}"
-    },
-    "Message:\nBack here: who shares an address with them?\n\nEarlier turns of this thread, oldest first:\n1. ask \"claimants-sharing-a-phone\"; ran for claimant = c1\n2. refused (other-source)\n\nElements of those turns, by key | title | type:\nc1 | \"CT-00280\" | \"claimant\"\n\nIn view:\n(none)\n\nYour last reply was not a route. Reply with one route object only: start with { and write nothing before or after it, no reasoning.": {
       "reply": "{\"route\":\"ask\",\"intent\":\"claimants-at-the-same-address\",\"entities\":{},\"elements\":{\"claimant\":\"c1\"}}"
     },
     "Message:\nWhat is on screen right now?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-002090\"\nc2 | \"claimant\" | \"CT-00290\"": {
@@ -419,14 +437,8 @@
     "Message:\nAnd their policies?\n\nEarlier turns of this thread, oldest first:\n1. view; cited c1, c2\n2. ask \"claims-filed-by-a-claimant\"; ran for claimant = c2\n\nElements of those turns, by key | title | type:\nc1 | \"CL-002090\" | \"claim\"\nc2 | \"CT-00290\" | \"claimant\"\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"claim\" | \"CL-002090\" (also in the earlier turns)\nc2 | \"claimant\" | \"CT-00290\" (also in the earlier turns)": {
       "reply": "{\"route\":\"ask\",\"intent\":\"policies-of-a-claimants-claims\",\"entities\":{},\"elements\":{\"claimant\":\"c2\"}}"
     },
-    "Message:\nWhich of the transactions on screen is the largest?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"transaction\" | \"TX-0300001\"\nc2 | \"transaction\" | \"TX-0300002\"\nc3 | \"transaction\" | \"TX-0300003\"": {
-      "reply": "{\"route\":\"view\"}"
-    },
-    "Message:\nWhat did MR-0100 receive, and how large was each payment?\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"ask\",\"intent\":\"payments-made-to-a-merchant\",\"entities\":{\"merchant\":\"MR-0100\"}}"
-    },
-    "Message:\nWhich transactions did AC-0002000 send, with their amounts?\n\nIn view:\n(none)": {
-      "reply": "{\"route\":\"refuse\",\"cause\":\"unplaced\"}"
+    "Message:\nPut the accounts on screen in a table with their ids and their owners.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
     }
   }
 }

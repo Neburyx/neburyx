@@ -44,6 +44,8 @@ export const assistantPlanSchema = z.strictObject({
   messageHash: z.string().regex(/^[0-9a-f]{64}$/),
   viewHash: z.string().regex(/^[0-9a-f]{64}$/),
   fromView: z.boolean(),
+  /** The form of the answer the router chose for the waiting turn: the turn that goes on keeps it. */
+  form: z.literal('table').optional(),
   steps: z.array(planStepSchema).max(40),
   wait: planStepSchema,
   counters: z.strictObject({ steps: z.number().int().min(1), rows: z.number().int().nonnegative(), calls: z.number().int().nonnegative(), elapsedMs: z.number().int().nonnegative() }),
@@ -157,6 +159,26 @@ export const assistantReadSchema = z.union([
 
 export type AssistantRead = z.infer<typeof assistantReadSchema>;
 
+/** The bounds of a table answer: columns, rows, the length of a label and of a cell, and the keys a row cites. */
+export const ASSISTANT_TABLE_COLUMNS_MAX = 6;
+export const ASSISTANT_TABLE_ROWS_MAX = 25;
+export const ASSISTANT_TABLE_LABEL_MAX = 40;
+export const ASSISTANT_TABLE_CELL_MAX = 80;
+export const ASSISTANT_TABLE_CITES_MAX = 6;
+
+/** A table the model drafted, kept row by row by the checks: the title and the counts are the server's, every row cites the elements it reads. `droppedRows` is how many rows the checks removed; `moreNotShown` how many rows the model wrote beyond the row limit. */
+export const assistantTableSchema = z
+  .strictObject({
+    title: text,
+    columns: z.array(text.max(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
+    rows: z.array(z.strictObject({ cells: z.array(z.string().max(ASSISTANT_TABLE_CELL_MAX)), cites: z.array(text).min(1).max(ASSISTANT_TABLE_CITES_MAX) })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
+    droppedRows: z.number().int().positive().optional(),
+    moreNotShown: z.number().int().positive().optional(),
+  })
+  .refine((table) => table.rows.every((row) => row.cells.length === table.columns.length), { message: 'a row has a cell for each column', path: ['rows'] });
+
+export type AssistantTable = z.infer<typeof assistantTableSchema>;
+
 export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
     status: z.literal('answered'),
@@ -257,6 +279,32 @@ export const assistantTurnAnswerSchema = z.union([
     /** Each read of the turn in order, written by the server. */
     reads: z.array(assistantReadSchema).min(1).max(20),
     /** The limit that ended the reading of the turn, when it did. */
+    stoppedAt: z.enum(ASSISTANT_LIMITS).optional(),
+  }),
+  /** The view route, asked for as a table: the rows that the checks kept, each citing the elements it reads, the citations they name, the coverage the server writes, the model and the calls. */
+  z.strictObject({
+    status: z.literal('answered'),
+    route: z.literal('view'),
+    table: assistantTableSchema,
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema])).min(1),
+    coverage: z.strictObject({ retrieval: text, summary: text }),
+    /** The fixed sentence for a type in the question that the mapping does not describe, beside the table. */
+    noDescription: text.optional(),
+    model: text,
+    calls: z.number().int().positive(),
+  }),
+  /** The view route, asked for as a table, after tool steps: the table over the elements of the reads, with the steps and the reads of the turn. */
+  z.strictObject({
+    status: z.literal('answered'),
+    route: z.literal('view'),
+    table: assistantTableSchema,
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema])).min(1),
+    coverage: z.strictObject({ retrieval: text, summary: text }),
+    noDescription: text.optional(),
+    model: text,
+    calls: z.number().int().positive(),
+    steps: z.number().int().min(1),
+    reads: z.array(assistantReadSchema).min(1).max(20),
     stoppedAt: z.enum(ASSISTANT_LIMITS).optional(),
   }),
   /** A message over the limit of words: nothing was sent to a model and nothing was read. */

@@ -77,6 +77,7 @@ export type LoopOutcome =
   /** A heavy step the analyst has to confirm: nothing of it was read. The steps before it and the counters are what a decision needs to go on. */
   | { readonly kind: 'waiting'; readonly wait: { readonly request: ToolRequest; readonly answer: Answered }; readonly steps: readonly PlanStep[]; readonly counters: { readonly steps: number; readonly rows: number; readonly calls: number }; readonly reads: readonly AssistantRead[]; readonly fromView: boolean }
   /** The checked answer after tool steps: sentences that cite the elements the steps returned. */
+  | { readonly kind: 'table'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'table' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
   | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
   | { readonly kind: 'no-description'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported' }
@@ -88,6 +89,8 @@ export type LoopOutcome =
 /** What the loop reports of the answer call that follows its steps. */
 function answered(outcome: ToolAnswerOutcome, steps: number, calls: number, reads: readonly AssistantRead[], stoppedAt?: AssistantLimit): LoopOutcome {
   switch (outcome.kind) {
+    case 'table':
+      return { kind: 'table', answer: outcome, steps, calls: calls + outcome.calls, reads, ...(stoppedAt === undefined ? {} : { stoppedAt }) };
     case 'sentences':
       return { kind: 'sentences', answer: outcome, steps, calls: calls + outcome.calls, reads, ...(stoppedAt === undefined ? {} : { stoppedAt }) };
     case 'noDescription':

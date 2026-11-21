@@ -40,7 +40,7 @@ describe('the typology in the registry', () => {
     expect(toolsText(registryWith(LINES))).toContain('typology(): returns the lines of this product');
     expect(buildStepInstructions('prompt', registryWith(LINES)).text).toContain('typology()');
     expect(STEP_PROMPT_VERSION).toBe(2);
-    expect(ANSWER_PROMPT_VERSION).toBe(6);
+    expect(ANSWER_PROMPT_VERSION).toBe(7);
   });
 
   it('is a malformed request when it is given a value or is not offered', () => {

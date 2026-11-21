@@ -66,20 +66,20 @@ async function scriptedModel() {
   };
 }
 
-const flags = (out: string) => ['assistant', 'loop-cost', '--packs', PACKS, '--budget', '450', '--out', out];
+const flags = (out: string) => ['assistant', 'loop-cost', '--packs', PACKS, '--budget', '490', '--out', out];
 
 describe('the loop-cost command', () => {
   it('prints, in a dry run, the messages, the runs and the most calls it would make, needs no key and makes no call', async () => {
     const given = hooksWith(() => ({ failure: 'timeout' }));
     const out = io();
     expect(await runCli(['assistant', 'loop-cost', '--packs', PACKS, '--dry-run'], out.io, given)).toBe(0);
-    expect(out.out.join('\n')).toContain('messages to run: 45, each with the loop off and on (90 runs)');
-    expect(out.out.join('\n')).toContain('calls: at most 450 (5 for each run)');
+    expect(out.out.join('\n')).toContain('messages to run: 49, each with the loop off and on (98 runs)');
+    expect(out.out.join('\n')).toContain('calls: at most 490 (5 for each run)');
     expect(given.asked).toEqual([]);
   });
 
   it('refuses a missing budget, a budget below the most the runs can cost, a missing --out and an --out inside a git tree, making no call', async () => {
-    for (const extra of [['--out', scratch()], ['--budget', '449', '--out', scratch()], ['--budget', '450'], ['--budget', '450', '--out', join(ROOT, 'tools', 'ask-eval', 'out-in-a-git-tree')]]) {
+    for (const extra of [['--out', scratch()], ['--budget', '489', '--out', scratch()], ['--budget', '490'], ['--budget', '490', '--out', join(ROOT, 'tools', 'ask-eval', 'out-in-a-git-tree')]]) {
       const given = hooksWith(() => ({ failure: 'timeout' }));
       expect(await runCli(['assistant', 'loop-cost', '--packs', PACKS, ...extra], io().io, given), extra.join(' ')).toBe(2);
       expect(given.asked).toEqual([]);
@@ -94,14 +94,14 @@ describe('the loop-cost command', () => {
     const code = await runCli(flags(join(out, 'run')), run2.io, live);
     expect(code, run2.out.join('\n') + run2.err.join('\n')).toBe(0);
     const text = run2.out.join('\n');
-    expect(text).toContain('messages run: 45 of 45');
+    expect(text).toContain('messages run: 49 of 49');
     expect(text).toMatch(/route answered ask: 32 messages/);
     expect(text).toMatch(/extra calls per routed message: mean 1, median 1, max 1/);
     const recordPath = join(out, 'run', 'loop-cost-record.json');
     expect(statSync(recordPath).mode & 0o777).toBe(0o600);
     const record = readFileSync(recordPath, 'utf8');
     for (const secret of ['AC-0002000', 'Which accounts', 'What am I looking at']) expect(record).not.toContain(secret);
-    expect(JSON.parse(record)).toMatchObject({ messages: 45, run: 45, steps: 4, maxCalls: 5 });
+    expect(JSON.parse(record)).toMatchObject({ messages: 49, run: 49, steps: 4, maxCalls: 5 });
   });
 
   it('stops before a run the budget cannot cover, never inside a turn, and says how many messages it ran', async () => {
@@ -110,12 +110,12 @@ describe('the loop-cost command', () => {
       ...given,
       recordingProvider: (provider: unknown, budget: number) => {
         const recording = given.recordingProvider(provider, budget);
-        return { ...recording, usage: () => ({ ...recording.usage(), calls: recording.usage().calls + 445 }) };
+        return { ...recording, usage: () => ({ ...recording.usage(), calls: recording.usage().calls + 485 }) };
       },
     };
     const out = io();
     expect(await runCli(flags(join(scratch(), 'run')), out.io, inflated)).toBe(1);
     expect(out.out.join('\n')).toContain('stopped at the budget');
-    expect(out.out.join('\n')).toContain('messages run: 0 of 45');
+    expect(out.out.join('\n')).toContain('messages run: 0 of 49');
   });
 });

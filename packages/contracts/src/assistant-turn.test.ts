@@ -342,3 +342,37 @@ describe('the events of a streamed turn', () => {
   });
 });
 
+describe('the table answers', () => {
+  const cite = { key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'widget', stableId: 'W-1' } };
+  const table = { title: 'widgets · 1 row', columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }] };
+  const view = { status: 'answered', route: 'view', table, citations: [cite], coverage: { retrieval: 'r', summary: '1 of 1 widgets in view shown · exact' }, model: 'm', calls: 2 };
+  const loop = { ...view, steps: 2, reads: [{ tool: 'view', kind: 'view', read: true, rows: 1, quality: 'exact', partial: false }] };
+  const parses = (answer: unknown): boolean => assistantTurnAnswerSchema.safeParse(answer).success;
+
+  it('takes the table of the view call and the table after tool steps, with the counts of rows dropped and not shown', () => {
+    expect(parses(view)).toBe(true);
+    expect(parses({ ...view, table: { ...table, droppedRows: 2, moreNotShown: 5 } })).toBe(true);
+    expect(parses({ ...view, noDescription: 'The mapping has no description for Widget, so I cannot say what it means.' })).toBe(true);
+    expect(parses(loop)).toBe(true);
+    expect(parses({ ...loop, stoppedAt: 'steps' })).toBe(true);
+  });
+
+  it('refuses a row over a bound, a cell count that differs from the columns, a label or cell over its length, a row with no cite and a count that is not positive', () => {
+    const cases: [string, unknown][] = [
+      ['seven columns', { ...table, columns: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], rows: [{ cells: ['1', '2', '3', '4', '5', '6', '7'], cites: ['n1'] }] }],
+      ['a label over 40', { ...table, columns: ['L'.repeat(41), 'Type'] }],
+      ['a cell over 80', { ...table, rows: [{ cells: ['C'.repeat(81), 'widget'], cites: ['n1'] }] }],
+      ['a short row', { ...table, rows: [{ cells: ['Account A-1'], cites: ['n1'] }] }],
+      ['no cite', { ...table, rows: [{ cells: ['Account A-1', 'widget'], cites: [] }] }],
+      ['seven cites', { ...table, rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1', 'n1', 'n1', 'n1', 'n1', 'n1', 'n1'] }] }],
+      ['no row', { ...table, rows: [] }],
+      ['26 rows', { ...table, rows: Array.from({ length: 26 }, () => ({ cells: ['Account A-1', 'widget'], cites: ['n1'] })) }],
+      ['zero dropped', { ...table, droppedRows: 0 }],
+      ['an extra member', { ...table, extra: 1 }],
+    ];
+    for (const [name, bad] of cases) expect(parses({ ...view, table: bad }), name).toBe(false);
+    expect(parses({ ...view, sentences: [{ text: 'x', cites: ['n1'] }] })).toBe(false);
+    expect(parses({ ...view, route: 'ask' })).toBe(false);
+  });
+});
+

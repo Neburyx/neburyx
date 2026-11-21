@@ -146,6 +146,11 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   paramsHash: sha256Hex.optional(),
   steps: wholeCount.optional(),
   citedElements: wholeCount.optional(),
+  /** An answer written as a table: the form, and how many rows it shows, how many the checks removed and how many the model wrote beyond the 25 shown (the last two absent when none); never a cell, a column label or a title. */
+  form: z.literal('table').optional(),
+  tableRowsShown: wholeCount.optional(),
+  tableRowsDropped: wholeCount.optional(),
+  tableRowsNotShown: wholeCount.optional(),
   /** When an AI case summary was attached and used: how many of its sentences still held and how many did not; never a sentence. */
   summarySentencesKept: wholeCount.optional(),
   summarySentencesDropped: wholeCount.optional(),

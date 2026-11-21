@@ -580,3 +580,71 @@
   color: var(--color-text-muted);
   white-space: nowrap;
 }
+
+/* a table answer: the table scrolls inside the card, the page never does */
+.assistant-table-scroll {
+  overflow-x: auto;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.assistant-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-small);
+}
+
+.assistant-table-title {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.assistant-table th,
+.assistant-table td {
+  text-align: left;
+  padding: var(--space-6) var(--space-8);
+  border-bottom: var(--border-width) solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+.assistant-table th:not(:last-child),
+.assistant-table td:not(.assistant-table-cite) {
+  min-width: 9ch;
+}
+
+.assistant-table-cite {
+  white-space: nowrap;
+}
+
+.assistant-table-cite .summary-chip {
+  white-space: nowrap;
+}
+
+.assistant-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.assistant-table-fold td {
+  text-align: center;
+  background: var(--color-surface-muted);
+}
+
+.assistant-table-fold-button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.assistant-table-notice {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius);
+  background: var(--color-caution-surface);
+  color: var(--color-caution-text);
+}
+
+.assistant-table-notice p {
+  margin: 0;
+}

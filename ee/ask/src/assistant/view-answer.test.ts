@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ExtensionRefusal } from '@neburyx/contracts';
-import type { CheckRunner } from '@neburyx/ee-ai-runtime';
+import { createCheckRunner, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { estimateTokens } from '../case-summary/assemble.js';
-import { VIEW_BODY, VIEW_KEYS, answerOf, fileQueryResult, ok, refusalOf, rig } from '../testing/assistant-rig.js';
+import { VIEW_BODY, VIEW_KEYS, answerOf, expandResult, fileQueryResult, ok, refusalOf, rig } from '../testing/assistant-rig.js';
 
 const RUN_1 = 'c0a80101-0000-4000-8000-000000000001';
 const RUN_2 = 'c0a80101-0000-4000-8000-000000000002';
@@ -15,7 +15,7 @@ describe('the view answer', () => {
     const t = await rig({ view: reply([{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }]) });
     const answer = await answerOf(t.route.handler(t.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', route: 'view', calls: 2, model: 'fixture-model' });
-    if (answer.status !== 'answered' || answer.route !== 'view') throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
     expect(answer.sentences).toHaveLength(1);
     expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
     expect(t.elementReads).toHaveLength(1);
@@ -363,7 +363,7 @@ describe('what the checks leave of the sentences of a view answer', () => {
       ]),
     });
     const answer = await answerOf(t.route.handler(t.request(VIEW_BODY)));
-    if (answer.status !== 'answered' || answer.route !== 'view') throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
     expect(answer.sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is in view.', 'Account A-2 is also in view.']);
   });
 
@@ -563,7 +563,7 @@ describe('a tool request in the view reply', () => {
     expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered', route: 'view' });
     const views = t.fixture.calls.filter((call) => call.promptId === 'assistant.view');
     expect(views).toHaveLength(2);
-    expect(new Set(views.map((call) => call.version))).toEqual(new Set([6]));
+    expect(new Set(views.map((call) => call.version))).toEqual(new Set([7]));
     expect(views[0]?.instructions).not.toContain('# Tools you may ask for');
   });
 
@@ -577,11 +577,11 @@ describe('a tool request in the view reply', () => {
     const t = await rig({ view: sentences, step: sequence(DONE) });
     await answerOf(t.route.handler(t.request(VIEW_BODY)));
     const view = t.fixture.calls.find((call) => call.promptId === 'assistant.view');
-    expect(view?.version).toBe(7);
+    expect(view?.version).toBe(8);
     expect(view?.instructions).toContain('# Tools you may ask for');
     expect(view?.instructions).toContain('byId(id)');
     expect(view?.instructions).not.toContain('view()');
-    expect(JSON.stringify(t.events)).toContain('"promptVersion":"6"');
+    expect(JSON.stringify(t.events)).toContain('"promptVersion":"8"');
   });
 
   it('runs the request as the second step from the view’s reading, and answers over the view and what the tool returned, checked', async () => {
@@ -606,5 +606,258 @@ describe('a tool request in the view reply', () => {
     const t = await rig({ view: TOOL, step: sequence(DONE), maxCalls: 2, run: () => ({ status: 'ok', result: fileQueryResult() }) });
     expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'calls' });
     expect(t.runs).toHaveLength(0);
+  });
+});
+
+describe('the form of the view answer is the router\'s to choose', () => {
+  const GOOD = reply([{ text: 'Account A-1 is in view.', cites: ['n1'] }]);
+  const viewCall = (t: Awaited<ReturnType<typeof rig>>) => t.fixture.calls.find((call) => call.promptId === 'assistant.view');
+
+  it('says in the values of the view call that a table is asked for when the router reply carries the form, and nothing more', async () => {
+    const t = await rig({ reply: ok('{"route":"view","form":"table"}'), view: GOOD });
+    await answerOf(t.route.handler(t.request(VIEW_BODY)));
+    expect(viewCall(t)?.values).toContain('The analyst asked for the answer as a table.');
+  });
+
+  it('makes the call it makes today when the reply has no form, whatever the message says, with the same instructions', async () => {
+    const plain = await rig({ view: GOOD });
+    await answerOf(plain.route.handler(plain.request({ ...VIEW_BODY, message: 'Show these accounts as a table, please' })));
+    expect(viewCall(plain)?.values).not.toContain('The analyst asked for the answer as a table.');
+    const formed = await rig({ reply: ok('{"route":"view","form":"table"}'), view: GOOD });
+    await answerOf(formed.route.handler(formed.request(VIEW_BODY)));
+    expect(viewCall(formed)?.instructions).toBe(viewCall(plain)?.instructions);
+  });
+
+  it('keeps the form of the answer to sentences on the ask route', async () => {
+    const t = await rig({ reply: ok('{"route":"ask","intent":"shared","entities":{"id":"A-1"}}'), view: GOOD });
+    const answer = await answerOf(t.route.handler(t.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ route: 'ask' });
+    expect(viewCall(t)).toBeUndefined();
+  });
+});
+
+describe('a table answer from the view call', () => {
+  const FORM = ok('{"route":"view","form":"table"}');
+  const tableOf = (columns: readonly string[], rows: readonly { cells: readonly string[]; cites: readonly string[] }[], extra: Record<string, unknown> = {}) => ok(JSON.stringify({ table: { columns, rows }, ...extra }));
+  const TWO = tableOf(['Element', 'Type'], [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['n2'] }]);
+  const run = async (view: ReturnType<typeof tableOf>, over: { reply?: ReturnType<typeof ok>; mapping?: object } = {}) => {
+    const t = await rig({ reply: over.reply ?? FORM, view });
+    return { t, answer: await answerOf(t.route.handler(t.request(VIEW_BODY, over.mapping ?? {}))) };
+  };
+
+  it('accepts the reply as a table when the router chose the form: the rows that pass, their citations, the title and the coverage the server writes', async () => {
+    const { answer } = await run(TWO);
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', calls: 2, model: 'fixture-model' });
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table).toEqual({ title: 'widgets · 2 rows', columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['n2'] }] });
+    expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
+    expect(answer.coverage.summary).toBe('2 of 2 widgets in view shown · exact');
+  });
+
+  it('writes the title with the plain-words label of the type when the mapping has one, and "Elements" for rows about several types', async () => {
+    const mapping = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget' }], relationshipTypes: [] }) };
+    const { answer } = await run(TWO, { mapping });
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.title).toBe('Widgets · 2 rows');
+  });
+
+  it('does not fit the reply format when no form was asked for: the repeat is asked and the turn ends as a sentence answer does', async () => {
+    const t = await rig({ view: TWO });
+    expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered', route: 'view' });
+    expect(t.fixture.calls.filter((call) => call.promptId === 'assistant.view')).toHaveLength(2);
+  });
+
+  it.each([
+    ['more than six columns', tableOf(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((label) => `Label ${label}`), [{ cells: ['1', '2', '3', '4', '5', '6', '7'], cites: ['n1'] }])],
+    ['a label over its length', tableOf(['L'.repeat(41)], [{ cells: ['x'], cites: ['n1'] }])],
+    ['a cell over its length', tableOf(['Element'], [{ cells: ['C'.repeat(81)], cites: ['n1'] }])],
+    ['a cell count that differs from the columns', tableOf(['Element', 'Type'], [{ cells: ['Account A-1'], cites: ['n1'] }])],
+    ['more than six cites', tableOf(['Element'], [{ cells: ['Account A-1'], cites: ['n1', 'n2', 'n1', 'n2', 'n1', 'n2', 'n1'] }])],
+    ['a row with no cite', tableOf(['Element'], [{ cells: ['Account A-1'], cites: [] }])],
+    ['no row', tableOf(['Element'], [])],
+    ['an extra member of the table', ok(JSON.stringify({ table: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }], title: 'x' } }))],
+  ])('does not fit the reply format with %s, and the turn ends as a sentence answer does', async (_name, view) => {
+    const { t, answer } = await run(view as ReturnType<typeof tableOf>);
+    expect(answer).toMatchObject({ status: 'not-answered', route: 'view' });
+    expect(t.fixture.calls.filter((call) => call.promptId === 'assistant.view')).toHaveLength(2);
+  });
+
+  it('keeps the first 25 rows that pass when the model wrote more, and counts the rest in moreNotShown, not in droppedRows', async () => {
+    const rows = Array.from({ length: 30 }, (_, index) => ({ cells: [`Account A-${index % 2 === 0 ? 1 : 2}`], cites: [index % 2 === 0 ? 'n1' : 'n2'] }));
+    const { answer } = await run(tableOf(['Element'], rows));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toHaveLength(25);
+    expect(answer.table.moreNotShown).toBe(5);
+    expect(answer.table).not.toHaveProperty('droppedRows');
+    expect(answer.table.title).toBe('widgets · 25 rows');
+  });
+
+  it('cuts after the checks, so that the good rows stay: a bad row in the first 25 is dropped and counted, and a good row after the 25th takes its place', async () => {
+    const rows = Array.from({ length: 27 }, (_, index) => ({ cells: [index === 3 ? 'Account A-9' : 'Account A-1'], cites: ['n1'] }));
+    const { answer } = await run(tableOf(['Element'], rows));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toHaveLength(25);
+    expect(answer.table.droppedRows).toBe(1);
+    expect(answer.table.moreNotShown).toBe(1);
+    expect(answer.table.rows.every((row) => row.cells[0] === 'Account A-1')).toBe(true);
+  });
+
+  it('ends as a sentence answer does when every row fails the checks', async () => {
+    const { answer } = await run(tableOf(['Element', 'Count'], [{ cells: ['Account A-1', '7311'], cites: ['n1'] }]));
+    expect(answer).toMatchObject({ status: 'not-answered', route: 'view' });
+  });
+
+  it('drops a row that cites a sentence of a summary or a line that says what a type means', async () => {
+    const { answer } = await run(tableOf(['Element'], [{ cells: ['Account A-1'], cites: ['s1'] }, { cells: ['Account A-2'], cites: ['m1'] }, { cells: ['Account A-1'], cites: ['n1'] }]));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toEqual([{ cells: ['Account A-1'], cites: ['n1'] }]);
+    expect(answer.table.droppedRows).toBe(2);
+  });
+
+  it('keeps the sentence for a type the mapping does not describe beside the table when the router reply carries the types', async () => {
+    const mapping = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget' }], relationshipTypes: [] }) };
+    const reply = ok('{"route":"view","types":["widget"],"form":"table"}');
+    const { answer } = await run(tableOf(['Element'], [{ cells: ['Account A-1'], cites: ['n1'] }], { noDescription: ['widget'] }), { reply, mapping });
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', noDescription: 'The mapping has no description for Widget, so I cannot say what it means.' });
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toHaveLength(1);
+  });
+});
+
+describe('a table answer: rows and labels judged like sentences', () => {
+  const FORM = ok('{"route":"view","form":"table"}');
+  const tableOf = (columns: readonly string[], rows: readonly { cells: readonly string[]; cites: readonly string[] }[]) => ok(JSON.stringify({ table: { columns, rows } }));
+  const run = async (view: ReturnType<typeof tableOf>) => {
+    const t = await rig({ reply: FORM, view });
+    return { t, answer: await answerOf(t.route.handler(t.request(VIEW_BODY))) };
+  };
+  const viewCalls = (t: Awaited<ReturnType<typeof rig>>) => t.fixture.calls.filter((call) => call.promptId === 'assistant.view');
+
+  it('drops a row with an invented number, a row with a name that was not given and a row with no cite, and keeps the rows that pass', async () => {
+    const { answer } = await run(tableOf(['Element', 'Description'], [
+      { cells: ['Account A-1', 'in view'], cites: ['n1'] },
+      { cells: ['Account A-1', '7311'], cites: ['n1'] },
+      { cells: ['Account Zeta', 'in view'], cites: ['n1'] },
+      { cells: ['Account A-2', 'in view'], cites: ['n9'] },
+      { cells: ['Account A-2', 'in view'], cites: ['n2'] },
+    ]));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows.map((row) => row.cells[0])).toEqual(['Account A-1', 'Account A-2']);
+    expect(answer.table.droppedRows).toBe(3);
+  });
+
+  it('asks again when a cell holds a verdict word, and ends as a sentence answer with a verdict does when it still does', async () => {
+    const { t, answer } = await run(tableOf(['Element', 'Description'], [{ cells: ['Account A-1', 'fraud suspected'], cites: ['n1'] }, { cells: ['Account A-2', 'in view'], cites: ['n2'] }]));
+    expect(answer).toMatchObject({ status: 'not-answered', route: 'view' });
+    expect(viewCalls(t)).toHaveLength(2);
+    expect(viewCalls(t)[1]?.values).toContain('stated a conclusion');
+  });
+
+  it('drops a row that writes a key in a cell, so that each row shows its cells exactly as judged', async () => {
+    const { answer } = await run(tableOf(['Element'], [{ cells: ['Account A-1 (n1)'], cites: ['n1'] }, { cells: ['Account A-2'], cites: ['n2'] }]));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toEqual([{ cells: ['Account A-2'], cites: ['n2'] }]);
+    expect(answer.table.droppedRows).toBe(1);
+  });
+
+  it.each([['a word nothing backs', 'Suspicion'], ['a number', 'Score 7'], ['a verdict word', 'Fraud flag'], ['a symbol', 'Amount (USD)']])('asks again when a column label holds %s, and ends as a sentence answer does when it still does', async (_name, label) => {
+    const { t, answer } = await run(tableOf(['Element', label], [{ cells: ['Account A-1', 'in view'], cites: ['n1'] }]));
+    expect(answer).toMatchObject({ status: 'not-answered', route: 'view' });
+    expect(viewCalls(t)).toHaveLength(2);
+  });
+
+  it('keeps a label of the fixed list and a label made of the words of the types of the text sent', async () => {
+    const { answer } = await run(tableOf(['Element', 'Type', 'Widget'], [{ cells: ['Account A-1', 'widget', 'in view'], cites: ['n1'] }]));
+    expect(answer).toMatchObject({ status: 'answered', route: 'view' });
+  });
+});
+
+describe('a table answer judged by a check that runs in a worker thread', () => {
+  it('keeps and drops the same rows in the worker as in place, known by their position', async () => {
+    const rows = [
+      { cells: ['Account A-1', 'in view'], cites: ['n1'] },
+      { cells: ['Account A-1', '7311'], cites: ['n1'] },
+      { cells: ['Account A-2', 'in view'], cites: ['n2'] },
+      { cells: ['Account Zeta', 'in view'], cites: ['n2'] },
+      { cells: ['Account A-2 (n2)', 'in view'], cites: ['n2'] },
+    ];
+    const view = ok(JSON.stringify({ table: { columns: ['Element', 'Description'], rows } }));
+    const answerWith = async (checks?: CheckRunner) => {
+      const t = await rig({ reply: ok('{"route":"view","form":"table"}'), view, ...(checks === undefined ? {} : { checks }) });
+      return answerOf(t.route.handler(t.request(VIEW_BODY)));
+    };
+    let now = 0;
+    // every run takes 100 ms by this clock, over the threshold: after the first, the checks go to the worker
+    const offloading = createCheckRunner({ thresholdMs: 5, clock: () => (now += 100) });
+    const inPlace = await answerWith();
+    const inWorker = await answerWith(offloading);
+    if (inPlace.status !== 'answered' || !('table' in inPlace) || inWorker.status !== 'answered' || !('table' in inWorker)) throw new Error('not table answers');
+    expect(inPlace.table.rows.map((row) => row.cells[0])).toEqual(['Account A-1', 'Account A-2']);
+    expect(inWorker.table).toEqual(inPlace.table);
+  });
+});
+
+
+describe('a table answer after tool steps', () => {
+  const FORM = ok('{"route":"view","form":"table"}');
+  const TOOL = ok(JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }));
+  const DONE = ok('{"done":true}');
+  const sequence = (...replies: FixtureReply[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? DONE;
+  };
+  const tableOf = (rows: readonly { cells: readonly string[]; cites: readonly string[] }[]) => ok(JSON.stringify({ table: { columns: ['Element', 'Type'], rows } }));
+  const go = async (answer: ReturnType<typeof tableOf>, over: Parameters<typeof rig>[0] = {}) => {
+    const t = await rig({ reply: FORM, view: sequence(TOOL), step: sequence(DONE), answer, run: () => ({ status: 'ok', result: fileQueryResult() }), ...over });
+    return { t, answer: await answerOf(t.route.handler(t.request(VIEW_BODY))) };
+  };
+
+  it('answers the table over the view and what the steps returned: rows citing elements, the coverage naming what the reads returned, the steps and calls', async () => {
+    const { answer } = await go(tableOf([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['n2'] }]));
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', steps: 2, calls: 4 });
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toHaveLength(2);
+    expect(answer.table.title).toMatch(/ · 2 rows$/);
+    expect(answer.coverage.summary).toMatch(/^2 of \d+ .* read shown · /);
+    expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
+  });
+
+  it('drops a row that cites only a line of a read, and keeps the rows that cite an element', async () => {
+    const { answer } = await go(tableOf([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['s1'] }]));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toEqual([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }]);
+    expect(answer.table.droppedRows).toBe(1);
+  });
+
+  it('keeps the sentences form when the router chose no form', async () => {
+    const { answer } = await go(ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })), { reply: ok('{"route":"view"}') });
+    expect(answer).toMatchObject({ status: 'answered', route: 'view' });
+    expect('table' in answer).toBe(false);
+  });
+
+  it('titles the table with the anchor of one expansion when every row was listed by it, and without an anchor when two reads were made', async () => {
+    const { answer } = await go(tableOf([{ cells: ['Account A-2', 'widget'], cites: ['n2'] }]), { run: () => ({ status: 'ok', result: expandResult() }) });
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.title).toBe('widgets of Account A-1 · 1 row');
+    const two = await go(tableOf([{ cells: ['Account A-2', 'widget'], cites: ['n2'] }]), { step: sequence(TOOL, TOOL, DONE), run: () => ({ status: 'ok', result: expandResult() }) });
+    if (two.answer.status !== 'answered' || !('table' in two.answer)) throw new Error('not a table answer');
+    expect(two.answer.table.title).toBe('widgets · 1 row');
+  });
+
+  it('drops a row that cites a line of a read beside an element, so that no cell rests on text the card does not show', async () => {
+    const { answer } = await go(tableOf([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', '2 matches'], cites: ['n2', 's1'] }]));
+    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
+    expect(answer.table.rows).toEqual([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }]);
+    expect(answer.table.droppedRows).toBe(1);
+  });
+
+  it('counts the rows of the type of the table when the read lists more than that type, and titles a table about relationships Elements', async () => {
+    const mixed = await go(tableOf([{ cells: ['Account A-2', 'widget'], cites: ['n2'] }]), { run: () => ({ status: 'ok', result: expandResult() }) });
+    if (mixed.answer.status !== 'answered' || !('table' in mixed.answer)) throw new Error('not a table answer');
+    expect(mixed.answer.coverage.summary).toBe('1 of 3 widgets read shown · exact');
+    const link = await go(tableOf([{ cells: ['SENT', 'x'], cites: ['r2'] }]), { run: () => ({ status: 'ok', result: expandResult() }) });
+    if (link.answer.status !== 'answered' || !('table' in link.answer)) throw new Error('not a table answer');
+    expect(link.answer.table.title).toMatch(/^Elements( of .*)? · 1 row$/);
+    expect(link.answer.coverage.summary).toMatch(/^1 of 1 elements read shown · exact$/);
   });
 });

@@ -33,6 +33,8 @@ export async function auditConfirmation(request: ExtensionRequest, ids: { readon
 type Waiting = Extract<LoopOutcome, { kind: 'waiting' }>;
 
 export interface WaitContext {
+  /** The form of the answer the router chose, kept in the plan so that the resumed turn answers in it. */
+  readonly form?: 'table';
   readonly request: ExtensionRequest;
   readonly sourceId: string;
   readonly investigationId: string;
@@ -68,6 +70,7 @@ export async function waitingAnswer(ctx: WaitContext, outcome: Waiting): Promise
       messageHash: hashText(ctx.message),
       viewHash: hashKeys(ctx.viewElementKeys),
       fromView: outcome.fromView,
+      ...(ctx.form === undefined ? {} : { form: ctx.form }),
       steps: [...outcome.steps],
       wait: { tool: wait.request.tool.name, values: { ...wait.request.values } },
       counters: { ...outcome.counters, elapsedMs: Math.max(0, now - ctx.startedAt) },

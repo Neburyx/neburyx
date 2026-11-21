@@ -4,6 +4,18 @@ messages:
   - id: describe-the-view
     wording: "What am I looking at?"
     expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }] }
+  - id: transactions-as-a-table
+    wording: "Show the accounts and the device on screen as a table."
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }], form: table }
+  - id: tabulate-the-accounts
+    wording: "Put the accounts in view into a table with their ids."
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }], form: table }
+  - id: accounts-with-owners-as-a-table
+    wording: "Put the accounts on screen in a table with their ids and their owners."
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: account, stableId: AC-0002001 }], form: table }
+  - id: a-table-in-the-wording-only
+    wording: "I have the table panel open: describe the accounts and the device on screen."
+    expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }] }
   - id: summarize-what-is-on-screen
     wording: "Describe the accounts and the device on screen."
     expect: { route: view, view: [{ entityType: account, stableId: AC-0002000 }, { entityType: device, stableId: DV-0001 }] }

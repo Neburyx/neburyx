@@ -97,6 +97,9 @@ export const ASSISTANT_COPY = {
   sentences: 'Answer from the view',
   sentencesFromReads: 'Answer from the reads',
   coverage: 'Server-authored coverage',
+  citeColumn: 'Cite',
+  foldClose: 'Fold the rows again',
+  moreNotShownTitle: 'More not shown',
   accessLost: 'You no longer have access to this investigation, so the thread was cleared.',
   maskingTitle: 'Masking changed',
   maskingBody: 'The text of this thread was cleared. Ask again.',
@@ -116,6 +119,11 @@ export const ASSISTANT_COPY = {
   thread: 'Conversation',
   you: 'You',
 } as const;
+
+const rowsOf = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'row' : 'rows'}`;
+export const foldedRowsText = (count: number): string => `… ${count.toLocaleString('en-US')} more ${count === 1 ? 'row' : 'rows'} …`;
+export const moreNotShownText = (shown: number, more: number): string => `${rowsOf(shown)} ${shown === 1 ? 'is' : 'are'} shown. ${more.toLocaleString('en-US')} more ${more === 1 ? 'row was' : 'rows were'} not shown. Narrow the view or ask for a smaller set.`;
+export const droppedRowsText = (count: number): string => `${rowsOf(count)} ${count === 1 ? 'was' : 'were'} left out because ${count === 1 ? 'it' : 'they'} did not hold up against the elements cited.`;
 
 export const wordsText = (used: number, limit: number): string => `${used.toLocaleString('en-US')} / ${limit.toLocaleString('en-US')} words`;
 export const wordsSpoken = (used: number, limit: number): string => `${used.toLocaleString('en-US')} of ${limit.toLocaleString('en-US')} words`;

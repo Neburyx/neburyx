@@ -1355,3 +1355,32 @@ describe('the larger of two amounts in the lines of a tool result, through the r
   });
 });
 
+describe('a table answer through the real application', () => {
+  const sequence = (...replies: string[]) => {
+    let next = 0;
+    return () => replies[Math.min(next++, replies.length - 1)] ?? '{"done":true}';
+  };
+  const ROUTER = '{"route":"view","form":"table"}';
+  const key = (id: string) => JSON.stringify(['node', 'demo', 'widget', id]);
+  const table = (rows: { cells: string[]; cites: string[] }[]) => JSON.stringify({ table: { columns: ['Element', 'Type'], rows } });
+  const turn = async (reply: string, mask: boolean) => {
+    const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTER, reply, reply), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
+    const answer = await rig.post({ ...rig.body, message: 'Show the elements as a table', viewElementKeys: [key('W-1')], mask });
+    const bodies = [...rig.stub.bodies];
+    await rig.stop();
+    return { answer: answer.json() as Record<string, unknown>, bodies };
+  };
+
+  it('answers a table when the router chose the form', async () => {
+    const { answer } = await turn(table([{ cells: ['W-1', 'widget'], cites: ['n1'] }]), false);
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', table: { columns: ['Element', 'Type'], rows: [{ cells: ['W-1', 'widget'], cites: ['n1'] }] } });
+  });
+
+  it('with masking on, never sends the unmasked value of a masked property, and drops a row that writes it', async () => {
+    const { answer, bodies } = await turn(table([{ cells: ['Ana Silva', 'widget'], cites: ['n1'] }, { cells: ['W-1', 'widget'], cites: ['n1'] }]), true);
+    for (const body of bodies) expect(body).not.toContain('Ana Silva');
+    expect(JSON.stringify(answer)).not.toContain('Ana Silva');
+    expect(answer).toMatchObject({ status: 'answered', table: { rows: [{ cells: ['W-1', 'widget'] }], droppedRows: 1 } });
+  });
+});
+

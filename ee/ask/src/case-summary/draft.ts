@@ -4,6 +4,7 @@ import type { FailureCode, ModelAnswer } from '@neburyx/ee-ai-runtime';
 import type { SummaryCallEnd } from './run-store.js';
 import { estimateTokens } from './assemble.js';
 import { MAX_SUMMARY_SENTENCES } from './instructions.js';
+import { parseTable, rowSentenceOf, type TableDraft } from '../assistant/table.js';
 
 const SUMMARY_PROMPT_ID = 'case-summary';
 const SUMMARY_PROMPT_VERSION = 1;
@@ -40,7 +41,7 @@ export interface Checked {
 }
 
 export type Drafted =
-  | { readonly status: 'drafted'; /** The fixed sentence for the types the reply named as having no description, when the caller accepted them. */ readonly noDescription?: string; readonly sentences: readonly SummarySentence[]; readonly removed: number; readonly calls: number; /** Whether the last reply held verdict wording, with no call left to repeat it. */ readonly verdictFound: boolean; /** The model the provider says produced the reply that was accepted. */ readonly model: string }
+  | { readonly status: 'drafted'; /** The table the reply drafted when the form was asked for: every row the reply held, in order (the sentences are these rows read as sentences). */ readonly table?: TableDraft; /** The fixed sentence for the types the reply named as having no description, when the caller accepted them. */ readonly noDescription?: string; readonly sentences: readonly SummarySentence[]; readonly removed: number; readonly calls: number; /** Whether the last reply held verdict wording, with no call left to repeat it. */ readonly verdictFound: boolean; /** The model the provider says produced the reply that was accepted. */ readonly model: string }
   | { readonly status: 'tooLarge'; readonly calls: number }
   | { readonly status: 'timeLimit'; readonly calls: number; readonly checked?: Checked }
   | { readonly status: 'failed'; readonly kind: SummaryFailureKind; readonly calls: number; readonly checked?: Checked };
@@ -72,9 +73,11 @@ export interface DraftOptions {
   /** The most the whole text of one submission may weigh, in the estimate of tokens; none when absent. A submission over it is not sent, and the draft ends as too large. */
   readonly maxInputTokens?: number;
   /** The checks of a reply that fits the format: what is kept, how many were removed, and whether a sentence was removed for its wording. */
-  readonly judge: (sentences: readonly SummarySentence[], signal: AbortSignal) => Promise<Judgement | CheckRefused> | Judgement | CheckRefused;
+  readonly judge: (sentences: readonly SummarySentence[], signal: AbortSignal, table?: TableDraft) => Promise<Judgement | CheckRefused> | Judgement | CheckRefused;
   /** Told why a check could not run, which is not a reply that cited nothing: the click ends at once, with no further call. */
   readonly onCheckRefused?: (reason: CheckRefused['refused']) => void;
+  /** The form of the answer the turn asked for: with `table` the reply is read as a table. */
+  readonly form?: 'table';
   readonly maxCalls: number;
   /** The most calls that may repeat a reply that did not pass; the case summary repeats as often as its call limit allows. */
   readonly repeats?: number;
@@ -98,15 +101,24 @@ export interface DraftOptions {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The sentences of a reply of the exact shape `{"sentences":[{"text","cites"}]}`, with the optional member `noDescription` (a list of names), with at most the sentence limit; anything else is undefined. */
-function parseReply(text: string): { readonly sentences: readonly SummarySentence[]; readonly noDescription?: readonly string[] } | undefined {
+/** The sentences of a reply of the exact shape `{"sentences":[{"text","cites"}]}`, with the optional member `noDescription` (a list of names), with at most the sentence limit; anything else is undefined. When a table is asked for, a reply of the shape `{"table":{...}}` (with `noDescription` as well, optionally) is read instead, its rows as the sentences. */
+function parseReply(text: string, table: boolean): { readonly sentences: readonly SummarySentence[]; readonly noDescription?: readonly string[]; readonly table?: TableDraft } | undefined {
   let json: unknown;
   try {
     json = JSON.parse(text);
   } catch {
     return undefined;
   }
+  if (table && isRecord(json) && 'table' in json) {
+    if (!['table', 'noDescription,table'].includes(Object.keys(json).sort().join())) return undefined;
+    const drafted = parseTable(json['table']);
+    const named = json['noDescription'];
+    if (drafted === undefined || ('noDescription' in json && (!Array.isArray(named) || named.length === 0 || !named.every((name): name is string => typeof name === 'string' && name !== '')))) return undefined;
+    return { sentences: drafted.rows.map((row) => rowSentenceOf(row)), table: drafted, ...(Array.isArray(named) ? { noDescription: named as string[] } : {}) };
+  }
   if (!isRecord(json) || !['sentences', 'noDescription,sentences'].includes(Object.keys(json).sort().join()) || !Array.isArray(json['sentences']) || json['sentences'].length > MAX_SUMMARY_SENTENCES) return undefined;
+  // a table is asked for: sentences stand only to carry the names of types that have no description, with no sentence
+  if (table && json['sentences'].length > 0) return undefined;
   const named = json['noDescription'];
   if ('noDescription' in json && (!Array.isArray(named) || named.length === 0 || !named.every((name): name is string => typeof name === 'string' && name !== ''))) return undefined;
   const sentences: SummarySentence[] = [];
@@ -187,14 +199,14 @@ export async function draftSummary(options: DraftOptions): Promise<DraftedOrAlte
       if (answer.status === 'refused') return { status: 'failed', kind: 'refused', calls, ...so() };
       if (answer.status === 'failed') return { status: 'failed', kind: FAILURE_KINDS[answer.code], calls, ...so() };
       const model = answer.model;
-      const parsed = parseReply(answer.text);
+      const parsed = parseReply(answer.text, options.form === 'table');
       const fixed = parsed?.noDescription === undefined ? undefined : options.noDescription?.(parsed.noDescription);
       if (parsed === undefined || (parsed.noDescription !== undefined && fixed === undefined)) {
         if (options.alternative?.(answer.text) === true) return { status: 'alternative', text: answer.text, calls };
         values = `${options.values}\n\n${FORMAT_NOTE}`;
         continue;
       }
-      const judged = await options.judge(parsed.sentences, AbortSignal.any([options.signal, limit.signal]));
+      const judged = await options.judge(parsed.sentences, AbortSignal.any([options.signal, limit.signal]), parsed.table);
       if ('refused' in judged) {
         if (judged.refused !== 'cancelled') options.onCheckRefused?.(judged.refused);
         if (options.signal.aborted) throw new Error('the request was cancelled');
@@ -208,7 +220,7 @@ export async function draftSummary(options: DraftOptions): Promise<DraftedOrAlte
         values = `${options.values}\n\n${judged.verdictFound ? VERDICT_NOTE : NOTHING_LEFT_NOTE}`;
         continue;
       }
-      return { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls, verdictFound: judged.verdictFound, model, ...(fixed === undefined ? {} : { noDescription: fixed }) };
+      return { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls, verdictFound: judged.verdictFound, model, ...(fixed === undefined ? {} : { noDescription: fixed }), ...(parsed.table === undefined ? {} : { table: parsed.table }) };
     } finally {
       clearTimeout(timer);
     }

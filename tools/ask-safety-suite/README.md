@@ -42,6 +42,14 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 | A hostile type name in the router's reply is never shown and reads nothing | `src/assistant-descriptions.test.ts` | never shows a type name that is |
 | An `m` line holds the operator's text as a quoted string and no value of the graph, and an `m` key the model invents is dropped | `src/assistant-descriptions.test.ts` | holds the operator |
 | A reply that says a described type has no description is never shown | `src/assistant-descriptions.test.ts` | never shows a reply that says a described type has no description |
+| A table answer shows rows copied from the element each cites, and no cell, label or title reaches an event or a log line | `src/assistant-table.test.ts` | accepts a row of cells copied from the element it cites |
+| A hostile value in a cell drops its row and shows nothing of it | `src/assistant-table.test.ts` | drops a row whose cell is %s and shows nothing of it |
+| A hostile value as a column label refuses the table and shows nothing of it | `src/assistant-table.test.ts` | refuses a table whose column label is %s and shows nothing of it |
+| A cell that states a verdict refuses the table with the fixed sentence | `src/assistant-table.test.ts` | refuses a table with a cell that states a verdict |
+| A row with a number its element does not hold is dropped and the row that copies the element is kept | `src/assistant-table.test.ts` | drops a row with a number that the element it cites does not hold |
+| An invented key, or a key written in a cell, drops its row and keeps the good row | `src/assistant-table.test.ts` | drops a row that %s and keeps the good row |
+| The dropped-row check fails for a body that kept the bad row, as it would with the row check removed | `src/assistant-table.test.ts` | canary: the dropped-row check fails for a body that kept the bad row |
+| A leaky record of a table is caught | `src/assistant-table.test.ts` | canary: a check for a value in a record fails |
 | For a person with saved patterns the provider receives their own catalog and no id, version, anchor or other person's pattern | `src/provider-input.test.ts` | is the question, the fixed note and the catalog |
 | No id of a pattern is in any request | `src/provider-input.test.ts` | carries no id of any pattern |
 | A leaky provider input is caught | `src/provider-input.test.ts` | canary: a request that carries a property value |

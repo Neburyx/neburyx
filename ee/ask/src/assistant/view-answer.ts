@@ -3,6 +3,8 @@ import { AuditUnavailableError, type AuditedModelCall, type CheckRunner, type Ju
 import { prepareSummary } from '../case-summary/prepare.js';
 import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
+import { ASSISTANT_TABLE_ROWS_MAX } from '@neburyx/contracts';
+import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, typeOfKey } from './table.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
 import { MAX_SUMMARY_SENTENCES } from '../case-summary/instructions.js';
@@ -18,9 +20,9 @@ import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
-export const VIEW_PROMPT_VERSION = 6;
+export const VIEW_PROMPT_VERSION = 7;
 /** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 7;
+export const VIEW_TOOLS_PROMPT_VERSION = 8;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -73,6 +75,8 @@ export interface ViewInput {
   readonly typeDescriptions?: TypeDescriptions;
   /** The names of types the router said the message also asks the meaning of. */
   readonly askedTypes?: readonly string[];
+  /** The form of the answer the router chose: `table` only when its reply said so. */
+  readonly form?: 'table';
   /** The entity types of the elements the router context lists. */
   readonly contextTypes?: readonly string[];
   /** Told when the call that writes the answer is about to be made, so a streamed turn can say so. */
@@ -228,13 +232,15 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const cited = new Set<number>();
     // the names of the last reply that named types without a description, for the answer when it is the one accepted
     let lastNames: readonly string[] | undefined;
+    // the positions of the rows of a table reply that the last check kept
+    let keptRows: readonly number[] = [];
     let drafted: DraftedOrAlternative;
     try {
       drafted = await draftSummary({
         call: options.model,
         context: { action: VIEW_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
         instructions: sent.text,
-        values: valuesOf(input.message, assembled.text + typeLines.section, section),
+        values: valuesOf(input.message, assembled.text + typeLines.section, section + (input.form === 'table' ? TABLE_NOTE : '')),
         prompt: { id: VIEW_PROMPT_ID, version: promptVersion },
         alternative: (text: string) => (tools !== undefined && readToolRequest(text, tools).ok) || noDescriptionReplyOf(text, typeLines) !== undefined,
         noDescription: (names: readonly string[]) => {
@@ -243,7 +249,14 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
           return found === undefined ? undefined : noDescriptionSentence(found);
         },
         maxInputTokens: settings.maxInputTokens,
-        judge: async (sentences, signal) => {
+        judge: async (sentences, signal, drafted) => {
+          if (input.form === 'table') {
+            // each row alone (see `judgeTableRows`); a row that cites a sentence of a summary or a line that says what a type means is removed unjudged
+            const judged = await judgeTableRows({ rows: sentences, columns: drafted?.columns, checks: options.checks, judge: judgeCheck, text: checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => SENTENCE_KEY.test(key) || /^m\d+$/.test(key)) });
+            if ('refused' in judged) return { refused: judged.refused };
+            keptRows = judged.positions;
+            return { kept: judged.kept, removed: judged.removed, verdictFound: judged.verdictFound, keysStripped: judged.keysStripped, keysRemoved: judged.keysRemoved };
+          }
           if (input.summary === undefined) {
             const checked = await options.checks.run(judgeCheck, { sentences, text: checkedText }, { timeoutMs: settings.timeoutMs, signal });
             return checked.status === 'refused' ? { refused: checked.reason } : checked.value;
@@ -288,6 +301,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
           }
           return { kept: keptSentences, removed, verdictFound, keysStripped, keysRemoved };
         },
+        ...(input.form === undefined ? {} : { form: input.form }),
         maxCalls: allowed,
         repeats: 1,
         totalTimeoutMs: remaining,
@@ -333,6 +347,28 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         // the fixed sentence covers the types the model named and every type the message names that has no description, whatever the model wrote
         const fixed = undescribedOf(drafted.noDescription === undefined ? undefined : lastNames, typeLines);
         if (drafted.sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? outcome({ status: 'no-description', sentence: noDescriptionSentence(fixed), names: fixed }) : outcome({ status: 'unsupported' });
+        if (drafted.table !== undefined) {
+          const table = drafted.table;
+          const rows = keptRows.flatMap((index) => (table.rows[index] === undefined ? [] : [table.rows[index]]));
+          const shown = rows.slice(0, ASSISTANT_TABLE_ROWS_MAX);
+          const cut = rows.length - shown.length;
+          const shownSentences = shown.map((row) => ({ text: row.cells.join(' '), cites: [...row.cites] }));
+          const elementCitations = [...citationsOf(shownSentences, assembled)];
+          const subject = subjectTypeOf(shown, assembled);
+          const plural = subjectPluralOf(subject, input.typeDescriptions);
+          const inView = subject === undefined ? assembled.keys.size : [...assembled.keys.keys()].filter((key) => typeOfKey(assembled, key)?.text === subject.text).length;
+          const answer = {
+            status: 'answered' as const,
+            route: 'view' as const,
+            table: { title: `${plural} · ${rowsPhrase(shown.length)}`, columns: [...table.columns], rows: shown.map((row) => ({ cells: [...row.cells], cites: [...row.cites] })), ...(table.rows.length - rows.length > 0 ? { droppedRows: table.rows.length - rows.length } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) },
+            citations: elementCitations,
+            coverage: { retrieval: retrievalLine(viewReading), summary: `${shown.length} of ${inView} ${plural.toLowerCase()} in view shown · exact` },
+            ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }),
+            model: drafted.model,
+            calls: progress.calls + input.callsUsed,
+          };
+          return outcome({ status: 'answered', answer, cited: elementCitations.length });
+        }
         const elementCitations = [...citationsOf(drafted.sentences, assembled)];
         const citations = [...elementCitations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);

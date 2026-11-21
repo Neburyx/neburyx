@@ -108,6 +108,12 @@ describe('the shipped router prompt and the reply format', () => {
     for (const tool of ['ai-notes', 'ai-summary', '"tool"']) expect(prompt).not.toContain(tool);
   });
 
+  it('tells the router to add the form table to a view reply that asks for a table, and to leave it out otherwise, with no tool named', async () => {
+    const { prompt } = await shippedText();
+    expect(prompt).toContain('When the message asks for its answer as a table, also add `"form":"table"`; when it does not, leave `form` out (the words of the message alone never decide it, only your reply does).');
+    for (const tool of ['ai-notes', 'ai-summary', 'typology']) expect(prompt).not.toContain(`"tool":"${tool}"`);
+  });
+
   it('places a message that needs several reads on its first read only when the loop is on, and otherwise leaves it unplaced, with a different instructions hash', async () => {
     const { prompt } = await shippedText();
     const on = buildAssistantInstructions(prompt, true);

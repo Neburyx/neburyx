@@ -11,8 +11,8 @@ const MAX_TURNS = 5;
 
 const elementSchema = z.strictObject({ entityType: z.string().min(1), stableId: z.string().min(1) });
 const typeNames = z.array(z.string().min(1)).min(1).max(8);
-/** A view question; `types` when the message also asks what types mean (the router adds their names to its view reply). */
-const viewSchema = z.strictObject({ route: z.literal('view'), view: z.array(elementSchema).min(1), types: typeNames.optional() });
+/** A view question; `types` when the message also asks what types mean (the router adds their names to its view reply); `form` when the message asks for the answer as a table (the router adds the field to its view reply, and only then). */
+const viewSchema = z.strictObject({ route: z.literal('view'), view: z.array(elementSchema).min(1), types: typeNames.optional(), form: z.literal('table').optional() });
 /** A question that asks only what types mean: the router copies their names; no view is needed. */
 const meaningSchema = z.strictObject({ route: z.literal('meaning'), types: typeNames });
 const refuseSchema = z.strictObject({ route: z.literal('refuse'), cause: z.enum(ASSISTANT_REFUSAL_CAUSES) });

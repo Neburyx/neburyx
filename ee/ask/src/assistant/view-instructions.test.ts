@@ -94,3 +94,20 @@ describe('the shipped prompt of the answer from the view and after tool steps', 
     expect(text).toContain('An element whose line shows no amount is named as such');
   });
 });
+
+describe('the shipped prompt on the table form', () => {
+  it('names the table reply form, says it is for the turn that asks for it, what a column label and a cell are, that a row cites elements and never a summary sentence, and that no sum, rank or percentage is a cell', async () => {
+    const result = await loadViewInstructions({ env: {} });
+    if (!result.ok) throw new Error(result.problems.join('; '));
+    const { text } = result.instructions;
+    expect(text).toContain('{"table":{"columns":["<label>",...],"rows":[{"cells":["<text>",...],"cites":["<key>",...]},...]}}');
+    expect(text).toContain('When the question text ends with the line "The analyst asked for the answer as a table."');
+    expect(text).toContain('A table has 1 to 6 columns, each a short plain label');
+    expect(text).toContain('each copied exactly from the element text');
+    expect(text).toContain('never write a key in a cell');
+    expect(text).toContain("a column named Element holds the element's name or title as its line shows it, never its key such as n1");
+    expect(text).toContain('no sum, rank or percentage is ever a cell');
+    expect(text).toContain('never a sentence of a summary');
+    expect(text).not.toContain('is answered with sentences as before');
+  });
+});

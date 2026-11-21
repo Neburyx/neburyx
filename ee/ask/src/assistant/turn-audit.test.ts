@@ -79,7 +79,7 @@ describe('the closing event of an answered Ask turn', () => {
     await run(r);
     const { event, turn } = turnOf(r.events);
     expect(event).toMatchObject({ actorId: 'p-1', actorRole: 'investigator', result: 'success', sourceId: 'demo', investigationId: 'inv-1', traceId: 'tr-1' });
-    expect(turn).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, citedElements: 2, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '6', tokensIn: 20, tokensOut: 10 });
+    expect(turn).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', templateId: 'shared-attribute', steps: 1, citedElements: 2, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '7', tokensIn: 20, tokensOut: 10 });
     expect(turn.paramsHash).toMatch(SHA);
     expect(turn.instructionsSha256).toBe(createHash('sha256').update(r.fixture.calls[0]?.instructions ?? '', 'utf8').digest('hex'));
     const asked = r.events.find((candidate) => candidate.action === 'assistant.ask');
@@ -428,7 +428,7 @@ describe('turns that overlap', () => {
     await noteTurnStarted({ sourceId: 'leaked', investigationId: 'leaked' });
     const next = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}') });
     await run(next);
-    expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '6', propertyValuesSent: false, instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10, runId: expect.stringMatching(UUID) });
+    expect(turnOf(next.events).turn).toEqual({ route: 'refuse', outcome: 'refused', cause: 'verdict', steps: 0, modelCalls: 1, modelRef: 'fixture-model', promptId: 'assistant.route', promptVersion: '7', propertyValuesSent: false, instructionsSha256: expect.stringMatching(SHA), tokensIn: 20, tokensOut: 10, runId: expect.stringMatching(UUID) });
     expect(closing(next.events)[0]).toMatchObject({ sourceId: 'demo', investigationId: 'inv-1' });
     expect(closing(r.events)).toHaveLength(1);
   });

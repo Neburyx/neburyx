@@ -1,11 +1,23 @@
 {
   "note": "scripted",
   "folders": {
-    "banking-demo": "fbcea199d82433bf6fa68d972c8ecb8c92557afe7dc6b69377dc858fe4850b02",
-    "insurance-demo": "3116bf156d10237c465f1209fe698b1cfd31c74973002f6f2c2f1371ef85fa75"
+    "banking-demo": "347b74a8ea3af13b04adc7587bde77ab04811d176705498774da35f638e4ff33",
+    "insurance-demo": "5ce9481a650b3cdbb1dcce25e901df89eb6f6252383dbfa249c584b43c2f4513"
   },
   "answers": {
     "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\"}"
+    },
+    "Message:\nShow the accounts and the device on screen as a table.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
+    },
+    "Message:\nPut the accounts in view into a table with their ids.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
+    },
+    "Message:\nPut the accounts on screen in a table with their ids and their owners.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {
+      "reply": "{\"route\":\"view\",\"form\":\"table\"}"
+    },
+    "Message:\nI have the table panel open: describe the accounts and the device on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
       "reply": "{\"route\":\"view\"}"
     },
     "Message:\nDescribe the accounts and the device on screen.\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"device\" | \"DV-0001\"": {
