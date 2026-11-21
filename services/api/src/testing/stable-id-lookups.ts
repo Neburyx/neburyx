@@ -36,7 +36,7 @@ export const LOOKUP_INVENTORY: Record<string, Record<string, unknown>> = {
  * type and an evidence property on the link relationship.
  */
 export const LOOKUP_MAPPING = linkedMappingOf({
-  entities: PATTERN_ENTITIES.map((entity) => (entity.type === 'maker' ? { ...entity, sortable: ['rank'], search: ['region'] } : entity)),
+  entities: PATTERN_ENTITIES.map((entity) => (entity.type === 'maker' ? { ...entity, sortable: ['rank'], search: ['region'] } : entity.type === 'tool' ? { ...entity, reference: ['kind'] } : entity)),
   relationships: PATTERN_RELATIONSHIPS.map((row) => (row.type === 'USES_TOOL' ? { ...row, observed_at: 'seenAt' } : row.type === 'LINKS' ? { ...row, evidence: ['lane'] } : row)),
   derived: [DERIVED_RULE],
   patterns: [],
@@ -86,4 +86,17 @@ export const LOOKUP_SEARCHES: readonly (readonly [string, string, Record<string,
   ['entity search by value', 'entity-search', { text: 'north', targets: [{ entityType: 'maker', property: 'region', match: 'value' }] }],
   ['entity search by prefix', 'entity-search-prefix', { text: 'nor', targets: [{ entityType: 'maker', property: 'region', match: 'value' }] }],
   ['relationship evidence by value', 'relationship-evidence', { text: 'x', targets: [LINK_TARGET] }],
+  ['related records by a reference property', 'entity-related', { text: 'plain', targets: [{ entityType: 'tool', property: 'kind', match: 'value' }] }],
+  [
+    'facets of a search property, a reference property and an evidence property',
+    'search-facets',
+    {
+      text: 'north',
+      probes: [
+        { targets: [{ kind: 'search', entityType: 'maker', property: 'region', match: 'value' }] },
+        { targets: [{ kind: 'reference', entityType: 'tool', property: 'kind', match: 'value' }] },
+        { targets: [{ kind: 'evidence', relationshipType: 'LINKS', from: 'maker', to: 'maker', property: 'lane', match: 'value' }] },
+      ],
+    },
+  ],
 ];

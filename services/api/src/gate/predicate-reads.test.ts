@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LOOKUP_ALLOWLIST, LOOKUP_INVENTORY, LOOKUP_SHAPES } from '../testing/stable-id-lookups.js';
+import { LOOKUP_ALLOWLIST, LOOKUP_INVENTORY, LOOKUP_SEARCHES, LOOKUP_SHAPES } from '../testing/stable-id-lookups.js';
 import { defaultCatalog } from './assemble.js';
 import { renderTemplate } from './render.js';
 
@@ -84,6 +84,10 @@ describe('no condition of a match with an anchor reads a property directly', () 
 
   it.each(LOOKUP_SHAPES.map(([name, id, params]) => [name, id, params] as const))('%s (a filter, a rank, a window, a condition)', (_name, id, params) => {
     expect(directReads(statementOf(id, params))).toEqual([]);
+  });
+
+  it.each(LOOKUP_SEARCHES.map(([name, id, params]) => [name, id, params] as const))('%s renders, and has no anchor: its reads are the search itself', (_name, id, params) => {
+    expect(statementOf(id, params)).toContain('`');
   });
 
   it('fails for a direct read and passes for a wrapped one and for a hinted lookup (the check is not empty)', () => {

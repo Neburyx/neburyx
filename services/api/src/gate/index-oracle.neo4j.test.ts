@@ -127,7 +127,6 @@ const scansOf = (outcomes: Map<string, Outcome> | undefined): string[] => [...(o
 
 describe(`every template returns the rows of the oracle and expands from its anchor, with and without statistics, on ${NEO4J_SERIES}`, () => {
   it('has a case for each template of the lookup inventory, and for the shapes that add conditions, windows, filters and ranks', () => {
-    // the related-records and facet statements are not in the oracle: they need reference properties and facet targets that the fixture mapping does not declare (a residual risk the docs name)
     expect(new Set(CASES.map(([, id]) => id))).toEqual(new Set([...Object.keys(LOOKUP_INVENTORY), ...LOOKUP_SEARCHES.map(([, id]) => id)]));
     expect(CASES.length).toBeGreaterThan(Object.keys(LOOKUP_INVENTORY).length + 15);
   });

@@ -141,7 +141,7 @@ They read imports, not calls. They cannot see:
 
 Review covers those. The gate has one place that builds it, and the checks keep the modules that hold the executor closed.
 
-The node search branches (`entity-search`, `entity-search-prefix`, `entity-related` and the facet probes of `search-facets`) are not covered by the two checks above: they have no anchor and read properties on purpose, and their plans depend on index statistics in the same way. That is a known residual risk.
+The node search branches (`entity-search`, `entity-search-prefix`, `entity-related`, `relationship-evidence` and the facet probes of `search-facets`) are not covered by the two string checks above: they have no anchor, read properties on purpose and are not hinted, so their plans can depend on index statistics in the same way. The oracle suite runs them on its data, with and without statistics and with the indexes dropped, and requires no scan and the oracle's rows; that is a test of the fixture's data, not a guarantee for every graph, and stays a known residual risk.
 
 ## No domain words in code
 
