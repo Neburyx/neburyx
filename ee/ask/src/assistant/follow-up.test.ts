@@ -988,3 +988,24 @@ describe('the one element a message needs and does not name', () => {
     expect(ranFor(t.rig)[1]).not.toContain('"stableId":"A-1"');
   });
 });
+
+/** What a written value does today when a clarification is answered (the checking stories of the feature turn this). */
+describe('a written value that travels through a clarification, today', () => {
+  const PAIR = {
+    pair: { parameters: ['first', 'second'], template: 'shortest-paths', settings: { ends: [{ entityType: 'widget', stableId: '$first' }, { entityType: 'widget', stableId: '$second' }], relTypes: ['LINK_A'], maxHops: 3, limit: 5, direction: 'both' } },
+  };
+
+  it('seals the written value of another role into the choice, re-reads only the role the choice fills, and runs the intent with the unchecked value, which ends nothing found', async () => {
+    const t = await follow(() => clarifying(['c1', 'c2'], { intent: 'pair', role: 'first', entities: { second: 'K-1' } }), { readNodes: everyone, intents: PAIR, run: () => ({ status: 'refused', refusal: { code: 'NOT_FOUND' } }) });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }], citationRefs: [widget('A-2')] }));
+    const clarification = await t.send(FOLLOW_UP);
+    if (clarification.status !== 'clarification') throw new Error('not a clarification');
+    const choice = clarification.candidates[1]?.choice as AssistantChoice;
+    expect(choice.entities).toEqual({ first: 'A-2', second: 'K-1' });
+    t.rig.elementReads.length = 0;
+    const answer = await answerOf(t.rig.route.handler(t.rig.request({ sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], choice }, { principalId: PERSON })));
+    expect(JSON.stringify(t.rig.elementReads.map((read) => read.refs))).not.toContain('K-1');
+    expect(ranFor(t.rig)[0]).toContain('K-1');
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'nothing-found' } } });
+  });
+});

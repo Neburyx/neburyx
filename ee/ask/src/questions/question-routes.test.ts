@@ -688,3 +688,24 @@ describe('a question of a path intent', () => {
     expect(rows).toEqual([{ actorId: 'p-1', intent: 'between', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
   });
 });
+
+/** What a value the person writes does today, before it is checked against the type its role needs (the checking stories of the feature turn these). */
+describe('a written value on Ask, today', () => {
+  const NO_ANCHOR = { run: (): AskRun => ({ status: 'refused', refusal: { code: 'NOT_FOUND' } }) };
+
+  it.each([
+    ['a value of another mapped type', 'K-1'],
+    ['an id that exists as nothing', 'NOBODY'],
+  ])('runs the intent with %s as the parameter, with no check of its type, and answers nothing found', async (_name, value) => {
+    const { route, request, runs } = await rig({ classify: async () => ({ ok: true, intent: 'shared', entities: { id: value } }), ...NO_ANCHOR });
+    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'nothing-found', intent: 'shared' }) });
+    expect(JSON.stringify(runs)).toContain(value);
+    expect(runs).toHaveLength(1);
+  });
+
+  it('runs an asked pattern for an anchor of another type than the pattern starts at, with no check, and answers nothing found', async () => {
+    const { route, request, runs } = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'K-1' }), ...NO_ANCHOR });
+    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'nothing-found' }) });
+    expect(runs[0]?.asked).toEqual({ templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'K-1' } } });
+  });
+});
