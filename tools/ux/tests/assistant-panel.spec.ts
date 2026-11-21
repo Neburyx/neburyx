@@ -388,6 +388,57 @@ test.describe('the Assistant panel', () => {
   }
 
   for (const width of [1440, 1280]) {
+    test(`shows the refusal of a verdict with what the investigation connects at ${width} pixels, and selects the cited element`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+      const overview: AssistantTurnAnswer = {
+        status: 'answered',
+        route: 'refuse',
+        cause: 'verdict',
+        sentence: ASSISTANT_REFUSAL_SENTENCES.verdict,
+        overview: { sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref: cited }], coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The overview cites 1 of the 1 shown elements.' }, model: 'claude-sonnet-5-5' },
+      };
+      await answerWith(page, overview);
+      await open(page);
+      await page.getByLabel('Your message').fill('is this customer laundering money?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByRole('heading', { name: 'Not answered' })).toBeVisible();
+      await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+      await expect(panel(page).getByRole('heading', { name: 'What the investigation connects' })).toBeVisible();
+      await expect(panel(page).getByText('AI-drafted')).toBeVisible();
+      await expect(panel(page).getByText('Account AC-1 is in view.')).toBeVisible();
+      await expect(panel(page).getByText('1 shown · 0 not yet retrieved (exact)')).toBeVisible();
+      await expect(panel(page).getByText('An overview of the view, not an assessment.')).toBeVisible();
+      await expect(panel(page).getByRole('button', { name: 'Open Filters' })).toBeVisible();
+      await expect(panel(page).getByText(/^Sources · /)).toHaveCount(0);
+      const box = await panel(page).boundingBox();
+      for (const target of [panel(page).locator('.assistant-overview'), panel(page).getByRole('button', { name: 'Open Filters' })]) {
+        const inner = await target.boundingBox();
+        expect(box !== null && inner !== null && inner.x >= box.x && inner.x + inner.width <= box.x + box.width).toBe(true);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      await panel(page).getByRole('button', { name: /^Citation 1, / }).first().click();
+      await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+    });
+
+    test(`shows the plain refusal alone at ${width} pixels when no overview could be drawn`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      await answerWith(page, REFUSE);
+      await open(page);
+      await page.getByLabel('Your message').fill('is this customer laundering money?');
+      await page.keyboard.press('Enter');
+      await expect(panel(page).getByRole('heading', { name: 'Not answered' })).toBeVisible();
+      await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeVisible();
+      await expect(panel(page).getByRole('button', { name: 'Open Filters' })).toBeVisible();
+      await expect(panel(page).getByRole('heading', { name: 'What the investigation connects' })).toHaveCount(0);
+      await expect(panel(page).getByText('AI-drafted')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    });
+  }
+
+  for (const width of [1440, 1280]) {
     test(`shows an About chip for the meaning of a type at ${width} pixels, opens the operator's description as text and selects nothing, and shows the plain card of a type with no description`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openWorkspace(page);

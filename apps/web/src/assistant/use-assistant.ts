@@ -72,7 +72,11 @@ const sentOf = (request: AssistantTurnRequest): { readonly message: string; read
 function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: AssistantTurnRequest, now: number, entriesOf: (answer: ViewAnswer) => readonly CitationEntry[]): Outcome | { readonly tooLong: { readonly words: number; readonly limit: number } } {
   switch (answer.status) {
     case 'answered':
-      if (answer.route === 'refuse') return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence };
+      if (answer.route === 'refuse') {
+        // the overview is drawn as an answer from the view is, so it is given the shape of one
+        const overview: ViewAnswer | undefined = answer.overview === undefined ? undefined : { status: 'answered', route: 'view', ...answer.overview, calls: 1 };
+        return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence, ...(overview === undefined ? {} : { overview, entries: entriesOf(overview) }) };
+      }
       if ('sentences' in answer || 'table' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, reads: answer.reads, stoppedAt: answer.stoppedAt, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };

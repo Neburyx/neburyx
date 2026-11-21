@@ -162,7 +162,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
         </section>
       );
     case 'refuse':
-      return <RefusalCard sentence={outcome.sentence} />;
+      return <RefusalCard sentence={outcome.sentence} {...(outcome.overview === undefined ? {} : { overview: outcome.overview, entries: outcome.entries ?? [] })} />;
     case 'waiting':
       return <ConfirmationCard waiting={outcome.waiting} onConfirm={() => actions.decide(turn.id, 'confirm')} onSkip={() => actions.decide(turn.id, 'skip')} onCancel={() => actions.cancelWaiting(turn.id)} />;
     case 'waiting-closed':

@@ -63,7 +63,8 @@ export type Outcome =
   /** A confirmation that is no longer open (another message was sent, or the panel was reloaded): the reads stay, the buttons are gone. */
   | { readonly kind: 'waiting-closed'; readonly reads: readonly AssistantRead[] }
   | { readonly kind: 'cancelled' }
-  | { readonly kind: 'refuse'; readonly cause: AssistantRefusalCause; readonly sentence: string }
+  /** A refusal of the assistant; a verdict may carry a neutral overview of the view, beside the fixed sentence, with the entries of what it cites. */
+  | { readonly kind: 'refuse'; readonly cause: AssistantRefusalCause; readonly sentence: string; readonly overview?: ViewAnswer; readonly entries?: readonly CitationEntry[] }
   | { readonly kind: 'not-answered'; readonly sentence: string }
   /** The question was about types the mapping does not describe: the fixed sentence of the server. */
   | { readonly kind: 'no-description'; readonly sentence: string }

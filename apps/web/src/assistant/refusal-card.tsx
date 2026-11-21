@@ -7,6 +7,9 @@ import { useStoreSelector } from '../state/store.js';
 import { isPathsTool } from '../ask/refusal-chips.js';
 import { useTools, type RegisteredTool } from '../workspace/tool-registry.js';
 import { ASSISTANT_COPY } from './copy.js';
+import type { ViewAnswer } from './assistant-session.js';
+import type { CitationEntry } from '../summary/summary-model.js';
+import { ViewAnswerCard } from './view-answer-card.js';
 
 const FILTERS_TOOL_ID = 'filters';
 const PATHS_TOOL_ID = 'paths';
@@ -48,12 +51,19 @@ function ToolChip({ tool, label }: { readonly tool: RegisteredTool; readonly lab
 }
 
 /** A refusal of the assistant: the title, the fixed sentence of the cause, and the manual ways on. The words of the model never reach it. */
-export function RefusalCard({ sentence, hint }: { readonly sentence: string; readonly hint?: string | undefined }) {
+export function RefusalCard({ sentence, hint, overview, entries }: { readonly sentence: string; readonly hint?: string | undefined; readonly overview?: ViewAnswer | undefined; readonly entries?: readonly CitationEntry[] | undefined }) {
   const titleId = useId();
   const tools = useTools();
   const filters = tools.find((tool) => tool.id === FILTERS_TOOL_ID);
   const paths = tools.find((tool) => tool.id === PATHS_TOOL_ID);
   const hasPaths = isPathsTool(paths);
+  const chips = (
+    <div className="ask-chips">
+      {filters === undefined ? null : <ToolChip tool={filters} label={ASSISTANT_COPY.openFilters} />}
+      <SummarizeChip />
+      {hasPaths && paths !== undefined ? <ToolChip tool={paths} label={ASSISTANT_COPY.openPaths} /> : null}
+    </div>
+  );
   return (
     <section className="assistant-refusal-region" aria-labelledby={titleId}>
       <div className="assistant-refusal">
@@ -61,12 +71,15 @@ export function RefusalCard({ sentence, hint }: { readonly sentence: string; rea
           {ASSISTANT_COPY.notAnswered}
         </h3>
         <p>{sentence}</p>
-        <div className="ask-chips">
-          {filters === undefined ? null : <ToolChip tool={filters} label={ASSISTANT_COPY.openFilters} />}
-          <SummarizeChip />
-          {hasPaths && paths !== undefined ? <ToolChip tool={paths} label={ASSISTANT_COPY.openPaths} /> : null}
-        </div>
+        {overview === undefined ? chips : null}
       </div>
+      {overview === undefined ? null : (
+        <div className="assistant-overview">
+          <ViewAnswerCard answer={overview} entries={entries ?? []} heading={ASSISTANT_COPY.overviewHeading} sources={false} />
+          <p className="ask-hint">{ASSISTANT_COPY.overviewNote}</p>
+          {chips}
+        </div>
+      )}
       {hint === undefined ? null : <p className="ask-hint">{hint}</p>}
       {hasPaths ? null : <p className="ask-note">{ASSISTANT_COPY.pathsLeftOut}</p>}
     </section>

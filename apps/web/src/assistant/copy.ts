@@ -22,6 +22,8 @@ export const ASSISTANT_COPY = {
   stepReadingView: 'Reading your view…',
   stepReading: 'Reading',
   stepReadingFor: 'for',
+  overviewHeading: 'What the investigation connects',
+  overviewNote: 'An overview of the view, not an assessment.',
   stepAnswering: 'Checking the answer…',
   stepAnsweringBody: 'Every sentence must cite something that was read.',
   stepReadDone: 'Finished reading',

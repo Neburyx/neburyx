@@ -16,12 +16,17 @@ const labelOf = (entry: CitationEntry): string =>
   entry.label ??
   `${entry.kind === "entity" ? SUMMARY_COPY.entity : SUMMARY_COPY.relationship} ${entry.key}`;
 
+/** `heading` shows a visible title in place of the hidden one, and `sources: false` leaves out the list of sources: the overview beside a refusal is drawn so. */
 export function ViewAnswerCard({
   answer,
   entries,
+  heading,
+  sources = true,
 }: {
   readonly answer: ViewAnswer;
   readonly entries: readonly CitationEntry[];
+  readonly heading?: string;
+  readonly sources?: boolean;
 }) {
   const titleId = useId();
   const tableTitleId = useId();
@@ -181,16 +186,22 @@ export function ViewAnswerCard({
   };
   return (
     <section className="assistant-view-answer" aria-labelledby={titleId}>
-      <h3
-        id={titleId}
-        className="visually-hidden"
-        tabIndex={-1}
-        data-ask-focus="title"
-      >
-        {"steps" in answer
-          ? ASSISTANT_COPY.sentencesFromReads
-          : ASSISTANT_COPY.sentences}
-      </h3>
+      {heading === undefined ? (
+        <h3
+          id={titleId}
+          className="visually-hidden"
+          tabIndex={-1}
+          data-ask-focus="title"
+        >
+          {"steps" in answer
+            ? ASSISTANT_COPY.sentencesFromReads
+            : ASSISTANT_COPY.sentences}
+        </h3>
+      ) : (
+        <h4 id={titleId} className="assistant-overview-heading">
+          {heading}
+        </h4>
+      )}
       <div className="summary-tags">
         <span className="summary-tag summary-tag-accent">
           {ASSISTANT_COPY.drafted}
@@ -199,7 +210,7 @@ export function ViewAnswerCard({
       </div>
       {"table" in answer ? tableOf(answer) : sentencesOf(answer)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
-      {entries.length === 0 ? null : (
+      {entries.length === 0 || !sources ? null : (
         <details className="assistant-sources" open>
           <summary>{`${ASSISTANT_COPY.sources} · ${entries.length}`}</summary>
           <ul>
