@@ -1,8 +1,9 @@
+import { MAX_READ_REFS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { RequestCancelled } from '../errors.js';
+import { AppError, RequestCancelled } from '../errors.js';
 import type { ShownReader } from '../exports/shown-reader.js';
 import type { Principal } from '../seams/seams.js';
-import { createElementsReader } from './elements-reader.js';
+import { createElementsReader, createSourceElementsReader } from './elements-reader.js';
 
 const principal = { id: 'p', displayName: 'P', role: 'investigator' } as Principal;
 const ref = (id: string) => ({ sourceId: 'demo', entityType: 'widget', stableId: id });
@@ -65,5 +66,44 @@ describe('the reader of the elements of a view', () => {
     expect(seen.map((signal) => signal.aborted)).toEqual([true, false]);
     own.abort();
     expect(seen.map((signal) => signal.aborted)).toEqual([true, true]);
+  });
+});
+
+describe('the reader of the elements of a source', () => {
+  const source = { sourceId: 'demo', mask: false };
+  const none = { nodes: [], edges: [], omitted: false, unresolved: false, unresolvedCount: 0, maskedFields: 0, notRetrieved: EXACT, uncounted: 0 };
+  const build = (shownReader: ShownReader, counted: unknown[] = []) => createSourceElementsReader({ shownReader, access: access(counted), principal, traceId: 't', signal: new AbortController().signal });
+
+  it('reads through the same shown reader with the mask of the scope and no investigation, counts the call once against the rate of the person, under the action of the read by references', async () => {
+    const calls: unknown[] = [];
+    const counted: unknown[] = [];
+    const read = build(reader(async (call) => (calls.push(call), none)), counted);
+    await read({ sourceId: 'demo', mask: true }, refs);
+    expect(counted).toMatchObject([{ sourceId: 'demo', rate: 'count', auditAction: 'graph.read_refs', principal }]);
+    expect(calls).toMatchObject([{ sourceId: 'demo', mask: true, entities: refs.entities }]);
+  });
+
+  it('gives back what the shown reader gave: the references that did not resolve and the flag that something was left out, as the reader of a view does', async () => {
+    const read = build(reader(async () => ({ ...none, omitted: true, unresolved: true, unresolvedCount: 2 })));
+    expect(await read(source, refs)).toMatchObject({ unresolved: 2, omitted: true });
+  });
+
+  it('reads nothing and counts nothing when a kind holds more references than a read takes, and reads when it holds exactly that many', async () => {
+    let reads = 0;
+    const counted: unknown[] = [];
+    const read = build(reader(async () => (reads += 1, none)), counted);
+    const many = (count: number) => ({ entities: Array.from({ length: count }, (_unused, index) => ref(`W-${index}`)), edges: [], aggregates: [], derived: [] });
+    await read(source, many(MAX_READ_REFS));
+    expect(reads).toBe(1);
+    await expect(read(source, many(MAX_READ_REFS + 1))).rejects.toMatchObject({ code: 'INVALID_REQUEST' });
+    expect(reads).toBe(1);
+    expect(counted).toHaveLength(1);
+  });
+
+  it('passes on the refusal of a source the person may not read, and the error of the shown reader, as they are', async () => {
+    const denied = createSourceElementsReader({ shownReader: reader(async () => none), access: { require: async () => Promise.reject(new AppError('NOT_FOUND')) }, principal, traceId: 't', signal: new AbortController().signal });
+    await expect(denied(source, refs)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const cancelled = build(reader(() => Promise.reject(new RequestCancelled())));
+    await expect(cancelled(source, refs)).rejects.toBeInstanceOf(RequestCancelled);
   });
 });

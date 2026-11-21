@@ -1,5 +1,5 @@
 import { createEnterpriseExtension } from '@neburyx/ee-ask';
-import type { AskClassification, AskClassifier, AskRunner, ElementRefs, SummaryReading } from '@neburyx/contracts';
+import type { AskClassification, AskClassifier, AskRunner, ElementRefs, SourceElementsScope, SummaryReading } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { communitySeams } from '../seams/community-seams.js';
 import { currentReadOrigin } from '../seams/read-origin.js';
@@ -53,6 +53,14 @@ describe('the capabilities that mark AI reads', () => {
     const read = markReadElements(async () => (seen.push(currentReadOrigin()), { missing: 0 } as unknown as SummaryReading));
     await read({ investigationId: 'i', sourceId: 'demo', mask: false }, { entities: [], edges: [], aggregates: [], derived: [] } satisfies ElementRefs);
     expect(seen).toEqual(['ai', 'ai']);
+    expect(currentReadOrigin()).toBe('manual');
+  });
+
+  it('runs the read of the elements of a source, which has no investigation, as an AI read too', async () => {
+    const seen: string[] = [];
+    const read = markReadElements<SourceElementsScope>(async () => (seen.push(currentReadOrigin()), { missing: 0 } as unknown as SummaryReading));
+    await read({ sourceId: 'demo', mask: false }, { entities: [], edges: [], aggregates: [], derived: [] } satisfies ElementRefs);
+    expect(seen).toEqual(['ai']);
     expect(currentReadOrigin()).toBe('manual');
   });
 });

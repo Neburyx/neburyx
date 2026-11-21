@@ -50,6 +50,12 @@ export interface ExtensionRequest {
    * read through the reader the exports use, with the mask of the request: what the person may not export is left out, and the answer says how many references did not resolve, whether anything was left out and how many relationships are not yet retrieved.
    */
   readonly readElements?: (scope: ElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
+  /**
+   * Elements of a source read again through the gate, for the caller and this request, with no investigation: the same reader as `readElements` (the mask of the request, what the person may not export left out and said
+   * so, the references that did not resolve counted), for a route that has no investigation, such as Ask's. A source that is not configured or that the caller may not read is `NOT_FOUND`; at most `MAX_READ_REFS` references of
+   * a kind in one call, more is refused.
+   */
+  readonly readSourceElements?: (scope: SourceElementsScope, refs: ElementRefs) => Promise<SummaryReading>;
   /** The AI notes of the caller's own drafts; absent, a route that stores or reads them refuses. */
   readonly aiNotes?: AiNotesCapability;
   /** Resolves when the investigation is the caller's and is for the source, and the source is as the investigation left it; rejects with `NOT_FOUND`, or the source-changed refusal, otherwise. */
@@ -74,6 +80,13 @@ export interface ElementsScope {
   readonly sourceId: string;
   readonly mask: boolean;
   /** Ends the read when it aborts, besides the request's own signal; the read never outlives it. */
+  readonly signal?: AbortSignal;
+}
+
+/** The source whose elements are read, whether the personal data of its nodes is masked, and a signal that ends the read. */
+export interface SourceElementsScope {
+  readonly sourceId: string;
+  readonly mask: boolean;
   readonly signal?: AbortSignal;
 }
 

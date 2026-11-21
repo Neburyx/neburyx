@@ -9,6 +9,6 @@ export function markAskRunner(runnerFor: (scope: AskRunScope) => AskRunner): (sc
   };
 }
 
-export function markReadElements(read: NonNullable<ExtensionRequest['readElements']>): (scope: ElementsScope, refs: ElementRefs) => Promise<SummaryReading> {
+export function markReadElements<Scope>(read: (scope: Scope, refs: ElementRefs) => Promise<SummaryReading>): (scope: Scope, refs: ElementRefs) => Promise<SummaryReading> {
   return (scope, refs) => asAiReads(() => read(scope, refs));
 }

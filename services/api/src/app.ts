@@ -42,7 +42,7 @@ import { asksForJsonOnly, REFUSAL_PAGE_CSP, refusalPage } from './source-links/r
 import { createSourceLinkService } from './source-links/source-link-service.js';
 import { createSearchService } from './search/search-service.js';
 import { createInvestigationService } from './investigations/investigation-service.js';
-import { createElementsReader, createInvestigationCheck } from './graph/elements-reader.js';
+import { createElementsReader, createInvestigationCheck, createSourceElementsReader } from './graph/elements-reader.js';
 import { createCursorCodec, type CursorCodec } from './gate/cursor/codec.js';
 import { createViewService } from './investigations/view-service.js';
 import { createOwnedViewService } from './investigations/owned-view-service.js';
@@ -406,7 +406,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const askSourceChecks: { current?: NonNullable<ExtensionMount['askSourceReadableFor']> } = {};
   const askPatternLists: { current?: NonNullable<ExtensionMount['askPatternsFor']> } = {};
   const askPatternFinders: { current?: NonNullable<ExtensionMount['askPatternFindFor']> } = {};
-  const elementReaders: { current?: NonNullable<ExtensionMount['readElementsFor']> } = {};
+  const elementReaders: { current?: NonNullable<ExtensionMount['readElementsFor']>; source?: NonNullable<ExtensionMount['readSourceElementsFor']> } = {};
   const investigationChecks: { current?: NonNullable<ExtensionMount['investigationReadableFor']> } = {};
   const investigationSources: { current?: NonNullable<ExtensionMount['investigationSourceFor']> } = {};
   const aiNotesCapabilities: { current?: NonNullable<ExtensionMount['aiNotesFor']> } = {};
@@ -429,6 +429,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
       typeDescriptions: (sourceId) => typeDescriptionsOf(mapping.sources.find((source) => source.id === sourceId)),
       readElementsFor: (context) => elementReaders.current?.(context),
+      readSourceElementsFor: (context) => elementReaders.source?.(context),
       investigationReadableFor: (context) => investigationChecks.current?.(context),
       aiNotesFor: (context) => aiNotesCapabilities.current?.(context),
       investigationSourceFor: (context) => investigationSources.current?.(context),
@@ -736,6 +737,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });
     const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: privilegedAuditOf(options.seams ?? communitySeams()) });
     elementReaders.current = (context) => createElementsReader({ shownReader: summaryShownReader, investigations, access, ...context });
+    elementReaders.source = (context) => createSourceElementsReader({ shownReader: summaryShownReader, access, ...context });
     investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
     investigationSources.current = ({ principal }) => async (investigationId) => (await investigations.read({ id: investigationId, principal })).investigation.sourceId;
     aiNotesCapabilities.current = ({ principal }) => ({

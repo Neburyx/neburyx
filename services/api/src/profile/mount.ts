@@ -29,6 +29,8 @@ export interface ExtensionMount {
   readonly signText?: ExtensionRequest['signText'];
   /** Reads the elements of a view again for one request, bound to its caller, its trace ID and its abort signal; absent, a route that reads elements refuses. */
   readonly readElementsFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['readElements'];
+  /** Reads the elements of a source again for one request with no investigation (Ask's route), bound to its caller, its trace ID and its abort signal; absent, a route that reads them refuses. */
+  readonly readSourceElementsFor?: (context: { readonly principal: Principal; readonly traceId: string; readonly signal: AbortSignal }) => ExtensionRequest['readSourceElements'];
   /** Whether the caller still has the investigation of a view and its source, for one request; absent, a route that asks it refuses. */
   readonly investigationReadableFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['investigationReadable'];
   /** The source of the caller's investigation, from its record, for one request; rejects as `NOT_FOUND` for an investigation that is not the caller's; absent, a route that declares an `investigation` refuses. */
@@ -104,6 +106,8 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
             const askSourceReadable = mount.askSourceReadableFor?.({ principal, traceId: request.id });
             const unmarkedElements = mount.signalOf === undefined ? undefined : mount.readElementsFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
             const readElements = unmarkedElements === undefined ? undefined : markReadElements(unmarkedElements);
+            const unmarkedSourceElements = mount.signalOf === undefined ? undefined : mount.readSourceElementsFor?.({ principal, traceId: request.id, signal: mount.signalOf(request) });
+            const readSourceElements = unmarkedSourceElements === undefined ? undefined : markReadElements(unmarkedSourceElements);
             const investigationReadable = mount.investigationReadableFor?.({ principal, traceId: request.id });
             const aiNotes = mount.aiNotesFor?.({ principal, traceId: request.id });
             const askPatterns = mount.askPatternsFor?.({ principal, traceId: request.id });
@@ -127,6 +131,7 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(mount.typeDescriptions === undefined ? {} : { typeDescriptions: mount.typeDescriptions }),
               ...(askRunner === undefined ? {} : { askRunner }),
               ...(readElements === undefined ? {} : { readElements }),
+              ...(readSourceElements === undefined ? {} : { readSourceElements }),
               ...(investigationReadable === undefined ? {} : { investigationReadable }),
               ...(aiNotes === undefined ? {} : { aiNotes }),
               ...(body === undefined ? {} : { body }),
