@@ -54,7 +54,29 @@ function viaHost(url: string): string {
   return reachable.toString();
 }
 
+const REACHABLE_WITHIN_MS = 60_000;
+let reachable: Promise<void> | undefined;
+
+/** Waits until a container of the image under test can open a connection to the test Postgres through the host alias: the database being ready for the test process does not mean the path from a container is open yet, and the migrate command gives up after ten seconds. */
+function postgresReachableFromContainer(): Promise<void> {
+  reachable ??= (async () => {
+    const { port } = postgres.address();
+    const probe = `require('node:net').connect(${port}, '${HOST_ALIAS}').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),3000)`;
+    const deadline = Date.now() + REACHABLE_WITHIN_MS;
+    let last = '';
+    while (Date.now() < deadline) {
+      const result = await docker(['run', '--rm', '--add-host', `${HOST_ALIAS}:host-gateway`, '--entrypoint', 'node', TAG, '-e', probe]);
+      if (result.code === 0) return;
+      last = result.stderr.slice(-300);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error(`the test Postgres was not reachable from a container at ${HOST_ALIAS}:${port} within ${REACHABLE_WITHIN_MS / 1000} s: ${last}`);
+  })();
+  return reachable;
+}
+
 async function migratedDatabase(): Promise<TestDatabase> {
+  await postgresReachableFromContainer();
   const database = await postgres.newDatabase();
   const result = await docker([
     'run', '--rm', '--add-host', `${HOST_ALIAS}:host-gateway`,
