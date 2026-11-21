@@ -6299,7 +6299,8 @@
                             "additionalProperties": false
                           },
                           "title": {
-                            "type": "string"
+                            "type": "string",
+                            "maxLength": 300
                           },
                           "type": {
                             "type": "string",
