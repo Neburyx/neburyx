@@ -38,6 +38,8 @@ interface ViewPrompt {
   readonly id: string;
   readonly version: number;
   readonly action: string;
+  /** Keeps only the sentences that rest on a relationship of the view: what is connected, never what a node's properties say. */
+  readonly connectionsOnly?: boolean;
 }
 
 export interface ViewAnswerOptions {
@@ -361,7 +363,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
       case 'drafted': {
         // the fixed sentence covers the types the model named and every type the message names that has no description, whatever the model wrote
         const fixed = undescribedOf(drafted.noDescription === undefined ? undefined : lastNames, typeLines);
-        if (drafted.sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? outcome({ status: 'no-description', sentence: noDescriptionSentence(fixed), names: fixed }) : outcome({ status: 'unsupported' });
+        const sentences = options.prompt?.connectionsOnly === true ? drafted.sentences.filter((sentence) => sentence.cites.some((key) => assembled.keys.get(key)?.kind === 'relationship')) : drafted.sentences;
+        if (sentences.length === 0 || drafted.verdictFound) return fixed.length > 0 ? outcome({ status: 'no-description', sentence: noDescriptionSentence(fixed), names: fixed }) : outcome({ status: 'unsupported' });
         if (drafted.table !== undefined) {
           const table = drafted.table;
           const rows = keptRows.flatMap((index) => (table.rows[index] === undefined ? [] : [table.rows[index]]));
@@ -384,10 +387,10 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
           };
           return outcome({ status: 'answered', answer, cited: elementCitations.length });
         }
-        const elementCitations = [...citationsOf(drafted.sentences, assembled)];
-        const citations = [...elementCitations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
+        const elementCitations = [...citationsOf(sentences, assembled)];
+        const citations = [...elementCitations, ...descriptionCitationsOf(sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);
-        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...drafted.sentences], ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }), citations, coverage: { ...coverageOf(viewReading, drafted.sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
+        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...sentences], ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }), citations, coverage: { ...coverageOf(viewReading, sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
         return outcome({ status: 'answered', answer, cited: elementCitations.length });
       }
       default: {

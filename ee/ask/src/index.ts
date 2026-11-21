@@ -186,7 +186,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   const assistantOverview = (): ReturnType<typeof createViewAnswer> | undefined => {
     const model = assistantModelOf();
     const settings = assistantSettings;
-    return !features.assistant || model === undefined || settings === undefined || overviewInstructions === undefined ? undefined : createViewAnswer({ model, prompt: { id: OVERVIEW_PROMPT_ID, version: OVERVIEW_PROMPT_VERSION, action: OVERVIEW_AUDIT_ACTION }, instructions: () => overviewInstructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
+    return !features.assistant || model === undefined || settings === undefined || overviewInstructions === undefined ? undefined : createViewAnswer({ model, prompt: { id: OVERVIEW_PROMPT_ID, version: OVERVIEW_PROMPT_VERSION, action: OVERVIEW_AUDIT_ACTION, connectionsOnly: true }, instructions: () => overviewInstructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
   };
   const assistantRouter = (): ReturnType<typeof createAssistantRouter> | undefined => {
     const model = assistantModelOf();

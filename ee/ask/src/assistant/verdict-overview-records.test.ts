@@ -10,10 +10,12 @@ afterAll(removeAskFolders);
 
 const PERSON = '0192f000-0000-7000-8000-000000000001';
 const INVESTIGATION = '0192f000-0000-7000-8000-0000000000a1';
-const BODY = { ...VIEW_BODY, investigationId: INVESTIGATION, message: 'Is this customer laundering money? SENTINEL-MESSAGE' };
+const EDGE_KEY = JSON.stringify(['edge', 'demo', 'stored', 'SENT', 'A-1', 'A-2', 'e-1']);
+const linked = (refs: { edges: readonly { stableId: string }[] }) => refs.edges.map((ref) => ({ ref: { ...ref, sourceId: 'demo', type: 'SENT', from: 'A-1', to: 'A-2' }, from: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' }, to: { sourceId: 'demo', entityType: 'widget', stableId: 'A-2' }, type: 'SENT', direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }));
+const BODY = { ...VIEW_BODY, viewElementKeys: [...VIEW_BODY.viewElementKeys, EDGE_KEY], investigationId: INVESTIGATION, message: 'Is this customer laundering money? SENTINEL-MESSAGE' };
 const VERDICT = ok('{"route":"refuse","cause":"verdict"}');
 const SENTENCE = 'Account A-1 is in view zzcanaryzz';
-const GOOD = ok(JSON.stringify({ sentences: [{ text: SENTENCE, cites: ['n1'] }] }));
+const GOOD = ok(JSON.stringify({ sentences: [{ text: SENTENCE, cites: ['e1', 'n1', 'n2'] }] }));
 const drain = async (): Promise<void> => {
   for (let step = 0; step < 20; step += 1) await Promise.resolve();
 };
@@ -21,7 +23,7 @@ const drain = async (): Promise<void> => {
 async function turn(over: Partial<RigOptions> = {}, body: unknown = BODY) {
   const runs = createMemoryAssistantRunStore();
   const threads = createMemoryAssistantThreadStore();
-  const r: Rig = await rig({ reply: VERDICT, overview: GOOD, view: GOOD, runStore: runs, threadStore: threads, ...over });
+  const r: Rig = await rig({ reply: VERDICT, overview: GOOD, view: GOOD, readEdges: linked as never, runStore: runs, threadStore: threads, ...over });
   const answer = await answerOf(r.route.handler(r.request(body, { principalId: PERSON })));
   await drain();
   return { r, runs, threads, answer };
@@ -53,7 +55,7 @@ describe('the records of a verdict refusal with an overview', () => {
 
   it('closes the turn as a verdict refusal with the added call and the number of elements cited, and no sentence or message text in any audit event', async () => {
     const t = await turn();
-    expect(closed(t.r)).toMatchObject({ route: 'refuse', outcome: 'refused', cause: 'verdict', modelCalls: 2, citedElements: 1, steps: 0 });
+    expect(closed(t.r)).toMatchObject({ route: 'refuse', outcome: 'refused', cause: 'verdict', modelCalls: 2, citedElements: 3, steps: 0 });
     const everything = JSON.stringify(t.r.events);
     expect(everything).not.toContain('zzcanaryzz');
     expect(everything).not.toContain('SENTINEL-MESSAGE');

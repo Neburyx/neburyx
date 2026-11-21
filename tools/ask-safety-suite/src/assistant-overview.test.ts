@@ -26,11 +26,12 @@ const start = (): Promise<AssistantRig> => startAssistantRig({ stub, respond: (c
 const carrying = (text: string): number[] => stub.requests.flatMap((body, index) => (body.includes(text) ? [index] : []));
 
 describe('the overview beside a refusal of a verdict in the real application', () => {
-  it('shows the fixed refusal and a cited neutral overview of the view for a verdict question, with the source read only as the view is', async () => {
+  it('makes the overview call over the view and, with no relationship in it, shows the plain refusal and nothing of the nodes’ properties, with the source read only as the view is', async () => {
     const rig = await start();
-    const answer = await rig.turn('Is this customer laundering money?', [VERDICT, overview('Widget W-1 is in view.')], { viewElementKeys: VIEW });
+    const answer = await rig.turn('Is this customer laundering money?', [VERDICT, overview('Widget W-1 lists ownerName Ana Silva.')], { viewElementKeys: VIEW });
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause: 'verdict', overview: { sentences: [{ text: 'Widget W-1 is in view.', cites: ['n1'] }] } });
+    expect(Object.keys(answer.body).sort()).toEqual(['cause', 'route', 'sentence', 'status']);
+    expect(stub.requests).toHaveLength(2);
     expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
     await rig.close();
   });
@@ -63,11 +64,11 @@ describe('the overview beside a refusal of a verdict in the real application', (
   it('sends the masked form of a personal value when masking is asked for, and no unmasked value reaches the overview call, the answer, an audit event or a log line; the same turn unmasked does send it', async () => {
     const rig = await start();
     const open = await rig.turn('Is this customer laundering money?', [VERDICT, overview('Widget W-1 is in view.')], { viewElementKeys: VIEW });
-    expect(open.body).toMatchObject({ route: 'refuse', cause: 'verdict', overview: expect.anything() });
+    expect(open.body).toMatchObject({ route: 'refuse', cause: 'verdict' });
     // canary: the value is in the overview call of an unmasked turn, so the scan below can fail
     expect(carrying('Ana Silva')).toEqual([1]);
     const masked = await rig.turn('Is this customer laundering money?', [VERDICT, overview('Widget W-1 is in view.')], { viewElementKeys: VIEW, mask: true });
-    expect(masked.body).toMatchObject({ route: 'refuse', cause: 'verdict', overview: expect.anything() });
+    expect(masked.body).toMatchObject({ route: 'refuse', cause: 'verdict' });
     // the requests of both turns are kept: the unmasked turn's are the first two, the masked turn's the last two
     expect(stub.requests).toHaveLength(4);
     expect(carrying('Ana Silva')).toEqual([1]);

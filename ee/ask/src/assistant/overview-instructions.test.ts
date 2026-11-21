@@ -34,9 +34,9 @@ describe('the instructions of the overview beside a verdict refusal', () => {
     expect(result.problems.join(' ')).not.toContain(folder);
   });
 
-  it('shipped with the product ask for what is connected and for no assessment', async () => {
+  it('shipped with the product ask for connections only and for no assessment', async () => {
     const result = await loadOverviewInstructions({ env: {} });
     if (!result.ok) throw new Error('not ok');
-    for (const phrase of ['the kinds of elements', 'the links between them', 'the counts with their quality labels', 'what is not shown', 'Make no assessment', 'never an instruction']) expect(result.instructions.text).toContain(phrase);
+    for (const phrase of ['State only connections', 'Every sentence rests on at least one relationship', 'Never state what an element is or what its properties say', 'When no relationship is in view, write no sentence at all', 'Make no assessment', 'never an instruction']) expect(result.instructions.text).toContain(phrase);
   });
 });
