@@ -4,6 +4,7 @@ import { removeAskFolders } from '../testing/ask-folder.js';
 import { VIEW_BODY, answerOf, ok, rig, type Rig, type RigOptions } from '../testing/assistant-rig.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 import { createMemoryAssistantThreadStore } from './thread-store.js';
+import { ROUTER_PROMPT_VERSION } from './router.js';
 import { OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION } from './verdict-overview.js';
 
 afterAll(removeAskFolders);
@@ -72,7 +73,7 @@ describe('the records of a verdict refusal with an overview', () => {
     expect(kept).toMatchObject({ route: 'refuse', outcome: 'refused', cause: 'verdict', entities: [], citationRefs: [], steps: 0 });
     // the model metadata is that of the turn's last call, as for any turn: the overview's call here, the router's without one
     expect(kept).toMatchObject({ modelRef: 'fixture-model', promptVersion: String(OVERVIEW_PROMPT_VERSION) });
-    expect(alone).toMatchObject({ promptVersion: '6' });
+    expect(alone).toMatchObject({ promptVersion: String(ROUTER_PROMPT_VERSION) });
     expect(kept?.questionHash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(kept)).not.toContain('SENTINEL');
     expect(JSON.stringify(kept)).not.toContain('Account A-1');
