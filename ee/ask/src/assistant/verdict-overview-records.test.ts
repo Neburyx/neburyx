@@ -68,6 +68,9 @@ describe('the records of a verdict refusal with an overview', () => {
     expect(stored(withOverview)).toHaveLength(1);
     for (const key of ['route', 'outcome', 'cause', 'entities', 'citationRefs', 'steps'] as const) expect(kept?.[key], key).toEqual(alone?.[key]);
     expect(kept).toMatchObject({ route: 'refuse', outcome: 'refused', cause: 'verdict', entities: [], citationRefs: [], steps: 0 });
+    // the model metadata is that of the turn's last call, as for any turn: the overview's call here, the router's without one
+    expect(kept).toMatchObject({ modelRef: 'fixture-model', promptVersion: String(OVERVIEW_PROMPT_VERSION) });
+    expect(alone).toMatchObject({ promptVersion: '6' });
     expect(kept?.questionHash).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.stringify(kept)).not.toContain('SENTINEL');
     expect(JSON.stringify(kept)).not.toContain('Account A-1');

@@ -26,7 +26,7 @@ const plain = (): AssistantTurnAnswer => ({ status: 'answered', route: 'refuse',
 /**
  * The answer to a message the router refused as a request for a verdict: the fixed refusal, and beside it a neutral, cited overview of the elements in view when one can be drawn. The overview is drafted by the view's own path (the elements read again
  * through the gate with the request's masking, the same checks) under a prompt of its own and a request the server wrote, so nothing the analyst typed reaches the call. When it cannot be drawn, for whatever reason, the answer is the plain refusal and says
- * nothing of the attempt; only a cancel and an audit that cannot be recorded end the turn otherwise, as they do on the view path.
+ * nothing of the attempt; only a cancel, an audit that cannot be recorded and an error that is not the gate's refusal of the read end the turn otherwise, as they do on the view path.
  */
 export async function verdictRefusal(input: VerdictOverviewInput): Promise<AssistantTurnAnswer> {
   const { overview, request, body, readElements } = input;
@@ -57,7 +57,9 @@ export async function verdictRefusal(input: VerdictOverviewInput): Promise<Assis
   } catch (error) {
     if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
     if (request.signal.aborted) throw new Error('the request was cancelled');
-    return plain();
+    // the gate's own refusal of the read, or the time of the turn spent, leaves the plain refusal; anything else is a failure to be seen, as on the view path
+    if (error instanceof ExtensionRefusal || input.deadline.aborted) return plain();
+    throw error;
   }
   if (outcome.status === 'cancelled') throw new Error('the request was cancelled');
   if (outcome.status !== 'answered') return plain();

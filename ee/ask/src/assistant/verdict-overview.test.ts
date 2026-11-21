@@ -1,4 +1,4 @@
-import { ASSISTANT_REFUSAL_SENTENCES, assistantTurnAnswerSchema, type AssistantTurnAnswer, type ExtensionRequest } from '@neburyx/contracts';
+import { ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal, assistantTurnAnswerSchema, type AssistantTurnAnswer, type ExtensionRequest } from '@neburyx/contracts';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
@@ -112,7 +112,7 @@ describe('a verdict refusal with no overview to show', () => {
   it('is the plain refusal, not an unavailable turn, when the provider fails, answers with something that is not sentences, or the view cannot be read', async () => {
     expect((await noOverview({ overview: { kind: 'failed', code: 'timeout' } })).answer).toEqual(PLAIN);
     expect((await noOverview({ overview: ok('this is not sentences') })).answer).toEqual(PLAIN);
-    expect((await noOverview({ viewReadThrows: new Error('the source is down') })).answer).toEqual(PLAIN);
+    expect((await noOverview({ viewReadThrows: new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE' }) })).answer).toEqual(PLAIN);
   });
 
   it('is the answer of the refusal without the overview step, whatever stopped the overview', async () => {
@@ -178,12 +178,14 @@ describe('the overview step when the view path stops it', () => {
     }
   });
 
-  it('ends the turn as cancelled on a cancel and as the view path ends it when the audit cannot be recorded, and answers the plain refusal for any other failure', async () => {
+  it('ends the turn as cancelled on a cancel and as the view path ends it when the audit cannot be recorded, and answers the plain refusal only for the gate’s own refusal, rethrowing any other failure', async () => {
     await expect(verdictRefusal(input(stopped('cancelled')))).rejects.toThrow('cancelled');
     const aborted = new AbortController();
     aborted.abort();
     await expect(verdictRefusal(input(new Error('the call was aborted'), aborted.signal))).rejects.toThrow('cancelled');
     await expect(verdictRefusal(input(new AuditUnavailableError()))).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
-    expect(await verdictRefusal(input(new Error('the gate said no')))).toEqual(PLAIN);
+    expect(await verdictRefusal(input(new ExtensionRefusal({ code: 'SOURCE_UNAVAILABLE' })))).toEqual(PLAIN);
+    // a failure that is not the gate's refusal is not hidden as a refusal that tried nothing
+    await expect(verdictRefusal(input(new TypeError('a bug in the view path')))).rejects.toThrow('a bug in the view path');
   });
 });
