@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -129,6 +129,96 @@ describe('the recorder of the assistant\'s router', () => {
     const spied = { ...given, liveAssistantProvider: async (env: Readonly<Record<string, string | undefined>>, folder: string, model?: string) => (seen.push(model), given.liveAssistantProvider(env, folder, model)) };
     await runCli([...base(fixture), '--budget', '6', '--out', join(scratch(), 'run'), '--model', 'a-model'], io().io, spied);
     expect(seen).toEqual(['a-model']);
+  });
+});
+
+describe('the run log and the resume of the recorder of the assistant\'s router', () => {
+  const logLines = (out: string): Record<string, unknown>[] => readFileSync(join(out, 'run.log'), 'utf8').split('\n').filter((line) => line !== '').map((line) => JSON.parse(line) as Record<string, unknown>);
+  const answersOf = (out: string): string[] => Object.keys((JSON.parse(readFileSync(join(out, 'recording.json'), 'utf8')) as { answers: Record<string, unknown> }).answers);
+
+  it('writes run.log with the model, the hashes and the set hash first and a line for each call, and rewrites recording.json after each request, all owner-only and with no wording', async () => {
+    const fixture = privateSet();
+    const out = join(scratch(), 'run');
+    const given = hooksWith(answerRoutes);
+    const seen: { recorded: number; calls: number }[] = [];
+    const watched = {
+      ...given,
+      routeMessage: async (...args: Parameters<typeof given.routeMessage>) => {
+        seen.push({ recorded: existsSync(join(out, 'recording.json')) ? answersOf(out).length : 0, calls: logLines(out).filter((line) => line['state'] === 'sent').length });
+        return given.routeMessage(...args);
+      },
+    };
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out], io().io, watched)).toBe(0);
+    expect(seen).toEqual([{ recorded: 0, calls: 0 }, { recorded: 1, calls: 1 }, { recorded: 2, calls: 2 }]);
+    const lines = logLines(out);
+    expect(lines[0]).toMatchObject({ start: { model: 'fixture-model', routerTextHashes: expect.any(Object), setHash: expect.stringMatching(/^[0-9a-f]{64}$/) } });
+    expect(lines.filter((line) => line['state'] === 'sent')).toHaveLength(3);
+    expect(lines.filter((line) => line['state'] === 'ok')).toHaveLength(3);
+    for (const name of ['run.log', 'recording.json', 'run-record.json']) expect(statSync(join(out, name)).mode & 0o777).toBe(0o600);
+    const text = readFileSync(join(out, 'run.log'), 'utf8');
+    for (const secret of ['Show thing one.', 'What is shown?', 'guilty', 'T-1', '{"route"']) expect(text).not.toContain(secret);
+  });
+
+  it('counts a call that was sent and never came back, from the log', async () => {
+    const fixture = privateSet();
+    const out = join(scratch(), 'run');
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out], io().io, hooksWith(answerRoutes))).toBe(0);
+    appendFileSync(join(out, 'run.log'), `${JSON.stringify({ call: 4, request: 'fixture-source/view', state: 'sent' })}\n`);
+    const given = hooksWith(answerRoutes);
+    const run = io();
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out, '--resume'], run.io, given)).toBe(0);
+    expect(given.asked).toEqual([]);
+    expect(run.out).toContain('calls: 4 of 6');
+  });
+
+  /** A run that stops by an error at its third request, as a service that goes away would stop it. */
+  const failingAtThird = () => {
+    const given = hooksWith(answerRoutes);
+    let routed = 0;
+    return { ...given, routeMessage: async (...args: Parameters<typeof given.routeMessage>) => (++routed === 3 ? Promise.reject(new Error('the service went away')) : given.routeMessage(...args)) };
+  };
+
+  it('finishes a run that stopped: the answered requests are not asked again, the calls of the log count, and the recording equals an uninterrupted one', async () => {
+    const fixture = privateSet();
+    const out = join(scratch(), 'run');
+    const stopped = io();
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out], stopped.io, failingAtThird())).toBe(1);
+    expect(stopped.out.join('\n')).toContain('requests routed: 2 of 3');
+    expect(answersOf(out)).toHaveLength(2);
+    const resumed = hooksWith(answerRoutes);
+    const run = io();
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', out, '--resume'], run.io, resumed)).toBe(0);
+    expect(resumed.asked).toHaveLength(1);
+    expect(run.out).toEqual(expect.arrayContaining(['calls: 3 of 6']));
+    const whole = join(scratch(), 'whole');
+    expect(await runCli([...base(fixture), '--budget', '6', '--out', whole], io().io, hooksWith(answerRoutes))).toBe(0);
+    expect(readFileSync(join(out, 'recording.json'), 'utf8')).toBe(readFileSync(join(whole, 'recording.json'), 'utf8'));
+    expect(JSON.parse(readFileSync(join(out, 'run-record.json'), 'utf8'))).toMatchObject({ calls: 3, callsBeforeResume: 2, requests: 3 });
+  });
+
+  it('stops a resume before a request that the calls of the log leave no budget for, and refuses a resume made under another model, another set, with --force, or with nothing to continue, making no call', async () => {
+    const fixture = privateSet();
+    const stoppedRun = async () => {
+      const out = join(scratch(), 'run');
+      expect(await runCli([...base(fixture), '--budget', '6', '--out', out], io().io, failingAtThird())).toBe(1);
+      return out;
+    };
+    const refused = async (extra: string[], where: string) => {
+      const given = hooksWith(answerRoutes);
+      const run = io();
+      const code = await runCli([...base(fixture), ...extra, '--out', where, '--resume'], run.io, given);
+      expect(given.asked, extra.join(' ')).toEqual([]);
+      return { code, text: run.err.join('\n') };
+    };
+    const out = await stoppedRun();
+    expect((await refused(['--budget', '3'], out)).code).toBe(2);
+    expect((await refused(['--budget', '6', '--force'], out)).code).toBe(2);
+    expect((await refused(['--budget', '6'], join(scratch(), 'nothing'))).text).toContain('--resume needs');
+    const other = await stoppedRun();
+    writeFileSync(join(other, 'run.log'), readFileSync(join(other, 'run.log'), 'utf8').replace('"model":"fixture-model"', '"model":"another-model"'));
+    expect((await refused(['--budget', '6'], other)).text).toContain('another model');
+    writeFileSync(fixture.questions, MESSAGES.replace('What is shown?', 'What is on screen?'));
+    expect((await refused(['--budget', '6'], out)).text).toContain('another set of questions');
   });
 });
 

@@ -17,7 +17,7 @@ export const USAGE = `usage:
   ask-eval (--packs <folder> | --questions <file> --folder <folder> --source <id>) --write-replay <file>
   ask-eval record (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force])
   ask-eval assistant (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--replay <file> [--baseline <file> [--update-baseline]] | --write-replay <file>) [--json]
-  ask-eval assistant record (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force]) [--model <name>]
+  ask-eval assistant record (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force | --resume]) [--model <name>]
   ask-eval assistant loop-cost (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force]) [--model <name>]
   ask-eval assistant defaults (--packs <folder> | --questions <file> --folder <folder> --source <id>) --run-record <file> --loop-cost <file> [--out <folder> [--force]]
   ask-eval scan --questions <file> --folder <folder> --source <id> [--exclude <path>]... [--common <path>]... <checkout>`;
@@ -29,7 +29,7 @@ export interface CliIo {
 }
 
 const VALUE_FLAGS = ['run-record', 'loop-cost', 'model', 'packs', 'questions', 'folder', 'source', 'replay', 'baseline', 'write-replay', 'budget', 'out', 'exclude', 'common'];
-const SWITCHES = ['dry-run', 'force', 'json', 'update-baseline'];
+const SWITCHES = ['dry-run', 'force', 'json', 'resume', 'update-baseline'];
 
 interface Parsed {
   readonly command: 'score' | 'record' | 'scan' | 'assistant';
@@ -162,7 +162,7 @@ export async function runCli(argv: readonly string[], io: CliIo, hooks: EvalHook
       const path = (name: string): { readonly [key: string]: string } => (one(parsed, name) === undefined ? {} : { [name === 'write-replay' ? 'writeReplay' : name]: resolve(one(parsed, name) ?? '') });
       const plain = (name: string): { readonly [key: string]: string } => (one(parsed, name) === undefined ? {} : { [name]: one(parsed, name) ?? '' });
       return await runAssistant(
-        { ...path('packs'), ...path('questions'), ...path('folder'), ...plain('source'), ...path('replay'), ...path('write-replay'), ...path('baseline'), ...plain('budget'), ...path('out'), ...plain('model'), updateBaseline: parsed.switches.has('update-baseline'), json: parsed.switches.has('json'), mode: parsed.rest[0] === 'record' ? 'record' : parsed.rest[0] === 'loop-cost' ? 'loop-cost' : parsed.rest[0] === 'defaults' ? 'defaults' : 'score', ...(one(parsed, 'run-record') === undefined ? {} : { runRecord: resolve(one(parsed, 'run-record') ?? '') }), ...(one(parsed, 'loop-cost') === undefined ? {} : { loopCost: resolve(one(parsed, 'loop-cost') ?? '') }), dryRun: parsed.switches.has('dry-run'), force: parsed.switches.has('force') },
+        { ...path('packs'), ...path('questions'), ...path('folder'), ...plain('source'), ...path('replay'), ...path('write-replay'), ...path('baseline'), ...plain('budget'), ...path('out'), ...plain('model'), updateBaseline: parsed.switches.has('update-baseline'), json: parsed.switches.has('json'), resume: parsed.switches.has('resume'), mode: parsed.rest[0] === 'record' ? 'record' : parsed.rest[0] === 'loop-cost' ? 'loop-cost' : parsed.rest[0] === 'defaults' ? 'defaults' : 'score', ...(one(parsed, 'run-record') === undefined ? {} : { runRecord: resolve(one(parsed, 'run-record') ?? '') }), ...(one(parsed, 'loop-cost') === undefined ? {} : { loopCost: resolve(one(parsed, 'loop-cost') ?? '') }), dryRun: parsed.switches.has('dry-run'), force: parsed.switches.has('force') },
         io,
         hooks,
         io.env,

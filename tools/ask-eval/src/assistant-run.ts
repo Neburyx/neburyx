@@ -61,6 +61,7 @@ export interface AssistantArgs {
   readonly budget?: string;
   readonly out?: string;
   readonly force: boolean;
+  readonly resume?: boolean;
   readonly model?: string;
 }
 
@@ -100,7 +101,7 @@ export async function runAssistant(args: AssistantArgs, io: { readonly out: (lin
     if (args.mode === 'record') {
       const folder = args.packs !== undefined ? resolve(args.packs) : resolve(args.folder ?? '');
       const budget = args.budget === undefined ? {} : { budget: Number(args.budget) };
-      const outcome = await recordAssistant(sets, { dryRun: args.dryRun, ...budget, ...(args.out === undefined ? {} : { out: resolve(args.out) }), force: args.force, folder, ...(args.model === undefined ? {} : { model: args.model }) }, all, env);
+      const outcome = await recordAssistant(sets, { dryRun: args.dryRun, ...budget, ...(args.out === undefined ? {} : { out: resolve(args.out) }), force: args.force, resume: args.resume === true, folder, ...(args.model === undefined ? {} : { model: args.model }) }, all, env);
       for (const line of outcome.lines) io.out(line);
       return outcome.code;
     }
