@@ -35,6 +35,8 @@ export interface AssistantRig {
   reads(): ExecuteCall[];
   /** The investigation the turns are made in. */
   readonly investigationId: string;
+  /** The scripted source's executor: a call made on it directly is a read around the gate. */
+  readonly executor: AssistantApp['executor'];
   /** Opens another investigation of the same person on the same source. */
   openInvestigation(): Promise<string>;
   /** A request of any form, as given: a choice, a continue or a decision carries no message. */
@@ -59,6 +61,7 @@ export async function startAssistantRig(options: AssistantRigOptions): Promise<A
     reads: app.reads,
     investigationId: app.investigationId,
     openInvestigation: app.openInvestigation,
+    executor: app.executor,
     post: app.post,
     threadWritten: app.threadWritten,
     turn: (message, replies, over) => {

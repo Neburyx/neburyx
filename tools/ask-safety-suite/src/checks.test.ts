@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expectedBody, expectNoNoteWrite, expectNoSentenceWith, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
+import { expectEveryReadHasGateEvent, expectedBody, expectNoNoteWrite, expectNoSentenceWith, expectNoValue, expectOnlyParameters, expectOnlyRegisteredReads, expectProviderInput, SafetyCheckFailed } from './checks.js';
 
 const TEXT = 'MATCH (n) WHERE n.id = $id AND n.x = $x RETURN n';
 const read = (cypher: string, parameters: Record<string, unknown>) => ({ cypher, parameters });
@@ -58,6 +58,20 @@ describe('the check that every read is a read of a registered tool', () => {
   it('canary: fails a read no tool names, and a case that read nothing', () => {
     expect(() => expectOnlyRegisteredReads([{ templateId: 'entity-load' }, { templateId: 'drop-everything' }], ['entity-load'])).toThrow(SafetyCheckFailed);
     expect(() => expectOnlyRegisteredReads([], ['entity-load'])).toThrow(SafetyCheckFailed);
+  });
+});
+
+describe('the check that every read of the source has a gate event', () => {
+  const gateEvent = { action: 'entity.load', traceId: 'tr-1' };
+  it('passes the reads of a trace that the gate recorded, and ignores the assistant’s own events and the schema reads', () => {
+    expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }], [gateEvent, { action: 'assistant.ask', traceId: 'tr-1' }, { action: 'source.schema_indexes', traceId: 'tr-1' }])).not.toThrow();
+  });
+
+  it('canary: fails a read of a trace with no gate event, one with fewer events than reads, and a case that read nothing', () => {
+    expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-direct' }], [gateEvent])).toThrow(SafetyCheckFailed);
+    expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }, { templateId: 'entity-load', traceId: 'tr-1' }], [gateEvent])).toThrow(SafetyCheckFailed);
+    expect(() => expectEveryReadHasGateEvent([{ templateId: 'entity-load', traceId: 'tr-1' }], [{ action: 'assistant.ask', traceId: 'tr-1' }])).toThrow(SafetyCheckFailed);
+    expect(() => expectEveryReadHasGateEvent([], [gateEvent])).toThrow(SafetyCheckFailed);
   });
 });
 

@@ -1,9 +1,21 @@
+import type { AuditEvent } from '@neburyx/contracts';
 import type { ExecuteCall } from '../../../services/api/src/gate/executor.js';
 
 /** The reads of a turn that ran tool steps are the reads the registry offered: each template the gate ran is one of the allowed, and at least one read happened. */
 export function expectOnlyRegisteredReads(reads: readonly Pick<ExecuteCall, 'templateId'>[], allowed: readonly string[]): void {
   if (reads.length === 0) fail('no read reached the source, so nothing was checked');
   for (const read of reads) if (!allowed.includes(read.templateId)) fail('a read ran that no registered tool names');
+}
+
+/** Every read that reached the source has a gate event of its own turn: for each trace of a read, the gate recorded at least as many events (the gate's, not the assistant's or the schema reads') as the source saw reads, so a read made around the gate, which records none, fails. */
+export function expectEveryReadHasGateEvent(reads: readonly Pick<ExecuteCall, 'traceId' | 'templateId'>[], events: readonly Pick<AuditEvent, 'action' | 'traceId'>[]): void {
+  if (reads.length === 0) fail('no read reached the source, so nothing was checked');
+  const traces = new Set(reads.map((read) => read.traceId));
+  for (const trace of traces) {
+    const seen = reads.filter((read) => read.traceId === trace).length;
+    const recorded = events.filter((event) => event.traceId === trace && !event.action.startsWith('assistant.') && !event.action.startsWith('source.schema')).length;
+    if (recorded < seen) fail(`a read of the trace ${trace ?? 'none'} has no gate event`);
+  }
 }
 
 export class SafetyCheckFailed extends Error {}
