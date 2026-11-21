@@ -38,7 +38,7 @@ import { summarizeRun } from './run-summary.js';
 import { currentRunId, isReplaying, noteRun } from '../assistant/turn-audit.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
 import { canonicalText } from './canonical.js';
-import { firstMisfit, lookupWrittenValues, valueNotFitAnswer } from './written-values.js';
+import { refusalOfValues } from './written-values.js';
 import { issueContinueToken, verifyContinueToken } from './continue-token.js';
 import type { RunStore } from './run-store.js';
 
@@ -260,13 +260,12 @@ function bindingsOf(sourceId: string, settings: unknown, params: unknown): Assis
 async function refusalForUnfitValues(run: Execution, bindings: NonNullable<Prepared['bindings']>): Promise<AskAnswer | undefined> {
   const { request } = run;
   const readSource = request.readSourceElements;
-  const mapped = request.typeDescriptions?.(run.sourceId).entityTypes.map((entry) => entry.type);
+  const descriptions = request.typeDescriptions?.(run.sourceId);
+  const mapped = descriptions?.entityTypes.map((entry) => entry.type);
   // a role that names a type the mapping does not have is not a value to look up: the gate refuses the type as it always did
   const values = bindings.filter((binding) => !(run.keyedRoles ?? []).includes(binding.role) && (mapped === undefined || mapped.length === 0 || mapped.includes(binding.ref.entityType))).map((binding) => ({ role: binding.role, value: binding.ref.stableId, needed: binding.ref.entityType }));
-  if (readSource === undefined || values.length === 0) return undefined;
-  const types = mapped !== undefined && mapped.length > 0 ? mapped : [...new Set(values.map((entry) => entry.needed))];
-  const misfit = firstMisfit(await lookupWrittenValues({ sourceId: run.sourceId, types, values, read: (refs) => readSource({ sourceId: run.sourceId, mask: run.mask, signal: request.signal }, refs) }));
-  return misfit === undefined ? undefined : valueNotFitAnswer(misfit, run.intent);
+  if (readSource === undefined) return undefined;
+  return refusalOfValues({ sourceId: run.sourceId, mask: run.mask, signal: request.signal, intent: run.intent, values, descriptions, readSource });
 }
 
 export async function execute(run: Execution): Promise<AskAnswer> {
@@ -275,14 +274,21 @@ export async function execute(run: Execution): Promise<AskAnswer> {
   const prepared = run.intent === ASK_SAVED_PATTERN_INTENT ? await prepareSavedPattern(run) : await prepareFolderIntent(run);
   if (!isPrepared(prepared)) return prepared;
   const { base, input, params, templateId, entities } = prepared;
+  const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
+  const started = (options.now ?? Date.now)();
   // a run that repeats one that resolved does not look its values up again; every other value the person (or the model on their behalf) wrote is looked up through the gate before anything runs
-  const unfit = run.continuing ? undefined : await refusalForUnfitValues(run, prepared.bindings ?? []);
+  let unfit: AskAnswer | undefined;
+  try {
+    unfit = run.continuing ? undefined : await refusalForUnfitValues(run, prepared.bindings ?? []);
+  } catch (error) {
+    // a lookup that fails (a source error, a timeout, the gate's refusal) is a run that failed: one event with the outcome and the cause of the error, never a value, and the error goes on as it was
+    await failedRun(run, error, { ...base, ...(templateId === undefined ? {} : { templateId }), paramsHash }, Math.max(0, (options.now ?? Date.now)() - started), logger);
+    throw error;
+  }
   if (unfit !== undefined) {
     await writeEvent(request, run.action, 'refused', sourceId, { ...base, ...(templateId === undefined ? {} : { templateId }), outcome: 'refused', cause: 'value-not-fit', ...('refused' in unfit && unfit.refused.valueNotFit !== undefined ? { valueKind: unfit.refused.valueNotFit.kind } : {}) });
     return unfit;
   }
-  const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
-  const started = (options.now ?? Date.now)();
   noteRun({ intent: name, ...(templateId === undefined ? {} : { templateId }), paramsHash, entities: prepared.bindings ?? [] });
   let outcome: AskRun;
   try {

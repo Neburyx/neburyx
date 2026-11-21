@@ -243,10 +243,14 @@ describe('the ask route through the real gate', () => {
     await rig.stop();
   });
 
-  it('answers Ask’s nothing-found refusal for an anchor the source does not hold, after one read', async () => {
+  it('answers that there is no widget with an id the source does not hold, after the lookup of the id and before any read of the intent', async () => {
     const rig = await assistantRig({ reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-404"}}' });
+    const before = rig.rig.executor.calls.length;
     const answer = await rig.post({ ...rig.body, message: 'Show widget W-404' });
-    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'nothing-found' } } });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'value-not-fit', valueNotFit: { kind: 'not-found', needed: 'widget' } } } });
+    const reads = rig.rig.executor.calls.slice(before).filter((call) => !call.templateId.startsWith('schema-'));
+    expect(reads.length).toBeGreaterThan(0);
+    expect(reads.every((call) => call.templateId === 'entity-load-many')).toBe(true);
     await rig.stop();
   });
 

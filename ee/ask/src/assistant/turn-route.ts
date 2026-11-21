@@ -274,7 +274,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     const intent = options.folder()?.intent(body.sourceId, intentName);
     if (intent === undefined || Object.keys(written).length === 0) return undefined;
     try {
-      const refusal = await checkIntentValues({ sourceId: body.sourceId, mask: body.mask === true, signal, intent, written, types: typeDescriptions?.(body.sourceId).entityTypes.map((entry) => entry.type), readSource: readSourceElements });
+      const refusal = await checkIntentValues({ sourceId: body.sourceId, mask: body.mask === true, signal, intent, written, descriptions: typeDescriptions?.(body.sourceId), readSource: readSourceElements });
       return refusal === undefined ? undefined : answeredAsk(refusal);
     } catch (error) {
       if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });

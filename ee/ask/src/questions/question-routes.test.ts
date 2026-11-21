@@ -37,7 +37,7 @@ interface Rig {
   request(body: unknown, over?: Partial<ExtensionRequest>): ExtensionRequest;
 }
 
-async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskRun; sink?: 'fails'; readable?: boolean; source?: readonly string[]; sourceOmits?: boolean; types?: readonly string[]; lookups?: boolean } = {}): Promise<Rig> {
+async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskRun; sink?: 'fails'; readable?: boolean; source?: readonly string[]; sourceOmits?: boolean; types?: readonly string[]; keyed?: readonly string[]; lookups?: boolean } = {}): Promise<Rig> {
   const folder: AskFolder | undefined = await loadAskFolder({ folder: makeAskFolder([SOURCE], options.intents), sourceIds: [SOURCE] }).then((loaded) => (loaded.ok ? loaded.folder : undefined));
   const events: AuditEvent[] = [];
   const rows: Omit<RunRecord, 'id'>[] = [];
@@ -94,7 +94,7 @@ async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: u
             return { nodes: refs.entities.filter(held).map((ref) => ({ ref, display: { title: `${ref.entityType} ${ref.stableId}`, type: ref.entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } })), edges: [], unresolved: refs.entities.filter((ref) => !held(ref)).length, omitted: options.sourceOmits === true, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0, mask: scope.mask } as never;
           },
         }),
-    ...(options.types === undefined ? {} : { typeDescriptions: () => ({ entityTypes: (options.types ?? []).map((type) => ({ type, label: type, displayName: type })), relationshipTypes: [] }) }),
+    ...(options.types === undefined ? {} : { typeDescriptions: () => ({ entityTypes: (options.types ?? []).map((type) => ({ type, label: type, displayName: type, ...(options.keyed?.includes(type) === true ? { keyed: true } : {}) })), relationshipTypes: [] }) }),
     askRunner: (scope) => ({
       run: async (asked, runOptions) => {
         runs.push({ asked, options: runOptions, mask: scope.mask });
@@ -752,6 +752,21 @@ describe('a written value on Ask', () => {
     const failing = await rig({ ...classifying('K-1'), types: TYPES });
     await expect(failing.route.handler(failing.request(ASK, { readSourceElements: () => Promise.reject(new ExtensionRefusal({ code: 'SOURCE_BUSY' } as never)) }))).rejects.toBeInstanceOf(ExtensionRefusal);
     expect(failing.runs).toHaveLength(0);
+  });
+
+  it('records a lookup that fails as a failed question: one event with the outcome failed and the cause of the error, and a failed row, never the value', async () => {
+    const failing = await rig({ ...classifying('K-1'), types: TYPES });
+    await expect(failing.route.handler(failing.request(ASK, { readSourceElements: () => Promise.reject(new ExtensionRefusal({ code: 'SOURCE_BUSY' } as never)) }))).rejects.toBeInstanceOf(ExtensionRefusal);
+    expect(failing.events.map((event) => [event.action, event.result])).toEqual([['ask.question', 'failed']]);
+    expect(detailOf(failing.events[0])).toMatchObject({ intent: 'shared', outcome: 'failed', cause: 'source-busy' });
+    expect(failing.rows).toEqual([{ actorId: 'p-1', intent: 'shared', outcome: 'failed', rowCount: 0, elapsedMs: 0 }]);
+    expect(JSON.stringify(failing.events)).not.toContain('K-1');
+  });
+
+  it('says there is no element, not that the read left something out, on a mapping with a keyed type: only the types a typed value can stand for are looked up', async () => {
+    const mapped = await rig({ ...classifying('NOBODY'), source: [], types: ['widget', 'gadget', 'phone'], keyed: ['phone'] });
+    expect(await mapped.route.handler(mapped.request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'value-not-fit', valueNotFit: expect.objectContaining({ kind: 'not-found' }) }) });
+    expect(mapped.lookups).toEqual([['widget/NOBODY', 'gadget/NOBODY']]);
   });
 
   it('looks the anchor of an asked saved pattern up against the type the pattern starts at', async () => {

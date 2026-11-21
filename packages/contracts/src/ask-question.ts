@@ -75,7 +75,7 @@ const valueNotFitSchema = z
     kind: z.enum(ASK_VALUE_NOT_FIT_KINDS),
     needed: typeName,
     found: typeName.optional(),
-    citation: z.strictObject({ ref: elementRefSchema, title: z.string(), type: typeName }).optional(),
+    citation: z.strictObject({ ref: elementRefSchema, title: z.string().max(ASK_SUMMARY_MAX_SENTENCE_LENGTH), type: typeName }).optional(),
   })
   .refine((fit) => (fit.kind === 'other-type') === (fit.found !== undefined && fit.citation !== undefined), { message: 'another type names the type found and cites the element; no other kind does', path: ['kind'] })
   .refine((fit) => fit.kind === 'other-type' || (fit.found === undefined && fit.citation === undefined), { message: 'only another type names a type found', path: ['found'] });

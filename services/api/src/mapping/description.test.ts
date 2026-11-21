@@ -64,3 +64,11 @@ describe('the description of a type', () => {
     expect(typeDescriptionsOf(load().sources[0])).toEqual({ entityTypes: [{ type: 'node_a', label: 'NodeA', displayName: 'NodeA' }, { type: 'node_b', label: 'NodeB', displayName: 'NodeB' }], relationshipTypes: [{ type: 'LINKS' }] });
   });
 });
+
+describe('the types a typed value can stand for', () => {
+  it('says which entity types are keyed: their stable ID is also a personal field, so the identifier of an element is a token the server made', () => {
+    const model = parseMapping(fileOf(baseSource({ entities: [{ type: 'node_a', label: 'NodeA', stable_id: 'id' }, { type: 'node_b', label: 'NodeB', stable_id: 'key', pii: [{ property: 'key', class: 'name' }] }], relationships: [] })), 'neburyx.yaml');
+    const described = typeDescriptionsOf(model.sources[0]).entityTypes;
+    expect(described.map((entry) => [entry.type, entry.keyed])).toEqual([['node_a', undefined], ['node_b', true]]);
+  });
+});

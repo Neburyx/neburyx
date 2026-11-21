@@ -38,7 +38,7 @@ const exportMapping = (extra: { readonly synthetic?: boolean; readonly descripti
 };
 
 export const widget = (id: string, name = 'Ana Silva') => plainNode(['Widget'], { widgetId: id, ownerName: name }, `4:s:${id}`);
-const gadget = (id = 'GT-1') => plainNode(['Gadget'], { gadgetId: id }, `4:s:${id}`);
+export const gadget = (id = 'GT-1') => plainNode(['Gadget'], { gadgetId: id }, `4:s:${id}`);
 const link = (id: string, from = 'W-1') => ({ r: plainRelationship('MADE_FROM', widget(from), gadget(), { linkId: id }, `5:s:${id}`), a: widget(from), b: gadget() });
 export const el = (entityType: string, stableId: string) => ({ sourceId: 'demo', entityType, stableId });
 export const linkRef = (id: string) => ({ sourceId: 'demo', type: 'MADE_FROM', from: 'widget', to: 'gadget', stableId: id });
@@ -106,7 +106,8 @@ export async function startExportRig(options: ExportRigOptions = {}) {
         }
         const ids = idsOf(call);
         if (call.templateId === 'entity-load-many') {
-          const entityType = String(call.parameters['entityType']);
+          const refs = call.parameters['refs'];
+          const entityType = String(call.parameters['entityType'] ?? (Array.isArray(refs) ? (refs[0] as { entityType?: string } | undefined)?.entityType : undefined));
           return { status: 'rows', rows: ids.flatMap((id, i) => (entityType === 'gadget' ? (id === 'GT-1' ? [{ i, dup: false, n: gadget() }] : []) : entityType === 'widget' && known(id) ? [{ i, dup: false, n: widget(id, options.name?.(id) ?? 'Ana Silva') }] : [])) };
         }
         if (call.templateId === 'edge-load-many') return { status: 'rows', rows: ids.flatMap((id, i) => ((options.links ?? []).includes(id) ? [{ i, dup: false, ...link(id) }] : [])) };

@@ -126,3 +126,58 @@ describe('a canary for the check', () => {
     }
   });
 });
+
+describe('the sentence of a refusal', () => {
+  const longTitle = 'T'.repeat(400);
+  const node = (title: string, type: string) => ({ ref: { sourceId: 'demo', entityType: 'gadget', stableId: 'K-1' }, display: { title, type } });
+
+  it('fits what a refusal holds, whatever the title the gate gave: a title of 400 characters is cut at a code point, the sentence stays within the bound and still ends as it should', async () => {
+    const reading = { nodes: [node(longTitle, 'gadget')], omitted: false };
+    const checked = await lookupWrittenValues({ sourceId: 'demo', types: ['widget', 'gadget'], values: [{ role: 'id', value: 'K-1', needed: 'widget' }], read: async () => reading as never });
+    const misfit = firstMisfit(checked);
+    if (misfit === undefined) throw new Error('every value fit');
+    const answer = valueNotFitAnswer(misfit, 'shared');
+    expect(askAnswerSchema.safeParse(answer).success).toBe(true);
+    const refused = (answer as { refused: { sentence: string; valueNotFit: { citation: { title: string } } } }).refused;
+    expect(refused.sentence.length).toBeLessThanOrEqual(300);
+    expect(refused.sentence.endsWith('Nothing was run.')).toBe(true);
+    expect(refused.valueNotFit.citation.title.endsWith('…')).toBe(true);
+  });
+
+  it('names both types as the mapping names them for a person: the display name of the needed type next to the one of the element found, and a name of any length is cut to what a refusal holds', async () => {
+    const reading = { nodes: [node('K-1', 'IP address')], omitted: false };
+    const checked = await lookupWrittenValues({ sourceId: 'demo', types: ['ip_address', 'gadget'], values: [{ role: 'id', value: 'K-1', needed: 'ip_address', neededLabel: 'Shop owner account '.repeat(10) }], read: async () => reading as never });
+    const misfit = firstMisfit(checked);
+    if (misfit === undefined) throw new Error('every value fit');
+    const answer = valueNotFitAnswer(misfit, undefined);
+    expect(askAnswerSchema.safeParse(answer).success).toBe(true);
+    expect((answer as { refused: { valueNotFit: { needed: string } } }).refused.valueNotFit.needed.length).toBeLessThanOrEqual(64);
+    const plain = valueNotFitAnswer({ ...misfit, neededLabel: 'Shop owner' }, undefined);
+    expect((plain as { refused: { sentence: string } }).refused.sentence).toBe('K-1 is an IP address; this question needs a shop owner. Nothing was run.');
+  });
+});
+
+describe('a mapping with a keyed type', () => {
+  const types = ['widget', 'gadget', 'phone'];
+  it('does not send a reference of a keyed type for the other types, and says none, not hidden, for an unknown id', async () => {
+    const s = source([]);
+    const checked = await lookupWrittenValues({ sourceId: 'demo', types, keyed: new Set(['phone']), values: [{ role: 'id', value: 'NOBODY', needed: 'widget' }], read: s.read });
+    expect(checked[0]?.verdict).toEqual({ kind: 'none' });
+    expect(s.reads[0]?.entities.map((ref) => ref.entityType)).toEqual(['widget', 'gadget']);
+  });
+
+  it('still tells another type apart and still fits', async () => {
+    const found = await lookupWrittenValues({ sourceId: 'demo', types, keyed: new Set(['phone']), values: [{ role: 'id', value: 'K-1', needed: 'widget' }], read: source(['gadget/K-1']).read });
+    expect(found[0]?.verdict.kind).toBe('other-type');
+    const fits = await lookupWrittenValues({ sourceId: 'demo', types, keyed: new Set(['phone']), values: [{ role: 'id', value: 'W-1', needed: 'widget' }], read: source(['widget/W-1']).read });
+    expect(fits[0]?.verdict.kind).toBe('fits');
+  });
+
+  it('is hidden, with no read for it, when the type the role needs is itself keyed: a typed value cannot stand for such an identifier', async () => {
+    const s = source([]);
+    const checked = await lookupWrittenValues({ sourceId: 'demo', types, keyed: new Set(['phone']), values: [{ role: 'number', value: '+1 555 0100', needed: 'phone' }, { role: 'id', value: 'W-1', needed: 'widget' }], read: s.read });
+    expect(checked.map((entry) => entry.verdict.kind)).toEqual(['hidden', 'none']);
+    expect(s.reads).toHaveLength(1);
+    expect(JSON.stringify(s.reads)).not.toContain('555');
+  });
+});

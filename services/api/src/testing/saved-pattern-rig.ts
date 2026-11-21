@@ -12,6 +12,7 @@ import { memoryStoreWith, type MemoryAppStore, type MemoryAppStoreOptions } from
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import type { TemplateProbe } from '../graph/template-probes.js';
 import type { MappingModel } from '../mapping/model.js';
+import { lookupAnswer } from './held-elements.js';
 import { TestExecutor } from './gate.js';
 import { onlineIndexesOf, schemaAnswer, withSchema } from './search-fixtures.js';
 import { DERIVED_RULE } from './derived-fixtures.js';
@@ -100,7 +101,7 @@ export async function patternApp(options: PatternAppOptions = {}) {
       ? () => {
           throw new Error('a saved-pattern route called the source');
         }
-      : withSchema(() => schemaAnswer(onlineIndexesOf(first)), options.answer),
+      : withSchema(() => schemaAnswer(onlineIndexesOf(first)), (call) => Promise.resolve(lookupAnswer(call, mapping, options.answer)) as Promise<ExecuteOutcome>),
   );
   const seams: Seams = { ...communitySeams(), audit: audit.sink, ...(options.deny === true ? { policy: { authorizeSource: () => Promise.resolve({ allowed: false, reason: 'no' }) } } : {}) };
   const parts = testSourceGate(mapping, { executor });

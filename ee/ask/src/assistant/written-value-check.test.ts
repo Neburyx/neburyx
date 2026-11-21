@@ -59,6 +59,20 @@ describe('a written value on the ask route', () => {
     expect(answer).toMatchObject({ status: 'unavailable' });
     expect(runs).toHaveLength(0);
   });
+
+  it('records a lookup that fails as a failed question of the turn, with the cause of the error and no value', async () => {
+    const { route, request, events } = await rig({ reply: routeAsk('shared', { id: 'K-1' }), types: TYPES });
+    await answerOf(route.handler(request(undefined, { readSourceElements: () => Promise.reject(new ExtensionRefusal({ code: 'SOURCE_BUSY' } as never)) })));
+    const asked = events.find((event) => event.action === 'assistant.ask');
+    expect(asked).toMatchObject({ result: 'failed', detail: { askRun: { intent: 'shared', outcome: 'failed', cause: 'source-busy' } } });
+    expect(JSON.stringify(events)).not.toContain('K-1');
+  });
+
+  it('says there is no element on a mapping with a keyed type, looking up only the types a typed value can stand for', async () => {
+    const { route, request, sourceReads } = await rig({ reply: routeAsk('shared', { id: 'NOBODY' }), source: [], types: ['widget', 'gadget', 'phone'], keyed: ['phone'] });
+    expect(askOf(await answerOf(route.handler(request())))).toMatchObject({ refused: { valueNotFit: { kind: 'not-found' } } });
+    expect(sourceReads[0]?.refs.entities.map((ref) => ref.entityType)).toEqual(['widget', 'gadget']);
+  });
 });
 
 describe('a written value on the saved-pattern anchor', () => {

@@ -153,6 +153,14 @@ describe('nothing is withheld or redacted on the way', () => {
     // the reads of the intent: the lookup of the value (a batched read of elements) is another read and holds the id the same way
     const parameters = rig.reads().filter((read) => read.templateId !== 'entity-load-many').map((read) => JSON.stringify(read.parameters));
     expect(new Set(parameters).size).toBe(1);
+    // and the lookup holds the typed value only as the reference it looks up: the same two reads for the plain and the masked question, the value in no other parameter
+    const lookups = rig.reads().filter((read) => read.templateId === 'entity-load-many');
+    expect(lookups.length).toBeGreaterThan(0);
+    for (const read of lookups) {
+      expect(Object.keys(read.parameters).sort()).toEqual(['limit', 'refs']);
+      expect((read.parameters['refs'] as { stableId: string }[]).map((ref) => ref.stableId)).toEqual(['W-001']);
+    }
+    expect(new Set(lookups.map((read) => JSON.stringify(read.parameters))).size).toBeLessThanOrEqual(lookups.length / 2);
     await rig.close();
   });
 });

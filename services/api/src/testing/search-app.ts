@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import { afterAll } from 'vitest';
 import { buildApp } from '../app.js';
 import type { AssembleOptions } from '../gate/assemble.js';
+import { lookupAnswer } from './held-elements.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { createLogger } from '../logger.js';
 import { parseMapping } from '../mapping/load.js';
@@ -47,6 +48,8 @@ export interface SearchAppOptions {
   readonly rows?: readonly Record<string, unknown>[];
   readonly mapping?: MappingModel;
   readonly respond?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
+  /** The elements the source holds for the lookup of a value written for a question, as `type/id`; absent, it holds every one asked for. */
+  readonly held?: readonly string[];
   /** Answers the relationship context read, which `respond` is not asked; absent, it finds no relationship. */
   readonly context?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
   /** True when `respond` answers the schema read itself; otherwise every index of the mapping is online. */
@@ -65,7 +68,9 @@ export async function startSearchApp(options: SearchAppOptions = {}) {
   const mapping = options.mapping ?? searchMappingOf();
   const first = mapping.sources[0];
   if (first === undefined) throw new Error('the mapping has no source');
-  const answer = options.respond ?? answering(options.rows ?? [widget(1)]);
+  const scripted = options.respond ?? answering(options.rows ?? [widget(1)]);
+  // the batched read of elements, which is how a value written for a question is looked up, is answered from the mapping: the source holds the elements a case writes ids for
+  const answer = (call: ExecuteCall): Promise<ExecuteOutcome> => Promise.resolve(lookupAnswer(call, mapping, scripted, options.held)) as Promise<ExecuteOutcome>;
   const data = (call: ExecuteCall): Promise<ExecuteOutcome> => (call.templateId === RELATED_CONTEXT_ID ? (options.context ?? (() => Promise.resolve<ExecuteOutcome>({ status: 'rows', rows: [] })))(call) : answer(call));
   const executor = new TestExecutor(options.ownSchema === true ? data : withOnlineIndexes(first, data));
   const events: AuditEvent[] = [];
