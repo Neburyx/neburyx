@@ -11,7 +11,7 @@ const MAX_BODY_BYTES = 1 << 20;
 
 /**
  * A plain GET that follows a few redirects as `fetch` does and answers with what it read, or undefined when the connection fails, the answer is too long or nothing finishes within `timeoutMs` in all.
- * It does not use `fetch`, whose client can throw from a socket event, out of reach of the caller's try and catch, when a connection is reset just after it opens.
+ * It does not use `fetch`, whose client (undici before 7.30.2, as in Node up to 24.22.2) can throw from a socket event, out of reach of the caller's try and catch, when a connection is reset just after it opens.
  */
 function read(url: string, timeoutMs: number, withBody: boolean): Promise<Probed | undefined> {
   return new Promise((resolve) => {

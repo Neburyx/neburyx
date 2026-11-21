@@ -5,6 +5,12 @@ import { probeBody, probeStatus } from './http-probe.js';
 
 const servers: Server[] = [];
 
+/** The undici a Node release bundles, from 7.30.2 on (the backport of the fix of 2026-11-05) or any later major, skips the type-of-service call when none was asked for and ignores its failure; Node 24.22.3 is the first 24.x with it. */
+function undiciIgnoresTypeOfServiceErrors(): boolean {
+  const [major = 0, minor = 0, patch = 0] = (process.versions.undici ?? '0.0.0').split('.').map(Number);
+  return major > 7 || (major === 7 && (minor > 30 || (minor === 30 && patch >= 2)));
+}
+
 async function stopServers(): Promise<void> {
   await Promise.all(servers.splice(0).map((server) => new Promise((resolve) => {
     server.closeAllConnections();
@@ -130,7 +136,7 @@ describe('a probe of an address', () => {
     }
   });
 
-  it('shows that the built-in fetch is what throws there, so the test above can tell', async () => {
+  it('shows what the built-in fetch does there: it throws before undici 7.30.2, which skips the call when no type of service was asked for and ignores its failure, and it does not throw after', async () => {
     const refused: Error[] = [];
     const onUncaught = (error: Error): void => void refused.push(error);
     process.on('uncaughtException', onUncaught);
@@ -141,7 +147,9 @@ describe('a probe of an address', () => {
       const server = await serve((_request, response) => response.end('ready'));
       await fetch(urlOf(server), { signal: AbortSignal.timeout(1000) }).catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, 100));
-      expect(refused.map((error) => Reflect.get(error, 'syscall'))).toContain('setTypeOfService');
+      const syscalls = refused.map((error) => Reflect.get(error, 'syscall'));
+      if (undiciIgnoresTypeOfServiceErrors()) expect(syscalls).toEqual([]);
+      else expect(syscalls).toContain('setTypeOfService');
     } finally {
       process.off('uncaughtException', onUncaught);
     }
