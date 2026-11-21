@@ -39,7 +39,7 @@ export function hooksWith(answer: (question: string, promptId: string) => Record
     routeMessage: (source, provider, model, input) => routeMessage(source as never, provider as never, model, input) as never,
     routerRequests: (source, input) => routerRequests(source as never, input),
     routerTextSha256: (source) => routerTextSha256(source as never),
-    contextKeys: (source, earlier) => contextKeys(source as never, earlier),
+    contextKeys: (source, earlier, viewElementKeys) => contextKeys(source as never, earlier, viewElementKeys),
     contextTurns,
     routerTextBytes: (source) => routerTextBytes(source as never),
     assistantRunSettings,

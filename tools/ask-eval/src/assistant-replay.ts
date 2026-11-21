@@ -9,14 +9,32 @@ export type Hooks = EvalHooks & AssistantHooks;
 /** The input a unit gives the router: its message, the keys of its view and the labelled turns of its context. */
 export const inputOf = (unit: Unit) => ({ message: unit.message, viewElementKeys: unit.viewKeys, earlier: unit.earlier, ...(unit.selectedKeys.length === 0 ? {} : { selectionKeys: unit.selectedKeys }) });
 
+/** Whether the message writes the value as a word of its own: a value inside a longer identifier does not count as written. */
+export const writtenIn = (wording: string, value: string): boolean => {
+  const escaped = value.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped}(?![\\p{L}\\p{N}_-])`, 'u').test(wording.toLowerCase());
+};
+
 /** The reply a router would give for what a unit expects: the scripted answer. A clarification names its candidates by the keys of the thread's context. */
 async function scriptedReply(unit: Unit, hooks: AssistantHooks): Promise<string> {
   const { expect } = unit;
   if (expect.route === 'view') return JSON.stringify({ route: 'view', ...(expect.types === undefined ? {} : { types: expect.types }), ...(expect.form === undefined ? {} : { form: expect.form }) });
   if (expect.route === 'meaning') return JSON.stringify({ route: 'meaning', types: expect.types });
   if (expect.route === 'refuse') return JSON.stringify({ route: 'refuse', cause: expect.cause });
-  if (expect.route === 'ask') return JSON.stringify({ route: 'ask', intent: expect.intent, entities: expect.entities });
-  const keys = await hooks.contextKeys(unit.set.source, unit.earlier);
+  if (expect.route === 'ask') {
+    // a value the message does not write, that an element of the earlier turns or the view holds, is named by that element's key under its role, as the router prompt asks; a written value stays text
+    const held = await hooks.contextKeys(unit.set.source, unit.earlier, unit.viewKeys);
+    const wording = unit.message.toLowerCase();
+    const entities: Record<string, string> = {};
+    const elements: Record<string, string> = {};
+    for (const [role, value] of Object.entries(expect.entities)) {
+      const key = writtenIn(wording, value) ? undefined : Object.entries(held).find(([, stableId]) => stableId === value)?.[0];
+      if (key === undefined) entities[role] = value;
+      else elements[role] = key;
+    }
+    return JSON.stringify({ route: 'ask', intent: expect.intent, entities, ...(Object.keys(elements).length === 0 ? {} : { elements }) });
+  }
+  const keys = await hooks.contextKeys(unit.set.source, unit.earlier, unit.viewKeys);
   const keyOf = (stableId: string): string => {
     const found = Object.entries(keys).find(([, id]) => id === stableId)?.[0];
     if (found === undefined) throw new UsageError(`the request ${unit.name} offers a candidate that the context of its turns does not hold`);

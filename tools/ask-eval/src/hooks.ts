@@ -66,8 +66,8 @@ export interface AssistantHooks {
   readonly routeMessage: (source: SourceHandle, provider: unknown, model: string, input: RouteInput) => Promise<RouteOutcome>;
   /** The values of the two requests a message can make: the first, and the repeat after a reply that is not a route. */
   readonly routerRequests: (source: SourceHandle, input: RouteInput) => Promise<{ readonly first: string; readonly repeat: string }>;
-  /** The key the thread's context gives each element of the labelled earlier turns, with the stable id it stands for. */
-  readonly contextKeys: (source: SourceHandle, earlier: readonly LabelledTurn[]) => Promise<Readonly<Record<string, string>>>;
+  /** The key the thread's context gives each element of the labelled earlier turns and then each element in view, with the stable id it stands for. */
+  readonly contextKeys: (source: SourceHandle, earlier: readonly LabelledTurn[], viewElementKeys?: readonly string[]) => Promise<Readonly<Record<string, string>>>;
   /** What a run will use, without a key: the model (the setting or the one given), the effort and the output limit of a reply. */
   readonly assistantRunSettings: (env: Readonly<Record<string, string | undefined>>, model?: string) => { readonly model: string; readonly effort: string; readonly outputLimit: number };
   readonly liveAssistantProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, model?: string) => Promise<{ readonly provider: unknown; readonly model: string; readonly effort: string; readonly outputLimit: number }>;

@@ -108,6 +108,17 @@ describe('the shipped router prompt and the reply format', () => {
     for (const tool of ['ai-notes', 'ai-summary', '"tool"']) expect(prompt).not.toContain(tool);
   });
 
+  it('tells the router to name the single element of the needed type held by the earlier turns or the view when the message names none, before any instruction to choose null, and to ask with two or more and refuse with none', async () => {
+    const { prompt } = await shippedText();
+    expect(prompt).toContain('when exactly one of them (an element held by both counts once) is of the type the role needs, it is the one meant. Name it by its key in `elements` under the role, as above.');
+    expect(prompt).toContain('This rule comes before any instruction in the list of questions to choose null for a missing value.');
+    expect(prompt).toContain('The rule about selected elements comes first: when it settles the referent, this rule does not apply');
+    expect(prompt).toContain('When two or more are of that type, choose `clarify` as above; when none is, choose `refuse` with the cause `unplaced`.');
+    expect(prompt).toContain('An element the message writes stays text in `entities` and is used as written, whatever else is held.');
+    // the router is never told to pick one of several, and no tool is named
+    expect(prompt).not.toMatch(/most recent|the latest/i);
+  });
+
   it('tells the router to add the form table to a view reply that asks for a table, and to leave it out otherwise, with no tool named', async () => {
     const { prompt } = await shippedText();
     expect(prompt).toContain('When the message asks for its answer as a table, also add `"form":"table"`; when it does not, leave `form` out (the words of the message alone never decide it, only your reply does).');

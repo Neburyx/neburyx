@@ -20,8 +20,10 @@ const askSchema = z.strictObject({ route: z.literal('ask'), intent: z.string().m
 const clarifySchema = z.strictObject({ route: z.literal('clarify'), intent: z.string().min(1), role: z.string().min(1), entities: z.record(z.string(), z.string()), candidates: z.array(elementSchema).min(2) });
 
 const messageSchema = z.strictObject({ id: z.string().min(1), wording: z.string(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema]) });
-/** `selected` names elements of the thread's view the person has selected on the canvas when the turn's message is sent. */
-const turnSchema = z.strictObject({ message: z.string(), selected: z.array(elementSchema).min(1).optional(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema, clarifySchema]) });
+/** A turn of a thread: the message and the route it should take. `view` is the view the message itself is sent with (the panel sends the current view with every message), for a turn that is not itself a view question; `selected` names elements of the thread's view the person has selected on the canvas when the message is sent. */
+const turnSchema = z
+  .strictObject({ message: z.string(), view: z.array(elementSchema).min(1).optional(), selected: z.array(elementSchema).min(1).optional(), expect: z.union([viewSchema, meaningSchema, refuseSchema, askSchema, clarifySchema]) })
+  .refine((turn) => turn.view === undefined || turn.expect.route !== 'view', { message: 'a view question carries its elements in its expectation, not in a view of its own' });
 const threadSchema = z.strictObject({ id: z.string().min(1), turns: z.array(turnSchema) });
 const fileSchema = z.strictObject({ messages: z.array(messageSchema), threads: z.array(threadSchema).optional() });
 
@@ -79,7 +81,9 @@ export function readAssistantFile(text: string, window: number): AssistantFile {
       if (turn.expect.route !== 'clarify') return;
       if (index === 0) throw new UsageError(`the thread ${thread.id} asks for a clarification in its first turn, which has no context`);
       const inWindow = thread.turns.slice(0, index).filter((earlier) => earlier.expect.route !== 'clarify').slice(-window);
-      for (const candidate of turn.expect.candidates) if (!inWindow.some((earlier) => names(earlier, candidate))) throw new UsageError(`the thread ${thread.id} turn ${index + 1} offers a candidate that no turn of its context names`);
+      // a candidate is an element that a turn of the context names, or one the message is sent with in its own view
+      const inView = (candidate: { readonly entityType: string; readonly stableId: string }): boolean => (turn.view ?? []).some((shown) => shown.entityType === candidate.entityType && shown.stableId === candidate.stableId);
+      for (const candidate of turn.expect.candidates) if (!inWindow.some((earlier) => names(earlier, candidate)) && !inView(candidate)) throw new UsageError(`the thread ${thread.id} turn ${index + 1} offers a candidate that no turn of its context names`);
     });
   }
   return { messages: read.data.messages, threads };
@@ -123,6 +127,7 @@ export function unitsOf(sets: readonly AssistantSet[]): readonly Unit[] {
       let view: readonly string[] = [];
       thread.turns.forEach((turn, index) => {
         if (turn.expect.route === 'view') view = viewKeysOf(set.source.sourceId, turn.expect);
+        else if (turn.view !== undefined) view = turn.view.map((element) => JSON.stringify(['node', set.source.sourceId, element.entityType, element.stableId]));
         units.push({ name: `${set.label}/${thread.id}#${index + 1}`, set, message: turn.message, expect: turn.expect, earlier: [...earlier], viewKeys: view, selectedKeys: (turn.selected ?? []).map((element) => nodeKeyOf(set.source.sourceId, element)) });
         const kept = labelled(turn.expect);
         if (kept !== undefined) earlier.push(kept);

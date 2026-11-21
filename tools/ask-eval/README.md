@@ -41,6 +41,8 @@ pnpm ask-eval record --packs domain-packs --budget <n> --out <folder outside eve
 
 `ask-eval assistant` scores the assistant's router on `assistant-questions.yaml` of each pack: single messages and short threads, each with the route it should take (a view, an Ask question with its intent and entities, a clarification with its candidates, or a refusal with its cause). It runs the product's own router, with the product's own thread context built from labelled earlier turns, over recorded replies of the model.
 
+The threads include the follow-up cases of a message that names no element (both packs hold each): one element of the needed type in the thread (also beside an element of another type), one in the view only, two (one in the view and a different one in the thread: a clarification), the same element in the view and in the thread (counted once), none of the needed type (refused as `unplaced`), and a message that writes the value while another element is held (the written value is used). A turn may carry `view:`, the elements the message itself is sent with (not part of the thread's context, as the panel sends the current view with every message); a view question carries its elements in its expectation instead. In the scripted replay a value the message does not write as a word of its own, that a held element (of the thread or the view) stands for, is named by that element's key under its role in `elements`, as the router prompt asks.
+
 ```bash
 pnpm ask-eval assistant --packs domain-packs --replay tools/ask-eval/data/assistant/scripted/replay.json
 pnpm ask-eval assistant --packs domain-packs --write-replay <file outside every git working tree>

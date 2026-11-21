@@ -939,3 +939,52 @@ describe('the elements selected on the canvas, as the router is shown them and a
     expect(routerValuesOf(t)).not.toContain('"W-2" (selected)');
   });
 });
+
+describe('the one element a message needs and does not name', () => {
+  it('runs the intent for the single element of the view when the router names its key, and for no other', async () => {
+    const t = await follow(() => naming('c1'), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, [widgetKey('W-9')]);
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(ranFor(t.rig)).toHaveLength(1);
+    expect(ranFor(t.rig)[0]).toContain('"stableId":"W-9"');
+  });
+
+  it('counts an element held by the thread and the view once, so the key the router names runs the intent for it', async () => {
+    const t = await follow(() => naming('c1'), { readNodes: everyone });
+    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('W-1') }] }));
+    const answer = await t.send(FOLLOW_UP, undefined, [widgetKey('W-1')]);
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(ranFor(t.rig)[0]).toContain('"stableId":"W-1"');
+  });
+
+  it('runs the intent with the element resolved through the gate for this message\'s masking: no unmasked title reaches the router and the key still resolves', async () => {
+    const t = await follow(() => naming('c1'), { readNodes: (refs, mask) => refs.entities.map((ref) => nodeOf(ref.stableId, mask ? `Masked ${ref.stableId}` : `Account ${ref.stableId}`)) });
+    const answer = await t.rig.route.handler(t.rig.request({ ...BASE, message: FOLLOW_UP, viewElementKeys: [widgetKey('W-9')], mask: true }, { principalId: PERSON }));
+    expect(assistantTurnAnswerSchema.parse(answer)).toMatchObject({ status: 'answered', route: 'ask' });
+    expect(routerValues(t.rig, 0)).not.toContain('Account W-9');
+    expect(t.rig.runs[0]?.mask).toBe(true);
+    expect(ranFor(t.rig)[0]).toContain('"stableId":"W-9"');
+  });
+
+  it('does not fill the role itself when the router names a key of another type and one element of the right type is held: it asks, with that element as the one candidate', async () => {
+    const t = await follow(() => naming('c2'), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, [widgetKey('W-1'), JSON.stringify(['node', 'demo', 'gadget', 'gadgetone'])]);
+    expect(ranFor(t.rig)).toHaveLength(0);
+    expect(answer).toMatchObject({ status: 'clarification', question: 'Which widget do you mean?', candidates: [{ title: 'Account W-1', type: 'widget' }] });
+  });
+
+  it('refuses as unplaced when the router names a key of another type and no element of the right type is held', async () => {
+    const t = await follow(() => naming('c1'), { readNodes: everyone });
+    const answer = await t.send(FOLLOW_UP, undefined, [JSON.stringify(['node', 'demo', 'gadget', 'gadgetone'])]);
+    expect(ranFor(t.rig)).toHaveLength(0);
+    expect(answer).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+  });
+
+  it('uses a value the message writes, as typed, and not the single element the thread holds', async () => {
+    const t = await follow((_values, call) => (call === 0 ? ASKED_A1 : routeAsk('shared', { id: 'A-2' })));
+    await t.send(FIRST);
+    await t.send('what else uses A-2?');
+    expect(ranFor(t.rig)[1]).toContain('"stableId":"A-2"');
+    expect(ranFor(t.rig)[1]).not.toContain('"stableId":"A-1"');
+  });
+});

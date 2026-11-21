@@ -313,3 +313,50 @@ threads:
         expect: { route: view, view: [{ entityType: device, stableId: DV-000162 }, { entityType: device, stableId: DV-000163 }] }
       - message: "Which accounts use this device?"
         expect: { route: clarify, intent: accounts-using-a-device, role: device, entities: {}, candidates: [{ entityType: device, stableId: DV-000162 }, { entityType: device, stableId: DV-000163 }] }
+  - id: one-account-beside-a-merchant-then-merchants
+    turns:
+      - message: "Show the payments made to MR-0101."
+        expect: { route: ask, intent: payments-made-to-a-merchant, entities: { merchant: MR-0101 } }
+      - message: "Which accounts use the same device as AC-0002130?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002130 } }
+      - message: "Which merchants were paid?"
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002130 } }
+  - id: account-in-view-only-then-merchants
+    turns:
+      - message: "Show the payments made to MR-0102."
+        expect: { route: ask, intent: payments-made-to-a-merchant, entities: { merchant: MR-0102 } }
+      - message: "Which merchants were paid?"
+        view: [{ entityType: account, stableId: AC-0002140 }]
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002140 } }
+  - id: account-in-view-and-another-in-the-thread
+    turns:
+      - message: "Which accounts use the same device as AC-0002150?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002150 } }
+      - message: "Which merchants were paid?"
+        view: [{ entityType: account, stableId: AC-0002151 }]
+        expect: { route: clarify, intent: merchants-an-account-paid, role: account, entities: {}, candidates: [{ entityType: account, stableId: AC-0002150 }, { entityType: account, stableId: AC-0002151 }] }
+  - id: the-same-account-in-view-and-in-the-thread
+    turns:
+      - message: "Which accounts use the same device as AC-0002160?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002160 } }
+      - message: "Which merchants were paid?"
+        view: [{ entityType: account, stableId: AC-0002160 }]
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002160 } }
+  - id: a-written-account-beside-one-in-the-thread
+    turns:
+      - message: "Which accounts use the same device as AC-0002170?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002170 } }
+      - message: "Which merchants has AC-0002171 paid?"
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002171 } }
+  - id: one-account-then-merchants
+    turns:
+      - message: "Which accounts use the same device as AC-0002120?"
+        expect: { route: ask, intent: accounts-on-the-same-device, entities: { account: AC-0002120 } }
+      - message: "Which merchants were paid?"
+        expect: { route: ask, intent: merchants-an-account-paid, entities: { account: AC-0002120 } }
+  - id: no-account-then-merchants
+    turns:
+      - message: "Show the payments made to MR-0100."
+        expect: { route: ask, intent: payments-made-to-a-merchant, entities: { merchant: MR-0100 } }
+      - message: "Which merchants were paid?"
+        expect: { route: refuse, cause: unplaced }

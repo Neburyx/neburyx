@@ -5,7 +5,7 @@ import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import { buildAssistantInstructions, type AssistantInstructions } from './instructions.js';
 
 export const ROUTER_PROMPT_ID = 'assistant.route';
-export const ROUTER_PROMPT_VERSION = 9;
+export const ROUTER_PROMPT_VERSION = 10;
 export const ROUTER_AUDIT_ACTION = 'assistant.route';
 
 const NO_KEYS = '(none)';

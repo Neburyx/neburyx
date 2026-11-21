@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { assistantSetHash, checkAssistantSets, readAssistantFile, unitsOf, type AssistantSet } from './assistant-questions.js';
 import { loadAssistantSets } from './assistant-run.js';
-import { requestsOf } from './assistant-replay.js';
+import { requestsOf, writtenIn } from './assistant-replay.js';
 import { runCli } from './cli.js';
 import { UsageError } from './questions.js';
 import { cleanUpTemporary } from './sets.js';
@@ -139,7 +139,7 @@ describe('the committed sets of the demo packs', () => {
     }
     // three first turns of each of the two threads that open alike in both packs, and the first turn of the thread of the account just shown
     expect(requests.size - firsts.size).toBe(sharing.reduce((sum, names) => sum + names.length - 1, 0));
-    expect(requests.size - firsts.size).toBe(10);
+    expect(requests.size - firsts.size).toBe(11);
   });
 });
 
@@ -195,12 +195,12 @@ describe('the router scored over a replay', () => {
     for (const entry of (await requestsOf(await loadAssistantSets(PACKS, hooks()), hooks())).values()) shared.set(entry.first, (shared.get(entry.first) ?? 0) + 1);
     // a request that two units make (the same first turns of two threads) would count as two misses when removed
     const plans = Object.keys(replay.answers).filter((values) => shared.get(values) === 1 && values.includes('Earlier turns') && replay.answers[values]?.reply.includes('"route":"ask"') === true);
-    for (const values of plans.slice(0, 12)) delete replay.answers[values];
+    for (const values of plans.slice(0, 14)) delete replay.answers[values];
     const within = await run(replay);
-    expect(within.text).toContain('at most 12 may miss');
+    expect(within.text).toContain('at most 14 may miss');
     expect(within.text).toContain('no-reply');
     expect(within.code, within.text).toBe(0);
-    delete replay.answers[plans[12] ?? ''];
+    delete replay.answers[plans[14] ?? ''];
     const over = await run(replay);
     expect(over.code).toBe(1);
     expect(over.text).toContain('result: fail');
@@ -252,7 +252,7 @@ describe('the router scored over a replay', () => {
     const out = io();
     await runCli(['assistant', '--packs', PACKS, '--replay', SCRIPTED, '--json'], out.io, hooks());
     const text = out.out.join('\n');
-    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 159, right: 159 }, scripted: true });
+    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 29, refused: 29 }, plans: { total: 185, right: 185 }, scripted: true });
     for (const secret of ['guilty', 'AC-0002000', 'same device', 'CT-00100', 'fraudster']) expect(text).not.toContain(secret);
   });
 
@@ -319,7 +319,11 @@ describe('the committed threads of the demo packs', () => {
     expect(turns.filter((entry) => entry.expect.route === 'clarify').length).toBeGreaterThanOrEqual(2);
     for (const set of sets) {
       for (const thread of set.threads) {
+        // the thread that writes the value in its last message tests that a written value is used as typed, and has no follow-up of this kind
+        if (thread.id.startsWith('a-written-')) continue;
         const followUp = thread.turns.slice(1).some((entry) => {
+          // a follow-up that ends in a refusal as unplaced counts too: it is the thread with no element of the type the intent needs
+          if (entry.expect.route === 'refuse') return entry.expect.cause === 'unplaced';
           if (entry.expect.route !== 'ask' && entry.expect.route !== 'clarify') return false;
           const ids = entry.expect.route === 'ask' ? Object.values(entry.expect.entities) : entry.expect.candidates.map((candidate) => candidate.stableId);
           return ids.every((id) => !entry.message.includes(id));
@@ -397,7 +401,7 @@ describe('the threads scored over a replay', { timeout: 30_000 }, () => {
     const out = io();
     await runCli(['assistant', '--packs', PACKS, '--replay', SCRIPTED, '--json'], out.io, hooks());
     const text = out.out.join('\n');
-    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 27, refused: 27 }, plans: { total: 159, right: 159 } });
+    expect(JSON.parse(text)).toMatchObject({ refusals: { total: 29, refused: 29 }, plans: { total: 185, right: 185 } });
     for (const secret of ['AC-0002050', 'CT-00230', 'Which merchants', 'that account']) expect(text).not.toContain(secret);
   });
 });
@@ -432,8 +436,8 @@ describe('the first replies of the router', () => {
     replay.answers[at('insurance-claims/filed-then-policies#2').first] = { failure: 'timeout' };
     delete replay.answers[at('insurance-claims/vehicle-then-repairer#2').first];
     const counted = await json(replay);
-    expect(counted.result.firstReplies).toMatchObject({ counted: 184, bare: 180, textAround: 2, wrongForm: 1, didNotFit: 1, failed: 1, noFirstReply: 1, rescued: 2, unplaced: 1, notBare: 4 });
-    expect(counted.result.firstReplies['rate']).toBeCloseTo(4 / 184, 6);
+    expect(counted.result.firstReplies).toMatchObject({ counted: 212, bare: 208, textAround: 2, wrongForm: 1, didNotFit: 1, failed: 1, noFirstReply: 1, rescued: 2, unplaced: 1, notBare: 4 });
+    expect(counted.result.firstReplies['rate']).toBeCloseTo(4 / 212, 6);
     expect(counted.result.firstReplies['ids']).toEqual(expect.arrayContaining([{ name: 'banking-fraud/device-then-merchants#2', kind: 'text-around' }, { name: 'banking-fraud/two-accounts-then-which#3', kind: 'did-not-fit' }]));
   });
 
@@ -459,7 +463,7 @@ describe('the first replies of the router', () => {
     const found = await requests();
     delete replay.answers[found.get('banking-fraud/address-then-show#2')?.first ?? ''];
     const counted = await json(replay);
-    expect(counted.result.firstReplies).toMatchObject({ noFirstReply: 1, counted: 185, bare: 185 });
+    expect(counted.result.firstReplies).toMatchObject({ noFirstReply: 1, counted: 213, bare: 213 });
   });
 });
 
@@ -482,6 +486,55 @@ describe('the committed replays of the models', () => {
     const code = await runCli(['assistant', '--packs', PACKS, '--replay', join(DATA, model, 'replay.json'), '--baseline', join(DATA, model, 'baseline.json')], out.io, hooks());
     expect(code, out.out.join('\n') + out.err.join('\n')).toBe(0);
     expect(out.out.join('\n')).toContain('requests with no first reply: 0');
+  });
+});
+
+describe('a value the message writes', () => {
+  it.each([
+    ['which claims did cl-002100 file?', 'CL-002100', true],
+    ['which claims went through the repairer of cl-002100?', 'CL-00210', false],
+    ['claim cl-0021000 only', 'CL-002100', false],
+    ['the same as (cl-002100), please', 'CL-002100', true],
+    ['an id with a dot: x.y', 'x.y', true],
+    ['an id with a dot: xzy', 'x.y', false],
+    ['Which claims did CL-002100 file?', 'CL-002100', true],
+  ])('reads %j for %s as written: %s', (wording, value, written) => {
+    expect(writtenIn(wording, value)).toBe(written);
+  });
+});
+
+describe('the view a turn is sent with', () => {
+  const turnWithView = (wording: string, view: string, expect: string) => `      - message: "${wording}"\n        view: [${view}]\n        expect: ${expect}`;
+
+  it('refuses a view on a view question, which carries its elements in its expectation, and an empty view', () => {
+    expect(() => readAssistantFile(THREAD_FILE([turn('first', ASK), turnWithView('second', T1, VIEW)].join('\n')), 3)).toThrow(UsageError);
+    expect(() => readAssistantFile(THREAD_FILE([turn('first', ASK), turnWithView('second', '', ASK2)].join('\n')), 3)).toThrow(UsageError);
+  });
+
+  it('refuses a candidate that neither a turn of the context nor the turn\'s own view holds, and takes one the own view holds', () => {
+    const none = THREAD_FILE([turn('first', ASK), turnWithView('which one', '{ entityType: thing, stableId: T-3 }', CLARIFY(`${T1}, ${T2}`))].join('\n'));
+    expect(() => readAssistantFile(none, 3)).toThrow(/no turn of its context/);
+    const held = THREAD_FILE([turn('first', ASK), turnWithView('which one', T2, CLARIFY(`${T1}, ${T2}`))].join('\n'));
+    expect(() => readAssistantFile(held, 3)).not.toThrow();
+  });
+
+  it('sends the elements with the message of that turn and every later turn, and keeps them out of the thread\'s context', () => {
+    const file = readAssistantFile(THREAD_FILE([turn('first', ASK), turnWithView('second', T2, ASK2), turn('third', ASK)].join('\n')), 3);
+    const set = { label: 'x', source: { sourceId: 'src' }, messages: [], threads: file.threads } as unknown as AssistantSet;
+    const units = unitsOf([set]);
+    const key = (id: string) => JSON.stringify(['node', 'src', 'thing', id]);
+    expect(units.map((unit) => unit.viewKeys)).toEqual([[], [key('T-2')], [key('T-2')]]);
+    expect(units[1]?.earlier).toEqual([{ route: 'ask', intent: 'byId', entities: { id: 'T-1' } }]);
+  });
+
+  it('writes a scripted reply that names the key of an element only the view holds, and keeps a written value as text', async () => {
+    const set = (await loadAssistantSets(PACKS, hooks())).find((entry) => entry.label.includes('insurance')) as AssistantSet;
+    const requests = await requestsOf([set], hooks());
+    const replay = JSON.parse(readFileSync(SCRIPTED, 'utf8')) as { answers: Record<string, { reply: string }> };
+    const reply = (name: string) => JSON.parse(replay.answers[requests.get(name)?.first ?? '']?.reply ?? '{}') as Record<string, unknown>;
+    expect(reply('insurance-claims/claim-in-view-only-then-repairer#2')).toMatchObject({ route: 'ask', entities: {}, elements: { claim: expect.stringMatching(/^c\d+$/) } });
+    expect(reply('insurance-claims/a-written-claim-beside-one-in-the-thread#2')).toMatchObject({ route: 'ask', entities: { claim: 'CL-002141' } });
+    expect(reply('insurance-claims/a-written-claim-beside-one-in-the-thread#2')).not.toHaveProperty('elements');
   });
 });
 

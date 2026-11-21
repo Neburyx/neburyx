@@ -97,10 +97,13 @@ export async function routeMessage(source: LoadedSource, provider: ModelProvider
   return { ...outcome, keys: Object.fromEntries([...context.keys].map(([key, ref]) => [key, ref.stableId])) };
 }
 
-/** The key the thread's context gives each element of the labelled earlier turns, with the stable id it stands for: what a scripted clarification names its candidates by. */
-export async function contextKeys(source: LoadedSource, earlier: readonly LabelledTurn[]): Promise<Readonly<Record<string, string>>> {
-  const context = await contextOf(source, earlier);
-  return Object.fromEntries([...(context?.keys ?? [])].map(([key, ref]) => [key, ref.stableId]));
+/** The key the thread's context gives each element of the labelled earlier turns and then each element in view, with the stable id it stands for: what a scripted reply names its elements by. */
+export async function contextKeys(source: LoadedSource, earlier: readonly LabelledTurn[], viewElementKeys: readonly string[] = []): Promise<Readonly<Record<string, string>>> {
+  const thread = await contextOf(source, earlier);
+  // the elements in view get keys after those of the thread, as the product's turn gives them
+  const view = readViewKeys(viewElementKeys, source.sourceId);
+  const context = withView(thread, view.ok ? view.refs : { entities: [], edges: [], aggregates: [], derived: [] }, source.sourceId);
+  return Object.fromEntries([...context.keys].map(([key, ref]) => [key, ref.stableId]));
 }
 
 /** The number of turns of a thread the router is shown: the setting of the assistant. */

@@ -232,3 +232,44 @@ threads:
         expect: { route: view, view: [{ entityType: claim, stableId: CL-001232 }, { entityType: claim, stableId: CL-001233 }] }
       - message: "Which claims went through the same repairer as this one?"
         expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-001232 }, { entityType: claim, stableId: CL-001233 }] }
+  - id: one-claim-beside-a-claimant-then-repairer
+    turns:
+      - message: "Which claims were filed by CT-00300?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00300 } }
+      - message: "Which claims involve the same vehicle as CL-002100?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002100 } }
+      - message: "Which claims went through the same repairer?"
+        expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002100 } }
+  - id: claim-in-view-only-then-repairer
+    turns:
+      - message: "Which claims were filed by CT-00302?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00302 } }
+      - message: "Which claims went through the same repairer?"
+        view: [{ entityType: claim, stableId: CL-002110 }]
+        expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002110 } }
+  - id: claim-in-view-and-another-in-the-thread
+    turns:
+      - message: "Which claims involve the same vehicle as CL-002120?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002120 } }
+      - message: "Which claims went through the same repairer?"
+        view: [{ entityType: claim, stableId: CL-002121 }]
+        expect: { route: clarify, intent: claims-by-the-same-repairer, role: claim, entities: {}, candidates: [{ entityType: claim, stableId: CL-002120 }, { entityType: claim, stableId: CL-002121 }] }
+  - id: the-same-claim-in-view-and-in-the-thread
+    turns:
+      - message: "Which claims involve the same vehicle as CL-002130?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002130 } }
+      - message: "Which claims went through the same repairer?"
+        view: [{ entityType: claim, stableId: CL-002130 }]
+        expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002130 } }
+  - id: no-claim-then-repairer
+    turns:
+      - message: "Which claims were filed by CT-00301?"
+        expect: { route: ask, intent: claims-filed-by-a-claimant, entities: { claimant: CT-00301 } }
+      - message: "Which claims went through the same repairer?"
+        expect: { route: refuse, cause: unplaced }
+  - id: a-written-claim-beside-one-in-the-thread
+    turns:
+      - message: "Which claims involve the same vehicle as CL-002140?"
+        expect: { route: ask, intent: claims-on-the-same-vehicle, entities: { claim: CL-002140 } }
+      - message: "Which claims went through the same repairer as CL-002141?"
+        expect: { route: ask, intent: claims-by-the-same-repairer, entities: { claim: CL-002141 } }

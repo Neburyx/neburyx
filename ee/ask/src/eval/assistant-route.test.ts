@@ -110,4 +110,14 @@ describe('the context of a view turn and an ask turn', () => {
     const empty = await contextKeys(source, [{ route: 'view', cited: [] }]);
     expect(empty).toEqual({});
   });
+
+  it('gives the elements in view keys after those of the thread, once for an element held by both, and none for a key that is no element of this source', async () => {
+    const source = await sourceOf();
+    const key = (id: string, sourceId = source.sourceId) => JSON.stringify(['node', sourceId, 'thing', id]);
+    expect(await contextKeys(source, [], [key('T-9', 'another-source'), 'not a key'])).toEqual({});
+    const both = await contextKeys(source, [{ route: 'view', cited: [{ entityType: 'thing', stableId: 'T-1' }] }], [key('T-1'), key('T-2')]);
+    expect(Object.values(both)).toEqual(['T-1', 'T-2']);
+    expect(Object.keys(both)).toHaveLength(2);
+    expect(Object.values(await contextKeys(source, [], [key('T-2')]))).toEqual(['T-2']);
+  });
 });
