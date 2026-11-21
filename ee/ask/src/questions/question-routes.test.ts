@@ -29,17 +29,20 @@ interface Rig {
   readonly events: AuditEvent[];
   readonly rows: Omit<RunRecord, 'id'>[];
   readonly runs: { asked: unknown; options: unknown; mask: boolean }[];
+  /** The reads of a source's elements that looked a written value up, as `type/id`, one list for each read. */
+  readonly lookups: string[][];
   readonly classified: unknown[];
   readonly signals: AbortSignal[];
   readonly logs: { fields: unknown; message: string }[];
   request(body: unknown, over?: Partial<ExtensionRequest>): ExtensionRequest;
 }
 
-async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskRun; sink?: 'fails'; readable?: boolean } = {}): Promise<Rig> {
+async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: unknown; classify?: () => Promise<AskClassification>; run?: (continuing: boolean) => AskRun; sink?: 'fails'; readable?: boolean; source?: readonly string[]; sourceOmits?: boolean; types?: readonly string[]; lookups?: boolean } = {}): Promise<Rig> {
   const folder: AskFolder | undefined = await loadAskFolder({ folder: makeAskFolder([SOURCE], options.intents), sourceIds: [SOURCE] }).then((loaded) => (loaded.ok ? loaded.folder : undefined));
   const events: AuditEvent[] = [];
   const rows: Omit<RunRecord, 'id'>[] = [];
   const runs: Rig['runs'] = [];
+  const lookups: Rig['lookups'] = [];
   const classified: unknown[] = [];
   const signals: AbortSignal[] = [];
   const logs: Rig['logs'] = [];
@@ -81,6 +84,17 @@ async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: u
           askPatterns: async () => ({ offers: options.patterns ?? [], cut: false }),
           askPatternFind: async (_sourceId: string, id: string) => options.patterns?.find((offer) => offer.id === id),
         }),
+    // a source that holds the elements `source` names (every one asked for when it is absent) and the entity types `types` names
+    ...(options.lookups === false
+      ? {}
+      : {
+          readSourceElements: async (scope: { mask: boolean }, refs: { entities: readonly { sourceId: string; entityType: string; stableId: string }[] }) => {
+            lookups.push(refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`));
+            const held = (ref: { entityType: string; stableId: string }): boolean => options.source === undefined || options.source.includes(`${ref.entityType}/${ref.stableId}`);
+            return { nodes: refs.entities.filter(held).map((ref) => ({ ref, display: { title: `${ref.entityType} ${ref.stableId}`, type: ref.entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } })), edges: [], unresolved: refs.entities.filter((ref) => !held(ref)).length, omitted: options.sourceOmits === true, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0, mask: scope.mask } as never;
+          },
+        }),
+    ...(options.types === undefined ? {} : { typeDescriptions: () => ({ entityTypes: (options.types ?? []).map((type) => ({ type, label: type, displayName: type })), relationshipTypes: [] }) }),
     askRunner: (scope) => ({
       run: async (asked, runOptions) => {
         runs.push({ asked, options: runOptions, mask: scope.mask });
@@ -90,7 +104,7 @@ async function rig(options: { patterns?: readonly AskPatternOffer[]; intents?: u
     body,
     ...over,
   });
-  return { route: createAskQuestionRoute(routeOptions), continueRoute: createAskContinueRoute(routeOptions), events, rows, runs, classified, signals, logs, request };
+  return { route: createAskQuestionRoute(routeOptions), continueRoute: createAskContinueRoute(routeOptions), events, rows, runs, lookups, classified, signals, logs, request };
 }
 
 const ASK = { sourceId: SOURCE, question: QUESTION };
@@ -689,23 +703,71 @@ describe('a question of a path intent', () => {
   });
 });
 
-/** What a value the person writes does today, before it is checked against the type its role needs (the checking stories of the feature turn these). */
-describe('a written value on Ask, today', () => {
+/** A value the person writes for a role that needs a type is looked up through the gate before the intent runs. */
+describe('a written value on Ask', () => {
   const NO_ANCHOR = { run: (): AskRun => ({ status: 'refused', refusal: { code: 'NOT_FOUND' } }) };
+  const TYPES = ['widget', 'gadget'];
+  const classifying = (id: string) => ({ classify: async (): Promise<AskClassification> => ({ ok: true, intent: 'shared', entities: { id } }) });
 
   it.each([
-    ['a value of another mapped type', 'K-1'],
-    ['an id that exists as nothing', 'NOBODY'],
-  ])('runs the intent with %s as the parameter, with no check of its type, and answers nothing found', async (_name, value) => {
-    const { route, request, runs } = await rig({ classify: async () => ({ ok: true, intent: 'shared', entities: { id: value } }), ...NO_ANCHOR });
-    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'nothing-found', intent: 'shared' }) });
-    expect(JSON.stringify(runs)).toContain(value);
+    ['another mapped type', 'K-1', ['gadget/K-1'], false, 'other-type', 'gadget K-1 is a gadget; this question needs a widget. Nothing was run.'],
+    ['an id that exists as nothing', 'NOBODY', [], false, 'not-found', 'There is no widget with that id. Nothing was run.'],
+    ['an id the read left something out for', 'NOBODY', [], true, 'hidden', 'That value does not give a widget this question can use. Nothing was run.'],
+  ])('answers a value of %s with the fixed refusal, runs nothing, reads once with a reference of each mapped type, and writes one refused event and no row', async (_name, value, source, omits, kind, sentence) => {
+    const { route, request, runs, lookups, events, rows } = await rig({ ...classifying(value), source, sourceOmits: omits, types: TYPES, ...NO_ANCHOR });
+    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'value-not-fit', intent: 'shared', sentence, valueNotFit: expect.objectContaining({ kind, needed: 'widget' }) }) });
+    expect(runs).toHaveLength(0);
+    expect(lookups).toEqual([[`widget/${value}`, `gadget/${value}`]]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ result: 'refused' });
+    expect(detailOf(events[0])).toMatchObject({ intent: 'shared', outcome: 'refused', cause: 'value-not-fit' });
+    expect(JSON.stringify(events)).not.toContain(value);
+    expect(rows).toEqual([]);
+  });
+
+  it('runs the intent as before for a value that is an element of the type its role needs', async () => {
+    const { route, request, runs, lookups } = await rig({ ...classifying('A-1'), source: ['widget/A-1'], types: TYPES });
+    expect(await route.handler(request(ASK))).toMatchObject({ answered: { intent: 'shared', entities: { id: 'A-1' } } });
+    expect(runs).toHaveLength(1);
+    expect(lookups).toHaveLength(1);
+  });
+
+  it('looks a file query intent up for nothing: no entity type is known for its values', async () => {
+    const { route, request, runs, lookups } = await rig({ classify: async () => ({ ok: true, intent: 'byId', entities: { id: 'K-1' } }), source: [], types: TYPES });
+    await route.handler(request(ASK));
+    expect(runs).toHaveLength(1);
+    expect(lookups).toEqual([]);
+  });
+
+  it('shows the refusal of no kind and runs the intent unchecked when the check is removed (the canary of the tests above)', async () => {
+    const { route, request, runs } = await rig({ ...classifying('K-1'), source: ['gadget/K-1'], types: TYPES, lookups: false, ...NO_ANCHOR });
+    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'nothing-found' }) });
     expect(runs).toHaveLength(1);
   });
 
-  it('runs an asked pattern for an anchor of another type than the pattern starts at, with no check, and answers nothing found', async () => {
-    const { route, request, runs } = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'K-1' }), ...NO_ANCHOR });
-    expect(await route.handler(request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'nothing-found' }) });
-    expect(runs[0]?.asked).toEqual({ templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'K-1' } } });
+  it('is asked of the gate masked as the question is and ends as any read does when it fails', async () => {
+    const masked = await rig({ ...classifying('K-1'), source: ['gadget/K-1'], types: TYPES });
+    await masked.route.handler(masked.request({ ...ASK, mask: true }));
+    expect(masked.lookups).toHaveLength(1);
+    const failing = await rig({ ...classifying('K-1'), types: TYPES });
+    await expect(failing.route.handler(failing.request(ASK, { readSourceElements: () => Promise.reject(new ExtensionRefusal({ code: 'SOURCE_BUSY' } as never)) }))).rejects.toBeInstanceOf(ExtensionRefusal);
+    expect(failing.runs).toHaveLength(0);
+  });
+
+  it('looks the anchor of an asked saved pattern up against the type the pattern starts at', async () => {
+    const other = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'K-1' }), source: ['gadget/K-1'], types: TYPES, ...NO_ANCHOR });
+    expect(await other.route.handler(other.request(ASK))).toEqual({ refused: expect.objectContaining({ cause: 'value-not-fit', valueNotFit: expect.objectContaining({ kind: 'other-type', needed: 'widget', found: 'gadget' }) }) });
+    expect(other.runs).toHaveLength(0);
+    const right = await rig({ patterns: [ASKED], ...asks({ pattern: 'pat_1', anchor: 'A-1' }), source: ['widget/A-1'], types: TYPES, run: () => ({ status: 'ok', result: savedResult() }) });
+    await right.route.handler(right.request(ASK));
+    expect(right.runs[0]?.asked).toEqual({ templateId: 'saved-pattern', params: { patternId: PATTERN_ASKED, patternVersion: 2, ref: { entityType: 'widget', stableId: 'A-1' } } });
+  });
+
+  it('does not look a Continue up again: it repeats a run that resolved', async () => {
+    const heavy = await rig({ source: ['widget/A-1'], types: TYPES, run: (continuing) => ({ status: 'ok', result: continuing ? okResult() : heavyResult() }) });
+    const first = (await heavy.route.handler(heavy.request(ASK))) as { answered: { continueToken: string } };
+    expect(heavy.lookups).toHaveLength(1);
+    await heavy.continueRoute.handler(heavy.request({ sourceId: SOURCE, intent: 'shared', entities: { id: 'A-1' }, continueToken: first.answered.continueToken }));
+    expect(heavy.lookups).toHaveLength(1);
   });
 });
