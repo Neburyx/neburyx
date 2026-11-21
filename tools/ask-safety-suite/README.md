@@ -16,62 +16,83 @@ Tests that the Ask design holds its safety rules, one hostile case at a time fro
 
 ## Named tests
 
-`src/named-tests.test.ts` fails if a test named here is not found in its file. The first column says what it proves; the files outside this folder are existing tests that the suite relies on.
+`src/named-tests.test.ts` fails if a test named here is not found in its file, if a row names a file that is gone, if a row has no kind of proof, and if one of the assistant's guarantees listed in the test has no row. The first column says what it proves; the second, which guarantee of the assistant it belongs to ("the Ask route" for the rows that are not about the assistant); the third, the one kind of proof: the real application (`POST /v1/assistant/turns` or Ask's route over the real gate), the `ee/ask` route rig, a single module, or a static check; a test that CI does not run (a `.neo4j.test.ts` or an integration file) must say "not in CI" in its kind. The files outside this folder are existing tests that the suite relies on.
 
-| What it proves | File | Test |
-|---|---|---|
-| A value reaches a file query only as a parameter, and the statement is the folder's own text | `src/parameters.test.ts` | own query text for a value that holds |
-| The same for a template that takes an ID | `src/parameters.test.ts` | sends the same statement of the entity template |
-| The same for a search | `src/parameters.test.ts` | in a search as a parameter of the search |
-| A hostile value stays a parameter through Continue, with no new model call | `src/parameters.test.ts` | keeps a hostile value a parameter through Continue |
-| A leaky query is caught | `src/parameters.test.ts` | canary: the check fails when a leaky executor |
-| An instruction typed into a question runs nothing | `src/injection.test.ts` | treats a question that holds |
-| A reply that fits runs once, with the entities only | `src/injection.test.ts` | runs a reply that fits and names an intent of the folder once |
-| A reply with an entity too many, too few or too long is refused as the reply reader or the binding refuses it | `src/injection.test.ts` | refuses a reply with |
-| A folder with a write, a call, LOAD CSV or a second statement is refused at start-up | `src/file-queries.test.ts` | refuses a start for %s, naming the file |
-| A parameter that is not declared is refused at start-up | `src/file-queries.test.ts` | refuses a start for a query that names a parameter |
-| A query forced past the loader is refused by the gate before any read | `src/file-queries.test.ts` | answers the gate |
-| The route checks its own folder and the gate its own | `src/file-queries.test.ts` | shows that the route checks |
-| A result of a type the mapping does not name is refused whole | `src/file-queries.test.ts` | refuses %s as file-query-result |
-| The read transaction refuses a write that passed every text check (Neo4j) | `src/file-query-transaction.neo4j.test.ts` | is refused by the explicit READ transaction on a login that can write |
-| The provider receives the instructions and the raw question, cached | `src/provider-input.test.ts` | is the instructions as the one cached system block |
-| The same with caching off | `src/provider-input.test.ts` | is one user message that joins the instructions |
-| A question with text that looks like an instruction is sent as typed | `src/provider-input.test.ts` | is the same body for a question that holds text |
-| No property value of a result reaches the provider, and the model is called once for each question | `src/provider-input.test.ts` | holds no property value in any request of any later question |
-| A question about what a type means is answered by the server from the operator's text, with one model call and no read of the source | `src/assistant-descriptions.test.ts` | answers a question about a described type with the operator |
-| A hostile type name in the router's reply is never shown and reads nothing | `src/assistant-descriptions.test.ts` | never shows a type name that is |
-| An `m` line holds the operator's text as a quoted string and no value of the graph, and an `m` key the model invents is dropped | `src/assistant-descriptions.test.ts` | holds the operator |
-| A reply that says a described type has no description is never shown | `src/assistant-descriptions.test.ts` | never shows a reply that says a described type has no description |
-| A table answer shows rows copied from the element each cites, and no cell, label or title reaches an event or a log line | `src/assistant-table.test.ts` | accepts a row of cells copied from the element it cites |
-| A hostile value in a cell drops its row and shows nothing of it | `src/assistant-table.test.ts` | drops a row whose cell is %s and shows nothing of it |
-| A hostile value as a column label refuses the table and shows nothing of it | `src/assistant-table.test.ts` | refuses a table whose column label is %s and shows nothing of it |
-| A cell that states a verdict refuses the table with the fixed sentence | `src/assistant-table.test.ts` | refuses a table with a cell that states a verdict |
-| A row with a number its element does not hold is dropped and the row that copies the element is kept | `src/assistant-table.test.ts` | drops a row with a number that the element it cites does not hold |
-| An invented key, or a key written in a cell, drops its row and keeps the good row | `src/assistant-table.test.ts` | drops a row that %s and keeps the good row |
-| The dropped-row check fails for a body that kept the bad row, as it would with the row check removed | `src/assistant-table.test.ts` | canary: the dropped-row check fails for a body that kept the bad row |
-| A leaky record of a table is caught | `src/assistant-table.test.ts` | canary: a check for a value in a record fails |
-| For a person with saved patterns the provider receives their own catalog and no id, version, anchor or other person's pattern | `src/provider-input.test.ts` | is the question, the fixed note and the catalog |
-| No id of a pattern is in any request | `src/provider-input.test.ts` | carries no id of any pattern |
-| A leaky provider input is caught | `src/provider-input.test.ts` | canary: a request that carries a property value |
-| No event, row, log line or problem response holds a value, the question or a label | `src/records.test.ts` | holds nothing of them after an answered question |
-| The same for a saved pattern's label and anchor | `src/records.test.ts` | label or anchor: not its run |
-| A leaky sink is caught | `src/records.test.ts` | canary: a sink that adds a sentinel |
-| Nothing is redacted or withheld in the request path | `src/records.test.ts` | sends the model the question exactly as typed |
-| Masking applies to the result nodes only: the model and the source receive the same | `src/records.test.ts` | masks the personal property of the result nodes |
-| The checks fail on a leaky input | `src/checks.test.ts` | canary: fails a statement with a value built into its text |
-| A request for a tool that is not offered, with query text, or that does not fit, ends the turn after one repeat and the source sees the first read only | `src/assistant-loop.test.ts` | ends the turn as the unplaced refusal after the one repeat for |
-| An instruction in a tool result runs no tool outside the registry | `src/assistant-loop.test.ts` | reaches the model only as a masked line of the results |
-| A value of a tool request reaches the source only as a parameter of the stored statement | `src/assistant-loop.test.ts` | runs the stored statement of a file query with |
-| A built-in template for an entity type the mapping does not know reads nothing | `src/assistant-loop.test.ts` | refuses a built-in template for an entity type that is |
-| The rig of the loop reads when a request is a good one | `src/assistant-loop.test.ts` | runs a built-in template with an anchor of the source |
-| A sentence of the person's notes that holds an instruction runs nothing, and no note is written | `src/assistant-tools.test.ts` | reaches the model only as a line of the results |
-| Another person's notes never reach the model | `src/assistant-tools.test.ts` | never reaches the model from another person |
-| A reply that cites a key the application tools did not return is dropped | `src/assistant-tools.test.ts` | drops a reply that cites a key the application tools did not return |
-| A sentence of an AI case summary drafted in the turn that holds an instruction runs nothing | `src/assistant-tools.test.ts` | is data for the model; the tool it names is refused |
-| An amount a reply states that no cited line holds is dropped (the check fails a sentence that holds it) | `src/assistant-tools.test.ts` | drops a sentence that states a planted amount for an element the result lists |
-| No sentence of an answer holds a planted text (the check fails one that does) | `src/checks.test.ts` | canary: fails a sentence that holds the planted text |
-| A turn writes no AI notes (the check fails a changed draft) | `src/checks.test.ts` | canary: fails a new version, an added entry, and a draft that is gone |
-| A read that no tool names is caught | `src/checks.test.ts` | canary: fails a read no tool names |
-| A case that never ran cannot pass | `src/rig.test.ts` | counts what a case expects |
-| The settings that withheld a property from the model are refused as unknown keys of the mapping file | `../../services/api/src/mapping/ai.test.ts` | refuses %s as a key the section does not have |
-| The loader names the intent and never the text of a bad query | `../../ee/ask/src/folder/load.test.ts` | naming the intent and not the text |
+| What it proves | Guarantee | Kind | File | Test |
+|---|---|---|---|---|
+| A value reaches a file query only as a parameter, and the statement is the folder's own text | the Ask route | real application | `src/parameters.test.ts` | own query text for a value that holds |
+| The same for a template that takes an ID | the Ask route | real application | `src/parameters.test.ts` | sends the same statement of the entity template |
+| The same for a search | the Ask route | real application | `src/parameters.test.ts` | in a search as a parameter of the search |
+| A hostile value stays a parameter through Continue, with no new model call | the Ask route | real application | `src/parameters.test.ts` | keeps a hostile value a parameter through Continue |
+| A leaky query is caught | the Ask route | real application | `src/parameters.test.ts` | canary: the check fails when a leaky executor |
+| An instruction typed into a question runs nothing | the Ask route | real application | `src/injection.test.ts` | treats a question that holds |
+| A reply that fits runs once, with the entities only | the Ask route | real application | `src/injection.test.ts` | runs a reply that fits and names an intent of the folder once |
+| A reply with an entity too many, too few or too long is refused as the reply reader or the binding refuses it | the Ask route | real application | `src/injection.test.ts` | refuses a reply with |
+| A folder with a write, a call, LOAD CSV or a second statement is refused at start-up | the Ask route | real application | `src/file-queries.test.ts` | refuses a start for %s, naming the file |
+| A parameter that is not declared is refused at start-up | the Ask route | real application | `src/file-queries.test.ts` | refuses a start for a query that names a parameter |
+| A query forced past the loader is refused by the gate before any read | the Ask route | real application | `src/file-queries.test.ts` | answers the gate |
+| The route checks its own folder and the gate its own | the Ask route | real application | `src/file-queries.test.ts` | shows that the route checks |
+| A result of a type the mapping does not name is refused whole | the Ask route | real application | `src/file-queries.test.ts` | refuses %s as file-query-result |
+| The read transaction refuses a write that passed every text check (Neo4j) | the Ask route | real application, not in CI | `src/file-query-transaction.neo4j.test.ts` | is refused by the explicit READ transaction on a login that can write |
+| The provider receives the instructions and the raw question, cached | the Ask route | real application | `src/provider-input.test.ts` | is the instructions as the one cached system block |
+| The same with caching off | the Ask route | real application | `src/provider-input.test.ts` | is one user message that joins the instructions |
+| A question with text that looks like an instruction is sent as typed | the Ask route | real application | `src/provider-input.test.ts` | is the same body for a question that holds text |
+| No property value of a result reaches the provider, and the model is called once for each question | the Ask route | real application | `src/provider-input.test.ts` | holds no property value in any request of any later question |
+| A question about what a type means is answered by the server from the operator's text, with one model call and no read of the source | text that holds an instruction runs nothing | real application | `src/assistant-descriptions.test.ts` | answers a question about a described type with the operator |
+| A hostile type name in the router's reply is never shown and reads nothing | text that holds an instruction runs nothing | real application | `src/assistant-descriptions.test.ts` | never shows a type name that is |
+| An `m` line holds the operator's text as a quoted string and no value of the graph, and an `m` key the model invents is dropped | text that holds an instruction runs nothing | real application | `src/assistant-descriptions.test.ts` | holds the operator |
+| A reply that says a described type has no description is never shown | text that holds an instruction runs nothing | real application | `src/assistant-descriptions.test.ts` | never shows a reply that says a described type has no description |
+| A table answer shows rows copied from the element each cites, and no cell, label or title reaches an event or a log line | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | accepts a row of cells copied from the element it cites |
+| A hostile value in a cell drops its row and shows nothing of it | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | drops a row whose cell is %s and shows nothing of it |
+| A hostile value as a column label refuses the table and shows nothing of it | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | refuses a table whose column label is %s and shows nothing of it |
+| A cell that states a verdict refuses the table with the fixed sentence | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | refuses a table with a cell that states a verdict |
+| A row with a number its element does not hold is dropped and the row that copies the element is kept | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | drops a row with a number that the element it cites does not hold |
+| An invented key, or a key written in a cell, drops its row and keeps the good row | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | drops a row that %s and keeps the good row |
+| The dropped-row check fails for a body that kept the bad row, as it would with the row check removed | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | canary: the dropped-row check fails for a body that kept the bad row |
+| A leaky record of a table is caught | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-table.test.ts` | canary: a check for a value in a record fails |
+| For a person with saved patterns the provider receives their own catalog and no id, version, anchor or other person's pattern | the Ask route | real application | `src/provider-input.test.ts` | is the question, the fixed note and the catalog |
+| No id of a pattern is in any request | the Ask route | real application | `src/provider-input.test.ts` | carries no id of any pattern |
+| A leaky provider input is caught | the Ask route | real application | `src/provider-input.test.ts` | canary: a request that carries a property value |
+| No event, row, log line or problem response holds a value, the question or a label | the Ask route | real application | `src/records.test.ts` | holds nothing of them after an answered question |
+| The same for a saved pattern's label and anchor | the Ask route | real application | `src/records.test.ts` | label or anchor: not its run |
+| A leaky sink is caught | the Ask route | real application | `src/records.test.ts` | canary: a sink that adds a sentinel |
+| Nothing is redacted or withheld in the request path | the Ask route | real application | `src/records.test.ts` | sends the model the question exactly as typed |
+| Masking applies to the result nodes only: the model and the source receive the same | the Ask route | real application | `src/records.test.ts` | masks the personal property of the result nodes |
+| The checks fail on a leaky input | the Ask route | single module | `src/checks.test.ts` | canary: fails a statement with a value built into its text |
+| A request for a tool that is not offered, with query text, or that does not fit, ends the turn after one repeat and the source sees the first read only | a route reads only through the gate and only what a registered tool names | real application | `src/assistant-loop.test.ts` | ends the turn as the unplaced refusal after the one repeat for |
+| An instruction in a tool result runs no tool outside the registry | text that holds an instruction runs nothing | real application | `src/assistant-loop.test.ts` | reaches the model only as a masked line of the results |
+| A value of a tool request reaches the source only as a parameter of the stored statement | a route reads only through the gate and only what a registered tool names | real application | `src/assistant-loop.test.ts` | runs the stored statement of a file query with |
+| A built-in template for an entity type the mapping does not know reads nothing | a route reads only through the gate and only what a registered tool names | real application | `src/assistant-loop.test.ts` | refuses a built-in template for an entity type that is |
+| The rig of the loop reads when a request is a good one | a route reads only through the gate and only what a registered tool names | real application | `src/assistant-loop.test.ts` | runs a built-in template with an anchor of the source |
+| A sentence of the person's notes that holds an instruction runs nothing, and no note is written | text that holds an instruction runs nothing | real application | `src/assistant-tools.test.ts` | reaches the model only as a line of the results |
+| Another person's notes never reach the model | text that holds an instruction runs nothing | real application | `src/assistant-tools.test.ts` | never reaches the model from another person |
+| A reply that cites a key the application tools did not return is dropped | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-tools.test.ts` | drops a reply that cites a key the application tools did not return |
+| A sentence of an AI case summary drafted in the turn that holds an instruction runs nothing | text that holds an instruction runs nothing | real application | `src/assistant-tools.test.ts` | is data for the model; the tool it names is refused |
+| An amount a reply states that no cited line holds is dropped (the check fails a sentence that holds it) | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `src/assistant-tools.test.ts` | drops a sentence that states a planted amount for an element the result lists |
+| No sentence of an answer holds a planted text (the check fails one that does) | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | single module | `src/checks.test.ts` | canary: fails a sentence that holds the planted text |
+| A turn writes no AI notes (the check fails a changed draft) | text that holds an instruction runs nothing | single module | `src/checks.test.ts` | canary: fails a new version, an added entry, and a draft that is gone |
+| A read that no tool names is caught | a route reads only through the gate and only what a registered tool names | single module | `src/checks.test.ts` | canary: fails a read no tool names |
+| A case that never ran cannot pass | the Ask route | single module | `src/rig.test.ts` | counts what a case expects |
+| The settings that withheld a property from the model are refused as unknown keys of the mapping file | the Ask route | single module | `../../services/api/src/mapping/ai.test.ts` | refuses %s as a key the section does not have |
+| The loader names the intent and never the text of a bad query | the Ask route | single module | `../../ee/ask/src/folder/load.test.ts` | naming the intent and not the text |
+| A follow-up runs the intent for the element an earlier turn ran for, named by a key the router was shown | a follow-up resolves only to an element the application gave, or asks | route rig | `../../ee/ask/src/assistant/follow-up.test.ts` | runs the intent for the element the earlier turn ran for |
+| A key that names nothing gives a clarification, and the gate sees only reads of elements | a follow-up resolves only to an element the application gave, or asks | real application | `../../services/api/src/profile/ee-assistant.test.ts` | asks which element is meant for a key that names nothing |
+| A choice token is never a continue token or a plan | a follow-up resolves only to an element the application gave, or asks | single module | `../../ee/ask/src/assistant/plan-token.test.ts` | is never valid as a choice token or a continue token |
+| A turn never runs more reads or calls than the settings allow | a turn stops at each of its limits | route rig | `../../ee/ask/src/assistant/limits.test.ts` | never lets a turn run more reads, make more model calls |
+| Each limit has its fixed sentence | a turn stops at each of its limits | single module | `../../ee/ask/src/assistant/tool-loop.test.ts` | has the fixed sentence of the |
+| A turn whose steps are spent answers over what was read | a turn stops at each of its limits | real application | `../../services/api/src/profile/ee-assistant.test.ts` | answers over what was read when the steps of the turn are spent |
+| A confirmation never lifts a limit | a turn stops at each of its limits | real application | `src/assistant-confirmation.test.ts` | never lifts a limit |
+| Each refusal has its fixed sentence, reads nothing and makes one model call | a refusal of a verdict, raw query text or another source runs nothing | real application | `../../services/api/src/profile/ee-assistant.test.ts` | refusal with its fixed sentence |
+| Raw Cypher, another source and "just run it" are refused without running anything | a refusal of a verdict, raw query text or another source runs nothing | route rig | `../../ee/ask/src/assistant/turn-route.test.ts` | refuses messages that ask for raw Cypher, another source or to just run it |
+| No registered tool writes | a route reads only through the gate and only what a registered tool names | single module | `../../ee/ask/src/assistant/tool-registry.test.ts` | has no tool that writes |
+| The assistant code imports no driver and no path into the application | a route reads only through the gate and only what a registered tool names | static check | `../workspace-checks/src/architecture/ai-imports.test.ts` | passes on the real tree |
+| A cancel aborts the read and closes the turn once as cancelled | a cancel stops the model call, the reads and the turn | real application | `../cancellation-suite/src/assistant.test.ts` | aborts the read of the step |
+| A closed stream starts no read | a cancel stops the model call, the reads and the turn | real application | `../cancellation-suite/src/assistant-stream.test.ts` | starts no read when the stream is closed |
+| A sentence that cites no key, or a key no read returned, is dropped | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | single module | `../../ee/ask/src/assistant/tool-answer.test.ts` | drops a sentence that cites no key |
+| A number the cited lines do not hold is dropped | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | single module | `../../ee/ask/src/assistant/tool-answer.test.ts` | drops a number that is not in the lines it cites |
+| A reply with verdict wording is rejected whole | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | single module | `../../ee/ask/src/assistant/tool-answer.test.ts` | rejects a reply with verdict wording |
+| The overview beside a verdict refusal: its checks are shown to be able to fail | a reply cites what it was given, states no number its lines do not hold and holds no verdict word | real application | `../summary-suite/src/overview.test.ts` | canary: with the verdict test taken out |
+| An answered turn writes one closing event with the route, intent and template | every turn is audited once whatever its ending | route rig | `../../ee/ask/src/assistant/turn-audit.test.ts` | holds the route, the intent, the template |
+| Every ending of a turn writes the closing event once | every turn is audited once whatever its ending | real application | `../../services/api/src/profile/ee-assistant.test.ts` | is written once for the |
+| No step event holds model text | a streamed turn carries no model text | route rig | `../../ee/ask/src/assistant/step-events.test.ts` | puts nothing a model wrote in any event |
+| Real assistant turns leave the manual work its margin | AI reads leave manual exploration its share | real application | `../concurrency-suite/src/ai-load.test.ts` | stays within the recorded margin of its time alone with a third of the AI requests real assistant turns |
