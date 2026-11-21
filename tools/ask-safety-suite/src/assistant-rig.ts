@@ -16,6 +16,12 @@ export interface AssistantRigOptions {
   readonly descriptions?: Readonly<Record<string, string>>;
   /** Turns the AI case summary on. */
   readonly summary?: boolean;
+  /** The person each request is made by; a function so a test can change the person between requests. */
+  readonly principalId?: () => string;
+  /** The clock of the extension, which a token's lifetime is read from. */
+  readonly now?: () => number;
+  /** Keeps the person's thread, so a follow-up has earlier turns. */
+  readonly threads?: boolean;
 }
 
 
@@ -27,6 +33,14 @@ export interface AssistantRig {
   readonly logs: string[];
   /** The reads that reached the source, without the schema reads of its start. */
   reads(): ExecuteCall[];
+  /** The investigation the turns are made in. */
+  readonly investigationId: string;
+  /** Opens another investigation of the same person on the same source. */
+  openInvestigation(): Promise<string>;
+  /** A request of any form, as given: a choice, a continue or a decision carries no message. */
+  post(payload: Record<string, unknown>): Promise<{ readonly status: number; readonly body: Record<string, unknown> }>;
+  /** Waits until the thread holds this many turns. */
+  threadWritten(count: number): Promise<void>;
   /** One turn: the replies the model gives in order (the router's, then each step's, then the answer's), then the message. */
   turn(message: string, replies: readonly string[], over?: Record<string, unknown>): Promise<{ readonly status: number; readonly body: Record<string, unknown> }>;
   close(): Promise<void>;
@@ -36,13 +50,17 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
   return {
     stub,
     store: app.store,
     events: app.events,
     logs: app.logs,
     reads: app.reads,
+    investigationId: app.investigationId,
+    openInvestigation: app.openInvestigation,
+    post: app.post,
+    threadWritten: app.threadWritten,
     turn: (message, replies, over) => {
       stub.replies.push(...replies);
       return app.turn(message, over);

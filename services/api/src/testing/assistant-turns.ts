@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AuditEvent } from '@neburyx/contracts';
+import type { AuditEvent, RecordJob } from '@neburyx/contracts';
 import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryAssistantPendingStore, createMemoryAssistantThreadStore } from '@neburyx/ee-ask';
+import { createEventQueue } from '../audit/queue.js';
 import { fileQueryDepsOf } from '../gate/file-query.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { makeAskFolder } from './ask-folder.js';
@@ -99,6 +100,12 @@ export interface AssistantAppOptions {
   readonly settings?: Readonly<Record<string, string>>;
   /** A description for a type of the source's mapping, by the name of the type. */
   readonly descriptions?: Readonly<Record<string, string>>;
+  /** The person each request is made by: a second person is a function that answers another id. */
+  readonly principalId?: () => string;
+  /** The clock of the extension (the lifetime of a choice or follow-up token is read from it). */
+  readonly now?: () => number;
+  /** Keeps the person's thread: the memory store of the thread and the queue that writes each turn's record to it, which a follow-up of an earlier turn needs. */
+  readonly threads?: boolean;
 }
 
 const INTENTS = {
@@ -119,7 +126,9 @@ export type AssistantApp = Awaited<ReturnType<typeof startAssistantApp>>;
 
 /** The real application with the real enterprise extension and the assistant on (its tool loop from two steps), over a model service the test gives and the real gate over a scripted source. */
 export async function startAssistantApp(options: AssistantAppOptions) {
-  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
+  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
+  const records = options.threads === true ? createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => job.write() } }], idFields: (job) => job.ids, settings: { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: () => undefined } }) : undefined;
+  if (records !== undefined) extension.attachRecordQueue?.({ enqueue: (job) => void records.sink.record(job) });
   const env = {
     NEBURYX_ASK_API_KEY: 'not-a-real-key',
     NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS),
@@ -132,12 +141,12 @@ export async function startAssistantApp(options: AssistantAppOptions) {
   };
   const configured = await extension.configure?.({}, env, { sourceIds: ['demo'], features: { ask: false, summary: options.summary === true, assistant: true } });
   if (configured?.ok !== true) throw new Error(`the extension was not configured: ${JSON.stringify(configured)}`);
-  const sinkOpened = options.stores === true ? extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined }) : undefined;
+  const sinkOpened = options.stores === true || options.threads === true ? extension.createAuditSink?.({ databaseUrl: 'postgres://app@db.example.test:5432/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => randomUUID(), onConnectionError: () => undefined }) : undefined;
   const modelEvents: AuditEvent[] = [];
   extension.attachAudit?.({ record: (event) => (modelEvents.push(event), Promise.resolve()) });
   const logs: string[] = [];
   const armed = { open: false };
-  const rig = await startExportRig({ extension, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
+  const rig = await startExportRig({ extension, ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() ?? '' }) }), ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], previewOn: true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? options.respond?.(call) : undefined) });
   const investigation = await rig.open();
   armed.open = true;
   const body = (message: string, over: Record<string, unknown> = {}) => ({ sourceId: 'demo', investigationId: investigation.id, message, viewElementKeys: [], ...over });
@@ -155,6 +164,20 @@ export async function startAssistantApp(options: AssistantAppOptions) {
     turn: async (message: string, over: Record<string, unknown> = {}) => {
       const response = await rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload: body(message, over) });
       return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+    },
+    /** The investigation the turns are made in. */
+    investigationId: investigation.id,
+    /** Opens another investigation of the same person on the same source. */
+    openInvestigation: async (): Promise<string> => (await rig.open()).id,
+    /** A request of any form to the turn route, as given (a choice, a continue or a decision has no message). */
+    post: async (payload: Record<string, unknown>) => {
+      const response = await rig.app.inject({ method: 'POST', url: '/v1/assistant/turns', payload });
+      return { status: response.statusCode, body: response.json() as Record<string, unknown> };
+    },
+    /** Waits until the thread holds `count` turns written by the queue of the records. */
+    threadWritten: async (count: number): Promise<void> => {
+      for (let wait = 0; wait < 200 && (records?.counts().written ?? 0) < count; wait += 1) await new Promise((resolve) => setTimeout(resolve, 10));
+      if ((records?.counts().written ?? 0) < count) throw new Error(`the thread holds ${records?.counts().written ?? 0} records, not ${count}`);
     },
     /** One turn over the real connection, which the caller may abort. */
     sendTurn: async (message: string, signal: AbortSignal, over: Record<string, unknown> = {}, headers: Record<string, string> = {}) => {
