@@ -50,6 +50,7 @@ import { ATTACHED_SUMMARY_LINE, openAttachment, type SummaryAttachment } from '.
 import type { TokenKeys } from '../case-summary/token-keys.js';
 import type { AssistantThreadStore } from './thread-store.js';
 import type { AssistantSettings } from './settings.js';
+import { verdictRefusal } from './verdict-overview.js';
 import { noteResumes, noteStep, noteTurn, noteTurnStarted, readTurnContext, withTurnAudit } from './turn-audit.js';
 import { auditConfirmation, openDecision, waitingAnswer, type WaitContext } from './confirmation.js';
 import type { AssistantPendingStore } from './pending-store.js';
@@ -72,6 +73,8 @@ export interface TurnRouteOptions {
   readonly turnDeadline?: (totalMs: number) => AbortSignal;
   /** Answers from the elements in view; without it the view route gives the fixed sentence. */
   readonly viewAnswer?: () => ((input: ViewInput) => Promise<ViewOutcome>) | undefined;
+  /** The view's own path under the overview's prompt: what a refusal of a verdict shows beside its fixed sentence. Absent, the refusal stands alone. */
+  readonly overview?: () => ((input: ViewInput) => Promise<ViewOutcome>) | undefined;
   /** Whether the view call may answer with a tool request, which goes on in the loop from the view's reading; absent or false, the view call has its two reply forms. */
   readonly viewTools?: () => boolean;
   /** The loop after an `ask` run: the model may ask for another registered read. Without it, an `ask` turn is its one read, as before the loop. */
@@ -491,7 +494,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           return refused('unplaced');
         case 'routed': {
           const { reply } = outcome;
-          if (reply.route === 'refuse') return refused(reply.cause);
+          if (reply.route === 'refuse') return reply.cause === 'verdict' ? verdictRefusal({ overview: options.overview?.(), request, body, readElements, deadline, startedAt, callsUsed: outcome.calls }) : refused(reply.cause);
           if (reply.route === 'meaning') {
             // the names are matched by the server, which writes the answer; a name that matches no type is a question for the view
             // the same roles may ask as for the view route, whichever way the question is routed

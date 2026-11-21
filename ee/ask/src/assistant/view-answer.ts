@@ -33,8 +33,16 @@ interface ViewAnswerSettings {
   readonly timeoutMs: number;
 }
 
+/** The prompt an answer from the view is sent under, when it is not the view's own: the overview beside a verdict refusal is one. */
+interface ViewPrompt {
+  readonly id: string;
+  readonly version: number;
+  readonly action: string;
+}
+
 export interface ViewAnswerOptions {
   readonly model: AuditedModelCall;
+  readonly prompt?: ViewPrompt;
   readonly instructions: () => ViewInstructions | undefined;
   readonly checks: CheckRunner;
   readonly settings: () => ViewAnswerSettings | undefined;
@@ -81,6 +89,8 @@ export interface ViewInput {
   readonly contextTypes?: readonly string[];
   /** Told when the call that writes the answer is about to be made, so a streamed turn can say so. */
   readonly onAnswering?: () => void;
+  /** Told when the elements are about to be read, which is after every check that needs no read. */
+  readonly onReading?: () => void;
 }
 
 type StoppedBecause = 'deadline' | 'input' | 'calls';
@@ -182,6 +192,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const outcome = (rest: ViewResult): ViewOutcome => ({ ...rest, calls: progress.calls, read: progress.read, readStarted: progress.readStarted, ...(counts === undefined ? {} : { summary: counts }) });
     const instructions = options.instructions();
     const settings = options.settings();
+    const promptId = options.prompt?.id ?? VIEW_PROMPT_ID;
+    const auditAction = options.prompt?.action ?? VIEW_AUDIT_ACTION;
     if (instructions === undefined || settings === undefined) return outcome({ status: 'failed', kind: 'service' });
     const keys = readViewKeys(input.viewElementKeys, input.sourceId);
     if (!keys.ok) return outcome({ status: 'invalid-keys' });
@@ -193,11 +205,14 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const remaining = input.startedAt + settings.totalTimeoutMs - now();
     if (remaining <= 0 || input.deadline.aborted) return outcome({ status: 'stopped', because: 'deadline' });
     if (input.signal.aborted) return outcome({ status: 'cancelled' });
+    // an answer under a prompt of its own (the overview beside a refusal) reads nothing when it has no call to make
+    if (options.prompt !== undefined && settings.maxCalls - input.callsUsed < 1) return outcome({ status: 'stopped', because: 'calls' });
     const turnSignal = AbortSignal.any([input.signal, input.deadline]);
     const ended = (): ViewOutcome | undefined => (input.signal.aborted ? outcome({ status: 'cancelled' }) : input.deadline.aborted ? outcome({ status: 'stopped', because: 'deadline' }) : undefined);
     let viewReading: SummaryReading;
     let reading: SummaryReading;
     progress.readStarted = true;
+    input.onReading?.();
     try {
       const scope = { investigationId: input.investigationId, sourceId: input.sourceId, mask: input.mask, signal: turnSignal };
       viewReading = await until(input.readElements(scope, keys.refs), turnSignal);
@@ -219,7 +234,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const inView = new Set([...keys.refs.entities, ...keys.refs.edges, ...keys.refs.aggregates, ...keys.refs.derived].map((ref) => canonicalText(ref)));
     const { tools } = input;
     const sent = tools === undefined ? instructions : buildViewToolInstructions(instructions, tools);
-    const promptVersion = tools === undefined ? VIEW_PROMPT_VERSION : VIEW_TOOLS_PROMPT_VERSION;
+    const promptVersion = options.prompt?.version ?? (tools === undefined ? VIEW_PROMPT_VERSION : VIEW_TOOLS_PROMPT_VERSION);
     const prepared = prepareSummary(reading, sent.text + section, settings.maxInputTokens);
     if (!prepared.ready) return outcome({ status: 'stopped', because: 'input' });
     const { assembled } = prepared;
@@ -238,10 +253,10 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     try {
       drafted = await draftSummary({
         call: options.model,
-        context: { action: VIEW_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
+        context: { action: auditAction, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, ...auditInvestigationOf(input.investigationId), sourceId: input.sourceId },
         instructions: sent.text,
         values: valuesOf(input.message, assembled.text + typeLines.section, section + (input.form === 'table' ? TABLE_NOTE : '')),
-        prompt: { id: VIEW_PROMPT_ID, version: promptVersion },
+        prompt: { id: promptId, version: promptVersion },
         alternative: (text: string) => (tools !== undefined && readToolRequest(text, tools).ok) || noDescriptionReplyOf(text, typeLines) !== undefined,
         noDescription: (names: readonly string[]) => {
           const found = undescribedNamesOf(names, typeLines);
@@ -309,7 +324,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         now,
         onCall: (calls) => void (progress.calls = calls),
         trace: (call) => {
-          const record = startModelCall({ modelRef: options.model.modelRef, promptId: VIEW_PROMPT_ID, promptVersion, instructionsSha256: sent.sha256, instructions: call.instructions, values: call.values });
+          const record = startModelCall({ modelRef: options.model.modelRef, promptId, promptVersion, instructionsSha256: sent.sha256, instructions: call.instructions, values: call.values });
           return {
             ...(record.runId === undefined ? {} : { runId: record.runId }),
             received: (answer) => {

@@ -36,6 +36,8 @@ import { createViewAnswer } from './assistant/view-answer.js';
 import { createToolLoop } from './assistant/tool-loop.js';
 import { createToolAnswer } from './assistant/tool-answer.js';
 import { loadViewInstructions, type ViewInstructions } from './assistant/view-instructions.js';
+import { loadOverviewInstructions, type OverviewInstructions } from './assistant/overview-instructions.js';
+import { OVERVIEW_AUDIT_ACTION, OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION } from './assistant/verdict-overview.js';
 import { createAssistantTurnRoute } from './assistant/turn-route.js';
 import { withheldDescriptionWarnings } from './assistant/description-warnings.js';
 
@@ -147,6 +149,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   let sourceBudgets: ConfigureContext['budgets'];
   let assistantInstructions: AssistantInstructions | undefined;
   let viewInstructions: ViewInstructions | undefined;
+  let overviewInstructions: OverviewInstructions | undefined;
   let typologyLines: readonly string[] = [];
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
@@ -179,6 +182,12 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     const settings = assistantSettings;
     return !features.assistant || model === undefined || settings === undefined || viewInstructions === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
   };
+  /** The view's own path under the overview's prompt, for what a refusal of a verdict shows beside its fixed sentence. */
+  const assistantOverview = (): ReturnType<typeof createViewAnswer> | undefined => {
+    const model = assistantModelOf();
+    const settings = assistantSettings;
+    return !features.assistant || model === undefined || settings === undefined || overviewInstructions === undefined ? undefined : createViewAnswer({ model, prompt: { id: OVERVIEW_PROMPT_ID, version: OVERVIEW_PROMPT_VERSION, action: OVERVIEW_AUDIT_ACTION }, instructions: () => overviewInstructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
+  };
   const assistantRouter = (): ReturnType<typeof createAssistantRouter> | undefined => {
     const model = assistantModelOf();
     const settings = assistantSettings;
@@ -194,7 +203,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       }, answer: createToolAnswer({ model, instructions: () => viewInstructions, checks, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, ...(options.now === undefined ? {} : { now: options.now }) }) });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, toolLoop: assistantToolLoop, viewTools: () => (assistantSettings?.maxSteps ?? 1) >= 2, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: () => typologyLines, notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, toolLoop: assistantToolLoop, viewTools: () => (assistantSettings?.maxSteps ?? 1) >= 2, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: () => typologyLines, notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -224,11 +233,13 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       assistantSettings = undefined;
       assistantInstructions = undefined;
       viewInstructions = undefined;
+      overviewInstructions = undefined;
       typologyLines = [];
       const assistant = features.assistant ? readAssistantSettings(env) : undefined;
       const assistantPrompt = features.assistant ? await loadAssistantInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
       const viewPrompt = features.assistant ? await loadViewInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
-      const assistantProblems = [...(assistant?.ok === false ? assistant.problems : []), ...(assistantPrompt?.ok === false ? assistantPrompt.problems : []), ...(viewPrompt?.ok === false ? viewPrompt.problems : [])];
+      const overviewPrompt = features.assistant ? await loadOverviewInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
+      const assistantProblems = [...(assistant?.ok === false ? assistant.problems : []), ...(assistantPrompt?.ok === false ? assistantPrompt.problems : []), ...(viewPrompt?.ok === false ? viewPrompt.problems : []), ...(overviewPrompt?.ok === false ? overviewPrompt.problems : [])];
       if (assistantProblems.length > 0) return { ok: false, problems: assistantProblems };
       if (providerConfigured === undefined) return { ok: true };
       configuration = askConfigured?.configuration;
@@ -269,6 +280,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       assistantSettings = assistant?.ok === true ? assistant.settings : undefined;
       assistantInstructions = assistantPrompt?.ok === true ? assistantPrompt.instructions : undefined;
       viewInstructions = viewPrompt?.ok === true ? viewPrompt.instructions : undefined;
+      overviewInstructions = overviewPrompt?.ok === true ? overviewPrompt.instructions : undefined;
       typologyLines = viewPrompt?.ok === true ? viewPrompt.typology : [];
       folder = loadedFolder;
       instructions = readInstructions;
