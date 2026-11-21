@@ -208,6 +208,9 @@ async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting
       return resumed || outcome.steps > 1 || outcome.stoppedAt !== undefined ? answeredAsk({ answered: outcome.answer }, outcome.reads, outcome.stoppedAt) : undefined;
     case 'waiting':
       return onWaiting(outcome);
+    case 'misfit':
+      // the refusal of a value that does not fit, with the reads the earlier steps made: no limit, and no answer of those steps
+      return { status: 'answered', route: 'ask', answer: { refused: outcome.refused }, ...(outcome.reads.length === 0 ? {} : { reads: [...outcome.reads] }) };
     case 'limit':
       return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit], reads: [...outcome.reads] };
     case 'sentences':
@@ -331,9 +334,6 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     }
     const binding = { principalId: request.principalId, sourceId: body.sourceId, investigationId: body.investigationId, intent: choice.intent, definition: definitionOf(found), roles: choice.roles, entities: choice.entities, mask: body.mask === true };
     if (!verifyChoiceToken(capabilitiesOf(request).signText, choice.choiceToken, binding, (options.now ?? Date.now)())) return invalid;
-    // the values the person wrote for the other roles were sealed with the choice, and are checked as any written value is before anything runs
-    const unfit = await writtenValuesRefusal(request, body, choice.intent, Object.fromEntries(Object.entries(choice.entities).filter(([role]) => !choice.roles.includes(role))), signal, deadline);
-    if (unfit !== undefined) return unfit;
     let reading;
     try {
       reading = await readElements({ investigationId: body.investigationId, sourceId: body.sourceId, mask: body.mask === true, signal }, { entities: wanted, edges: [], aggregates: [], derived: [] });
@@ -344,7 +344,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       return unavailable;
     }
     if (!wanted.every((ref) => reading.nodes.some((node) => node.ref.entityType === ref.entityType && node.ref.stableId === ref.stableId))) return invalid;
-    return runAndAnswer({ request, capabilities: capabilitiesOf(request), options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: choice.intent, entities: choice.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId }, followUpsFor(request, body));
+    return runAndAnswer({ request, capabilities: capabilitiesOf(request), options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: choice.intent, entities: choice.entities, keyedRoles: choice.roles, continuing: false, action: ASK_ACTION, investigationId: body.investigationId }, followUpsFor(request, body));
   }
   /** The continue of a heavy stop finds a catalog template that a tool step of the loop ran, which the router's own `ask` reply never does. */
   const continueOptions = { ...runOptions, folder: () => withTemplateTools(options.folder()) };
@@ -594,9 +594,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           }
           const intentOfReply = options.folder()?.intent(body.sourceId, reply.intent);
           const resolved = entitiesOfReply(reply, routed, (role) => (intentOfReply === undefined ? undefined : roleEntityType(intentOfReply, role)));
-          const unfit = await writtenValuesRefusal(request, body, reply.intent, reply.entities, AbortSignal.any([request.signal, deadline]), deadline);
-          if (unfit !== undefined) return unfit;
           if (resolved.unheld !== undefined) {
+            // a clarification is offered only for values that fit: the written ones are looked up first (a run that goes on is looked up where it is bound)
+            const unfit = await writtenValuesRefusal(request, body, reply.intent, reply.entities, AbortSignal.any([request.signal, deadline]), deadline);
+            if (unfit !== undefined) return unfit;
             try {
               return await clarifyUnheld(request, reply, resolved.unheld, resolved.entities, routed, body, readElements, AbortSignal.any([request.signal, deadline]));
             } catch (error) {
@@ -606,7 +607,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
               return unavailable;
             }
           }
-          const execution: Execution = { request, capabilities, options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: reply.intent, entities: resolved.entities, continuing: false, action: ASK_ACTION, investigationId: body.investigationId, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
+          const execution: Execution = { request, capabilities, options: runOptions, sourceId: body.sourceId, mask: body.mask === true, intent: reply.intent, entities: resolved.entities, keyedRoles: Object.keys(reply.elements ?? {}), continuing: false, action: ASK_ACTION, investigationId: body.investigationId, ...(built === undefined || listing === undefined ? {} : { patterns: { built, listing } }) };
           const loop = options.toolLoop?.();
           const after =
             loop === undefined

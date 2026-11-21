@@ -15,7 +15,7 @@ const DONE = '{"done":true}';
 vi.mock('@neburyx/ee-audit', async () => (await import('./mock-audit.js')).auditMock);
 
 let stub: ModelStub;
-/** The reads the source sees for the first read of a turn alone (the model says it is done after it). */
+/** The reads the source sees for the first read of a turn alone (the model says it is done after it): the lookup of the value the router wrote, and the read. */
 let firstRead = 0;
 beforeAll(async () => {
   stub = await startModelStub();
@@ -38,7 +38,7 @@ function expectEndedAfterOneRead(rig: AssistantRig, answer: { status: number; bo
   expect(answer.status).toBe(200);
   expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
   expect(rig.reads()).toHaveLength(firstRead);
-  expectOnlyRegisteredReads(rig.reads(), ['entity-load']);
+  expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
 }
 
 describe('the rig reads when a request is a good one', () => {
@@ -47,7 +47,7 @@ describe('the rig reads when a request is a good one', () => {
     const answer = await rig.turn('Show W-1 and W-2', [ROUTE, tool('entity', { entityType: 'widget', stableId: 'W-2' }), DONE]);
     expect(answer.status).toBe(200);
     expect(rig.reads().length).toBeGreaterThan(firstRead);
-    expectOnlyRegisteredReads(rig.reads(), ['entity-load']);
+    expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
     await rig.close();
   });
 });
@@ -87,7 +87,7 @@ describe('a value of a tool request reaches the source only as a parameter', () 
     const answer = await rig.turn('Show W-1 and then look further', [ROUTE, tool('byId', { id: hostile.value }), DONE]);
     expect(answer.status).toBe(200);
     expectOnlyParameters(rig.reads().filter((read) => read.templateId === 'file-query'), { text: FILE_QUERY, values: [hostile.value] });
-    expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'file-query']);
+    expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many', 'file-query']);
     expectNoValue([rig.events(), rig.logs], [hostile.sentinel]);
     await rig.close();
   });
@@ -97,7 +97,7 @@ describe('a value of a tool request reaches the source only as a parameter', () 
     const answer = await rig.turn('Show W-1 and then look further', [ROUTE, tool('entity', { entityType: hostile.value, stableId: 'W-1' }), DONE]);
     expect(answer.status).toBe(200);
     expect(rig.reads()).toHaveLength(firstRead);
-    expectOnlyRegisteredReads(rig.reads(), ['entity-load']);
+    expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
     expectNoValue([rig.reads().map((read) => [read.cypher, read.parameters]), rig.events(), rig.logs], [hostile.sentinel]);
     await rig.close();
   });

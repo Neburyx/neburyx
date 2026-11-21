@@ -82,6 +82,8 @@ export type LoopOutcome =
   | { readonly kind: 'no-description'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind }
+  /** A step whose value the model wrote is not an element of the type its role needs: the turn ends here with the fixed refusal, and the reads the earlier steps made are the ones it lists. The model is not asked again. */
+  | { readonly kind: 'misfit'; readonly refused: Extract<AskAnswer, { refused: unknown }>['refused']; readonly reads: readonly AssistantRead[] }
   | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly reads: readonly AssistantRead[] }
   /** A tool request that is malformed after its repeat, or names a tool that is no longer available. */
   | { readonly kind: 'ended'; readonly because: 'malformed' | 'unavailable' };
@@ -190,7 +192,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
       return answered(await options.answer({ scope, message: input.message, reads, ...(input.context === undefined ? {} : { context: input.context }), ...(view === undefined ? {} : { view }), steps, callsUsed: calls, maxCalls: settings.maxCalls, maxInputTokens: settings.maxInputTokens, startedAt: input.startedAt, signal: scope.request.signal, deadline: input.deadline }), steps, calls, entries, stoppedAt);
     };
     /** What one step of the turn, made now or read again, adds to what the model sees and to the reads of the turn. */
-    const apply = (request: ToolRequest, step: StepResult, how: { readonly confirmed?: boolean } = {}): void => {
+    const apply = (request: ToolRequest, step: StepResult, how: { readonly confirmed?: boolean } = {}): LoopOutcome | undefined => {
       const { tool, values } = request;
       const mark = how.confirmed === true ? { confirmed: true as const } : {};
       switch (step.status) {
@@ -209,6 +211,7 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
           done.push({ tool: tool.name, values, ...mark });
           break;
         case 'refused':
+          if (step.refused.cause === 'value-not-fit') return { kind: 'misfit', refused: step.refused, reads: entries };
           if (step.refused.cause === 'nothing-found') reads.push({ tool: tool.name, ...labelFor(tool.name) });
           put(step.refused.cause === 'nothing-found' ? readOfNothing(tool.kind, tool.name, values) : readNotRead(tool.kind, tool.name));
           lines.push(`${tool.name}: ${step.refused.cause === 'nothing-found' ? 'nothing found' : 'not read, its values did not fit'}`);
@@ -295,7 +298,8 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
             continue;
           }
           const request = { tool, values: earlier.values };
-          apply(request, await runToolStep(request, scope, { continuing: earlier.confirmed === true }), { ...(earlier.confirmed === true ? { confirmed: true } : {}) });
+          const ended = apply(request, await runToolStep(request, scope, { continuing: earlier.confirmed === true }), { ...(earlier.confirmed === true ? { confirmed: true } : {}) });
+          if (ended !== undefined) return ended;
         }
       } finally {
         noteReplaying(false);
@@ -318,7 +322,8 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
         const request = { tool, values: resume.wait.values };
         const confirmed = await runToolStep(request, scope, { continuing: true });
         steps += 1;
-        apply(request, confirmed, { confirmed: true });
+        const ended = apply(request, confirmed, { confirmed: true });
+        if (ended !== undefined) return ended;
       }
     }
     let read: ReturnType<typeof readToolRequest>;
@@ -384,7 +389,8 @@ export function createToolLoop(options: ToolLoopOptions): (input: LoopInput) => 
         summaryReading = step.reading;
         calls += step.calls;
       } else if (step.status === 'no-summary') calls += step.calls;
-      apply(read.request, step);
+      const ended = apply(read.request, step);
+      if (ended !== undefined) return ended;
     }
   };
 }

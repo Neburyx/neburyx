@@ -3,8 +3,9 @@ import { fileQueryDepsOf } from '../../../services/api/src/gate/file-query.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
 import type { MappingModel } from '../../../services/api/src/mapping/model.js';
 import type { TemplateProbe } from '../../../services/api/src/graph/template-probes.js';
-import { DEFINITION, OTHER_IDENTITY, patternApp, type PatternApp } from '../../../services/api/src/testing/saved-pattern-rig.js';
-import { startSearchApp, type SearchApp } from '../../../services/api/src/testing/search-app.js';
+import { DEFINITION, OTHER_IDENTITY, SAVED_PATTERN_MAPPING, patternApp, type PatternApp } from '../../../services/api/src/testing/saved-pattern-rig.js';
+import { lookupAnswer } from '../../../services/api/src/testing/held-elements.js';
+import { searchMappingOf, startSearchApp, type SearchApp } from '../../../services/api/src/testing/search-app.js';
 import { modelEvents } from './mock-audit.js';
 import type { ModelStub } from './stub.js';
 
@@ -67,7 +68,8 @@ export async function startRig(options: RigOptions): Promise<Rig> {
   const appEvents: AuditEvent[] = [];
   const rig = await startSearchApp({
     ...(options.mapping === undefined ? {} : { mapping: options.mapping }),
-    ...(options.respond === undefined ? {} : { respond: options.respond }),
+    // the lookup of a written value is a batched read of elements: the scripted source holds the widgets it is asked for, and every other read is the case's own
+    ...(options.respond === undefined ? {} : { respond: async (call: ExecuteCall) => (await lookupAnswer(call, options.mapping ?? searchMappingOf(), options.respond)) as ExecuteOutcome }),
     audit: { record: (event) => (appEvents.push(event), Promise.resolve()) },
     fileQueries: fileQueryDepsOf(options.gateFolder ?? (() => extension.askFolder?.()), options.textCheck),
     appOptions: { extension, previewOn: true },
@@ -122,7 +124,8 @@ export async function startPatternRig(options: { readonly extension: AskExtensio
   if (configured?.ok !== true) throw new Error(`the extension was not configured: ${JSON.stringify(configured)}`);
   extension.createAuditSink?.({ databaseUrl: 'postgres://app@127.0.0.1:1/neburyx', poolSize: 1, connectionTimeoutMs: 100, statementTimeoutMs: 100, queryTimeoutMs: 100, newId: () => crypto.randomUUID(), onConnectionError: () => undefined });
   const logs: string[] = [];
-  const context = await patternApp({ answer: options.answer ?? (() => Promise.resolve({ status: 'rows' as const, rows: [] })), extension, logLines: logs, ...(options.probes === undefined ? {} : { probes: options.probes }) });
+  const answerOf = options.answer ?? (() => Promise.resolve({ status: 'rows' as const, rows: [] }));
+  const context = await patternApp({ answer: async (call: ExecuteCall) => (await lookupAnswer(call, SAVED_PATTERN_MAPPING, answerOf)) as ExecuteOutcome, extension, logLines: logs, ...(options.probes === undefined ? {} : { probes: options.probes }) });
   const other = await patternApp({ sharing: context.store, identity: OTHER_IDENTITY });
   const save = async (who: PatternApp, name: string, extra: Record<string, unknown>): Promise<string> => {
     const response = await who.app.inject({ method: 'POST', url: '/v1/patterns', payload: { sourceId: SOURCE_ID, name, kind: 'definition', definition: DEFINITION, ...extra }, headers: JSON_HEADERS });

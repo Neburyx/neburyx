@@ -38,6 +38,7 @@ import { summarizeRun } from './run-summary.js';
 import { currentRunId, isReplaying, noteRun } from '../assistant/turn-audit.js';
 import { summaryOfFileQuery, summaryOfRun } from '../summary/attach.js';
 import { canonicalText } from './canonical.js';
+import { firstMisfit, lookupWrittenValues, valueNotFitAnswer } from './written-values.js';
 import { issueContinueToken, verifyContinueToken } from './continue-token.js';
 import type { RunStore } from './run-store.js';
 
@@ -131,6 +132,8 @@ export interface Execution {
   readonly patterns?: PatternContext;
   /** Of a continue of a saved pattern: the pattern the route found by its id. */
   readonly offer?: AskPatternOffer;
+  /** The roles whose value is an element the server resolved from a key or read again through the gate: they are not looked up again as a written value is. */
+  readonly keyedRoles?: readonly string[];
 }
 
 /** What a run needs once an intent is bound: the audit detail, what the runner runs, the parameters the summary reads, the entities as they are answered, the fingerprint of the definition and, for a saved pattern, its label. */
@@ -253,12 +256,31 @@ function bindingsOf(sourceId: string, settings: unknown, params: unknown): Assis
 }
 
 /** Runs one intent of a source that the caller may read: binds the entities, runs it through the gate, and writes the event, the row and the summary in that order. */
+/** The refusal for the first value of the bound roles that is not an element of the type its role needs, or undefined: the roles the server resolved are left out, and an edition with no read of elements for the route does not check. */
+async function refusalForUnfitValues(run: Execution, bindings: NonNullable<Prepared['bindings']>): Promise<AskAnswer | undefined> {
+  const { request } = run;
+  const readSource = request.readSourceElements;
+  const mapped = request.typeDescriptions?.(run.sourceId).entityTypes.map((entry) => entry.type);
+  // a role that names a type the mapping does not have is not a value to look up: the gate refuses the type as it always did
+  const values = bindings.filter((binding) => !(run.keyedRoles ?? []).includes(binding.role) && (mapped === undefined || mapped.length === 0 || mapped.includes(binding.ref.entityType))).map((binding) => ({ role: binding.role, value: binding.ref.stableId, needed: binding.ref.entityType }));
+  if (readSource === undefined || values.length === 0) return undefined;
+  const types = mapped !== undefined && mapped.length > 0 ? mapped : [...new Set(values.map((entry) => entry.needed))];
+  const misfit = firstMisfit(await lookupWrittenValues({ sourceId: run.sourceId, types, values, read: (refs) => readSource({ sourceId: run.sourceId, mask: run.mask, signal: request.signal }, refs) }));
+  return misfit === undefined ? undefined : valueNotFitAnswer(misfit, run.intent);
+}
+
 export async function execute(run: Execution): Promise<AskAnswer> {
   const { request, capabilities, options, sourceId, intent: name } = run;
   const logger = options.logger();
   const prepared = run.intent === ASK_SAVED_PATTERN_INTENT ? await prepareSavedPattern(run) : await prepareFolderIntent(run);
   if (!isPrepared(prepared)) return prepared;
   const { base, input, params, templateId, entities } = prepared;
+  // a run that repeats one that resolved does not look its values up again; every other value the person (or the model on their behalf) wrote is looked up through the gate before anything runs
+  const unfit = run.continuing ? undefined : await refusalForUnfitValues(run, prepared.bindings ?? []);
+  if (unfit !== undefined) {
+    await writeEvent(request, run.action, 'refused', sourceId, { ...base, ...(templateId === undefined ? {} : { templateId }), outcome: 'refused', cause: 'value-not-fit' });
+    return unfit;
+  }
   const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));
   const started = (options.now ?? Date.now)();
   noteRun({ intent: name, ...(templateId === undefined ? {} : { templateId }), paramsHash, entities: prepared.bindings ?? [] });

@@ -150,7 +150,8 @@ describe('nothing is withheld or redacted on the way', () => {
     expect(masked.body).toMatchObject({ answered: { intent: 'widgetById' } });
     expectProviderInput(stub.requests, 0, expectedBody({ model: 'claude-haiku-5-5', instructions: CLASSIFICATION, values: typed, cache: true }));
     expectProviderInput(stub.requests, 1, expectedBody({ model: 'claude-haiku-5-5', instructions: CLASSIFICATION, values: typed, cache: true }));
-    const parameters = rig.reads().map((read) => JSON.stringify(read.parameters));
+    // the reads of the intent: the lookup of the value (a batched read of elements) is another read and holds the id the same way
+    const parameters = rig.reads().filter((read) => read.templateId !== 'entity-load-many').map((read) => JSON.stringify(read.parameters));
     expect(new Set(parameters).size).toBe(1);
     await rig.close();
   });

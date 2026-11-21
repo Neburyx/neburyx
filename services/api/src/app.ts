@@ -737,7 +737,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const listCursors = options.cursors ?? createCursorCodec({ key: fallbackKeyMaterial, clock: Date.now });
     const investigations = createInvestigationService({ cursors: listCursors, store: options.store, entities, mapping, access, references: storedReferences, audit: privilegedAuditOf(options.seams ?? communitySeams()) });
     elementReaders.current = (context) => createElementsReader({ shownReader: summaryShownReader, investigations, access, ...context });
-    elementReaders.source = (context) => createSourceElementsReader({ shownReader: summaryShownReader, access, ...context });
+    elementReaders.source = (context) => createSourceElementsReader({ shownReader: summaryShownReader, access, mapping, ...context });
     investigationChecks.current = (context) => createInvestigationCheck({ investigations, ...context });
     investigationSources.current = ({ principal }) => async (investigationId) => (await investigations.read({ id: investigationId, principal })).investigation.sourceId;
     aiNotesCapabilities.current = ({ principal }) => ({

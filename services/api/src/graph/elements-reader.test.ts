@@ -2,10 +2,13 @@ import { MAX_READ_REFS } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { AppError, RequestCancelled } from '../errors.js';
 import type { ShownReader } from '../exports/shown-reader.js';
+import type { MappingModel } from '../mapping/model.js';
 import type { Principal } from '../seams/seams.js';
 import { createElementsReader, createSourceElementsReader } from './elements-reader.js';
 
 const principal = { id: 'p', displayName: 'P', role: 'investigator' } as Principal;
+/** A source with a plain type and a keyed one (its stable ID is also a personal field). */
+const MAPPING = { sources: [{ id: 'demo', entities: [{ type: 'widget', stableId: 'widgetId', pii: [] }, { type: 'phone', stableId: 'number', pii: ['number'] }] }] } as unknown as MappingModel;
 const ref = (id: string) => ({ sourceId: 'demo', entityType: 'widget', stableId: id });
 const investigations = (state: 'available' | 'repointed' = 'available', sourceId = 'demo') => ({ read: async () => ({ investigation: { id: 'i', sourceId, sourceState: state } }) as never });
 const EXACT = { value: 0, quality: 'exact', scope: 'coverage' } as const;
@@ -72,7 +75,7 @@ describe('the reader of the elements of a view', () => {
 describe('the reader of the elements of a source', () => {
   const source = { sourceId: 'demo', mask: false };
   const none = { nodes: [], edges: [], omitted: false, unresolved: false, unresolvedCount: 0, maskedFields: 0, notRetrieved: EXACT, uncounted: 0 };
-  const build = (shownReader: ShownReader, counted: unknown[] = []) => createSourceElementsReader({ shownReader, access: access(counted), principal, traceId: 't', signal: new AbortController().signal });
+  const build = (shownReader: ShownReader, counted: unknown[] = []) => createSourceElementsReader({ shownReader, access: access(counted), mapping: MAPPING, principal, traceId: 't', signal: new AbortController().signal });
 
   it('reads through the same shown reader with the mask of the scope and no investigation, counts the call once against the rate of the person, under the action of the read by references', async () => {
     const calls: unknown[] = [];
@@ -101,9 +104,22 @@ describe('the reader of the elements of a source', () => {
   });
 
   it('passes on the refusal of a source the person may not read, and the error of the shown reader, as they are', async () => {
-    const denied = createSourceElementsReader({ shownReader: reader(async () => none), access: { require: async () => Promise.reject(new AppError('NOT_FOUND')) }, principal, traceId: 't', signal: new AbortController().signal });
+    const denied = createSourceElementsReader({ shownReader: reader(async () => none), access: { require: async () => Promise.reject(new AppError('NOT_FOUND')) }, mapping: MAPPING, principal, traceId: 't', signal: new AbortController().signal });
     await expect(denied(source, refs)).rejects.toMatchObject({ code: 'NOT_FOUND' });
     const cancelled = build(reader(() => Promise.reject(new RequestCancelled())));
     await expect(cancelled(source, refs)).rejects.toBeInstanceOf(RequestCancelled);
+  });
+
+  it('leaves the references of a keyed type out of the read, since a typed value cannot stand for its token, and says something was left out', async () => {
+    const calls: { entities: unknown }[] = [];
+    const read = build(reader(async (call) => (calls.push({ entities: call.entities }), none)));
+    const phone = { sourceId: 'demo', entityType: 'phone', stableId: '+1 555 0100' };
+    const answer = await read(source, { entities: [ref('W-1'), phone], edges: [], aggregates: [], derived: [] });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.entities).toEqual([ref('W-1')]);
+    expect(answer).toMatchObject({ omitted: true, unresolved: 1 });
+    const only = await read(source, { entities: [phone], edges: [], aggregates: [], derived: [] });
+    expect(calls).toHaveLength(1);
+    expect(only).toMatchObject({ omitted: true, unresolved: 1, nodes: [] });
   });
 });

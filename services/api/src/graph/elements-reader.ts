@@ -1,5 +1,6 @@
 import { MAX_READ_REFS, type ElementRefs, type ElementsScope, type SourceElementsScope, type SummaryReading } from '@neburyx/contracts';
 import { AppError } from '../errors.js';
+import { isKeyed, type MappingModel } from '../mapping/model.js';
 import type { ShownReader } from '../exports/shown-reader.js';
 import type { SourceAccess } from '../investigations/source-access.js';
 import { sourceChangedRefusal } from '../investigations/read-only.js';
@@ -51,11 +52,19 @@ const SOURCE_READ_AUDIT_ACTION = 'graph.read_refs';
  * The same reader for a route that has no investigation (Ask's): it reads the elements of a source for the person through the shown reader, with the mask, the export rule and the counts of `createElementsReader`, counts the call once
  * against the person's rate on the source, and refuses a source the person may not read as `NOT_FOUND`. More than `MAX_READ_REFS` references of a kind is refused as `INVALID_REQUEST` before anything is read.
  */
-export function createSourceElementsReader(deps: Omit<ElementsReaderDeps, 'investigations'>): (scope: SourceElementsScope, refs: ElementRefs) => Promise<SummaryReading> {
+export function createSourceElementsReader(deps: Omit<ElementsReaderDeps, 'investigations'> & { readonly mapping: MappingModel }): (scope: SourceElementsScope, refs: ElementRefs) => Promise<SummaryReading> {
   const read = readThrough(deps, SOURCE_READ_AUDIT_ACTION);
+  const keyedType = (sourceId: string, entityType: string): boolean => {
+    const entity = deps.mapping.sources.find((source) => source.id === sourceId)?.entities.find((candidate) => candidate.type === entityType);
+    return entity !== undefined && isKeyed(entity);
+  };
   return async (scope, refs) => {
     if ([refs.entities, refs.edges, refs.aggregates, refs.derived].some((kind) => kind.length > MAX_READ_REFS)) throw new AppError('INVALID_REQUEST');
-    return read(scope, refs);
+    // the identifier of an element of a keyed type is a token the server made, never the value: a value that was typed for such a type cannot be looked up, so it is left out of the read and the answer says so (`omitted`), as it does for what the person may not see
+    const readable = refs.entities.filter((ref) => !keyedType(ref.sourceId, ref.entityType));
+    if (readable.length === refs.entities.length) return read(scope, refs);
+    const reading = readable.length + refs.edges.length + refs.aggregates.length + refs.derived.length === 0 ? undefined : await read(scope, { ...refs, entities: readable });
+    return { ...(reading ?? { nodes: [], edges: [], unresolved: 0, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0 }), unresolved: (reading?.unresolved ?? 0) + (refs.entities.length - readable.length), omitted: true };
   };
 }
 

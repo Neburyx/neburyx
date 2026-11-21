@@ -61,28 +61,57 @@ describe('a written value on the ask route', () => {
   });
 });
 
-describe('a written value on the saved-pattern anchor, today', () => {
-  it('runs an asked pattern for an anchor of another type than the pattern starts at, reads no element to check it, and answers nothing found', async () => {
-    const held = offerOf('22222222-2222-4222-8222-222222222222', 'A-PATTERN');
-    const asked = { ...held, projection: { ...held.projection, startingEntity: 'asked' as const } };
-    const { route, request, runs, elementReads } = await rig({ patterns: [asked], reply: routeAsk('saved-pattern', { pattern: 'pat_1', anchor: 'K-1' }), ...NO_ANCHOR });
-    expect(askOf(await answerOf(route.handler(request())))).toMatchObject({ refused: { cause: 'nothing-found' } });
-    expect(JSON.stringify(runs[0]?.asked)).toContain('K-1');
-    expect(elementReads).toHaveLength(0);
+describe('a written value on the saved-pattern anchor', () => {
+  const held = offerOf('22222222-2222-4222-8222-222222222222', 'A-PATTERN');
+  const asked = { ...held, projection: { ...held.projection, startingEntity: 'asked' as const } };
+
+  it('is looked up against the type the pattern starts at: an anchor of another type answers the refusal and the pattern does not run', async () => {
+    const { route, request, runs, sourceReads } = await rig({ patterns: [asked], reply: routeAsk('saved-pattern', { pattern: 'pat_1', anchor: 'K-1' }), source: ['gadget/K-1'], types: TYPES, ...NO_ANCHOR });
+    expect(askOf(await answerOf(route.handler(request())))).toMatchObject({ refused: { cause: 'value-not-fit', valueNotFit: { kind: 'other-type', needed: 'widget', found: 'gadget' } } });
+    expect(runs).toHaveLength(0);
+    expect(sourceReads).toHaveLength(1);
+  });
+
+  it('runs the pattern for an anchor of the right type', async () => {
+    const { route, request, runs } = await rig({ patterns: [asked], reply: routeAsk('saved-pattern', { pattern: 'pat_1', anchor: 'A-1' }), source: ['widget/A-1'], types: TYPES });
+    await route.handler(request());
+    expect(runs).toHaveLength(1);
   });
 });
 
-describe('a written value in a step of the tool loop, today', () => {
+describe('a written value in a step of the tool loop', () => {
   const sequence = (...replies: FixtureReply[]) => {
     let next = 0;
     return () => replies[Math.min(next++, replies.length - 1)] ?? ok('{"done":true}');
   };
   const GOOD = ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] }));
+  const step = (id: string) => ok(JSON.stringify({ tool: 'shared', values: { id } }));
+  const loop = (source: readonly string[], steps: ReturnType<typeof sequence>, over: Record<string, unknown> = {}) => rig({ reply: routeAsk('shared', { id: 'A-1' }), maxCalls: 10, loopSteps: 4, step: steps, answer: GOOD, source, types: TYPES, ...over });
 
-  it('runs the intent the model names with the value the model wrote, reads no element to check its type, and the step ends nothing found', async () => {
-    const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), maxCalls: 10, loopSteps: 4, step: sequence(ok(JSON.stringify({ tool: 'shared', values: { id: 'K-1' } })), ok('{"done":true}')), answer: GOOD, run: (_continuing, asked) => (JSON.stringify(asked).includes('K-1') ? { status: 'refused', refusal: { code: 'NOT_FOUND' } } : { status: 'ok', result: okResultOf() }) });
+  it('ends the turn with the fixed refusal when a step whose value the model wrote is an element of another type: the reads of the earlier steps are listed, no limit, the intent of the step does not run and the model is not asked again', async () => {
+    const r = await loop(['widget/A-1', 'gadget/K-1'], sequence(step('K-1'), ok('{"done":true}')));
+    const answer = await answerOf(r.route.handler(r.request()));
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'value-not-fit', valueNotFit: { kind: 'other-type', needed: 'widget', found: 'gadget' } } }, reads: [{ tool: 'shared', read: true }] });
+    expect(answer).not.toHaveProperty('stoppedAt');
+    expect(r.runs.map((run) => JSON.stringify(run.asked)).filter((asked) => asked.includes('K-1'))).toHaveLength(0);
+    expect(r.fixture.calls.map((call) => call.promptId)).toEqual(['assistant.route', 'assistant.step']);
+  });
+
+  it('ends the same way for an id that exists as nothing', async () => {
+    const r = await loop(['widget/A-1'], sequence(step('NOBODY')));
+    expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ answer: { refused: { valueNotFit: { kind: 'not-found', needed: 'widget' } } } });
+  });
+
+  it('counts the lookup as a read of the turn but not as a step or a call: a loop of two steps still runs its second step', async () => {
+    const r = await loop(['widget/A-1', 'widget/A-2'], sequence(step('A-2'), ok('{"done":true}')), { loopSteps: 2 });
     await answerOf(r.route.handler(r.request()));
-    expect(r.runs.map((run) => JSON.stringify(run.asked)).some((asked) => asked.includes('K-1'))).toBe(true);
-    expect(JSON.stringify(r.elementReads.map((read) => read.refs))).not.toContain('K-1');
+    expect(r.runs.map((run) => JSON.stringify(run.asked)).some((asked) => asked.includes('A-2'))).toBe(true);
+    expect(r.sourceReads.length).toBeGreaterThan(0);
+  });
+
+  it('reads the elements once more for a step, with a reference of the type the role needs and one of each other type, through the capability and not the loop\'s own reads', async () => {
+    const r = await loop(['widget/A-1', 'widget/A-2'], sequence(step('A-2'), ok('{"done":true}')));
+    await answerOf(r.route.handler(r.request()));
+    expect(r.sourceReads.flatMap((read) => read.refs.entities.map((ref) => `${ref.entityType}/${ref.stableId}`))).toEqual(expect.arrayContaining(['widget/A-2', 'gadget/A-2']));
   });
 });
