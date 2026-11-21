@@ -1,4 +1,6 @@
 import { ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal, assistantTurnAnswerSchema, type AssistantTurnAnswer, type ExtensionRequest } from '@neburyx/contracts';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
@@ -12,6 +14,7 @@ const VERDICT = ok('{"route":"refuse","cause":"verdict"}');
 const sentences = (...list: { text: string; cites: string[] }[]) => ok(JSON.stringify({ sentences: list }));
 const GOOD = sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['e1', 'n1', 'n2'] });
 const EDGE_KEY = JSON.stringify(['edge', 'demo', 'stored', 'SENT', 'A-1', 'A-2', 'e-1']);
+const EDGE_KEY_2 = JSON.stringify(['edge', 'demo', 'stored', 'SENT', 'A-1', 'A-2', 'e-2']);
 const VIEW_BODY_NO_EDGE = VIEW_BODY;
 const LINKED_BODY = { ...VIEW_BODY, viewElementKeys: [...VIEW_BODY.viewElementKeys, EDGE_KEY] };
 const linked = (refs: { edges: readonly { stableId: string }[] }) => refs.edges.map((ref) => ({ ref: { ...ref, sourceId: 'demo', type: 'SENT', from: 'A-1', to: 'A-2' }, from: { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' }, to: { sourceId: 'demo', entityType: 'widget', stableId: 'A-2' }, type: 'SENT', direction: 'from-to', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }));
@@ -94,6 +97,22 @@ describe('a verdict refusal with an overview', () => {
   it('asks the model for connections only, in the shipped prompt and the request the server writes', () => {
     expect(OVERVIEW_REQUEST).toContain('Describe only what the elements in view are connected by');
     expect(OVERVIEW_REQUEST).toContain('State no property of an element');
+    expect(OVERVIEW_REQUEST).toContain('Group');
+  });
+
+  it('shows one sentence that groups several relationships, citing each of them, and asks for grouping in the shipped prompt', async () => {
+    const grouped = sentences({ text: 'Account A-1 sent to Account A-2 twice.', cites: ['e1', 'e2', 'n1', 'n2'] });
+    const { answer } = await turn({ overview: grouped }, { ...LINKED_BODY, viewElementKeys: [...LINKED_BODY.viewElementKeys, EDGE_KEY_2] });
+    const overview = overviewOf(answer);
+    expect(overview.sentences).toHaveLength(1);
+    expect(overview.sentences[0]?.cites).toEqual(['e1', 'e2', 'n1', 'n2']);
+    expect(overview.citations).toHaveLength(4);
+    expect(overview.citations.filter((citation) => citation.kind === 'relationship')).toHaveLength(2);
+    const prompt = readFileSync(fileURLToPath(new URL('../../prompts/assistant-overview.md', import.meta.url)), 'utf8');
+    expect(prompt).toContain('three to five short neutral sentences');
+    expect(prompt).toContain('never one for each relationship');
+    expect(prompt).toContain('two or more elements link to the same element');
+    expect(prompt).toContain('lists the key of every relationship it states');
   });
 
   it('reads the elements of the view once, through the gate, with the masking of the request', async () => {

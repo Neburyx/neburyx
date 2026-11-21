@@ -4,11 +4,11 @@ import { stepsOf } from './steps.js';
 import type { ViewInput, ViewOutcome, ViewProgress } from './view-answer.js';
 
 export const OVERVIEW_PROMPT_ID = 'assistant.overview';
-export const OVERVIEW_PROMPT_VERSION = 2;
+export const OVERVIEW_PROMPT_VERSION = 3;
 export const OVERVIEW_AUDIT_ACTION = 'assistant.overview';
 
 /** What the overview call is asked, written by the server: the analyst's message is not part of it. */
-export const OVERVIEW_REQUEST = 'Describe only what the elements in view are connected by: the relationships between them and what they share. State no property of an element and nothing about what is missing. Make no assessment.';
+export const OVERVIEW_REQUEST = 'Describe only what the elements in view are connected by: the relationships between them and what they share. State no property of an element and nothing about what is missing. Group alike connections into a few sentences. Make no assessment.';
 
 export interface VerdictOverviewInput {
   readonly overview: ((input: ViewInput) => Promise<ViewOutcome>) | undefined;
