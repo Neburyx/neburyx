@@ -278,7 +278,7 @@ export async function execute(run: Execution): Promise<AskAnswer> {
   // a run that repeats one that resolved does not look its values up again; every other value the person (or the model on their behalf) wrote is looked up through the gate before anything runs
   const unfit = run.continuing ? undefined : await refusalForUnfitValues(run, prepared.bindings ?? []);
   if (unfit !== undefined) {
-    await writeEvent(request, run.action, 'refused', sourceId, { ...base, ...(templateId === undefined ? {} : { templateId }), outcome: 'refused', cause: 'value-not-fit' });
+    await writeEvent(request, run.action, 'refused', sourceId, { ...base, ...(templateId === undefined ? {} : { templateId }), outcome: 'refused', cause: 'value-not-fit', ...('refused' in unfit && unfit.refused.valueNotFit !== undefined ? { valueKind: unfit.refused.valueNotFit.kind } : {}) });
     return unfit;
   }
   const paramsHash = capabilities.signText(canonicalText([ASK_RUN_PARAMS_LABEL, 1, name, entities]));

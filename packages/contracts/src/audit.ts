@@ -1,7 +1,7 @@
 import type { Socket } from 'node:net';
 import { z } from 'zod';
 import { ASK_INTENT_NAME } from './ask-folder.js';
-import { ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
+import { ASK_TEMPLATE_IDS, ASK_REFUSAL_CAUSES, ASK_VALUE_NOT_FIT_KINDS, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
 import { ERROR_CODES } from './error-codes.js';
 import { roleSchema } from './me.js';
 
@@ -83,6 +83,8 @@ export const askRunAuditDetailSchema = z.strictObject({
   kind: z.enum(['template', 'query']),
   outcome: z.enum(['complete', 'partial', 'refused', 'failed']),
   cause: z.enum(ASK_RUN_CAUSES).optional(),
+  /** For the cause `value-not-fit`: how the value failed (another type, not found, hidden), never the value. */
+  valueKind: z.enum(ASK_VALUE_NOT_FIT_KINDS).optional(),
   templateId: z.enum([...ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]).optional(),
   querySha256: sha256Hex.optional(),
   paramsHash: sha256Hex.optional(),
@@ -140,6 +142,8 @@ export const assistantTurnAuditDetailSchema = z.strictObject({
   route: z.enum(['ask', 'view', 'refuse']).optional(),
   outcome: z.enum(ASSISTANT_TURN_OUTCOMES),
   cause: label.optional(),
+  /** For the cause `value-not-fit`: how the value failed (another type, not found, hidden), never the value. */
+  valueKind: z.enum(ASK_VALUE_NOT_FIT_KINDS).optional(),
   failureKind: label.optional(),
   intent: label.optional(),
   templateId: z.enum([...ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID]).optional(),

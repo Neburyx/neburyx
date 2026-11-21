@@ -113,6 +113,8 @@ export interface AssistantAppOptions {
   readonly threads?: boolean;
   /** The widgets the scripted source holds for the lookup of a written value, as `widget/<id>`; absent, it holds every one asked for. */
   readonly held?: readonly string[];
+  /** The widget whose element the person may not export: the read of it leaves it out and says so. */
+  readonly unexportable?: string;
 }
 
 const INTENTS = {
@@ -154,7 +156,7 @@ export async function startAssistantApp(options: AssistantAppOptions) {
   extension.attachAudit?.({ record: (event) => (modelEvents.push(event), Promise.resolve()) });
   const logs: string[] = [];
   const armed = { open: false };
-  const rig = await startExportRig({ extension, ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() ?? '' }) }), ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], previewOn: options.previewOn ?? true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? lookupAnswer(call, rig.mapping, options.respond, options.held, (entityType, id) => (entityType === 'widget' && (id === 'W-1' || id === 'W-2') ? widgetNode(id, options.name?.(id) ?? 'Ana Silva') : undefined)) : undefined) });
+  const rig = await startExportRig({ extension, ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.principalId === undefined ? {} : { principal: () => ({ id: options.principalId?.() ?? '' }) }), ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), links: ['L-1'], ...(options.unexportable === undefined ? {} : { unexportableNode: options.unexportable }), previewOn: options.previewOn ?? true, directAudit: true, logLines: logs, ...(options.name === undefined ? {} : { name: options.name }), fileQueries: fileQueryDepsOf(() => extension.askFolder()), answer: (call) => (armed.open ? lookupAnswer(call, rig.mapping, options.respond, options.held, (entityType, id) => (entityType === 'widget' && (id === 'W-1' || id === 'W-2') ? widgetNode(id, options.name?.(id) ?? 'Ana Silva') : undefined)) : undefined) });
   const investigation = await rig.open();
   armed.open = true;
   const body = (message: string, over: Record<string, unknown> = {}) => ({ sourceId: 'demo', investigationId: investigation.id, message, viewElementKeys: [], ...over });

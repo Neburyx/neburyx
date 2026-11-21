@@ -26,6 +26,7 @@ const ASSISTANT_GUARANTEES = [
   'every turn is audited once whatever its ending',
   'a streamed turn carries no model text',
   'AI reads leave manual exploration its share',
+  'a value the person writes is checked against the type its role needs',
 ] as const;
 
 const KINDS = ['real application', 'route rig', 'single module', 'static check'] as const;

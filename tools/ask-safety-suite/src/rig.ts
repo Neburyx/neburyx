@@ -32,6 +32,8 @@ export interface RigOptions {
   readonly env?: Readonly<Record<string, string>>;
   readonly mapping?: MappingModel;
   readonly respond?: (call: ExecuteCall) => Promise<ExecuteOutcome>;
+  /** The elements the scripted source holds for the lookup of a written value, as `type/id`; absent, it holds every one asked for. */
+  readonly held?: readonly string[];
   readonly sourceIds?: readonly string[];
   /** The folder the gate checks and runs a file query from: the extension's own unless a case forces another (a query that the extension's folder does not hold). */
   readonly gateFolder?: () => AskFolder | undefined;
@@ -69,7 +71,7 @@ export async function startRig(options: RigOptions): Promise<Rig> {
   const rig = await startSearchApp({
     ...(options.mapping === undefined ? {} : { mapping: options.mapping }),
     // the lookup of a written value is a batched read of elements: the scripted source holds the widgets it is asked for, and every other read is the case's own
-    ...(options.respond === undefined ? {} : { respond: async (call: ExecuteCall) => (await lookupAnswer(call, options.mapping ?? searchMappingOf(), options.respond)) as ExecuteOutcome }),
+    ...(options.respond === undefined ? {} : { respond: async (call: ExecuteCall) => (await lookupAnswer(call, options.mapping ?? searchMappingOf(), options.respond, options.held)) as ExecuteOutcome }),
     audit: { record: (event) => (appEvents.push(event), Promise.resolve()) },
     fileQueries: fileQueryDepsOf(options.gateFolder ?? (() => extension.askFolder?.()), options.textCheck),
     appOptions: { extension, previewOn: true },

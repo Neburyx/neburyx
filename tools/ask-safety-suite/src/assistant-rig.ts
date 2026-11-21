@@ -30,6 +30,10 @@ export interface AssistantRigOptions {
   readonly now?: () => number;
   /** Keeps the person's thread, so a follow-up has earlier turns. */
   readonly threads?: boolean;
+  /** The elements the scripted source holds for the lookup of a written value, as `type/id`; absent, it holds every one asked for. */
+  readonly held?: readonly string[];
+  /** The widget whose element the person may not export. */
+  readonly unexportable?: string;
 }
 
 
@@ -64,7 +68,7 @@ export interface AssistantRig {
 export async function startAssistantRig(options: AssistantRigOptions): Promise<AssistantRig> {
   const { stub } = options;
   stub.reset();
-  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.maxCalls === undefined ? {} : { maxCalls: options.maxCalls }), ...(options.settings === undefined ? {} : { settings: options.settings }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.previewOn === undefined ? {} : { previewOn: options.previewOn }), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
+  const app: AssistantApp = await startAssistantApp({ model: stub, ...(options.descriptions === undefined ? {} : { descriptions: options.descriptions }), ...(options.held === undefined ? {} : { held: options.held }), ...(options.unexportable === undefined ? {} : { unexportable: options.unexportable }), respond: options.respond, ...(options.name === undefined ? {} : { name: options.name }), ...(options.maxSteps === undefined ? {} : { maxSteps: options.maxSteps }), ...(options.maxCalls === undefined ? {} : { maxCalls: options.maxCalls }), ...(options.settings === undefined ? {} : { settings: options.settings }), ...(options.stores === true ? { stores: true } : {}), ...(options.summary === true ? { summary: true } : {}), ...(options.synthetic === undefined ? {} : { synthetic: options.synthetic }), ...(options.previewOn === undefined ? {} : { previewOn: options.previewOn }), ...(options.principalId === undefined ? {} : { principalId: options.principalId }), ...(options.now === undefined ? {} : { now: options.now }), ...(options.threads === true ? { threads: true } : {}) });
   return {
     stub,
     store: app.store,

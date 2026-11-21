@@ -184,6 +184,7 @@ interface Ending {
   readonly outcome: AssistantTurnAuditDetail['outcome'];
   readonly result: AuditResult;
   readonly cause?: string;
+  readonly valueKind?: 'other-type' | 'not-found' | 'hidden';
   readonly failureKind?: string;
   readonly intent?: string;
   readonly citedElements?: number;
@@ -199,7 +200,7 @@ function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
       if ('table' in answer) return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length, table: tableOf(answer), ...(answer.status === 'answered' && 'stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
       if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
       if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(answer.stoppedAt === undefined ? {} : { cause: `limit-${answer.stoppedAt}` }) };
-      if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
+      if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.valueNotFit === undefined ? {} : { valueKind: answer.answer.refused.valueNotFit.kind }), ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
       return {
         route: 'ask',
         outcome: 'answered',
@@ -270,6 +271,7 @@ function detailOf(notes: TurnNotes, ending: Ending): AssistantTurnAuditDetail {
     ...(route === undefined ? {} : { route }),
     outcome: ending.outcome,
     ...(ending.cause === undefined ? {} : { cause: ending.cause }),
+    ...(ending.valueKind === undefined ? {} : { valueKind: ending.valueKind }),
     ...(ending.failureKind === undefined ? {} : { failureKind: ending.failureKind }),
     ...(intent === undefined ? {} : { intent }),
     ...(notes.templateId === undefined ? {} : { templateId: notes.templateId }),
