@@ -147,7 +147,7 @@ With no AI provider configured (and the older preview switch not set), the AI ex
 
 | Answer | When |
 |---|---|
-| `{ status: "answered", route: "refuse", cause, sentence }` | the router refused (`verdict`, `raw-query`, `other-source`) or its reply was not a route (`unplaced`); the sentence is fixed and never the model's |
+| `{ status: "answered", route: "refuse", cause, sentence, overview? }` | the router refused (`verdict`, `raw-query`, `other-source`) or its reply was not a route (`unplaced`); the sentence is fixed and never the model's. A `verdict` refusal may carry `overview`: `{ sentences, citations, coverage, model }`, a neutral overview of the elements in view drafted and checked as an answer from the view is (every sentence cites elements, no verdict wording); no other cause carries one, and when none can be drawn the refusal is returned without it |
 | `{ status: "not-answered", route: "view", sentence }` | the router placed the message on the view; the cited answer from the view is not built yet |
 | `{ status: "answered", route: "ask", answer, followUps? }` | the router placed it on an intent of the source's Ask folder; `answer` is the body `POST /v1/ask` answers (a result with its cited summary, a heavy stop with its token, or a refusal with its cause); `followUps` holds at most three other template questions of the folder the elements of the answer can be put to, each with `titles` and the `choice` to send |
 | `{ status: "unavailable", kind, readStarted, retryAfterSeconds? }` | the model's service or the source failed; `readStarted` is false when no read began; `retryAfterSeconds` only when a wait is known |

@@ -19,6 +19,7 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `assistant.route` | any | queued | `ee/ask/src/assistant/router.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.turn.closed` | any | queued | `ee/ask/src/assistant/turn-audit.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `assistant.view` | any | queued | `ee/ask/src/assistant/view-answer.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
+| `assistant.overview` | any | queued | `ee/ask/src/assistant/verdict-overview.ts` | The audit of the model call that drafts the overview beside a refusal of a verdict: queued, so the answer is never withheld for it. |
 | `assistant.step` | any | queued | `ee/ask/src/assistant/tool-loop.ts` | The audit of a model call of the tool loop (the next step): queued, so the answer is never withheld for it. |
 | `assistant.confirmation` | any | queued | `ee/ask/src/assistant/confirmation.ts` | What happened to a confirmation of a heavy step that waits for the analyst: queued, so the answer is never withheld for it. |
 | `assistant.answer` | any | queued | `ee/ask/src/assistant/tool-answer.ts` | The audit of the model call that answers after the tool steps: queued, so the answer is never withheld for it. |
