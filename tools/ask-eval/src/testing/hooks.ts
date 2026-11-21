@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { assistantLimits, assistantRunSettings, classify, contextKeys, contextTurns, liveAssistantProvider, loadSource, loopCostRun, loopDefaults, routeMessage, routerRequests, routerTextBytes, routerTextSha256, runSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
-import type { AssistantHooks, EvalHooks, RecordedAnswer } from '../hooks.js';
+import { askRequestBytes, assistantLimits, assistantRunSettings, classify, contextKeys, contextTurns, liveAssistantProvider, loadSource, loopCostRun, loopDefaults, routeMessage, routerRequests, routerTextBytes, routerTextSha256, runSettings, recordingProvider, replayProvider } from '@neburyx/ee-ask/eval';
+import type { AssistantHooks, EvalHooks, ProviderLabel, RecordedAnswer } from '../hooks.js';
 
 const made: string[] = [];
 
@@ -18,7 +18,7 @@ export function scratch(prefix = 'ask-eval-test-'): string {
 }
 
 /** The hooks the entry script gives the command, with the live provider replaced by one that answers from a function and counts nothing itself. */
-export function hooksWith(answer: (question: string, promptId: string) => RecordedAnswer): EvalHooks & AssistantHooks & { readonly asked: string[] } {
+export function hooksWith(answer: (question: string, promptId: string) => RecordedAnswer, label: ProviderLabel = { kind: 'anthropic' }): EvalHooks & AssistantHooks & { readonly asked: string[] } {
   const asked: string[] = [];
   const inner = {
     complete: async (request: { readonly values: string; readonly promptId: string; readonly version: number; readonly instructions?: string }) => {
@@ -34,6 +34,7 @@ export function hooksWith(answer: (question: string, promptId: string) => Record
     asked,
     loadSource: (folder, sourceId) => loadSource(folder, sourceId),
     classify: (source, provider, model, question) => classify(source as never, provider as never, model, question),
+    askRequestBytes: (source, question) => askRequestBytes(source as never, question),
     replayProvider: (answers) => replayProvider(answers as never),
     recordingProvider: (provider, budget) => recordingProvider(provider as never, budget) as never,
     routeMessage: (source, provider, model, input) => routeMessage(source as never, provider as never, model, input) as never,
@@ -46,9 +47,9 @@ export function hooksWith(answer: (question: string, promptId: string) => Record
     loopCostRun: (source, provider, model, input, steps) => loopCostRun(source as never, provider as never, model, input, steps),
     loopDefaults,
     assistantLimits,
-    liveAssistantProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium', outputLimit: 4000 }),
+    liveAssistantProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium', outputLimit: 4000, label }),
     runSettings,
-    liveProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium' }),
+    liveProvider: async () => ({ provider: inner, model: 'fixture-model', effort: 'medium', label }),
   };
 }
 

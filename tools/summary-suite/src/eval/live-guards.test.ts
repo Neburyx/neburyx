@@ -81,3 +81,31 @@ describe('a live run, before any call', () => {
     expect({ built: spy.built.count, requests: spy.requests.count }).toEqual(before);
   });
 });
+
+describe('a local run of the summary evaluation', () => {
+  const localHooks = (label: { kind: 'anthropic' | 'local'; grammar?: boolean; grammarPrompts?: string[]; probe?: 'accepted' }): EvalHooks<ModelProvider> => ({
+    ...realHooks,
+    liveProvider: async (_env, _folder, settings) => ({ provider: realHooks.scriptedProvider(() => JSON.stringify({ sentences: [{ text: 'quill haverd is also linked to AC-7001.', cites: ['n1'] }] })), model: settings.model, label }),
+  });
+
+  it('prints the provider, the grammar label, the schema probe and the time of a call, and writes them to the record, as figures and names only', async () => {
+    const out = join(outside, 'local');
+    const result = await cli(['--budget', '60', '--out', out, '--folder', 'f', '--views', 'aml-cycle'], GUARD, localHooks({ kind: 'local', grammar: true, grammarPrompts: ['case-summary'], probe: 'accepted' }));
+    expect(result.code).toBe(0);
+    expect(result.text).toContain('provider: local, grammar on');
+    expect(result.text).toContain('grammar prompts: case-summary');
+    expect(result.text).toContain('schema probe: accepted');
+    expect(result.text).toMatch(/time of a call: median \d+ ms, 95th percentile \d+ ms/);
+    const record = JSON.parse(readFileSync(join(out, 'run-record.json'), 'utf8')) as { provider: unknown; usage: { medianMs: number; p95Ms: number } };
+    expect(record.provider).toEqual({ kind: 'local', grammar: true, grammarPrompts: ['case-summary'], probe: 'accepted' });
+    expect(record.usage).toMatchObject({ medianMs: expect.any(Number), p95Ms: expect.any(Number) });
+  });
+
+  it('writes no provider line for an Anthropic run, so that its output stays as it was', async () => {
+    const out = join(outside, 'anthropic');
+    const result = await cli(['--budget', '60', '--out', out, '--folder', 'f', '--views', 'aml-cycle'], GUARD, localHooks({ kind: 'anthropic' }));
+    expect(result.code).toBe(0);
+    expect(result.text).not.toContain('provider:');
+    expect(JSON.parse(readFileSync(join(out, 'run-record.json'), 'utf8'))).not.toHaveProperty('provider');
+  });
+});

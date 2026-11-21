@@ -62,10 +62,10 @@ export function assistantResultOf(scored: readonly AssistantScored[], scripted: 
 const percent = (part: number, whole: number): string => (whole === 0 ? 'n/a' : `${((part / whole) * 100).toFixed(1)}%`);
 
 /** The lines of a report: counts, ids and causes only; no wording, no entity value and no reply is ever printed. */
-export function assistantReportLines(result: AssistantResult, label: string, model: string | undefined): string[] {
+export function assistantReportLines(result: AssistantResult, label: string, model: string | undefined, provider: readonly string[] = []): string[] {
   const lines = [`set: ${label}`];
   if (result.scripted) lines.push('replay: scripted from the expectations, not a model');
-  else lines.push(`model: ${model ?? 'unknown'}`);
+  else lines.push(`model: ${model ?? 'unknown'}`, ...provider);
   lines.push(`refusals: ${result.refusals.refused} of ${result.refusals.total} refused with their expected cause`);
   for (const cause of result.causes) lines.push(`refusal cause ${cause.cause}: ${cause.refused} of ${cause.total}`);
   lines.push(`plans: ${result.plans.right} of ${result.plans.total} right (${percent(result.plans.right, result.plans.total)}), at most ${result.plans.allowedMisses} may miss`);

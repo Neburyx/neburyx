@@ -1,9 +1,11 @@
 import { join } from 'node:path';
 import { questionsHash } from './baseline.js';
+import { tokensOf } from './estimate.js';
 import type { EvalHooks } from './hooks.js';
+import { providerLines } from './provider-label.js';
 import { UsageError } from './questions.js';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from './paths.js';
-import { replayText, type Replay } from './replay-file.js';
+import { replayLabelOf, replayText, type Replay } from './replay-file.js';
 import type { SourceSet } from './sets.js';
 
 export interface RecordOptions {
@@ -25,6 +27,8 @@ export async function recordRun(sets: readonly SourceSet[], options: RecordOptio
   const questions = count(sets);
   const settings = hooks.runSettings(env);
   if (options.dryRun) {
+    let largest = 0;
+    for (const set of sets) for (const question of set.questions) largest = Math.max(largest, await hooks.askRequestBytes(set.source, question.wording));
     return {
       code: 0,
       lines: [
@@ -34,6 +38,7 @@ export async function recordRun(sets: readonly SourceSet[], options: RecordOptio
         `effort: ${settings.effort}`,
         ...sets.map((set) => `prompt hash ${set.label}: ${set.source.classificationSha256}`),
         `questions hash: ${questionsHash(sets)}`,
+        `largest request, estimated input tokens: ${tokensOf(largest)}`,
       ],
     };
   }
@@ -43,7 +48,7 @@ export async function recordRun(sets: readonly SourceSet[], options: RecordOptio
   requireOutsideGitTree(options.out, '--out');
   prepareOutFolder(options.out);
   for (const name of ['recording.json', 'run-record.json']) checkPrivateTarget(join(options.out, name), options.force);
-  const live = await hooks.liveProvider(env, options.folder);
+  const live = await hooks.liveProvider(env, options.folder, [...new Set(sets.flatMap((set) => set.source.intents.map((intent) => intent.name)))]);
   const recording = hooks.recordingProvider(live.provider, options.budget);
   let stopped = false;
   let failedWith: unknown;
@@ -62,8 +67,8 @@ export async function recordRun(sets: readonly SourceSet[], options: RecordOptio
     failedWith = error;
   }
   const usage = recording.usage();
-  const replay: Replay = { model: live.model, folders: Object.fromEntries(sets.map((set) => [set.source.sourceId, set.source.classificationSha256])), answers: Object.fromEntries(recording.answers()) };
-  const record = { model: live.model, effort: live.effort, prompts: Object.fromEntries(sets.map((set) => [set.label, set.source.classificationSha256])), questions, questionsHash: questionsHash(sets), stoppedAtBudget: stopped, stoppedByError: failedWith !== undefined, ...usage };
+  const replay: Replay = { model: live.model, ...replayLabelOf(live.label), folders: Object.fromEntries(sets.map((set) => [set.source.sourceId, set.source.classificationSha256])), answers: Object.fromEntries(recording.answers()) };
+  const record = { model: live.model, provider: live.label, effort: live.effort, prompts: Object.fromEntries(sets.map((set) => [set.label, set.source.classificationSha256])), questions, questionsHash: questionsHash(sets), stoppedAtBudget: stopped, stoppedByError: failedWith !== undefined, ...usage };
   writePrivateFile(join(options.out, 'recording.json'), replayText(replay), options.force);
   writePrivateFile(join(options.out, 'run-record.json'), `${JSON.stringify(record, null, 2)}\n`, options.force);
   return {
@@ -71,10 +76,12 @@ export async function recordRun(sets: readonly SourceSet[], options: RecordOptio
     lines: [
       `calls: ${usage.calls} of ${options.budget}`,
       `model: ${live.model}`,
+      ...providerLines(live.label),
       `effort: ${live.effort}`,
       ...sets.map((set) => `prompt hash ${set.label}: ${set.source.classificationSha256}`),
       `tokens: in ${usage.inputTokens}, out ${usage.outputTokens}, cache read ${usage.cacheReadTokens}, cache write ${usage.cacheWriteTokens}, calls without counts ${usage.withoutCounts}`,
       `failed calls: ${usage.failed}`,
+      `time of a call: median ${usage.medianMs} ms, 95th percentile ${usage.p95Ms} ms`,
       ...(stopped ? ['stopped at the budget: the recording holds the questions answered so far'] : []),
       ...(failedWith !== undefined ? ['stopped by an unexpected error: the recording holds the questions answered so far'] : []),
     ],

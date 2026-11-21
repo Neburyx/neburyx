@@ -1,5 +1,5 @@
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */
-export { classify, loadSource } from './evaluate.js';
+export { askRequestBytes, classify, loadSource } from './evaluate.js';
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */
 export { liveProvider, runSettings } from './live.js';
 /** @public Imported by the entry script of the evaluation tool through the package subpath `./eval`, which knip does not follow. */

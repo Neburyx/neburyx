@@ -9,7 +9,7 @@ import { assistantReportLines, assistantResultOf } from './assistant-report.js';
 import { scoreAssistantReplay } from './assistant-score.js';
 import type { AssistantHooks, EvalHooks } from './hooks.js';
 import { UsageError } from './questions.js';
-import { parseReplay, replayText, requireModel, SCRIPTED } from './replay-file.js';
+import { parseReplay, replayProviderLines, replayText, requireModel, SCRIPTED } from './replay-file.js';
 import { belowBaseline, parseBaseline, updatedBaseline } from './baseline.js';
 import { requireOutsideGitTree, writePrivateFile } from './paths.js';
 import { cleanUpTemporary, loadPackSource } from './sets.js';
@@ -133,9 +133,9 @@ export async function runAssistant(args: AssistantArgs, io: { readonly out: (lin
         io.out('baseline written');
       }
     } else if (args.updateBaseline) throw new UsageError('--update-baseline needs --baseline');
-    if (args.json) io.out(JSON.stringify({ label, ...(replay.model === undefined ? {} : { model: replay.model }), ...result, questions: hash, ...(problem === undefined ? {} : { baseline: problem }) }));
+    if (args.json) io.out(JSON.stringify({ label, ...(replay.model === undefined ? {} : { model: replay.model }), ...(replay.provider === 'local' ? { provider: 'local', grammar: replay.grammar === true, ...(replay.thinking === 'off' ? { thinking: 'off' } : {}) } : {}), ...result, questions: hash, ...(problem === undefined ? {} : { baseline: problem }) }));
     else {
-      for (const line of assistantReportLines(result, label, replay.model)) io.out(line);
+      for (const line of assistantReportLines(result, label, replay.model, replayProviderLines(replay))) io.out(line);
       if (problem !== undefined) io.out(`baseline: ${problem}`);
       io.out(result.targetsMet && problem === undefined ? 'result: pass' : 'result: fail');
     }

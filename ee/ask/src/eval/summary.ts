@@ -1,4 +1,4 @@
-import { createAuditedModelCall } from '@neburyx/ee-ai-runtime';
+import { createAuditedModelCall, percentileOf } from '@neburyx/ee-ai-runtime';
 import { loadSummaryInstructions } from '../case-summary/load-instructions.js';
 import { createMemorySummaryRunStore } from '../case-summary/run-store.js';
 import { readSummarySettings, type SummarySettings } from '../case-summary/settings.js';
@@ -36,6 +36,9 @@ export interface BudgetedUsage {
   readonly cacheWriteTokens: number;
   /** Calls whose answer did not state its token counts. */
   readonly withoutCounts: number;
+  /** The median and the 95th percentile of the time of a call in milliseconds, 0 when no call was made. */
+  readonly medianMs: number;
+  readonly p95Ms: number;
 }
 
 /** @public A provider whose requests all count against one budget. */
@@ -48,10 +51,11 @@ export interface BudgetedProvider {
  * Wraps a provider so that its requests, of every kind, count against one budget: the nth request is made, and a request that would be the (n+1)th is not made and answers as a failed call. The wrapper retries nothing.
  * `onRequest` is told the values of each request that is made, for the run that holds it; nothing is kept.
  */
-export function budgetedProvider(inner: ModelProvider, budget: number, onRequest?: (values: string) => void): BudgetedProvider {
+export function budgetedProvider(inner: ModelProvider, budget: number, onRequest?: (values: string) => void, now: () => number = Date.now): BudgetedProvider {
   const total = { calls: 0, refused: 0, failed: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, withoutCounts: 0 };
+  const times: number[] = [];
   return {
-    usage: () => ({ ...total }),
+    usage: () => ({ ...total, medianMs: percentileOf(times, 0.5), p95Ms: percentileOf(times, 0.95) }),
     provider: {
       async complete(request: ModelRequest, signal: AbortSignal): Promise<ModelAnswer> {
         if (total.calls >= budget) {
@@ -61,9 +65,12 @@ export function budgetedProvider(inner: ModelProvider, budget: number, onRequest
         total.calls += 1;
         onRequest?.(request.values);
         let answer: ModelAnswer;
+        const started = now();
         try {
           answer = await inner.complete(request, signal);
+          times.push(Math.max(0, now() - started));
         } catch (error) {
+          times.push(Math.max(0, now() - started));
           total.failed += 1;
           total.withoutCounts += 1;
           throw error;

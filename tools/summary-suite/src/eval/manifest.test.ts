@@ -36,7 +36,7 @@ describe('the manifest of a run', () => {
   it('is printed by --dry-run, which makes no call and reads no key, with the model, the call limit and the budget needed at least', async () => {
     const result = await cli(['--dry-run', '--views', 'aml'], { NEBURYX_SUMMARY_MAX_CALLS: '3', NEBURYX_ASK_API_KEY_FILE: '/nonexistent/key' });
     expect(result.code).toBe(0);
-    expect(result.out).toEqual([
+    expect(result.out.slice(0, 6)).toEqual([
       'mode: live',
       'model: claude-sonnet-5-5',
       'call limit of a click: 3',
@@ -44,5 +44,7 @@ describe('the manifest of a run', () => {
       'calls: at most 21, budget needed at least 7',
       'size guard: 25000 tokens',
     ]);
+    expect(result.out).toHaveLength(7);
+    expect(result.out[6]).toMatch(/^largest request, estimated input tokens: [1-9]\d*$/);
   });
 });

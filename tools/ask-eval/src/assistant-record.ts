@@ -2,12 +2,12 @@ import { appendFileSync, chmodSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assistantSetHash, unitsOf, type AssistantSet } from './assistant-questions.js';
 import { inputOf, requestsOf, type Hooks } from './assistant-replay.js';
+import { tokensOf } from './estimate.js';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from './paths.js';
 import { UsageError } from './questions.js';
-import { parseReplay, replayText, type Replay } from './replay-file.js';
+import { parseReplay, replayLabelOf, replayText, type Replay } from './replay-file.js';
+import { providerLines } from './provider-label.js';
 
-/** The ratio of bytes to tokens the product uses to estimate the size of a text before it is sent. */
-const BYTES_PER_TOKEN = 1.8;
 /** The most calls one message can cost: the first reply and the single repeat. */
 const MOST_CALLS = 2;
 
@@ -56,13 +56,18 @@ async function hashesOf(sets: readonly AssistantSet[], hooks: Hooks): Promise<Re
 }
 
 /** An estimate of the input of a whole run: each request's values and the router's instruction text of its source, at the product's bytes to a token. */
-async function estimatedTokens(sets: readonly AssistantSet[], hooks: Hooks): Promise<number> {
+async function estimatedTokens(sets: readonly AssistantSet[], hooks: Hooks): Promise<{ readonly total: number; readonly largest: number }> {
   const requests = await requestsOf(sets, hooks);
   const sizes = new Map<string, number>();
   for (const set of sets) sizes.set(set.label, await hooks.routerTextBytes(set.source));
   let bytes = 0;
-  for (const unit of unitsOf(sets)) bytes += Buffer.byteLength(requests.get(unit.name)?.first ?? '', 'utf8') + (sizes.get(unit.set.label) ?? 0);
-  return Math.ceil(bytes / BYTES_PER_TOKEN);
+  let largest = 0;
+  for (const unit of unitsOf(sets)) {
+    const size = Buffer.byteLength(requests.get(unit.name)?.first ?? '', 'utf8') + (sizes.get(unit.set.label) ?? 0);
+    bytes += size;
+    largest = Math.max(largest, size);
+  }
+  return { total: tokensOf(bytes), largest: tokensOf(largest) };
 }
 
 /**
@@ -75,6 +80,7 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
   const settings = hooks.assistantRunSettings(env, options.model);
   const hashes = await hashesOf(sets, hooks);
   if (options.dryRun) {
+    const estimated = await estimatedTokens(sets, hooks);
     return {
       code: 0,
       lines: [
@@ -85,7 +91,8 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
         `output limit: ${settings.outputLimit}`,
         ...sets.map((set) => `router text hash ${set.label}: ${hashes[set.source.sourceId]}`),
         `set hash: ${assistantSetHash(sets)}`,
-        `estimated input tokens: ${await estimatedTokens(sets, hooks)}`,
+        `estimated input tokens: ${estimated.total}`,
+        `largest request, estimated input tokens: ${estimated.largest}`,
       ],
     };
   }
@@ -157,15 +164,16 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
       const after = recording.usage();
       recorded.add(first);
       outcomes.push({ name: unit.name, status: outcome.status, calls: 'calls' in outcome ? outcome.calls : 0, inputTokens: after.inputTokens - beforeUsage.inputTokens, outputTokens: after.outputTokens - beforeUsage.outputTokens });
-      writePrivateFile(recordingPath, replayText({ model: live.model, folders: hashes, answers: { ...earlier?.answers, ...Object.fromEntries(recording.answers()) } }), true);
+      writePrivateFile(recordingPath, replayText({ model: live.model, ...replayLabelOf(live.label), folders: hashes, answers: { ...earlier?.answers, ...Object.fromEntries(recording.answers()) } }), true);
     }
   } catch (error) {
     failedWith = error;
   }
   const usage = recording.usage();
-  const replay: Replay = { model: live.model, folders: hashes, answers: { ...earlier?.answers, ...Object.fromEntries(recording.answers()) } };
+  const replay: Replay = { model: live.model, ...replayLabelOf(live.label), folders: hashes, answers: { ...earlier?.answers, ...Object.fromEntries(recording.answers()) } };
   const record = {
     model: live.model,
+    provider: live.label,
     effort: live.effort,
     outputLimit: live.outputLimit,
     /** The limits the run measured under: the product's defaults, whatever the settings given to the run. */
@@ -179,6 +187,7 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
     calls: callsBefore + usage.calls,
     callsBeforeResume: callsBefore,
     failedCalls: usage.failed,
+    callMs: { median: usage.medianMs, p95: usage.p95Ms },
     tokens: { input: usage.inputTokens, output: usage.outputTokens, cacheRead: usage.cacheReadTokens, cacheWrite: usage.cacheWriteTokens, callsWithoutCounts: usage.withoutCounts },
     outcomes,
   };
@@ -190,10 +199,12 @@ export async function recordAssistant(sets: readonly AssistantSet[], options: As
       `calls: ${callsBefore + usage.calls} of ${options.budget}`,
       `requests routed: ${outcomes.length} of ${requests}`,
       `model: ${live.model}`,
+      ...providerLines(live.label),
       `effort: ${live.effort}`,
       ...sets.map((set) => `router text hash ${set.label}: ${hashes[set.source.sourceId]}`),
       `tokens: in ${usage.inputTokens}, out ${usage.outputTokens}, cache read ${usage.cacheReadTokens}, cache write ${usage.cacheWriteTokens}, calls without counts ${usage.withoutCounts}`,
       `failed calls: ${usage.failed}`,
+      `time of a call: median ${usage.medianMs} ms, 95th percentile ${usage.p95Ms} ms`,
       ...(stopped ? ['stopped at the budget: the recording holds the requests routed so far'] : []),
       ...(failedWith !== undefined ? ['stopped by an unexpected error: the recording holds the requests routed so far'] : []),
     ],

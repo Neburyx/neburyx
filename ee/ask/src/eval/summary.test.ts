@@ -15,6 +15,28 @@ const view: SummaryReading = { nodes: [node('AC-1'), node('AC-2')], edges: [], u
 const REQUEST: ModelRequest = { promptId: 'p', version: 1, instructions: 'i', values: 'v' };
 const GOOD = JSON.stringify({ sentences: [{ text: 'AC-1 is listed.', cites: ['n1'] }] });
 
+describe('the call times of a budgeted provider', () => {
+  const request = { promptId: 'p', version: 1, values: 'v' } as const;
+  const ok = (): ModelProvider => ({ complete: async (given) => ({ status: 'ok', text: 'x', usage: { kind: 'known', inputTokens: 1, outputTokens: 1 }, model: 'm', prompt: promptRecordOf(given) }) });
+
+  it('times each request made with the clock it is given, as the median and the 95th percentile, and 0 with none', async () => {
+    const stamps = [0, 5, 5, 25, 25, 100];
+    let read = 0;
+    const budgeted = budgetedProvider(ok(), 3, undefined, () => stamps[read++] ?? 0);
+    for (let call = 0; call < 3; call += 1) await budgeted.provider.complete(request, new AbortController().signal);
+    expect(budgeted.usage()).toMatchObject({ calls: 3, medianMs: 20, p95Ms: 75 });
+    expect(budgetedProvider(ok(), 1).usage()).toMatchObject({ calls: 0, medianMs: 0, p95Ms: 0 });
+  });
+
+  it('does not time a request that the budget refuses, which is never made', async () => {
+    let read = 0;
+    const budgeted = budgetedProvider(ok(), 1, undefined, () => (read += 10));
+    await budgeted.provider.complete(request, new AbortController().signal);
+    await budgeted.provider.complete(request, new AbortController().signal);
+    expect(budgeted.usage()).toMatchObject({ calls: 1, refused: 1, medianMs: 10, p95Ms: 10 });
+  });
+});
+
 describe('the settings of a summary run', () => {
   it('are the product\'s own settings, with no size guard until the environment gives one, and a problem names the variable and not its value', () => {
     const settings = summaryRunSettings({ NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '50000' });
@@ -43,7 +65,7 @@ describe('the budgeted provider', () => {
     expect((await budgeted.provider.complete(REQUEST, signal)).status).toBe('ok');
     expect((await budgeted.provider.complete(REQUEST, signal)).status).toBe('ok');
     expect(await budgeted.provider.complete(REQUEST, signal)).toMatchObject({ status: 'failed', code: 'provider-error' });
-    expect(budgeted.usage()).toEqual({ calls: 2, refused: 1, failed: 0, inputTokens: 20, outputTokens: 4, cacheReadTokens: 6, cacheWriteTokens: 0, withoutCounts: 0 });
+    expect(budgeted.usage()).toEqual({ calls: 2, refused: 1, failed: 0, inputTokens: 20, outputTokens: 4, cacheReadTokens: 6, cacheWriteTokens: 0, withoutCounts: 0, medianMs: expect.any(Number), p95Ms: expect.any(Number) });
   });
 
   it('counts a call whose answer states no token counts, and a failed call, and retries nothing', async () => {

@@ -20,16 +20,29 @@ interface RunUsage {
   readonly cacheReadTokens: number;
   readonly cacheWriteTokens: number;
   readonly withoutCounts: number;
+  readonly medianMs: number;
+  readonly p95Ms: number;
+}
+
+/** What a run says of the provider it used, for its record: names, a flag and a count; no text. */
+export interface ProviderLabel {
+  readonly kind: 'anthropic' | 'local';
+  readonly grammar?: boolean;
+  readonly grammarPrompts?: readonly string[];
+  readonly probe?: 'accepted';
+  readonly thinking?: 'off';
 }
 
 /** What the tool needs of the enterprise code, which it may reach only through its entry script. A provider is opaque here. */
 export interface EvalHooks {
   readonly loadSource: (folder: string, sourceId: string) => Promise<{ readonly ok: true; readonly source: SourceHandle } | { readonly ok: false; readonly problems: readonly string[] }>;
   readonly classify: (source: SourceHandle, provider: unknown, model: string, question: string) => Promise<AskClassification>;
+  /** The size in UTF-8 bytes of the request the classifier makes for a question, built and not sent. */
+  readonly askRequestBytes: (source: SourceHandle, question: string) => Promise<number>;
   readonly replayProvider: (answers: ReadonlyMap<string, RecordedAnswer>) => unknown;
   readonly recordingProvider: (inner: unknown, budget: number) => { readonly provider: unknown; readonly answers: () => ReadonlyMap<string, RecordedAnswer>; readonly usage: () => RunUsage };
   readonly runSettings: (env: Readonly<Record<string, string | undefined>>) => { readonly model: string; readonly effort: string };
-  readonly liveProvider: (env: Readonly<Record<string, string | undefined>>, folder: string) => Promise<{ readonly provider: unknown; readonly model: string; readonly effort: string }>;
+  readonly liveProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, intents?: readonly string[]) => Promise<{ readonly provider: unknown; readonly model: string; readonly effort: string; readonly label: ProviderLabel }>;
 }
 
 /** What the router returned for one message: its route, no route after the one repeat, or no reply the run could use. */
@@ -70,7 +83,7 @@ export interface AssistantHooks {
   readonly contextKeys: (source: SourceHandle, earlier: readonly LabelledTurn[], viewElementKeys?: readonly string[]) => Promise<Readonly<Record<string, string>>>;
   /** What a run will use, without a key: the model (the setting or the one given), the effort and the output limit of a reply. */
   readonly assistantRunSettings: (env: Readonly<Record<string, string | undefined>>, model?: string) => { readonly model: string; readonly effort: string; readonly outputLimit: number };
-  readonly liveAssistantProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, model?: string) => Promise<{ readonly provider: unknown; readonly model: string; readonly effort: string; readonly outputLimit: number }>;
+  readonly liveAssistantProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, model?: string) => Promise<{ readonly provider: unknown; readonly model: string; readonly effort: string; readonly outputLimit: number; readonly label: ProviderLabel }>;
   /** One message through the real assistant turn over a stand-in for the capabilities, with the tool loop's steps at the given number. */
   readonly loopCostRun: (source: SourceHandle, provider: unknown, model: string, input: RouteInput, steps: number) => Promise<LoopCostRun>;
   /** The limits of a turn as the settings of the assistant have them: the default a turn runs under and the highest value a setting accepts. */

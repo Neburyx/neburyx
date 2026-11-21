@@ -1,11 +1,12 @@
 export { createAnthropicProvider, type ProviderFailure } from './anthropic.js';
+export { LocalProviderSettingError, createLocalProvider, type LocalProviderOptions } from './local.js';
 export { AuditUnavailableError, createAuditedModelCall, type AuditedCallContext, type AuditedModelCall } from './audited.js';
 export { createFailureReporter } from './failure-line.js';
 export { DEFAULT_ASK_MODEL, configureProvider, given, integerChoice, type Env, type ProviderConfiguration } from './provider-configuration.js';
 export { FAILURE_CODES, promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptRecord, type TokenUsage } from './provider.js';
 export { parseKeyText } from './key-file.js';
 export { gateClientOf, type GateClient } from './gate-client.js';
-export { BudgetReached, recordingProvider, type Recording, type Usage } from './eval/recording.js';
+export { BudgetReached, percentileOf, recordingProvider, type Recording, type Usage } from './eval/recording.js';
 export { replayProvider, type ReplayAnswer } from './eval/replay.js';
 export { JUDGE_MODULE, VERDICT, descriptionHoldsVerdict, judgeSentences, parseJudged, type CheckedText, type JudgeInput, type Judged } from './reply-checks.js';
 export { DEFAULT_OFFLOAD_THRESHOLD_MS, createCheckRunner, type CheckModule, type CheckOutcome, type CheckRunner, type CheckRunnerOptions, type HeavyCheck } from './check-runner.js';

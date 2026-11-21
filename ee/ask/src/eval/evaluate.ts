@@ -1,7 +1,7 @@
 import { loadAskFolder } from '../folder/load.js';
 import type { AskClassification, AskFolder } from '@neburyx/contracts';
 import { createAskClassifier } from '../classify/classifier.js';
-import { createAuditedModelCall } from '@neburyx/ee-ai-runtime';
+import { createAuditedModelCall, promptRecordOf } from '@neburyx/ee-ai-runtime';
 import type { ModelProvider } from '@neburyx/ee-ai-runtime';
 
 export interface LoadedSource {
@@ -21,6 +21,19 @@ export async function loadSource(folder: string, sourceId: string): Promise<Load
   const found = loaded.folder.source(sourceId);
   if (found === undefined) return { ok: false, problems: [`the folder has no subfolder for the source ${sourceId}`] };
   return { ok: true, source: { sourceId, folder: loaded.folder, classificationSha256: found.classification.sha256, intents: found.intents.map((intent) => ({ name: intent.name, parameters: intent.parameters })) } };
+}
+
+/** The size in UTF-8 bytes of the one request the classifier makes for a question (the classification text of the source and the question): the request is built as for a run and never sent. */
+export async function askRequestBytes(source: LoadedSource, question: string): Promise<number> {
+  let bytes = 0;
+  const catching: ModelProvider = {
+    complete: async (request) => {
+      bytes = Buffer.byteLength(request.instructions ?? '', 'utf8') + Buffer.byteLength(request.values, 'utf8');
+      return { status: 'failed', code: 'provider-error', prompt: promptRecordOf(request) };
+    },
+  };
+  await classify(source, catching, 'size', question);
+  return bytes;
 }
 
 const ACTOR = '00000000-0000-7000-8000-000000000001';

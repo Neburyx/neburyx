@@ -53,7 +53,23 @@ describe('the recording provider', () => {
     const recording = recordingProvider(inner((values) => (values === 'b' ? 'refused' : values === 'c' ? 'failed' : 'ok')), 3);
     for (const values of ['a', 'b', 'c']) await recording.provider.complete(request(values), SIGNAL);
     expect([...recording.answers()]).toEqual([['a', { reply: 'reply to a' }], ['b', { declined: true }], ['c', { failure: 'rate-limited' }]]);
-    expect(recording.usage()).toEqual({ calls: 3, failed: 1, inputTokens: 4, outputTokens: 2, cacheReadTokens: 1, cacheWriteTokens: 0, withoutCounts: 2 });
+    expect(recording.usage()).toEqual({ calls: 3, failed: 1, inputTokens: 4, outputTokens: 2, cacheReadTokens: 1, cacheWriteTokens: 0, withoutCounts: 2, medianMs: expect.any(Number), p95Ms: expect.any(Number) });
+  });
+
+  it('times each call with the clock it is given, as the median and the 95th percentile by nearest rank, and 0 with no call', async () => {
+    const stamps = [0, 10, 10, 30, 30, 60, 60, 100, 100, 1100];
+    let read = 0;
+    const timed = recordingProvider(inner(() => 'ok'), 10, () => stamps[read++] ?? 0);
+    for (const values of ['a', 'b', 'c', 'd', 'e']) await timed.provider.complete(request(values), SIGNAL);
+    expect(timed.usage()).toMatchObject({ calls: 5, medianMs: 30, p95Ms: 1000 });
+    expect(recordingProvider(inner(() => 'ok'), 1).usage()).toMatchObject({ calls: 0, medianMs: 0, p95Ms: 0 });
+  });
+
+  it('times a call that throws too', async () => {
+    let clock = 0;
+    const recording = recordingProvider({ complete: async () => Promise.reject(new Error('boom')) }, 1, () => (clock += 7));
+    await expect(recording.provider.complete(request('a'), SIGNAL)).rejects.toThrow('boom');
+    expect(recording.usage()).toMatchObject({ medianMs: 7, p95Ms: 7 });
   });
 
   it('never makes a call that would pass the budget', async () => {

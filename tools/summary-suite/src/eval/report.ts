@@ -1,4 +1,4 @@
-import type { BudgetUsage } from './hooks.js';
+import type { BudgetUsage, ProviderLabel } from './hooks.js';
 import type { Measurement, Proposal } from './measure.js';
 
 type ViewStatus = 'ok' | 'partial' | 'unsupported' | 'tooLarge' | 'failed' | 'timeLimit' | 'cancelled' | 'not run';
@@ -41,6 +41,8 @@ export interface Report {
   readonly instructionsSha256: string;
   readonly budget: number;
   readonly usage: BudgetUsage;
+  /** Present for a local run only: the provider kind, the grammar label and the schema probe. */
+  readonly provider?: ProviderLabel;
   readonly budgetSpent: boolean;
   readonly views: readonly ViewReport[];
   /** The measurements of a measuring run, and what they support: sizes and counts only. */
@@ -101,8 +103,10 @@ export function textOf(report: Report): string[] {
     `calls: ${report.usage.calls} of ${report.budget}${report.budgetSpent ? ' (the budget was spent)' : ''}`,
     `tokens: in ${report.usage.inputTokens}, out ${report.usage.outputTokens}, cache read ${report.usage.cacheReadTokens}, cache write ${report.usage.cacheWriteTokens}, calls without counts ${report.usage.withoutCounts}`,
     `failed calls: ${report.usage.failed}`,
+    `time of a call: median ${report.usage.medianMs} ms, 95th percentile ${report.usage.p95Ms} ms`,
     '',
   ];
+  if (report.provider?.kind === 'local') lines.splice(2, 0, `provider: local, grammar ${report.provider.grammar === true ? 'on' : 'off'}`, ...(report.provider.thinking === 'off' ? ['thinking: off'] : []), ...(report.provider.grammarPrompts !== undefined && report.provider.grammarPrompts.length > 0 ? [`grammar prompts: ${report.provider.grammarPrompts.join(', ')}`] : []), ...(report.provider.probe === undefined ? [] : [`schema probe: ${report.provider.probe}`]));
   for (const view of report.views) {
     if (view.status === 'not run') {
       lines.push(`${view.id} [${view.kind}]: not run`);

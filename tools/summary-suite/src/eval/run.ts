@@ -3,7 +3,7 @@ import { keyMapOf, loadCases, readingOf, type LabelledCase } from '../cases.js';
 import { sentencesOf } from '../checks.js';
 import { scoreLabelled, scoreSummary } from '../score.js';
 import { causeOf, removedOf } from './diagnose.js';
-import type { BudgetUsage, EvalHooks, EvalSummarizer, ReplyObservation, RunSettings } from './hooks.js';
+import type { BudgetUsage, EvalHooks, EvalSummarizer, ProviderLabel, ReplyObservation, RunSettings } from './hooks.js';
 import { manifestOf, richSampleSizes, selectViews, sampleSizes, type MeasureMode } from './manifest.js';
 import { elementsOf, estimatedTokensOf, heavyReading, proposalOf, realisticReading, scaledReading, utf8Bytes, type Measurement } from './measure.js';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, UsageError, writePrivateFile } from './paths.js';
@@ -140,6 +140,26 @@ async function measureOne(run: Run, summarizer: EvalSummarizer, target: { readon
   return { ...base, measured: true, bytes: bytes ?? 0, inputTokens, bytesPerToken: (bytes ?? 0) / inputTokens, tokensPerElement: inputTokens / elements };
 }
 
+/** The estimate of the input of the largest first request of the views, as the product builds it: each view goes through the real summarizer over a scripted provider that makes no model call, and the bytes of the instructions and the values it was sent are counted. */
+async function largestRequestTokens<Provider>(hooks: EvalHooks<Provider>, settings: RunSettings, env: Env, views: readonly LabelledCase[]): Promise<number> {
+  let current: LabelledCase | undefined;
+  let sent = '';
+  const scripted = hooks.scriptedProvider((values) => (current === undefined ? EMPTY_REPLY : scriptedReply(current, values)));
+  const budgeted = hooks.budgeted(scripted, Number.MAX_SAFE_INTEGER, (values) => {
+    if (sent === '') sent = values;
+  });
+  const built = await hooks.summarizer({ provider: budgeted.provider, settings: { ...settings, maxCalls: 1 }, env, observe: () => undefined });
+  if (!built.ok) throw new UsageError(built.problems.join('; '));
+  let largest = 0;
+  for (const labelled of views) {
+    current = labelled;
+    sent = '';
+    await built.summarizer.summarize(readingOf(labelled), new AbortController().signal);
+    if (sent !== '') largest = Math.max(largest, utf8Bytes(built.summarizer.instructions, sent));
+  }
+  return estimatedTokensOf(largest);
+}
+
 function guardLive(options: RunOptions): void {
   if (options.out === undefined) throw new UsageError('a live run needs --out, a folder outside every git working tree');
   if (options.folder === undefined) throw new UsageError('a live run needs --folder, an Ask folder that gives the provider its settings');
@@ -160,6 +180,7 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
   const manifest = manifestOf(views, settings, options.measure);
   const mode = options.stub ? 'stub' : 'live';
   if (options.dryRun) {
+    const largest = await largestRequestTokens(hooks, settings, env, views);
     return {
       code: 0,
       lines: [
@@ -169,6 +190,7 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
         ...manifest.categories.map((each) => `${each.name}: ${each.views} views, at most ${each.mostCalls} calls, at least ${each.leastCalls}`),
         `calls: at most ${manifest.mostCalls}, budget needed at least ${manifest.leastCalls}`,
         `size guard: ${settings.maxInputTokens} tokens`,
+        `largest request, estimated input tokens: ${largest}`,
       ],
     };
   }
@@ -177,7 +199,8 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
   if (budget < manifest.leastCalls) throw new UsageError(`the budget ${budget} is below the ${manifest.leastCalls} calls the run needs`);
   if (!options.stub) guardLive(options);
   let current: () => LabelledCase | undefined = () => undefined;
-  const inner = options.stub ? hooks.scriptedProvider((values) => scriptedReplyFor(current(), values)) : await liveProviderOf(hooks, options, env, settings);
+  const live = options.stub ? undefined : await liveProviderOf(hooks, options, env, settings);
+  const inner = live === undefined ? hooks.scriptedProvider((values) => scriptedReplyFor(current(), values)) : live.provider;
   const state: Run = { current: undefined, sent: '', observations: [], usage: () => budgeted.usage(), signal, stopped: false, budget };
   current = () => state.current;
   const budgeted = hooks.budgeted(inner, budget, (values) => {
@@ -202,7 +225,7 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
   const proposal = options.measure === 'none' ? undefined : proposalOf(measurements, new Set(views.filter((each) => each.shape !== undefined).map((each) => each.id)), settings.maxElements);
   const usage = budgeted.usage();
   const spent = state.stopped || usage.refused > 0;
-  const report: Report = { mode, model: settings.model, instructionsSha256: built.summarizer.instructionsSha256, budget, usage, budgetSpent: spent, views: reports, ...(options.measure === 'none' ? {} : { measurements, ...(proposal === undefined ? {} : { proposal }) }) };
+  const report: Report = { mode, model: settings.model, instructionsSha256: built.summarizer.instructionsSha256, budget, usage, ...(live?.label?.kind === 'local' ? { provider: live.label } : {}), budgetSpent: spent, views: reports, ...(options.measure === 'none' ? {} : { measurements, ...(proposal === undefined ? {} : { proposal }) }) };
   if (!options.stub && options.out !== undefined) writePrivateFile(join(options.out, RECORD_FILE), `${recordOf(report)}\n`, options.force);
   const failed = reports.some((view) => view.status === 'failed' || view.status === 'timeLimit' || view.status === 'cancelled');
   return { code: spent || failed ? 1 : 0, lines: options.json ? [jsonOf(report)] : textOf(report), report };
@@ -211,9 +234,9 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
 const scriptedReplyFor = (labelled: LabelledCase | undefined, values: string): string => (labelled === undefined ? EMPTY_REPLY : scriptedReply(labelled, values));
 
 /** The live provider of the hooks, with its refusals (a key in the environment, a key file that cannot be used, settings that cannot be used) turned into a usage error: the message, exit code 2, no stack. */
-async function liveProviderOf<Provider>(hooks: EvalHooks<Provider>, options: RunOptions, env: Env, settings: RunSettings): Promise<Provider> {
+async function liveProviderOf<Provider>(hooks: EvalHooks<Provider>, options: RunOptions, env: Env, settings: RunSettings): Promise<{ readonly provider: Provider; readonly label?: ProviderLabel }> {
   try {
-    return (await hooks.liveProvider(options.measure === 'none' ? env : { ...env, NEBURYX_AI_CACHE: 'off' }, options.folder ?? '', settings)).provider;
+    return await hooks.liveProvider(options.measure === 'none' ? env : { ...env, NEBURYX_AI_CACHE: 'off' }, options.folder ?? '', settings);
   } catch (error) {
     if (error instanceof Error && error.name === 'LiveProviderError') throw new UsageError(error.message);
     throw error;

@@ -31,6 +31,17 @@ export interface BudgetUsage {
   readonly cacheReadTokens: number;
   readonly cacheWriteTokens: number;
   readonly withoutCounts: number;
+  readonly medianMs: number;
+  readonly p95Ms: number;
+}
+
+/** What a run says of the provider it used: names, a flag and a count; no text. */
+export interface ProviderLabel {
+  readonly kind: 'anthropic' | 'local';
+  readonly grammar?: boolean;
+  readonly grammarPrompts?: readonly string[];
+  readonly probe?: 'accepted';
+  readonly thinking?: 'off';
 }
 
 export interface EvalSummarizer {
@@ -44,7 +55,7 @@ export interface EvalSummarizer {
 export interface EvalHooks<Provider = unknown> {
   readonly settings: (env: Readonly<Record<string, string | undefined>>) => { readonly ok: true; readonly settings: RunSettings } | { readonly ok: false; readonly problems: readonly string[] };
   readonly scriptedProvider: (replyFor: (values: string) => string) => Provider;
-  readonly liveProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, settings: RunSettings) => Promise<{ readonly provider: Provider; readonly model: string }>;
+  readonly liveProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, settings: RunSettings) => Promise<{ readonly provider: Provider; readonly model: string; readonly label?: ProviderLabel }>;
   readonly budgeted: (inner: Provider, budget: number, onRequest: (values: string) => void) => { readonly provider: Provider; readonly usage: () => BudgetUsage };
   readonly summarizer: (options: { readonly provider: Provider; readonly settings: RunSettings; readonly env: Readonly<Record<string, string | undefined>>; readonly observe: (observation: ReplyObservation) => void }) => Promise<{ readonly ok: true; readonly summarizer: EvalSummarizer } | { readonly ok: false; readonly problems: readonly string[] }>;
 }
