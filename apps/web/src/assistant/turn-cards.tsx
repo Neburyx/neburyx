@@ -261,7 +261,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
 }
 
 /** The words of the step in progress: a fixed sentence for a phase, and for a read the label of the intent or the humanized tool, with its subject; all of it text. */
-export function stepSentenceOf(step: TurnStep): string {
+function stepSentenceOf(step: TurnStep): string {
   switch (step.phase) {
     case 'routing':
       return ASSISTANT_COPY.stepRouting;
