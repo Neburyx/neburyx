@@ -173,6 +173,7 @@ test.describe('the Patterns panel on the canvas', () => {
     const card = panelOf(page).getByRole('button', { name: 'Shared devices', exact: true });
     const box = await card.boundingBox();
     expect(box?.height ?? 99).toBeLessThan(40);
+    await expect(card.locator('xpath=ancestor::h4')).toHaveCSS('font-weight', '400');
     const glyph = await card.locator('img').boundingBox();
     const name = await card.locator('.pattern-card-name').boundingBox();
     expect(Math.abs(((glyph?.y ?? 0) + (glyph?.height ?? 0) / 2) - ((name?.y ?? 99) + (name?.height ?? 0) / 2))).toBeLessThan(4);

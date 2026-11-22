@@ -22,9 +22,3 @@ export function savedSummary(item: ListedPattern, presets: readonly Preset[] | u
   const params = paramsInWords(preset ?? { labels: [] }, item.params, preset === undefined ? undefined : windowOf?.(preset));
   return [preset === undefined ? '' : presetSummary(preset, nameOf), params].filter((part) => part !== '').join(' · ');
 }
-
-/** Whether a row shows for the search text: the text is in its name or in its chain, ignoring case; no text shows every row. */
-export function rowMatches(text: string, name: string, summary: string): boolean {
-  const needle = text.trim().toLowerCase();
-  return needle === '' || name.toLowerCase().includes(needle) || summary.toLowerCase().includes(needle);
-}

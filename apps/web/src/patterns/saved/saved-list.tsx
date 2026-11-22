@@ -69,7 +69,7 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
       {groups.named.length > 0 && groups.general.length === 0 && presets?.length === 0 ? null : (
       <Section id="built-in" label={groups.named.length === 0 ? SAVED_COPY.builtIn : `${SAVED_COPY.builtIn} · ${SAVED_COPY.builtInGeneral}`} count={presets === undefined ? undefined : String(presets.length + groups.general.length)} headingRef={builtIn}>
         {words === undefined || groups.general.length === 0 ? null : <TypologyRows items={groups.general} client={words.client} sourceId={words.sourceId} sourceName={sourceName} mask={words.mask} actions={words.actions} />}
-        {presets === undefined ? null : <BuiltInRows presets={presets} actions={actions} nameOf={nameOf} hasOthers={groups.general.length > 0} selectedId={selectedPresetId} iconOf={iconOf} />}
+        {presets === undefined ? null : <BuiltInRows presets={presets} actions={actions} hasOthers={groups.general.length > 0} selectedId={selectedPresetId} iconOf={iconOf} />}
         {presetPanel}
       </Section>
       )}
@@ -116,7 +116,7 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
   );
 }
 
-/** The built-in definitions that match the search, in the sections their mappings name (in the order first named) and, with no group or the group "general", in the general section with the built-in templates. */
+/** The built-in definitions, in the sections their mappings name (in the order first named) and, with no group or the group "general", in the general section with the built-in templates. */
 function groupsOf(definitions: readonly BuiltInDefinition[] | undefined): { readonly named: readonly { readonly name: string; readonly items: readonly BuiltInDefinition[] }[]; readonly general: readonly BuiltInDefinition[] } {
   const named = new Map<string, BuiltInDefinition[]>();
   const general: BuiltInDefinition[] = [];
@@ -139,7 +139,7 @@ function Section({ id, label, count, headingRef, children }: { readonly id: stri
   );
 }
 
-function BuiltInRows({ presets, actions, nameOf, hasOthers, selectedId, iconOf }: { readonly presets: readonly Preset[]; readonly actions: RowActions; readonly nameOf: Props['nameOf']; readonly hasOthers: boolean; readonly selectedId: string | undefined; readonly iconOf: Props['iconOf'] }) {
+function BuiltInRows({ presets, actions, hasOthers, selectedId, iconOf }: { readonly presets: readonly Preset[]; readonly actions: RowActions; readonly hasOthers: boolean; readonly selectedId: string | undefined; readonly iconOf: Props['iconOf'] }) {
   if (presets.length === 0) return hasOthers ? null : <p className="search-panel-note">{SAVED_COPY.noBuiltIn}</p>;
   return (
     <ul className="pattern-rows">

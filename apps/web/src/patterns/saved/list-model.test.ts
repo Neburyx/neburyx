@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ListedPattern } from '@neburyx/contracts';
-import { presetSummary, rowMatches, savedSummary } from './list-model.js';
+import { presetSummary, savedSummary } from './list-model.js';
 import { pathSummary } from './path-summary.js';
 
 const names: Record<string, string> = { 'kind-a': 'Kind A', 'kind-b': 'Kind B' };
@@ -31,15 +31,6 @@ describe('the chain of a saved pattern in a line', () => {
     expect(savedSummary(saved({ kind: 'preset-run', presetId: 'p', params: { limit: 25 } }), presets, nameOf)).toBe('Kind A → USES → Kind B · Limit 25');
     expect(savedSummary(saved({ kind: 'preset-run', presetId: 'gone', params: {} }), presets, nameOf)).toBe('');
     expect(savedSummary(saved({ kind: 'preset-run', presetId: 'gone', params: { limit: 25 } }), presets, nameOf)).toBe('Limit 25');
-  });
-});
-
-describe('the search of the list', () => {
-  it('matches the name or the chain, ignoring case and spaces at the ends, and shows every row for no text', () => {
-    expect(rowMatches('', 'Alpha', 'Kind A → USES → Kind B')).toBe(true);
-    expect(rowMatches('  ALP ', 'Alpha', '')).toBe(true);
-    expect(rowMatches('uses', 'Alpha', 'Kind A → USES → Kind B')).toBe(true);
-    expect(rowMatches('zzz', 'Alpha', 'Kind A → USES → Kind B')).toBe(false);
   });
 });
 

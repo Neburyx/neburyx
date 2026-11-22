@@ -321,7 +321,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
         </button>
       </div>
       {sourceId === null || view === 'list' ? null : (
-        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : view === 'builder' ? (editing === undefined ? EDITOR_SUBTITLE : changed ? `${editing.item.name} · ${RUN_COPY.changesNotSaved}` : editing.item.name) : ''}</p>
+        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : editing === undefined ? EDITOR_SUBTITLE : changed ? `${editing.item.name} · ${RUN_COPY.changesNotSaved}` : editing.item.name}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (
