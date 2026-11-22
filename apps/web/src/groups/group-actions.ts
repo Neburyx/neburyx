@@ -14,7 +14,7 @@ function apply(state: ClientState, grouping: Grouping): Applied {
   return { applied: true, left: grouping.left };
 }
 
-/** Groups every loaded entity by its entity type, replacing every group; each group starts collapsed. */
+/** Groups every loaded entity by its entity type, replacing every group; each group starts expanded. */
 export function groupAllByType(state: ClientState): Applied {
   const nodes = loadedNodes(state);
   if (nodes.length === 0) return { applied: false, reason: 'nothing-loaded' };
@@ -41,7 +41,7 @@ function selectionGroupId(groups: readonly { readonly id: string }[], type: stri
   return `${prefix}${highest + 1}`;
 }
 
-/** Groups the selected entities by entity type (relationships in the selection are ignored): each type among them becomes one collapsed group, its members taken out of any other group. */
+/** Groups the selected entities by entity type (relationships in the selection are ignored): each type among them becomes one group (expanded), its members taken out of any other group. */
 export function groupSelection(state: ClientState, selection: readonly string[]): void {
   const wanted = new Set(selection.filter((key) => nodeRefOfKey(key) !== undefined));
   const nodes = loadedNodes(state).filter((node) => wanted.has(elementKey(node.ref)));

@@ -28,11 +28,11 @@ type Scalar = string | number | boolean;
 const scalarOf = (value: unknown): Scalar | undefined => (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? value : undefined);
 const sameValueKey = (value: Scalar): string => `${typeof value}:${String(value)}`;
 
-/** One collapsed group for each entity type among the nodes, in the order the types first appear. */
+/** One group for each entity type among the nodes, in the order the types first appear. */
 export function groupsByEntityType(nodes: readonly GraphNode[], idOf: (type: string) => string = (type) => `${TYPE_ID_PREFIX}${type}`): Group[] {
   const members = new Map<string, string[]>();
   for (const node of nodes) members.set(node.ref.entityType, [...(members.get(node.ref.entityType) ?? []), elementKey(node.ref)]);
-  return [...members].map(([type, keys]) => ({ id: idOf(type), by: BY_ENTITY_TYPE, members: keys, collapsed: true }));
+  return [...members].map(([type, keys]) => ({ id: idOf(type), by: BY_ENTITY_TYPE, members: keys, collapsed: false }));
 }
 
 export interface Grouping {
@@ -41,7 +41,7 @@ export interface Grouping {
   readonly left: number;
 }
 
-/** One collapsed group for each distinct scalar value of the property among the nodes that carry it; the group's id holds the order the values first appear in, never a value. */
+/** One group for each distinct scalar value of the property among the nodes that carry it; the group's id holds the order the values first appear in, never a value. */
 export function groupsByProperty(nodes: readonly GraphNode[], key: string): Grouping {
   const byValue = new Map<string, string[]>();
   let left = 0;
@@ -54,13 +54,13 @@ export function groupsByProperty(nodes: readonly GraphNode[], key: string): Grou
     const valueKey = sameValueKey(value);
     byValue.set(valueKey, [...(byValue.get(valueKey) ?? []), elementKey(node.ref)]);
   }
-  return { groups: [...byValue.values()].map((keys, index) => ({ id: `${PROPERTY_ID_PREFIX}${key}:${index + 1}`, by: propertyBy(key), members: keys, collapsed: true })), left };
+  return { groups: [...byValue.values()].map((keys, index) => ({ id: `${PROPERTY_ID_PREFIX}${key}:${index + 1}`, by: propertyBy(key), members: keys, collapsed: false })), left };
 }
 
 /** The order of keys by code unit, the same on every machine. */
 const codeUnitOrder = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
-/** One collapsed group for each connected component of the loaded drawable relationships (direction ignored) with at least one relationship, numbered by the smallest element key of each. */
+/** One group for each connected component of the loaded drawable relationships (direction ignored) with at least one relationship, numbered by the smallest element key of each. */
 export function groupsByComponent(graph: LoadedGraph): Grouping {
   const parent = new Map<string, string>();
   const find = (key: string): string => {
@@ -81,7 +81,7 @@ export function groupsByComponent(graph: LoadedGraph): Grouping {
   const components = new Map<string, string[]>();
   for (const key of [...joined].sort(codeUnitOrder)) components.set(find(key), [...(components.get(find(key)) ?? []), key]);
   const ordered = [...components.values()].sort((a, b) => codeUnitOrder(a[0] ?? '', b[0] ?? ''));
-  return { groups: ordered.map((keys, index) => ({ id: `${COMPONENT_ID_PREFIX}${index + 1}`, by: BY_COMPONENT, members: keys, collapsed: true })), left: graph.nodes.length - joined.size };
+  return { groups: ordered.map((keys, index) => ({ id: `${COMPONENT_ID_PREFIX}${index + 1}`, by: BY_COMPONENT, members: keys, collapsed: false })), left: graph.nodes.length - joined.size };
 }
 
 /** The mapped properties that may be grouped by: those of the entity types in the view; while masking is on, not one that any of those types marks `pii`, and not one a loaded entity carries masked by a policy. */

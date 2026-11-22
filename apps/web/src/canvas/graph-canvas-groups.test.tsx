@@ -1,6 +1,6 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cardKey, containerKey } from '../groups/group-keys.js';
+import { cardKey } from '../groups/group-keys.js';
 import { entityOf, keyOf, linkOf, loadedState, at } from '../groups/group-kit.js';
 import { ClientStateProvider } from '../state/context.js';
 import type { ClientState } from '../state/client-state.js';
@@ -43,11 +43,11 @@ describe('the canvas with groups', () => {
     expect(scene?.relationships.map((relationship) => [relationship.from, relationship.to, relationship.look.label])).toEqual([[cardKey('type:kind-a'), keyOf(at(devices, 0)), '×2']]);
   });
 
-  it('draws an expanded group as a container around its members, and no card', () => {
+  it('draws an expanded group as its members, with no card and no container', () => {
     const state = loadedState([...devices, ...accounts], links);
     const { last } = draw(state);
     act(() => state.presentation.setGroups([groupOf('type:kind-d', devices, false)]));
-    expect(last()?.containers).toEqual([{ id: containerKey('type:kind-d'), label: 'kind-d · 2 loaded', members: devices.map(keyOf) }]);
+    expect(last()?.entities.map((entity) => entity.id).sort()).toEqual([...devices, ...accounts].map(keyOf).sort());
     expect(last()?.entities).toHaveLength(4);
   });
 

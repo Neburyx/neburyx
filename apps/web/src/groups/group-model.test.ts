@@ -5,13 +5,13 @@ import { entityOf, graphOf, keyOf, linkOf, profileWith, at } from './group-kit.j
 const byKey = (nodes: readonly ReturnType<typeof entityOf>[]) => new Map(nodes.map((entry) => [keyOf(entry), entry]));
 
 describe('grouping by entity type', () => {
-  it('makes one collapsed group for each type, singletons included, with no value in it', () => {
+  it('makes one expanded group for each type, singletons included, with no value in it', () => {
     const nodes = [entityOf('kind-d', 'DV1'), entityOf('kind-a', 'A1'), entityOf('kind-d', 'DV2'), entityOf('kind-l', 'C1')];
     const groups = groupsByEntityType(nodes);
     expect(groups.map((group) => [group.id, group.members.length, group.collapsed, group.by])).toEqual([
-      ['type:kind-d', 2, true, BY_ENTITY_TYPE],
-      ['type:kind-a', 1, true, BY_ENTITY_TYPE],
-      ['type:kind-l', 1, true, BY_ENTITY_TYPE],
+      ['type:kind-d', 2, false, BY_ENTITY_TYPE],
+      ['type:kind-a', 1, false, BY_ENTITY_TYPE],
+      ['type:kind-l', 1, false, BY_ENTITY_TYPE],
     ]);
   });
 
@@ -56,7 +56,7 @@ describe('grouping by component', () => {
     const { groups, left } = groupsByComponent(graph);
     expect(groups.map((group) => group.members.map((member) => JSON.parse(member)[3]))).toEqual([['A', 'B', 'C'], ['D', 'E']]);
     expect(groups.map((group) => group.id)).toEqual(['component:1', 'component:2']);
-    expect(groups.every((group) => group.by === BY_COMPONENT && group.collapsed)).toBe(true);
+    expect(groups.every((group) => group.by === BY_COMPONENT && !group.collapsed)).toBe(true);
     expect(left).toBe(1);
   });
 

@@ -6,7 +6,7 @@ import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
 import { pinBadgeUri } from './pin-badge.js';
 import { createHoverTip, type HoverTip } from './hover-tip.js';
-import { CAPTION_COLOR, CARD_BADGE_OFFSET, CARD_BADGE_SIZE, CARD_GLYPH_INSET, CARD_FONT_SIZE, CARD_HEIGHT, CARD_STACK_OPACITY, CARD_STACK_PADDING, CARD_WIDTH, CONTAINER_FILL, CONTAINER_FILL_OPACITY, CONTAINER_LABEL_SIZE, CONTAINER_OUTLINE_WIDTH, CONTAINER_PADDING_BOTTOM, CONTAINER_PADDING_TOP, CONTAINER_PADDING_X, AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
+import { CAPTION_COLOR, CARD_BADGE_OFFSET, CARD_BADGE_SIZE, CARD_GLYPH_INSET, CARD_FONT_SIZE, CARD_HEIGHT, CARD_STACK_OPACITY, CARD_STACK_PADDING, CARD_WIDTH, AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -128,29 +128,6 @@ export const STYLE: StylesheetJson = [
       'underlay-opacity': CARD_STACK_OPACITY,
       'underlay-padding': CARD_STACK_PADDING,
       'underlay-shape': 'round-rectangle',
-    },
-  },
-  // The container around the members of an expanded group: behind them, not interactive, its label at the upper left.
-  {
-    selector: 'node[?container]',
-    style: {
-      shape: 'round-rectangle',
-      width: 'data(w)',
-      height: 'data(h)',
-      'background-color': CONTAINER_FILL,
-      'background-opacity': CONTAINER_FILL_OPACITY,
-      'border-style': 'dashed',
-      'border-width': CONTAINER_OUTLINE_WIDTH,
-      'border-color': DERIVED_COLOR,
-      label: 'data(caption)',
-      'text-valign': 'top',
-      'text-halign': 'center',
-      'text-margin-y': -2 * CONTAINER_OUTLINE_WIDTH - CONTAINER_LABEL_SIZE,
-      'font-family': 'Inter, system-ui, sans-serif',
-      'font-size': CONTAINER_LABEL_SIZE,
-      color: CAPTION_COLOR,
-      events: 'no',
-      'z-index': 1,
     },
   },
   { selector: 'edge[?remainder]', style: { width: 1, 'line-style': 'dashed', 'line-dash-pattern': DASH_PATTERN, 'target-arrow-shape': 'none' } },
@@ -729,7 +706,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         }
         lastSource = scene.source;
       }
-      const wantedEntities = new Set([...scene.entities.map((entity) => entity.id), ...(scene.containers ?? []).map((container) => container.id)]);
+      const wantedEntities = new Set(scene.entities.map((entity) => entity.id));
       const wantedRelationships = new Set(scene.relationships.map((relationship) => relationship.id));
       if (dragging !== undefined && (scene.tool !== dragging.tool || !sameKeys(scene.pinned, dragging.pinned) || !wantedEntities.has(dragging.id))) cancelDrag();
       drawnPinned = scene.pinned;
@@ -775,25 +752,6 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
               node.style('background-image', imagesFor(entity.look.iconKey, pinned, known));
               if (known === undefined) captionQueue.push({ id: entity.id, key: lookKey, iconKey: entity.look.iconKey, line1: entity.look.line1, line2: entity.look.line2, pinned });
             }
-          }
-        }
-        for (const container of scene.containers ?? []) {
-          const places = container.members.flatMap((member) => {
-            const entity = scene.entities.find((candidate) => candidate.id === member);
-            return entity === undefined ? [] : [entity.position];
-          });
-          if (places.length === 0) continue;
-          const left = Math.min(...places.map((place) => place.x)) - CONTAINER_PADDING_X;
-          const right = Math.max(...places.map((place) => place.x)) + CONTAINER_PADDING_X;
-          const top = Math.min(...places.map((place) => place.y)) - CONTAINER_PADDING_TOP;
-          const bottom = Math.max(...places.map((place) => place.y)) + CONTAINER_PADDING_BOTTOM;
-          const frame = { w: right - left, h: bottom - top, caption: container.label, remainder: true, container: true };
-          const centre = { x: (left + right) / 2, y: (top + bottom) / 2 };
-          const held = cy.getElementById(container.id);
-          if (held.empty()) cy.add({ group: 'nodes', data: { id: container.id, ...frame }, position: centre, grabbable: false });
-          else {
-            held.data(frame);
-            held.position(centre);
           }
         }
         for (const relationship of scene.relationships) {
@@ -885,7 +843,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         zoomLimits: { min: cy.minZoom(), max: cy.maxZoom() },
         boundingBox: cy.nodes().empty() ? undefined : cy.nodes().renderedBoundingBox({}),
         interaction: { panning: cy.userPanningEnabled(), zooming: cy.userZoomingEnabled(), boxSelecting: cy.boxSelectionEnabled(), nodesGrabbable: cy.nodes().map((node) => node.grabbable()).includes(true), nodesSelectable: !cy.autounselectify() },
-        remainders: cy.nodes('[?remainder][!group][!container]').map((node) => ({ id: node.id(), caption: String(node.data('caption') ?? ''), grabbable: node.grabbable() })),
+        remainders: cy.nodes('[?remainder][!group]').map((node) => ({ id: node.id(), caption: String(node.data('caption') ?? ''), grabbable: node.grabbable() })),
         nodes: cy.nodes('[!remainder]').map((node) => {
           const image = node.style('background-image');
           const layers = image === 'none' ? [] : image.split(' ');

@@ -25,6 +25,8 @@ test.describe('grouping of loaded nodes', () => {
 
     await panel(page).getByRole('radio', { name: 'Entity type' }).click();
     await expect(panel(page).getByText('Other types')).toBeVisible();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '10');
+    await panel(page).getByRole('button', { name: 'Collapse all' }).click();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '0');
     await panel(page).getByRole('button', { name: /^Expand / }).first().click();
     await expect(canvasOf(page)).not.toHaveAttribute('data-drawn-entities', '0');
@@ -46,7 +48,7 @@ test.describe('grouping of loaded nodes', () => {
     await canvasOf(page).click({ button: 'right', position: { x: 20, y: 20 } });
     await page.getByRole('menuitem', { name: 'Group all by type' }).click();
     await page.getByRole('menuitem', { name: 'All entity types' }).click();
-    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '0');
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '10');
     await canvasOf(page).click({ button: 'right', position: { x: 20, y: 20 } });
     await page.getByRole('menuitem', { name: 'Ungroup all' }).click();
     await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '10');

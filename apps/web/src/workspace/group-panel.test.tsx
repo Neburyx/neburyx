@@ -50,7 +50,7 @@ describe('the Group panel', () => {
     for (const radio of panel.getAllByRole('radio')) expect(radio).toHaveProperty('disabled', true);
   });
 
-  it('applies Entity type at once with one collapsed group for each type, lists them largest first with "n loaded", folds past four into Other types, and expands that row', async () => {
+  it('applies Entity type at once with one group for each type, none collapsed, lists them largest first with "n loaded", folds past four into Other types, and expands that row', async () => {
     const state = loadedState(entities);
     const { user, panel } = show(state);
     await user.click(panel.getByRole('radio', { name: 'Entity type' }));
@@ -66,11 +66,12 @@ describe('the Group panel', () => {
     const state = loadedState(entities.slice(0, 4));
     const { user, panel } = show(state);
     await user.click(panel.getByRole('radio', { name: 'Entity type' }));
-    const chevron = panel.getByRole('button', { name: 'Expand Kind A' });
-    expect(chevron.getAttribute('aria-expanded')).toBe('false');
+    expect(state.presentation.view.getState().groups.some((group) => group.collapsed)).toBe(false);
+    const chevron = panel.getByRole('button', { name: 'Collapse Kind A' });
+    expect(chevron.getAttribute('aria-expanded')).toBe('true');
     await user.click(chevron);
-    expect(state.presentation.view.getState().groups.find((group) => group.id === 'type:kind-a')?.collapsed).toBe(false);
-    expect(panel.getByRole('button', { name: 'Collapse Kind A' }).getAttribute('aria-expanded')).toBe('true');
+    expect(state.presentation.view.getState().groups.find((group) => group.id === 'type:kind-a')?.collapsed).toBe(true);
+    expect(panel.getByRole('button', { name: 'Expand Kind A' }).getAttribute('aria-expanded')).toBe('false');
     await user.click(panel.getByRole('button', { name: 'Collapse all' }));
     expect(state.presentation.view.getState().groups.every((group) => group.collapsed)).toBe(true);
     await user.click(panel.getByRole('button', { name: 'Ungroup all' }));

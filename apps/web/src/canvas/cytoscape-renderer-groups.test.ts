@@ -15,7 +15,6 @@ function groupedScene(): Scene {
       { id: 'group:g1', position: { x: 100, y: 200 }, group: { id: 'g1', count: 3 }, look: { iconKey: 'generic' as const, line1: 'Kind D', line2: '3 loaded' } },
     ],
     relationships: [{ id: 'ab', from: 'a', to: 'group:g1', look: { aggregate: true, origin: 'stored' as const, label: '×2', badge: '×2' } }],
-    containers: [{ id: 'container:g2', label: 'Kind A · 2 loaded', members: ['a', 'b'] }],
     profile: undefined,
     omitted: 0,
     selection: new Set<string>(),
@@ -46,26 +45,11 @@ describe('the Cytoscape renderer with groups', () => {
     expect(renderer.inspect().remainders).toEqual([]);
   });
 
-  it('draws the container behind the members as a node that cannot be touched, sized to the members with the room for their captions, and draws it again when they move', () => {
+  it('removes the card when the scene no longer holds them', () => {
     const { renderer, core } = mounted();
     renderer.draw(groupedScene());
-    const container = core()?.getElementById('container:g2');
-    expect(container?.data('container')).toBe(true);
-    expect(container?.grabbable()).toBe(false);
-    expect(container?.data('w')).toBeGreaterThan(200);
-    expect(container?.data('caption')).toBe('Kind A · 2 loaded');
-    const wide = container?.data('w');
-    const moved = groupedScene();
-    renderer.draw({ ...moved, entities: moved.entities.map((entity) => (entity.id === 'b' ? { ...entity, position: { x: 600, y: 0 } } : entity)) });
-    expect(core()?.getElementById('container:g2').data('w')).toBeGreaterThan(wide);
-  });
-
-  it('removes the card and the container when the scene no longer holds them', () => {
-    const { renderer, core } = mounted();
-    renderer.draw(groupedScene());
-    renderer.draw({ ...groupedScene(), entities: groupedScene().entities.filter((entity) => entity.group === undefined), relationships: [], containers: [] });
+    renderer.draw({ ...groupedScene(), entities: groupedScene().entities.filter((entity) => entity.group === undefined), relationships: [] });
     expect(core()?.getElementById('group:g1').empty()).toBe(true);
-    expect(core()?.getElementById('container:g2').empty()).toBe(true);
   });
 
   it('gives the card the badge of its count as an image and a second outline behind it in the style', () => {

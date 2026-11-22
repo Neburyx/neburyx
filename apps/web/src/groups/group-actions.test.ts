@@ -12,14 +12,14 @@ const profile = profileWith({ 'kind-d': { properties: ['currency'] }, 'kind-a': 
 const groupsOf = (state: ReturnType<typeof loadedState>) => state.presentation.view.getState().groups;
 
 describe('grouping by entity type from the menus', () => {
-  it('groups every loaded entity by type, each group collapsed, and writes no position, pin or hidden state', () => {
+  it('groups every loaded entity by type, each group expanded (nothing collapses by itself), and writes no position, pin or hidden state', () => {
     const state = loadedState(all);
     state.presentation.pin([keyOf(d1)]);
     state.presentation.setPosition(keyOf(a1), { x: 3, y: 4 });
     const before = state.presentation.view.getState();
     expect(groupAllByType(state)).toEqual({ applied: true, left: 0 });
     const after = state.presentation.view.getState();
-    expect(groupsOf(state).map((group) => [group.id, group.members.length, group.collapsed])).toEqual([['type:kind-d', 2, true], ['type:kind-a', 1, true], ['type:kind-c', 1, true]]);
+    expect(groupsOf(state).map((group) => [group.id, group.members.length, group.collapsed])).toEqual([['type:kind-d', 2, false], ['type:kind-a', 1, false], ['type:kind-c', 1, false]]);
     expect([after.positions, after.pins, after.hidden]).toEqual([before.positions, before.pins, before.hidden]);
   });
 

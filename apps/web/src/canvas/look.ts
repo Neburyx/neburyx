@@ -48,11 +48,3 @@ export const CARD_GLYPH_INSET = 10;
 export const CARD_STACK_PADDING = 7;
 export const CARD_STACK_OPACITY = 0.18;
 export const CARD_FONT_SIZE = 12;
-/** The container around the members of an expanded group: the padding on each side of their box (the bottom leaves room for the captions), its fill and its outline. */
-export const CONTAINER_PADDING_X = 70;
-export const CONTAINER_PADDING_TOP = 50;
-export const CONTAINER_PADDING_BOTTOM = 80;
-export const CONTAINER_FILL = '#eef0f8';
-export const CONTAINER_FILL_OPACITY = 0.55;
-export const CONTAINER_OUTLINE_WIDTH = 1;
-export const CONTAINER_LABEL_SIZE = 12;
