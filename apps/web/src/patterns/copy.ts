@@ -33,6 +33,7 @@ export const PATTERNS_COPY = {
   /** Proposed copy (the frame and the ui-spec give none). */
   noPatterns: 'This source has no patterns.',
   noMatches: 'No matches found.',
+  noCount: 'no count',
   cancelled: 'Cancelled. No new matches shown.',
   earlierResult: 'This is the result of the earlier run. The last run gave no result.',
   loading: 'Loading patterns…',

@@ -1,5 +1,6 @@
 import type { TemplateRunOk } from '@neburyx/contracts';
-import { degreeCountText } from '../workspace/degree-text.js';
+import type { Count } from '@neburyx/contracts';
+import { formatNumber } from '../workspace/scope-text.js';
 import { elementKey } from '../state/keys.js';
 import { addedText, noticeText, PATTERNS_COPY } from './copy.js';
 import type { AddedOutcome } from './add-to-graph.js';
@@ -30,6 +31,25 @@ function linkOf(result: TemplateRunOk, match: Ref, titles: ReadonlyMap<string, s
   return `${link.hops} ${link.hops === 1 ? 'hop' : 'hops'}${through === undefined ? '' : ` via ${through}`}`;
 }
 
+const QUALITY_WORDS: Record<Count['quality'], string> = { exact: 'exact', estimated: 'estimated', lowerBound: 'lower bound', unknown: 'no count' };
+
+const plural = (noun: string, number: number): string => {
+  if (number === 1) return noun;
+  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
+  return /(s|x|ch|sh)$/i.test(noun) ? `${noun}es` : `${noun}s`;
+};
+
+/** The sentence that leads a result: the number as the count's quality allows it, what was found, and the quality in words. */
+function resultSentence(result: TemplateRunOk, noun: string): string {
+  const { count } = result;
+  const reached = result.links !== undefined;
+  if (count.value === undefined) return PATTERNS_COPY.noCount;
+  const number = formatNumber(count.value);
+  const lead = count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;
+  const name = plural(noun.toLowerCase(), count.value);
+  return `${lead} ${reached ? name : `other ${name}`} ${reached ? 'reached' : 'found'} · ${QUALITY_WORDS[count.quality]}`;
+}
+
 /** The count with its quality in the words of the UI, and the table of matches with what they share, the notices and the evidence references. */
 export interface AddControl {
   /** `onCanvas`: everything of the result is already loaded; `running`: a run is in flight; `ready`: the result can be added. */
@@ -44,23 +64,9 @@ export function PatternResult({ result, matchHeading, sharedHeading, add, added,
   return (
     <section className="patterns-result" aria-label={PATTERNS_COPY.result}>
       <p className="patterns-summary" role="status">
-        {result.matchIds.length === 0 ? PATTERNS_COPY.noMatches : null}
-        {result.matchIds.length === 0 ? ' ' : null}
-        {degreeCountText(result.count)}
+        {result.matchIds.length === 0 && result.count.value !== 0 ? `${PATTERNS_COPY.noMatches} ` : null}
+        {result.matchIds.length === 0 && result.count.value === 0 ? `${PATTERNS_COPY.noMatches.replace(/\.$/, '')} · ${QUALITY_WORDS[result.count.quality]}` : resultSentence(result, matchHeading)}
       </p>
-      {result.matchIds.length === 0 || add === undefined ? null : (
-        <div className="patterns-actions">
-          <button type="button" className="primary" disabled={add.disabled} onClick={add.onAdd} {...(add.state === 'running' ? { 'aria-describedby': 'patterns-run-in-progress' } : {})}>
-            {add.state === 'onCanvas' ? PATTERNS_COPY.onCanvas : PATTERNS_COPY.addToGraph}
-          </button>
-          {add.state === 'running' ? <span id="patterns-run-in-progress" className="search-panel-note">{PATTERNS_COPY.runInProgress}</span> : null}
-        </div>
-      )}
-      {added === undefined ? null : (
-        <p className="patterns-state" role="status">
-          {addedText(added, result.count)}
-        </p>
-      )}
       {result.matchIds.length === 0 ? null : (
         <table className="patterns-table">
           <thead>
@@ -104,6 +110,19 @@ export function PatternResult({ result, matchHeading, sharedHeading, add, added,
           {noticeText(notice)}
         </p>
       ))}
+      {result.matchIds.length === 0 || add === undefined ? null : (
+        <div className="patterns-actions">
+          <button type="button" className="primary" disabled={add.disabled} onClick={add.onAdd} {...(add.state === 'running' ? { 'aria-describedby': 'patterns-run-in-progress' } : {})}>
+            {add.state === 'onCanvas' ? PATTERNS_COPY.onCanvas : PATTERNS_COPY.addToGraph}
+          </button>
+          {add.state === 'running' ? <span id="patterns-run-in-progress" className="search-panel-note">{PATTERNS_COPY.runInProgress}</span> : null}
+        </div>
+      )}
+      {added === undefined ? null : (
+        <p className="patterns-state" role="status">
+          {addedText(added, result.count)}
+        </p>
+      )}
     </section>
   );
 }

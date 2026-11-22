@@ -934,6 +934,11 @@
 
 .pattern-card[data-selected='true'] {
   border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+}
+
+.patterns-field .supernode-label {
+  font-weight: normal;
 }
 
 .pattern-card .pattern-row-name {

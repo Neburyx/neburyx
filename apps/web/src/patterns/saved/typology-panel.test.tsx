@@ -26,7 +26,7 @@ const sectionOf = (name: RegExp) => within(screen.getByRole('region', { name }))
 describe('the typology rows of the Patterns panel', () => {
   it('lists the typologies under "Built-in · AML typologies" with their count, name, tag and sentence, and the other built-ins under "Built-in · general"', async () => {
     await workspace();
-    expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · AML typologies · 2', 'Built-in · general · 3', 'My patterns · 0', 'Shared on this source · 0']);
+    expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · general · 3', 'Built-in · AML typologies · 2', 'My patterns · 0', 'Shared on this source · 0']);
     const typologies = sectionOf(/AML typologies/);
     expect(typologies.getAllByRole('listitem')).toHaveLength(2);
     expect(typologies.getByText('One account sends to many accounts.')).toBeTruthy();
@@ -188,7 +188,7 @@ describe('the groups of built-in definitions', () => {
     ];
     await patternsWorkspace({ list: listWith(definitions) });
     await openPatterns();
-    expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · A/B · 1', 'Built-in · A B · 1', 'Built-in · general · 5', 'My patterns · 0', 'Shared on this source · 0']);
+    expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · general · 5', 'Built-in · A/B · 1', 'Built-in · A B · 1', 'My patterns · 0', 'Shared on this source · 0']);
     expect(within(screen.getByRole('region', { name: 'Built-in · A/B · 1' })).getByText('Slash')).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Built-in · general · 5' })).getByText('Plain two')).toBeTruthy();
   });

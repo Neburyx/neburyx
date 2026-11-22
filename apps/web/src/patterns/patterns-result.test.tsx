@@ -25,9 +25,9 @@ async function shown(answer: (call: number) => TemplateRunResponse, pattern?: st
 
 describe('the result of a pattern run', () => {
   it.each([
-    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 · exact'],
-    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 (estimated)'],
-    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 · lower bound'],
+    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 other kind-as found · exact'],
+    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 other kind-as found · estimated'],
+    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 other kind-as found · lower bound'],
     [{ quality: 'unknown' as const, scope: 'matches' }, 'no count'],
   ])('states the count %j as %s', async (count, text) => {
     await shown(() => okRun(['acc-2'], { count } as never));
@@ -41,7 +41,7 @@ describe('the result of a pattern run', () => {
 
   it('says no matches were found, shows the count as stated and draws no table', async () => {
     await shown(() => okRun([]));
-    expect(within(summary()).getByRole('status').textContent).toBe('No matches found. 0 · exact');
+    expect(within(summary()).getByRole('status').textContent).toBe('No matches found · exact');
     expect(screen.queryByRole('table')).toBeNull();
   });
 
