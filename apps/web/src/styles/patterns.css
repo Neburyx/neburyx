@@ -1066,6 +1066,7 @@
 
 .library-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-8);
   justify-content: flex-end;
@@ -1079,11 +1080,12 @@
 
 .library-pill {
   display: inline-block;
+  max-width: 100%;
   padding: 0 var(--space-8);
   border: var(--border-width) solid var(--color-control-border);
   border-radius: var(--radius-panel);
   font-size: var(--font-size-caption);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .library-actions .pattern-menu {

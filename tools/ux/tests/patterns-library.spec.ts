@@ -72,6 +72,28 @@ test.describe('the patterns library page', () => {
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
   });
 
+  test('never lets the visibility of a row run under its buttons, whichever of the three labels it carries, at a width narrower than the supported ones', async ({ page }) => {
+    await page.getByRole('button', { name: 'More: Device ring' }).click();
+    await page.getByRole('menuitem', { name: 'Share' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Share' }).click();
+    await expect(page.getByText('Pattern shared with everyone on this source.')).toBeVisible();
+    await page.setViewportSize({ width: 800, height: 700 });
+    for (const tab of [/^My patterns/, /^Shared with me/]) {
+      await page.getByRole('tab', { name: tab }).click();
+      const rows = page.getByRole('row').filter({ has: page.locator('.library-pill') });
+      expect(await rows.count()).toBeGreaterThan(0);
+      for (const row of await rows.all()) {
+        const pill = await row.locator('.library-pill').boundingBox();
+        expect(pill).not.toBeNull();
+        for (const button of await row.getByRole('button').all()) {
+          const box = await button.boundingBox();
+          if (pill === null || box === null) continue;
+          expect(pill.x + pill.width <= box.x || box.x + box.width <= pill.x || pill.y + pill.height <= box.y || box.y + box.height <= pill.y).toBe(true);
+        }
+      }
+    }
+  });
+
   test('opens from the link of the panel on the same source', async ({ page }) => {
     await page.getByRole('tab', { name: /^Built-in/ }).click();
     await page.getByRole('button', { name: 'Run Shared devices' }).click();

@@ -53,8 +53,10 @@ describe('the tabs of the library', () => {
     const more = { ...base, builtInDefinitions: [first, { ...first, id: 'two', name: 'Two', group: 'Other group' }, { ...first, id: 'free', name: 'Free', group: undefined }] };
     await libraryPage({ templates: async () => ({ ok: true, value: more }) });
     await userEvent.click(tab(/^Built-in/));
-    expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label')).filter((name) => name?.startsWith('Built-in'))).toEqual(['Built-in · AML typologies', 'Built-in · Other group', 'Built-in · general']);
-    expect(within(screen.getByRole('region', { name: 'Built-in · general' })).getAllByRole('row').slice(1)).toHaveLength(4);
+    expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label')).filter((name) => name?.startsWith('Built-in'))).toEqual(['Built-in · general', 'Built-in · AML typologies', 'Built-in · Other group']);
+    const general = within(screen.getByRole('region', { name: 'Built-in · general' })).getAllByRole('row').slice(1);
+    expect(general).toHaveLength(4);
+    expect(general[0]?.textContent).toContain('Free');
   });
 
   it('points each tab at the panel it controls, and the panel at its tab', async () => {

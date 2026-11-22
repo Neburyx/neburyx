@@ -50,11 +50,13 @@ export function LibraryTable({ entries, label }: { readonly entries: readonly Ta
               <td>
                 <span className="library-pill">{row.visibility}</span>
               </td>
-              <td className="library-actions">
-                <button type="button" className="secondary" disabled={!canRun} aria-label={`${LIBRARY_COPY.run} ${row.name}`} aria-describedby={canRun || row.reasons.length === 0 ? undefined : reasonId} onClick={onRun}>
-                  {LIBRARY_COPY.run}
-                </button>
-                {menu === undefined ? null : <RowMenu name={row.name} items={menu} />}
+              <td>
+                <div className="library-actions">
+                  <button type="button" className="secondary" disabled={!canRun} aria-label={`${LIBRARY_COPY.run} ${row.name}`} aria-describedby={canRun || row.reasons.length === 0 ? undefined : reasonId} onClick={onRun}>
+                    {LIBRARY_COPY.run}
+                  </button>
+                  {menu === undefined ? null : <RowMenu name={row.name} items={menu} />}
+                </div>
               </td>
             </tr>
           );
