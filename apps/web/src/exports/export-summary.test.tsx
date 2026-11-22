@@ -1,4 +1,4 @@
-import { act, cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SUMMARY_TOKEN_LIFETIME_MS, type ExportRecord, type ExportRequest } from '@neburyx/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -103,10 +103,17 @@ describe('Include AI case summary in the Export dialog', () => {
     expect(box.getByText('Not for a picture')).toBeTruthy();
   });
 
-  it('shows no option in Community', async () => {
+  it('shows the option locked, with the reason, when the summary is not available, and sends no token', async () => {
     const { state } = withDraft(draftOf(Date.now()));
-    const { box } = await opened(state, 'unavailable');
-    expect(box.queryByRole('checkbox', { name: 'Include AI case summary' })).toBeNull();
+    const { box, user, requests } = await opened(state, 'unavailable');
+    const option = box.getByRole('checkbox', { name: 'Include AI case summary' });
+    expect(option).toHaveProperty('disabled', true);
+    expect(option).toHaveProperty('checked', false);
+    expect(box.getByText('Not available: AI is switched off, or no AI provider is configured.')).toBeTruthy();
+    expect(option.getAttribute('aria-describedby')).toBeTruthy();
+    await user.click(box.getByRole('button', { name: 'Download JSON' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).not.toHaveProperty('summaryToken');
   });
 
   it('says when the server refuses the token that nothing was exported, turns the option off and exports without it on the next try', async () => {

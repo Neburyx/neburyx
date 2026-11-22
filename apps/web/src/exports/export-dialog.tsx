@@ -236,19 +236,18 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
             ))}
           </ul>
         </div>
-        {option.kind === 'hidden' ? null : (
-          <div className="export-summary">
-            <label className="export-summary-option">
-              <input type="checkbox" checked={option.kind === 'offered' && include} disabled={option.kind !== 'offered' || sending} aria-describedby={option.kind === 'disabled' ? summaryId : undefined} onChange={(event) => setInclude(event.target.checked)} />
-              {INCLUDE_SUMMARY}
-            </label>
-            {option.kind === 'disabled' ? (
-              <p id={summaryId} className="export-summary-reason">
-                {option.reason}
-              </p>
-            ) : null}
-          </div>
-        )}
+        <div className="export-summary">
+          <label className="export-summary-option">
+            <input type="checkbox" className={option.kind === 'offered' ? undefined : 'export-summary-locked'} checked={option.kind === 'offered' && include} disabled={option.kind !== 'offered' || sending} aria-describedby={option.kind === 'disabled' ? summaryId : undefined} onChange={(event) => setInclude(event.target.checked)} />
+            {option.kind === 'offered' ? null : <span className="icon icon-lock" aria-hidden="true" />}
+            {INCLUDE_SUMMARY}
+          </label>
+          {option.kind === 'disabled' ? (
+            <p id={summaryId} className="export-summary-reason">
+              {option.reason}
+            </p>
+          ) : null}
+        </div>
         <MaskButton on={maskOn} lock={lock} fields={sensitiveFieldCount(profile, view)} names={sensitiveFieldNames(profile, view)} disabled={sending} onToggle={() => setChosen((held) => !held)} />
         <p className="export-footnote">{FOOTNOTE}</p>
         <p role="status" className="export-problem">

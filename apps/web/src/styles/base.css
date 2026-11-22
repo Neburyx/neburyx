@@ -126,6 +126,10 @@ nav a[aria-current='page'] {
   font-weight: var(--font-weight-medium);
 }
 
+.icon-lock {
+  --icon: url('../assets/lucide/lock.svg');
+}
+
 .icon {
   flex: none;
   width: var(--icon-size);
