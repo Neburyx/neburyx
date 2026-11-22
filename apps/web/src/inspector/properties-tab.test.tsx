@@ -210,6 +210,9 @@ describe('the masking switch in the Properties tab', () => {
     expect(reads).toHaveLength(1);
     expect(reads[0]?.request).toMatchObject({ mask: true, entities: [{ sourceId: 'a', entityType: 'type-a', stableId: 'n1' }], edges: [] });
     expect(inInspector().getByRole('status').textContent).toBe('Re-reading the view');
+    const reading = screen.getByRole('switch', { name: 'Mask sensitive values' });
+    expect(reading.getAttribute('aria-describedby')).toBe('inspector-mask-note');
+    expect(document.getElementById('inspector-mask-note')).not.toBeNull();
     expect(inspector()).not.toBeNull();
     await answerRead(reads[0], [maskedNode('n1')]);
     await waitFor(() => expect(lines()).toContain('holder|J••• L•••'));
@@ -261,9 +264,10 @@ describe('the masking switch in the Properties tab', () => {
     expect(screen.getByRole('switch', { name: 'Mask sensitive values' }).getAttribute('aria-disabled')).toBeNull();
     cleanup();
     const second = open([policy]);
-    const locked = screen.getByRole('switch', { name: 'Mask sensitive values · Locked by policy' });
+    const locked = screen.getByRole('switch', { name: 'Mask sensitive values' });
     expect(locked).toHaveProperty('checked', true);
     expect(locked.getAttribute('aria-disabled')).toBe('true');
+    expect(inInspector().getByText('Locked by policy')).toBeTruthy();
     expect(inInspector().getByText(/Your role cannot view sensitive properties/)).toBeTruthy();
     await userEvent.setup().click(locked);
     expect(second.reads).toEqual([]);
@@ -276,7 +280,7 @@ describe('the masking switch in the Properties tab', () => {
     await user.click(screen.getByRole('switch', { name: 'Mask sensitive values' }));
     const policy = { ...entity('n1', [{ ...property('holder', 'J••• L•••', 'name', true), maskedBy: 'policy' as const }]), display: { title: 'J••• L•••', type: 'kind-a' } };
     await answerRead(reads[0], [policy]);
-    await waitFor(() => expect(screen.getByRole('switch', { name: 'Mask sensitive values · Locked by policy' }).getAttribute('aria-disabled')).toBe('true'));
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Mask sensitive values' }).getAttribute('aria-disabled')).toBe('true'));
   });
 
   it('says how many fields the mapping marks sensitive for the types in the view, once per type, in both states and for none, and says nothing while the read runs', async () => {
@@ -321,7 +325,7 @@ describe('the masking switch in the Properties tab', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Properties' }));
     expect(screen.getByRole('switch', { name: 'Mask sensitive values' }).getAttribute('aria-disabled')).toBeNull();
     await answerEntity(rig.entityReads[0], entity('n1', [{ ...property('holder', 'J••• L•••', 'name', true), maskedBy: 'policy' as const }]));
-    expect(screen.getByRole('switch', { name: 'Mask sensitive values · Locked by policy' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('switch', { name: 'Mask sensitive values' }).getAttribute('aria-disabled')).toBe('true');
   });
 
   it('says nothing of a count while the profile is not known, and "0 sensitive fields are shown" only when it is known to hold none', () => {

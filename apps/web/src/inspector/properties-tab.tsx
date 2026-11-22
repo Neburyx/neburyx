@@ -1,7 +1,7 @@
 import { CopyButton } from '../workspace/copy-button.js';
 import { COPY_ALL, COPY_ALL_LABEL, copyLabel } from './copy.js';
 import type { InspectorTabProps } from './inspector-tabs.js';
-import { MaskControl } from './mask-control.js';
+import { MaskControl, MaskNote } from './mask-control.js';
 import { propertyText } from './property-text.js';
 
 export function PropertiesTab({ node }: InspectorTabProps) {
@@ -21,6 +21,7 @@ export function PropertiesTab({ node }: InspectorTabProps) {
           </div>
         ))}
       </dl>
+      <MaskNote node={node} />
     </div>
   );
 }

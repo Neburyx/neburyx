@@ -12,6 +12,17 @@ import { fieldsMasked, fieldsShown, LOCKED_BY_POLICY, MASK_NOTE, MASK_SWITCH_LAB
 
 let keepFocus = false;
 
+/** Whether a policy locks the switch: a policy-masked property in the loaded graph or in the entity shown. */
+function useLockedByPolicy(node?: GraphNode): boolean {
+  const graph = useLoadedGraph();
+  return isLockedByPolicy(graph) || (node?.properties.some((property) => property.maskedBy === 'policy') ?? false);
+}
+
+/** The note under the property list: the pii rule, or why the switch is locked. */
+export function MaskNote({ node }: { readonly node?: GraphNode | undefined }) {
+  return <p id="inspector-mask-note" className="inspector-mask-note">{useLockedByPolicy(node) ? POLICY_NOTE : MASK_NOTE}</p>;
+}
+
 /** The masking switch of the Properties tab. The tab is drawn again when the view is read again, so a toggle by the person leaves a mark that the next switch drawn takes the focus. */
 export function MaskControl({ node }: { readonly node?: GraphNode | undefined }) {
   const state = useClientState();
@@ -19,13 +30,14 @@ export function MaskControl({ node }: { readonly node?: GraphNode | undefined })
   const mask = useSessionMask();
   const graph = useLoadedGraph();
   const profile = useProfileWhenProvided();
-  const locked = isLockedByPolicy(graph) || (node?.properties.some((property) => property.maskedBy === 'policy') ?? false);
+  const locked = useLockedByPolicy(node);
   const shown = mask || locked;
   const read = useStoreSelector(maskSwitch.status, (current) => current);
   const input = useRef<HTMLInputElement>(null);
   const reading = read.kind === 'reading';
   const settled = read.kind === 'idle';
   const count = sensitiveFieldCount(profile, graph);
+  const hasCaption = locked || (settled && count !== undefined);
   useEffect(() => {
     if (!keepFocus || reading) return;
     keepFocus = false;
@@ -33,25 +45,32 @@ export function MaskControl({ node }: { readonly node?: GraphNode | undefined })
   }, [reading]);
   return (
     <div className="inspector-mask">
-      <label className="inspector-mask-switch">
+      <label className="inspector-mask-card" data-locked={locked ? 'true' : undefined}>
+        <span className="inspector-mask-text">
+          <span id="inspector-mask-label" className="inspector-mask-label">{MASK_SWITCH_LABEL}</span>
+          {locked ? (
+            <span id="inspector-mask-caption" className="inspector-mask-caption">{LOCKED_BY_POLICY}</span>
+          ) : settled && count !== undefined ? (
+            <span id="inspector-mask-caption" className="inspector-mask-caption">{shown ? fieldsMasked(count) : fieldsShown(count)}</span>
+          ) : null}
+        </span>
         <input
           ref={input}
+          className="inspector-mask-toggle"
           type="checkbox"
           role="switch"
           checked={shown}
           disabled={reading}
           aria-disabled={locked ? true : undefined}
-          aria-describedby="inspector-mask-note"
+          aria-labelledby="inspector-mask-label"
+          aria-describedby={hasCaption ? 'inspector-mask-caption inspector-mask-note' : 'inspector-mask-note'}
           onChange={(event) => {
             if (locked) return;
             keepFocus = true;
             maskSwitch.turn(event.target.checked);
           }}
         />
-        <span>{locked ? `${MASK_SWITCH_LABEL} · ${LOCKED_BY_POLICY}` : MASK_SWITCH_LABEL}</span>
       </label>
-      {settled && count !== undefined ? <p className="inspector-mask-caption">{shown ? fieldsMasked(count) : fieldsShown(count)}</p> : null}
-      <p id="inspector-mask-note" className="inspector-mask-note">{locked ? POLICY_NOTE : MASK_NOTE}</p>
       {reading ? <p role="status">{REREADING_VIEW}</p> : null}
       {read.kind === 'failed' ? (
         <div role="group" aria-label={REREAD_FAILED}>

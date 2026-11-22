@@ -1803,11 +1803,74 @@
   gap: var(--space-4);
 }
 
-.inspector-mask-switch {
-  display: inline-flex;
+.inspector-mask-card {
+  display: flex;
   align-items: center;
-  gap: var(--space-6);
+  justify-content: space-between;
+  gap: var(--space-8);
+  padding: var(--space-8);
+  background: var(--color-surface-muted);
+  border-radius: var(--radius-panel);
   cursor: pointer;
+}
+
+.inspector-mask-card[data-locked='true'] {
+  cursor: not-allowed;
+}
+
+.inspector-mask-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.inspector-mask-caption {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.inspector-mask-toggle {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--color-icon);
+  cursor: inherit;
+  transition: background 120ms;
+}
+
+.inspector-mask-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  transition: transform 120ms;
+}
+
+.inspector-mask-toggle:checked {
+  background: var(--color-accent);
+}
+
+.inspector-mask-toggle:checked::after {
+  transform: translateX(16px);
+}
+
+.inspector-mask-toggle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.inspector-mask-toggle:disabled,
+.inspector-mask-toggle[aria-disabled='true'] {
+  opacity: 0.5;
 }
 
 .inspector-mask-note {

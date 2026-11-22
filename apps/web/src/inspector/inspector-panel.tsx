@@ -10,7 +10,7 @@ import { inspectedKey } from './inspected.js';
 import { InspectorContext, type Inspector } from './inspector.js';
 import { useInspectorTabs } from './inspector-tabs.js';
 import { useEntityRead } from './entity-read.js';
-import { MaskControl } from './mask-control.js';
+import { MaskControl, MaskNote } from './mask-control.js';
 
 function focusCanvas(): void {
   document.querySelector<HTMLElement>('.graph-canvas')?.focus({ preventScroll: true });
@@ -62,6 +62,7 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
         </header>
         <div className="inspector-body">
           <MaskControl />
+          <MaskNote />
         </div>
       </div>
     );
