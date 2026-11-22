@@ -23,16 +23,24 @@ async function shown(answer: (call: number) => TemplateRunResponse, pattern?: st
   return kit;
 }
 
+/** The run's measured time ends the sentence; its value is the clock's, so the tests read the sentence without it. */
+const withoutTime = (text: string | null): string | undefined => text?.replace(/ · \d+\.\d\d s$/, '');
+
 describe('the result of a pattern run', () => {
   it.each([
-    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 matches found · exact'],
-    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 matches found · estimated'],
-    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 matches found · lower bound'],
-    [{ value: 1, quality: 'exact' as const, scope: 'matches' }, '1 match found · exact'],
+    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 other kind-as found · exact'],
+    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 other kind-as found · estimated'],
+    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 other kind-as found · lower bound'],
+    [{ value: 1, quality: 'exact' as const, scope: 'matches' }, '1 other kind-a found · exact'],
     [{ quality: 'unknown' as const, scope: 'matches' }, 'no count'],
   ])('states the count %j as %s', async (count, text) => {
     await shown(() => okRun(['acc-2'], { count } as never));
-    expect(within(summary()).getByRole('status').textContent).toBe(text);
+    expect(withoutTime(within(summary()).getByRole('status').textContent)).toBe(text);
+  });
+
+  it('ends the sentence with the time the run took, measured on the client', async () => {
+    await shown(() => okRun(['acc-2']));
+    expect(within(summary()).getByRole('status').textContent).toMatch(/ · \d+\.\d\d s$/);
   });
 
   it('lists the evidence records as references under the table', async () => {
@@ -42,7 +50,7 @@ describe('the result of a pattern run', () => {
 
   it('says no matches were found, shows the count as stated and draws no table', async () => {
     await shown(() => okRun([]));
-    expect(within(summary()).getByRole('status').textContent).toBe('No matches found · exact');
+    expect(withoutTime(within(summary()).getByRole('status').textContent)).toBe('No matches found · exact');
     expect(screen.queryByRole('table')).toBeNull();
   });
 
@@ -65,7 +73,7 @@ describe('the result of a pattern run', () => {
     [{ quality: 'unknown' as const, scope: 'matches' }, 'No matches found · no count'],
   ])('says no matches were found with the quality of the count %j', async (count, text) => {
     await shown(() => okRun([], { count } as never));
-    expect(within(summary()).getByRole('status').textContent).toBe(text);
+    expect(withoutTime(within(summary()).getByRole('status').textContent)).toBe(text);
   });
 
   it('reads in order: the sentence, the table, the evidence, the notices, then Add to graph', async () => {
@@ -76,7 +84,7 @@ describe('the result of a pattern run', () => {
 
   it('reads a linked-entities result as matches reached', async () => {
     await shown(() => okRun(['acc-2'], { templateId: 'linked-entities', presetId: 'connected-accounts', links: [{ match: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-2' }, hops: 1 }], count: { value: 1, quality: 'exact', scope: 'matches' } } as never), 'Connected accounts');
-    expect(within(summary()).getByRole('status').textContent).toBe('1 match reached · exact');
+    expect(withoutTime(within(summary()).getByRole('status').textContent)).toBe('1 kind-a reached · exact');
   });
 
   it('shows how a linked match was reached', async () => {

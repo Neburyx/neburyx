@@ -36,14 +36,14 @@ export interface AddControl {
   readonly onAdd: () => void;
 }
 
-/** A result in reading order: the sentence with the count and its quality, the table of matches with what they share, the evidence references, the notices, then Add to graph and what adding did. */
-export function PatternResult({ result, matchHeading, sharedHeading, add, added, evidenceOpener }: { readonly result: TemplateRunOk; readonly matchHeading: string; readonly sharedHeading: string; readonly add?: AddControl; readonly added?: AddedOutcome; readonly evidenceOpener?: (reference: string) => (() => void) | undefined }) {
+/** A result in reading order: the sentence with the count, its quality and the time the run took, the table of matches with what they share, the evidence references, the notices, then Add to graph and what adding did. */
+export function PatternResult({ result, matchHeading, sharedHeading, elapsedMs, add, added, evidenceOpener }: { readonly result: TemplateRunOk; readonly matchHeading: string; readonly sharedHeading: string; readonly elapsedMs?: number | undefined; readonly add?: AddControl; readonly added?: AddedOutcome; readonly evidenceOpener?: (reference: string) => (() => void) | undefined }) {
   const titles = new Map(result.nodes.map((node) => [elementKey(node.ref), node.display.title]));
   const evidence = [...new Set(result.edges.flatMap((edge) => edge.evidenceRefs))];
   return (
     <section className="patterns-result" aria-label={PATTERNS_COPY.result}>
       <p className="patterns-summary" role="status">
-        {resultSentence(result.count, result.matchIds.length === 0, result.links !== undefined)}
+        {resultSentence(result.count, result.matchIds.length === 0, result.links !== undefined, matchHeading.toLowerCase(), elapsedMs)}
       </p>
       {result.matchIds.length === 0 ? null : (
         <table className="patterns-table">

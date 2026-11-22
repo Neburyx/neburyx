@@ -51,7 +51,7 @@ test.describe('adding a pattern result to the canvas', () => {
 
   test('says a cut result is a lower bound and gives no remainder number', async ({ page }) => {
     await run(page, 'Shared devices', 'Starting account', LIMITS.cut);
-    await expect(panelOf(page).getByRole('status').filter({ hasText: 'lower bound' }).first()).toHaveText('≥ 5 matches found · lower bound');
+    await expect(panelOf(page).getByRole('status').filter({ hasText: 'lower bound' }).first()).toHaveText(/^≥ 5 other .+ found · lower bound · \d+\.\d\d s$/);
     await addOf(page).click();
     const outcome = panelOf(page).getByText(/more matches may exist and were not loaded/);
     await expect(outcome).toContainText('≥ 5 · lower bound');

@@ -768,6 +768,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
       {result === undefined ? null : (
         <PatternResult
           result={result}
+          elapsedMs={run.elapsedMs}
           {...(addControl === undefined ? {} : { add: addControl })}
           {...(added === undefined || added.result !== result ? {} : { added: added.outcome })}
           {...(evidenceOpener === undefined ? {} : { evidenceOpener })}

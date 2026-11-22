@@ -21,7 +21,7 @@ export type SavedHeavy = { readonly kind: 'pattern'; readonly answer: PatternRun
 
 export interface SavedRunView {
   readonly running: boolean;
-  readonly result: { readonly ask: SavedAsk; readonly answer: SavedResult } | undefined;
+  readonly result: { readonly ask: SavedAsk; readonly answer: SavedResult; readonly elapsedMs: number } | undefined;
   readonly heavy: SavedHeavy | undefined;
   /** The pattern could not run against the current mapping: no source was read. */
   readonly unavailable: { readonly id: string; readonly answer: PatternUnavailable } | undefined;
@@ -56,6 +56,7 @@ export function createSavedRunStore(client: ApiClient, mask: boolean): SavedRunS
     newest = controller;
     patch({ running: true, heavy: undefined, unavailable: undefined, failure: undefined, cancelled: false, ask });
     const send = async (): Promise<void> => {
+      const started = performance.now();
       let result: Awaited<ReturnType<ApiClient['runSavedPattern']>>;
       try {
         result = await client.runSavedPattern(ask.id, { ...(ask.anchor === undefined ? {} : { anchor: ask.anchor }), ...(mask ? { mask: true } : {}), ...(ask.continue === undefined ? {} : { continue: true, limit: ask.continue.limit }) }, newKey(), controller.signal);
@@ -74,11 +75,11 @@ export function createSavedRunStore(client: ApiClient, mask: boolean): SavedRunS
       if (ask.kind === 'preset-run') {
         const template = templateRunResponseSchema.safeParse(answer);
         if (!template.success) return patch({ running: false, failure: { code: 'SCHEMA_MISMATCH' } });
-        return patch(template.data.status === 'heavy' ? { running: false, heavy: { kind: 'template', answer: template.data } } : { running: false, result: { ask, answer: { kind: 'template', answer: template.data } } });
+        return patch(template.data.status === 'heavy' ? { running: false, heavy: { kind: 'template', answer: template.data } } : { running: false, result: { ask, answer: { kind: 'template', answer: template.data }, elapsedMs: performance.now() - started } });
       }
       const pattern = patternRunResponseSchema.safeParse(answer);
       if (!pattern.success) return patch({ running: false, failure: { code: 'SCHEMA_MISMATCH' } });
-      patch(pattern.data.status === 'heavy' ? { running: false, heavy: { kind: 'pattern', answer: pattern.data } } : { running: false, result: { ask, answer: { kind: 'pattern', answer: pattern.data } } });
+      patch(pattern.data.status === 'heavy' ? { running: false, heavy: { kind: 'pattern', answer: pattern.data } } : { running: false, result: { ask, answer: { kind: 'pattern', answer: pattern.data }, elapsedMs: performance.now() - started } });
     };
     void send();
   };

@@ -155,6 +155,7 @@ export function SavedPresetRun({ client, sourceId, sourceName, mask, store, targ
       {shown === undefined || shown.kind !== 'template' ? null : (
         <PatternResult
           result={shown.answer}
+          elapsedMs={view.result?.elapsedMs}
           matchHeading={nameOf(shown.answer.matchIds[0]?.entityType) || PATTERNS_COPY.matchHeading}
           sharedHeading={shown.answer.links !== undefined ? PATTERNS_COPY.reachedHeading : `Shared ${nameOf(presets?.find((preset) => target.kind === 'preset-run' && preset.id === target.presetId)?.bind.attribute).toLowerCase() || 'attribute'}`}
           {...(add === undefined ? {} : { add })}

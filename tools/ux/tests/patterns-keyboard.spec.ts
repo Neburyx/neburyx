@@ -61,7 +61,7 @@ test.describe('the Patterns panel by keyboard', () => {
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeEnabled();
     await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
     await expect(panelOf(page).getByRole('table').getByRole('row')).toHaveCount(6);
-    await expect(panelOf(page).getByRole('status').filter({ hasText: 'exact' })).toHaveText('5 matches found · exact');
+    await expect(panelOf(page).getByRole('status').filter({ hasText: 'exact' })).toHaveText(/^5 other .+ found · exact · \d+\.\d\d s$/);
     await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
     await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true, pressed: true }));
     await expect(panelOf(page).getByLabel('Starting account')).toHaveCount(0);

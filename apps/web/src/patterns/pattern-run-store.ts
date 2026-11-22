@@ -14,6 +14,8 @@ export interface PatternRunView {
   readonly running: boolean;
   /** The last result that arrived; it stays while a newer run is on its way, after a failure and after a cancel. */
   readonly result: TemplateRunOk | undefined;
+  /** How long the run that gave `result` took, measured here from the request to the answer. */
+  readonly elapsedMs: number | undefined;
   /** The stop of a heavy run, until the person refines, continues or changes the form. */
   readonly heavy: TemplateRunHeavy | undefined;
   readonly failure: ApiFailure | undefined;
@@ -33,7 +35,7 @@ export interface PatternRunStore extends ReadableStore<PatternRunView> {
 
 const newKey = (): string => globalThis.crypto.randomUUID();
 
-const IDLE: PatternRunView = { running: false, result: undefined, heavy: undefined, failure: undefined, cancelled: false, ask: undefined };
+const IDLE: PatternRunView = { running: false, result: undefined, elapsedMs: undefined, heavy: undefined, failure: undefined, cancelled: false, ask: undefined };
 
 /**
  * One run at a time: a newer run, a cancel and leaving abort the older one, and an answer to an aborted run is never shown. It lives outside React, so a test of the cancellation suite drives the same store the panel uses.
@@ -50,6 +52,7 @@ export function createPatternRunStore(client: ApiClient, sourceId: string, mask:
     newest = controller;
     patch({ running: true, heavy: undefined, failure: undefined, cancelled: false, ask });
     const send = async (): Promise<void> => {
+      const started = performance.now();
       let result: Awaited<ReturnType<ApiClient['runTemplate']>>;
       try {
         result = await client.runTemplate(ask.id, { sourceId, params: ask.params, ...(mask ? { mask: true } : {}), ...(ask.continue === true ? { continue: true } : {}) }, newKey(), controller.signal);
@@ -63,7 +66,7 @@ export function createPatternRunStore(client: ApiClient, sourceId: string, mask:
         return;
       }
       const answer = result.value;
-      patch(answer.status === 'heavy' ? { running: false, heavy: answer } : { running: false, result: answer });
+      patch(answer.status === 'heavy' ? { running: false, heavy: answer } : { running: false, result: answer, elapsedMs: performance.now() - started });
     };
     void send();
   };

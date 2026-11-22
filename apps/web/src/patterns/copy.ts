@@ -1,6 +1,7 @@
 import type { ApiFailure } from '../api/client.js';
 import type { Count, PatternWithin, TemplateRunNotice } from '@neburyx/contracts';
 import { degreeCountText } from '../workspace/degree-text.js';
+import { secondsText } from '../search/count-label.js';
 import { formatNumber, qualityWord } from '../workspace/scope-text.js';
 import type { AddedOutcome } from './add-to-graph.js';
 import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
@@ -35,6 +36,7 @@ export const PATTERNS_COPY = {
   noPatterns: 'This source has no patterns.',
   noMatches: 'No matches found',
   found: 'found',
+  other: 'other',
   reached: 'reached',
   noCount: 'no count',
   cancelled: 'Cancelled. No new matches shown.',
@@ -59,6 +61,9 @@ export const PATTERNS_COPY = {
 /** Says what is missing in the words of the form's own field label, so no article is chosen from a type name. */
 export const startHint = (fieldLabel: string): string => `Choose the ${fieldLabel.toLowerCase()} to run this pattern.`;
 
+/** The plural of a type's display name for the sentence of a result; the packs carry no plural, so the English endings are applied to the name. */
+const pluralOf = (name: string): string => (/[^aeiou]y$/i.test(name) ? `${name.slice(0, -1)}ies` : /(s|x|z|ch|sh)$/i.test(name) ? `${name}es` : `${name}s`);
+
 const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 
 /** What adding a result did, in exact facts of the client; the run's own count is named, with its label, only when it says more may exist. */
@@ -71,13 +76,15 @@ export function addedText(outcome: AddedOutcome, count: Count): string {
 }
 
 /** The sentence that leads a result: the number as its quality allows it, what was found or reached, and the quality in words; a result with no matches says so, with the quality of its count. */
-export function resultSentence(count: Count, noMatches: boolean, reached: boolean): string {
+export function resultSentence(count: Count, noMatches: boolean, reached: boolean, noun: string, elapsedMs: number | undefined): string {
+  const time = elapsedMs === undefined ? '' : ` · ${secondsText(elapsedMs)}`;
   const quality = count.value === undefined ? PATTERNS_COPY.noCount : qualityWord(count.quality);
-  if (noMatches) return `${PATTERNS_COPY.noMatches} · ${quality}`;
-  if (count.value === undefined) return PATTERNS_COPY.noCount;
+  if (noMatches) return `${PATTERNS_COPY.noMatches} · ${quality}${time}`;
+  if (count.value === undefined) return `${PATTERNS_COPY.noCount}${time}`;
   const number = formatNumber(count.value);
   const lead = count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;
-  return `${lead} ${count.value === 1 && count.quality === 'exact' ? 'match' : 'matches'} ${reached ? PATTERNS_COPY.reached : PATTERNS_COPY.found} · ${quality}`;
+  const name = count.value === 1 && count.quality === 'exact' ? noun : pluralOf(noun);
+  return `${lead} ${reached ? '' : `${PATTERNS_COPY.other} `}${name} ${reached ? PATTERNS_COPY.reached : PATTERNS_COPY.found} · ${quality}${time}`;
 }
 
 export const timeoutLabel = (timeoutMs: number): string => `${Math.round(timeoutMs / 100) / 10} s timeout`;

@@ -92,7 +92,7 @@ describe('what the outcome and the canvas show', () => {
     await settle();
     await add();
     expect(screen.getByText('Added 4 entities and 5 relationships. 3 entities already loaded.')).toBeTruthy();
-    expect(screen.getByText('5 matches found · exact')).toBeTruthy();
+    expect(screen.getByText(/^5 other .+ found · exact · \d+\.\d\d s$/)).toBeTruthy();
     expect(ids(kit)).toHaveLength(7);
   });
 
