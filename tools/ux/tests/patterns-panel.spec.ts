@@ -174,6 +174,8 @@ test.describe('the Patterns panel on the canvas', () => {
     const box = await card.boundingBox();
     expect(box?.height ?? 99).toBeLessThan(40);
     expect((await card.locator('xpath=ancestor::li').boundingBox())?.height ?? 99, 'the card around the button adds no padding of its own').toBeLessThan(40);
+    const around = await card.locator('xpath=ancestor::li').boundingBox();
+    expect(Math.abs((box?.width ?? 0) - ((around?.width ?? 99) - 2)), 'the button spans the card').toBeLessThan(3);
     await expect(card.locator('xpath=ancestor::h4')).toHaveCSS('font-weight', '400');
     const glyph = await card.locator('img').boundingBox();
     const name = await card.locator('.pattern-card-name').boundingBox();

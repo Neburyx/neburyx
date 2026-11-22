@@ -918,7 +918,8 @@
 }
 
 .pattern-row.pattern-card {
-  flex-direction: row;
+  flex-direction: column;
+  align-items: stretch;
   gap: 0;
   padding: 0;
   border: var(--border-width) solid var(--color-control-border);
