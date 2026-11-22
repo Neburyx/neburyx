@@ -72,6 +72,14 @@ test.describe('the patterns library page', () => {
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
   });
 
+  test('puts the Synthetic data pill beside the title, not at the far edge', async ({ page }) => {
+    const title = await page.getByRole('heading', { name: 'Patterns', level: 1 }).boundingBox();
+    const pill = await page.getByText('Synthetic data', { exact: true }).boundingBox();
+    expect(title).not.toBeNull();
+    expect(pill).not.toBeNull();
+    expect((pill?.x ?? 999) - ((title?.x ?? 0) + (title?.width ?? 0))).toBeLessThan(40);
+  });
+
   test('keeps Run and the menu of a row side by side at the width of the project', async ({ page }) => {
     for (const row of await page.getByRole('row').filter({ has: page.locator('.library-pill') }).all()) {
       const run = await row.getByRole('button', { name: /^Run / }).boundingBox();

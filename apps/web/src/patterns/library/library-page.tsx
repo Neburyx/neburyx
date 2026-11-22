@@ -141,7 +141,7 @@ function LibraryBody({ source }: { readonly source: SourceSummary }) {
     ],
   });
   const presetEntries: readonly TableEntry[] = (presets ?? []).map((preset) => ({ row: presetRowOf(preset, nameOf), canRun: true, onRun: () => actions.runPreset(preset) }));
-  const groups = groupsOf(definitions, '');
+  const groups = groupsOf(definitions);
   const builtInSections = [
     { label: groups.named.length === 0 ? LIBRARY_COPY.builtIn : `${LIBRARY_COPY.builtIn} · ${SAVED_COPY.builtInGeneral}`, entries: [...groups.general.map(definitionEntry), ...presetEntries] },
     ...groups.named.map((group) => ({ label: `${LIBRARY_COPY.builtIn} · ${group.name}`, entries: group.items.map(definitionEntry) })),

@@ -1072,6 +1072,10 @@
   justify-content: flex-end;
 }
 
+.library-page .page-title .page-tag {
+  margin-left: 0;
+}
+
 .library-footnote {
   margin: 0;
   padding: var(--space-10) var(--space-12);
