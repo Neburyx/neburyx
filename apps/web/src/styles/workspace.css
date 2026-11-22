@@ -1834,10 +1834,10 @@
   appearance: none;
   flex: none;
   position: relative;
-  width: 36px;
-  height: 20px;
+  width: var(--toggle-width);
+  height: var(--toggle-height);
   margin: 0;
-  border-radius: 10px;
+  border-radius: calc(var(--toggle-height) / 2);
   background: var(--color-icon);
   cursor: inherit;
   transition: background 120ms;
@@ -1846,10 +1846,10 @@
 .inspector-mask-toggle::after {
   content: '';
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
+  top: var(--toggle-inset);
+  left: var(--toggle-inset);
+  width: var(--toggle-knob);
+  height: var(--toggle-knob);
   border-radius: 50%;
   background: var(--color-surface);
   transition: transform 120ms;
@@ -1860,12 +1860,12 @@
 }
 
 .inspector-mask-toggle:checked::after {
-  transform: translateX(16px);
+  transform: translateX(var(--toggle-knob));
 }
 
 .inspector-mask-toggle:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  outline: var(--toggle-inset) solid var(--color-accent);
+  outline-offset: var(--toggle-inset);
 }
 
 .inspector-mask-toggle:disabled,

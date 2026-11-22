@@ -148,6 +148,10 @@
   --sheet-padding-block: 24px;
   --sheet-padding-inline: 28px;
   --sheet-gap: 18px;
+  --toggle-width: 36px;
+  --toggle-height: 20px;
+  --toggle-knob: 16px;
+  --toggle-inset: 2px;
   --sheet-columns-gap: 32px;
   --sheet-rows-gap: 8px;
   --sheet-label-width: 130px;
