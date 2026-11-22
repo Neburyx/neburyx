@@ -79,9 +79,10 @@ describe('the dates of a window as the frames write them', () => {
 
 describe('paramValuesOf', () => {
   const labels = [{ key: 'limit', text: 'Max matching accounts' }, { key: 'minShared', text: 'Min shared devices' }, { key: 'direction', text: 'Direction' }];
-  it('writes values alone in the order stored: the dates, a relative window without its "Last", a bound with its first word, the starting entity never', () => {
+  it('writes values alone, the window first and the rest in the order stored: the dates, a relative window without its "Last", a bound with its first word, the starting entity never', () => {
     expect(paramValuesOf({ labels }, { ref: { stableId: 'x' }, window: { from: '2026-10-21', to: '2026-10-28' }, limit: 25 })).toBe('21–28 Oct 2026 · max 25');
     expect(paramValuesOf({ labels }, { window: { days: 30 }, limit: 25, minShared: 2, direction: 'out' })).toBe('30 days · max 25 · min 2 · out');
+    expect(paramValuesOf({ labels }, { limit: 25, window: { days: 7 } })).toBe('7 days · max 25');
     expect(paramValuesOf({ labels }, {})).toBe('');
     expect(paramValuesOf({ labels: [] }, { limit: 25, minShared: 2 })).toBe('25 · min 2');
   });

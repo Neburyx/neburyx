@@ -1094,11 +1094,11 @@
 }
 
 .library-table th:nth-child(1) {
-  width: 22%;
+  width: 20%;
 }
 
 .library-table th:nth-child(2) {
-  width: 20%;
+  width: 17%;
 }
 
 .library-table th:nth-child(3) {
@@ -1110,9 +1110,9 @@
 }
 
 .library-table th:nth-child(5) {
-  width: 13%;
+  width: 15%;
 }
 
 .library-table th:nth-child(6) {
-  width: 10%;
+  width: 13%;
 }

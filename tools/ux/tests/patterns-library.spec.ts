@@ -72,6 +72,16 @@ test.describe('the patterns library page', () => {
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(page.viewportSize()?.width ?? 0);
   });
 
+  test('keeps Run and the menu of a row side by side at the width of the project', async ({ page }) => {
+    for (const row of await page.getByRole('row').filter({ has: page.locator('.library-pill') }).all()) {
+      const run = await row.getByRole('button', { name: /^Run / }).boundingBox();
+      const menu = await row.getByRole('button', { name: /^More: / }).boundingBox();
+      expect(run).not.toBeNull();
+      expect(menu).not.toBeNull();
+      expect(Math.abs((run?.y ?? 0) - (menu?.y ?? 99))).toBeLessThan(4);
+    }
+  });
+
   test('never lets the visibility of a row run under its buttons, whichever of the three labels it carries, at a width narrower than the supported ones', async ({ page }) => {
     await page.getByRole('button', { name: 'More: Device ring' }).click();
     await page.getByRole('menuitem', { name: 'Share' }).click();

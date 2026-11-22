@@ -74,10 +74,10 @@ export function paramsInWords(preset: Pick<Preset, 'labels'>, params: Readonly<R
     .join(', ');
 }
 
-/** The stored parameters of a saved run as values alone, in the order stored: "30 days · max 25". A bound keeps the first word of its label ("max"), a window loses its "Last". */
+/** The stored parameters of a saved run as values alone, the window first and the rest in the order stored: "30 days · max 25". A bound keeps the first word of its label ("max"), a window loses its "Last". */
 export function paramValuesOf(preset: Pick<Preset, 'labels'>, params: Readonly<Record<string, unknown>>): string {
-  return Object.entries(params)
-    .filter(([key]) => key !== 'ref')
+  const entries = Object.entries(params).filter(([key]) => key !== 'ref');
+  return [...entries.filter(([, value]) => isRecord(value)), ...entries.filter(([, value]) => !isRecord(value))]
     .flatMap(([key, value]) => {
       const text = textOf(value);
       if (text === undefined) return [];
