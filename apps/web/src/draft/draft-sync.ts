@@ -1,9 +1,11 @@
 import { ERROR_TABLE, windowSchema, type DraftWriteRequest, type EdgeRef, type ElementRef, type ErrorCode, type QueryContextDocument } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
+import { StateError } from '../state/errors.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { refreshRecord } from '../lifecycle/refresh-record.js';
 import { draftOf, keptFrom, NOTHING_KEPT, type CarriedContext, type KeptItems } from './draft-document.js';
+import { conditionOf } from './property-conditions.js';
 
 /** How long the draft waits after the last change before it is written. */
 export const AUTOSAVE_DELAY_MS = 3000;
@@ -476,6 +478,15 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     if (stored.success) {
       state.setTimeWindow(stored.data);
       session.carried = session.carried === undefined ? undefined : { ...session.carried, time: null };
+    }
+    for (const entry of filters.properties) {
+      const condition = conditionOf(entry);
+      if (condition === undefined || (condition.on === 'entity' && (mapped.properties?.entity[condition.type]?.pii.includes(condition.property) ?? false))) continue;
+      try {
+        state.setPropertyCondition({ on: condition.on, type: condition.type, property: condition.property }, condition);
+      } catch (error) {
+        if (!(error instanceof StateError)) throw error;
+      }
     }
     const filter = state.presentation.view.getState().typeFilter;
     session.applied = { entityTypes: { listed: filters.entityTypes.length > 0, off: offKey(filter.offEntityTypes) }, relTypes: { listed: filters.relTypes.length > 0, off: offKey(filter.offRelationshipTypes) } };

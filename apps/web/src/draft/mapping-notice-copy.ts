@@ -11,6 +11,7 @@ const REASONS: Readonly<Record<DroppedFilterReason, string>> = {
   'property-removed': 'property removed',
   'not-filterable': 'no longer a filterable property',
   'now-personal': 'now a sensitive field',
+  'kind-changed': 'the kind of value changed',
 };
 
 export const droppedFilterText = (name: string, reason: DroppedFilterReason): string => `${name} (${REASONS[reason]})`;

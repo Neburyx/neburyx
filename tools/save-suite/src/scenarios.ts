@@ -1,14 +1,16 @@
 // Scenarios more than one file of the suite starts from.
 import { expect } from 'vitest';
+import type { MappedPropertySets } from '../../../apps/web/src/state/presentation-state.js';
 import { AUTOSAVE_DELAY_MS, ref, SOURCE, type Running, type StoredEdgeRef, type Tab } from './rig.js';
 
 export const LINKED = (stableId: string): StoredEdgeRef => ({ sourceId: SOURCE, type: 'LINKED', from: 'hub', to: 'leaf', stableId });
 export const HAS = (stableId: string): StoredEdgeRef => ({ sourceId: SOURCE, type: 'HAS', from: 'hub', to: 'part', stableId });
 /** Opens the investigation in a fresh tab and tells it which types the mapping names, as the workspace does once the profile has loaded: the stored type filter is applied then. */
-export async function reopen(running: Running, id: string): Promise<Tab> {
+export async function reopen(running: Running, id: string, properties?: MappedPropertySets): Promise<Tab> {
   const tab = running.tab();
   expect(await tab.openById(id)).toMatchObject({ kind: 'shown', id });
-  tab.mapTypes(['hub', 'leaf', 'part'], ['LINKED', 'HAS']);
+  if (properties === undefined) tab.mapTypes(['hub', 'leaf', 'part'], ['LINKED', 'HAS']);
+  else tab.mapProperties(['hub', 'leaf', 'part'], ['LINKED', 'HAS'], properties);
   return tab;
 }
 /** An investigation in which the person has loaded, moved, pinned, hidden, filtered and laid out, written to the store by autosave. */

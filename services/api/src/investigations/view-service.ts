@@ -9,6 +9,7 @@ import type { Principal } from '../seams/seams.js';
 import type { MappingModel } from '../mapping/model.js';
 import { COMMUNITY_POLICY_VERSION, contentHashOf } from './draft.js';
 import { sourceStateOf } from './investigation-service.js';
+import { reviewedFilters } from './mapping-change.js';
 import { readOnlyRefusal, readOnlyStatusOf, sourceChangedRefusal } from './read-only.js';
 import type { StoredReferences } from './stored-references.js';
 
@@ -131,8 +132,12 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
       if (result.outcome === 'draft-conflict') throw new AppError('CONFLICTED_VIEW_VERSION');
       const { sourceId } = stored.investigation;
       const layout = deps.references.layout(sourceId, layoutDocumentSchema.parse(result.draft.layout));
-      const queryContext = deps.references.queryContext(sourceId, queryContextDocumentSchema.parse(result.draft.queryContext));
-      return { draft: { version: result.draft.version, layout, queryContext, notes: result.draft.notes, basedOnViewId: result.draft.basedOnViewId }, save: { state: 'saved', savedAt: result.savedAt } };
+      const storedContext = queryContextDocumentSchema.parse(result.draft.queryContext);
+      const source = deps.mapping.sources.find((candidate) => candidate.id === sourceId);
+      // the check compares the mapping only; the stored hash is the one the restore wrote, the view's own
+      const reviewed = source === undefined ? { queryContext: deps.references.queryContext(sourceId, storedContext) } : reviewedFilters(source, result.mappingHash !== source.configHash, storedContext.filters, deps.references.queryContext(sourceId, storedContext));
+      const mappingChange = 'mappingChange' in reviewed ? reviewed.mappingChange : undefined;
+      return { draft: { version: result.draft.version, layout, queryContext: reviewed.queryContext, notes: result.draft.notes, basedOnViewId: result.draft.basedOnViewId }, save: { state: 'saved', savedAt: result.savedAt }, ...(mappingChange === undefined ? {} : { mappingChange }) };
     },
   };
 }

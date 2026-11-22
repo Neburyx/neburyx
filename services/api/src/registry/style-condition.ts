@@ -1,5 +1,5 @@
+import type { StyleValue } from '@neburyx/contracts';
 import type { StyleRuleModel } from '../mapping/model.js';
-import type { StyleValue } from '../mapping/style-value.js';
 
 const SYMBOLS = { eq: '=', gt: '>', gte: '>=', lt: '<', lte: '<=' } as const;
 

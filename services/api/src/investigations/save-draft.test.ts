@@ -164,6 +164,60 @@ describe('PUT /v1/investigations/{id}/draft', () => {
     await app.close();
   });
 
+  const typed = { on: 'entity' as const, type: 'widget', key: 'size', kind: 'text' as const, op: 'in', values: ['a', 'b'] };
+  const ranged = { on: 'relationship' as const, type: 'LINKS', key: 'weight', kind: 'number' as const, op: 'between', values: [], from: '9007199254740993', to: '9007199254740994' };
+  const filtersOf = (...properties: QueryContextDocument['filters']['properties']): QueryContextDocument['filters'] => ({ entityTypes: [], relTypes: [], time: null, properties });
+
+  it('stores a property filter that names its type and kind as it was sent, a bound beyond 2^53 and a value of exponent size included, and gives it back', async () => {
+    const store = seeded();
+    const app = await started(store);
+    const filters = filtersOf(typed, ranged, { ...typed, kind: 'number', key: 'quantity', values: ['1000000000000000000000', '0.0000001'] });
+    const response = await put(app, documents([node('widget', 'W-1')], [], filters));
+    expect(response.statusCode).toBe(200);
+    expect((store.drafts[0]?.queryContext as QueryContextDocument).filters.properties).toEqual(filters.properties);
+    await app.close();
+  });
+
+  it.each([
+    ['an in with no value', { ...typed, values: [] }],
+    ['a value that does not read as its kind', { ...typed, kind: 'number' as const, values: ['1,000'] }],
+    ['a from after the to', { ...ranged, from: '5', to: '1' }],
+    ['a between on a text kind', { ...ranged, kind: 'text' as const, from: 'a', to: 'b' }],
+    ['a bound beyond the text limit', { ...typed, values: ['x'.repeat(257)] }],
+    ['a type without its kind', { key: 'size', op: 'in', values: ['a'], on: 'entity' as const, type: 'widget' }],
+  ])('refuses %s with INVALID_REQUEST and changes nothing', async (_name, entry) => {
+    const store = seeded();
+    const app = await started(store);
+    const before = JSON.stringify(store.drafts);
+    const response = await put(app, documents([node('widget', 'W-1')], [], filtersOf(entry as QueryContextDocument['filters']['properties'][number])));
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_REQUEST' } });
+    expect(JSON.stringify(store.drafts)).toBe(before);
+    await app.close();
+  });
+
+  it('drops a filter on a personal-data property by its type: the personal ones of its own type, of an unmapped type or of the older shape go, the same name on another type and a relationship property stay', async () => {
+    const store = seeded();
+    const app = await started(store);
+    const personal = { ...typed, key: 'secret', values: ['SECRET-1'] };
+    const entries = [
+      personal,
+      { ...personal, type: 'phone', key: 'phoneNumber', values: ['SECRET-2'] },
+      { ...personal, type: 'unmapped', values: ['SECRET-3'] },
+      { ...personal, on: 'relationship' as const, type: 'UNMAPPED', values: ['SECRET-4'] },
+      { key: 'secret', op: 'eq', values: ['SECRET-5'] },
+      { ...personal, type: 'phone', values: ['kept-on-another-type'] },
+      { ...personal, on: 'relationship' as const, type: 'LINKS', values: ['kept-on-a-relationship'] },
+      typed,
+    ];
+    const response = await put(app, documents([node('widget', 'W-1')], [], filtersOf(...entries)));
+    expect(response.statusCode).toBe(200);
+    const stored = (store.drafts[0]?.queryContext as QueryContextDocument).filters.properties;
+    expect(stored.map((entry) => entry.values[0])).toEqual(['kept-on-another-type', 'kept-on-a-relationship', 'a']);
+    expect(JSON.stringify(store.drafts)).not.toMatch(/SECRET-\d/);
+    await app.close();
+  });
+
   it.each([
     ['another user’s investigation', seeded({ ownerId: OTHER }), ID],
     ['an unknown investigation', seeded(), '0192f000-0000-7000-8000-0000000000ff'],

@@ -1,3 +1,4 @@
+import { storedPropertyFilters } from './property-conditions.js';
 import type { DraftWriteRequest, EdgeRef, ElementRef, GraphEdge, LayoutDocument, QueryContextDocument } from '@neburyx/contracts';
 import { BY_ENTITY_TYPE, propertyKeyOf, type Group } from '../groups/group-model.js';
 import { elementKey, edgeKey, nodeRefOfKey } from '../state/keys.js';
@@ -42,7 +43,6 @@ const withCarried = (left: string[], carried: readonly string[] = [], keepList =
 export interface CarriedContext {
   readonly expansions: QueryContextDocument['expansions'];
   readonly time: QueryContextDocument['filters']['time'];
-  readonly properties: QueryContextDocument['filters']['properties'];
   /** The stored relationships that were hidden, by identity. */
   readonly hiddenEdges: ReadonlySet<string>;
   /** A layout name the web does not offer, and the layout shown when it was adopted: written back until the person picks another layout. */
@@ -55,7 +55,6 @@ export function carriedOf(draft: { readonly layout: LayoutDocument; readonly que
   return {
     expansions: queryContext.expansions,
     time: queryContext.filters.time,
-    properties: queryContext.filters.properties,
     hiddenEdges: new Set(layout.edges.filter((edge) => edge.hidden).map(edgeIdentity)),
     ...(layoutKnown ? {} : { layout: { stored: layout.layout, shown } }),
   };
@@ -127,7 +126,7 @@ export function draftOf(inputs: DraftInputs): DraftWriteRequest {
     schemaVersion: SCHEMA_VERSION,
     loaded: { nodes: allNodes.map(({ t, id }) => ({ t, id })), edges: allEdges },
     expansions: inputs.carried?.expansions ?? [],
-    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: presentation.typeFilter.time?.window ?? inputs.carried?.time ?? null, properties: inputs.carried?.properties ?? [] },
+    filters: inputs.storedFilters ?? { entityTypes: withCarried(typesLeftOn(mapped.entityTypes, presentation.typeFilter.offEntityTypes, inputs.keepLists?.entityTypes), inputs.carriedTypes?.entityTypes, inputs.keepLists?.entityTypes), relTypes: withCarried(typesLeftOn(mapped.relationshipTypes, presentation.typeFilter.offRelationshipTypes, inputs.keepLists?.relTypes), inputs.carriedTypes?.relTypes, inputs.keepLists?.relTypes), time: presentation.typeFilter.time?.window ?? inputs.carried?.time ?? null, properties: storedPropertyFilters(presentation.typeFilter.properties, presentation.mappedTypes) },
   };
   return { layout, queryContext, notes: inputs.notes };
 }

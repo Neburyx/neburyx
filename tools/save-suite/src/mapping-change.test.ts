@@ -13,7 +13,7 @@ afterEach(async () => {
 });
 
 const writes = (tab: Tab) => tab.draftWrites();
-const WEIGHT = { key: 'weight', op: 'gte' as const, values: ['3'] };
+const WEIGHT = { on: 'entity' as const, type: 'leaf', key: 'weight', kind: 'text' as const, op: 'in', values: ['3'] };
 
 /** A draft and a named view saved under the full mapping: a part and a leaf, both relationships, the part type switched off, and a property filter. */
 async function saved(running: Suite): Promise<{ readonly id: string; readonly viewId: string }> {
@@ -54,7 +54,7 @@ describe.each([
     expect(tab.state.presentation.view.getState().positions.get(tab.nodeKey('part', 'P-1'))).toEqual({ x: 300, y: 40 });
     const notice = mappingNoticesOf(tab.state).notice.getState();
     expect(notice).toMatchObject({ investigationId: id, hasUnmapped: true, canChange: true });
-    expect(notice?.droppedFilters).toEqual([{ name: 'weight', reason }]);
+    expect(notice?.droppedFilters).toEqual([{ name: 'leaf.weight', reason }]);
     const asked = idsRead(suite.executor.calls);
     expect(asked).not.toContain('P-1');
     expect(asked).toContain('L-1');
@@ -88,7 +88,7 @@ describe.each([
     await tab.openById(id);
     expect(await restoreNamedView(tab.client, tab.state, viewId)).toMatchObject({ kind: 'restored' });
     expect(placeholders(tab)).toEqual(['P-1']);
-    expect(mappingNoticesOf(tab.state).notice.getState()?.droppedFilters).toEqual([{ name: 'weight', reason }]);
+    expect(mappingNoticesOf(tab.state).notice.getState()?.droppedFilters).toEqual([{ name: 'leaf.weight', reason }]);
   });
 });
 

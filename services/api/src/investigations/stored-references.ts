@@ -78,8 +78,22 @@ export function createStoredReferences(mapping: MappingModel, keys: ReferenceKey
   const refs = (sourceId: string, list: readonly Ref[]): Ref[] => list.map((ref) => ({ ...ref, id: entityId(sourceId, ref.t, ref.id) }));
   const edges = <E extends EdgeEnds>(sourceId: string, list: readonly E[]): E[] => list.map((edge) => ({ ...edge, from: { ...edge.from, id: entityId(sourceId, edge.from.t, edge.from.id) }, to: { ...edge.to, id: entityId(sourceId, edge.to.t, edge.to.id) } }));
 
-  /** The keys of every personal-data property of the source: a stored property filter on one is not returned, since its values are personal data and the type it belongs to is not stored. */
-  const personalKeys = (sourceId: string): ReadonlySet<string> => new Set(sourceOf(sourceId)?.entities.flatMap((entity) => entity.pii) ?? []);
+  /**
+   * The property filters a document may keep: not one on a personal-data property, since its values are personal data and must never be stored. A filter that names its type is judged by its type: it goes when the key is personal data for
+   * that entity type, or when the type is not one the mapping names for that kind of item and the key is personal data on any entity type. A filter of the older shape, which names no type, goes when the key is personal data on any entity type.
+   */
+  const withoutPersonalFilters = (sourceId: string, filters: QueryContextDocument['filters']): QueryContextDocument['filters'] => {
+    const source = sourceOf(sourceId);
+    const personal = new Set(source?.entities.flatMap((entity) => entity.pii) ?? []);
+    const personalFilter = (entry: QueryContextDocument['filters']['properties'][number]): boolean => {
+      if (!personal.has(entry.key)) return false;
+      if (entry.on === undefined || entry.type === undefined) return true;
+      if (entry.on === 'relationship') return source?.relationships.every((relationship) => relationship.type !== entry.type) ?? true;
+      const mapped = source?.entities.find((entity) => entity.type === entry.type);
+      return mapped === undefined || mapped.pii.includes(entry.key);
+    };
+    return { ...filters, properties: filters.properties.filter((entry) => !personalFilter(entry)) };
+  };
 
   /** Whether a title is the generated `<name> <value>` of a keyed entity, whatever the type was called when it was made: it ends in the value, or, cut at the limit, in the front of it. */
   const generatedFrom = (title: string, raw: string): boolean => {
@@ -127,7 +141,7 @@ export function createStoredReferences(mapping: MappingModel, keys: ReferenceKey
         ...document,
         loaded: { nodes: storedRefs(sourceId, document.loaded.nodes), edges: storedEdges(sourceId, document.loaded.edges) },
         expansions: document.expansions.map((expansion) => ({ ...expansion, from: { ...expansion.from, id: storedId(sourceId, expansion.from.t, expansion.from.id) } })),
-        filters: { ...document.filters, properties: document.filters.properties.filter((filter) => !personalKeys(sourceId).has(filter.key)) },
+        filters: withoutPersonalFilters(sourceId, document.filters),
       };
     },
     layout(sourceId, document) {
@@ -143,7 +157,7 @@ export function createStoredReferences(mapping: MappingModel, keys: ReferenceKey
         ...document,
         loaded: { nodes: refs(sourceId, document.loaded.nodes), edges: edges(sourceId, document.loaded.edges) },
         expansions: document.expansions.map((expansion) => ({ ...expansion, from: { ...expansion.from, id: entityId(sourceId, expansion.from.t, expansion.from.id) } })),
-        filters: { ...document.filters, properties: document.filters.properties.filter((filter) => !personalKeys(sourceId).has(filter.key)) },
+        filters: withoutPersonalFilters(sourceId, document.filters),
       };
     },
     title(row) {

@@ -1,4 +1,4 @@
-import type { FilterKind } from '@neburyx/contracts';
+import type { FilterKind } from './expand.js';
 import { momentKey } from './moment-key.js';
 
 /** The data classes a rule's value can have: the kinds a mapping can declare for a property. */
@@ -18,6 +18,11 @@ interface Decimal {
   readonly integer: string;
   readonly fraction: string;
 }
+
+/** The decimal text a bound or a stored value is written in: an optional sign, digits and an optional fraction; no exponent, no separator, any length. */
+export const DECIMAL_TEXT = /^[+-]?\d+(?:\.\d+)?$/;
+
+export const isDecimalText = (text: string): boolean => DECIMAL_TEXT.test(text);
 
 const DECIMAL = /^([+-]?)(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
 
@@ -83,4 +88,18 @@ export function compareStyleValue(rule: StyleValue, valueClass: string, value: u
       return typeof left === 'bigint' && typeof right === 'bigint' ? order(left, right) : typeof left === 'string' && typeof right === 'string' ? order(left, right) : undefined;
     }
   }
+}
+
+/** A number, held as a JavaScript number or written as text, as its one canonical decimal text (the expanded decimal: never an exponent, no leading zero, no trailing fraction zero), or nothing when it is not a finite decimal. */
+export function canonicalNumberText(value: unknown): string | undefined {
+  const decimal = decimalOf(value);
+  if (decimal === undefined) return undefined;
+  return `${decimal.negative ? '-' : ''}${decimal.integer}${decimal.fraction === '' ? '' : `.${decimal.fraction}`}`;
+}
+
+/** How a number compares with another, each a JavaScript number or decimal text; nothing when either is not a finite decimal. */
+export function compareNumbers(left: unknown, right: unknown): -1 | 0 | 1 | undefined {
+  const a = decimalOf(left);
+  const b = decimalOf(right);
+  return a === undefined || b === undefined ? undefined : compareDecimals(a, b);
 }

@@ -1,7 +1,6 @@
-import { filterValueSchema, ICON_KEYS, MAX_FILTER_VALUES, STYLE_EFFECT_KINDS, STYLE_TONES, type FilterKind, type StyleEffectKind } from '@neburyx/contracts';
+import { compareStyleValue, filterValueSchema, ICON_KEYS, isOrdered, MAX_FILTER_VALUES, STYLE_EFFECT_KINDS, STYLE_TONES, type FilterKind, type StyleEffectKind, type StyleValue } from '@neburyx/contracts';
 import type { EntityModel, StyleEffectModel, StyleRuleModel } from './model.js';
 import type { RawStyleRule } from './schema.js';
-import { compareStyleValue, isOrdered, type StyleValue } from './style-value.js';
 
 type Report = (segments: readonly (string | number)[], reason: string) => void;
 

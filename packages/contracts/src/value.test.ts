@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareStyleValue, isOrdered, type StyleValue } from './style-value.js';
+import { canonicalNumberText, compareNumbers, compareStyleValue, isDecimalText, isOrdered, type StyleValue } from './value.js';
 
 const number = (value: number | string): StyleValue => ({ class: 'number', value: value as number });
 const rule = (kind: StyleValue['class'], value: string | number | boolean): StyleValue => ({ class: kind, value });
@@ -66,5 +66,34 @@ describe('comparing a node value with a rule value', () => {
     expect(['number', 'date', 'dateTime', 'localDateTime', 'time', 'localTime'].every((kind) => isOrdered(kind as StyleValue['class']))).toBe(true);
     expect(isOrdered('text')).toBe(false);
     expect(isOrdered('boolean')).toBe(false);
+  });
+});
+
+describe('the decimal-text rule and the canonical number text', () => {
+  it('accepts a sign, digits and a fraction of any length and refuses the rest', () => {
+    for (const text of ['0', '-5', '+5', '1000', '999.5', '9007199254740993', '123456789012345678901234567890.000000001']) expect(isDecimalText(text)).toBe(true);
+    for (const text of ['', ' ', '1,000', '1e5', '1E-7', 'abc', '1.', '.5', '--1', '1 000', '0x10']) expect(isDecimalText(text)).toBe(false);
+  });
+
+  it('writes a number as its expanded decimal, never in exponent form, and each text passes the rule', () => {
+    expect(canonicalNumberText(1e21)).toBe('1000000000000000000000');
+    expect(canonicalNumberText(1e-7)).toBe('0.0000001');
+    expect(canonicalNumberText(2000.0)).toBe('2000');
+    expect(canonicalNumberText('2000.50')).toBe('2000.5');
+    expect(canonicalNumberText('-0')).toBe('0');
+    expect(canonicalNumberText('9007199254740993')).toBe('9007199254740993');
+    for (const value of [1e21, 1e-7, 123.456, -0.5, '00012.3400']) expect(isDecimalText(canonicalNumberText(value) ?? '')).toBe(true);
+  });
+
+  it('gives no text for NaN, the infinities or what is not a number', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, 'NaN', 'Infinity', '-Infinity', null, undefined, {}, 'abc']) expect(canonicalNumberText(value)).toBeUndefined();
+  });
+
+  it('compares numbers exactly beyond 2^53 and never matches a non-finite value', () => {
+    expect(compareNumbers('9007199254740993', '9007199254740992')).toBe(1);
+    expect(compareNumbers(1e21, '1000000000000000000000')).toBe(0);
+    expect(compareNumbers(Number.NaN, 1)).toBeUndefined();
+    expect(compareNumbers('Infinity', 1)).toBeUndefined();
+    expect(compareNumbers('0.1', '0.10')).toBe(0);
   });
 });

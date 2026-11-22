@@ -10,6 +10,7 @@ describe('the words the mapping guide quotes from the mapping-changed notice', (
   it.each([
     ['the placeholder for a type that is no longer mapped', UNMAPPED_ITEMS_SENTENCE.slice(UNMAPPED_ITEMS_SENTENCE.indexOf('“'), UNMAPPED_ITEMS_SENTENCE.lastIndexOf('”') + 1)],
     ['the reason beside a dropped filter on a field that is now personal', droppedFilterText('x', 'now-personal').replace(/^x \(|\)$/g, '')],
+    ['the reason beside a dropped filter whose kind changed', droppedFilterText('x', 'kind-changed').replace(/^x \(|\)$/g, '')],
     ['the sentence for fields that are newly sensitive', NEWLY_SENSITIVE],
   ])('are the product\'s: %s', (_name, phrase) => {
     expect(phrase).not.toBe('');

@@ -1,8 +1,9 @@
-import type { ElementRef, Window } from '@neburyx/contracts';
+import type { ElementRef, FilterKind, Window } from '@neburyx/contracts';
 import type { Group } from '../groups/group-model.js';
 import { DEFAULT_DIRECTION, DEFAULT_LAYOUT, type LayoutDirection, type LayoutId } from './layout-choice.js';
 import { StateError } from './errors.js';
 import { nodeRefOfKey } from './keys.js';
+import { bounded, conditionKey, isEmptyCondition, isRangeKind, MAX_CHOSEN_VALUES, NO_CONDITIONS, readBound, sameCondition, type ConditionOn, type PropertyCondition } from './property-filter.js';
 import { createStore, readable, type ReadableStore } from './store.js';
 import { sameWindow, type DatedRow, type TimeFilter } from './time-window.js';
 
@@ -50,9 +51,24 @@ export interface TypeFilter {
   readonly offRelationshipTypes: ReadonlySet<string>;
   /** The time window filtered by, when one is set. */
   readonly time?: TimeFilter | undefined;
+  /** The property conditions set in the Filters panel, at most one for each property of a type. */
+  readonly properties: readonly PropertyCondition[];
 }
 
-export const NO_TYPE_FILTER: TypeFilter = { offEntityTypes: new Set(), offRelationshipTypes: new Set() };
+export const NO_TYPE_FILTER: TypeFilter = { offEntityTypes: new Set(), offRelationshipTypes: new Set(), properties: NO_CONDITIONS };
+
+/** What the mapping says of the properties of one entity type or relationship type: the filterable ones, the kind declared for a property (`unknown` when none), and the personal-data ones. */
+export interface MappedProperties {
+  readonly filterable: readonly string[];
+  readonly kinds: Readonly<Record<string, FilterKind | 'unknown'>>;
+  readonly pii: readonly string[];
+}
+
+/** The properties of every mapped type, by the kind of type and the type's name. */
+export interface MappedPropertySets {
+  readonly entity: Readonly<Record<string, MappedProperties>>;
+  readonly relationship: Readonly<Record<string, MappedProperties>>;
+}
 
 /** The entity and relationship types the mapping of the bound source names; undefined until its profile is read. */
 export interface MappedTypes {
@@ -60,6 +76,33 @@ export interface MappedTypes {
   readonly relationshipTypes: readonly string[];
   /** The relationship rows of the mapping that have a time, which a time window can judge. */
   readonly datedRelationships?: readonly DatedRow[] | undefined;
+  /** The properties of each type; when absent, a property condition is kept as it is. */
+  readonly properties?: MappedPropertySets | undefined;
+}
+
+/** Whether the mapping still supports a condition: its type is mapped, the property is filterable (and not personal data for an entity type), and a kind the mapping declares is the condition's. */
+function supported(condition: PropertyCondition, mapped: MappedTypes, allowPersonal = false): boolean {
+  const types = condition.on === 'entity' ? mapped.entityTypes : mapped.relationshipTypes;
+  if (!types.includes(condition.type)) return false;
+  const held = mapped.properties?.[condition.on][condition.type];
+  if (mapped.properties === undefined) return true;
+  if (held === undefined || !held.filterable.includes(condition.property)) return false;
+  if (condition.on === 'entity' && held.pii.includes(condition.property)) return allowPersonal;
+  const declared = held.kinds[condition.property];
+  if (condition.op === 'between') return declared === condition.kind;
+  if (declared !== undefined && declared !== 'unknown' && isRangeKind(declared)) return false;
+  return declared === undefined || declared === 'unknown' || declared === condition.kind;
+}
+
+/** Whether a condition is well formed: at most 20 different values, or bounds that read as the kind and are in order. */
+function wellFormed(condition: PropertyCondition): boolean {
+  if (condition.op === 'in') return condition.values.length <= MAX_CHOSEN_VALUES && new Set(condition.values).size === condition.values.length;
+  const { kind, from, to } = condition;
+  if (!isRangeKind(kind)) return false;
+  const readFrom = from === undefined ? undefined : readBound(kind, from);
+  const readTo = to === undefined ? undefined : readBound(kind, to);
+  if (readFrom?.ok === false || readTo?.ok === false) return false;
+  return from === undefined || to === undefined || !bounded(kind, from, to);
 }
 
 /** Where the Paths panel is to put the focus when it next shows (the first field, or the first path of its list); `serial` tells one request from the next. */
@@ -145,6 +188,8 @@ export interface PresentationState {
   readonly focused: string | undefined;
   /** What the last arrow-key move did, for screen readers, until the walk moves, the selection changes or the canvas loses the focus. */
   readonly moveNote: { readonly text: string; readonly serial: number } | undefined;
+  /** Why a transient filter on a personal-data property was cleared, shown in the Filters panel until the next change of a filter. */
+  readonly personalFilterNote: string | undefined;
   /** Undefined until a view was set, so that a view that was never set differs from a stored one at zoom 1. */
   readonly viewport: Viewport | undefined;
   /** The tool whose flyout is open, if any. Not saved with a view. */
@@ -206,6 +251,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   walking: false,
   focused: undefined,
   moveNote: undefined,
+  personalFilterNote: undefined,
   viewport: undefined,
   openTool: undefined,
   openMenu: undefined,
@@ -252,8 +298,12 @@ export interface PresentationActions {
   showAllHidden(): void;
   /** Tells which types the mapping names; an off type a known mapping does not name is dropped from the filter. Undefined when no profile is known: the filter is kept as it is. */
   setMappedTypes(types: MappedTypes | undefined): void;
-  /** Switches every type on again; a time window is left as it is. */
+  /** Switches every type on again and clears every property condition; a time window is left as it is. */
   resetTypeFilter(): void;
+  /** Clears every condition on a personal-data property of its entity type, and says why. */
+  clearPersonalConditions(): void;
+  /** Sets the condition on a property of a type, or clears it when `condition` is undefined or chooses no value. `leaving` are the keys of the items it newly filters out, which stop being selected, focused or open. */
+  setPropertyCondition(identity: { readonly on: ConditionOn; readonly type: string; readonly property: string }, condition: PropertyCondition | undefined, leaving?: readonly string[]): void;
   /** Sets or clears the time window. `leaving` are the keys of the items it filters out, which stop being selected, focused or open. */
   setTimeWindow(window: Window | undefined, leaving?: readonly string[]): void;
   setFiltersOpen(open: boolean): void;
@@ -318,6 +368,12 @@ export interface PresentationStore extends PresentationActions {
 /** An element the investigation does not hold is refused; selection may name a node or a relationship, a position or a pin only a node. */
 export function createPresentationStore(known: KnownElements): PresentationStore {
   const store = createStore<PresentationState>(INITIAL_PRESENTATION);
+  // the note of a cleared personal-data filter lasts until the next change of any filter
+  let noteFilter: TypeFilter | undefined;
+  store.subscribe(() => {
+    const current = store.getState();
+    if (current.personalFilterNote !== undefined && current.typeFilter !== noteFilter) store.setState({ ...current, personalFilterNote: undefined });
+  });
   const requireKnown = (keys: readonly string[], test: (key: string) => boolean): void => {
     if (!keys.every(test)) throw new StateError('UNKNOWN_ELEMENT');
   };
@@ -481,21 +537,61 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     setMappedTypes(mappedTypes) {
       const current = store.getState();
       const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, at) => item === b[at]);
-      if (current.mappedTypes === mappedTypes || (current.mappedTypes !== undefined && mappedTypes !== undefined && same(current.mappedTypes.entityTypes, mappedTypes.entityTypes) && same(current.mappedTypes.relationshipTypes, mappedTypes.relationshipTypes) && sameRows(current.mappedTypes.datedRelationships, mappedTypes.datedRelationships))) return;
+      if (current.mappedTypes === mappedTypes || (current.mappedTypes !== undefined && mappedTypes !== undefined && same(current.mappedTypes.entityTypes, mappedTypes.entityTypes) && same(current.mappedTypes.relationshipTypes, mappedTypes.relationshipTypes) && sameRows(current.mappedTypes.datedRelationships, mappedTypes.datedRelationships) && JSON.stringify(current.mappedTypes.properties) === JSON.stringify(mappedTypes.properties))) return;
       if (mappedTypes === undefined) {
         store.setState({ ...current, mappedTypes });
         return;
       }
       const offEntityTypes = new Set([...current.typeFilter.offEntityTypes].filter((type) => mappedTypes.entityTypes.includes(type)));
       const offRelationshipTypes = new Set([...current.typeFilter.offRelationshipTypes].filter((type) => mappedTypes.relationshipTypes.includes(type)));
-      const kept = offEntityTypes.size === current.typeFilter.offEntityTypes.size && offRelationshipTypes.size === current.typeFilter.offRelationshipTypes.size;
+      const properties = current.typeFilter.properties.filter((condition) => supported(condition, mappedTypes));
+      const kept = offEntityTypes.size === current.typeFilter.offEntityTypes.size && offRelationshipTypes.size === current.typeFilter.offRelationshipTypes.size && properties.length === current.typeFilter.properties.length;
       const time = current.typeFilter.time === undefined ? undefined : { window: current.typeFilter.time.window, rows: mappedTypes.datedRelationships ?? [] };
-      store.setState({ ...current, mappedTypes, typeFilter: kept && time === current.typeFilter.time ? current.typeFilter : { offEntityTypes, offRelationshipTypes, time } });
+      store.setState({ ...current, mappedTypes, typeFilter: kept && time === current.typeFilter.time ? current.typeFilter : { offEntityTypes, offRelationshipTypes, time, properties: kept ? current.typeFilter.properties : properties.length === 0 ? NO_CONDITIONS : properties } });
     },
     resetTypeFilter() {
       const { typeFilter } = store.getState();
-      if (typeFilter.offEntityTypes.size === 0 && typeFilter.offRelationshipTypes.size === 0) return;
-      store.setState({ ...store.getState(), typeFilter: typeFilter.time === undefined ? NO_TYPE_FILTER : { ...NO_TYPE_FILTER, time: typeFilter.time } });
+      if (typeFilter.offEntityTypes.size === 0 && typeFilter.offRelationshipTypes.size === 0 && typeFilter.properties.length === 0) return;
+      store.setState({ ...store.getState(), personalFilterNote: undefined, typeFilter: typeFilter.time === undefined ? NO_TYPE_FILTER : { ...NO_TYPE_FILTER, time: typeFilter.time } });
+    },
+    clearPersonalConditions() {
+      const current = store.getState();
+      const personalNow = (held: PropertyCondition): boolean => held.on === 'entity' && (current.mappedTypes?.properties?.entity[held.type]?.pii.includes(held.property) ?? false);
+      const cleared = current.typeFilter.properties.filter(personalNow);
+      if (cleared.length === 0) return;
+      const rest = current.typeFilter.properties.filter((held) => !personalNow(held));
+      const text = `${cleared.map((held) => `Filter on ${held.property}`).join(', ')} cleared: masking is on.`;
+      noteFilter = { ...current.typeFilter, properties: rest.length === 0 ? NO_CONDITIONS : rest };
+      store.setState({ ...current, typeFilter: noteFilter, personalFilterNote: text, moveNote: { text, serial: (current.moveNote?.serial ?? 0) + 1 } });
+    },
+    setPropertyCondition(identity, condition, leaving = []) {
+      const current = store.getState();
+      const { mappedTypes } = current;
+      const key = conditionKey(identity);
+      const others = current.typeFilter.properties.filter((held) => conditionKey(held) !== key);
+      if (condition === undefined || isEmptyCondition(condition)) {
+        if (others.length === current.typeFilter.properties.length) return;
+        store.setState({ ...current, personalFilterNote: undefined, typeFilter: { ...current.typeFilter, properties: others.length === 0 ? NO_CONDITIONS : others } });
+        return;
+      }
+      if (conditionKey(condition) !== key) throw new StateError('INVALID_CONDITION');
+      if (mappedTypes === undefined || !(identity.on === 'entity' ? mappedTypes.entityTypes : mappedTypes.relationshipTypes).includes(identity.type)) throw new StateError('UNKNOWN_TYPE');
+      if (!wellFormed(condition) || !supported(condition, mappedTypes, true) || mappedTypes.properties === undefined) throw new StateError('INVALID_CONDITION');
+      const held = current.typeFilter.properties.find((candidate) => conditionKey(candidate) === key);
+      if (held !== undefined && sameCondition(held, condition)) return;
+      const gone = new Set(leaving);
+      const endsFocus = current.neighborhoodFocus !== undefined && gone.has(current.neighborhoodFocus);
+      store.setState({
+        ...current,
+        ...(endsFocus ? endedFocus(current) : {}),
+        personalFilterNote: undefined,
+        typeFilter: { ...current.typeFilter, properties: [...others, condition] },
+        selection: new Set([...current.selection].filter((candidate) => !gone.has(candidate))),
+        focused: current.focused !== undefined && gone.has(current.focused) ? undefined : current.focused,
+        supernodePanel: current.supernodePanel !== undefined && gone.has(current.supernodePanel.key) ? undefined : current.supernodePanel,
+        openMenu: current.openMenu?.key !== undefined && gone.has(current.openMenu.key) ? undefined : current.openMenu,
+        moveNote: endsFocus ? { text: FOCUS_LEFT, serial: (current.moveNote?.serial ?? 0) + 1 } : undefined,
+      });
     },
     setTimeWindow(window, leaving = []) {
       const current = store.getState();

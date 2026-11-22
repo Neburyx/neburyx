@@ -60,11 +60,12 @@ describe('a saved investigation reopened in a fresh client', () => {
     const { tab, id } = await arranged(suite);
     const stored = suite.draft();
     if (stored === undefined) throw new Error('the draft was stored');
-    const filters = { entityTypes: ['hub', 'leaf'], relTypes: [], time: null, properties: [{ key: 'weight', op: 'gte' as const, values: ['3'] }] };
+    const filters = { entityTypes: ['hub', 'leaf'], relTypes: [], time: null, properties: [{ on: 'entity' as const, type: 'leaf', key: 'weight', kind: 'text' as const, op: 'in', values: ['3'] }] };
     const written = await tab.client.saveDraft(id, stored.version, { notes: null, layout: stored.layout, queryContext: { ...stored.queryContext, filters } });
     expect(written).toMatchObject({ ok: true });
     expect(suite.draft()?.queryContext.filters.properties).toEqual(filters.properties);
-    const reopened = await reopen(suite, id);
+    const reopened = await reopen(suite, id, { entity: { leaf: { filterable: ['weight'], kinds: {}, pii: [] } }, relationship: {} });
+    expect(reopened.state.presentation.view.getState().typeFilter.properties).toHaveLength(1);
     reopened.state.presentation.setPositions(new Map([[reopened.nodeKey('leaf', 'L-1'), { x: 1, y: 2 }]]));
     await suite.advance(AUTOSAVE_DELAY_MS);
     await reopened.written();

@@ -2,8 +2,9 @@ import type { Count, GraphEdge, GraphNode } from '@neburyx/contracts';
 import type { InvestigationState } from './investigation-state.js';
 import { edgeKey, elementKey, queryKeyText } from './keys.js';
 import type { TypeFilter } from './presentation-state.js';
+import { propertyFilteredKeys } from './property-filter.js';
 import type { ServerState } from './server-state.js';
-import { timeFilteredOf } from './time-window.js';
+import { filteredRelationshipsOf } from './filtered-relationships.js';
 
 export interface LoadedGraph {
   readonly nodes: readonly GraphNode[];
@@ -156,22 +157,23 @@ function typeFilteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySet<s
   return keys;
 }
 
-const combinedSets = new WeakMap<LoadedGraph, WeakMap<TypeFilter, { readonly timed: ReadonlySet<string>; readonly keys: ReadonlySet<string> }>>();
+const combinedSets = new WeakMap<LoadedGraph, WeakMap<TypeFilter, { readonly timed: ReadonlySet<string>; readonly propertied: ReadonlySet<string>; readonly keys: ReadonlySet<string> }>>();
 
-/** The keys of the loaded entities the filters leave out: those of a type switched off and those the time window filters out. The same inputs give the same set. */
+/** The keys of the loaded entities the filters leave out: those of a type switched off, those the time window filters out and those a property condition on their type leaves out. The same inputs give the same set. */
 export function filteredKeys(graph: LoadedGraph, filter: TypeFilter): ReadonlySet<string> {
   const typed = typeFilteredKeys(graph, filter);
-  const timed = timeFilteredOf(graph, filter.time).entities;
-  if (timed.size === 0) return typed;
+  const timed = filteredRelationshipsOf(graph, filter).entities;
+  const propertied = propertyFilteredKeys(graph, filter.properties);
+  if (timed.size === 0 && propertied.size === 0) return typed;
   let byFilter = combinedSets.get(graph);
   if (byFilter === undefined) {
     byFilter = new WeakMap();
     combinedSets.set(graph, byFilter);
   }
   const known = byFilter.get(filter);
-  if (known !== undefined && known.timed === timed) return known.keys;
-  const keys: ReadonlySet<string> = new Set([...typed, ...timed]);
-  byFilter.set(filter, { timed, keys });
+  if (known !== undefined && known.timed === timed && known.propertied === propertied) return known.keys;
+  const keys: ReadonlySet<string> = new Set([...typed, ...timed, ...propertied]);
+  byFilter.set(filter, { timed, propertied, keys });
   return keys;
 }
 

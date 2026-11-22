@@ -4,6 +4,7 @@ import type { ApiFailure, ApiResult } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { createClientState, type ClientState } from '../state/client-state.js';
 import { elementKey } from '../state/keys.js';
+import type { MappedPropertySets } from '../state/presentation-state.js';
 import { key, ref, result } from '../state/test-data.js';
 import { AUTOSAVE_DELAY_MS, createDraftSync, KEEPALIVE_LIMIT_BYTES, RETRY_STEADY_MS, STALLED_AFTER_MS, type DraftSync } from './draft-sync.js';
 import { carriedOf } from './draft-document.js';
@@ -312,8 +313,8 @@ describe('the parts of a stored draft the web does not edit', () => {
     layout: { schemaVersion: 1 as const, layout: 'force', nodes: [{ t: 'type-a', id: 'A', pinned: false, hidden: false, groupId: 'g1' }], edges: [], groups: [{ id: 'g1', label: 'One', by: 'manual', members: [{ t: 'type-a', id: 'A' }] }] },
     queryContext: { schemaVersion: 1 as const, loaded: { nodes: [], edges: [] }, expansions: [{ from: { t: 'type-a', id: 'A' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }], filters: { entityTypes: [], relTypes: [], time: { from: '2024-01-01' }, properties: [{ key: 'prop-x', op: 'gte', values: ['10'] }] } },
   };
-  const carried = { ...carriedOf(stored, 'force', true), time: stored.queryContext.filters.time, properties: stored.queryContext.filters.properties, expansions: stored.queryContext.expansions };
-  const filters = { entityTypes: ['type-a'], relTypes: [], time: carried.time, properties: carried.properties };
+  const carried = { ...carriedOf(stored, 'force', true), time: stored.queryContext.filters.time, expansions: stored.queryContext.expansions };
+  const filters = { entityTypes: ['type-a'], relTypes: [], time: carried.time, properties: [] };
 
   it('are still in the first write after the mapping is known, and in the ones that follow a change of a type filter', async () => {
     const { writes, move, sync, state } = rig(undefined, false);
@@ -321,13 +322,12 @@ describe('the parts of a stored draft the web does not edit', () => {
     state.presentation.setMappedTypes({ entityTypes: ['type-a', 'type-b'], relationshipTypes: [] });
     move(2);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
-    expect(writes[0]?.body.queryContext.filters.properties).toEqual(carried.properties);
     expect(writes[0]?.body.queryContext.filters.time).toEqual(carried.time);
     expect(writes[0]?.body.queryContext.expansions).toEqual(carried.expansions);
     state.setEntityTypeOff('type-b', false);
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     const last = writes[writes.length - 1]?.body.queryContext;
-    expect(last?.filters.properties).toEqual(carried.properties);
+    expect(last?.filters.properties).toEqual([]);
     expect(last?.expansions).toEqual(carried.expansions);
   });
 });
@@ -788,5 +788,65 @@ describe('a change of the masking setting', () => {
     expect(writes).toHaveLength(2);
     expect(writes[1]?.body.layout.nodes[0]).toMatchObject({ x: 5 });
     expect(JSON.stringify(writes[1]?.body)).not.toContain('mask');
+  });
+});
+
+describe('the property filters of a stored draft', () => {
+  const entry = (type: string, over: Record<string, unknown> = {}) => ({ on: 'entity' as const, type, key: 'score', kind: 'text' as const, op: 'in', values: ['a'], ...over });
+  const linkEntry = { on: 'relationship' as const, type: 'rel-a', key: 'weight', kind: 'number' as const, op: 'between', values: [], from: '9007199254740993' };
+  const properties = { entity: { 'type-a': { filterable: ['score'], kinds: {}, pii: [] }, 'type-b': { filterable: ['score'], kinds: {}, pii: [] } }, relationship: { 'rel-a': { filterable: ['weight'], kinds: { weight: 'number' as const }, pii: [] } } };
+  const mapped = (over: Partial<MappedPropertySets> = {}) => ({ entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'], properties: { ...properties, ...over } });
+  const filtersOf = (...stored: object[]) => ({ entityTypes: [], relTypes: [], time: null, properties: stored as never });
+
+  it('are held unchanged until the mapping is known, then applied to the view, each to its own type, and written back as the view holds them', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: filtersOf(entry('type-a'), entry('type-b', { values: ['b'] }), linkEntry), writable: true });
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes[0]?.body.queryContext.filters.properties).toEqual([entry('type-a'), entry('type-b', { values: ['b'] }), linkEntry]);
+    state.presentation.setMappedTypes(mapped());
+    expect(state.presentation.view.getState().typeFilter.properties.map((condition) => [condition.on, condition.type, condition.op])).toEqual([['entity', 'type-a', 'in'], ['entity', 'type-b', 'in'], ['relationship', 'rel-a', 'between']]);
+    move(3);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.properties).toEqual([entry('type-a'), entry('type-b', { values: ['b'] }), linkEntry]);
+  });
+
+  it('keep a filter whose type has no loaded item, and drop the next write of one the mapping no longer supports', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: filtersOf(entry('type-a'), entry('type-b', { key: 'gone' })), writable: true });
+    state.presentation.setMappedTypes(mapped());
+    expect(state.presentation.view.getState().typeFilter.properties).toHaveLength(1);
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.properties).toEqual([entry('type-a')]);
+  });
+
+  it('are never written for a personal-data property of their type, and a stored entry of the older shape is not written back', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: filtersOf({ key: 'score', op: 'eq', values: ['x'] }, entry('type-a')), writable: true });
+    state.presentation.setMappedTypes(mapped({ entity: { ...properties.entity, 'type-a': { filterable: ['score'], kinds: {}, pii: ['score'] } } }));
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes.at(-1)?.body.queryContext.filters.properties).toEqual([]);
+  });
+});
+
+describe('a filter on a personal-data property', () => {
+  it('is never in a draft write, with masking off, and is not restored after a reload', async () => {
+    const { writes, move, sync, state } = rig(undefined, false);
+    sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, writable: true });
+    const mappedSets = { entity: { 'type-a': { filterable: ['score', 'secret_a'], kinds: {}, pii: ['secret_a'] } }, relationship: {} };
+    state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: [], properties: mappedSets });
+    const secret = { on: 'entity', type: 'type-a', property: 'secret_a' } as const;
+    state.setPropertyCondition(secret, { ...secret, kind: 'text', op: 'in', values: ['SECRET-1'] });
+    expect(state.presentation.view.getState().typeFilter.properties).toHaveLength(1);
+    move(2);
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(JSON.stringify(writes.map((write) => write.body))).not.toContain('SECRET-1');
+    expect(writes.at(-1)?.body.queryContext.filters.properties).toEqual([]);
+    const reloaded = rig(undefined, false);
+    reloaded.sync.adopt(ID, { version: 1, notes: null, basedOnViewId: null, filters: { entityTypes: [], relTypes: [], time: null, properties: [{ on: 'entity', type: 'type-a', key: 'secret_a', kind: 'text', op: 'in', values: ['SECRET-1'] }] }, writable: true });
+    reloaded.state.presentation.setMappedTypes({ entityTypes: ['type-a'], relationshipTypes: [], properties: mappedSets });
+    expect(reloaded.state.presentation.view.getState().typeFilter.properties).toHaveLength(0);
   });
 });

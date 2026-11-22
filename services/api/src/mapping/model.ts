@@ -1,6 +1,5 @@
-import type { AiSettings, FilterKind, IconKey, PatternDefinition, PiiClass, PresetTemplate, StyleOperator, StyleTone } from '@neburyx/contracts';
+import type { AiSettings, FilterKind, IconKey, PatternDefinition, PiiClass, PresetTemplate, StyleOperator, StyleTone, StyleValue } from '@neburyx/contracts';
 import { buildLinkAddress } from './link-address.js';
-import type { StyleValue } from './style-value.js';
 
 /** The most properties a source may list under `search` in all its entity types: each is a branch of the one search read. */
 export const MAX_SEARCH_PROPERTIES = 100;

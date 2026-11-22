@@ -221,6 +221,23 @@ describe('stored documents with typed edge ends', () => {
     expect(JSON.stringify(context)).not.toContain('SECRET-A');
   });
 
+  it('judges a stored filter that names its type by that type: a personal-data property of its own type goes, a type the mapping lacks goes, the same name on another mapped type stays', () => {
+    const entry = (over: Record<string, unknown>) => ({ on: 'entity', type: 'handle_a', key: 'idA', kind: 'text', op: 'in', values: ['SECRET-A'], ...over });
+    const context = both.queryContext('demo', {
+      schemaVersion: 1,
+      loaded: { nodes: [], edges: [] },
+      expansions: [],
+      filters: {
+        entityTypes: [],
+        relTypes: [],
+        time: null,
+        properties: [entry({}), entry({ type: 'nowhere', values: ['SECRET-B'] }), entry({ type: 'person', values: ['kept-person'] }), entry({ on: 'relationship', type: 'HAS', values: ['kept-relationship'] }), entry({ on: 'relationship', type: 'NOWHERE', values: ['SECRET-C'] })] as never,
+      },
+    });
+    expect(context.filters.properties.map((filter) => filter.values[0])).toEqual(['kept-person', 'kept-relationship']);
+    expect(JSON.stringify(context)).not.toMatch(/SECRET-/);
+  });
+
   it('gives a generated title the type’s current name whatever the type was called when it was made, cut or whole', () => {
     const row = (title: string, id: string) => ({ sourceId: 'demo', title, startingEntityType: 'handle_a', startingStableId: id });
     expect(both.title(row('Old name RAW-SECRET', 'RAW-SECRET'))).toBe('HandleA');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { investigationResponseSchema, edgeEntrySchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema, layoutDocumentSchema } from './investigations.js';
+import { investigationResponseSchema, edgeEntrySchema, queryContextDocumentSchema, investigationListQuerySchema, investigationListResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema, renameRequestSchema, statusChangeRequestSchema, statusChangeResponseSchema, layoutDocumentSchema } from './investigations.js';
 
 const investigation = {
   id: '0192f000-0000-7000-8000-0000000000a1',
@@ -245,5 +245,63 @@ describe('the groups of a layout document', () => {
   it('refuses a collapsed flag that is not a boolean, and any other field of a group', () => {
     expect(layoutDocumentSchema.safeParse({ ...layout, groups: [{ ...group, collapsed: 'yes' }] }).success).toBe(false);
     expect(layoutDocumentSchema.safeParse({ ...layout, groups: [{ ...group, value: 'USD' }] }).success).toBe(false);
+  });
+});
+
+describe('a property filter of a stored document', () => {
+  const context = (properties: unknown[]) => ({ schemaVersion: 1, loaded: { nodes: [], edges: [] }, expansions: [], filters: { entityTypes: [], relTypes: [], time: null, properties } });
+  const accepted = (entry: unknown): boolean => queryContextDocumentSchema.safeParse(context([entry])).success;
+  const choice = { on: 'entity', type: 'kind-a', key: 'score', kind: 'text', op: 'in', values: ['a', 'b'] };
+  const range = { on: 'relationship', type: 'link-a', key: 'weight', kind: 'number', op: 'between', values: [], from: '1000', to: '5000' };
+
+  it('is read back as it was written, for a choice and a range, with the older shape still accepted', () => {
+    expect(accepted(choice)).toBe(true);
+    expect(accepted(range)).toBe(true);
+    expect(accepted({ key: 'score', op: 'eq', values: ['x'] })).toBe(true);
+    expect(accepted({ ...range, from: '9007199254740993', to: '9007199254740994' })).toBe(true);
+    expect(accepted({ ...choice, kind: 'number', values: ['1000000000000000000000', '0.0000001'] })).toBe(true);
+    expect(queryContextDocumentSchema.parse(context([range])).filters.properties[0]).toEqual(range);
+  });
+
+  it.each([
+    ['an on that is not entity or relationship', { ...choice, on: 'edge' }],
+    ['a kind outside the filter kinds', { ...choice, kind: 'duration' }],
+    ['a type without its kind', { key: 'score', op: 'in', values: ['a'], on: 'entity', type: 'kind-a' }],
+    ['a bound on the older shape', { key: 'score', op: 'between', values: [], from: '1' }],
+    ['an in with no value', { ...choice, values: [] }],
+    ['an in with 21 values', { ...choice, values: Array.from({ length: 21 }, (_unused, at) => String(at)) }],
+    ['an in with a bound', { ...choice, from: 'a' }],
+    ['a value that does not read as its kind', { ...choice, kind: 'number', values: ['1,000'] }],
+    ['a number in exponent form', { ...choice, kind: 'number', values: ['1e21'] }],
+    ['a boolean that is not true or false', { ...choice, kind: 'boolean', values: ['yes'] }],
+    ['a text over 256 characters', { ...choice, values: ['x'.repeat(257)] }],
+    ['a between with values', { ...range, values: ['1'] }],
+    ['a between with no bound', { ...range, from: undefined, to: undefined }],
+    ['a between on a boolean', { ...range, kind: 'boolean', from: 'true', to: 'true' }],
+    ['a between on a text', { ...range, kind: 'text', from: 'a', to: 'b' }],
+    ['a bound that does not read as its kind', { ...range, kind: 'date', from: 'March 1', to: undefined }],
+    ['a from after the to', { ...range, from: '5000', to: '1000' }],
+    ['a date from after the to', { ...range, kind: 'date', from: '2026-03-02', to: '2026-03-01' }],
+    ['an op that is not in or between', { ...choice, op: 'eq' }],
+    ['the same value twice', { ...choice, values: ['a', 'a'] }],
+    ['a value with a NUL', { ...choice, values: ['a\u0000b'] }],
+    ['a value with a lone surrogate', { ...choice, values: ['a\ud800'] }],
+    ['a key over 256 characters', { ...choice, key: 'k'.repeat(257) }],
+    ['a type over 256 characters', { ...choice, type: 't'.repeat(257) }],
+    ['a key with a NUL', { ...choice, key: 'k\u0000' }],
+    ['a type with a lone surrogate', { ...choice, type: 't\ud800' }],
+  ])('is refused with %s', (_name, entry) => {
+    expect(accepted(entry)).toBe(false);
+  });
+
+  it('refuses two filters on the same property of the same type, and accepts the same property on two types', () => {
+    expect(queryContextDocumentSchema.safeParse(context([choice, { ...choice, values: ['c'] }])).success).toBe(false);
+    expect(queryContextDocumentSchema.safeParse(context([choice, { ...choice, type: 'kind-b' }])).success).toBe(true);
+  });
+
+  it('accepts a from equal to the to, a one-ended range, and a date and time range', () => {
+    expect(accepted({ ...range, from: '5', to: '5' })).toBe(true);
+    expect(accepted({ ...range, to: undefined })).toBe(true);
+    expect(accepted({ ...range, kind: 'dateTime', from: '2026-03-01T10:00:00Z', to: '2026-03-01T10:00:00.000000001Z' })).toBe(true);
   });
 });

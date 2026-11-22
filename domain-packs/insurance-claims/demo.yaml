@@ -71,6 +71,7 @@ relationships:
       eventId: { sequence: { prefix: "FB-", width: 6 } }
       filedAt: { datetime: { from: "2023-01-01T00:00:00Z", to: "2026-09-30T23:59:59Z" }, missing: 0.05 }
       sourceRecordId: { join: ["SRC-FB-", { sequence: { width: 6 } }] }
+      channel: { cycle: { values: [phone, online, agent], every: 1 } }
   - type: INVOLVES_VEHICLE
     from: claim
     to: vehicle

@@ -7,7 +7,7 @@ import { deriveLoadedGraph } from '../state/loaded-graph.js';
 import { key, ref, result } from '../state/test-data.js';
 import { carriedOf, draftOf, keptFrom, NOTHING_KEPT, refsOf } from './draft-document.js';
 
-const PRESENTATION = { layout: 'force' as const, positions: new Map(), pins: new Set<string>(), hidden: new Set<string>(), groups: [], viewport: undefined, typeFilter: { offEntityTypes: new Set<string>(), offRelationshipTypes: new Set<string>() }, mappedTypes: undefined };
+const PRESENTATION = { layout: 'force' as const, positions: new Map(), pins: new Set<string>(), hidden: new Set<string>(), groups: [], viewport: undefined, typeFilter: { offEntityTypes: new Set<string>(), offRelationshipTypes: new Set<string>(), properties: [] }, mappedTypes: undefined };
 
 function loaded(nodes: readonly string[], edges: ReadonlyArray<readonly [string, string, string]> = []) {
   const state = createClientState();
@@ -68,7 +68,7 @@ describe('the draft as it is written', () => {
 
   it('lists the types left on only when one is switched off, and none when the mapping is not known', () => {
     const { graph, nodeRefs } = loaded(['A']);
-    const off = { offEntityTypes: new Set(['type-b']), offRelationshipTypes: new Set<string>() };
+    const off = { offEntityTypes: new Set(['type-b']), offRelationshipTypes: new Set<string>(), properties: [] };
     const mapped = { entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] };
     expect(draftOf({ nodeRefs, graph, presentation: { ...PRESENTATION, typeFilter: off, mappedTypes: mapped }, notes: null, kept: NOTHING_KEPT }).queryContext.filters).toMatchObject({ entityTypes: ['type-a'], relTypes: [] });
     expect(draftOf({ nodeRefs, graph, presentation: { ...PRESENTATION, typeFilter: off }, notes: null, kept: NOTHING_KEPT }).queryContext.filters).toMatchObject({ entityTypes: [], relTypes: [] });
@@ -129,15 +129,15 @@ describe('the parts of a stored draft the web does not edit', () => {
     },
   };
 
-  it('are written back as they were read, whatever the mapping and the type filters are', () => {
+  it('are written back as they were read, whatever the mapping and the type filters are (the property filters are the view\'s own, none here)', () => {
     const { graph, nodeRefs } = loaded(['A']);
     const carried = carriedOf(stored, 'force', true);
     const known = { ...PRESENTATION, mappedTypes: { entityTypes: ['type-a', 'type-b'], relationshipTypes: ['rel-a'] } };
-    for (const presentation of [PRESENTATION, known, { ...known, typeFilter: { offEntityTypes: new Set(['type-b']), offRelationshipTypes: new Set<string>() } }]) {
+    for (const presentation of [PRESENTATION, known, { ...known, typeFilter: { offEntityTypes: new Set(['type-b']), offRelationshipTypes: new Set<string>(), properties: [] } }]) {
       const { queryContext } = draftOf({ nodeRefs, graph, presentation, notes: null, kept: NOTHING_KEPT, carried });
       expect(queryContext.expansions).toEqual(stored.queryContext.expansions);
       expect(queryContext.filters.time).toEqual(stored.queryContext.filters.time);
-      expect(queryContext.filters.properties).toEqual(stored.queryContext.filters.properties);
+      expect(queryContext.filters.properties).toEqual([]);
     }
   });
 

@@ -7,6 +7,8 @@ import { deriveLoadedGraph, excludedKeys, filteredKeys, neighborhoodOf, visibleG
 import { createPresentationStore, type PresentationActions, type PresentationSnapshot, type Viewport } from './presentation-state.js';
 import { createServerStore, type GraphResult, type ServerState } from './server-state.js';
 import { createStore, readable, type ReadableStore } from './store.js';
+import { conditionKey, propertyFilteredKeys, type ConditionOn, type PropertyCondition } from './property-filter.js';
+import { filteredRelationshipsOf } from './filtered-relationships.js';
 import { timeFilteredOf } from './time-window.js';
 
 /** `current`: the investigation was already the one shown; `resumed`: it came back as it was left in this session; `fresh`: nothing was held of it. */
@@ -16,7 +18,7 @@ export interface ClientState {
   readonly server: ReadableStore<ServerState> & { get(key: QueryKey): GraphResult | undefined };
   readonly investigation: ReadableStore<InvestigationState>;
   /** Hiding goes through `hide` of the state, which also takes the relationships of the hidden entities out of the selection. */
-  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn' | 'setEntityTypeOff' | 'setRelationshipTypeOff' | 'setTimeWindow'>;
+  readonly presentation: Omit<PresentationActions, 'hide' | 'focusOn' | 'setEntityTypeOff' | 'setRelationshipTypeOff' | 'setTimeWindow' | 'setPropertyCondition' | 'clearPersonalConditions'>;
   readonly jobs: ReadableStore<JobState>;
   /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
   readonly mask: ReadableStore<boolean>;
@@ -56,6 +58,8 @@ export interface ClientState {
   setEntityTypeOff(type: string, off: boolean): void;
   /** Sets or clears the time window; what it filters out stops being selected, focused or open. */
   setTimeWindow(window: Window | undefined): void;
+  /** Sets the condition on a property of a type, or clears it; the items it filters out stop being selected, focused or open. */
+  setPropertyCondition(identity: { readonly on: ConditionOn; readonly type: string; readonly property: string }, condition: PropertyCondition | undefined): void;
   /** Switches a relationship type off or on; the loaded relationships of the type leave the selection with it. */
   setRelationshipTypeOff(type: string, off: boolean): void;
 }
@@ -110,6 +114,7 @@ export function createClientState(): ClientState {
       server.dropOtherMask(next);
       for (const [id, held] of setAside) if (!readFor(held.investigation.resultKeys, next)) setAside.delete(id);
       mask.setState(next);
+      if (next) presentation.clearPersonalConditions();
     },
     finishMaskRead({ key, result, nodeRefs, edgeRefs }) {
       refuseOtherMask([key]);
@@ -233,7 +238,7 @@ export function createClientState(): ClientState {
     visibleGraph: () => {
       const { hidden, neighborhoodFocus, typeFilter } = presentation.view.getState();
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
-      return withoutRelationshipTypes(visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus, filtered: filteredKeys(graph, typeFilter) })), typeFilter.offRelationshipTypes, timeFilteredOf(graph, typeFilter.time).relationships);
+      return withoutRelationshipTypes(visibleGraph(graph, excludedKeys(graph, { hidden, neighborhoodFocus, filtered: filteredKeys(graph, typeFilter) })), typeFilter.offRelationshipTypes, filteredRelationshipsOf(graph, typeFilter).relationships);
     },
     focusOn(key, viewport) {
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
@@ -254,10 +259,21 @@ export function createClientState(): ClientState {
     setTimeWindow(window) {
       const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
       const rows = presentation.view.getState().mappedTypes?.datedRelationships ?? [];
-      const filtered = window === undefined ? undefined : timeFilteredOf(graph, { window, rows });
+      const filtered = window === undefined ? undefined : filteredRelationshipsOf(graph, { time: { window, rows }, properties: presentation.view.getState().typeFilter.properties });
       const entities = filtered?.entities ?? new Set<string>();
       const touching = graph.edges.filter((edge) => entities.has(elementKey(edge.from)) || entities.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));
       presentation.setTimeWindow(window, [...entities, ...(filtered?.relationships ?? []), ...touching]);
+    },
+    setPropertyCondition(identity, condition) {
+      const personal = identity.on === 'entity' && (presentation.view.getState().mappedTypes?.properties?.entity[identity.type]?.pii.includes(identity.property) ?? false);
+      if (personal && condition !== undefined && mask.getState()) throw new StateError('INVALID_CONDITION');
+      const graph = deriveLoadedGraph(server.view.getState(), investigation.view.getState());
+      const held = presentation.view.getState().typeFilter.properties;
+      const next = condition === undefined ? held : [...held.filter((candidate) => conditionKey(candidate) !== conditionKey(identity)), condition];
+      const relationships = filteredRelationshipsOf(graph, { time: presentation.view.getState().typeFilter.time, properties: next });
+      const entities = new Set([...propertyFilteredKeys(graph, next), ...relationships.entities]);
+      const touching = graph.edges.filter((edge) => entities.has(elementKey(edge.from)) || entities.has(elementKey(edge.to))).map((edge) => edgeKey(edge.ref));
+      presentation.setPropertyCondition(identity, condition, [...entities, ...relationships.relationships, ...touching]);
     },
     hide(keys) {
       const hiding = new Set(keys);

@@ -44,6 +44,7 @@ export interface MemoryNamedView {
   readonly layout: LayoutDocument;
   readonly queryContext: QueryContextDocument;
   readonly contentHash: string;
+  readonly mappingHash?: string;
   readonly createdAt: string;
   readonly version: number;
   readonly deletedAt?: string;
@@ -283,7 +284,7 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const queryContext = queryContextDocumentSchema.parse(draft.queryContext);
       const contentHash = save.contentHashOf({ layout, queryContext, aiNotes: draft.aiNotes ?? null });
       const createdAt = new Date(Date.UTC(2026, 10, 5, 13, 0, namedViews.length)).toISOString();
-      namedViews.push({ id: save.viewId, investigationId: save.investigationId, name: save.name, notes: save.notes, layout, queryContext, contentHash, createdAt, version: 1 });
+      namedViews.push({ id: save.viewId, investigationId: save.investigationId, name: save.name, notes: save.notes, layout, queryContext, contentHash, mappingHash: draft.mappingHash, createdAt, version: 1 });
       drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, notes: save.notes, basedOnViewId: save.viewId, contentHash };
       const changed = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString(), ...(save.title === undefined ? {} : { title: save.title.value, version: investigation.version + 1 }) };
       investigations[investigations.indexOf(investigation)] = changed;
@@ -359,9 +360,9 @@ export function memoryStoreWith(options: MemoryAppStoreOptions): MemoryAppStore 
       const frozen = readOnlyStatusOf(investigation.status);
       if (frozen !== undefined) return Promise.resolve({ outcome: 'read-only', status: frozen });
       if (draft.version !== restore.expectedDraftVersion) return Promise.resolve({ outcome: 'draft-conflict' });
-      drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id, contentHash: view.contentHash };
+      drafts[drafts.indexOf(draft)] = { ...draft, version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id, contentHash: view.contentHash, mappingHash: view.mappingHash ?? draft.mappingHash };
       if (draft.contentHash !== view.contentHash) investigations[investigations.indexOf(investigation)] = { ...investigation, lastEditedAt: new Date(Date.parse(investigation.lastEditedAt) + 1000).toISOString() };
-      return Promise.resolve({ outcome: 'restored', savedAt: view.createdAt, draft: { version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id } });
+      return Promise.resolve({ outcome: 'restored', savedAt: view.createdAt, mappingHash: view.mappingHash ?? draft.mappingHash, draft: { version: draft.version + 1, layout: view.layout, queryContext: view.queryContext, notes: view.notes, basedOnViewId: view.id } });
     },
     purgeExpiredInvestigations: async (beforeDelete) => {
       const expired = investigations.filter((row) => (deletedAt.get(row.id)?.purgeAfter ?? '9999') <= new Date(Date.UTC(2026, 10, 7, 12, 0, deletions)).toISOString());

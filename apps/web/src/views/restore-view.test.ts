@@ -114,15 +114,16 @@ describe('restoring a view into the draft', () => {
   });
 
   it('writes back the property filter, the time filter and the expansion the view held, after the next change', async () => {
-    const properties = [{ key: 'prop-x', op: 'gte', values: ['10'] }];
+    const properties = [{ on: 'entity' as const, type: 'kind-a', key: 'score', kind: 'text' as const, op: 'in', values: ['10'] }];
     const expansions = [{ from: { t: 'kind-a', id: 'A-1' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }];
     const draft = restoredDraft(4);
     const { client, state, writes } = await opened({ restore: () => ({ ok: true, value: { draft: { ...draft, queryContext: { ...draft.queryContext, expansions, filters: { ...NO_FILTERS, time: { from: '2024-01-01' }, properties } } }, save: { state: 'saved', savedAt: SAVED_AT } } }) });
     await restoreNamedView(client, state, VIEW);
-    state.presentation.setMappedTypes({ entityTypes: ['kind-a'], relationshipTypes: [] });
+    state.presentation.setMappedTypes({ entityTypes: ['kind-a'], relationshipTypes: [], properties: { entity: { 'kind-a': { filterable: ['score'], kinds: {}, pii: [] } }, relationship: {} } });
     state.presentation.setPosition(key('A-1'), { x: 1, y: 2 });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes.at(-1)?.body?.queryContext.filters).toEqual({ ...NO_FILTERS, time: { from: '2024-01-01' }, properties });
+    expect(state.presentation.view.getState().typeFilter.properties).toHaveLength(1);
     expect(writes.at(-1)?.body?.queryContext.expansions).toEqual(expansions);
   });
 
@@ -173,6 +174,21 @@ describe('restoring a view into the draft', () => {
     expect(mappingNoticesOf(state).notice.getState()).toMatchObject({ investigationId: INVESTIGATION_A, droppedFilters: [{ name: 'ghost', reason: 'property-removed' }], canChange: true });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
     expect(writes).toEqual([]);
+  });
+
+  it('writes the draft under the current mapping once the banner has been shown, so the next open does not show it again', async () => {
+    const { client, state, writes } = await opened({ mapping: { mappingChange: { droppedFilters: [{ name: 'kind-a.score', reason: 'kind-changed' }] }, unmapped: { nodes: [], edges: [] } } });
+    await restoreNamedView(client, state, VIEW);
+    expect(mappingNoticesOf(state).notice.getState()?.droppedFilters).toEqual([{ name: 'kind-a.score', reason: 'kind-changed' }]);
+    mappingNoticesOf(state).notice.getState()?.onShown?.();
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes).toHaveLength(1);
+  });
+
+  it('shows no banner for a view saved under this mapping, even when an entry the server dropped was in it', async () => {
+    const { client, state } = await opened({ mapping: { unmapped: { nodes: [], edges: [] } } });
+    await restoreNamedView(client, state, VIEW);
+    expect(mappingNoticesOf(state).notice.getState()).toBeUndefined();
   });
 
   it('draws the items of an unmapped type as placeholders, reading nothing for them, when the view names them', async () => {

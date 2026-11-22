@@ -72,6 +72,7 @@
   --checkbox-size: 16px;
   --tool-flyout-width: 236px;
   --menu-row-height: 30px;
+  --property-filter-list-height: calc(var(--menu-row-height) * 6);
   --radius-flyout: 10px;
   --opacity-disabled: 0.5;
   --menu-max-width: calc(100vw - 16px);

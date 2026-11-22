@@ -1,4 +1,4 @@
-import { momentKey } from '../../mapping/moment-key.js';
+import { momentKey } from '@neburyx/contracts';
 
 /** When a relationship was observed, as the source gave it: a zoned `dateTime` compares as an instant, a `localDateTime` or a `date` as a local time with no zone. */
 interface Moment {

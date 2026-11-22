@@ -5,9 +5,11 @@ import { elementKey } from '../state/keys.js';
 import { filteredKeys, outsideFocusKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { useUtcDay } from '../state/utc-day.js';
-import { timeFilteredOf } from '../state/time-window.js';
+import { filteredRelationshipsOf } from '../state/filtered-relationships.js';
 import { FILTERS_PANEL_COPY, selectedRelationshipTypesText } from './filters-copy.js';
 import { focusFiltersTool } from './filters-tool.js';
+import { PropertyBlocks, usePropertyBlocks } from './property-filters.js';
+import { PROPERTY_FILTER_COPY } from './filters-copy.js';
 import { TimeWindowControl } from './time-window-control.js';
 import { filterResultLine, relationshipResultLine } from './scope-text.js';
 
@@ -18,6 +20,7 @@ export function FiltersPanel() {
   const root = useRef<HTMLDivElement>(null);
   const typeFilter = useStoreSelector(state.presentation.view, (current) => current.typeFilter);
   const off = typeFilter.offEntityTypes;
+  const personalNote = useStoreSelector(state.presentation.view, (current) => current.personalFilterNote);
   const handHidden = useStoreSelector(state.presentation.view, (current) => current.hidden);
   const neighborhoodFocus = useStoreSelector(state.presentation.view, (current) => current.neighborhoodFocus);
   useUtcDay();
@@ -29,9 +32,10 @@ export function FiltersPanel() {
   const result = filterResultLine(loaded, hidden, filtered);
   const relationshipTypes = [...new Set((profile?.relationshipTypes ?? []).map((type) => type.type))];
   const offRelationships = typeFilter.offRelationshipTypes;
-  const timedOut = typeFilter.time === undefined ? undefined : timeFilteredOf(graph, typeFilter.time).relationships;
+  const filteringRelationships = typeFilter.time !== undefined || typeFilter.properties.some((condition) => condition.on === 'relationship');
+  const timedOut = filteringRelationships ? filteredRelationshipsOf(graph, typeFilter).relationships : undefined;
   const relationshipResult = relationshipResultLine(graph, hidden, filtered, offRelationships, timedOut);
-  const anyOff = off.size > 0 || typeFilter.offRelationshipTypes.size > 0;
+  const anyOff = off.size > 0 || typeFilter.offRelationshipTypes.size > 0 || typeFilter.properties.length > 0;
   const close = (): void => {
     state.presentation.setFiltersOpen(false);
     focusFiltersTool();
@@ -45,14 +49,11 @@ export function FiltersPanel() {
     event.stopPropagation();
     close();
   };
+  const propertyBlocks = usePropertyBlocks();
   const types = profile?.entityTypes ?? [];
   return (
     <div className="filters-panel" ref={root} onKeyDown={onKeyDown}>
       <h2 className="search-panel-heading">{FILTERS_PANEL_COPY.title}</h2>
-      <div className="filters-section" role="status">
-        <p className="neighbor-types-note">{result ?? FILTERS_PANEL_COPY.nothingLoaded}</p>
-        {relationshipResult === undefined ? null : <p className="neighbor-types-note">{relationshipResult}</p>}
-      </div>
       <div role="group" aria-label={FILTERS_PANEL_COPY.entityTypes} className="filters-section">
         <span className="supernode-label">{FILTERS_PANEL_COPY.entityTypes}</span>
         {profile === undefined ? (
@@ -108,6 +109,17 @@ export function FiltersPanel() {
           )}
         </div>
       )}
+      <PropertyBlocks blocks={propertyBlocks} />
+      <div className="filters-section" role="status">
+        <p className="neighbor-types-note">{result ?? FILTERS_PANEL_COPY.nothingLoaded}</p>
+        {relationshipResult === undefined ? null : <p className="neighbor-types-note">{relationshipResult}</p>}
+      </div>
+      {personalNote === undefined ? null : (
+        <p className="neighbor-types-note" role="status">
+          {personalNote}
+        </p>
+      )}
+      {propertyBlocks.length === 0 ? null : <p className="neighbor-types-note">{PROPERTY_FILTER_COPY.footnote}</p>}
       <button type="button" className="legend-close filters-close" aria-label={FILTERS_PANEL_COPY.close} onClick={close}>
         <span className="icon icon-clear" aria-hidden="true" />
       </button>

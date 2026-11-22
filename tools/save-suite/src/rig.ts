@@ -9,6 +9,7 @@ import { AUTOSAVE_DELAY_MS, draftSyncOf, type DraftSync } from '../../../apps/we
 import { openById, openEntity, type OpenOutcome } from '../../../apps/web/src/investigations/open-flow.js';
 import { createClientState, type ClientState } from '../../../apps/web/src/state/client-state.js';
 import { elementKey } from '../../../apps/web/src/state/keys.js';
+import type { MappedPropertySets } from '../../../apps/web/src/state/presentation-state.js';
 import { key } from '../../../apps/web/src/state/test-data.js';
 import { buildApp, registeredRoutesOf } from '../../../services/api/src/app.js';
 import { createAppStore, type AppStore } from '../../../services/api/src/app-store.js';
@@ -176,6 +177,8 @@ export interface Tab {
   load(entities: readonly ElementRef[], edges?: readonly StoredEdgeRef[], more?: { readonly aggregates?: readonly AggregateEdgeRef[]; readonly derived?: readonly DerivedEdgeRef[] }): Promise<void>;
   /** Tells the tab which types the mapping names, as the profile does when the workspace opens. */
   mapTypes(entityTypes: readonly string[], relationshipTypes: readonly string[]): void;
+  /** As `mapTypes`, with the properties the mapping lists for each type, so a saved property filter can be applied. */
+  mapProperties(entityTypes: readonly string[], relationshipTypes: readonly string[], properties: MappedPropertySets): void;
   /** What a person has made of the investigation, as one plain document: the loaded items, positions, pins, hidden items, the layout, the viewport and the type filter. */
   canonical(): string;
   nodeKey(entityType: string, stableId: string): string;
@@ -362,6 +365,7 @@ async function build(options: BuildOptions): Promise<Running> {
           state.setLoaded([...held.resultKeys, extra], [...held.nodeRefs, ...read.value.nodes.map((node) => node.ref)], [...held.edgeRefs, ...read.value.edges.map((edge) => edge.ref)]);
         },
         mapTypes: (entityTypes, relationshipTypes) => state.presentation.setMappedTypes({ entityTypes, relationshipTypes }),
+        mapProperties: (entityTypes, relationshipTypes, properties) => state.presentation.setMappedTypes({ entityTypes, relationshipTypes, properties }),
         canonical: () => {
           const view = state.presentation.view.getState();
           const graph = state.loadedGraph();

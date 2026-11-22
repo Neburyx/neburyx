@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { INVESTIGATION_STATUSES, codePoints, draftSchema, holdsNoNulOrLoneSurrogate, investigationSaveSchema, investigationTitleSchema, notesSchema } from './investigations.js';
+import { INVESTIGATION_STATUSES, codePoints, draftSchema, holdsNoNulOrLoneSurrogate, investigationSaveSchema, investigationTitleSchema, mappingChangeSchema, notesSchema } from './investigations.js';
 
 /** The longest name of a named view, in characters (the database checks the same limit). */
 export const MAX_VIEW_NAME_LENGTH = 120;
@@ -104,6 +104,8 @@ export type DeleteViewResponse = z.infer<typeof deleteViewResponseSchema>;
 export const restoreViewResponseSchema = z.strictObject({
   draft: draftSchema.extend({ basedOnViewId: z.uuid() }),
   save: z.strictObject({ state: z.literal('saved'), savedAt: z.iso.datetime() }),
+  /** Present when the mapping changed since the view was saved: the saved property filters it no longer supports, dropped from the draft with their reasons. A client that opens the restored draft again gets the same list from the investigation answer. */
+  mappingChange: mappingChangeSchema.optional(),
 });
 
 export type RestoreViewResponse = z.infer<typeof restoreViewResponseSchema>;

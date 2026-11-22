@@ -186,7 +186,7 @@ describe('opening an investigation whose draft holds more than its first entity'
 
   it('writes back a property filter, a time filter and an expansion the draft held, though it shows none of them and its only entity is the first', async () => {
     const stored = draftOf(['A-1']);
-    const properties = [{ key: 'prop-x', op: 'gte', values: ['10'] }];
+    const properties = [{ on: 'entity' as const, type: 'kind-a', key: 'score', kind: 'text' as const, op: 'in', values: ['10'] }];
     const expansions = [{ from: { t: 'kind-a', id: 'A-1' }, relTypes: ['rel-a'], neighborTypes: [], window: null, sort: 'default', pages: 2 }];
     const draft = { ...stored, queryContext: { ...stored.queryContext, expansions, filters: { ...NO_FILTERS, time: { from: '2024-01-01' }, properties } } };
     const { client, asked, writes } = rig(draft);
@@ -194,10 +194,11 @@ describe('opening an investigation whose draft holds more than its first entity'
     await openById(client, state, INVESTIGATION_A, CONTEXT);
     // a draft that holds a filter is not the draft an open writes, so it is restored and not started afresh
     expect(asked).toHaveLength(1);
-    state.presentation.setMappedTypes({ entityTypes: ['kind-a'], relationshipTypes: [] });
+    state.presentation.setMappedTypes({ entityTypes: ['kind-a'], relationshipTypes: [], properties: { entity: { 'kind-a': { filterable: ['score'], kinds: {}, pii: [] } }, relationship: {} } });
     state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 1, y: 1 });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
     expect(writes[0]?.body.queryContext.filters).toEqual({ ...NO_FILTERS, time: { from: '2024-01-01' }, properties });
+    expect(state.presentation.view.getState().typeFilter.properties).toHaveLength(1);
     expect(writes[0]?.body.queryContext.expansions).toEqual(expansions);
   });
 });

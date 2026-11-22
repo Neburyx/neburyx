@@ -163,3 +163,37 @@ describe('POST /v1/investigations/{id}/views/{viewId}/restore', () => {
     await app.close();
   });
 });
+
+describe('the mapping check on a restore', () => {
+  const typed = { on: 'entity' as const, type: 'widget', key: 'color', kind: 'text' as const, op: 'in', values: ['red'] };
+  const viewWith = (properties: object[], mappingHash?: string): MemoryNamedView => ({ ...savedView, queryContext: { ...LARGER.queryContext, filters: { entityTypes: [], relTypes: [], time: null, properties } as never }, ...(mappingHash === undefined ? {} : { mappingHash }) });
+  const restoredWith = async (view: MemoryNamedView) => {
+    const store = seeded();
+    store.namedViews[0] = view;
+    const { app } = await started(store);
+    const response = await restore(app);
+    await app.close();
+    return { response, store };
+  };
+
+  it('answers mappingChange with the filters the mapping no longer supports, named by type, when the view was saved under another mapping, and the restored draft holds none of them', async () => {
+    const { response, store } = await restoredWith(viewWith([typed], 'the-hash-of-the-mapping-that-was'));
+    expect(response.statusCode).toBe(200);
+    const body = restoreViewResponseSchema.parse(response.json());
+    expect(body.mappingChange).toEqual({ droppedFilters: [{ name: 'widget.color', reason: 'property-removed' }] });
+    expect(body.draft.queryContext.filters.properties).toEqual([]);
+    expect(store.drafts[0]).toMatchObject({ mappingHash: 'the-hash-of-the-mapping-that-was' });
+  });
+
+  it('answers an empty list when everything the view saved is still supported', async () => {
+    const { response } = await restoredWith(viewWith([], 'the-hash-of-the-mapping-that-was'));
+    expect(restoreViewResponseSchema.parse(response.json()).mappingChange).toEqual({ droppedFilters: [] });
+  });
+
+  it('sends no mappingChange for a view saved under this mapping, and drops an entry that names no type and kind without a word', async () => {
+    const { response } = await restoredWith(viewWith([{ key: 'color', op: 'eq', values: ['x'] }, typed], demo.configHash));
+    const body = restoreViewResponseSchema.parse(response.json());
+    expect(body.mappingChange).toBeUndefined();
+    expect(body.draft.queryContext.filters.properties).toEqual([typed]);
+  });
+});

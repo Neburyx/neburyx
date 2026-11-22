@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { referenceTextSchema, referenceValueSchema } from './entities.js';
+import { FILTER_KINDS, MAX_FILTER_TEXT, MAX_FILTER_VALUES } from './expand.js';
 import { elementRefSchema, nodeSchema } from './graph.js';
+import { momentKey } from './moment-key.js';
+import { compareStyleValue, isDecimalText, isOrdered } from './value.js';
 
 /** The longest case reference and title, in characters (the database checks the same limits). */
 export const MAX_CASE_REF_LENGTH = 100;
@@ -141,6 +144,68 @@ export const layoutDocumentSchema = z.strictObject({
   groups: z.array(z.strictObject({ id: text, label: text, by: text, collapsed: z.boolean().optional(), members: z.array(refEntry) })),
 });
 
+/** Whether a stored filter value reads as the kind it is stored with. */
+function readsAs(kind: (typeof FILTER_KINDS)[number], value: string): boolean {
+  if (value.length === 0 || value.length > MAX_FILTER_TEXT || !holdsNoNulOrLoneSurrogate(value)) return false;
+  if (kind === 'text') return true;
+  if (kind === 'boolean') return value === 'true' || value === 'false';
+  if (kind === 'number') return isDecimalText(value);
+  return momentKey(kind, value) !== undefined;
+}
+
+interface PropertyFilterEntry {
+  readonly key: string;
+  readonly on?: 'entity' | 'relationship' | undefined;
+  readonly type?: string | undefined;
+  readonly kind?: (typeof FILTER_KINDS)[number] | undefined;
+  readonly op: string;
+  readonly values: readonly string[];
+  readonly from?: string | undefined;
+  readonly to?: string | undefined;
+}
+
+/**
+ * Why a stored property filter is not well formed, or nothing. An entry of the older shape (no `on`, `type` or `kind`) is not judged here; one of the shape that names its type holds all three, a `type` and `key` of at most 256 characters, an `op` of `in` (one to 20
+ * different values, each reading as its kind, no bounds) or `between` (no value, one or both bounds of an ordered kind that read as it, `from` not after `to`).
+ */
+export function propertyFilterProblem(entry: PropertyFilterEntry): string | undefined {
+  const { on, type, kind, op, values, from, to } = entry;
+  if (on === undefined && type === undefined && kind === undefined) return from === undefined && to === undefined ? undefined : 'a bound needs the type and kind of the filter';
+  if (on === undefined || type === undefined || kind === undefined) return 'on, type and kind go together';
+  if (type.length > MAX_FILTER_TEXT || entry.key.length > MAX_FILTER_TEXT) return `a type and a key are at most ${MAX_FILTER_TEXT} characters`;
+  if (!holdsNoNulOrLoneSurrogate(type) || !holdsNoNulOrLoneSurrogate(entry.key)) return 'a type and a key hold no NUL and no unpaired surrogate';
+  if (op === 'in') {
+    if (from !== undefined || to !== undefined) return 'an in filter has no bounds';
+    if (values.length === 0 || values.length > MAX_FILTER_VALUES) return `an in filter holds 1 to ${MAX_FILTER_VALUES} values`;
+    if (new Set(values).size !== values.length) return 'an in filter holds each value once';
+    return values.every((value) => readsAs(kind, value)) ? undefined : `a value does not read as ${kind}`;
+  }
+  if (op !== 'between') return 'op is in or between';
+  if (values.length > 0) return 'a between filter holds no values';
+  if (from === undefined && to === undefined) return 'a between filter holds a bound';
+  if (!isOrdered(kind)) return `${kind} is not an ordered kind`;
+  if ((from !== undefined && !readsAs(kind, from)) || (to !== undefined && !readsAs(kind, to))) return `a bound does not read as ${kind}`;
+  if (from !== undefined && to !== undefined && (compareStyleValue({ class: kind, value: from }, kind, to) ?? 0) < 0) return 'from is after to';
+  return undefined;
+}
+
+/** A property filter of a stored document: the older shape holds `key`, `op` and `values`; the shape that names its type adds `on`, `type` and `kind` and, for a range, `from` and `to`, so two types with a property of one name do not mix. */
+export const propertyFilterSchema = z
+  .strictObject({
+    key: text,
+    op: text,
+    values: z.array(text),
+    on: z.enum(['entity', 'relationship']).optional(),
+    type: text.optional(),
+    kind: z.enum(FILTER_KINDS).optional(),
+    from: text.optional(),
+    to: text.optional(),
+  })
+  .superRefine((entry, context) => {
+    const problem = propertyFilterProblem(entry);
+    if (problem !== undefined) context.addIssue({ code: 'custom', message: problem, path: ['op'] });
+  });
+
 export const queryContextDocumentSchema = z.strictObject({
   schemaVersion: z.literal(1),
   loaded: z.strictObject({ nodes: z.array(refEntry), edges: z.array(edgeEntrySchema) }),
@@ -149,7 +214,15 @@ export const queryContextDocumentSchema = z.strictObject({
     entityTypes: z.array(text),
     relTypes: z.array(text),
     time: z.unknown().nullable(),
-    properties: z.array(z.strictObject({ key: text, op: text, values: z.array(text) })),
+    properties: z.array(propertyFilterSchema).superRefine((entries, context) => {
+      const seen = new Set<string>();
+      for (const [at, entry] of entries.entries()) {
+        if (entry.on === undefined || entry.type === undefined) continue;
+        const identity = JSON.stringify([entry.on, entry.type, entry.key]);
+        if (seen.has(identity)) context.addIssue({ code: 'custom', message: 'a property of a type has one filter', path: [at, 'key'] });
+        seen.add(identity);
+      }
+    }),
   }),
 });
 
@@ -190,8 +263,8 @@ export const deleteInvestigationResponseSchema = z.strictObject({ id: z.uuid(), 
 /** `POST /v1/investigations/{id}/restore`: the investigation's own version goes in the body as `expectedVersion`. */
 export const restoreInvestigationRequestSchema = z.strictObject({ expectedVersion: z.number().int().min(1) });
 
-/** Why a saved property filter is no longer kept after the mapping changed. A filter has exactly one reason, the first that holds in this order. A type filter is never dropped: the state saved for a type is kept for when the mapping has it again. */
-export const DROPPED_FILTER_REASONS = ['property-removed', 'now-personal', 'not-filterable'] as const;
+/** Why a saved property filter is no longer kept after the mapping changed. A filter has exactly one reason, the first that holds in this order; `kind-changed` is the kind the mapping declares for the property not being the one the filter was saved with. A type filter is never dropped: the state saved for a type is kept for when the mapping has it again. */
+export const DROPPED_FILTER_REASONS = ['property-removed', 'now-personal', 'not-filterable', 'kind-changed'] as const;
 
 /** The key of a property filter, as it was saved. */
 export const droppedFilterSchema = z.strictObject({ name: text, reason: z.enum(DROPPED_FILTER_REASONS) });

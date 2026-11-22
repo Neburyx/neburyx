@@ -100,7 +100,7 @@ export interface ViewRestore {
 
 /** The draft as the restore wrote it, read in the same transaction; `savedAt` is when the view was made, which the draft now equals. */
 export type ViewRestoreResult =
-  | { readonly outcome: 'restored'; readonly savedAt: string; readonly draft: { readonly version: number; readonly layout: unknown; readonly queryContext: unknown; readonly notes: string | null; readonly basedOnViewId: string } }
+  | { readonly outcome: 'restored'; readonly savedAt: string; readonly mappingHash: string; readonly draft: { readonly version: number; readonly layout: unknown; readonly queryContext: unknown; readonly notes: string | null; readonly basedOnViewId: string } }
   | { readonly outcome: 'draft-conflict' }
   | { readonly outcome: 'read-only'; readonly status: ReadOnlyStatus }
   | { readonly outcome: 'not-found' };
@@ -346,18 +346,18 @@ export async function restoreNamedView(pool: pg.Pool, restore: ViewRestore): Pro
       await client.query('ROLLBACK');
       return { outcome: 'draft-conflict' };
     }
-    const written = await client.query<{ version: number; layout: unknown; query_context: unknown; notes: string | null }>(
+    const written = await client.query<{ version: number; layout: unknown; query_context: unknown; notes: string | null; mapping_hash: string }>(
       `UPDATE saved_views AS draft SET layout = v.layout, query_context = v.query_context, notes = v.notes, ai_notes = v.ai_notes, mapping_hash = v.mapping_hash, node_count = v.node_count, edge_count = v.edge_count,
          counts_policy_version = v.counts_policy_version, content_hash = v.content_hash, based_on_view_id = v.id, version = draft.version + 1, updated_at = now()
        FROM saved_views v WHERE draft.id = $1 AND v.id = $2 AND v.deleted_at IS NULL
-       RETURNING draft.version, draft.layout, draft.query_context, draft.notes`,
+       RETURNING draft.version, draft.layout, draft.query_context, draft.notes, draft.mapping_hash`,
       [held.id, from.id],
     );
     const [draftNow] = written.rows;
     if (draftNow === undefined) throw new Error('the draft was not returned after its restore');
     if (held.content_hash !== from.content_hash) await client.query(`UPDATE investigations SET last_edited_at = now() WHERE id = $1`, [restore.investigationId]);
     await client.query('COMMIT');
-    return { outcome: 'restored', savedAt: from.created_at.toISOString(), draft: { version: draftNow.version, layout: draftNow.layout, queryContext: draftNow.query_context, notes: draftNow.notes, basedOnViewId: from.id } };
+    return { outcome: 'restored', savedAt: from.created_at.toISOString(), mappingHash: draftNow.mapping_hash, draft: { version: draftNow.version, layout: draftNow.layout, queryContext: draftNow.query_context, notes: draftNow.notes, basedOnViewId: from.id } };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw error;

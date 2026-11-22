@@ -11,7 +11,7 @@ import { isStorableText, storableOf } from '../reference/well-formed.js';
 import { identityHashOf } from '../registry/identity-hash.js';
 import type { AuditSink, Principal } from '../seams/seams.js';
 import type { SourceAccess } from './source-access.js';
-import { droppedFiltersOf, unmappedItemsOf, withoutDropped } from './mapping-change.js';
+import { reviewedFilters, unmappedItemsOf } from './mapping-change.js';
 import type { StoredReferences } from './stored-references.js';
 import { readOnlyRefusal, readOnlyStatusOf, sourceChangedError, sourceChangedRefusal } from './read-only.js';
 import { auditActionOf } from './status-change.js';
@@ -211,10 +211,10 @@ export function createInvestigationService(deps: InvestigationServiceDeps): Inve
     // the check compares the mapping only: nothing is read from the source, and a source that was removed or re-pointed is not judged here
     const unmapped = source === undefined ? undefined : unmappedItemsOf(source, layout, queryContext);
     let mappingChange: MappingChange | undefined;
-    if (source !== undefined && stored.draft.mappingHash !== source.configHash) {
-      const droppedFilters = droppedFiltersOf(source, storedContext.filters);
-      queryContext = withoutDropped(queryContext, droppedFilters);
-      mappingChange = { droppedFilters };
+    if (source !== undefined) {
+      const reviewed = reviewedFilters(source, stored.draft.mappingHash !== source.configHash, storedContext.filters, queryContext);
+      queryContext = reviewed.queryContext;
+      mappingChange = reviewed.mappingChange;
     }
     return investigationResponseSchema.parse({
       investigation,

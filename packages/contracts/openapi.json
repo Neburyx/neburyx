@@ -19100,6 +19100,38 @@
                             "type": "string",
                             "minLength": 1
                           }
+                        },
+                        "on": {
+                          "type": "string",
+                          "enum": [
+                            "entity",
+                            "relationship"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "text",
+                            "number",
+                            "boolean",
+                            "date",
+                            "dateTime",
+                            "localDateTime",
+                            "time",
+                            "localTime"
+                          ]
+                        },
+                        "from": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "to": {
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
@@ -25912,6 +25944,38 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "on": {
+                              "type": "string",
+                              "enum": [
+                                "entity",
+                                "relationship"
+                              ]
+                            },
+                            "type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "number",
+                                "boolean",
+                                "date",
+                                "dateTime",
+                                "localDateTime",
+                                "time",
+                                "localTime"
+                              ]
+                            },
+                            "from": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -26123,7 +26187,8 @@
                       "enum": [
                         "property-removed",
                         "now-personal",
-                        "not-filterable"
+                        "not-filterable",
+                        "kind-changed"
                       ]
                     }
                   },
@@ -29395,6 +29460,38 @@
                                 "type": "string",
                                 "minLength": 1
                               }
+                            },
+                            "on": {
+                              "type": "string",
+                              "enum": [
+                                "entity",
+                                "relationship"
+                              ]
+                            },
+                            "type": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "number",
+                                "boolean",
+                                "date",
+                                "dateTime",
+                                "localDateTime",
+                                "time",
+                                "localTime"
+                              ]
+                            },
+                            "from": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "to": {
+                              "type": "string",
+                              "minLength": 1
                             }
                           },
                           "required": [
@@ -29465,6 +29562,41 @@
             "required": [
               "state",
               "savedAt"
+            ],
+            "additionalProperties": false
+          },
+          "mappingChange": {
+            "type": "object",
+            "properties": {
+              "droppedFilters": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "property-removed",
+                        "now-personal",
+                        "not-filterable",
+                        "kind-changed"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "reason"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "droppedFilters"
             ],
             "additionalProperties": false
           }

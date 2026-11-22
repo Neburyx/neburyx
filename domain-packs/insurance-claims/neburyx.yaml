@@ -72,6 +72,7 @@ sources:
         stable_id: eventId
         observed_at: filedAt
         evidence: [sourceRecordId]
+        filterable: [channel]
         evidence_link: "https://records.example.test/events/{sourceRecordId}"
       - type: INVOLVES_VEHICLE
         from: claim

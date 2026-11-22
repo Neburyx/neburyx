@@ -1,6 +1,5 @@
-import type { GraphNode, GraphProperty } from '@neburyx/contracts';
+import { compareStyleValue, type GraphNode, type GraphProperty } from '@neburyx/contracts';
 import type { StyleRuleModel } from '../mapping/model.js';
-import { compareStyleValue } from '../mapping/style-value.js';
 import type { Normalized } from './normalize/index.js';
 import type { GateContext, Item } from './types.js';
 

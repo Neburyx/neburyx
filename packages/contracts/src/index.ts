@@ -99,6 +99,9 @@ export {
   referenceOpenRequestSchema,
   valueOpenRequestSchema,
   openInvestigationResponseSchema,
+  holdsNoNulOrLoneSurrogate,
+  propertyFilterProblem,
+  propertyFilterSchema,
   queryContextDocumentSchema,
   startingEntitySchema,
   unmappedItemsSchema,
@@ -200,3 +203,6 @@ export type { ElementRefs, ElementsScope, SourceElementsScope } from './extensio
 export type { CopyToNotesRequest, CopyToNotesResponse, CaseSummarizer, CaseSummaryAvailability, CaseSummaryEarlyEnd, CaseSummaryExportInput, CaseSummaryExportOutcome, CaseSummaryInput, CaseSummaryOutcome, ExportSummary, SummaryFailureKind, SummaryReading, SummaryRequest, SummaryResponse, SummarySentence } from './summary.js';
 export { AI_NOTES_MAX_ENTRIES, AI_NOTES_MAX_SENTENCES, AI_NOTES_MAX_SLOTS, AI_NOTES_TIME_FIELDS, aiNotesDescriptorSchema, aiNotesPlaceholderSchema, storedAiNotesEntrySchema, aiNotesEntryInputSchema, aiNotesQuerySchema, aiNotesResponseSchema, storedAiNotesSchema } from './ai-notes.js';
 export type { AiNotesDescriptor, AiNotesPlaceholder, StoredAiNotesEntry, AiNotesResponse, AiNotesAppendCall, AiNotesAppended, AiNotesCapability, AiNotesEntryInput, AiNotesRead, StoredAiNotes } from './ai-notes.js';
+export { DECIMAL_TEXT, canonicalNumberText, compareNumbers, compareStyleValue, isDecimalText, isOrdered } from './value.js';
+export type { StyleValue, StyleValueClass } from './value.js';
+export { momentKey } from './moment-key.js';

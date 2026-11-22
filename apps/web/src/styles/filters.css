@@ -46,3 +46,40 @@
   top: var(--space-12);
   right: var(--space-12);
 }
+
+.property-filter-button {
+  display: block;
+  width: 100%;
+  padding: var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.property-filter-button:disabled {
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.property-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.property-filter-list .neighbor-types-list {
+  max-height: var(--property-filter-list-height);
+  overflow-y: auto;
+}
+
+.property-filter-find {
+  width: 100%;
+  padding: var(--space-4) var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  font: inherit;
+}
