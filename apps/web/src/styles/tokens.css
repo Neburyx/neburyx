@@ -154,6 +154,9 @@
   --export-format-width: 94px;
   --export-format-height: 36px;
   --export-format-dot: 12px;
+  --group-segment-height: 28px;
+  --group-row-height: 36px;
+  --group-heading-tracking: 0.04em;
   --toggle-width: 36px;
   --toggle-height: 20px;
   --toggle-knob: 16px;

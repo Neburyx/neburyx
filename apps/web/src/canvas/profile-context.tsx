@@ -44,3 +44,12 @@ export function useProfileWhenProvided(): SourceProfile | undefined {
   const state = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => store?.getState() ?? NONE_STATE);
   return state.sourceId === bound ? answeredData(state.request) : undefined;
 }
+
+/** What is known of the profile of the bound source where one is provided: the profile once read, and whether the read failed; nothing is provided where this part of the app is drawn without one. */
+export function useProfileOutcomeWhenProvided(): { readonly provided: boolean; readonly profile: SourceProfile | undefined; readonly failed: boolean } {
+  const store = useContext(ProfileContext);
+  const bound = useStoreSelector(useClientState().investigation, (investigation) => investigation.sourceId);
+  const state = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => store?.getState() ?? NONE_STATE);
+  const current = state.sourceId === bound;
+  return { provided: store !== undefined, profile: current ? answeredData(state.request) : undefined, failed: current && state.request.phase === 'failed' };
+}

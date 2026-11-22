@@ -223,3 +223,52 @@ describe('PUT /v1/investigations/{id}/draft', () => {
     await app.close();
   });
 });
+
+describe('the groups of a draft', () => {
+  const grouped = (extra: object = {}) => {
+    const base = documents([node('widget', 'W-1'), node('widget', 'W-2')]);
+    return { ...base, layout: { ...base.layout, nodes: base.layout.nodes.map((entry) => ({ ...entry, groupId: 'g1' })), groups: [{ id: 'g1', label: 'widget', by: 'entityType', collapsed: true, members: [{ t: 'widget', id: 'W-1' }, { t: 'widget', id: 'W-2' }], ...extra }] } };
+  };
+
+  it('stores a group with its collapsed flag, as it was written', async () => {
+    const store = seeded();
+    const app = await started(store);
+    const response = await put(app, grouped());
+    expect(response.statusCode).toBe(200);
+    expect((store.drafts[0]?.layout as LayoutDocument).groups).toEqual([{ id: 'g1', label: 'widget', by: 'entityType', collapsed: true, members: [{ t: 'widget', id: 'W-1' }, { t: 'widget', id: 'W-2' }] }]);
+    await app.close();
+  });
+
+  it('stores a grouping by a property as a descriptor only: the layout names the key and holds no value', async () => {
+    const store = seeded();
+    const app = await started(store);
+    const body = grouped({ id: 'property:currency:1', label: 'currency', by: 'property:currency' });
+    expect((await put(app, body)).statusCode).toBe(200);
+    const stored = JSON.stringify(store.drafts[0]?.layout);
+    expect(stored).toContain('property:currency');
+    expect(stored).not.toContain('USD');
+    await app.close();
+  });
+
+  it('stores a group written without the flag as it was, so a document of before it loads unchanged', async () => {
+    const store = seeded();
+    const app = await started(store);
+    const body = grouped();
+    const { collapsed: _collapsed, ...without } = body.layout.groups[0] ?? {};
+    expect((await put(app, { ...body, layout: { ...body.layout, groups: [without] } })).statusCode).toBe(200);
+    expect((store.drafts[0]?.layout as LayoutDocument).groups[0]).not.toHaveProperty('collapsed');
+    await app.close();
+  });
+
+  it.each([
+    ['a field of a group that the contract does not name', { extra: 1 }],
+    ['a collapsed flag that is not a boolean', { collapsed: 'yes' }],
+  ])('refuses %s and stores nothing', async (_name, extra) => {
+    const store = seeded();
+    const app = await started(store);
+    const before = JSON.stringify(store.drafts);
+    expect((await put(app, grouped(extra))).statusCode).toBe(400);
+    expect(JSON.stringify(store.drafts)).toBe(before);
+    await app.close();
+  });
+});

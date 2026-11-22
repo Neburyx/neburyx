@@ -7,6 +7,8 @@ import type { SaveState } from '../state/investigation-state.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, type QueryKey } from '../state/keys.js';
 import { LAYOUTS } from '../state/layout-choice.js';
 import { elementKey } from '../state/keys.js';
+import type { Group } from '../groups/group-model.js';
+import { restoredGroups } from '../groups/group-restore.js';
 import { draftSyncOf } from '../draft/draft-sync.js';
 import { carriedOf, type CarriedContext, type KeptItems } from '../draft/draft-document.js';
 import { isOpeningDraft, readDraftItems } from '../draft/restore.js';
@@ -67,6 +69,8 @@ function applyPresentation(state: ClientState, draft: InvestigationResponse['dra
   if (positions.size > 0) state.presentation.setPositions(positions);
   if (pinned.length > 0) state.presentation.pin(pinned);
   if (hidden.length > 0) state.hide(hidden);
+  const groups = restoredGroups(draft.layout.groups, (type, id) => keys.get(nodeIdentity(type, id)));
+  if (groups.length > 0) state.presentation.setGroups(groups);
   if (draft.layout.viewport !== undefined) state.presentation.setViewport(draft.layout.viewport);
 }
 

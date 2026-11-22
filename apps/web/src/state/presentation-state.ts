@@ -1,4 +1,5 @@
 import type { ElementRef, Window } from '@neburyx/contracts';
+import type { Group } from '../groups/group-model.js';
 import { DEFAULT_DIRECTION, DEFAULT_LAYOUT, type LayoutDirection, type LayoutId } from './layout-choice.js';
 import { StateError } from './errors.js';
 import { nodeRefOfKey } from './keys.js';
@@ -86,6 +87,8 @@ export interface PresentationState {
   readonly pins: ReadonlySet<string>;
   /** The keys of the entities hidden from the view: still loaded, not drawn. Part of the view that is saved. */
   readonly hidden: ReadonlySet<string>;
+  /** The groups of loaded entities: descriptors and member keys, never a value. A member keeps its own position, pin and hidden state while grouped. Part of the view that is saved. */
+  readonly groups: readonly Group[];
   /** The key of the entity the neighborhood focus is on: only it and its loaded neighbors are drawn. Session state: kept when an investigation is set aside and resumed, and not part of a saved view. */
   readonly neighborhoodFocus: string | undefined;
   /** The viewport from before the first entry into focus, put back when focus ends; present exactly while focus is on. */
@@ -100,6 +103,8 @@ export interface PresentationState {
   readonly filtersOpen: boolean;
   /** The Patterns panel is open; it, the Filters panel and the Search panel are never open together. Not saved with a view, and kept when another source is bound. */
   readonly patternsOpen: boolean;
+  /** The Group panel is open; it is never open together with the Filters, Search, Patterns and Paths panels. Not saved with a view, and kept when another source is bound. */
+  readonly groupOpen: boolean;
   /** The Paths panel is open; like Patterns it is never open together with the Filters, Search and Patterns panels. Not saved with a view, and kept when another source is bound. */
   readonly pathsOpen: boolean;
   /** The ends the Paths panel is to take when it next shows its form: handed over by the way into the panel (the selection bar, a menu, a key), read once and cleared by the panel. An end left out is empty. Not saved with a view, and not kept when another source is bound. */
@@ -171,6 +176,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   positions: new Map(),
   pins: new Set(),
   hidden: new Set(),
+  groups: [],
   neighborhoodFocus: undefined,
   focusReturn: undefined,
   viewChange: undefined,
@@ -179,6 +185,7 @@ export const INITIAL_PRESENTATION: PresentationState = {
   filtersOpen: false,
   patternsOpen: false,
   pathsOpen: false,
+  groupOpen: false,
   pathsHandover: undefined,
   pathsFocus: undefined,
   askOpen: false,
@@ -233,6 +240,12 @@ export interface PresentationActions {
   focusOn(key: string, gone: readonly string[], viewport?: Viewport): void;
   /** Ends the focus and puts back the viewport from before it was first set. */
   leaveFocus(): void;
+  /** Replaces every group (refused for a member that is not a loaded entity); no position, pin or hidden state is written. */
+  setGroups(groups: readonly Group[]): void;
+  /** Collapses or expands one group. */
+  toggleGroup(id: string): void;
+  /** Collapses or expands every group. */
+  setGroupsCollapsed(collapsed: boolean): void;
   /** Shows the named hidden entities again, and no others. */
   showHidden(keys: readonly string[]): void;
   /** Shows every hidden entity again. */
@@ -246,6 +259,7 @@ export interface PresentationActions {
   setFiltersOpen(open: boolean): void;
   setPatternsOpen(open: boolean): void;
   setPathsOpen(open: boolean): void;
+  setGroupOpen(open: boolean): void;
   /** Opens the Paths panel with the given ends: the panel takes them once. The ends are references of loaded entities. */
   requestPaths(ends: { readonly from?: ElementRef; readonly to?: ElementRef }): void;
   clearPathsHandover(): void;
@@ -287,7 +301,7 @@ export interface PresentationActions {
   setViewport(viewport: Viewport): void;
 }
 
-export type PresentationSnapshot = Pick<PresentationState, 'layout' | 'layoutDirection' | 'physics' | 'selection' | 'positions' | 'pins' | 'hidden' | 'typeFilter' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
+export type PresentationSnapshot = Pick<PresentationState, 'layout' | 'layoutDirection' | 'physics' | 'selection' | 'positions' | 'pins' | 'hidden' | 'groups' | 'typeFilter' | 'neighborhoodFocus' | 'focusReturn' | 'viewport'>;
 
 export interface PresentationStore extends PresentationActions {
   reset(): void;
@@ -399,6 +413,20 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       if (!keys.some((key) => current.hidden.has(key))) return;
       store.setState({ ...current, hidden: new Set([...current.hidden].filter((key) => !keys.includes(key))) });
     },
+    setGroups(groups) {
+      requireKnown(groups.flatMap((group) => group.members), known.isNode);
+      store.setState({ ...store.getState(), groups: groups.map((group) => ({ ...group, members: [...group.members] })) });
+    },
+    toggleGroup(id) {
+      const current = store.getState();
+      if (!current.groups.some((group) => group.id === id)) return;
+      store.setState({ ...current, groups: current.groups.map((group) => (group.id === id ? { ...group, collapsed: !group.collapsed } : group)) });
+    },
+    setGroupsCollapsed(collapsed) {
+      const current = store.getState();
+      if (current.groups.every((group) => group.collapsed === collapsed)) return;
+      store.setState({ ...current, groups: current.groups.map((group) => ({ ...group, collapsed })) });
+    },
     showAllHidden() {
       if (store.getState().hidden.size === 0) return;
       store.setState({ ...store.getState(), hidden: new Set() });
@@ -490,19 +518,23 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setFiltersOpen(filtersOpen) {
       if (store.getState().filtersOpen === filtersOpen) return;
-      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false, pathsOpen: false } : {}) });
+      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false, pathsOpen: false, groupOpen: false } : {}) });
     },
     setPatternsOpen(patternsOpen) {
       if (store.getState().patternsOpen === patternsOpen) return;
-      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false, pathsOpen: false } : { patternsPreset: undefined }) });
+      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false, pathsOpen: false, groupOpen: false } : { patternsPreset: undefined }) });
+    },
+    setGroupOpen(groupOpen) {
+      if (store.getState().groupOpen === groupOpen) return;
+      store.setState({ ...store.getState(), groupOpen, ...(groupOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false, pathsOpen: false } : {}) });
     },
     setPathsOpen(pathsOpen) {
       if (store.getState().pathsOpen === pathsOpen) return;
-      store.setState({ ...store.getState(), pathsOpen, ...(pathsOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false } : {}) });
+      store.setState({ ...store.getState(), pathsOpen, ...(pathsOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false, groupOpen: false } : {}) });
     },
     requestPaths(ends) {
       const current = store.getState();
-      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, pathsHandover: { ...ends, serial: (current.pathsHandover?.serial ?? 0) + 1 } });
+      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, groupOpen: false, pathsHandover: { ...ends, serial: (current.pathsHandover?.serial ?? 0) + 1 } });
     },
     requestPathsFocus(target) {
       const current = store.getState();
@@ -553,7 +585,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setSearchOpen(searchOpen) {
       if (store.getState().searchOpen === searchOpen) return;
-      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false, pathsOpen: false } : {}) });
+      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false, pathsOpen: false, groupOpen: false } : {}) });
     },
     setSearchTab(searchTab) {
       if (store.getState().searchTab === searchTab) return;
@@ -627,10 +659,12 @@ export function createPresentationStore(known: KnownElements): PresentationStore
       const positions = [...current.positions].filter(([key]) => known.isNode(key));
       const pins = [...current.pins].filter(known.isNode);
       const hidden = [...current.hidden].filter(known.isNode);
+      const groups = current.groups.map((group) => ({ ...group, members: group.members.filter(known.isNode) })).filter((group) => group.members.length > 0);
+      const groupsSame = groups.length === current.groups.length && groups.every((group, at) => group.members.length === current.groups[at]?.members.length);
       const focused = current.focused !== undefined && (known.isElement(current.focused) || current.sceneItems.includes(current.focused)) ? current.focused : undefined;
       const supernodePanel = current.supernodePanel !== undefined && known.isNode(current.supernodePanel.key) ? current.supernodePanel : undefined;
       const focusLost = current.neighborhoodFocus !== undefined && !known.isNode(current.neighborhoodFocus);
-      if (!focusLost && selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && hidden.length === current.hidden.size && focused === current.focused && supernodePanel === current.supernodePanel) return;
+      if (!focusLost && selection.length === current.selection.size && positions.length === current.positions.size && pins.length === current.pins.size && hidden.length === current.hidden.size && groupsSame && focused === current.focused && supernodePanel === current.supernodePanel) return;
       store.setState({
         ...current,
         ...(focusLost ? { ...endedFocus(current), moveNote: { text: FOCUS_LEFT, serial: (current.moveNote?.serial ?? 0) + 1 } } : {}),
@@ -638,20 +672,21 @@ export function createPresentationStore(known: KnownElements): PresentationStore
         positions: new Map(positions),
         pins: new Set(pins),
         hidden: new Set(hidden),
+        groups: groupsSame ? current.groups : groups,
         focused,
         supernodePanel,
       });
     },
     snapshot() {
-      const { layout, layoutDirection, physics, selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport } = store.getState();
-      return { layout, layoutDirection, physics, selection, positions, pins, hidden, typeFilter, neighborhoodFocus, focusReturn, viewport };
+      const { layout, layoutDirection, physics, selection, positions, pins, hidden, groups, typeFilter, neighborhoodFocus, focusReturn, viewport } = store.getState();
+      return { layout, layoutDirection, physics, selection, positions, pins, hidden, groups, typeFilter, neighborhoodFocus, focusReturn, viewport };
     },
     restore(snapshot) {
       store.setState({ ...store.getState(), ...snapshot, walking: false, focused: undefined, moveNote: undefined, openMenu: undefined });
     },
     reset() {
-      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, assistantOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes } = store.getState();
-      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, askOpen, assistantOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes });
+      const { tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, groupOpen, askOpen, assistantOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes } = store.getState();
+      store.setState({ ...INITIAL_PRESENTATION, tool, panelSizes, collapsedPanels, legendOpen, searchOpen, searchTab, searchFocus, sheetOpen, filtersOpen, patternsOpen, pathsOpen, groupOpen, askOpen, assistantOpen, summaryOpen, summaryNotesOnly, summaryNotesRequests, mappedTypes });
     },
   };
 }

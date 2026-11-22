@@ -5,6 +5,8 @@ import { CanvasRegions } from './canvas-regions.js';
 import { ContextMenu } from './context-menu.js';
 import { ExpandSelectionAction } from './expand-selection-action.js';
 import { HideSelectionAction } from './hide-selection-action.js';
+import { GroupSelectionAction } from './group-menu.js';
+import { GroupGuard } from './group-guard.js';
 import { PinSelectionAction } from './pin-selection-action.js';
 import { ExpansionStatus } from './expansion-status.js';
 import { DockColumn, FloatingPanels } from './panel-host.js';
@@ -39,6 +41,8 @@ export function WorkspaceShell({ canvasView, notice, status, busy = false }: { r
             <ExpandSelectionAction />
             <PinSelectionAction />
             <HideSelectionAction />
+            <GroupSelectionAction />
+            <GroupGuard />
             <SelectionBar />
             <StartingEntityHint />
             <ExpansionStatus />

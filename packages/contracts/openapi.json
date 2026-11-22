@@ -18846,6 +18846,9 @@
                       "type": "string",
                       "minLength": 1
                     },
+                    "collapsed": {
+                      "type": "boolean"
+                    },
                     "members": {
                       "type": "array",
                       "items": {
@@ -25654,6 +25657,9 @@
                           "type": "string",
                           "minLength": 1
                         },
+                        "collapsed": {
+                          "type": "boolean"
+                        },
                         "members": {
                           "type": "array",
                           "items": {
@@ -29133,6 +29139,9 @@
                         "by": {
                           "type": "string",
                           "minLength": 1
+                        },
+                        "collapsed": {
+                          "type": "boolean"
                         },
                         "members": {
                           "type": "array",

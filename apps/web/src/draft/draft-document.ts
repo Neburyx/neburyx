@@ -1,5 +1,6 @@
 import type { DraftWriteRequest, EdgeRef, ElementRef, GraphEdge, LayoutDocument, QueryContextDocument } from '@neburyx/contracts';
-import { elementKey, edgeKey } from '../state/keys.js';
+import { BY_ENTITY_TYPE, propertyKeyOf, type Group } from '../groups/group-model.js';
+import { elementKey, edgeKey, nodeRefOfKey } from '../state/keys.js';
 import type { LoadedGraph } from '../state/loaded-graph.js';
 import type { MappedTypes, PresentationState } from '../state/presentation-state.js';
 
@@ -36,16 +37,12 @@ function typesLeftOn(known: readonly string[] | undefined, off: ReadonlySet<stri
 const withCarried = (left: string[], carried: readonly string[] = [], keepList = false): string[] => (left.length === 0 && !keepList ? left : [...left, ...carried.filter((type) => !left.includes(type))]);
 
 /**
- * The parts of a stored draft that the web does not edit: a write carries them through as they were read. Expansions are carried even when the node they start from is no longer in the draft. Groups are carried with the members still in the draft,
- * and a group with none left is dropped with the group marks of its nodes.
+ * The parts of a stored draft that the web does not edit: a write carries them through as they were read. Expansions are carried even when the node they start from is no longer in the draft. Groups are edited by the web and written from the presentation state.
  */
 export interface CarriedContext {
   readonly expansions: QueryContextDocument['expansions'];
   readonly time: QueryContextDocument['filters']['time'];
   readonly properties: QueryContextDocument['filters']['properties'];
-  readonly groups: LayoutDocument['groups'];
-  /** The group of each node that has one, by the identity of the node. */
-  readonly groupIds: ReadonlyMap<string, string>;
   /** The stored relationships that were hidden, by identity. */
   readonly hiddenEdges: ReadonlySet<string>;
   /** A layout name the web does not offer, and the layout shown when it was adopted: written back until the person picks another layout. */
@@ -59,8 +56,6 @@ export function carriedOf(draft: { readonly layout: LayoutDocument; readonly que
     expansions: queryContext.expansions,
     time: queryContext.filters.time,
     properties: queryContext.filters.properties,
-    groups: layout.groups,
-    groupIds: new Map(layout.nodes.flatMap((node) => (node.groupId === null ? [] : [[nodeIdentity(node.t, node.id), node.groupId] as const]))),
     hiddenEdges: new Set(layout.edges.filter((edge) => edge.hidden).map(edgeIdentity)),
     ...(layoutKnown ? {} : { layout: { stored: layout.layout, shown } }),
   };
@@ -69,7 +64,7 @@ export function carriedOf(draft: { readonly layout: LayoutDocument; readonly que
 export interface DraftInputs {
   readonly nodeRefs: readonly ElementRef[];
   readonly graph: LoadedGraph;
-  readonly presentation: Pick<PresentationState, 'layout' | 'positions' | 'pins' | 'hidden' | 'viewport' | 'typeFilter' | 'mappedTypes'>;
+  readonly presentation: Pick<PresentationState, 'layout' | 'positions' | 'pins' | 'hidden' | 'groups' | 'viewport' | 'typeFilter' | 'mappedTypes'>;
   readonly notes: string | null;
   readonly kept: KeptItems;
   /** What the stored draft holds that the web has no way to edit (see `CarriedContext`), written back as it was read. */
@@ -82,22 +77,40 @@ export interface DraftInputs {
   readonly keepLists?: { readonly entityTypes: boolean; readonly relTypes: boolean } | undefined;
 }
 
+const COMPONENT_LABEL = 'component';
+
+/** The groups as the document stores them: the descriptor, a label that holds no value (the entity type's name, the property's key, or the kind of grouping) and the references of the members that are in the draft. */
+function layoutGroupsOf(groups: readonly Group[], present: ReadonlySet<string>): LayoutDocument['groups'] {
+  return groups.flatMap((group) => {
+    const members = group.members.flatMap((key) => {
+      const ref = nodeRefOfKey(key);
+      return ref === undefined || !present.has(nodeIdentity(ref.entityType, ref.stableId)) ? [] : [{ ref, entry: { t: ref.entityType, id: ref.stableId } }];
+    });
+    const [first] = members;
+    if (first === undefined) return [];
+    const key = propertyKeyOf(group.by);
+    const label = group.by === BY_ENTITY_TYPE ? first.ref.entityType : (key ?? COMPONENT_LABEL);
+    return [{ id: group.id, label, by: group.by, collapsed: group.collapsed, members: members.map((member) => member.entry) }];
+  });
+}
+
 /** The draft as it is written: references only, never a property value. The layout direction, physics, selection and panels are not part of it. */
 export function draftOf(inputs: DraftInputs): DraftWriteRequest {
   const { presentation } = inputs;
   const held = new Set<string>();
+  const groupOfKey = new Map(presentation.groups.flatMap((group) => group.members.map((member) => [member, group.id] as const)));
   const nodes: LayoutNode[] = inputs.nodeRefs.map((ref) => {
     held.add(nodeIdentity(ref.entityType, ref.stableId));
     const key = elementKey(ref);
     const position = presentation.positions.get(key);
-    return { t: ref.entityType, id: ref.stableId, ...(position === undefined ? {} : { x: position.x, y: position.y }), pinned: presentation.pins.has(key), hidden: presentation.hidden.has(key), groupId: inputs.carried?.groupIds.get(nodeIdentity(ref.entityType, ref.stableId)) ?? null };
+    return { t: ref.entityType, id: ref.stableId, ...(position === undefined ? {} : { x: position.x, y: position.y }), pinned: presentation.pins.has(key), hidden: presentation.hidden.has(key), groupId: groupOfKey.get(key) ?? null };
   });
   const edges: StoredEdge[] = inputs.graph.edges.map(storedEdgeOf);
   const heldEdges = new Set(edges.map(edgeIdentity));
   const keptNodes = inputs.kept.nodes.filter((node) => !held.has(nodeIdentity(node.t, node.id)));
   const keptEdges = inputs.kept.edges.filter((edge) => !heldEdges.has(edgeIdentity(edge)));
   const present = new Set([...nodes, ...keptNodes].map((node) => nodeIdentity(node.t, node.id)));
-  const groups = (inputs.carried?.groups ?? []).map((group) => ({ ...group, members: group.members.filter((member) => present.has(nodeIdentity(member.t, member.id))) })).filter((group) => group.members.length > 0);
+  const groups = layoutGroupsOf(presentation.groups, present);
   const live = new Set(groups.map((group) => group.id));
   const allNodes = [...nodes, ...keptNodes].map((node) => (node.groupId === null || live.has(node.groupId) ? node : { ...node, groupId: null }));
   const allEdges = [...edges, ...keptEdges];

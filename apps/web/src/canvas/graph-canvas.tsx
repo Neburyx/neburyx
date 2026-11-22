@@ -12,6 +12,9 @@ import { useStoreSelector } from '../state/store.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { formatNumber, notDrawnLine } from '../workspace/scope-text.js';
 import { buildScene } from './build-scene.js';
+import { groupIdOfCard } from '../groups/group-keys.js';
+import { placementPositions } from '../groups/group-placement.js';
+import { groupScene } from '../groups/group-scene.js';
 import { useAggregateNodes } from './use-aggregate-nodes.js';
 import { aggregateKey, parseAggregateKey, type AggregateNode } from '../workspace/aggregate-nodes.js';
 import { placeNewEntities } from './incremental-layout.js';
@@ -35,8 +38,21 @@ export const WALK_SENTENCE = 'Press Enter or Space to walk the entities and rela
 const NO_AGGREGATES: readonly AggregateNode[] = [];
 const counted = (value: number, one: string, many: string): string => `${formatNumber(value)} ${value === 1 ? one : many}`;
 
-/** A drag of an entity that is no longer held, or that was pinned meanwhile, is stale and changes nothing. */
-function applyMove(state: ClientState, move: EntityMove): void {
+/** A drag of an entity that is no longer held, or that was pinned meanwhile, is stale and changes nothing; the drag of a card moves the members of its group that are not pinned by the same offset. */
+function applyMove(state: ClientState, move: EntityMove, cards: ReadonlyMap<string, Position>): void {
+  const groupId = groupIdOfCard(move.id);
+  if (groupId !== undefined) {
+    const from = cards.get(move.id);
+    const { groups, positions, pins } = state.presentation.view.getState();
+    const members = groups.find((group) => group.id === groupId)?.members.filter((member) => !pins.has(member) && positions.has(member));
+    if (from === undefined || members === undefined || members.length === 0) return;
+    const moved = new Map(members.flatMap((member) => {
+      const at = positions.get(member);
+      return at === undefined ? [] : [[member, { x: at.x + move.position.x - from.x, y: at.y + move.position.y - from.y }] as const];
+    }));
+    state.presentation.setPositions(moved);
+    return;
+  }
   if (state.presentation.view.getState().pins.has(move.id)) return;
   try {
     state.presentation.setPosition(move.id, move.position);
@@ -71,9 +87,10 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   const viewChange = useStoreSelector(state.presentation.view, (current) => current.viewChange);
   // A request for the view (fit it, or show the viewport from before focus) is served after the drawing it comes with; one held at mount is not served.
   const requestServed = useRef(viewChange);
+  const groups = useStoreSelector(state.presentation.view, (current) => current.groups);
   const placed = useMemo(
-    () => placeNewEntities({ ids: loadedGraph.nodes.map((node) => elementKey(node.ref)), links: loadedGraph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions }),
-    [loadedGraph, positions],
+    () => placeNewEntities({ ids: loadedGraph.nodes.map((node) => elementKey(node.ref)), links: loadedGraph.edges.map((edge) => [elementKey(edge.from), elementKey(edge.to)] as const), positions: placementPositions(positions, groups) }),
+    [loadedGraph, positions, groups],
   );
   const allAggregates = useAggregateNodes(loadedGraph, profile);
   const offEntityTypes = useStoreSelector(state.presentation.view, (current) => current.typeFilter.offEntityTypes);
@@ -86,7 +103,10 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
   }, [allAggregates, graph, loadedGraph, offEntityTypes, inFocus]);
   const drawn = useMemo(() => buildScene(graph, placed.size === 0 ? positions : new Map([...positions, ...placed]), profile, selection, tool, source, view, pins, walking ? focused : undefined, true, aggregates), [graph, positions, placed, profile, selection, tool, source, view, pins, walking, focused, aggregates]);
   // A menu holding the focus only takes the ring off the walk element: the scene is the same one, so the drawing that follows is not a sign that the renderer works again.
-  const scene = useMemo(() => ({ ...drawn, focusRing: !menuOpen }), [drawn, menuOpen]);
+  const grouped = useMemo(() => groupScene(drawn, loadedGraph, groups, profile), [drawn, loadedGraph, groups, profile]);
+  const cardPlaces = useRef<ReadonlyMap<string, Position>>(new Map());
+  cardPlaces.current = new Map(grouped.entities.flatMap((entity) => (entity.group === undefined ? [] : [[entity.id, entity.position] as const])));
+  const scene = useMemo(() => ({ ...grouped, focusRing: !menuOpen }), [grouped, menuOpen]);
   const lastDrawn = useRef<typeof drawn | undefined>(undefined);
   const sceneKeys = useMemo(() => aggregates.map((aggregate) => aggregateKey(aggregate.nodeKey, aggregate.neighborType)), [aggregates]);
   const spoken = useMemo(() => new Map(aggregates.map((aggregate) => [aggregateKey(aggregate.nodeKey, aggregate.neighborType), aggregate.spoken])), [aggregates]);
@@ -128,7 +148,7 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
         click: whileMounted((click) => applyClick(state, click)),
         box: whileMounted((box) => applyBox(state, box)),
         contextMenu: whileMounted((request) => openContextMenu(state, request)),
-        move: whileMounted((move) => applyMove(state, move)),
+        move: whileMounted((move) => applyMove(state, move, cardPlaces.current)),
         dragging: whileMounted((id, position) => physicsLoop.current?.drag(id, position)),
         dragCancelled: whileMounted((id, start) => physicsLoop.current?.cancelDrag(id, start)),
         failed: whileMounted(() => setFailed(true)),

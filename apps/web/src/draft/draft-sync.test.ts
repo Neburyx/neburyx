@@ -329,7 +329,6 @@ describe('the parts of a stored draft the web does not edit', () => {
     const last = writes[writes.length - 1]?.body.queryContext;
     expect(last?.filters.properties).toEqual(carried.properties);
     expect(last?.expansions).toEqual(carried.expansions);
-    expect(writes[0]?.body.layout.groups).toEqual(stored.layout.groups);
   });
 });
 

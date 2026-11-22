@@ -39,3 +39,20 @@ export const MIN_LEGIBLE_FONT_SIZE = 7;
 /** How far under the disc or the middle of a line the readable caption of a hovered element hangs, in screen pixels. */
 export const TIP_GAP = 8;
 export const CAPTION_MIN_ZOOM = MIN_LEGIBLE_FONT_SIZE / CAPTION_FONT_SIZE;
+/** The card of a collapsed group: a rounded box that holds its name and "n loaded", with a corner badge of the member count and a second outline behind it (frame 04f). */
+export const CARD_WIDTH = 112;
+export const CARD_HEIGHT = 52;
+export const CARD_BADGE_SIZE = 22;
+export const CARD_BADGE_OFFSET = -8;
+export const CARD_GLYPH_INSET = 10;
+export const CARD_STACK_PADDING = 7;
+export const CARD_STACK_OPACITY = 0.18;
+export const CARD_FONT_SIZE = 12;
+/** The container around the members of an expanded group: the padding on each side of their box (the bottom leaves room for the captions), its fill and its outline. */
+export const CONTAINER_PADDING_X = 70;
+export const CONTAINER_PADDING_TOP = 50;
+export const CONTAINER_PADDING_BOTTOM = 80;
+export const CONTAINER_FILL = '#eef0f8';
+export const CONTAINER_FILL_OPACITY = 0.55;
+export const CONTAINER_OUTLINE_WIDTH = 1;
+export const CONTAINER_LABEL_SIZE = 12;

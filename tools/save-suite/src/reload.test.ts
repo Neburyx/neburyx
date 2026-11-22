@@ -52,6 +52,22 @@ describe('the page closed in the middle of an investigation', () => {
   });
 });
 
+describe('a grouped investigation', () => {
+  it('is stored with its groups and their collapsed state, and a fresh client shows them again with no position written', async () => {
+    suite = await startSuite();
+    const { tab, id } = await started(suite);
+    const keys = [at(tab, 'L-1'), at(tab, 'L-2')];
+    tab.state.presentation.setGroups([{ id: 'selection:leaf:1', by: 'entityType', members: keys, collapsed: true }]);
+    await suite.advance(AUTOSAVE_DELAY_MS);
+    await tab.written();
+    const fresh = suite.tab();
+    await fresh.openById(id);
+    const view = fresh.state.presentation.view.getState();
+    expect(view.groups.map((group) => [group.id, group.by, group.collapsed, group.members.length])).toEqual([['selection:leaf:1', 'entityType', true, 2]]);
+    expect(view.positions.has(at(fresh, 'L-2'))).toBe(false);
+  });
+});
+
 describe('a draft some of whose items the source no longer holds', () => {
   it('shows the readable items, says some are missing, and never shortens the stored draft', async () => {
     suite = await startSuite();

@@ -1,3 +1,4 @@
+import { groupIdOfCard } from '../groups/group-keys.js';
 import type { ClientState } from '../state/client-state.js';
 import { StateError } from '../state/errors.js';
 import { drawnKeys } from '../state/loaded-graph.js';
@@ -7,6 +8,12 @@ import { selectionAfterClick, type Click } from './selection-gestures.js';
 
 /** The selection a click on an item (or the keyboard's stand-in for one) leads to, by the matrix of the pointer modes. */
 export function applyClick(state: ClientState, click: Click): void {
+  const card = click.target === undefined ? undefined : groupIdOfCard(click.target);
+  if (card !== undefined) {
+    // the card of a collapsed group opens it and selects nothing
+    state.presentation.toggleGroup(card);
+    return;
+  }
   const aggregate = click.target === undefined ? undefined : parseAggregateKey(click.target);
   if (aggregate !== undefined) {
     // an aggregate node stands for neighbors that are not loaded: it opens the panel of its node and selects nothing

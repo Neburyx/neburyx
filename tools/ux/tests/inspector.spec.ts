@@ -30,7 +30,7 @@ async function stopsUntilInspector(page: Page, key: 'Tab' | 'Shift+Tab', limit =
 }
 
 /** The tool strip, the zoom controls and the layout choice sit between the canvas and the inspector; the inspector's first control is its close button. */
-const STOPS_BETWEEN = ['button: Explore', 'button: Filters', 'button: Paths', 'button: Patterns', 'button: Search', 'button: Group', 'button: Table', 'button: Legend', 'button: Zoom out', 'button: Zoom in', 'button: Fit to view', 'button: Layout: Force', 'button: Close inspector'];
+const STOPS_BETWEEN = ['button: Explore', 'button: Filters', 'button: Paths', 'button: Patterns', 'button: Search', 'button: Group loaded nodes', 'button: Table', 'button: Legend', 'button: Zoom out', 'button: Zoom in', 'button: Fit to view', 'button: Layout: Force', 'button: Close inspector'];
 
 async function stopsBackToCanvas(page: Page, limit = 40): Promise<string[]> {
   const stops: string[] = [];

@@ -12,6 +12,15 @@ export interface SceneEntity {
   readonly look: EntityLook;
   /** Stands for neighbors that are not loaded (an aggregate node): drawn, never selected, pinned, dragged, counted or saved. */
   readonly remainder?: boolean;
+  /** The card of a collapsed group: never selected, pinned, counted or saved, but dragged, which moves its members; `count` is its loaded members. */
+  readonly group?: { readonly id: string; readonly count: number };
+}
+
+/** The container drawn around the members of an expanded group: not selected, dragged, counted or saved. */
+export interface SceneContainer {
+  readonly id: string;
+  readonly label: string;
+  readonly members: readonly string[];
 }
 
 export interface SceneRelationship {
@@ -39,6 +48,8 @@ export interface Scene {
   readonly focused?: string | undefined;
   /** False while a menu holds the focus: the walk's element is still told and revealed, and its ring is not drawn, so that one ring shows at a time. */
   readonly focusRing?: boolean;
+  /** The containers of the expanded groups. */
+  readonly containers?: readonly SceneContainer[];
   /** Relationships that are loaded but not drawn, because an entity they join is not loaded. */
   readonly omitted: number;
   /** Whether the viewport is set to show everything when a graph is first drawn, or left as the entities' own positions give it. */

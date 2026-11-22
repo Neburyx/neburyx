@@ -7,7 +7,7 @@ import { deriveLoadedGraph } from '../state/loaded-graph.js';
 import { key, ref, result } from '../state/test-data.js';
 import { carriedOf, draftOf, keptFrom, NOTHING_KEPT, refsOf } from './draft-document.js';
 
-const PRESENTATION = { layout: 'force' as const, positions: new Map(), pins: new Set<string>(), hidden: new Set<string>(), viewport: undefined, typeFilter: { offEntityTypes: new Set<string>(), offRelationshipTypes: new Set<string>() }, mappedTypes: undefined };
+const PRESENTATION = { layout: 'force' as const, positions: new Map(), pins: new Set<string>(), hidden: new Set<string>(), groups: [], viewport: undefined, typeFilter: { offEntityTypes: new Set<string>(), offRelationshipTypes: new Set<string>() }, mappedTypes: undefined };
 
 function loaded(nodes: readonly string[], edges: ReadonlyArray<readonly [string, string, string]> = []) {
   const state = createClientState();
@@ -154,19 +154,10 @@ describe('the parts of a stored draft the web does not edit', () => {
     expect([body.queryContext.expansions, body.queryContext.filters.time, body.queryContext.filters.properties, body.layout.groups]).toEqual([[], null, [], []]);
   });
 
-  it('keep the groups with the members still in the draft, the group mark of their nodes, and the hidden mark of a stored relationship', () => {
+  it('keep the hidden mark of a stored relationship', () => {
     const { graph, nodeRefs } = loaded(['A', 'B'], [['e1', 'A', 'B']]);
     const body = draftOf({ nodeRefs, graph, presentation: PRESENTATION, notes: null, kept: NOTHING_KEPT, carried: carriedOf(stored, 'force', true) });
-    expect(body.layout.nodes.map((node) => [node.id, node.groupId])).toEqual([['A', 'g1'], ['B', 'g1']]);
-    // g2 had only C, which is not in the draft: the group goes, and so does its mark
-    expect(body.layout.groups).toEqual([stored.layout.groups[0]]);
     expect(body.layout.edges.map((edge) => edge.hidden)).toEqual([true]);
-  });
-
-  it('keep a group whose member the person removed, with the members left', () => {
-    const { graph, nodeRefs } = loaded(['A']);
-    const body = draftOf({ nodeRefs, graph, presentation: PRESENTATION, notes: null, kept: NOTHING_KEPT, carried: carriedOf(stored, 'force', true) });
-    expect(body.layout.groups).toEqual([{ ...stored.layout.groups[0], members: [{ t: 'type-a', id: 'A' }] }]);
   });
 
   it('keep a layout name the web does not offer until the person picks another layout', () => {
@@ -177,3 +168,42 @@ describe('the parts of a stored draft the web does not edit', () => {
     expect(written('radial')).toBe('radial');
   });
 });
+
+describe('the groups of the view', () => {
+  const [a, b, c] = ['A', 'B', 'C'].map((id) => ref('demo', 'type-a', id));
+  const keyOf = (member: ReturnType<typeof ref> | undefined) => elementKey(member ?? ref('demo', 'type-a', 'X'));
+  const base = { notes: null, kept: NOTHING_KEPT };
+
+  it('writes each group from the state: its descriptor, a label that holds no value, its collapsed flag, its members and the group of each member', () => {
+    const read = loaded(['A', 'B', 'C']);
+    const { nodeRefs } = read;
+    const graph = { ...read.graph, nodes: read.graph.nodes.map((node) => ({ ...node, properties: [{ key: 'currency', value: 'USD', dataClass: 'text' as const, masked: false }] })) };
+    expect(exportless(graph)).toContain('USD');
+    const groups = [
+      { id: 'type:type-a', by: 'entityType', members: [keyOf(a), keyOf(b)], collapsed: true },
+      { id: 'property:currency:1', by: 'property:currency', members: [keyOf(c)], collapsed: false },
+    ];
+    const body = draftOf({ nodeRefs, graph, presentation: { ...PRESENTATION, groups }, ...base });
+    expect(body.layout.groups).toEqual([
+      { id: 'type:type-a', label: 'type-a', by: 'entityType', collapsed: true, members: [{ t: 'type-a', id: 'A' }, { t: 'type-a', id: 'B' }] },
+      { id: 'property:currency:1', label: 'currency', by: 'property:currency', collapsed: false, members: [{ t: 'type-a', id: 'C' }] },
+    ]);
+    expect(body.layout.nodes.map((node) => [node.id, node.groupId])).toEqual([['A', 'type:type-a'], ['B', 'type:type-a'], ['C', 'property:currency:1']]);
+    expect(exportless(body)).not.toContain('USD');
+  });
+
+  it('writes the members that are in the draft and drops a group with none, with the mark of its nodes', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    const groups = [{ id: 'g1', by: 'component', members: [keyOf(a), keyOf(b)], collapsed: true }, { id: 'g2', by: 'component', members: [keyOf(c)], collapsed: true }];
+    const body = draftOf({ nodeRefs, graph, presentation: { ...PRESENTATION, groups }, ...base });
+    expect(body.layout.groups).toEqual([{ id: 'g1', label: 'component', by: 'component', collapsed: true, members: [{ t: 'type-a', id: 'A' }] }]);
+    expect(body.layout.nodes.map((node) => node.groupId)).toEqual(['g1']);
+  });
+
+  it('writes no group when there is none', () => {
+    const { graph, nodeRefs } = loaded(['A']);
+    expect(draftOf({ nodeRefs, graph, presentation: PRESENTATION, ...base }).layout.groups).toEqual([]);
+  });
+});
+
+const exportless = (body: unknown): string => JSON.stringify(body);

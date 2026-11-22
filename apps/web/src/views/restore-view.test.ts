@@ -27,7 +27,7 @@ function restoredDraft(version: number): RestoreViewResponse['draft'] {
     version,
     notes: 'restored note',
     basedOnViewId: VIEW,
-    layout: { schemaVersion: 1, layout: 'radial', nodes: [entry('A-1'), entry('B', { x: 10, y: 20, pinned: true }), entry('C', { hidden: true })], edges: [], groups: [], viewport: { zoom: 2, x: 5, y: 6 } },
+    layout: { schemaVersion: 1, layout: 'radial', nodes: [entry('A-1'), entry('B', { x: 10, y: 20, pinned: true }), entry('C', { hidden: true })], edges: [], groups: [{ id: 'type:kind-a', label: 'kind-a', by: 'entityType', collapsed: true, members: [{ t: 'kind-a', id: 'A-1' }, { t: 'kind-a', id: 'B' }] }], viewport: { zoom: 2, x: 5, y: 6 } },
     queryContext: { schemaVersion: 1, loaded: { nodes: ['A-1', 'B', 'C'].map((id) => ({ t: 'kind-a', id })), edges: [] }, expansions: [], filters: NO_FILTERS },
   };
 }
@@ -97,6 +97,7 @@ describe('restoring a view into the draft', () => {
     expect(presentation.pins.has(key('B'))).toBe(true);
     expect(presentation.hidden.has(key('C'))).toBe(true);
     expect(presentation.viewport).toEqual({ zoom: 2, x: 5, y: 6 });
+    expect(presentation.groups.map((group) => [group.id, group.members.length, group.collapsed])).toEqual([['type:kind-a', 2, true]]);
     expect(asked.at(-1)?.entities.map((ref) => ref.stableId)).toEqual(['A-1', 'B', 'C']);
   });
 
@@ -242,6 +243,20 @@ describe('restoring a view into the draft', () => {
     expect(await restoreNamedView(client, state, VIEW)).toEqual({ kind: 'restored', someMissing: true });
     expect(state.loadedGraph().nodes.map((node) => node.ref.stableId)).toEqual(['A-1', 'C']);
     expect(restoreNoticeOf(state).missing.getState()).toBe(true);
+  });
+
+  it('leaves the groups as they were when the restore is refused or its read fails', async () => {
+    let failing = false;
+    const { client, state } = await opened({ restore: () => failure('INTERNAL_ERROR'), readFails: () => failing });
+    state.presentation.setGroups([{ id: 'g1', by: 'entityType', members: [key('A-1')], collapsed: true }]);
+    const before = state.presentation.view.getState().groups;
+    expect(await restoreNamedView(client, state, VIEW)).toEqual({ kind: 'failed' });
+    expect(state.presentation.view.getState().groups).toEqual(before);
+    failing = true;
+    const second = await opened({ readFails: () => failing });
+    second.state.presentation.setGroups(before);
+    expect((await restoreNamedView(second.client, second.state, VIEW)).kind).toBe('read-failed');
+    expect(second.state.presentation.view.getState().groups).toEqual(before);
   });
 
   it('shows the read failure with a retry, keeps the old canvas, writes nothing while the read has not succeeded, and shows the view once the retry reads it', async () => {

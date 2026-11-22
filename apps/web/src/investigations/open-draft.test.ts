@@ -104,6 +104,14 @@ describe('opening an investigation whose draft holds more than its first entity'
     expect(writes).toHaveLength(0);
   });
 
+  it('leaves the groups of the view as they were when the reopen fails', async () => {
+    const state = createClientState();
+    state.presentation.setGroups([{ id: 'g1', by: 'entityType', members: [], collapsed: true }]);
+    const before = state.presentation.view.getState().groups;
+    expect(await openById(rig(draftOf(['A-1', 'B']), [], true).client, state, INVESTIGATION_A, CONTEXT)).toMatchObject({ kind: 'failed' });
+    expect(state.presentation.view.getState().groups).toEqual(before);
+  });
+
   it('resumes an investigation the session holds without a read', async () => {
     const { client, asked } = rig(draftOf(['A-1', 'B']));
     const state = createClientState();
@@ -153,14 +161,15 @@ describe('opening an investigation whose draft holds more than its first entity'
 
   it('restores a draft with only its first entity and a group, and does not lose the group on the first write', async () => {
     const stored = draftOf(['A-1']);
-    const groups = [{ id: 'g1', label: 'One', by: 'manual', members: [{ t: 'kind-a', id: 'A-1' }] }];
+    const groups = [{ id: 'g1', label: 'kind-a', by: 'entityType', members: [{ t: 'kind-a', id: 'A-1' }] }];
     const { client, asked, writes } = rig({ ...stored, layout: { ...stored.layout, groups, nodes: stored.layout.nodes.map((node) => ({ ...node, groupId: 'g1' })) } });
     const state = createClientState();
     await openById(client, state, INVESTIGATION_A, CONTEXT);
     expect(asked).toHaveLength(1);
+    expect(state.presentation.view.getState().groups).toEqual([{ id: 'g1', by: 'entityType', collapsed: false, members: [elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' })] }]);
     state.presentation.setPosition(elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' }), { x: 1, y: 1 });
     await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
-    expect(writes[0]?.body.layout.groups).toEqual(groups);
+    expect(writes[0]?.body.layout.groups).toEqual([{ ...groups[0], collapsed: false }]);
     expect(writes[0]?.body.layout.nodes.map((node) => node.groupId)).toEqual(['g1']);
   });
 

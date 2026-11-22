@@ -232,3 +232,18 @@ describe('the viewport of a layout document', () => {
     expect(layoutDocumentSchema.safeParse({ ...layout, viewport: { zoom: 1, x: 2, y: 3, canvas } }).success).toBe(false);
   });
 });
+
+describe('the groups of a layout document', () => {
+  const layout = { schemaVersion: 1, layout: 'force', nodes: [], edges: [] };
+  const group = { id: 'g1', label: 'widget', by: 'entityType', members: [{ t: 'widget', id: 'W-1' }] };
+
+  it('takes a group with a collapsed flag, and one without it as a document of before the flag', () => {
+    expect(layoutDocumentSchema.parse({ ...layout, groups: [{ ...group, collapsed: true }] }).groups[0]?.collapsed).toBe(true);
+    expect(layoutDocumentSchema.parse({ ...layout, groups: [group] }).groups[0]?.collapsed).toBeUndefined();
+  });
+
+  it('refuses a collapsed flag that is not a boolean, and any other field of a group', () => {
+    expect(layoutDocumentSchema.safeParse({ ...layout, groups: [{ ...group, collapsed: 'yes' }] }).success).toBe(false);
+    expect(layoutDocumentSchema.safeParse({ ...layout, groups: [{ ...group, value: 'USD' }] }).success).toBe(false);
+  });
+});

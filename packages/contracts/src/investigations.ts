@@ -137,7 +137,8 @@ export const layoutDocumentSchema = z.strictObject({
   layout: text,
   nodes: z.array(refEntry.extend({ x: z.number().optional(), y: z.number().optional(), pinned: z.boolean(), hidden: z.boolean(), groupId: text.nullable() })),
   edges: z.array(layoutEdgeSchema),
-  groups: z.array(z.strictObject({ id: text, label: text, by: text, members: z.array(refEntry) })),
+  /** A group holds a descriptor and member references, never a property value; `collapsed` is optional and a document without it reads as expanded. */
+  groups: z.array(z.strictObject({ id: text, label: text, by: text, collapsed: z.boolean().optional(), members: z.array(refEntry) })),
 });
 
 export const queryContextDocumentSchema = z.strictObject({
