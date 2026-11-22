@@ -14,28 +14,6 @@ const HOLDS = listed({ id: '0192f000-0000-7000-8000-000000000001', name: 'Device
 const page = (): ApiResult<PatternListResponse> => ({ ok: true, value: { items: [HOLDS], nextCursor: null } });
 
 describe('the form under a built-in card', () => {
-  it('goes with its card: while the search leaves the chosen card out of the list the form is hidden, and it is shown again with the card', async () => {
-    await patternsWorkspace();
-    await openBuiltIn();
-    expect(screen.getByLabelText('Starting account')).toBeTruthy();
-    const search = screen.getByRole('searchbox', { name: 'Search patterns' });
-    await userEvent.type(search, 'connected');
-    expect(screen.getByLabelText('Starting account').closest('[hidden]')).not.toBeNull();
-    await userEvent.clear(search);
-    expect(screen.getByLabelText('Starting account').closest('[hidden]')).toBeNull();
-  });
-
-  it('is kept while its card is out of the list, so that clearing the search leaves the focus in the search and the values of the form as they were', async () => {
-    await patternsWorkspace();
-    await openBuiltIn();
-    fireEvent.change(screen.getByLabelText('Max matching accounts'), { target: { value: '25' } });
-    const search = screen.getByRole('searchbox', { name: 'Search patterns' });
-    await userEvent.type(search, 'zzz');
-    await userEvent.clear(search);
-    expect(document.activeElement).toBe(search);
-    expect(screen.getByLabelText('Max matching accounts')).toHaveProperty('value', '25');
-  });
-
   it('shows the glyph of the type a built-in pattern reaches on its card, and no summary line', async () => {
     await patternsWorkspace();
     await openBuiltIn();

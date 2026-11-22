@@ -144,7 +144,7 @@ describe('running a saved built pattern', () => {
     await press('Run Alpha');
     await back();
     expect(signals[0]?.aborted).toBe(true);
-    expect(screen.getByRole('searchbox', { name: 'Search patterns' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Run Alpha' })).toBeTruthy();
     await press('Run Alpha');
     await userEvent.click(screen.getByRole('button', { name: 'Close Patterns' }));
     expect(signals[1]?.aborted).toBe(true);

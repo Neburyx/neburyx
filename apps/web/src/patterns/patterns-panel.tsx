@@ -21,7 +21,7 @@ import { continueWith, rateLimitedRetry } from '../banner/copy.js';
 import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
 import { Dialog } from '../views/dialog.js';
 import { RUN_COPY } from './run/run-copy.js';
-import { EDITOR_SUBTITLE, failureView, type FailureView, listSubtitle, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
+import { EDITOR_SUBTITLE, failureView, type FailureView, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
 import { buildParams, fieldsOf, labelOf, observedAtOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
 import { RunFailure } from './run-failure.js';
@@ -320,8 +320,8 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
       </div>
-      {sourceId === null ? null : (
-        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : view === 'builder' ? (editing === undefined ? EDITOR_SUBTITLE : changed ? `${editing.item.name} · ${RUN_COPY.changesNotSaved}` : editing.item.name) : listSubtitle(sourceName)}</p>
+      {sourceId === null || view === 'list' ? null : (
+        <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : view === 'builder' ? (editing === undefined ? EDITOR_SUBTITLE : changed ? `${editing.item.name} · ${RUN_COPY.changesNotSaved}` : editing.item.name) : ''}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
       {notice === undefined ? null : (

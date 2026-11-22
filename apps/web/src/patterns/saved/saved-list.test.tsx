@@ -29,9 +29,10 @@ const heading = (name: RegExp | string) => screen.getByRole('heading', { name })
 const section = (name: RegExp | string) => within(screen.getByRole('region', { name }));
 
 describe('the list of the panel', () => {
-  it('has the search, the three sections with their counts, the built-in rows with Run and no menu, and the footnote', async () => {
+  it('has no search box and no line about the source, the three sections with their counts, the built-in rows with Run and no menu, and the footnote', async () => {
     await savedWorkspace();
-    expect(screen.getByRole('searchbox', { name: 'Search patterns' })).toBeTruthy();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.queryByText(/read-only$/)).toBeNull();
     expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · 3', 'My patterns · 0', 'Shared on this source · 0']);
     const builtIn = section(/Built-in/);
     expect(builtIn.getAllByRole('listitem')).toHaveLength(3);
@@ -62,28 +63,6 @@ describe('the list of the panel', () => {
     expect(section(/My patterns/).getByText('Start from a built-in pattern, or create your own. Saved patterns appear here.')).toBeTruthy();
     expect(section(/Shared on this source/).getByText('Nobody has shared a pattern on this source.')).toBeTruthy();
     expect(section(/Built-in/).queryAllByText(/→ USES →/)).toHaveLength(0);
-  });
-
-  it('filters the rows of each section on the client as the text is typed, says when none of a section matches, and sends nothing', async () => {
-    const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([MINE, THEIRS]) } });
-    const calls = kit.patternCalls.length;
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search patterns' }), 'alp');
-    expect(section(/My patterns/).getByText('Alpha')).toBeTruthy();
-    expect(section(/Shared on this source/).queryByText('Beta')).toBeNull();
-    expect(section(/Shared on this source/).getByText('No pattern in this section matches the search.')).toBeTruthy();
-    expect(section(/Built-in/).getByText('No pattern in this section matches the search.')).toBeTruthy();
-    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search patterns' }));
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search patterns' }), 'USES');
-    expect(section(/Built-in/).getAllByRole('listitem')).toHaveLength(1);
-    expect(kit.patternCalls.length).toBe(calls);
-  });
-
-  it('says the search covers the rows loaded so far while more pages remain, and keeps Load more', async () => {
-    await savedWorkspace({ patterns: { listPatterns: async () => page([MINE], 'next-1') } });
-    expect(screen.queryByText('The search covers the patterns loaded so far.')).toBeNull();
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search patterns' }), 'a');
-    expect(screen.getByText('The search covers the patterns loaded so far.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Load more' })).toBeTruthy();
   });
 
   it('offers the person’s own pattern its menu in order, with Delete last in the warning colour, and another person’s shared pattern Run and Copy and the owner-only lines that do nothing', async () => {

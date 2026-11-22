@@ -8,10 +8,10 @@ afterEach(() => {
 });
 
 describe('the headers of the panel shell', () => {
-  it('names the source and says the list is read-only, and in the editor says the pattern is a draft that is not saved', async () => {
+  it('draws no line about the source in the list, and in the editor says the pattern is a draft that is not saved', async () => {
     await builderWorkspace();
     expect(screen.getByRole('heading', { level: 2, name: 'Patterns' })).toBeTruthy();
-    expect(screen.getByText(/^Source: .+ · read-only$/)).toBeTruthy();
+    expect(screen.queryByText(/^Source: .+ · read-only$/)).toBeNull();
     await openBuilder();
     expect(screen.getByRole('heading', { level: 2, name: 'New pattern' })).toBeTruthy();
     expect(screen.getByText('Draft · not saved')).toBeTruthy();
@@ -24,6 +24,6 @@ describe('the headers of the panel shell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await settle();
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByText(/^Source: .+ · read-only$/)).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 2, name: 'Patterns' })).toBeTruthy();
   });
 });

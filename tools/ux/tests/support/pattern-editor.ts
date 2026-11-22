@@ -23,7 +23,7 @@ export const patternBuilder = (page: Page): Locator => patternsPanel(page).getBy
 /** Opens the Patterns panel on its list. */
 export async function openPatternList(page: Page): Promise<void> {
   if (!(await patternsPanel(page).isVisible())) await patternsTool(page).click();
-  await expect(patternsPanel(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+  await expect(patternsPanel(page).getByRole('heading', { name: 'Patterns', level: 2 })).toBeVisible();
 }
 
 /** From the list, opens the builder and builds Account → Device ← Account with choices only; the check has answered when it returns. */

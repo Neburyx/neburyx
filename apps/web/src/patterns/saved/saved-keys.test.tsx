@@ -28,10 +28,10 @@ describe('the hand-off from Home', () => {
 });
 
 describe('the list by keyboard and Escape', () => {
-  it('names the search and each Run and menu by the pattern, and has no tab to stop at', async () => {
+  it('names each Run and menu by the pattern, and has no tab and no search box', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([listed({ id: ID, name: 'Alpha' })]) } });
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
-    expect(screen.getByRole('searchbox', { name: 'Search patterns' })).toBeTruthy();
+    expect(screen.queryByRole('searchbox')).toBeNull();
     expect(screen.getByRole('button', { name: 'Run Alpha' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'More: Alpha' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Shared devices' })).toBeTruthy();
@@ -95,14 +95,9 @@ describe('the menu of another person’s shared pattern, and the search, by keyb
     expect(own.querySelector('[role="separator"]')?.nextElementSibling?.textContent).toBe('Delete');
   });
 
-  it('clears the search on Escape first and closes the panel only when the box is empty', async () => {
+  it('closes the panel on Escape from the list', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([]) } });
-    const box = screen.getByRole('searchbox', { name: 'Search patterns' }) as HTMLInputElement;
-    await userEvent.type(box, 'abc');
-    fireEvent.keyDown(box, { key: 'Escape' });
-    expect(box.value).toBe('');
-    expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();
-    fireEvent.keyDown(box, { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Shared devices' }), { key: 'Escape' });
     await settle();
     expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
   });

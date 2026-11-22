@@ -159,17 +159,6 @@
   gap: var(--space-12);
 }
 
-.pattern-search {
-  width: 100%;
-  box-sizing: border-box;
-  padding: var(--space-6) var(--space-8);
-  border: var(--border-width) solid var(--color-control-border);
-  border-radius: var(--radius);
-  background: var(--color-surface);
-  color: var(--color-text-strong);
-  font: inherit;
-}
-
 .pattern-section {
   display: flex;
   flex-direction: column;
@@ -943,6 +932,8 @@
 
 .pattern-card .pattern-row-name {
   margin: 0;
+  font-size: var(--font-size-body);
+  font-weight: normal;
 }
 
 .pattern-card-button {

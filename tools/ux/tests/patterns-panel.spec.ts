@@ -15,7 +15,7 @@ const cardOf = (page: Page) => panelOf(page).getByRole('button', { name: 'Shared
 
 async function open(page: Page): Promise<void> {
   await toolOf(page).click();
-  await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+  await expect(panelOf(page).getByRole('heading', { name: 'Patterns', level: 2 })).toBeVisible();
 }
 
 /** Opens the list and then the form of Shared devices with its Run. */
@@ -36,11 +36,11 @@ test.describe('the Patterns panel on the canvas', () => {
     await openOneEntity(page, SOURCE, 'AC-1');
   });
 
-  test('opens from the tool strip with the key, and Escape from the search closes it and gives the focus back to the tool', async ({ page }) => {
+  test('opens from the tool strip with the key, and Escape from the list closes it and gives the focus back to the tool', async ({ page }) => {
     await toolOf(page).focus();
     await page.keyboard.press('Enter');
     await expect(panelOf(page)).toBeVisible();
-    await panelOf(page).getByRole('searchbox', { name: 'Search patterns' }).focus();
+    await cardOf(page).focus();
     await expect(toolOf(page)).toHaveAttribute('data-active', 'true');
     await page.keyboard.press('Escape');
     await expect(panelOf(page)).toHaveCount(0);
@@ -54,17 +54,6 @@ test.describe('the Patterns panel on the canvas', () => {
     await expect(panelOf(page).getByRole('button', { name: /^(Shared devices|Shared addresses|Connected accounts)$/ })).toHaveCount(3);
     await expect(panelOf(page).getByRole('button', { name: /^More: (Shared devices|Shared addresses|Connected accounts)$/ })).toHaveCount(0);
     await expect(panelOf(page).getByText(/Suspicious/)).toHaveCount(0);
-  });
-
-  test('filters the rows of every section with the search and says when a section has none', async ({ page }) => {
-    await open(page);
-    await panelOf(page).getByRole('searchbox', { name: 'Search patterns' }).fill('addresses');
-    await expect(panelOf(page).getByRole('button', { name: 'Shared addresses', exact: true })).toBeVisible();
-    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toHaveCount(0);
-    await expect(panelOf(page).getByText('No pattern in this section matches the search.').first()).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toHaveValue('');
-    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toBeVisible();
   });
 
   test('says the source has no patterns when it offers none', async ({ page }) => {
@@ -105,7 +94,7 @@ test.describe('the Patterns panel on the canvas', () => {
     await expect(panelOf(page).getByRole('table')).toBeVisible();
     await cardOf(page).click();
     await expect(panelOf(page).getByRole('heading', { name: 'Patterns', level: 2 })).toBeVisible();
-    await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+    await expect(panelOf(page).getByRole('heading', { name: 'Patterns', level: 2 })).toBeVisible();
     await expect(panelOf(page).getByRole('table')).toHaveCount(0);
     await panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }).click();
     await expect(panelOf(page).getByRole('table')).toBeVisible();
@@ -177,6 +166,18 @@ test.describe('the Patterns panel on the canvas', () => {
     await expect(runOf(page)).toBeFocused();
     for (let presses = 0; presses < 4 && !(await limit.evaluate((element) => element === document.activeElement)); presses += 1) await page.keyboard.press('Shift+Tab');
     await expect(limit).toBeFocused();
+  });
+
+  test('draws each built-in card slim, with its glyph and name on one line, and no search box or line about the source', async ({ page }) => {
+    await open(page);
+    const card = panelOf(page).getByRole('button', { name: 'Shared devices', exact: true });
+    const box = await card.boundingBox();
+    expect(box?.height ?? 99).toBeLessThan(40);
+    const glyph = await card.locator('img').boundingBox();
+    const name = await card.locator('.pattern-card-name').boundingBox();
+    expect(Math.abs(((glyph?.y ?? 0) + (glyph?.height ?? 0) / 2) - ((name?.y ?? 99) + (name?.height ?? 0) / 2))).toBeLessThan(4);
+    await expect(panelOf(page).getByRole('searchbox')).toHaveCount(0);
+    await expect(panelOf(page).getByText(/read-only$/)).toHaveCount(0);
   });
 
   test('keeps every control and the result inside the window, the panel scrolling inside itself', async ({ page }) => {

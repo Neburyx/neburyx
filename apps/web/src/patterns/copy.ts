@@ -157,8 +157,6 @@ const PROBLEM_TEXT: Readonly<Record<PatternProblemCode, string>> = {
 
 export const problemText = (problem: PatternProblem): string => PROBLEM_TEXT[problem.code];
 
-/** The line under the panel's heading in the list: which source, and that the list is read-only. */
-export const listSubtitle = (source: string): string => `Source: ${source} · read-only`;
 /** The line under the panel's heading in the editor: that what is being made is not saved. */
 export const EDITOR_SUBTITLE = 'Draft · not saved';
 

@@ -38,7 +38,7 @@ async function backToList(page: Page): Promise<void> {
   await press(page, panelOf(page).getByRole('button', { name: 'Edit' }));
   await press(page, patternBuilder(page).getByRole('button', { name: 'Cancel' }));
   await press(page, dialogOf(page).getByRole('button', { name: 'Discard draft' }));
-  await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+  await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toBeVisible();
 }
 
 test.describe('the Patterns panel by keyboard', () => {
@@ -48,7 +48,7 @@ test.describe('the Patterns panel by keyboard', () => {
     await openOneEntity(page, SOURCE, 'AC-1');
     await toolOf(page).focus();
     await page.keyboard.press('Enter');
-    await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toBeVisible();
   });
 
   test('runs a built-in pattern: its card, the start field and Run pattern, with the list kept above the form', async ({ page }) => {
@@ -62,7 +62,7 @@ test.describe('the Patterns panel by keyboard', () => {
     await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
     await expect(panelOf(page).getByRole('table').getByRole('row')).toHaveCount(6);
     await expect(panelOf(page).getByRole('status').filter({ hasText: 'exact' })).toHaveText(/^5 other .+ found · exact · \d+\.\d\d\ss$/);
-    await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toBeVisible();
     await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true, pressed: true }));
     await expect(panelOf(page).getByLabel('Starting account')).toHaveCount(0);
   });
@@ -240,7 +240,6 @@ test.describe('the Patterns panel by keyboard', () => {
     expect(names).toEqual([
       'Close Patterns',
       '+ New pattern',
-      'Search patterns',
       'Shared devices',
       'Shared addresses',
       'Connected accounts',

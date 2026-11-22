@@ -78,16 +78,6 @@ describe('the typology rows of the Patterns panel', () => {
     await settle();
     expect(await screen.findByRole('region', { name: 'Fan-out: Steps in words' })).toBeTruthy();
   });
-
-  it('finds a typology by its name or its sentence, and says none match', async () => {
-    await workspace();
-    const search = screen.getByRole('searchbox', { name: 'Search patterns' });
-    await userEvent.type(search, 'many accounts');
-    expect(sectionOf(/AML typologies/).getAllByRole('listitem')).toHaveLength(1);
-    await userEvent.clear(search);
-    await userEvent.type(search, 'moves');
-    expect(sectionOf(/AML typologies/).getByRole('button', { name: 'Run Pass-through' })).toBeTruthy();
-  });
 });
 
 describe('running and copying a built-in definition', () => {
