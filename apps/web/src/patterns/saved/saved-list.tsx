@@ -144,7 +144,7 @@ function BuiltInRows({ presets, actions, hasOthers, selectedId, iconOf }: { read
   return (
     <ul className="pattern-rows">
       {presets.map((preset) => (
-        <li key={preset.id} className="pattern-row pattern-card" data-selected={selectedId === preset.id}>
+        <li key={preset.id} className="pattern-row pattern-option" data-selected={selectedId === preset.id}>
           <h4 className="pattern-row-name">
             <button type="button" className="pattern-card-button" aria-pressed={selectedId === preset.id} onClick={() => actions.runPreset(preset)}>
               {iconOf === undefined ? null : <img src={legendGlyph(iconOf(preset.bind['attribute'] ?? preset.bind['target'] ?? preset.bind['anchor'] ?? ''))} alt="" className="pattern-card-glyph" />}

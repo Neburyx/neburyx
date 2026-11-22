@@ -9,7 +9,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-const formOf = (): string | undefined => document.querySelector('.pattern-card[data-selected="true"] .pattern-card-name')?.textContent ?? undefined;
+const formOf = (): string | undefined => document.querySelector('.pattern-option[data-selected="true"] .pattern-card-name')?.textContent ?? undefined;
 
 const openFromHome = async (state: Awaited<ReturnType<typeof patternsWorkspace>>['state'], preset: string): Promise<void> => {
   act(() => {
