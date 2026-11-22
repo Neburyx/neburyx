@@ -93,6 +93,42 @@ test.describe('saved patterns in the Patterns panel', () => {
     await expect(rowOf(page, 'Saved by the spec')).toContainText('Shared');
   });
 
+  test('saves a built-in run from its form, lists it with its pattern and parameters, and runs it from its row with the answer of the form', async ({ page }) => {
+    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await panelOf(page).getByLabel('Max matching accounts').fill('7');
+    await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeEnabled();
+    await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
+    await expect(panelOf(page).getByRole('table')).toBeVisible();
+    const fromForm = await panelOf(page).getByRole('table').getByRole('row').count();
+    await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
+    const dialog = dialogOf(page);
+    await expect(dialog.getByLabel('Name')).toBeFocused();
+    await expect(dialog.getByText('Shared devices · v1')).toBeVisible();
+    await expect(dialog.getByText('Max matching accounts 7')).toBeVisible();
+    await dialog.getByLabel('Name').fill('Devices, small');
+    await press(page, dialog.getByRole('button', { name: 'Save pattern' }));
+    await expect(panelOf(page).getByText('Pattern saved.')).toBeVisible();
+    await expect(panelOf(page).getByRole('table').getByRole('row')).toHaveCount(fromForm);
+    await press(page, panelOf(page).getByRole('button', { name: 'Back to patterns' }));
+    const row = rowOf(page, 'Devices, small');
+    await expect(row).toContainText('Shared devices · v1');
+    await expect(row).toContainText('Max matching accounts 7');
+    await expect(row).toContainText('Private');
+    await press(page, row.getByRole('button', { name: 'Run Devices, small' }));
+    await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeEnabled();
+    await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
+    await expect(panelOf(page).getByRole('table').getByRole('row')).toHaveCount(fromForm);
+  });
+
+  test('refuses a name the person already uses when a built-in run is saved, and keeps the dialog with the name', async ({ page }) => {
+    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
+    await dialogOf(page).getByLabel('Name').fill('Device ring');
+    await press(page, dialogOf(page).getByRole('button', { name: 'Save pattern' }));
+    await expect(dialogOf(page).getByText('This name is already used on this source. Choose another.')).toBeVisible();
+    await expect(dialogOf(page).getByLabel('Name')).toHaveValue('Device ring');
+  });
+
   test('runs a pattern that holds its starting entity at once, with the saved name under the heading', async ({ page }) => {
     await press(page, rowOf(page, 'Device ring').getByRole('button', { name: 'Run Device ring' }));
     await expect(panelOf(page).getByRole('heading', { name: 'Pattern result' })).toBeVisible();

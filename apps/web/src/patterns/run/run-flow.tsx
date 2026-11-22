@@ -345,7 +345,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
         <SavePatternDialog
           client={client}
           sourceId={sourceId}
-          definition={definition}
+          subject={{ kind: 'definition', definition }}
           anchor={anchorRef}
           nameOf={nameOf}
           onClose={() => setSaving(false)}

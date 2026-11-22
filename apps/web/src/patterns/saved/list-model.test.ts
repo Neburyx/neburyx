@@ -27,8 +27,10 @@ describe('the chain of a saved pattern in a line', () => {
 
   it('is the chain of the built-in pattern a saved run came from, and nothing when that pattern is gone', () => {
     const presets = [{ id: 'p', name: 'P', template: 'shared-attribute' as const, bind: { anchor: 'kind-a', attribute: 'kind-b', via: 'USES' }, labels: [] }];
-    expect(savedSummary(saved({ kind: 'preset-run', presetId: 'p' }), presets, nameOf)).toBe('Kind A → USES → Kind B');
-    expect(savedSummary(saved({ kind: 'preset-run', presetId: 'gone' }), presets, nameOf)).toBe('');
+    expect(savedSummary(saved({ kind: 'preset-run', presetId: 'p', params: {} }), presets, nameOf)).toBe('Kind A → USES → Kind B');
+    expect(savedSummary(saved({ kind: 'preset-run', presetId: 'p', params: { limit: 25 } }), presets, nameOf)).toBe('Kind A → USES → Kind B · Limit 25');
+    expect(savedSummary(saved({ kind: 'preset-run', presetId: 'gone', params: {} }), presets, nameOf)).toBe('');
+    expect(savedSummary(saved({ kind: 'preset-run', presetId: 'gone', params: { limit: 25 } }), presets, nameOf)).toBe('Limit 25');
   });
 });
 

@@ -1,6 +1,7 @@
 import { patternDefinitionSchema, type ListedPattern, type TemplateListResponse } from '@neburyx/contracts';
 import { ARROW } from '../copy.js';
 import { pathSummary } from './path-summary.js';
+import { paramsInWords } from './preset-summary.js';
 
 type Preset = TemplateListResponse['presets'][number];
 
@@ -18,7 +19,8 @@ export function savedSummary(item: ListedPattern, presets: readonly Preset[] | u
     return parsed.success ? pathSummary(parsed.data, nameOf) : '';
   }
   const preset = presets?.find((candidate) => candidate.id === item.presetId);
-  return preset === undefined ? '' : presetSummary(preset, nameOf);
+  const params = paramsInWords(preset ?? { labels: [] }, item.params);
+  return [preset === undefined ? '' : presetSummary(preset, nameOf), params].filter((part) => part !== '').join(' · ');
 }
 
 /** Whether a row shows for the search text: the text is in its name or in its chain, ignoring case; no text shows every row. */

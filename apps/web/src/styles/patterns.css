@@ -871,3 +871,14 @@
   gap: var(--space-4);
   margin-left: auto;
 }
+
+.save-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.save-summary dd {
+  margin: 0;
+}

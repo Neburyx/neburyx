@@ -380,6 +380,14 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await patternsPanel(page).getByRole('button', { name: 'Save pattern…' }).click();
     await expect(page.getByRole('dialog', { name: 'Save pattern' })).toBeVisible();
   },
+  "Explore with the Save pattern dialog of a built-in run open": async (page) => {
+    await openEntity(page, 'banking-demo', `PB-${unique()}`);
+    await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
+    await openPatternList(page);
+    await patternsPanel(page).getByRole('button', { name: 'Run Shared devices' }).click();
+    await patternsPanel(page).getByRole('button', { name: 'Save pattern', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Save pattern' })).toBeVisible();
+  },
   'Explore with the pattern row menu open': async (page) => {
     await openEntity(page, 'banking-demo', `PM-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();

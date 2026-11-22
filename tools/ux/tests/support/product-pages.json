@@ -45,6 +45,7 @@
     { "name": "Explore with a pattern run's result", "route": "explore/:investigationId" },
     { "name": "Explore with a pattern run's Heavy operation state", "route": "explore/:investigationId" },
     { "name": "Explore with the Save pattern dialog open", "route": "explore/:investigationId" },
+    { "name": "Explore with the Save pattern dialog of a built-in run open", "route": "explore/:investigationId" },
     { "name": "Explore with the pattern row menu open", "route": "explore/:investigationId" },
     { "name": "Explore with the Search panel's Add tab", "route": "explore/:investigationId" },
     { "name": "Explore with the Search panel's Add tab failed", "route": "explore/:investigationId" },

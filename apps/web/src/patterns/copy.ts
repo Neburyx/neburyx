@@ -15,6 +15,7 @@ export const PATTERNS_COPY = {
   intro: 'Approved ways to explore. No query language needed.',
   list: 'Patterns',
   run: 'Run pattern',
+  savePattern: 'Save pattern',
   cancel: 'Cancel',
   backToList: 'Back to patterns',
   runAgain: 'Run again',

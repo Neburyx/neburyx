@@ -35,7 +35,8 @@ import { useSavedPatterns } from './saved/use-saved-patterns.js';
 import { PatternsHome } from './saved/patterns-home.js';
 import { ownIsEmpty } from './saved/saved-list.js';
 import { fromDefinition } from './builder/from-definition.js';
-import type { SaveMode } from './saved/save-dialog.js';
+import { SavePatternDialog, type SaveMode } from './saved/save-dialog.js';
+import { fieldsSummary } from './saved/preset-summary.js';
 import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
 import { PatternEditor, type EditingView, type ProfileView } from './builder/pattern-editor.js';
 import { RunFlow, type RunHeader } from './run/run-flow.js';
@@ -385,7 +386,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
             />
           </div>
           {view === 'preset' && templateData !== undefined && presetId !== undefined && templateData.presets.some((candidate) => candidate.id === presetId) ? (
-            <PatternsWorkbench client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} list={templateData} presetId={presetId} run={presetRun} close={close} escape={cancelOrClose} onBack={() => setView('list')} />
+            <PatternsWorkbench client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} list={templateData} presetId={presetId} run={presetRun} close={close} escape={cancelOrClose} onBack={() => setView('list')} onSaved={(notice) => { setNotice(notice); saved.reload(); }} />
           ) : null}
           {view === 'saved-preset' && savedItem !== undefined ? (
             <SavedPresetRun
@@ -527,9 +528,10 @@ interface WorkbenchProps {
   readonly close: () => void;
   readonly escape: React.MutableRefObject<() => void>;
   readonly onBack: () => void;
+  readonly onSaved: (notice: Notice) => void;
 }
 
-function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId, run, close, escape, onBack }: WorkbenchProps) {
+function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId, run, close, escape, onBack, onSaved }: WorkbenchProps) {
   const state = useClientState();
   const profile = useProfile();
   const graph = useLoadedGraph();
@@ -543,7 +545,10 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
   const [chosen, setChosen] = useState<GraphNode | undefined>(undefined);
   const [added, setAdded] = useState<{ readonly result: TemplateRunOk; readonly outcome: AddedOutcome } | undefined>(undefined);
   const expansions = useExpandStoreWhenProvided();
+  const [saving, setSaving] = useState<Readonly<Record<string, unknown>> | undefined>(undefined);
+  useEffect(() => setSaving(undefined), [sourceId, mask]);
   const startField = useRef<HTMLSelectElement>(null);
+  const saveButton = useRef<HTMLButtonElement>(null);
   const preset: Preset = list.presets.find((candidate) => candidate.id === selectedId) ?? list.presets[0] ?? ({} as Preset);
   const template = list.templates.find((candidate) => candidate.id === preset.template);
   const sources = answeredData(shell.sources)?.items ?? [];
@@ -597,6 +602,17 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
     }
     setErrors({});
     run.run({ id: preset.id, params: built.params });
+  };
+
+  const save = (): void => {
+    const built = buildParams(fields, values, { entityType: anchorType ?? '', stableId: '' });
+    if (!built.ok) {
+      setErrors(built.errors);
+      return;
+    }
+    setErrors({});
+    const { ref: _start, ...params } = built.params;
+    setSaving(params);
   };
 
   useEffect(() => {
@@ -672,9 +688,30 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
             {PATTERNS_COPY.run}
           </button>
         )}
+        <button type="button" className="secondary" ref={saveButton} onClick={save}>
+          {PATTERNS_COPY.savePattern}
+        </button>
         {timeout === undefined ? null : <span className="search-panel-note">{timeoutLabel(timeout)}</span>}
       </div>
       {hasEntity ? null : <p className="search-panel-note">{startHint(labelOf(preset, 'anchor'))}</p>}
+      {saving === undefined || template === undefined ? null : (
+        <SavePatternDialog
+          client={client}
+          sourceId={sourceId}
+          subject={{ kind: 'preset', presetId: preset.id, presetName: preset.name, templateVersion: template.version, params: saving, summary: fieldsSummary(fields, saving) }}
+          anchor={anchor === undefined ? undefined : { entityType: anchor.ref.entityType, stableId: anchor.ref.stableId }}
+          nameOf={typeName}
+          onClose={() => {
+            setSaving(undefined);
+            saveButton.current?.focus();
+          }}
+          onDone={(notice) => {
+            setSaving(undefined);
+            onSaved(notice);
+            saveButton.current?.focus();
+          }}
+        />
+      )}
       {run.running ? (
         <p className="patterns-state" role="status">
           {`Running${timeout === undefined ? '' : ` · ${timeoutLabel(timeout)}`}`}

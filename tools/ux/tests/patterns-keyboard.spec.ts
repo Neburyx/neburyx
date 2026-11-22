@@ -66,6 +66,34 @@ test.describe('the Patterns panel by keyboard', () => {
     await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
   });
 
+  test('saves a built-in run by keyboard: Save pattern follows Run pattern, the dialog keeps the focus and Escape gives it back', async ({ page }) => {
+    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await panelOf(page).getByLabel('Max matching accounts').focus();
+    await page.keyboard.press('Tab');
+    await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    const save = panelOf(page).getByRole('button', { name: 'Save pattern', exact: true });
+    await expect(save).toBeFocused();
+    expect(await ringOf(page)).toBe(true);
+    await page.keyboard.press('Enter');
+    await expect(dialogOf(page).getByLabel('Name')).toBeFocused();
+    for (let stops = 0; stops < 8; stops += 1) {
+      await page.keyboard.press('Tab');
+      expect(await page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null)).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialogOf(page)).toHaveCount(0);
+    await expect(save).toBeFocused();
+  });
+
+  test('shows the field error and opens no dialog when Save pattern is pressed on a form that is not valid', async ({ page }) => {
+    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await panelOf(page).getByLabel('Max matching accounts').fill('0');
+    await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
+    await expect(panelOf(page).getByRole('alert')).toBeVisible();
+    await expect(dialogOf(page)).toHaveCount(0);
+  });
+
   test('saves a built pattern, runs it from My patterns and shares it', async ({ page }) => {
     await panelOf(page).getByRole('button', { name: 'New pattern' }).focus();
     await page.keyboard.press('Enter');

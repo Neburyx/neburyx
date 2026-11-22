@@ -53,6 +53,8 @@ export const SAVED_COPY = {
   everyoneLine: 'Others can run and copy it. They cannot change or delete it.',
   saveButton: 'Save',
   saveDialog: 'Save pattern',
+  pattern: 'Pattern',
+  parameters: 'Parameters',
   saveText: 'Saves the pattern and its parameters, never query text. Running it applies your own access and limits.',
   askEachTime: 'Ask for the starting entity each time',
   keepsEntity: 'The pattern keeps the starting entity it holds.',

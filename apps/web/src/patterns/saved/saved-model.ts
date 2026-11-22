@@ -18,7 +18,7 @@ export const nameFits = (name: string): boolean => {
 /** What kind of pattern a row is, in a line: built in this panel, or the name of the built-in pattern it was saved from. */
 export function kindLineOf(item: ListedPattern, presets: readonly TemplateListResponse['presets'][number][] | undefined): string {
   if (item.kind === 'definition') return SAVED_COPY.builtInKind;
-  return presets?.find((preset) => preset.id === item.presetId)?.name ?? item.presetId;
+  return `${presets?.find((preset) => preset.id === item.presetId)?.name ?? item.presetId} · v${item.templateVersion}`;
 }
 
 export const lastRunText = (item: Pick<ListedPattern, 'lastRunAt'>): string => (item.lastRunAt === null ? SAVED_COPY.notRun : `Last run ${item.lastRunAt.slice(0, 10)} UTC`);

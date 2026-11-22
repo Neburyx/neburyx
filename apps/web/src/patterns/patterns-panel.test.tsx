@@ -115,14 +115,14 @@ describe('the Patterns panel: open and run a preset', () => {
     expect(screen.queryByText(/timeout/)).toBeNull();
   });
 
-  it('has no Save pattern control in any state', async () => {
+  it('has Save pattern beside Run in every state of the form, before and after a run', async () => {
     const kit = await patternsWorkspace();
     await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
-    expect(screen.queryByText(/Save pattern/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save pattern' })).toBeTruthy();
     await userEvent.click(run());
     await settle();
-    expect(screen.queryByText(/Save pattern/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save pattern' })).toBeTruthy();
   });
 
   it('keeps the list order the answer gives', async () => {

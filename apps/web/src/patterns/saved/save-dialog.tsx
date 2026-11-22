@@ -3,16 +3,21 @@ import { PATTERN_LIMITS, type ListedPattern, type PatternDefinition, type SavedP
 import type { ApiClient } from '../../api/client.js';
 import { Dialog } from '../../views/dialog.js';
 import { pathSummary } from './path-summary.js';
+import type { SummaryLine } from './preset-summary.js';
 import { SAVED_COPY, isNameTaken, nameLimitText, refusalText } from './saved-copy.js';
 import { nameFits } from './saved-model.js';
 import type { Notice } from './use-row-actions.js';
 
 export type SaveMode = { readonly kind: 'new' } | { readonly kind: 'change'; readonly item: ListedPattern };
 
+type SaveSubject =
+  | { readonly kind: 'definition'; readonly definition: PatternDefinition }
+  | { readonly kind: 'preset'; readonly presetId: string; readonly presetName: string; readonly templateVersion: string; readonly params: Readonly<Record<string, unknown>>; readonly summary: readonly SummaryLine[] };
+
 interface Props {
   readonly client: ApiClient;
   readonly sourceId: string;
-  readonly definition: PatternDefinition;
+  readonly subject: SaveSubject;
   /** The starting entity chosen on the preview, or nothing. */
   readonly anchor: { readonly entityType: string; readonly stableId: string } | undefined;
   readonly nameOf: (type: string) => string;
@@ -33,8 +38,8 @@ const OPTIONS = [
  * The Save pattern dialog (PB16): the name with its rule, who can use it, Cancel and Save. A refusal keeps the dialog open with what the person typed; a pattern shared with everyone is saved first and then shared, so that a refused share
  * leaves it saved and private. Whether the pattern asks for its starting entity each time stays a choice under the two options (the frame has none; listed).
  */
-export function SavePatternDialog({ client, sourceId, definition, anchor, nameOf, onClose, onDone }: Props) {
-  const [name, setName] = useState(suggestedName(definition, nameOf));
+export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, onClose, onDone }: Props) {
+  const [name, setName] = useState(subject.kind === 'definition' ? suggestedName(subject.definition, nameOf) : Array.from(subject.presetName).slice(0, PATTERN_LIMITS.nameLength).join(''));
   const [ask, setAsk] = useState(true);
   const [visibility, setVisibility] = useState<'private' | 'shared'>('private');
   const [busy, setBusy] = useState(false);
@@ -59,7 +64,8 @@ export function SavePatternDialog({ client, sourceId, definition, anchor, nameOf
     setBusy(true);
     setMessage(undefined);
     const held = asks || anchor === undefined ? undefined : anchor;
-    const saved = await client.savePattern({ sourceId, kind: 'definition', name: name.trim(), definition, ...(held === undefined ? {} : { anchor: held }) }, signal);
+    const body = subject.kind === 'definition' ? { sourceId, kind: 'definition' as const, name: name.trim(), definition: subject.definition } : { sourceId, kind: 'preset-run' as const, name: name.trim(), presetId: subject.presetId, params: subject.params };
+    const saved = await client.savePattern({ ...body, ...(held === undefined ? {} : { anchor: held }) }, signal);
     if (aborted()) return;
     if (!saved.ok) {
       setBusy(false);
@@ -102,6 +108,16 @@ export function SavePatternDialog({ client, sourceId, definition, anchor, nameOf
               {nameLimitText}
             </p>
           )}
+          {subject.kind === 'preset' ? (
+            <dl className="save-summary" aria-label={SAVED_COPY.pattern}>
+              <dt className="supernode-label">{SAVED_COPY.pattern}</dt>
+              <dd>{`${subject.presetName} · v${subject.templateVersion}`}</dd>
+              {subject.summary.length === 0 ? null : <dt className="supernode-label">{SAVED_COPY.parameters}</dt>}
+              {subject.summary.map((line) => (
+                <dd key={line.label}>{`${line.label} ${line.text}`}</dd>
+              ))}
+            </dl>
+          ) : null}
           <fieldset className="save-options">
             <legend className="supernode-label">{SAVED_COPY.visibility}</legend>
             {OPTIONS.map((option) => (
@@ -123,6 +139,7 @@ export function SavePatternDialog({ client, sourceId, definition, anchor, nameOf
             {SAVED_COPY.askEachTime}
           </label>
           {forced ? <p className="rename-hint">{SAVED_COPY.askEachTimeForced}</p> : null}
+          {subject.kind === 'preset' ? <p className="rename-hint">{SAVED_COPY.saveText}</p> : null}
           {message === undefined ? null : (
             <p role="alert" className="rename-problem">
               {message}
@@ -133,7 +150,7 @@ export function SavePatternDialog({ client, sourceId, definition, anchor, nameOf
               {SAVED_COPY.cancel}
             </button>
             <button type="submit" className="primary" disabled={!fits || busy || taken} aria-busy={busy ? true : undefined}>
-              {busy ? SAVED_COPY.saving : SAVED_COPY.saveButton}
+              {busy ? SAVED_COPY.saving : subject.kind === 'preset' ? SAVED_COPY.saveDialog : SAVED_COPY.saveButton}
             </button>
           </div>
         </form>

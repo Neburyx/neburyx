@@ -32,6 +32,7 @@ interface Stored {
   readonly owner: 'me' | 'other';
   readonly unavailable: boolean;
   readonly createdAt: string;
+  readonly preset?: { readonly presetId: string; readonly params: Record<string, unknown> };
 }
 
 const DEFINITION = { anchorType: 'account', steps: [{ relationshipTypes: ['USES_DEVICE'], direction: 'out', arrivesAt: 'device' }] };
@@ -45,7 +46,14 @@ const seed = (): Stored[] => [
   { id: id(3), sourceId: 'banking-demo', name: 'Retired pattern', definition: DEFINITION, anchor: null, visibility: 'private', version: 1, owner: 'me', unavailable: true, createdAt: AT },
 ];
 
-const listedOf = (item: Stored) => ({
+type TemplateOf = (sourceId: string, presetId: string) => 'shared-attribute' | 'linked-entities';
+
+const presetFields = (item: Stored, templateOf: TemplateOf) =>
+  item.preset === undefined
+    ? { kind: 'definition' as const, definition: item.definition }
+    : { kind: 'preset-run' as const, presetId: item.preset.presetId, templateId: templateOf(item.sourceId, item.preset.presetId), templateVersion: 1, params: item.preset.params };
+
+const listedOf = (item: Stored, templateOf: TemplateOf) => ({
   id: item.id,
   sourceId: item.sourceId,
   name: item.name,
@@ -56,15 +64,14 @@ const listedOf = (item: Stored) => ({
   createdAt: item.createdAt,
   updatedAt: AT,
   version: item.version,
-  kind: 'definition',
-  definition: item.definition,
+  ...presetFields(item, templateOf),
   owner: { name: item.owner === 'me' ? 'You' : 'Pat' },
   ownedByYou: item.owner === 'me',
   availability: item.unavailable ? { status: 'unavailable', reasons: [{ code: 'unknown-entity-type', path: ['steps', 0, 'arrivesAt'] }] } : { status: 'available' },
 });
 
-const storedOf = (item: Stored) => {
-  const { owner: _owner, availability: _availability, ownedByYou: _own, ...rest } = listedOf(item);
+const storedOf = (item: Stored, templateOf: TemplateOf) => {
+  const { owner: _owner, availability: _availability, ownedByYou: _own, ...rest } = listedOf(item, templateOf);
   return rest;
 };
 
@@ -72,7 +79,7 @@ const storedOf = (item: Stored) => {
  * The saved-pattern routes of the stand-in, in memory: a list of the person's own and others' shared patterns, save, change with the version, delete, copy and run. The run is the pattern run of the stand-in over the stored definition,
  * except for the pattern the mapping can no longer run, which answers `unavailable`. `POST /__support/reset` puts the three seeded patterns back.
  */
-export function createSavedPatterns(runPattern: (body: unknown, response: ServerResponse, request: IncomingMessage) => Promise<void>) {
+export function createSavedPatterns(runPattern: (body: unknown, response: ServerResponse, request: IncomingMessage) => Promise<void>, runPreset: (presetId: string, body: unknown, response: ServerResponse, request: IncomingMessage) => Promise<void>, templateOf: TemplateOf) {
   let items = seed();
   let next = 100;
   const visible = (item: Stored): boolean => item.owner === 'me' || item.visibility === 'shared';
@@ -88,14 +95,14 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
       items = seed();
       next = 100;
     },
-    list: (sourceId: string | null, response: ServerResponse): void => json(response, 200, { items: items.filter((item) => item.sourceId === sourceId && visible(item)).map(listedOf), nextCursor: null }),
+    list: (sourceId: string | null, response: ServerResponse): void => json(response, 200, { items: items.filter((item) => item.sourceId === sourceId && visible(item)).map((item) => listedOf(item, templateOf)), nextCursor: null }),
     save: (body: unknown, response: ServerResponse): void => {
       const parsed = savePatternRequestSchema.safeParse(body);
-      if (!parsed.success || parsed.data.kind !== 'definition') return refuse(response, 'INVALID_REQUEST');
+      if (!parsed.success) return refuse(response, 'INVALID_REQUEST');
       if (nameTaken(parsed.data.sourceId, parsed.data.name.trim(), undefined)) return refuseNameTaken(response);
-      const item: Stored = { id: id(next++), sourceId: parsed.data.sourceId, name: parsed.data.name.trim(), definition: parsed.data.definition, anchor: parsed.data.anchor ?? null, visibility: 'private', version: 1, owner: 'me', unavailable: false, createdAt: AT };
+      const item: Stored = { id: id(next++), sourceId: parsed.data.sourceId, name: parsed.data.name.trim(), definition: parsed.data.kind === 'definition' ? parsed.data.definition : {}, ...(parsed.data.kind === 'preset-run' ? { preset: { presetId: parsed.data.presetId, params: parsed.data.params } } : {}), anchor: parsed.data.anchor ?? null, visibility: 'private', version: 1, owner: 'me', unavailable: false, createdAt: AT };
       items = [item, ...items];
-      json(response, 201, storedOf(item), { etag: '"1"' });
+      json(response, 201, storedOf(item, templateOf), { etag: '"1"' });
     },
     change: (given: string, body: unknown, response: ServerResponse): void => {
       const parsed = changePatternRequestSchema.safeParse(body);
@@ -110,7 +117,7 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
       if (parsed.data.anchor !== undefined) item.anchor = parsed.data.anchor;
       if (parsed.data.visibility !== undefined) item.visibility = parsed.data.visibility;
       item.version += 1;
-      json(response, 200, storedOf(item), { etag: `"${item.version}"` });
+      json(response, 200, storedOf(item, templateOf), { etag: `"${item.version}"` });
     },
     remove: (given: string, header: string | string[] | undefined, response: ServerResponse): void => {
       const item = find(given);
@@ -127,7 +134,7 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
       for (let n = 2; nameTaken(item.sourceId, copyName, undefined); n += 1) copyName = `${item.name} (copy ${n})`;
       const copy: Stored = { ...item, name: copyName, id: id(next++), visibility: 'private', version: 1, owner: 'me' };
       items = [copy, ...items];
-      json(response, 201, storedOf(copy), { etag: '"1"' });
+      json(response, 201, storedOf(copy, templateOf), { etag: '"1"' });
     },
     run: async (given: string, body: unknown, response: ServerResponse, request: IncomingMessage): Promise<void> => {
       const item = find(given);
@@ -136,6 +143,10 @@ export function createSavedPatterns(runPattern: (body: unknown, response: Server
       const asked = typeof body === 'object' && body !== null ? body : {};
       const anchor = 'anchor' in asked && typeof asked.anchor === 'object' && asked.anchor !== null ? asked.anchor : item.anchor;
       if (anchor === null) return refuse(response, 'INVALID_REQUEST');
+      if (item.preset !== undefined) {
+        const limit = 'limit' in asked && typeof asked.limit === 'number' ? { limit: asked.limit } : {};
+        return runPreset(item.preset.presetId, { sourceId: item.sourceId, params: { ref: anchor, ...item.preset.params, ...limit }, ...('mask' in asked && asked.mask === true ? { mask: true } : {}), ...('continue' in asked && asked.continue === true ? { continue: true } : {}) }, response, request);
+      }
       return runPattern({ sourceId: item.sourceId, definition: item.definition, anchor, ...('continue' in asked && asked.continue === true ? { continue: true, limit: 'limit' in asked ? asked.limit : undefined } : {}), ...('cursor' in asked && typeof asked.cursor === 'string' ? { cursor: asked.cursor } : {}) }, response, request);
     },
   };

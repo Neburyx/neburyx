@@ -2,8 +2,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { errorResponseSchema, patternListResponseSchema, savedPatternRunResponseSchema, savedPatternSchema } from '@neburyx/contracts';
+import { Socket } from 'node:net';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { errorResponseSchema, patternListResponseSchema, savedPatternRunResponseSchema, savedPatternSchema, templateRunResponseSchema } from '@neburyx/contracts';
+import { IncomingMessage, ServerResponse } from 'node:http';
+import { createSavedPatterns } from './support-saved-patterns.ts';
 import { createSupportServer } from './support-server.ts';
 
 let folder = '';
@@ -86,5 +89,45 @@ describe('the saved patterns of the support server', () => {
     expect(await listed()).toHaveLength(2);
     await call('POST', '/__support/reset', {});
     expect(await listed()).toHaveLength(3);
+  });
+
+  it('saves a run of a built-in pattern with its parameters, lists it as one, and runs it through the preset run with the entity asked or the one held', async () => {
+    const saved = savedPatternSchema.parse(await (await call('POST', '/v1/patterns', { sourceId: 'banking-demo', kind: 'preset-run', name: 'Week', presetId: 'shared-devices', params: { limit: 25 } })).json());
+    expect(saved).toMatchObject({ kind: 'preset-run', presetId: 'shared-devices', templateId: 'shared-attribute', templateVersion: 1, params: { limit: 25 } });
+    expect((await listed())[0]).toMatchObject({ name: 'Week', kind: 'preset-run', params: { limit: 25 }, askForStartingEntity: true });
+    expect((await call('POST', `/v1/patterns/${saved.id}/run`, {}, { 'idempotency-key': 'a-key-of-sixteen-characters' })).status).toBe(400);
+    const ran = savedPatternRunResponseSchema.parse(await (await call('POST', `/v1/patterns/${saved.id}/run`, { anchor: { entityType: 'account', stableId: 'AC-1' } }, { 'idempotency-key': 'a-key-of-sixteen-characters' })).json());
+    expect(templateRunResponseSchema.parse(ran)).toMatchObject({ status: 'ok', presetId: 'shared-devices' });
+  });
+
+  it('gives a saved run of a linked-entities preset that template, and a shared-attribute preset the other', async () => {
+    const claims = createSupportServer({ root: folder, profile: { sourceId: 'banking-demo', presets: [{ id: 'claimant-claims', template: 'linked-entities' }, { id: 'shared-addresses', template: 'shared-attribute' }] } });
+    await new Promise<void>((done) => claims.listen(0, '127.0.0.1', done));
+    const address = claims.address();
+    if (address === null || typeof address === 'string') throw new Error('no port');
+    const post = (body: unknown) => fetch(`http://127.0.0.1:${address.port}/v1/patterns`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const linked = savedPatternSchema.parse(await (await post({ sourceId: 'banking-demo', kind: 'preset-run', name: 'Linked', presetId: 'claimant-claims', params: {} })).json());
+    const shared = savedPatternSchema.parse(await (await post({ sourceId: 'banking-demo', kind: 'preset-run', name: 'Shared', presetId: 'shared-addresses', params: {} })).json());
+    expect([linked.kind === 'preset-run' ? linked.templateId : '', shared.kind === 'preset-run' ? shared.templateId : '']).toEqual(['linked-entities', 'shared-attribute']);
+    await new Promise<void>((done) => void claims.close(() => done()));
+  });
+
+  it('hands the preset run the entity, the stored parameters with the limit of the run, the mask and the continuation', async () => {
+    const seen: unknown[] = [];
+    const response = (): ServerResponse => new ServerResponse(new IncomingMessage(new Socket()));
+    const saved = createSavedPatterns(
+      async () => undefined,
+      async (presetId, body) => void seen.push({ presetId, body }),
+      () => 'shared-attribute',
+    );
+    let id = '';
+    const reply = response();
+    vi.spyOn(reply, 'end').mockImplementation((chunk?: unknown) => {
+      id = savedPatternSchema.parse(JSON.parse(String(chunk))).id;
+      return reply;
+    });
+    saved.save({ sourceId: 'banking-demo', kind: 'preset-run', name: 'Spied', presetId: 'shared-devices', params: { limit: 25, minShared: 2 } }, reply);
+    await saved.run(id, { anchor: { entityType: 'account', stableId: 'AC-1' }, limit: 5, mask: true, continue: true }, response(), new IncomingMessage(new Socket()));
+    expect(seen).toEqual([{ presetId: 'shared-devices', body: { sourceId: 'banking-demo', params: { ref: { entityType: 'account', stableId: 'AC-1' }, limit: 5, minShared: 2 }, mask: true, continue: true } }]);
   });
 });

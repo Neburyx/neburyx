@@ -953,7 +953,16 @@ export function createSupportServer(options: SupportServerOptions): Server {
   const search = createSearch(options);
   const sources = createSources(options);
   const patterns = createPatterns(() => profilesOf(options));
-  const savedPatterns = createSavedPatterns(runPattern);
+  const savedPatterns = createSavedPatterns(
+    runPattern,
+    (presetId, body, response, request) => patterns.run(presetId, body, response, request),
+    (sourceId, presetId) => {
+      const preset = profilesOf(options)
+        .find((profile) => profile.sourceId === sourceId)
+        ?.presets?.find((candidate) => typeof candidate === 'object' && candidate !== null && 'id' in candidate && candidate.id === presetId);
+      return typeof preset === 'object' && preset !== null && 'template' in preset && preset.template === 'linked-entities' ? 'linked-entities' : 'shared-attribute';
+    },
+  );
   const preferences = createPreferences();
   return createServer((request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
