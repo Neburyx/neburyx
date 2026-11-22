@@ -1,4 +1,4 @@
-import { EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, notRetrievedText, type Count, type ExportHeader } from '@neburyx/contracts';
+import { EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, exportedTimeLine, notRetrievedText, type Count, type ExportHeader } from '@neburyx/contracts';
 
 export interface HeaderFacts {
   readonly source: string;
@@ -19,7 +19,7 @@ export function exportHeaderOf(facts: HeaderFacts): ExportHeader {
   const exported = facts.exportedAt.toISOString();
   const lines = [
     `source: ${facts.source}`,
-    `exported: ${exported}`,
+    exportedTimeLine(facts.exportedAt),
     `scope: ${EXPORT_SCOPE}`,
     `coverage: ${facts.shown.toLocaleString('en-US')} shown · ${notRetrievedText(facts.notRetrieved, facts.uncounted)}`,
     maskingLine(facts.maskedFields),

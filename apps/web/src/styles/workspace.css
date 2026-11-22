@@ -225,6 +225,16 @@
   background: var(--color-canvas);
 }
 
+.picture-apart {
+  width: var(--picture-apart-width);
+  height: var(--picture-apart-height);
+  position: fixed;
+  top: 0;
+  left: -100vw;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 .graph-canvas:focus-visible {
   outline-offset: calc(-1 * var(--focus-width));
 }

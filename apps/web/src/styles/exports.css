@@ -4,10 +4,16 @@
 }
 
 .export-dialog {
-  top: var(--sheet-top);
+  top: var(--export-sheet-top);
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: var(--space-20);
+  width: min(var(--export-sheet-width), calc(var(--viewport-width) - 2 * var(--sheet-margin)));
+  padding: var(--export-sheet-padding);
+}
+
+.export-dialog .sheet-heading {
+  font-size: var(--font-size-heading-2);
 }
 
 .export-title {
@@ -18,23 +24,66 @@
 
 .export-formats {
   display: flex;
-  gap: var(--space-16);
+  flex-wrap: wrap;
+  gap: var(--space-8);
   margin: 0;
   padding: 0;
   border: 0;
 }
 
 .export-formats legend {
+  flex-basis: 100%;
   padding: 0;
   margin-bottom: var(--space-4);
-  font-size: var(--font-size-small);
-  color: var(--color-text-muted);
+  font-size: var(--font-size-body);
 }
 
 .export-format {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-4);
+  justify-content: center;
+  gap: var(--space-6);
+  box-sizing: border-box;
+  width: var(--export-format-width);
+  height: var(--export-format-height);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-small);
+  cursor: pointer;
+}
+
+.export-format:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+  color: var(--color-accent);
+}
+
+.export-format:has(input:focus-visible) {
+  outline: var(--focus-width) solid var(--color-focus);
+}
+
+.export-format {
+  position: relative;
+}
+
+.export-format input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.export-format:has(input:checked)::before {
+  content: '';
+  box-sizing: border-box;
+  width: var(--export-format-dot);
+  height: var(--export-format-dot);
+  border: var(--border-width-thick) solid var(--color-accent);
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: inset 0 0 0 var(--border-width-thick) var(--color-accent-surface);
 }
 
 .export-summary {
@@ -56,17 +105,56 @@
   color: var(--color-text-muted);
 }
 
+.export-mask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.export-mask-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-12);
+}
+
+.export-mask-toggle {
+  height: var(--button-height);
+  padding: 0 var(--space-14);
+  border: var(--border-width) solid var(--color-accent);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.export-mask-toggle[aria-pressed='true'] {
+  background: var(--color-accent-surface);
+}
+
+.export-mask-toggle:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.export-mask-state,
+.export-mask-hint {
+  margin: 0;
+  font-size: var(--font-size-body);
+  color: var(--color-text-muted);
+}
+
 .export-preview {
-  padding: var(--space-8) var(--space-12);
+  padding: var(--space-16);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-small);
   background: var(--color-surface-muted);
 }
 
 .export-preview-heading {
-  margin: 0 0 var(--space-4);
-  font-size: var(--font-size-small);
-  color: var(--color-text-muted);
+  margin: 0 0 var(--space-12);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
 }
 
 .export-preview-lines {
@@ -75,9 +163,21 @@
   list-style: none;
   font-family: var(--font-mono);
   font-size: var(--font-size-small);
+  line-height: var(--line-height-export-preview);
 }
 
 .export-footnote,
+.export-problem {
+  margin: 0;
+  font-size: var(--font-size-body);
+}
+
+.export-footnote {
+  padding-top: var(--space-16);
+  border-top: var(--border-width) solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
 .export-problem {
   margin: 0;
   font-size: var(--font-size-small);

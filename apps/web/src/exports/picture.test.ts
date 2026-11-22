@@ -35,7 +35,7 @@ function fakes(bitmap: { readonly width: number; readonly height: number }, char
   };
 }
 
-const LINES = ['source: demo', 'exported: 2026-11-10T10:15:00.000Z', 'scope: current view (partial)', 'coverage: 10 shown · ~38 not yet retrieved (estimated)', 'masking: off'];
+const LINES = ['source: demo', 'exported time: 10 Nov 2026, 10:15:00 UTC', 'scope: current view (partial)', 'coverage: 10 shown · ~38 not yet retrieved (estimated)', 'masking: off'];
 
 describe('the picture of a view under its header', () => {
   it('draws the header lines as the server gave them, in order, above the drawing', async () => {

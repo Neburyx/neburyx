@@ -30,7 +30,9 @@ test.describe('exporting the current view', () => {
     await expect(dialog(page).getByText(/^coverage: 1 shown · /)).toBeVisible();
     await expect(dialog(page).getByText('masking: off')).toBeVisible();
     await expect(dialog(page).getByText('Exports are partial views, not signed evidence.')).toBeVisible();
-    await expect(dialog(page)).not.toContainText(/mask critical|configured store/i);
+    await expect(dialog(page).getByRole('button', { name: 'Mask critical fields' })).toHaveAttribute('aria-pressed', 'false');
+    await expect(dialog(page).getByText('Off · exports include all values')).toBeVisible();
+    await expect(dialog(page)).not.toContainText(/configured store/i);
     await page.keyboard.press('Escape');
     await expect(dialog(page)).toHaveCount(0);
     await expect(exportButton(page)).toBeFocused();

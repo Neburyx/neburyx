@@ -1,7 +1,10 @@
-import { rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ExportRequest } from '@neburyx/contracts';
-import { RequestCancelled } from '../errors.js';
+import { AppError, RequestCancelled } from '../errors.js';
 import { exportWebRoot, startExportRig } from '../testing/export-rig.js';
 import { principalFixture } from '../testing/principal-fixture.js';
 import { createExportService } from './export-service.js';
@@ -30,10 +33,10 @@ async function service(read: ShownReader['read'], audit: { record(event: { actio
   return { exports, rig, id: opened.id };
 }
 
-describe('an export that the client abandons', () => {
+describe.each([[request], [{ ...request, mask: true }]])('an export that the client abandons (%j)', (asked) => {
   it('leaves no row and no file when the client aborts during the reads', async () => {
     const { exports, rig, id } = await service(() => Promise.reject(new RequestCancelled()));
-    await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request })).rejects.toBeInstanceOf(RequestCancelled);
+    await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request: asked })).rejects.toBeInstanceOf(RequestCancelled);
     expect(rig.store.exports.rows).toEqual([]);
     expect(await rig.files.list()).toEqual([]);
     await rig.stop();
@@ -45,8 +48,18 @@ describe('an export that the client abandons', () => {
       controller.abort();
       return Promise.resolve(EMPTY);
     });
-    await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request, signal: controller.signal })).rejects.toMatchObject({ code: 'EXPORT_FAILED' });
+    await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request: asked, signal: controller.signal })).rejects.toMatchObject({ code: 'EXPORT_FAILED' });
     expect(rig.store.exports.rows).toMatchObject([{ status: 'failed', storageKey: null }]);
+    expect(await rig.files.list()).toEqual([]);
+    await rig.stop();
+  });
+});
+
+describe('an export whose masked read fails', () => {
+  it.each([['QUERY_TIMEOUT'], ['SOURCE_BUSY'], ['SOURCE_UNAVAILABLE']] as const)('keeps nothing and answers the gate\'s own %s', async (code) => {
+    const { exports, rig, id } = await service(() => Promise.reject(new AppError(code)));
+    await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request: { ...request, mask: true } })).rejects.toMatchObject({ code });
+    expect(rig.store.exports.rows).toEqual([]);
     expect(await rig.files.list()).toEqual([]);
     await rig.stop();
   });
@@ -88,6 +101,39 @@ describe('the path of the events of an export', () => {
     await expect(exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request: { ...request, summaryToken: 'not-a-token' } })).rejects.toMatchObject({ code: 'ACCESS_DENIED' });
     expect(direct).toEqual(['export.create:success']);
     expect(queued).toEqual(['export.create:refused']);
+    await rig.stop();
+  });
+});
+
+describe('a file made from a read in which a policy masks a property', () => {
+  const policy = { key: 'holder', value: 'J••• L•••', dataClass: 'name' as const, masked: true, maskedBy: 'policy' as const };
+  const policyRead = (): Awaited<ReturnType<ShownReader['read']>> => ({
+    ...EMPTY,
+    nodes: [{ ref: { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' }, display: { title: 'J••• L•••', type: 'Widget' }, properties: [policy], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }],
+    maskedFields: 1,
+  });
+
+  it.each([
+    ['json', undefined],
+    ['json', false],
+    ['json', true],
+    ['csv', undefined],
+    ['csv', false],
+    ['csv', true],
+  ] as const)('keeps the masked value, the policy marker and the count in the stored %s file when the flag is %s', async (format, flag) => {
+    const asked: unknown[] = [];
+    const { exports, rig, id } = await service((call) => (asked.push(call), Promise.resolve(policyRead())));
+    await exports.create({ traceId: 't', principal: principalFixture, investigationId: id, request: { ...request, format, ...(flag === undefined ? {} : { mask: flag }) } });
+    const [row] = rig.store.exports.rows;
+    const bytes = await rig.files.read(row?.storageKey ?? '');
+    expect(asked[0]).toMatchObject(flag === undefined ? {} : { mask: flag });
+    expect(row).toMatchObject({ masked: true, maskedFieldCount: 1 });
+    const folder = mkdtempSync(join(tmpdir(), 'nbx-policy-zip-'));
+    writeFileSync(join(folder, 'x.zip'), bytes ?? '');
+    const text = format === 'json' ? (bytes?.toString('utf8') ?? '') : execFileSync('unzip', ['-p', join(folder, 'x.zip'), 'entities.csv'], { encoding: 'utf8' });
+    expect(text).toContain('masking: 1 critical fields masked');
+    expect(text).toContain('J••• L•••');
+    if (format === 'json') expect(JSON.parse(text).entities[0].properties[0]).toMatchObject({ value: 'J••• L•••', masked: true, maskedBy: 'policy' });
     await rig.stop();
   });
 });

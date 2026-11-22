@@ -1,4 +1,4 @@
-import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, MAX_READ_REFS, combineCoverage, type AggregateEdgeRef, type Count, type CoverageEntity, type DerivedEdgeRef, type ElementRef, type GraphEdge, type GraphNode, type StoredEdgeRef } from '@neburyx/contracts';
+import { COVERAGE_MAX_ENTITIES, COVERAGE_SCOPE, MAX_READ_REFS, combineCoverage, maskedFieldCountOf, type AggregateEdgeRef, type Count, type CoverageEntity, type DerivedEdgeRef, type ElementRef, type GraphEdge, type GraphNode, type StoredEdgeRef } from '@neburyx/contracts';
 import { AppError, RequestCancelled } from '../errors.js';
 import { canonicalJson } from '../gate/cursor/binding.js';
 import { DEFAULT_BUDGETS } from '../gate/budgets.js';
@@ -104,13 +104,6 @@ function loadedCounts(nodes: readonly GraphNode[], edges: readonly GraphEdge[]):
   });
 }
 
-function maskedFieldsOf(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): number {
-  const fields = new Set<string>();
-  for (const node of nodes) for (const property of node.properties) if (property.masked) fields.add(`entity\u0000${node.display.type}\u0000${property.key}`);
-  for (const edge of edges) for (const property of edge.properties) if (property.masked) fields.add(`relationship\u0000${edge.type}\u0000${property.key}`);
-  return fields.size;
-}
-
 export function createShownReader(deps: Deps): ShownReader {
   const limits = deps.limits ?? DEFAULT_SHOWN_LIMITS;
 
@@ -182,7 +175,7 @@ export function createShownReader(deps: Deps): ShownReader {
         notRetrieved = combineCoverage(answers);
       }
 
-      return { nodes: exportable, edges: relationships, omitted, unresolved, unresolvedCount, maskedFields: maskedFieldsOf(exportable, relationships), notRetrieved, uncounted };
+      return { nodes: exportable, edges: relationships, omitted, unresolved, unresolvedCount, maskedFields: maskedFieldCountOf(exportable, relationships), notRetrieved, uncounted };
     },
   };
 }

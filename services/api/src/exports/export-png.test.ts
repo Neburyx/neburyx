@@ -30,9 +30,9 @@ describe('POST /v1/investigations/{id}/exports with format png', () => {
     const picture = pngExportSchema.parse((await rig.create(investigation.id, view('png', refs))).json());
     await rig.create(investigation.id, view('json', refs));
     const file = exportFileSchema.parse(JSON.parse((await rig.files.read(String(rows(rig)[0]?.storageKey)))?.toString('utf8') ?? ''));
-    const without = (header: typeof picture.header) => ({ ...header, exported: '', lines: header.lines.filter((line) => !line.startsWith('exported:')) });
+    const without = (header: typeof picture.header) => ({ ...header, exported: '', lines: header.lines.filter((line) => !line.startsWith('exported time:')) });
     expect(without(picture.header)).toEqual(without(file.header));
-    expect(picture.header.lines.some((line) => line.startsWith('exported: 2'))).toBe(true);
+    expect(picture.header.lines.some((line) => line.startsWith('exported time: '))).toBe(true);
     await rig.stop();
   });
 
@@ -124,12 +124,12 @@ describe('POST /v1/investigations/{id}/exports with format png', () => {
     await rig.stop();
   });
 
-  it.each(['json', 'csv'])('refuses mask on a %s export', async (format) => {
+  it.each(['json', 'csv'])('takes mask on a %s export', async (format) => {
     const rig = await startExportRig();
     const investigation = await rig.open();
     const response = await rig.create(investigation.id, view(format, { mask: true }));
-    expect(response.statusCode).toBe(400);
-    expect(rows(rig)).toHaveLength(0);
+    expect(response.statusCode).toBe(201);
+    expect(rows(rig)).toHaveLength(1);
     await rig.stop();
   });
 

@@ -515,7 +515,8 @@ function createInvestigations(options: SupportServerOptions) {
       if (exportMode === 'failed') return json(response, 500, { error: { code: 'EXPORT_FAILED', message: 'The export could not be created.', retryable: true, traceId: 'support' } });
       if (parsed.data.format === 'png') {
         const shown = parsed.data.entities.length;
-        const header = { source: found.sourceId, exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown, notRetrieved: { value: 38, quality: 'estimated', scope: 'not yet retrieved' }, uncounted: 0 }, masking: 'off', lines: ['source: ' + found.sourceId, 'exported: 2026-11-10T10:15:00.000Z', 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, 'masking: off'] };
+        const maskedFields = parsed.data.mask === true && parsed.data.entities.some((ref) => ref.stableId.startsWith(PERSONAL_ID_PREFIX)) ? 1 : 0;
+        const header = { source: found.sourceId, exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown, notRetrieved: { value: 38, quality: 'estimated', scope: 'not yet retrieved' }, uncounted: 0 }, masking: maskedFields === 0 ? 'off' : { maskedFields }, lines: ['source: ' + found.sourceId, 'exported time: 10 Nov 2026, 10:15:00 UTC', 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, maskedFields === 0 ? 'masking: off' : `masking: ${maskedFields} critical fields masked`] };
         return json(response, 201, { format: 'png', filename: 'neburyx-export-20261110T101500Z.png', header });
       }
       const exportId = randomUUID();

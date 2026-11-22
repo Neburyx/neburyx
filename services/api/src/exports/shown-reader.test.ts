@@ -52,8 +52,8 @@ function rig(options: { readonly nodes?: (id: string) => GraphNode | undefined; 
     },
   };
   const reader = createShownReader({ readRefs, coverage, limits: { ...DEFAULT_SHOWN_LIMITS, ...options.limits } });
-  const run = (entities: readonly string[], more: { readonly edges?: readonly string[]; readonly aggregates?: readonly string[]; readonly derived?: readonly string[]; readonly signal?: AbortSignal } = {}) =>
-    reader.read({ traceId: 't', principal: principalFixture, sourceId: 'demo', entities: entities.map(ref), edges: (more.edges ?? []).map(storedRef), aggregates: (more.aggregates ?? []).map(aggregateRef), derived: (more.derived ?? []).map(derivedRef), ...(more.signal === undefined ? {} : { signal: more.signal }) });
+  const run = (entities: readonly string[], more: { readonly edges?: readonly string[]; readonly aggregates?: readonly string[]; readonly derived?: readonly string[]; readonly signal?: AbortSignal; readonly mask?: boolean } = {}) =>
+    reader.read({ traceId: 't', principal: principalFixture, sourceId: 'demo', entities: entities.map(ref), edges: (more.edges ?? []).map(storedRef), aggregates: (more.aggregates ?? []).map(aggregateRef), derived: (more.derived ?? []).map(derivedRef), ...(more.signal === undefined ? {} : { signal: more.signal }), ...(more.mask === undefined ? {} : { mask: more.mask }) });
   return { run, reads, asked };
 }
 
@@ -151,6 +151,15 @@ describe('reading the shown elements for an export', () => {
     const masked = (key: string) => ({ key, value: '••••••', dataClass: 'phone' as const, masked: true });
     const { run } = rig({ nodes: (id) => node(id, { properties: [masked('phone'), { key: 'name', value: 'x', dataClass: 'text', masked: false }] }) });
     expect((await run(['W-1', 'W-2'])).maskedFields).toBe(1);
+  });
+
+  it.each([[undefined], [false], [true]] as const)('forwards the flag it is given (%s) to every read and keeps a policy-masked field counted and marked', async (flag) => {
+    const policy = { key: 'holder', value: '••••••', dataClass: 'name' as const, masked: true, maskedBy: 'policy' as const };
+    const { run, reads } = rig({ nodes: (id) => node(id, { properties: [policy] }) });
+    const read = await run(['W-1'], flag === undefined ? {} : { mask: flag });
+    expect(reads.map((call) => call.request.mask)).toEqual([flag]);
+    expect(read.nodes[0]?.properties).toEqual([policy]);
+    expect(read.maskedFields).toBe(1);
   });
 
   it('answers QUERY_TIMEOUT with the limit when the reads pass the request deadline, and builds nothing', async () => {

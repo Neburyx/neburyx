@@ -606,6 +606,44 @@ describe('the commands of the graph canvas', () => {
     expect(factory.made[0]?.zooms).toEqual([1.25]);
     expect(factory.made[0]?.centered).toEqual(['some-key']);
   });
+
+  it('draw a picture from other items in a drawing of their own, from the view and the places of the moment it was held, with no mark of the person, and leave the canvas on screen as it is', async () => {
+    const state = createClientState();
+    load(state, 3, 2);
+    state.presentation.select([nodeKey('n0')]);
+    state.replacePins([nodeKey('n1')]);
+    const factory = stubFactory();
+    const commands = viewWithProbe(state, factory.create, { available: false });
+    const [live] = factory.made;
+    const held = commands()?.capture();
+    const drawn = live?.scenes.length ?? 0;
+    const graph = state.loadedGraph();
+    const placed = live?.positions() ?? new Map();
+    act(() => state.replacePins([nodeKey('n2')]));
+    act(() => state.presentation.setPosition(nodeKey('n0'), { x: 9000, y: 9000 }));
+    const picture = await held?.draw({ nodes: graph.nodes.map((entry) => ({ ...entry, display: { ...entry.display, title: 'J••• L•••' } })), edges: graph.edges }, { maxWidth: 1000, maxHeight: 1000, maxArea: 1_000_000 });
+    expect(picture).toBeInstanceOf(Blob);
+    const apart = factory.made.at(-1);
+    const scene = apart?.scenes[0];
+    expect(scene?.entities.map((entity) => entity.look.line1)).toEqual(['J••• L•••', 'J••• L•••', 'J••• L•••']);
+    expect(scene?.entities.map((entity) => entity.position)).toEqual(graph.nodes.map((entry) => placed.get(elementKey(entry.ref))));
+    expect(scene?.pinned.has(nodeKey('n1'))).toBe(true);
+    expect(scene?.pinned.has(nodeKey('n2'))).toBe(false);
+    expect(scene?.selection.size).toBe(0);
+    expect(live?.disposed).toBe(0);
+    expect(apart?.disposed).toBe(1);
+    expect(drawn).toBeGreaterThan(0);
+  });
+
+  it('refuse a picture from items that lack an entity of the view, drawing nothing', async () => {
+    const state = createClientState();
+    load(state, 3, 0);
+    const factory = stubFactory();
+    const commands = viewWithProbe(state, factory.create, { available: false });
+    const graph = state.loadedGraph();
+    await expect(commands()?.capture().draw({ nodes: graph.nodes.slice(1), edges: [] }, { maxWidth: 1000, maxHeight: 1000, maxArea: 1_000_000 })).rejects.toThrow();
+    expect(factory.made).toHaveLength(1);
+  });
 });
 
 describe('the selection on the graph canvas', () => {
@@ -918,6 +956,7 @@ describe('the layouts of the graph canvas', () => {
     expect(factory.made[0]?.fits).toBe(fits + 1);
     expect(state.presentation.view.getState().positions).toBe(before);
   });
+
 });
 
 describe('the live physics of the graph canvas', () => {

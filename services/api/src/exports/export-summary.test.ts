@@ -223,7 +223,7 @@ describe('the summary of an export is never less masked than the file', () => {
     return { nodes: [node], edges: [], omitted: false, unresolved: false, unresolvedCount: 0, maskedFields: masked ? 1 : 0, uncounted: 0, notRetrieved: { value: 0, quality: 'exact', scope: 'not yet retrieved' } };
   };
 
-  async function exportWith(format: 'json' | 'csv', served: Awaited<ReturnType<ShownReader['read']>>) {
+  async function exportWith(format: 'json' | 'csv', served: Awaited<ReturnType<ShownReader['read']>>, mask?: boolean) {
     const asked: unknown[] = [];
     const rig = await startExportRig();
     const opened = await rig.open();
@@ -242,7 +242,7 @@ describe('the summary of an export is never less masked than the file', () => {
       previewOn: true,
     });
     const token = sealToken(keys, { investigationId: opened.id, generatedBy: principalFixture.id, policyVersion: 'none', modelRef: 'm', promptId: 'case-summary', promptVersion: '1', sentences: [{ text: 'Ana Silva has tier "gold".', cites: ['n1'] }, { text: 'Ana Silva is listed.', cites: ['n1'] }], inputRefs: [{ key: 'n1', kind: 'entity', ref: W1 }], propertyValuesSent: true, runId: RUN, mask: false, wordListVersion: 2, templates: [{ storable: false, reason: 'property-value' }, { storable: false, reason: 'unlisted-word' }] }, Date.now());
-    const made = await service.create({ traceId: 't', principal: principalFixture, investigationId: opened.id, request: { kind: 'view', format, entities: [W1], edges: [], aggregates: [], derived: [], summaryToken: token } });
+    const made = await service.create({ traceId: 't', principal: principalFixture, investigationId: opened.id, request: { kind: 'view', format, entities: [W1], edges: [], aggregates: [], derived: [], summaryToken: token, ...(mask === undefined ? {} : { mask }) } });
     const bytes = (await rig.download(('id' in made ? made.id : ''))).rawPayload;
     await rig.stop();
     return { asked, bytes };
@@ -259,5 +259,13 @@ describe('the summary of an export is never less masked than the file', () => {
     const shown = await exportWith(format, reading('gold', false));
     const shownText = format === 'json' ? shown.bytes.toString('utf8') : unzipped(shown.bytes).read('summary.csv');
     expect(shownText).toContain('has tier');
+  });
+
+  it.each(['json', 'csv'] as const)('forwards mask true for a %s export and keeps no sentence of a draft written unmasked, in the file and in its summary', async (format) => {
+    const masked = await exportWith(format, reading('g•••', true), true);
+    expect(masked.asked[0]).toMatchObject({ mask: true });
+    const text = format === 'json' ? masked.bytes.toString('utf8') : unzipped(masked.bytes).read('summary.csv');
+    expect(text).not.toContain('gold');
+    expect(text).not.toContain('has tier');
   });
 });

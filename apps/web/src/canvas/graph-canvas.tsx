@@ -24,6 +24,7 @@ import type { PhysicsLoop } from './physics-loop.js';
 import { useCanvasCommandsHandle } from './canvas-commands.js';
 import { captionFontsReady, loadCaptionFonts } from './fonts.js';
 import { useCreateRenderer } from './renderer-context.js';
+import { graphWithItems, pictureApart, type PictureCapture } from './masked-picture.js';
 import { selectionAfterBox, type BoxSelection } from './box-selection.js';
 import { applyClick, openContextMenu, replaceSelection } from './apply-click.js';
 import type { CanvasEvents, CanvasRenderer, EntityMove, RightClick, Scene } from './scene.js';
@@ -180,7 +181,19 @@ export function GraphCanvas({ profile, view = 'fit' }: { readonly profile?: Sour
     state.presentation.applyLayout(next);
   }, [state]);
 
-  useEffect(() => (renderer === undefined || failed ? undefined : commands.attach(renderer, () => setFailed(true), layoutNow)), [renderer, failed, commands, layoutNow]);
+  const capture = useRef<() => PictureCapture>(() => {
+    throw new Error('not drawn');
+  });
+  capture.current = () => {
+    const held = { graph, profile, tool, source, pins, aggregates };
+    const entities = new Set(held.graph.nodes.map((node) => elementKey(node.ref)));
+    const places = new Map([...(renderer?.positions() ?? [])].filter(([key]) => entities.has(key)));
+    return {
+      graph: held.graph,
+      draw: async (items, bounds) => await pictureApart(createRenderer, buildScene(graphWithItems(held.graph, items), places, held.profile, new Set(), held.tool, held.source, 'as-drawn', held.pins, undefined, true, held.aggregates), bounds),
+    };
+  };
+  useEffect(() => (renderer === undefined || failed ? undefined : commands.attach(renderer, () => setFailed(true), layoutNow, () => capture.current())), [renderer, failed, commands, layoutNow]);
 
   useEffect(() => {
     if (renderer === undefined) return undefined;

@@ -34,7 +34,7 @@ describe('POST /v1/investigations/{id}/exports', () => {
     expect(row?.sizeBytes).toBe(bytes?.length);
     const file = exportFileSchema.parse(JSON.parse(bytes?.toString('utf8') ?? ''));
     expect(Object.keys(JSON.parse(bytes?.toString('utf8') ?? ''))[0]).toBe('header');
-    expect(file.header.lines.slice(0, 3)).toEqual(['source: demo', expect.stringMatching(/^exported: 2/), 'scope: current view (partial)']);
+    expect(file.header.lines.slice(0, 3)).toEqual(['source: demo', expect.stringMatching(/^exported time: \d/), 'scope: current view (partial)']);
     expect(file.entities.map((node) => node.ref.stableId)).toEqual(['W-1', 'W-2']);
     expect(Date.parse(record.expiresAt) - Date.parse(record.createdAt)).toBe(3 * 86_400_000);
     await rig.stop();
@@ -68,7 +68,7 @@ describe('POST /v1/investigations/{id}/exports', () => {
 
   it.each([
     ['an unknown field', { ...two, extra: 1 }],
-    ['a mask field', { ...two, mask: true }],
+    ['a mask that is not a boolean', { ...two, mask: 'yes' }],
     ['another kind', { ...two, kind: 'table-csv' }],
     ['another format', { ...two, format: 'gif' }],
   ])('refuses %s with INVALID_REQUEST and builds nothing', async (_name, body) => {
@@ -228,4 +228,120 @@ describe('POST /v1/investigations/{id}/exports', () => {
     expect(rows(rig)).toHaveLength(1);
     await rig.stop();
   });
+});
+
+describe('a file made with the mask flag', () => {
+  const NAME = 'Ana Silva';
+  const MASKED = 'A••• S•••';
+  const asked = (format: 'json' | 'csv', mask?: boolean) => ({ kind: 'view', format, entities: [el('widget', 'W-1'), el('gadget', 'GT-1')], edges: [linkRef('L-1')], ...(mask === undefined ? {} : { mask }) });
+  const storedText = async (rig: ExportRig, format: 'json' | 'csv'): Promise<string> => {
+    const [row] = rows(rig);
+    const bytes = await rig.files.read(row?.storageKey ?? '');
+    if (format === 'json') return bytes?.toString('utf8') ?? '';
+    const folder = mkdtempSync(join(tmpdir(), 'nbx-mask-zip-'));
+    writeFileSync(join(folder, 'x.zip'), bytes ?? '');
+    return ['entities.csv', 'relationships.csv'].map((name) => execFileSync('unzip', ['-p', join(folder, 'x.zip'), name], { encoding: 'utf8' })).join('\n');
+  };
+
+  it.each(['json', 'csv'] as const)('holds no value of a pii field in the stored %s file, holds the mask, and states the count in the header and the audit', async (format) => {
+    const rig = await startExportRig({ links: ['L-1'] });
+    const investigation = await rig.open();
+    const response = await rig.create(investigation.id, asked(format, true));
+    expect(response.statusCode).toBe(201);
+    const text = await storedText(rig, format);
+    expect(text).not.toContain(NAME);
+    expect(text).toContain(MASKED);
+    expect(text).toContain('masking: 1 critical fields masked');
+    expect(rows(rig)).toMatchObject([{ masked: true, maskedFieldCount: 1 }]);
+    expect(rig.events.filter((event) => event.action === 'export.create')).toEqual([expect.objectContaining({ detail: { export: expect.objectContaining({ format, maskedFields: 1 }) } })]);
+    expect(JSON.stringify(rig.events)).not.toContain(NAME);
+    await rig.stop();
+  });
+
+  it('marks each masked property of the JSON file as masked by the request', async () => {
+    const rig = await startExportRig({ links: ['L-1'] });
+    const investigation = await rig.open();
+    await rig.create(investigation.id, asked('json', true));
+    const file = exportFileSchema.parse(JSON.parse(await storedText(rig, 'json')));
+    expect(file.header.masking).toEqual({ maskedFields: 1 });
+    const masked = file.entities.flatMap((node) => node.properties).filter((property) => property.masked);
+    expect(masked).toMatchObject([{ key: 'ownerName', value: MASKED, maskedBy: 'request' }]);
+    await rig.stop();
+  });
+
+  it.each([
+    ['omitted', undefined],
+    ['false', false],
+  ] as const)('holds the values and says masking is off when the flag is %s', async (_name, flag) => {
+    const rig = await startExportRig({ links: ['L-1'] });
+    const investigation = await rig.open();
+    await rig.create(investigation.id, asked('json', flag));
+    const text = await storedText(rig, 'json');
+    expect(text).toContain(NAME);
+    expect(text).toContain('masking: off');
+    await rig.stop();
+  });
+
+  it('says masking is off when nothing in the view is marked pii, whatever the request asked', async () => {
+    const rig = await startExportRig();
+    const investigation = await rig.open();
+    const response = await rig.create(investigation.id, { kind: 'view', format: 'json', entities: [el('gadget', 'GT-1')], mask: true });
+    expect(response.statusCode).toBe(201);
+    expect(await storedText(rig, 'json')).toContain('masking: off');
+    expect(rows(rig)).toMatchObject([{ masked: false, maskedFieldCount: 0 }]);
+    await rig.stop();
+  });
+
+  it('leaves nothing stored when the masked read fails', async () => {
+    let failing = false;
+    const rig = await startExportRig({ answer: () => (failing ? { status: 'timeout' } : undefined) });
+    const investigation = await rig.open();
+    failing = true;
+    const response = await rig.create(investigation.id, asked('json', true));
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(rows(rig).filter((row) => row.status === 'ready')).toEqual([]);
+    expect(await rig.files.list()).toEqual([]);
+    await rig.stop();
+  });
+});
+
+describe('the same key with a mask', () => {
+  const formats = ['json', 'csv', 'png'] as const;
+  const asked = (format: string, mask?: boolean) => ({ kind: 'view', format, entities: [el('widget', 'W-1')], ...(mask === undefined ? {} : { mask }) });
+
+  it.each(formats)('returns the first %s answer again and reads, stores and audits nothing more', async (format) => {
+    const rig = await startExportRig();
+    const investigation = await rig.open();
+    const key = rig.newKey();
+    const first = await rig.create(investigation.id, asked(format, true), key);
+    const reads = rig.executor.calls.length;
+    const events = rig.events.length;
+    const second = await rig.create(investigation.id, asked(format, true), key);
+    expect(second.statusCode).toBe(first.statusCode);
+    expect(second.json()).toEqual(first.json());
+    expect(second.headers['idempotent-replay']).toBe('true');
+    expect(rig.executor.calls.length).toBe(reads);
+    expect(rig.events.length).toBe(events);
+    expect(rows(rig)).toHaveLength(format === 'png' ? 0 : 1);
+    await rig.stop();
+  });
+
+  it.each(formats.flatMap((format) => [[format, true, false], [format, true, undefined], [format, false, true], [format, undefined, true], [format, undefined, false], [format, false, undefined]] as const))(
+    'is CONFLICT for a %s export first made with mask %s and sent again with %s, and builds nothing more',
+    async (format, first, second) => {
+      const rig = await startExportRig();
+      const investigation = await rig.open();
+      const key = rig.newKey();
+      await rig.create(investigation.id, asked(format, first), key);
+      const reads = rig.executor.calls.length;
+      const stored = rows(rig).length;
+      const refused = await rig.create(investigation.id, asked(format, second), key);
+      expect(refused.statusCode).toBe(409);
+      expect(refused.json()).toMatchObject({ error: { code: 'CONFLICT' } });
+      expect(refused.headers['idempotent-replay']).toBeUndefined();
+      expect(rig.executor.calls.length).toBe(reads);
+      expect(rows(rig)).toHaveLength(stored);
+      await rig.stop();
+    },
+  );
 });

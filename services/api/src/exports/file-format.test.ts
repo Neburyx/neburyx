@@ -47,7 +47,7 @@ describe('the export header', () => {
   it.each(counts)('states a %s count with its label, and no number when it is unknown', (_name, count, line) => {
     expect(notRetrievedText(count, 0)).toBe(line);
     const built = header({ notRetrieved: count });
-    expect(built.lines).toEqual(['source: demo', 'exported: 2026-11-10T10:15:00.000Z', 'scope: current view (partial)', `coverage: 10 shown · ${line}`, 'masking: off']);
+    expect(built.lines).toEqual(['source: demo', 'exported time: 10 Nov 2026, 10:15:00 UTC', 'scope: current view (partial)', `coverage: 10 shown · ${line}`, 'masking: off']);
     expect(exportHeaderSchema.parse(built)).toEqual(built);
   });
 

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { aggregateEdgeRefSchema, derivedEdgeRefSchema } from './edge-detail.js';
 import { exportSummarySchema } from './summary.js';
-import { countSchema, edgeSchema, elementRefSchema, nodeSchema, storedEdgeRefSchema } from './graph.js';
+import { countSchema, edgeSchema, elementRefSchema, nodeSchema, storedEdgeRefSchema, type GraphEdge, type GraphNode } from './graph.js';
 
 export const EXPORT_FORMATS = ['json', 'csv'] as const;
 /** What a request may ask for: the two files the server stores, and the picture the browser draws. */
@@ -13,6 +13,14 @@ export const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 
 /** The one scope every export states about itself. */
 export const EXPORT_SCOPE = 'current view (partial)';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+const two = (value: number): string => String(value).padStart(2, '0');
+
+/** The line of a header that states when the export was made, in UTC: `exported time: 30 Oct 2026, 10:18:24 UTC`. */
+export function exportedTimeLine(at: Date): string {
+  return `exported time: ${at.getUTCDate()} ${MONTHS[at.getUTCMonth()]} ${at.getUTCFullYear()}, ${two(at.getUTCHours())}:${two(at.getUTCMinutes())}:${two(at.getUTCSeconds())} UTC`;
+}
 
 /** The longest sealed summary token an export request may carry. */
 const SUMMARY_TOKEN_MAX_LENGTH = 32_768;
@@ -31,12 +39,11 @@ export const exportRequestSchema = z.strictObject({
   edges: z.array(storedEdgeRefSchema).default([]),
   aggregates: z.array(aggregateEdgeRefSchema).default([]),
   derived: z.array(derivedEdgeRefSchema).default([]),
-  /** The session's masking state; only a picture takes it, since the files have no mask button yet. */
+  /** Masks the fields marked `pii` in the file or the picture; absent means `false`. A policy can mask more, never less. */
   mask: z.boolean().optional(),
   /** The sealed token of the person's AI case summary, to include it in a JSON or a CSV file; a picture takes none. Without it no export carries any summary. */
   summaryToken: z.string().min(1).max(SUMMARY_TOKEN_MAX_LENGTH).optional(),
 })
-  .refine((request) => request.mask === undefined || request.format === 'png', { message: 'mask is only for a png', path: ['mask'] })
   .refine((request) => request.summaryToken === undefined || request.format !== 'png', { message: 'a picture takes no summary', path: ['summaryToken'] });
 
 /** An export as a client sees it: never its storage key or hash. */
@@ -89,3 +96,11 @@ export type CreateExportResponse = z.infer<typeof createExportResponseSchema>;
 export type ExportRecord = z.infer<typeof exportSchema>;
 export type ExportHeader = z.infer<typeof exportHeaderSchema>;
 export type ExportFile = z.infer<typeof exportFileSchema>;
+
+/** How many distinct fields are masked in what was read: a field is the key of a masked property on an entity type or on a relationship type, however many items carry it. */
+export function maskedFieldCountOf(nodes: readonly GraphNode[], edges: readonly GraphEdge[]): number {
+  const fields = new Set<string>();
+  for (const node of nodes) for (const property of node.properties) if (property.masked) fields.add(`entity\u0000${node.display.type}\u0000${property.key}`);
+  for (const edge of edges) for (const property of edge.properties) if (property.masked) fields.add(`relationship\u0000${edge.type}\u0000${property.key}`);
+  return fields.size;
+}

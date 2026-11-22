@@ -1,18 +1,23 @@
-import { EXPORT_SCOPE } from '@neburyx/contracts';
+import { EXPORT_SCOPE, exportedTimeLine } from '@neburyx/contracts';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import type { ApiClient, ApiFailure } from '../api/client.js';
+import type { PictureCapture } from '../canvas/masked-picture.js';
 import { DIALOG_BEHIND_ATTRIBUTE } from '../lifecycle/dialog-behind.js';
+import { useProfileWhenProvided } from '../canvas/profile-context.js';
+import { isLockedByPolicy, sensitiveFieldCount, sensitiveFieldNames } from '../mask/mask-view.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useNotRetrieved } from '../workspace/graph-scope.js';
 import { KEY_SCOPE_ATTRIBUTE } from '../workspace/key-binding-handler.js';
 import { remainderLine } from '../workspace/scope-text.js';
 import { useCanvasCommands } from '../canvas/canvas-commands.js';
-import { CANCEL, EXPORT_BUSY, INCLUDE_SUMMARY, SUMMARY_REFUSED, EXPORT_TITLE, FOOTNOTE, FORMAT_LABEL, FORMAT_NAMES, NETWORK_FAILURE, PICTURE_FAILURE, PICTURE_MASKED_LINE, PREPARING, PREVIEW_HEADING, SCHEMA_FAILURE, TRY_AGAIN, downloadLabel, tooLargeText, type PictureFormat } from './copy.js';
+import { CANCEL, EXPORT_BUSY, FILE_MASKED_LINE, INCLUDE_SUMMARY, SUMMARY_REFUSED, EXPORT_TITLE, FOOTNOTE, FORMAT_LABEL, FORMAT_NAMES, NETWORK_FAILURE, PICTURE_FAILURE, PICTURE_MASKED_LINE, PREPARING, PREVIEW_HEADING, SCHEMA_FAILURE, TRY_AGAIN, downloadLabel, tooLargeText, type PictureFormat } from './copy.js';
 import { exportRequestOf, keyAfter, newExportKey } from './export-attempt.js';
+import { MaskButton, type MaskLock } from './mask-button.js';
 import { useSummaryOption } from './summary-option.js';
 import { composePicture, drawingBoundsFor } from './picture.js';
+import { readMaskedView } from './masked-read.js';
 import { saveFile } from './save-file.js';
 
 const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -60,7 +65,9 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   const sourceId = useStoreSelector(state.investigation, (held) => held.sourceId) ?? '';
   const [format, setFormat] = useState<PictureFormat>('json');
   const commands = useCanvasCommands();
-  const mask = useStoreSelector(state.mask, (held) => held);
+  const sessionMask = useStoreSelector(state.mask, (held) => held);
+  const profile = useProfileWhenProvided();
+  const [chosen, setChosen] = useState(false);
   const [sending, setSending] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>({ kind: 'none' });
   const key = useRef(newExportKey());
@@ -72,6 +79,9 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   const option = useSummaryOption(format, now === undefined ? undefined : () => now().getTime());
   const [include, setInclude] = useState(false);
   const summaryToken = option.kind === 'offered' && include ? option.token : undefined;
+  const view = state.visibleGraph();
+  const lock: MaskLock | undefined = sessionMask ? 'switch' : isLockedByPolicy(view) ? 'policy' : undefined;
+  const maskOn = lock !== undefined || chosen;
 
   useEffect(() => {
     const behind = document.querySelectorAll(`[${KEY_SCOPE_ATTRIBUTE}="workspace"], [${DIALOG_BEHIND_ATTRIBUTE}]`);
@@ -88,14 +98,17 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
     setOutcome(next);
   };
 
-  const sendPicture = async (refs: ReturnType<typeof exportRequestOf>, id: string): Promise<void> => {
-    let drawing: Blob;
-    try {
-      if (commands === undefined) throw new Error('nothing is drawn');
-      drawing = await commands.snapshot(drawingBoundsFor());
-    } catch {
-      stopSending({ kind: 'picture-failed' });
-      return;
+  /** The picture of the canvas as it is, when it shows the values the file is to show; with the mask added by the button it is drawn from masked data instead, after the server has agreed to the export. */
+  const sendPicture = async (refs: ReturnType<typeof exportRequestOf>, id: string, apart: PictureCapture | undefined): Promise<void> => {
+    let drawing: Blob | undefined;
+    if (apart === undefined) {
+      try {
+        if (commands === undefined) throw new Error('nothing is drawn');
+        drawing = await commands.snapshot(drawingBoundsFor());
+      } catch {
+        stopSending({ kind: 'picture-failed' });
+        return;
+      }
     }
     const created = await client.createExport(id, refs, key.current);
     if (!created.ok) {
@@ -105,6 +118,12 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
     }
     try {
       if (!('header' in created.value)) throw new Error('not a picture');
+      if (apart !== undefined) {
+        const read = await readMaskedView(client, sourceId, refs, created.value.header);
+        if (!read.ok) throw new Error('the masked items cannot be drawn');
+        drawing = await apart.draw({ nodes: read.nodes, edges: read.edges }, drawingBoundsFor());
+      }
+      if (drawing === undefined) throw new Error('nothing is drawn');
       const picture = await composePicture(drawing, created.value.header.lines);
       save({ blob: picture, filename: created.value.filename });
     } catch {
@@ -122,9 +141,9 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
     sendingNow.current = true;
     setSending(true);
     setOutcome({ kind: 'none' });
-    const refs = exportRequestOf(state.visibleGraph(), format, mask, summaryToken);
+    const refs = exportRequestOf(state.visibleGraph(), format, maskOn, summaryToken);
     if (format === 'png') {
-      await sendPicture(refs, investigationId);
+      await sendPicture(refs, investigationId, maskOn && !sessionMask ? commands?.capture() : undefined);
       return;
     }
     const created = await client.createExport(investigationId, refs, key.current);
@@ -187,7 +206,7 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
   const failure = outcome.kind === 'failed' ? outcome.failure : undefined;
   const problem = outcome.kind === 'picture-failed' ? PICTURE_FAILURE : outcome.kind === 'summary-refused' ? SUMMARY_REFUSED : failure === undefined ? '' : failureText(failure);
   const failed = outcome.kind !== 'none';
-  const lines = [`source: ${sourceId}`, `exported: ${opened}`, `scope: ${EXPORT_SCOPE}`, `coverage: ${remainderLine(shown, notRetrieved)}`, format === 'png' && mask ? PICTURE_MASKED_LINE : 'masking: off'];
+  const lines = [`source: ${sourceId}`, exportedTimeLine(new Date(opened)), `scope: ${EXPORT_SCOPE}`, `coverage: ${remainderLine(shown, notRetrieved)}`, maskOn ? (format === 'png' ? PICTURE_MASKED_LINE : FILE_MASKED_LINE) : 'masking: off'];
 
   return createPortal(
     <div className="sheet-scrim export-scrim">
@@ -209,6 +228,14 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
             </label>
           ))}
         </fieldset>
+        <div id={previewId} className="export-preview">
+          <p className="export-preview-heading">{PREVIEW_HEADING}</p>
+          <ul className="export-preview-lines">
+            {lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
         {option.kind === 'hidden' ? null : (
           <div className="export-summary">
             <label className="export-summary-option">
@@ -222,14 +249,7 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
             ) : null}
           </div>
         )}
-        <div id={previewId} className="export-preview">
-          <p className="export-preview-heading">{PREVIEW_HEADING}</p>
-          <ul className="export-preview-lines">
-            {lines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </div>
+        <MaskButton on={maskOn} lock={lock} fields={sensitiveFieldCount(profile, view)} names={sensitiveFieldNames(profile, view)} disabled={sending} onToggle={() => setChosen((held) => !held)} />
         <p className="export-footnote">{FOOTNOTE}</p>
         <p role="status" className="export-problem">
           {problem}
@@ -239,7 +259,7 @@ export function ExportDialog({ client, onClose, onAccessChanged, onSourceChanged
             {CANCEL}
           </button>
           <button type="button" className="primary" disabled={sending || investigationId === null} aria-busy={sending} onClick={() => void send()}>
-            {sending ? PREPARING : failed ? TRY_AGAIN : downloadLabel(format)}
+            {sending ? PREPARING : failed ? TRY_AGAIN : downloadLabel(format, maskOn)}
           </button>
         </div>
       </div>

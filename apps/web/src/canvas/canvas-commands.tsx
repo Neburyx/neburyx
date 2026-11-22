@@ -2,6 +2,7 @@ import { createContext, useContext, useState, type ReactNode } from 'react';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
 import type { Viewport } from '../state/presentation-state.js';
 import type { CanvasRenderer } from './scene.js';
+import type { PictureCapture } from './masked-picture.js';
 import type { SnapshotBounds } from './snapshot.js';
 
 /** What the controls around the canvas can ask of it; absent while no renderer is running. */
@@ -17,19 +18,23 @@ export interface CanvasCommands {
   readonly anchorOf: (key: string | undefined) => { readonly x: number; readonly y: number } | undefined;
   /** The drawn view as a PNG; see `CanvasRenderer.snapshot`. A failure rejects, and is the caller's to report, not the canvas's. */
   readonly snapshot: (bounds: SnapshotBounds) => Promise<Blob>;
+  /** Holds the view as it is now, to draw a picture of it later from other items: what is drawn is the view of this moment, and the canvas on screen is not touched. */
+  readonly capture: () => PictureCapture;
 }
 
 export interface CanvasCommandsHandle {
   readonly view: ReadableStore<CanvasCommands | undefined>;
   /** Makes the renderer's commands available and returns the function that withdraws them; a command that fails is reported to `onFailure` and not thrown. */
-  attach(renderer: CanvasRenderer, onFailure: () => void, layout: () => void): () => void;
+  attach(renderer: CanvasRenderer, onFailure: () => void, layout: () => void, capture?: CanvasCommands['capture']): () => void;
 }
 
 function createCanvasCommandsHandle(): CanvasCommandsHandle {
   const store = createStore<CanvasCommands | undefined>(undefined);
   return {
     view: readable(store),
-    attach(renderer, onFailure, layout) {
+    attach(renderer, onFailure, layout, capture = () => {
+      throw new Error('no picture can be drawn apart');
+    }) {
       const guarded = (command: () => void): void => {
         try {
           command();
@@ -38,7 +43,7 @@ function createCanvasCommandsHandle(): CanvasCommandsHandle {
           onFailure();
         }
       };
-      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), centerOn: (key) => guarded(() => renderer.centerOn(key)), viewport: () => renderer.viewport(), anchorOf: (key) => renderer.anchorOf(key), snapshot: (bounds) => renderer.snapshot(bounds) };
+      const commands: CanvasCommands = { fit: () => guarded(() => renderer.fit()), zoomBy: (factor) => guarded(() => renderer.zoomBy(factor)), layout: () => guarded(layout), centerOn: (key) => guarded(() => renderer.centerOn(key)), viewport: () => renderer.viewport(), anchorOf: (key) => renderer.anchorOf(key), snapshot: (bounds) => renderer.snapshot(bounds), capture };
       store.setState(commands);
       return () => {
         if (store.getState() === commands) store.setState(undefined);

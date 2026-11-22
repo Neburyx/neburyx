@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createExportResponseSchema, exportFileSchema, exportRequestSchema, exportSchema, IDEMPOTENCY_KEY_PATTERN, pngExportSchema } from './exports.js';
+import { createExportResponseSchema, exportFileSchema, exportRequestSchema, exportSchema, IDEMPOTENCY_KEY_PATTERN, exportedTimeLine, maskedFieldCountOf, pngExportSchema } from './exports.js';
 import { errorBodySchema } from './error-codes.js';
 
 const ref = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
@@ -8,13 +8,15 @@ describe('the export contract', () => {
   it('takes references only, with every list optional, and refuses a field it does not know', () => {
     expect(exportRequestSchema.parse({ kind: 'view', format: 'json' })).toEqual({ kind: 'view', format: 'json', entities: [], edges: [], aggregates: [], derived: [] });
     expect(exportRequestSchema.safeParse({ kind: 'view', format: 'csv', entities: [ref] }).success).toBe(true);
-    for (const bad of [{ kind: 'view', format: 'gif' }, { kind: 'table-csv', format: 'json' }, { kind: 'view', format: 'json', mask: true }, { format: 'json' }]) expect(exportRequestSchema.safeParse(bad).success).toBe(false);
+    for (const bad of [{ kind: 'view', format: 'gif' }, { kind: 'table-csv', format: 'json' }, { kind: 'view', format: 'json', mask: 'yes' }, { format: 'json' }]) expect(exportRequestSchema.safeParse(bad).success).toBe(false);
   });
 
-  it('takes png, and the session\'s mask only with it', () => {
-    expect(exportRequestSchema.parse({ kind: 'view', format: 'png', mask: true })).toMatchObject({ format: 'png', mask: true });
+  it('takes png, and the mask with every format, as a boolean only', () => {
     expect(exportRequestSchema.safeParse({ kind: 'view', format: 'png' }).success).toBe(true);
-    for (const format of ['json', 'csv']) expect(exportRequestSchema.safeParse({ kind: 'view', format, mask: false }).success).toBe(false);
+    for (const format of ['json', 'csv', 'png']) {
+      for (const mask of [true, false]) expect(exportRequestSchema.parse({ kind: 'view', format, mask })).toMatchObject({ format, mask });
+      for (const mask of ['true', 1, null]) expect(exportRequestSchema.safeParse({ kind: 'view', format, mask }).success).toBe(false);
+    }
   });
 
   it('answers a picture with its file name and header, and never an id or a path', () => {
@@ -57,5 +59,29 @@ describe('the export contract', () => {
     expect(body('INVALID_REQUEST', { maxEntities: 300 })).toBe(false);
     expect(body('INVALID_REQUEST', { reason: 'export-too-large', maxEntities: 300, maxRelationships: 300, maxAggregates: 100, exceeded: 'bytes' })).toBe(false);
     expect(body('NOT_FOUND', { reason: 'export-too-large' })).toBe(false);
+  });
+});
+
+describe('the count of masked fields', () => {
+  const property = (key: string, masked: boolean) => ({ key, value: 'v', dataClass: 'text' as const, masked });
+  const node = (type: string, properties: ReturnType<typeof property>[]) => ({ ref, display: { title: 't', type }, properties, qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+  const edge = (type: string, properties: ReturnType<typeof property>[]) => ({ ref: { sourceId: 'demo', type, from: 'a', to: 'b', stableId: 'L-1' }, from: ref, to: ref, type, direction: 'from-to' as const, semantics: 'stored' as const, properties, evidenceRefs: [], qualityFlags: [] });
+
+  it('counts a field once however many items carry it, by entity type and by relationship type', () => {
+    const nodes = [node('Widget', [property('name', true), property('tier', false)]), node('Widget', [property('name', true)]), node('Gadget', [property('name', true)])];
+    const edges = [edge('MADE_FROM', [property('note', true)]), edge('MADE_FROM', [property('note', true)]), edge('USES', [property('note', true)])];
+    expect(maskedFieldCountOf(nodes, edges)).toBe(4);
+  });
+
+  it('counts none when nothing is masked or nothing is read', () => {
+    expect(maskedFieldCountOf([node('Widget', [property('name', false)])], [])).toBe(0);
+    expect(maskedFieldCountOf([], [])).toBe(0);
+  });
+});
+
+describe('the line that states when an export was made', () => {
+  it('reads the day without a leading zero, the month in three letters and the time in UTC', () => {
+    expect(exportedTimeLine(new Date('2026-10-30T10:18:24.500Z'))).toBe('exported time: 30 Oct 2026, 10:18:24 UTC');
+    expect(exportedTimeLine(new Date('2026-01-05T00:00:09.000Z'))).toBe('exported time: 5 Jan 2026, 00:00:09 UTC');
   });
 });

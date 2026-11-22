@@ -162,7 +162,7 @@ export { EXPAND_DIRECTIONS, EXPAND_SORTS, FILTER_KINDS, MAX_FILTER_TEXT, MAX_FIL
 export type { ExpandFilter, ExpandPage, ExpandPageWindow, ExpandRank, ExpandRequest, ExpandResponse, FilterKind, FilterValue } from './expand.js';
 export type { DegreeByType, DegreePreview, DegreePreviewRequest, DegreeWarning } from './degree-preview.js';
 export type { AggregateEvidenceHit, AggregateMember, DisabledRelationship, DisabledType, EvidenceGroup, ExactMatch, EvidenceHit, EvidenceRecord, Facets, GroupFailure, RelatedGroup, RelatedHit, RelationshipContext, SearchFailureGroup, SearchFilters, SearchGroup, SearchMatchMode, SearchMoreRequest, SearchMoreResult, SearchPagedGroup, SearchRequest, SearchResult, StartsWithGroup, StoredEvidenceHit, UnreferencedHit } from './search.js';
-export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEMPOTENCY_KEY_PATTERN, exportFileSchema, exportHeaderSchema, exportMaskingSchema, exportRequestSchema, exportSchema, createExportResponseSchema, pngExportSchema } from './exports.js';
+export { EXPORT_FORMATS, EXPORT_HIDDEN_NOTE, EXPORT_SCOPE, EXPORT_STATUSES, IDEMPOTENCY_KEY_PATTERN, exportFileSchema, exportHeaderSchema, exportMaskingSchema, exportRequestSchema, exportSchema, createExportResponseSchema, pngExportSchema, maskedFieldCountOf, exportedTimeLine } from './exports.js';
 export type { CreateExportResponse, ExportFile, ExportFormat, ExportHeader, ExportRecord, ExportRequest, PngExport } from './exports.js';
 export { PATHS_HOPS_MAX, PATHS_RESULTS_MAX, pathSchema, pathStepSchema, pathsHeavySchema, pathsOkSchema, pathsParamsSchema, pathsRequestSchema, pathsResponseSchema } from './paths.js';
 export type { PathStep, PathsHeavy, PathsOk, PathsRequest, PathsResponse } from './paths.js';

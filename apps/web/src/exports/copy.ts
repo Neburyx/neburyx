@@ -6,6 +6,7 @@ export const FORMAT_LABEL = 'Format';
 export type PictureFormat = ExportFormat | 'png';
 export const FORMAT_NAMES: Readonly<Record<PictureFormat, string>> = { json: 'JSON', csv: 'CSV', png: 'PNG' };
 export const PREVIEW_HEADING = 'Every export starts with';
+export const FILE_MASKED_LINE = 'masking: on · the header states how many fields are masked';
 export const PICTURE_MASKED_LINE = 'masking: on · the picture states how many fields are masked';
 export const FOOTNOTE = 'Exports are partial views, not signed evidence.';
 export const CANCEL = 'Cancel';
@@ -25,7 +26,14 @@ export const SUMMARY_EDITED = "Edited text can't be exported with the summary";
 export const SUMMARY_NOT_FOR_PICTURE = 'Not for a picture';
 export const SUMMARY_REFUSED = 'The summary could not be included, so nothing was exported. You can export without it.';
 
-export const downloadLabel = (format: PictureFormat): string => `Download ${FORMAT_NAMES[format]}`;
+export const downloadLabel = (format: PictureFormat, masked = false): string => `Download ${FORMAT_NAMES[format]}${masked ? ' (masked)' : ''}`;
+
+export const MASK_BUTTON = 'Mask critical fields';
+export const maskHint = (names: readonly string[] | undefined): string => `Hides fields marked pii in neburyx.yaml${names === undefined || names.length === 0 ? '' : ` (${names.join(', ')})`}. Enterprise: fields your policy masks stay masked.`;
+export const MASK_OFF_STATE = 'Off · exports include all values';
+export const MASK_LOCKED_BY_SWITCH = 'Locked on while the view is masked';
+export const MASK_LOCKED_BY_POLICY = 'Locked on by your policy';
+export const maskOnState = (fields: number | undefined): string => (fields === undefined ? 'On' : `On · ${fields} ${fields === 1 ? 'field' : 'fields'} marked pii in this view`);
 
 export interface ExportLimits {
   readonly maxEntities: number;

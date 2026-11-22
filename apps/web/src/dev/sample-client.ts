@@ -1,4 +1,4 @@
-import type { AggregateEdgeDetail, AggregateEdgeRef, StoredEdgeDetail, StoredEdgeRef } from '@neburyx/contracts';
+import { exportedTimeLine, type AggregateEdgeDetail, type AggregateEdgeRef, type StoredEdgeDetail, type StoredEdgeRef } from '@neburyx/contracts';
 import type { ApiClient } from '../api/client.js';
 import { fakeClient } from '../api/fake-client.js';
 import { FRAME_SAMPLE_SOURCE } from './frame-sample.js';
@@ -55,7 +55,7 @@ export function sampleExportClient(): ApiClient {
       sent.push(request);
       if (request.format !== 'png') return Promise.resolve({ ok: false, failure: { code: 'EXPORT_FAILED', message: 'Only a picture can be made here.', retryable: false, traceId: 'tr-sample' } });
       const shown = request.entities.length;
-      const lines = [`source: ${FRAME_SAMPLE_SOURCE}`, `exported: ${PICTURE_TIME}`, 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, 'masking: off'];
+      const lines = [`source: ${FRAME_SAMPLE_SOURCE}`, exportedTimeLine(new Date(PICTURE_TIME)), 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, 'masking: off'];
       const header = { source: FRAME_SAMPLE_SOURCE, exported: PICTURE_TIME, scope: 'current view (partial)' as const, coverage: { shown, notRetrieved: { value: 38, quality: 'estimated' as const, scope: 'not yet retrieved' }, uncounted: 0 }, masking: 'off' as const, lines };
       return Promise.resolve({ ok: true, value: { format: 'png', filename: 'neburyx-export-20261110T101500Z.png', header } });
     },

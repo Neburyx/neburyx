@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
-import { exportFileSchema } from '@neburyx/contracts';
+import { exportedTimeLine, exportFileSchema } from '@neburyx/contracts';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { keyAfter } from '../../../apps/web/src/exports/export-attempt.js';
 import { exportBlockedOf } from '../../../apps/web/src/state/investigation-state.js';
@@ -55,7 +55,7 @@ describe('the header of an export of a saved investigation', () => {
     expect(ids).not.toContain('P-1');
     expect(parsed.relationships.map((edge) => ('stableId' in edge.ref ? edge.ref.stableId : '')).sort()).toEqual(shown.edges.map((edge) => ('stableId' in edge.ref ? edge.ref.stableId : '')).sort());
     const { header } = parsed;
-    expect(header.lines).toEqual(['source: demo', `exported: ${header.exported}`, 'scope: current view (partial)', `coverage: ${String(shown.nodes.length)} shown · more not yet retrieved (${String(shown.nodes.length)} entities not yet counted)`, 'masking: off']);
+    expect(header.lines).toEqual(['source: demo', exportedTimeLine(new Date(header.exported)), 'scope: current view (partial)', `coverage: ${String(shown.nodes.length)} shown · more not yet retrieved (${String(shown.nodes.length)} entities not yet counted)`, 'masking: off']);
     expect(header).toMatchObject({ source: 'demo', scope: 'current view (partial)', masking: 'off', coverage: { shown: shown.nodes.length, notRetrieved: { quality: 'unknown' }, uncounted: shown.nodes.length } });
     expect(header.coverage.notRetrieved).not.toHaveProperty('value');
     expect(header.exported).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
@@ -78,8 +78,8 @@ describe('the header of an export of a saved investigation', () => {
       expect(lines.every((line) => /^"# .*"$/.test(line)), `${name} holds one quoted field a line`).toBe(true);
       const [source, exported, scope, coverage, masking] = lines.map((line) => line.slice(3, -1));
       expect([source, scope, coverage, masking], name).toEqual([json.header.lines[0], json.header.lines[2], json.header.lines[3], json.header.lines[4]]);
-      expect(exported, name).toMatch(/^exported: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-      expect(file.filename, name).toBe(`neburyx-export-${stampOf((exported ?? '').slice('exported: '.length))}.zip`);
+      expect(exported, name).toBe(json.header.lines[1]);
+      expect(file.filename, name).toBe(`neburyx-export-${stampOf(json.header.exported)}.zip`);
     }
     const path = zipPath(Buffer.from(await file.blob.arrayBuffer()));
     expect(execFileSync('unzip', ['-Z1', path], { encoding: 'utf8' }).trim().split('\n')).toEqual(['entities.csv', 'relationships.csv']);
@@ -257,7 +257,7 @@ describe('an export of a closed and of an archived investigation', () => {
     const json = await made(later, id, 'json', viewRequest(later, 'json'));
     const timeless = (bytes: Buffer) => {
       const file = exportFileSchema.parse(JSON.parse(bytes.toString('utf8')));
-      return { ...file, header: { ...file.header, exported: '', lines: file.header.lines.filter((line) => !line.startsWith('exported: ')) } };
+      return { ...file, header: { ...file.header, exported: '', lines: file.header.lines.filter((line) => !line.startsWith('exported time: ')) } };
     };
     expect(timeless(await downloaded(later, json.record.id))).toEqual(timeless(earlierBytes));
     const csv = await made(later, id, 'csv', viewRequest(later, 'csv'));
