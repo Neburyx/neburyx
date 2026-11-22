@@ -55,6 +55,7 @@ describe('the Group panel', () => {
     const { user, panel } = show(state);
     await user.click(panel.getByRole('radio', { name: 'Entity type' }));
     expect(state.presentation.view.getState().groups).toHaveLength(6);
+    expect(state.presentation.view.getState().groups.every((group) => !group.collapsed)).toBe(true);
     const rows = panel.getAllByRole('listitem').map((row) => row.textContent);
     expect(rows).toEqual([rowText('Kind A', 2), rowText('Kind D', 2), rowText('Kind C', 1), rowText('Kind L', 1), rowText('Other types', 2)]);
     expect(panel.queryByText('Kind P')).toBeNull();
