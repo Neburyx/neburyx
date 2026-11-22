@@ -8,6 +8,16 @@ import { failureWords, TRY_AGAIN } from './failure-words.js';
 import type { PatternProblem, PatternProblemCode } from '@neburyx/contracts';
 import type { Direction } from './builder/model.js';
 
+export const FORM_COPY = {
+  anyTime: 'Any time',
+  lastDays: (days: number): string => `Last ${days} days`,
+  customRange: 'Custom range…',
+  changeDates: 'Change dates',
+  defaultChoice: 'Default',
+  customNumber: 'Custom…',
+  numberOf: (label: string): string => `${label} (number)`,
+} as const;
+
 export const PATTERNS_COPY = {
   title: 'Patterns',
   close: 'Close Patterns',

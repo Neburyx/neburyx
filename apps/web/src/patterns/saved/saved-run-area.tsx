@@ -15,6 +15,7 @@ import { PatternResult } from '../pattern-result.js';
 import { RunFailure } from '../run-failure.js';
 import { StartEntityField } from '../start-entity.js';
 import { SAVED_COPY } from './saved-copy.js';
+import { labelOf } from '../form-model.js';
 import { definitionStartType } from './saved-model.js';
 import type { SavedAsk, SavedHeavy, SavedRunStore, SavedRunView } from './saved-run-store.js';
 
@@ -70,6 +71,8 @@ export function SavedPresetRun({ client, sourceId, sourceName, mask, store, targ
   const reasons = unavailable?.reasons ?? (target.availability.status === 'unavailable' ? target.availability.reasons : undefined);
   const press = (ask: SavedAsk): void => store.run(ask);
   const nameOf = (type: string | undefined): string => (type === undefined ? '' : (profile?.entityTypes.find((candidate) => candidate.type === type)?.displayName ?? type));
+  const startPreset = target.kind === 'preset-run' ? presets?.find((preset) => preset.id === target.presetId) : undefined;
+  const startLabel = startPreset === undefined ? nameOf(startType) : labelOf(startPreset, 'anchor');
   const stale = useRef(onStale);
   stale.current = onStale;
   const ran = useRef(onRan);
@@ -95,7 +98,7 @@ export function SavedPresetRun({ client, sourceId, sourceName, mask, store, targ
             client={client}
             sourceId={sourceId}
             mask={mask}
-            label={nameOf(startType)}
+            label={startLabel}
             entityType={startType}
             candidates={start.candidates}
             chosenKey={start.anchor === undefined ? undefined : elementKey(start.anchor.ref)}

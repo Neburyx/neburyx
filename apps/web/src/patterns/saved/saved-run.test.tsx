@@ -214,10 +214,10 @@ describe('a saved pattern that cannot run', () => {
   const reasons = PATTERN_UNAVAILABLE_CODES.map((code) => ({ code }));
   const gone = (overrides: Record<string, unknown> = {}): ListedPattern => listed({ id: ID, name: 'Alpha', availability: { status: 'unavailable', reasons: [{ code: 'unknown-property', path: ['steps', 1, 'conditions', 0] }] }, ...overrides });
 
-  it('says Pattern out of date with a sentence for the reason and the step, disables Run with that reason, and offers Change pattern for the person’s own pattern', async () => {
+  it('says Unavailable with a sentence for the reason and the step, disables Run with that reason, and offers Change pattern for the person’s own pattern', async () => {
     await savedWorkspace({ patterns: { listPatterns: async () => page([gone()]) } });
     const panel = within(screen.getByRole('region', { name: /My patterns/ }));
-    expect(panel.getByText('Pattern out of date')).toBeTruthy();
+    expect(panel.getByText('Unavailable')).toBeTruthy();
     expect(panel.getByText(`${UNAVAILABLE_TEXT['unknown-property']} (step 2)`)).toBeTruthy();
     const run = panel.getByRole('button', { name: 'Run Alpha' }) as HTMLButtonElement;
     expect(run.disabled).toBe(true);
@@ -253,7 +253,7 @@ describe('a saved pattern that cannot run', () => {
     }
   });
 
-  it('shows Pattern out of date in the run view when the run route says so, with Run off and no result, and reads the list again so that the row says it too', async () => {
+  it('shows Unavailable in the run view when the run route says so, with Run off and no result, and reads the list again so that the row says it too', async () => {
     let reads = 0;
     const kit = await savedWorkspace({
       patterns: {
@@ -262,7 +262,7 @@ describe('a saved pattern that cannot run', () => {
       },
     });
     await press('Run Alpha');
-    expect(panelHeader().title).toBe('Pattern out of date');
+    expect(panelHeader().title).toBe('Unavailable');
     expect(inRun().getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
     expect((inRun().getByRole('button', { name: 'Run pattern' }) as HTMLButtonElement).disabled).toBe(true);
     expect(inRun().getByRole('button', { name: 'Change pattern' })).toBeTruthy();

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ApiResult } from '../api/client.js';
 import type { TemplateRunResponse } from '@neburyx/contracts';
-import { choosePreset, heavyRun, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle } from './patterns-kit.js';
+import { choosePreset, heavyRun, okRun, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, setNumber } from './patterns-kit.js';
 
 afterEach(() => {
   cleanup();
@@ -17,7 +17,7 @@ async function heavyPanel(answers: (call: number) => ApiResult<TemplateRunRespon
   const kit = await patternsWorkspace({ run: async () => answers(++call) });
   await openBuiltIn();
   selectAccount(kit.state, 'acc-1');
-  await userEvent.type(screen.getByLabelText('Max matching accounts'), '100');
+  setNumber('Max matching accounts', '100');
   await userEvent.click(run());
   await settle();
   return kit;
@@ -63,7 +63,7 @@ describe('the heavy-operation warning in the panel', () => {
 
   it('takes the warning down when the pattern, a parameter or the starting entity changes', async () => {
     await heavyPanel(() => ({ ok: true, value: heavyRun() }));
-    await userEvent.type(screen.getByLabelText('Max matching accounts'), '1');
+    setNumber('Max matching accounts', '1');
     expect(screen.queryByText(/Estimated/)).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();

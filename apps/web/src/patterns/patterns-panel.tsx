@@ -36,7 +36,7 @@ import { PatternsHome } from './saved/patterns-home.js';
 import { ownIsEmpty } from './saved/saved-list.js';
 import { fromDefinition } from './builder/from-definition.js';
 import { SavePatternDialog, type SaveMode } from './saved/save-dialog.js';
-import { fieldsSummary } from './saved/preset-summary.js';
+import { fieldsSummary, windowName } from './saved/preset-summary.js';
 import { INITIAL, reduce, type Action, type BuilderState } from './builder/model.js';
 import { PatternEditor, type EditingView, type ProfileView } from './builder/pattern-editor.js';
 import { RunFlow, type RunHeader } from './run/run-flow.js';
@@ -586,7 +586,8 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
   const change = (key: string, value: string): void => {
     setValues((previous) => ({ ...previous, [key]: value }));
     setErrors((previous) => {
-      const { [key]: _gone, ...rest } = previous;
+      const owner = key.split('.')[0] ?? key;
+      const { [owner]: _gone, ...rest } = previous;
       return rest;
     });
     run.clear();
@@ -688,17 +689,17 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
             {PATTERNS_COPY.run}
           </button>
         )}
-        <button type="button" className="secondary" ref={saveButton} onClick={save}>
+        {timeout === undefined ? null : <span className="search-panel-note">{timeoutLabel(timeout)}</span>}
+        <button type="button" className="link" ref={saveButton} onClick={save}>
           {PATTERNS_COPY.savePattern}
         </button>
-        {timeout === undefined ? null : <span className="search-panel-note">{timeoutLabel(timeout)}</span>}
       </div>
       {hasEntity ? null : <p className="search-panel-note">{startHint(labelOf(preset, 'anchor'))}</p>}
       {saving === undefined || template === undefined ? null : (
         <SavePatternDialog
           client={client}
           sourceId={sourceId}
-          subject={{ kind: 'preset', presetId: preset.id, presetName: preset.name, templateVersion: template.version, params: saving, summary: fieldsSummary(fields, saving) }}
+          subject={{ kind: 'preset', presetId: preset.id, presetName: preset.name, templateVersion: template.version, params: saving, summary: fieldsSummary(fields, saving), suggestedName: [preset.name, windowName(saving)].filter((part) => part !== undefined).join(', '), startLabel: labelOf(preset, 'anchor').toLowerCase() }}
           anchor={anchor === undefined ? undefined : { entityType: anchor.ref.entityType, stableId: anchor.ref.stableId }}
           nameOf={typeName}
           onClose={() => {

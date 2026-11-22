@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
-import { buildTwoSteps, openPatternList, patternBuilder, patternsPanel, previewTwoSteps } from './pattern-editor.ts';
+import { buildTwoSteps, openPatternList, patternBuilder, patternsPanel, previewTwoSteps, setNumber } from './pattern-editor.ts';
 import { modifier } from './workspace.ts';
 
 export interface ProductPage {
@@ -328,7 +328,7 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     const panel = patternsPanel(page);
     await panel.getByRole('button', { name: 'Run Shared devices' }).click();
     await panel.getByLabel('Starting account').selectOption({ index: 1 });
-    await panel.getByLabel('Min shared').fill('2');
+    await setNumber(panel, 'Min shared', '2');
     await panel.getByRole('button', { name: 'Run pattern' }).click();
     await expect(panel.getByRole('button', { name: 'Continue with 25' })).toBeVisible();
   },

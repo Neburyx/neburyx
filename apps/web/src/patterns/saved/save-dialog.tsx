@@ -12,7 +12,7 @@ export type SaveMode = { readonly kind: 'new' } | { readonly kind: 'change'; rea
 
 type SaveSubject =
   | { readonly kind: 'definition'; readonly definition: PatternDefinition }
-  | { readonly kind: 'preset'; readonly presetId: string; readonly presetName: string; readonly templateVersion: string; readonly params: Readonly<Record<string, unknown>>; readonly summary: readonly SummaryLine[] };
+  | { readonly kind: 'preset'; readonly presetId: string; readonly presetName: string; readonly templateVersion: string; readonly params: Readonly<Record<string, unknown>>; readonly summary: readonly SummaryLine[]; readonly suggestedName: string; readonly startLabel: string };
 
 interface Props {
   readonly client: ApiClient;
@@ -39,7 +39,7 @@ const OPTIONS = [
  * leaves it saved and private. Whether the pattern asks for its starting entity each time stays a choice under the two options (the frame has none; listed).
  */
 export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, onClose, onDone }: Props) {
-  const [name, setName] = useState(subject.kind === 'definition' ? suggestedName(subject.definition, nameOf) : Array.from(subject.presetName).slice(0, PATTERN_LIMITS.nameLength).join(''));
+  const [name, setName] = useState(subject.kind === 'definition' ? suggestedName(subject.definition, nameOf) : Array.from(subject.suggestedName).slice(0, PATTERN_LIMITS.nameLength).join(''));
   const [ask, setAsk] = useState(true);
   const [visibility, setVisibility] = useState<'private' | 'shared'>('private');
   const [busy, setBusy] = useState(false);
@@ -52,6 +52,7 @@ export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, o
   const asks = forced || ask;
   const fits = nameFits(name);
   const taken = refusedName !== undefined && refusedName === name.trim();
+  const preset = subject.kind === 'preset' ? subject : undefined;
   useEffect(() => {
     abort.current = new AbortController();
     return () => abort.current?.abort();
@@ -99,25 +100,55 @@ export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, o
           <label htmlFor={nameId} className="supernode-label">
             {SAVED_COPY.name}
           </label>
-          <input id={nameId} type="text" className="patterns-input" value={name} aria-invalid={fits && !taken ? undefined : true} aria-describedby={ruleId} onChange={(event) => setName(event.target.value)} />
-          <p id={ruleId} className="rename-hint">
-            {SAVED_COPY.nameRule}
-          </p>
+          <input id={nameId} type="text" className="patterns-input" value={name} aria-invalid={fits && !taken ? undefined : true} aria-describedby={preset !== undefined && fits && !taken ? undefined : ruleId} onChange={(event) => setName(event.target.value)} />
+          {preset !== undefined && fits && !taken ? null : (
+            <p id={ruleId} className="rename-hint">
+              {SAVED_COPY.nameRule}
+            </p>
+          )}
           {fits ? null : (
             <p role="alert" className="rename-problem">
               {nameLimitText}
             </p>
           )}
-          {subject.kind === 'preset' ? (
-            <dl className="save-summary" aria-label={SAVED_COPY.pattern}>
-              <dt className="supernode-label">{SAVED_COPY.pattern}</dt>
-              <dd>{`${subject.presetName} · v${subject.templateVersion}`}</dd>
-              {subject.summary.length === 0 ? null : <dt className="supernode-label">{SAVED_COPY.parameters}</dt>}
-              {subject.summary.map((line) => (
-                <dd key={line.label}>{`${line.label} ${line.text}`}</dd>
-              ))}
-            </dl>
-          ) : null}
+          {preset === undefined ? null : (
+            <>
+              <div className="save-field">
+                <span className="supernode-label">{SAVED_COPY.pattern}</span>
+                <span className="save-pattern-line">
+                  {preset.presetName}
+                  <span className="save-pill">{`v${preset.templateVersion}`}</span>
+                </span>
+              </div>
+              {preset.summary.length === 0 ? null : (
+                <dl className="save-summary" aria-label={SAVED_COPY.parameters}>
+                  <dt className="supernode-label save-summary-heading">{SAVED_COPY.parameters}</dt>
+                  {preset.summary.map((line) => (
+                    <div key={line.label} className="save-summary-row">
+                      <dt>{line.label}</dt>
+                      <dd>{line.text}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+              <label className="pattern-type">
+                <input type="checkbox" checked={asks} disabled={forced} onChange={(event) => setAsk(event.target.checked)} />
+                {SAVED_COPY.askEachTimeOf(preset.startLabel)}
+              </label>
+              {forced ? <p className="rename-hint">{SAVED_COPY.askEachTimeForcedOf(preset.startLabel)}</p> : null}
+              <fieldset className="save-plain-options">
+                <legend className="supernode-label">{SAVED_COPY.visibilityLegend}</legend>
+                {OPTIONS.map((option) => (
+                  <label key={option.value} className="pattern-type">
+                    <input type="radio" name="pattern-visibility" value={option.value} checked={visibility === option.value} onChange={() => setVisibility(option.value)} />
+                    {option.title}
+                  </label>
+                ))}
+              </fieldset>
+              <p className="rename-hint">{SAVED_COPY.saveText}</p>
+            </>
+          )}
+          {preset !== undefined ? null : (
           <fieldset className="save-options">
             <legend className="supernode-label">{SAVED_COPY.visibility}</legend>
             {OPTIONS.map((option) => (
@@ -134,12 +165,14 @@ export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, o
               </label>
             ))}
           </fieldset>
-          <label className="pattern-type">
-            <input type="checkbox" checked={asks} disabled={forced} onChange={(event) => setAsk(event.target.checked)} />
-            {SAVED_COPY.askEachTime}
-          </label>
-          {forced ? <p className="rename-hint">{SAVED_COPY.askEachTimeForced}</p> : null}
-          {subject.kind === 'preset' ? <p className="rename-hint">{SAVED_COPY.saveText}</p> : null}
+          )}
+          {preset !== undefined ? null : (
+            <label className="pattern-type">
+              <input type="checkbox" checked={asks} disabled={forced} onChange={(event) => setAsk(event.target.checked)} />
+              {SAVED_COPY.askEachTime}
+            </label>
+          )}
+          {preset !== undefined || !forced ? null : <p className="rename-hint">{SAVED_COPY.askEachTimeForced}</p>}
           {message === undefined ? null : (
             <p role="alert" className="rename-problem">
               {message}

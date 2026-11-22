@@ -118,7 +118,7 @@ describe('the pattern that is out of date (PB19 state 8)', () => {
     const reasons = [{ code: 'unknown-property' as const, path: ['steps', 0, 'conditions', 0] }, { code: 'unknown-entity-type' as const }];
     const calls: string[] = [];
     const { rerender } = render(<OutOfDate reasons={reasons} offer="change" onChange={() => calls.push('change')} onCopyAndChange={() => calls.push('copy')} />);
-    expect(screen.getByText('Pattern out of date')).toBeTruthy();
+    expect(screen.getByText('Unavailable')).toBeTruthy();
     expect(screen.getByText(`${UNAVAILABLE_TEXT['unknown-property']} (step 1)`)).toBeTruthy();
     expect(screen.getByText(UNAVAILABLE_TEXT['unknown-entity-type'])).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Run pattern' }) as HTMLButtonElement).disabled).toBe(true);

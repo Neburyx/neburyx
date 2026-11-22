@@ -1,6 +1,6 @@
 import { paramsJsonSchemaOf } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { buildParams, fieldsOf, FORM_ERRORS, plainName, windowKey } from './form-model.js';
+import { buildParams, fieldsOf, FORM_ERRORS, plainName, stepsOf, windowKey } from './form-model.js';
 import { CONNECTED, SHARED_DEVICES } from './patterns-kit.js';
 
 const choices = { entityTypes: [{ value: 'kind-b', text: 'B' }], relationshipTypes: [{ value: 'USES', text: 'USES' }] };
@@ -54,5 +54,15 @@ describe('the parameters sent', () => {
     const linked = fieldsOf({ ...CONNECTED, bind: { anchor: 'kind-a', target: 'kind-a' } }, paramsJsonSchemaOf('linked-entities'), choices);
     expect(buildParams(linked, { via: 'USES', maxHops: '2' }, anchor)).toEqual({ ok: true, params: { ref: anchor, via: ['USES'], maxHops: 2 } });
     expect(buildParams(linked, { maxHops: '5' }, anchor).ok).toBe(false);
+  });
+});
+
+describe('the numbers a field offers', () => {
+  it('lists every whole number of a short range, and steps with the upper bound of a long one', () => {
+    expect(stepsOf({ min: 1, max: 4 })).toEqual({ steps: [1, 2, 3, 4], whole: true });
+    expect(stepsOf({ min: 1, max: 50 })).toEqual({ steps: [1, 2, 3, 5, 10, 25, 50], whole: false });
+    expect(stepsOf({ min: 1, max: 40 })).toEqual({ steps: [1, 2, 3, 5, 10, 25, 40], whole: false });
+    expect(stepsOf({})).toEqual({ steps: [1, 2, 3, 5, 10, 25, 50, 100, 200, 500, 1000], whole: false });
+    expect(stepsOf({ min: 10 }).steps[0]).toBe(10);
   });
 });

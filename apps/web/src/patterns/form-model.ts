@@ -44,6 +44,9 @@ export function plainName(name: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** The label of a window field: it always says the zone. */
+export const windowLabel = (label: string): string => (/\bUTC\b/.test(label) ? label : `${label} (UTC)`);
+
 export const labelOf = (preset: Preset, key: string): string => preset.labels.find((label) => label.key === key)?.text ?? plainName(key);
 
 export interface FieldChoices {
@@ -65,7 +68,7 @@ export function fieldsOf(preset: Preset, paramsSchema: Record<string, unknown>, 
     const schema = asRecord(raw) ?? {};
     const label = labelOf(preset, name);
     if (name === 'window') {
-      fields.push({ name, label: /\bUTC\b/.test(label) ? label : `${label} (UTC)`, kind: 'window' });
+      fields.push({ name, label: windowLabel(label), kind: 'window' });
       continue;
     }
     const choice = CHOICE_OF[name];
@@ -92,9 +95,28 @@ export interface FormValues {
 
 export const windowKey = (name: string, edge: 'from' | 'to'): string => `${name}.${edge}`;
 
+/** Which kind of window the person chose: none, the last n days (`days:7`) or a range of dates (`custom`). */
+export const windowModeKey = (name: string): string => `${name}.mode`;
+
+/** Set to `1` while the person is entering a number of their own instead of choosing a step. */
+export const customKey = (name: string): string => `${name}.custom`;
+
+export const RELATIVE_WINDOWS: readonly number[] = [7, 14, 30, 90];
+
+const STEPS = [1, 2, 3, 5, 10, 25, 50, 100, 200, 500, 1000];
+
+/** The numbers a field offers to choose from: every whole number when the range is short, else steps inside the range with its upper bound. `whole` is true when every number is offered, so that no number of one's own is needed. */
+export function stepsOf(field: Pick<Field, 'min' | 'max'>): { readonly steps: readonly number[]; readonly whole: boolean } {
+  const low = field.min ?? 1;
+  const high = field.max;
+  if (high !== undefined && high - low < 12) return { steps: Array.from({ length: high - low + 1 }, (_, index) => low + index), whole: true };
+  const inside = STEPS.filter((step) => step >= low && (high === undefined || step <= high));
+  return { steps: high !== undefined && !inside.includes(high) ? [...inside, high] : inside, whole: false };
+}
+
 const DAY_MS = 86_400_000;
-const dayOf = (value: string): number => Date.parse(`${value}T00:00:00Z`);
-const isDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(dayOf(value)) && new Date(dayOf(value)).toISOString().startsWith(value);
+export const dayOf = (value: string): number => Date.parse(`${value}T00:00:00Z`);
+export const isDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(dayOf(value)) && new Date(dayOf(value)).toISOString().startsWith(value);
 
 export type Built = { readonly ok: true; readonly params: Record<string, unknown> } | { readonly ok: false; readonly errors: Readonly<Record<string, string>> };
 
@@ -112,6 +134,12 @@ export function buildParams(fields: readonly Field[], values: FormValues, anchor
   const errors: Record<string, string> = {};
   for (const field of fields) {
     if (field.kind === 'window') {
+      const mode = values[windowModeKey(field.name)] ?? '';
+      const days = /^days:(\d+)$/.exec(mode);
+      if (days?.[1] !== undefined) {
+        params[field.name] = { days: Number(days[1]) };
+        continue;
+      }
       const from = (values[windowKey(field.name, 'from')] ?? '').trim();
       const to = (values[windowKey(field.name, 'to')] ?? '').trim();
       if (from === '' && to === '') continue;

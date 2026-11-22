@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openOneEntity } from './support/workspace.ts';
-import { buildStepThroughUi, chooseMenuItem, openPatternList, openRowMenu, patternBuilder, patternsPanel as panelOf, patternsTool as toolOf, pick, press, previewTwoSteps } from './support/pattern-editor.ts';
+import { buildStepThroughUi, chooseMenuItem, openPatternList, openRowMenu, patternBuilder, patternsPanel as panelOf, patternsTool as toolOf, pick, press, previewTwoSteps, setNumber } from './support/pattern-editor.ts';
 
 const SOURCE = 'banking-demo';
 
@@ -88,7 +88,7 @@ test.describe('the Patterns panel by keyboard', () => {
 
   test('shows the field error and opens no dialog when Save pattern is pressed on a form that is not valid', async ({ page }) => {
     await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
-    await panelOf(page).getByLabel('Max matching accounts').fill('0');
+    await setNumber(panelOf(page), 'Max matching accounts', '0');
     await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
     await expect(panelOf(page).getByRole('alert')).toBeVisible();
     await expect(dialogOf(page)).toHaveCount(0);

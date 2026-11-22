@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openOneEntity } from './support/workspace.ts';
-import { buildStepThroughUi, chooseMenuItem, openPatternList, openRowMenu, patternBuilder, patternsPanel as panelOf, pick, press } from './support/pattern-editor.ts';
+import { buildStepThroughUi, chooseMenuItem, openPatternList, openRowMenu, patternBuilder, patternsPanel as panelOf, pick, press, setNumber } from './support/pattern-editor.ts';
 
 const SOURCE = 'banking-demo';
 
@@ -50,7 +50,7 @@ test.describe('saved patterns in the Patterns panel', () => {
     await expect(panelOf(page).getByRole('heading', { level: 3 })).toHaveText(['Built-in · 3', 'My patterns · 2', 'Shared on this source · 1']);
     await expect(panelOf(page).getByText('Shared patterns can be run or copied. Only their owner can change or delete them.')).toBeVisible();
     const retired = rowOf(page, 'Retired pattern');
-    await expect(retired.getByText('Pattern out of date')).toBeVisible();
+    await expect(retired.getByText('Unavailable')).toBeVisible();
     await expect(retired.getByText('This pattern uses a type the mapping no longer has. (step 1)')).toBeVisible();
     await expect(retired.getByRole('button', { name: 'Run Retired pattern' })).toBeDisabled();
     await expect(retired.getByRole('button', { name: 'Change pattern' })).toBeVisible();
@@ -95,7 +95,7 @@ test.describe('saved patterns in the Patterns panel', () => {
 
   test('saves a built-in run from its form, lists it with its pattern and parameters, and runs it from its row with the answer of the form', async ({ page }) => {
     await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
-    await panelOf(page).getByLabel('Max matching accounts').fill('7');
+    await setNumber(panelOf(page), 'Max matching accounts', '7');
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeEnabled();
     await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
     await expect(panelOf(page).getByRole('table')).toBeVisible();
@@ -103,8 +103,9 @@ test.describe('saved patterns in the Patterns panel', () => {
     await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
     const dialog = dialogOf(page);
     await expect(dialog.getByLabel('Name')).toBeFocused();
-    await expect(dialog.getByText('Shared devices · v1')).toBeVisible();
-    await expect(dialog.getByText('Max matching accounts 7')).toBeVisible();
+    await expect(dialog.locator('.save-pattern-line')).toHaveText('Shared devicesv1');
+    await expect(dialog.getByText('Max matching accounts', { exact: true })).toBeVisible();
+    await expect(dialog.getByText('7', { exact: true })).toBeVisible();
     await dialog.getByLabel('Name').fill('Devices, small');
     await press(page, dialog.getByRole('button', { name: 'Save pattern' }));
     await expect(panelOf(page).getByText('Pattern saved.')).toBeVisible();

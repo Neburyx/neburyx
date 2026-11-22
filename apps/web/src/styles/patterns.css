@@ -879,6 +879,51 @@
   margin: 0;
 }
 
-.save-summary dd {
+
+.save-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.save-pattern-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+}
+
+.save-pill {
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-badge);
+  background: var(--color-badge-surface);
+  color: var(--color-badge-text);
+  font-size: var(--font-size-small);
+}
+
+.save-summary-heading {
   margin: 0;
+}
+
+.save-summary-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-8);
+}
+
+.save-summary-row dd {
+  margin: 0;
+}
+
+.save-summary-row dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.save-plain-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
 }

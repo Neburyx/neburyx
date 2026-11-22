@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { canvasOf, openOneEntity } from './support/workspace.ts';
+import { setNumber } from './support/pattern-editor.ts';
 
 const SOURCE = 'banking-demo';
 const LIMITS = { slow: '3', cut: '5', stopList: '6' } as const;
@@ -17,7 +18,7 @@ async function open(page: Page): Promise<void> {
 async function run(page: Page, pattern: string, startLabel: string, limit?: string): Promise<void> {
   await panelOf(page).getByRole('button', { name: `Run ${pattern}`, exact: true }).click();
   await panelOf(page).getByLabel(startLabel).selectOption({ index: 1 });
-  if (limit !== undefined) await panelOf(page).getByLabel('Max matching accounts').fill(limit);
+  if (limit !== undefined) await setNumber(panelOf(page), 'Max matching accounts', limit);
   await panelOf(page).getByRole('button', { name: 'Run pattern' }).click();
 }
 
@@ -76,7 +77,7 @@ test.describe('adding a pattern result to the canvas', () => {
   test('offers the result that was shown again after a cancelled run, and the add puts that result on the canvas', async ({ page }) => {
     await run(page, 'Shared devices', 'Starting account');
     await expect(panelOf(page).getByRole('table')).toBeVisible();
-    await panelOf(page).getByLabel('Max matching accounts').fill(LIMITS.slow);
+    await setNumber(panelOf(page), 'Max matching accounts', LIMITS.slow);
     await panelOf(page).getByRole('button', { name: 'Run pattern' }).click();
     await expect(panelOf(page).getByText(/^Running/)).toBeVisible();
     await panelOf(page).getByRole('button', { name: 'Cancel' }).click();

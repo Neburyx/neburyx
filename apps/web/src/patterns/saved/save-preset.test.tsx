@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { savedPatternSchema, type SavedPattern } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
-import { failure, listOf, openBuiltIn, patternsWorkspace, selectAccount, settle, SHARED_DEVICES } from '../patterns-kit.js';
+import { failure, listOf, openBuiltIn, patternsWorkspace, selectAccount, settle, SHARED_DEVICES, setNumber, setWindow } from '../patterns-kit.js';
 import { refusalText } from './saved-copy.js';
 
 afterEach(() => {
@@ -23,9 +23,8 @@ const submit = async (): Promise<void> => {
   await settle();
 };
 const fill = async (): Promise<void> => {
-  fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: '2026-10-21' } });
-  fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: '2026-10-28' } });
-  await userEvent.type(screen.getByLabelText('Max matching accounts'), '25');
+  setWindow('2026-10-21', '2026-10-28');
+  setNumber('Max matching accounts', '25');
 };
 const saves = (kit: Awaited<ReturnType<typeof patternsWorkspace>>) => kit.patternCalls.filter((call) => call.method === 'savePattern');
 const signalOf = (kit: Awaited<ReturnType<typeof patternsWorkspace>>): AbortSignal => {
@@ -46,8 +45,7 @@ describe('saving a built-in run from its form', () => {
   it('refuses an invalid form with its field errors, opens no dialog and sends nothing', async () => {
     const kit = await patternsWorkspace();
     await openBuiltIn();
-    fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: '2026-10-28' } });
-    fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: '2026-10-21' } });
+    setWindow('2026-10-28', '2026-10-21');
     await userEvent.click(saveButton());
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.querySelectorAll('.patterns-error').length).toBeGreaterThan(0);
@@ -60,15 +58,23 @@ describe('saving a built-in run from its form', () => {
     await fill();
     await userEvent.click(saveButton());
     expect(document.activeElement).toBe(nameField());
-    expect(nameField()).toHaveProperty('value', 'Shared devices');
-    expect(dialog().getByText('Shared devices · v1')).toBeTruthy();
-    expect(dialog().getByText('Window (UTC) 2026-10-21 – 2026-10-28')).toBeTruthy();
-    expect(dialog().getByText('Max matching accounts 25')).toBeTruthy();
+    expect(nameField()).toHaveProperty('value', 'Shared devices, 21–28 Oct 2026');
+    expect(dialog().queryByText(/^1 to 100 characters/)).toBeNull();
+    expect(dialog().getByText('Shared devices')).toBeTruthy();
+    expect(dialog().getByText('v1')).toBeTruthy();
+    const row = (label: string) => {
+      const found = dialog().getByText(label).closest('div');
+      if (found === null) throw new Error(`no row for ${label}`);
+      return within(found);
+    };
+    expect(row('Window (UTC)').getByText('21–28 Oct 2026')).toBeTruthy();
+    expect(row('Max matching accounts').getByText('25')).toBeTruthy();
     expect(dialog().queryByText(/Min shared/)).toBeNull();
+    expect(dialog().getByRole('group', { name: 'Visibility' })).toBeTruthy();
     expect(dialog().getByRole('radio', { name: 'Only me' })).toBeTruthy();
     expect(dialog().getByRole('radio', { name: 'Everyone on this source' })).toBeTruthy();
     expect(dialog().getByText('Saves the pattern and its parameters, never query text. Running it applies your own access and limits.')).toBeTruthy();
-    expect(dialog().getByRole('checkbox', { name: 'Ask for the starting entity each time' })).toHaveProperty('checked', true);
+    expect(dialog().getByRole('checkbox', { name: 'Ask for the starting account each time' })).toHaveProperty('checked', true);
   });
 
   it('saves the preset and its parameters without the starting entity and without an anchor while the choice stays', async () => {
@@ -92,17 +98,17 @@ describe('saving a built-in run from its form', () => {
     await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(saveButton());
-    await userEvent.click(dialog().getByRole('checkbox', { name: 'Ask for the starting entity each time' }));
+    await userEvent.click(dialog().getByRole('checkbox', { name: 'Ask for the starting account each time' }));
     await submit();
     expect(saves(kit)[0]?.args[0]).toMatchObject({ anchor: { entityType: 'kind-a', stableId: 'acc-1' } });
     cleanup();
     const none = await patternsWorkspace({ opened: null, patterns: { savePattern: ok } });
     await openBuiltIn();
     await userEvent.click(saveButton());
-    const ask = dialog().getByRole('checkbox', { name: 'Ask for the starting entity each time' });
+    const ask = dialog().getByRole('checkbox', { name: 'Ask for the starting account each time' });
     expect(ask).toHaveProperty('checked', true);
     expect(ask).toHaveProperty('disabled', true);
-    expect(dialog().getByText('No starting entity is chosen, so the pattern will ask for one each time.')).toBeTruthy();
+    expect(dialog().getByText('No account is chosen, so the pattern will ask for one each time.')).toBeTruthy();
     await submit();
     expect(saves(none)[0]?.args[0]).not.toHaveProperty('anchor');
   });
@@ -246,5 +252,26 @@ describe('saving a built-in run from its form', () => {
     await userEvent.keyboard('{Enter}');
     expect(dialog().getByRole('heading', { name: 'Save pattern' })).toBeTruthy();
     expect(document.activeElement).toBe(nameField());
+  });
+
+  it('shows the rule of a name only when the name is refused or does not fit', async () => {
+    await patternsWorkspace({ patterns: { savePattern: async () => ({ ok: false, failure: failure('CONFLICT', { reason: 'pattern-name-taken' }) }) } });
+    await openBuiltIn();
+    await userEvent.click(saveButton());
+    expect(dialog().queryByText(/^1 to 100 characters/)).toBeNull();
+    await userEvent.clear(nameField());
+    expect(dialog().getByText(/^1 to 100 characters/)).toBeTruthy();
+    await userEvent.type(nameField(), 'Taken');
+    expect(dialog().queryByText(/^1 to 100 characters/)).toBeNull();
+    await submit();
+    expect(dialog().getByText(/^1 to 100 characters/)).toBeTruthy();
+  });
+
+  it('puts Save pattern after the timeout label as a link', async () => {
+    await patternsWorkspace();
+    await openBuiltIn();
+    const note = screen.getByText('5 s timeout');
+    expect(note.compareDocumentPosition(saveButton()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(saveButton().className).toBe('link');
   });
 });

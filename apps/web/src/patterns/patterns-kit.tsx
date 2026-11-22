@@ -255,3 +255,25 @@ export const choosePreset = async (name: string): Promise<void> => {
 export const selectAccount = (state: ClientState, id: string): void => {
   act(() => state.presentation.select([elementKey(ref('a', 'kind-a', id))]));
 };
+
+/** Chooses a range of dates for the window of the form: the range is entered after choosing "Custom range". */
+export const setWindow = (from: string, to: string): void => {
+  fireEvent.change(screen.getByLabelText('Window (UTC)'), { target: { value: 'custom' } });
+  fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: from } });
+  fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: to } });
+};
+
+export const chooseWindow = (value: string): void => {
+  fireEvent.change(screen.getByLabelText('Window (UTC)'), { target: { value } });
+};
+
+/** Sets a number field of the form: a step is chosen, any other number is entered after choosing "Custom". */
+export const setNumber = (label: string, value: string): void => {
+  const select = screen.getByLabelText(label);
+  if (select.querySelector(`option[value="${value}"]`) !== null) {
+    fireEvent.change(select, { target: { value } });
+    return;
+  }
+  fireEvent.change(select, { target: { value: 'custom' } });
+  fireEvent.change(screen.getByLabelText(`${label} (number)`), { target: { value } });
+};

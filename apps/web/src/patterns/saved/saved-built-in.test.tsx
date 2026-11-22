@@ -43,7 +43,7 @@ describe('a saved built-in run in the list', () => {
     await openTab(/My patterns/);
     const li = rowOf('Devices week');
     expect(li.textContent).toContain('Shared devices · v1');
-    expect(li.textContent).toContain('Window 2026-10-21 – 2026-10-28, Max matching accounts 25');
+    expect(li.textContent).toContain('Window (UTC) 21–28 Oct 2026, Max matching accounts 25');
     expect(li.textContent).toContain('Not run yet');
     expect(li.textContent).toContain('Private');
     expect(li.textContent).not.toContain('held-acc-9');
@@ -181,7 +181,7 @@ describe('a saved built-in run that is not available', () => {
   it('carries the flag and the reason sentence, has Run off with the reason, and sends nothing for a press', async () => {
     const kit = await savedWorkspace({ patterns: { listPatterns: async () => page([gone([{ code: 'preset-removed' }])]) } });
     const li = rowOf('Devices week');
-    expect(within(li).getByText('Pattern out of date')).toBeTruthy();
+    expect(within(li).getByText('Unavailable')).toBeTruthy();
     expect(within(li).getByText(UNAVAILABLE_TEXT['preset-removed'])).toBeTruthy();
     const run = within(li).getByRole('button', { name: 'Run Devices week' });
     expect(run).toHaveProperty('disabled', true);
@@ -192,7 +192,7 @@ describe('a saved built-in run that is not available', () => {
   it('runs and carries no flag when the template version changed compatibly', async () => {
     const newer = { ...listOf(), templates: listOf().templates.map((template) => ({ ...template, version: '2' })) };
     const kit = await savedWorkspace({ list: async () => ({ ok: true, value: newer }), patterns: { listPatterns: async () => page([row({ templateVersion: 1, availability: { status: 'available' } })]), runSavedPattern: answered.runSavedPattern } });
-    expect(screen.queryByText('Pattern out of date')).toBeNull();
+    expect(screen.queryByText('Unavailable')).toBeNull();
     await press('Run Devices week');
     expect(calls(kit, 'runSavedPattern')).toHaveLength(1);
     expect(screen.getByRole('region', { name: 'Result' })).toBeTruthy();
@@ -226,7 +226,7 @@ describe('a saved built-in run whose built-in pattern is gone', () => {
     await savedWorkspace({ list: async () => ({ ok: true, value: listOf([]) }), patterns: { listPatterns: async () => page([row({ params: { limit: 25, minShared: 2 }, availability: { status: 'unavailable', reasons: [{ code: 'preset-removed' }] } })]) } });
     const li = rowOf('Devices week');
     expect(li.textContent).toContain('Limit 25, Min shared 2');
-    expect(within(li).getByText('Pattern out of date')).toBeTruthy();
+    expect(within(li).getByText('Unavailable')).toBeTruthy();
     expect(within(li).getByRole('button', { name: 'Run Devices week' })).toHaveProperty('disabled', true);
   });
 });

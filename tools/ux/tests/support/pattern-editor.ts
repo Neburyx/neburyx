@@ -71,3 +71,13 @@ export async function chooseMenuItem(page: Page, item: string): Promise<void> {
   await expect(target).toBeFocused();
   await page.keyboard.press('Enter');
 }
+
+/** Sets a number field of a pattern form: a step is chosen, any other number is entered after choosing "Custom…". */
+export async function setNumber(scope: Locator, label: string, value: string): Promise<void> {
+  const select = scope.getByLabel(label, { exact: true });
+  if ((await select.locator(`option[value="${value}"]`).count()) > 0) await select.selectOption(value);
+  else {
+    await select.selectOption('custom');
+    await scope.getByLabel(`${label} (number)`).fill(value);
+  }
+}

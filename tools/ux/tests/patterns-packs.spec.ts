@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { setNumber } from './support/pattern-editor.ts';
 
 test.use({ baseURL: 'http://127.0.0.1:4175' });
 
@@ -44,7 +45,7 @@ test.describe('the Patterns panel on each pack', () => {
       await page.getByRole('button', { name: 'Patterns', exact: true }).click();
       const panel = page.getByRole('complementary', { name: 'Patterns' });
       await panel.getByRole('button', { name: `Run ${pack.preset}` }).click();
-      await panel.getByLabel(pack.limit).fill('5');
+      await setNumber(panel, pack.limit, '5');
       await panel.getByRole('button', { name: 'Run pattern' }).click();
       await expect(panel.locator('.patterns-result')).toBeVisible();
       const fromForm = await panel.locator('.patterns-result').innerText();

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openOneEntity } from './support/workspace.ts';
+import { setNumber } from './support/pattern-editor.ts';
 
 const SOURCE = 'banking-demo';
 const LIMITS = { none: '1', slow: '3', busy: '4' } as const;
@@ -100,7 +101,7 @@ test.describe('the Patterns panel on the canvas', () => {
   test('says so plainly for an empty result', async ({ page }) => {
     await openForm(page);
     await chooseStart(page);
-    await panelOf(page).getByLabel('Max matching accounts').fill(LIMITS.none);
+    await setNumber(panelOf(page), 'Max matching accounts', LIMITS.none);
     await runOf(page).click();
     await expect(panelOf(page).getByText('No matches found.')).toBeVisible();
     await expect(panelOf(page).getByRole('table')).toHaveCount(0);
@@ -109,7 +110,7 @@ test.describe('the Patterns panel on the canvas', () => {
   test('stops a heavy run with Refine filters and Continue with 25, and Continue shows the page', async ({ page }) => {
     await openForm(page);
     await chooseStart(page);
-    await panelOf(page).getByLabel('Min shared').fill(HEAVY_MIN_SHARED);
+    await setNumber(panelOf(page), 'Min shared', HEAVY_MIN_SHARED);
     await runOf(page).click();
     await expect(panelOf(page).getByText('Estimated ≥ 500 matches · warning threshold 500')).toBeVisible();
     await expect(panelOf(page).getByRole('table')).toHaveCount(0);
@@ -125,7 +126,7 @@ test.describe('the Patterns panel on the canvas', () => {
   test('shows Running with Cancel, and Escape cancels the run and leaves the panel open', async ({ page }) => {
     await openForm(page);
     await chooseStart(page);
-    await panelOf(page).getByLabel('Max matching accounts').fill(LIMITS.slow);
+    await setNumber(panelOf(page), 'Max matching accounts', LIMITS.slow);
     await runOf(page).click();
     await expect(panelOf(page).getByText(/^Running/)).toBeVisible();
     await expect(panelOf(page).getByRole('button', { name: 'Cancel' })).toBeVisible();
@@ -141,18 +142,18 @@ test.describe('the Patterns panel on the canvas', () => {
   test('says the source is busy, keeps the form and offers Retry', async ({ page }) => {
     await openForm(page);
     await chooseStart(page);
-    await panelOf(page).getByLabel('Max matching accounts').fill(LIMITS.busy);
+    await setNumber(panelOf(page), 'Max matching accounts', LIMITS.busy);
     await runOf(page).click();
     await expect(panelOf(page).getByText(/is busy\. No read slot freed within the wait\./)).toBeVisible();
     await expect(panelOf(page).getByRole('button', { name: 'Try again' })).toBeVisible();
-    await expect(panelOf(page).getByLabel('Max matching accounts')).toHaveValue(LIMITS.busy);
+    await expect(panelOf(page).getByLabel('Max matching accounts (number)')).toHaveValue(LIMITS.busy);
   });
 
   test('walks the form in reading order with Tab and back with Shift+Tab', async ({ page }) => {
     await openForm(page);
     await expect(startOf(page)).toBeFocused();
     const limit = panelOf(page).getByLabel('Max matching accounts');
-    const order = [startOf(page), panelOf(page).getByRole('searchbox', { name: 'Search the source' }), panelOf(page).getByLabel('Window (UTC): from'), panelOf(page).getByLabel('Window (UTC): to'), panelOf(page).getByLabel('Min shared'), limit];
+    const order = [startOf(page), panelOf(page).getByRole('searchbox', { name: 'Search the source' }), panelOf(page).getByLabel('Window (UTC)', { exact: true }), panelOf(page).getByLabel('Min shared'), limit];
     for (const field of order) {
       // a date field has a stop for each of its parts, so Tab is pressed until the field is reached
       for (let presses = 0; presses < 4 && !(await field.evaluate((element) => element === document.activeElement)); presses += 1) await page.keyboard.press('Tab');
