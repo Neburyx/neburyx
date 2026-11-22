@@ -94,7 +94,7 @@ describe('the statement of a pattern', () => {
     const two = compile([TOOL, BACK]);
     expect(two).toContain('c.degree > $countCap');
     expect(two).toContain('coalesce(n.`isCommon`, false) = true');
-    const stops = (text: string): number => text.match(/coalesce\(/g)?.length ?? 0;
+    const stops = (text: string): number => text.match(/coalesce\([^()]*(?:\([^()]*\))?[^()]*, false\)/g)?.length ?? 0;
     expect(stops(compile([step(), step()]))).toBe(0);
   });
 

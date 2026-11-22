@@ -38,7 +38,7 @@ describe('the statement of the count of a shared-attribute run', () => {
     const head = sharedAttributeHeadOf(allowlist, sharedAttributeRequestOf(allowlist, params));
     expect(call?.cypher.split('\n').slice(0, head.length)).toEqual(head);
     expect(call?.cypher.split('\n').slice(head.length)).toEqual([
-      'CALL { WITH a, xs UNWIND xs AS x MATCH (x)<-[rb:`USES_TOOL`]-(b:`Maker`) WHERE b <> a WITH DISTINCT a, b CALL { WITH a, b MATCH (b)-[rc:`USES_TOOL`]->(y:`Tool`)<-[ra:`USES_TOOL`]-(a) WHERE coalesce(head([y.`isCommon`]), false) <> true WITH DISTINCT y LIMIT $minShared RETURN count(y) AS shared } WITH b, shared WHERE shared >= $minShared WITH b LIMIT $countCap + 1 RETURN count(b) AS matches }',
+      'CALL { WITH a, xs UNWIND xs AS x MATCH (x)<-[rb:`USES_TOOL`]-(b:`Maker`) WHERE b <> a WITH DISTINCT a, b CALL { WITH a, b MATCH (b)-[rc:`USES_TOOL`]->(y:`Tool`)<-[ra:`USES_TOOL`]-(a) WHERE coalesce(coalesce(y.`isCommon`), false) <> true WITH DISTINCT y LIMIT $minShared RETURN count(y) AS shared } WITH b, shared WHERE shared >= $minShared WITH b LIMIT $countCap + 1 RETURN count(b) AS matches }',
       'RETURN matches, anchorBounded, skipped',
     ]);
     expect(call?.cypher).toContain('LIMIT $countCap + 1');

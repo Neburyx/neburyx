@@ -103,7 +103,7 @@ describe('the closed set of the fuzz suite', () => {
       expect(statements.some((statement) => statement.includes('AS cut2') && !statement.includes('AS cut3'))).toBe(true);
       expect(statements.some((statement) => statement.includes('AS cut4'))).toBe(true);
       expect(statements.some((statement) => statement.includes('coalesce(n.`weight`, false) = true'))).toBe(true);
-      expect(statements.some((statement) => statement.includes('AS cut2') && !statement.includes('coalesce('))).toBe(true);
+      expect(statements.some((statement) => statement.includes('AS cut2') && !/, false\) = true/.test(statement))).toBe(true);
       for (const statement of statements) {
         expect(statement).toContain('LIMIT $countCap + 1');
         expect(statement).toContain('LIMIT $limit + 1');

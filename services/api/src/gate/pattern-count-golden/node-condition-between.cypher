@@ -1,3 +1,3 @@
 MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1
-CALL { WITH a CALL { WITH a MATCH (a)-[r1:`LINKS`]->(n1:`Maker`) WHERE n1 <> a AND ((head([n1.`rank`]) IS :: INTEGER NOT NULL OR head([n1.`rank`]) IS :: FLOAT NOT NULL) AND head([n1.`rank`]) >= $steps[0].conditions[0].from.value AND head([n1.`rank`]) <= $steps[0].conditions[0].to.value) RETURN n1, r1 } WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(n1) AS matches }
+CALL { WITH a CALL { WITH a MATCH (a)-[r1:`LINKS`]->(n1:`Maker`) WHERE n1 <> a AND ((coalesce(n1.`rank`) IS :: INTEGER NOT NULL OR coalesce(n1.`rank`) IS :: FLOAT NOT NULL) AND coalesce(n1.`rank`) >= $steps[0].conditions[0].from.value AND coalesce(n1.`rank`) <= $steps[0].conditions[0].to.value) RETURN n1, r1 } WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(n1) AS matches }
 RETURN matches, false AS bounded, false AS stopListed, 0 AS supernodes

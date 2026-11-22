@@ -1,3 +1,3 @@
 MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a ORDER BY elementId(a) LIMIT 1
-CALL { WITH a CALL { WITH a MATCH (a)-[r1:`LINKS`]->(n1:`Maker`) WHERE n1 <> a AND (head([n1.`region`]) IS :: STRING NOT NULL AND head([n1.`region`]) = $steps[0].conditions[0].value.value) RETURN n1, r1 } WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(n1) AS matches }
+CALL { WITH a CALL { WITH a MATCH (a)-[r1:`LINKS`]->(n1:`Maker`) WHERE n1 <> a AND (coalesce(n1.`region`) IS :: STRING NOT NULL AND coalesce(n1.`region`) = $steps[0].conditions[0].value.value) RETURN n1, r1 } WITH DISTINCT n1 LIMIT $countCap + 1 RETURN count(n1) AS matches }
 RETURN matches, false AS bounded, false AS stopListed, 0 AS supernodes

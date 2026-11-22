@@ -4,7 +4,7 @@ import { defaultCatalog } from './assemble.js';
 import { renderTemplate } from './render.js';
 
 /**
- * A property read of a node or a relationship in the condition of a match that has an anchor is written `head([x.property])`. A direct `x.property` in such a condition lets the planner start the match from an
+ * A property read of a node or a relationship in the condition of a match that has an anchor is written `coalesce(x.property)`. A direct `x.property` in such a condition lets the planner start the match from an
  * index on the property and join to the anchor, instead of expanding from the anchor, and on the server series this was measured on (5.26) a plan driven from an index by a negated type test returned rows missing
  * the elements that have no value for the property. The wrapped read has the same value and no index can serve it. The one exception is a lookup that a `USING INDEX SEEK` hint serves: the hint needs the direct read.
  * The check renders every template of the inventory and fails for a condition with a direct read, so that a statement added later cannot bring it back; the oracle suite of the Neo4j tests is the guard on the server.
@@ -40,24 +40,8 @@ function conditionsOf(cypher: string): string[] {
   return found;
 }
 
-/** The text with every `head([ ... ])` taken out. */
-function withoutWrapped(text: string): string {
-  let out = text;
-  for (;;) {
-    const start = out.indexOf('head([');
-    if (start < 0) return out;
-    let depth = 0;
-    let at = start + 4;
-    for (; at < out.length; at += 1) {
-      if (out[at] === '[') depth += 1;
-      if (out[at] === ']') {
-        depth -= 1;
-        if (depth === 0) break;
-      }
-    }
-    out = `${out.slice(0, start)}${out.slice(at + 2)}`;
-  }
-}
+/** The text with every wrapped read (`coalesce(x.property)`, one argument) taken out. */
+const withoutWrapped = (text: string): string => text.replace(/coalesce\([a-z]\w*\.`[^`]+`\)/g, '');
 
 /** The direct property reads in the conditions of a statement, other than the lookups that a seek hint serves. */
 function directReads(cypher: string): string[] {
@@ -93,9 +77,9 @@ describe('no condition of a match with an anchor reads a property directly', () 
   it('fails for a direct read and passes for a wrapped one and for a hinted lookup (the check is not empty)', () => {
     const anchor = 'MATCH (a:`Maker`) USING INDEX SEEK a:`Maker`(`makerId`) WHERE a.`makerId` IN [$stableId, $stableInteger] WITH a LIMIT 1';
     expect(directReads(`${anchor} MATCH (a)-[r:\`LINKS\`]->(m) WHERE NOT (r.\`linkId\` IS :: STRING NOT NULL) RETURN r`)).toEqual(['r.`linkId`']);
-    expect(directReads(`${anchor} MATCH (a)-[r:\`LINKS\`]->(m) WHERE NOT (head([r.\`linkId\`]) IS :: STRING NOT NULL) RETURN r`)).toEqual([]);
+    expect(directReads(`${anchor} MATCH (a)-[r:\`LINKS\`]->(m) WHERE NOT (coalesce(r.\`linkId\`) IS :: STRING NOT NULL) RETURN r`)).toEqual([]);
     expect(directReads(`${anchor} MATCH (a)-[r:\`LINKS\`]->(m) WHERE coalesce(m.\`stop\`, false) <> true AND m <> a RETURN r`)).toEqual(['m.`stop`']);
-    expect(directReads(`${anchor} MATCH (a)-[r:\`LINKS\`]->(m) WHERE head([m.\`stop\`]) = 1 RETURN r.\`linkId\``)).toEqual([]);
+    expect(directReads(`${anchor} MATCH (a)-[r:\`LINKS\`]->(m) WHERE coalesce(m.\`stop\`) = 1 RETURN r.\`linkId\``)).toEqual([]);
     expect(directReads('MATCH (a:`Maker`) WHERE a.`makerId` IN [$stableId] RETURN a')).toEqual(['a.`makerId`']);
   });
 });
