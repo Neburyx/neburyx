@@ -239,6 +239,7 @@ test.describe('the Patterns panel by keyboard', () => {
     }
     expect(names).toEqual([
       'Close Patterns',
+      'Open the patterns library',
       '+ New pattern',
       'Shared devices',
       'Shared addresses',

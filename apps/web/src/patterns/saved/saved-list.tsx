@@ -117,7 +117,7 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
 }
 
 /** The built-in definitions, in the sections their mappings name (in the order first named) and, with no group or the group "general", in the general section with the built-in templates. */
-function groupsOf(definitions: readonly BuiltInDefinition[] | undefined): { readonly named: readonly { readonly name: string; readonly items: readonly BuiltInDefinition[] }[]; readonly general: readonly BuiltInDefinition[] } {
+export function groupsOf(definitions: readonly BuiltInDefinition[] | undefined): { readonly named: readonly { readonly name: string; readonly items: readonly BuiltInDefinition[] }[]; readonly general: readonly BuiltInDefinition[] } {
   const named = new Map<string, BuiltInDefinition[]>();
   const general: BuiltInDefinition[] = [];
   for (const item of definitions ?? []) {
@@ -172,7 +172,7 @@ function SavedRows({ items, empty, presets, actions, nameOf, windowOf }: { reado
 }
 
 /** The menu of a row: the person's own pattern offers what the person may do, in the order of the frame; another person's shared pattern offers Run and Copy, and says what only its owner can do. */
-function menuOf(item: ListedPattern, actions: RowActions): MenuEntry[] {
+export function menuOf(item: ListedPattern, actions: RowActions): MenuEntry[] {
   const controls = controlsOf(item);
   if (!item.ownedByYou) {
     return [

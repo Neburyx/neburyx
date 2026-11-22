@@ -73,3 +73,18 @@ export function paramsInWords(preset: Pick<Preset, 'labels'>, params: Readonly<R
     })
     .join(', ');
 }
+
+/** The stored parameters of a saved run as values alone, in the order stored: "30 days · max 25". A bound keeps the first word of its label ("max"), a window loses its "Last". */
+export function paramValuesOf(preset: Pick<Preset, 'labels'>, params: Readonly<Record<string, unknown>>): string {
+  return Object.entries(params)
+    .filter(([key]) => key !== 'ref')
+    .flatMap(([key, value]) => {
+      const text = textOf(value);
+      if (text === undefined) return [];
+      if (isRecord(value)) return [text.replace(/^Last /, '')];
+      const label = preset.labels.find((entry) => entry.key === key)?.text ?? plainName(key);
+      const bound = /^(max|min)\b/i.exec(label);
+      return [bound === null ? text : `${bound[1]?.toLowerCase()} ${text}`];
+    })
+    .join(' · ');
+}

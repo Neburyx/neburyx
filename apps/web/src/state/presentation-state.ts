@@ -7,6 +7,8 @@ import { bounded, conditionKey, isEmptyCondition, isRangeKind, MAX_CHOSEN_VALUES
 import { createStore, readable, type ReadableStore } from './store.js';
 import { sameWindow, type DatedRow, type TimeFilter } from './time-window.js';
 
+const NO_HANDOFF = { patternsPreset: undefined, patternsSaved: undefined, patternsBuiltIn: undefined } as const;
+
 export interface Position {
   readonly x: number;
   readonly y: number;
@@ -118,6 +120,12 @@ interface PathsHandover {
   readonly serial: number;
 }
 
+/** What the patterns library asks the panel to do with a pattern: run it, open it in the builder for a change, or open a copy of it there. */
+interface PatternsHandoff {
+  readonly id: string;
+  readonly action: 'run' | 'change' | 'copy';
+}
+
 export interface PresentationState {
   readonly tool: PointerTool;
   /** How the loaded graph is arranged when a person lays it out, and which way a hierarchical layout runs. Part of the view that is saved. */
@@ -166,6 +174,10 @@ export interface PresentationState {
   readonly summaryNotesRequests: number;
   /** The preset the Patterns panel selects when it next shows its list: handed over by the way into the panel from Home, read once and cleared by the panel, and cleared when the panel closes. Not saved with a view, and not kept when another source is bound. */
   readonly patternsPreset: string | undefined;
+  /** A saved pattern the patterns library hands to the panel, with what the panel does with it. */
+  readonly patternsSaved: PatternsHandoff | undefined;
+  /** A built-in definition the patterns library hands to the panel, with what the panel does with it. */
+  readonly patternsBuiltIn: PatternsHandoff | undefined;
   readonly panelSizes: ReadonlyMap<string, number>;
   /** A panel is collapsed under the registration number it was collapsed with, so a panel taken out and registered again opens expanded. Not saved with a view. */
   readonly collapsedPanels: ReadonlyMap<string, number>;
@@ -239,6 +251,8 @@ export const INITIAL_PRESENTATION: PresentationState = {
   summaryNotesOnly: false,
   summaryNotesRequests: 0,
   patternsPreset: undefined,
+  patternsSaved: undefined,
+  patternsBuiltIn: undefined,
   panelSizes: new Map(),
   collapsedPanels: new Map(),
   legendOpen: false,
@@ -323,6 +337,8 @@ export interface PresentationActions {
   openSummaryNotes(): void;
   setSummaryNotesOnly(notesOnly: boolean): void;
   setPatternsPreset(preset: string | undefined): void;
+  setPatternsSaved(target: PatternsHandoff | undefined): void;
+  setPatternsBuiltIn(target: PatternsHandoff | undefined): void;
   setPanelSize(panel: string, size: number): void;
   clearPanelSize(panel: string): void;
   setLegendOpen(open: boolean): void;
@@ -614,27 +630,27 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setFiltersOpen(filtersOpen) {
       if (store.getState().filtersOpen === filtersOpen) return;
-      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false, pathsOpen: false, groupOpen: false } : {}) });
+      store.setState({ ...store.getState(), filtersOpen, ...(filtersOpen ? { searchOpen: false, patternsOpen: false, ...NO_HANDOFF, pathsOpen: false, groupOpen: false } : {}) });
     },
     setPatternsOpen(patternsOpen) {
       if (store.getState().patternsOpen === patternsOpen) return;
-      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false, pathsOpen: false, groupOpen: false } : { patternsPreset: undefined }) });
+      store.setState({ ...store.getState(), patternsOpen, ...(patternsOpen ? { searchOpen: false, filtersOpen: false, pathsOpen: false, groupOpen: false } : NO_HANDOFF) });
     },
     setGroupOpen(groupOpen) {
       if (store.getState().groupOpen === groupOpen) return;
-      store.setState({ ...store.getState(), groupOpen, ...(groupOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false, pathsOpen: false } : {}) });
+      store.setState({ ...store.getState(), groupOpen, ...(groupOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false, ...NO_HANDOFF, pathsOpen: false } : {}) });
     },
     setPathsOpen(pathsOpen) {
       if (store.getState().pathsOpen === pathsOpen) return;
-      store.setState({ ...store.getState(), pathsOpen, ...(pathsOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false, groupOpen: false } : {}) });
+      store.setState({ ...store.getState(), pathsOpen, ...(pathsOpen ? { searchOpen: false, filtersOpen: false, patternsOpen: false, ...NO_HANDOFF, groupOpen: false } : {}) });
     },
     requestPaths(ends) {
       const current = store.getState();
-      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, groupOpen: false, pathsHandover: { ...ends, serial: (current.pathsHandover?.serial ?? 0) + 1 } });
+      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, ...NO_HANDOFF, groupOpen: false, pathsHandover: { ...ends, serial: (current.pathsHandover?.serial ?? 0) + 1 } });
     },
     requestPathsFocus(target) {
       const current = store.getState();
-      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, pathsFocus: { target, serial: (current.pathsFocus?.serial ?? 0) + 1 } });
+      store.setState({ ...current, pathsOpen: true, searchOpen: false, filtersOpen: false, patternsOpen: false, ...NO_HANDOFF, pathsFocus: { target, serial: (current.pathsFocus?.serial ?? 0) + 1 } });
     },
     clearPathsFocus() {
       if (store.getState().pathsFocus === undefined) return;
@@ -665,7 +681,15 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setPatternsPreset(patternsPreset) {
       if (store.getState().patternsPreset === patternsPreset) return;
-      store.setState({ ...store.getState(), patternsPreset });
+      store.setState({ ...store.getState(), ...(patternsPreset === undefined ? {} : NO_HANDOFF), patternsPreset });
+    },
+    setPatternsSaved(patternsSaved) {
+      if (store.getState().patternsSaved === patternsSaved) return;
+      store.setState({ ...store.getState(), ...(patternsSaved === undefined ? {} : NO_HANDOFF), patternsSaved });
+    },
+    setPatternsBuiltIn(patternsBuiltIn) {
+      if (store.getState().patternsBuiltIn === patternsBuiltIn) return;
+      store.setState({ ...store.getState(), ...(patternsBuiltIn === undefined ? {} : NO_HANDOFF), patternsBuiltIn });
     },
     replacePins(keys) {
       requireKnown(keys, known.isNode);
@@ -681,7 +705,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     setSearchOpen(searchOpen) {
       if (store.getState().searchOpen === searchOpen) return;
-      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false, pathsOpen: false, groupOpen: false } : {}) });
+      store.setState({ ...store.getState(), searchOpen, ...(searchOpen ? { filtersOpen: false, patternsOpen: false, ...NO_HANDOFF, pathsOpen: false, groupOpen: false } : {}) });
     },
     setSearchTab(searchTab) {
       if (store.getState().searchTab === searchTab) return;
@@ -689,7 +713,7 @@ export function createPresentationStore(known: KnownElements): PresentationStore
     },
     requestSearch() {
       const current = store.getState();
-      store.setState({ ...current, searchOpen: true, filtersOpen: false, patternsOpen: false, pathsOpen: false, searchFocus: current.searchFocus + 1 });
+      store.setState({ ...current, searchOpen: true, filtersOpen: false, patternsOpen: false, ...NO_HANDOFF, pathsOpen: false, searchFocus: current.searchFocus + 1 });
     },
     setSheetOpen(sheetOpen) {
       if (store.getState().sheetOpen === sheetOpen) return;

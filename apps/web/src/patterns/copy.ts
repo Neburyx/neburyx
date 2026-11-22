@@ -25,6 +25,7 @@ export const PATTERNS_COPY = {
   close: 'Close Patterns',
   closeBuilder: 'Close pattern builder',
   intro: 'Approved ways to explore. No query language needed.',
+  openLibrary: 'Open the patterns library',
   list: 'Patterns',
   run: 'Run pattern',
   savePattern: 'Save pattern',

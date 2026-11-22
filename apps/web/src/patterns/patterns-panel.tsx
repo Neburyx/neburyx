@@ -7,6 +7,8 @@ import { useRequest } from '../api/use-request.js';
 import { useProfile, useProfileReload, useProfileState } from '../canvas/profile-context.js';
 import { useContextEpoch } from '../search/use-context-epoch.js';
 import { answeredData, useShellData } from '../shell/shell-data.js';
+import { Link } from 'react-router';
+import { PATTERNS_PATH } from '../shell/navigation.js';
 import { useClientState, useLoadedGraph, useSessionMask, useVisibleGraph } from '../state/context.js';
 import { edgeKey, elementKey } from '../state/keys.js';
 import { partitionEdges } from '../state/loaded-graph.js';
@@ -253,7 +255,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
       if (presetOf.current !== item.id) presetStore.clear();
       presetOf.current = item.id;
       setView('saved-preset');
-      if (!item.askForStartingEntity) presetStore.run({ id: item.id, kind: item.kind });
+      if (!item.askForStartingEntity && item.availability.status === 'available') presetStore.run({ id: item.id, kind: item.kind });
       return;
     }
     const parsed = patternDefinitionSchema.safeParse(item.definition);
@@ -281,6 +283,41 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
       setView('list');
     }
   };
+  const entrances = useRef({ runSaved, change, runBuiltIn, copyBuiltIn });
+  entrances.current = { runSaved, change, runBuiltIn, copyBuiltIn };
+  const handedSaved = useStoreSelector(state.presentation.view, (current) => current.patternsSaved);
+  useEffect(() => {
+    // a failed read drops the hand-off without the "not there any more" sentence: the list already shows its own failure
+    if (handedSaved === undefined) return;
+    const list = saved.state;
+    if (list.phase === 'loading') return;
+    if (list.phase === 'failed' || (list.phase === 'ready' && list.moreFailure !== undefined)) {
+      state.presentation.setPatternsSaved(undefined);
+      return;
+    }
+    const found = list.items.find((candidate) => candidate.id === handedSaved.id);
+    if (found !== undefined) {
+      state.presentation.setPatternsSaved(undefined);
+      if (handedSaved.action === 'change' && found.kind === 'definition') entrances.current.change(found);
+      else entrances.current.runSaved(found);
+      return;
+    }
+    if (list.nextCursor !== null) {
+      if (!list.loadingMore) saved.loadMore();
+      return;
+    }
+    state.presentation.setPatternsSaved(undefined);
+    setNotice({ text: SAVED_COPY.handedGone, tone: 'problem' });
+  }, [state, saved, handedSaved]);
+  const handedBuiltIn = useStoreSelector(state.presentation.view, (current) => current.patternsBuiltIn);
+  useEffect(() => {
+    if (handedBuiltIn === undefined || templateData === undefined) return;
+    state.presentation.setPatternsBuiltIn(undefined);
+    const definition = templateData.builtInDefinitions?.find((candidate) => candidate.id === handedBuiltIn.id);
+    if (definition === undefined) setNotice({ text: SAVED_COPY.handedGone, tone: 'problem' });
+    else if (handedBuiltIn.action === 'copy') entrances.current.copyBuiltIn(definition);
+    else entrances.current.runBuiltIn(definition);
+  }, [state, templateData, handedBuiltIn]);
   useEffect(() => {
     if (view === 'list') cancelOrClose.current = presetRun.running && presetId !== undefined ? presetRun.cancel : close;
   }, [view, presetRun.running, presetRun.cancel, presetId]);
@@ -324,6 +361,11 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
         <p className="search-panel-note patterns-subhead">{view === 'run' ? (runHeader?.subtitle ?? RUN_COPY.draft) : view === 'saved-preset' ? (savedItem === undefined ? '' : kindLineOf(savedItem, templateData?.presets)) : editing === undefined ? EDITOR_SUBTITLE : changed ? `${editing.item.name} · ${RUN_COPY.changesNotSaved}` : editing.item.name}</p>
       )}
       {view === 'list' ? <p className="search-panel-note">{PATTERNS_COPY.intro}</p> : null}
+      {view === 'list' && sourceId !== null ? (
+        <Link className="link" to={`${PATTERNS_PATH}?source=${encodeURIComponent(sourceId)}`}>
+          {PATTERNS_COPY.openLibrary}
+        </Link>
+      ) : null}
       {notice === undefined ? null : (
         <p className="search-panel-note" role={notice.tone === 'problem' ? 'alert' : 'status'}>
           {notice.text}
@@ -396,7 +438,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               }
             />
           </div>
-          {view === 'saved-preset' && savedItem !== undefined ? (
+          {view === 'saved-preset' && savedItem !== undefined && templateData !== undefined ? (
             <SavedPresetRun
               client={client}
               sourceId={sourceId}
@@ -435,6 +477,38 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
                 editing={editingView}
               />
             </div>
+          ) : null}
+          {view === 'run' && previewing !== undefined && profile === undefined ? (
+            profileView.kind === 'failed' && profileView.failure !== undefined ? (
+              <>
+                <TemplatesFailure failure={profileView.failure} sourceName={sourceName} retry={reloadProfile} />
+                <div className="patterns-actions">
+                  <button type="button" className="secondary" onClick={backToList}>
+                    {PATTERNS_COPY.backToList}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="search-panel-note" role="status">
+                {PATTERNS_COPY.loading}
+              </p>
+            )
+          ) : null}
+          {view === 'saved-preset' && savedItem !== undefined && templateData === undefined ? (
+            templates.state.phase === 'failed' ? (
+              <>
+                <TemplatesFailure failure={templates.state.failure} sourceName={sourceName} retry={templates.reload} />
+                <div className="patterns-actions">
+                  <button type="button" className="secondary" onClick={backToList}>
+                    {PATTERNS_COPY.backToList}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="search-panel-note" role="status">
+                {PATTERNS_COPY.loading}
+              </p>
+            )
           ) : null}
           {view === 'run' && previewing !== undefined && profile !== undefined ? (
             <RunFlow

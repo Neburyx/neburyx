@@ -981,3 +981,136 @@
   background: var(--color-accent);
 }
 
+.library-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+}
+
+.library-tabs {
+  display: flex;
+  gap: var(--space-16);
+  border-bottom: var(--border-width) solid var(--color-control-border);
+}
+
+.library-tab {
+  padding: var(--space-8) 0;
+  border: 0;
+  border-bottom: var(--border-width-current) solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.library-tab[aria-selected='true'] {
+  border-bottom-color: var(--color-accent);
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.library-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-panel);
+}
+
+.library-panel > .search-panel-note,
+.library-panel > .patterns-actions,
+.library-panel > .patterns-error,
+.library-panel > .patterns-state,
+.library-panel > .sources-failure,
+.library-panel > section > .pattern-section-heading {
+  margin: 0;
+  padding: var(--space-10) var(--space-12);
+}
+
+.library-panel > .patterns-state {
+  border: 0;
+}
+
+.library-panel:focus-visible {
+  outline-offset: calc(var(--border-width) * -1);
+}
+
+.library-table {
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.library-table th,
+.library-table td {
+  padding: var(--space-10) var(--space-12);
+  border-bottom: var(--border-width) solid var(--color-control-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.library-table thead th {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  font-weight: normal;
+}
+
+.library-table tbody tr:last-child th,
+.library-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.library-name {
+  font-weight: normal;
+}
+
+.library-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  justify-content: flex-end;
+}
+
+.library-footnote {
+  margin: 0;
+  padding: var(--space-10) var(--space-12);
+  border-top: var(--border-width) solid var(--color-control-border);
+}
+
+.library-pill {
+  display: inline-block;
+  padding: 0 var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius-panel);
+  font-size: var(--font-size-caption);
+  white-space: nowrap;
+}
+
+.library-actions .pattern-menu {
+  right: 0;
+  left: auto;
+}
+
+.library-table th:nth-child(1) {
+  width: 22%;
+}
+
+.library-table th:nth-child(2) {
+  width: 20%;
+}
+
+.library-table th:nth-child(3) {
+  width: 24%;
+}
+
+.library-table th:nth-child(4) {
+  width: 11%;
+}
+
+.library-table th:nth-child(5) {
+  width: 13%;
+}
+
+.library-table th:nth-child(6) {
+  width: 10%;
+}

@@ -61,6 +61,7 @@ async function abort(page: Page, matches: (url: URL) => boolean): Promise<void> 
   await page.route(matches, (route) => route.abort());
 }
 const isSources = (url: URL): boolean => url.pathname === '/v1/sources';
+const isPatternList = (url: URL): boolean => url.pathname === '/v1/patterns';
 const isProfile = (url: URL): boolean => /^\/v1\/sources\/[^/]+\/profile$/.test(url.pathname);
 
 /** Brings the page to the state of each entry, and waits until the controls of that state are on screen. */
@@ -251,6 +252,31 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   'Sources with the mapping example failed': async (page) => {
     await abort(page, isProfile);
     await page.goto('/sources');
+    await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  },
+  'Patterns library with My patterns': async (page) => {
+    await page.goto('/patterns?source=banking-demo');
+    await expect(page.getByRole('tab', { name: /^My patterns/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Run Device ring' })).toBeVisible();
+  },
+  'Patterns library with the Shared tab': async (page) => {
+    await page.goto('/patterns?source=banking-demo');
+    await page.getByRole('tab', { name: /^Shared on this source/ }).click();
+    await expect(page.getByRole('button', { name: 'Run Shared by Pat' })).toBeVisible();
+  },
+  'Patterns library with the Built-in tab': async (page) => {
+    await page.goto('/patterns?source=banking-demo');
+    await page.getByRole('tab', { name: /^Built-in/ }).click();
+    await expect(page.getByRole('button', { name: 'Run Shared devices' })).toBeVisible();
+  },
+  'Patterns library with a row menu open': async (page) => {
+    await page.goto('/patterns?source=banking-demo');
+    await page.getByRole('button', { name: 'More: Device ring' }).click();
+    await expect(page.getByRole('menu', { name: 'Device ring' })).toBeVisible();
+  },
+  'Patterns library with the list read failed': async (page) => {
+    await abort(page, isPatternList);
+    await page.goto('/patterns?source=banking-demo');
     await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
   },
   'Explore with an entity loaded': async (page) => {

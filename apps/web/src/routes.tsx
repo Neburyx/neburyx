@@ -10,6 +10,7 @@ import { SearchPage } from './search/search-page.js';
 import { ApiClientProvider } from './api/client-context.js';
 import { createWorkspacePresence, WorkspacePresenceProvider } from './workspace/workspace-presence.js';
 import { SearchShortcut } from './search/search-shortcut.js';
+import { LibraryPage } from './patterns/library/library-page.js';
 import { SourcesPage } from './sources/sources-page.js';
 import { createExcerpts } from './sources/excerpts.js';
 import { ExcerptsProvider } from './sources/excerpts-context.js';
@@ -168,6 +169,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
             { index: true, element: <StartPage /> },
             { path: 'investigations', element: <InvestigationsPage /> },
             { path: 'search', element: <SearchPage client={client} /> },
+            { path: 'patterns', element: <LibraryPage /> },
             { path: 'sources', element: <SourcesPage /> },
             ...developmentRoutes(client),
             { path: ':sourceId/entity/:entityType/:stableId', element: <DeepLinkPage client={client} /> },

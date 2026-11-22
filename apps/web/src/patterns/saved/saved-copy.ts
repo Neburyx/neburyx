@@ -24,6 +24,7 @@ export const SAVED_COPY = {
   newPattern: 'New pattern',
   seeBuiltIn: 'See built-in',
   emptyShared: 'Nobody has shared a pattern on this source.',
+  handedGone: 'That pattern is not there any more.',
   loadMore: 'Load more',
   cursorReset: 'The list changed while you were reading it, so it was read again from the start.',
   notRun: 'Not run yet',

@@ -28,7 +28,7 @@ export function NavigationRail() {
           <BrandMark />
         </span>
         <ul>
-          {NAVIGATION.map((item, index) => (
+          {NAVIGATION.filter((item) => item.inRail !== false).map((item, index) => (
             <Fragment key={item.to}>
               {index === 1 ? <RailSlot name="search" /> : null}
               <li>
