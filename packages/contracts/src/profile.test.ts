@@ -59,4 +59,17 @@ describe('source profile contract', () => {
     expect(withKinds(['number'])).toBe(false);
     expect(sourceProfileSchema.safeParse(profile).success).toBe(true);
   });
+
+  it('accepts style rules of each effect, an empty list and a profile without the list, and refuses a rule with two effects, an unknown tone or no condition', () => {
+    const rule = { id: 'r', label: 'Review', appliesTo: 'node_a', effect: { badge: 'amber' }, condition: 'status = review' };
+    const withRules = (styleRules: unknown) => sourceProfileSchema.safeParse({ ...profile, styleRules }).success;
+    expect(withRules([rule, { ...rule, id: 's', effect: { color: 'red' } }, { ...rule, id: 't', effect: { icon: 'shield' } }, { ...rule, id: 'u', effect: { size: 'larger' } }])).toBe(true);
+    expect(withRules([])).toBe(true);
+    expect(withRules([{ ...rule, effect: { badge: 'amber', color: 'red' } }])).toBe(false);
+    expect(withRules([{ ...rule, effect: { badge: 'mauve' } }])).toBe(false);
+    expect(withRules([{ ...rule, effect: { size: 'huge' } }])).toBe(false);
+    expect(withRules([{ id: 'r', label: 'Review', appliesTo: 'node_a', effect: { badge: 'amber' } }])).toBe(false);
+    expect(withRules([{ ...rule, label: 'x'.repeat(81) }])).toBe(false);
+    expect(sourceProfileSchema.safeParse(profile).success).toBe(true);
+  });
 });

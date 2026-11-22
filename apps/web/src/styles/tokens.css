@@ -20,6 +20,11 @@
   --color-danger-surface: #fbecee;
   --color-danger: #992933;
   --color-focus: var(--color-accent);
+  --style-tone-amber: #e8890c;
+  --style-tone-red: #c6303e;
+  --style-tone-green: #2e8b57;
+  --style-tone-blue: #2c7be5;
+  --style-tone-gray: #59616f;
   --color-canvas: #fafbfc;
   --color-workspace-border: #e3e6ec;
   --color-workspace-muted: #4a5261;
@@ -95,6 +100,8 @@
   --legend-heading-size: 15px;
   --legend-swatch-border-width: 1.5px;
   --legend-column-min: 140px;
+  --legend-badge-size: 12px;
+  --style-larger-factor: 1.5;
   --color-legend-swatch-border: #c7cce5;
   --stand-in-zoom-width: 197px;
   --selection-box-fill: rgba(82, 99, 166, 0.07);

@@ -236,7 +236,12 @@ sources:
         rule_version: 1
         stop_list_property: isShared  # e.g. ignore NAT/shared devices
 
-    style_rules: []                   # kept as written and hashed; the format is decided with style rules
+    style_rules:                      # look by property value; entity types only; [] or absent = none
+      - id: review-flag
+        label: Review required        # the legend's text
+        applies_to: account           # one entity type of the mapping
+        when: { property: risk_flag, op: eq, value: review_required }
+        effect: { badge: amber }      # exactly one of badge, color, icon, size
 
     patterns:                         # presets: a built-in template bound to mapped types, with labels
       - id: shared-devices
@@ -303,6 +308,8 @@ Only `type`, `label` and `stable_id` are required for an entity type. Everything
 default: a generic icon, the stable ID as the title, the first mapped properties as key properties,
 no style rules. A minimal mapping is therefore usable on day one.
 
+**Style rules** (`style_rules`). A rule has an `id`, a `label` (the legend's text), `applies_to` (one entity type), `when` (one condition `{ property, op, value }`) and `effect` (exactly one of `badge`, `color`, `icon`, `size`). The condition is data, never an expression: `op` is `eq`, `in`, `gt`, `gte`, `lt`, `lte` or `between`; `eq` and `in` suit any mapped property, and the ordering operators need a filterable property with a declared kind (`number`, a date kind or a time kind). The effect is a closed set: a tone (`amber`, `red`, `green`, `blue`, `gray`) for `badge` and `color`, an icon key, or `larger` for `size`. Load refuses a rule on a `pii` property, on an unmapped property, on an unknown entity type, and a duplicate `id`. A rule never causes a read: it is evaluated on the server after Redact, only on the properties the node already carries, and a property that is missing, masked or removed by policy gives no match. For one kind of effect on one node the first matching rule in mapping order wins; the node lists every matched rule id. The profile lists each rule with its server-built condition text. The [mapping guide](mapping-guide.md#style-rules) describes the format for administrators.
+
 The mapping is also the **projection list**: Cypher returns only mapped properties, never whole
 nodes, which keeps responses small. A property that is not mapped is never shown.
 
@@ -310,7 +317,7 @@ nodes, which keeps responses small. A property that is not mapped is never shown
 relationship types, icons, titles, key properties, filterable and sortable properties, `pii` flags,
 the `properties` list of each type (every property the mapping names for it, the same list a record
 is projected to, built by the same function; names only) and, for a relationship type, the property
-that holds its stable ID (none for an aggregate type), pattern presets, style rules (id, label, condition text, effect), vocabulary and a redacted mapping
+that holds its stable ID (none for an aggregate type), pattern presets, style rules (id, label, the type it applies to, effect and condition text), vocabulary and a redacted mapping
 excerpt. It never contains secrets or the URI. The response carries the source's `config_hash` as its
 ETag, so the client fetches it once per session and again only after a config change.
 

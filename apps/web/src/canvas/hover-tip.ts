@@ -37,7 +37,7 @@ export function createHoverTip(container: HTMLElement): HoverTip {
         container.append(tip);
         element = tip;
       }
-      const lines = [title, ...(detail === undefined || detail === '' ? [] : [detail])];
+      const lines = [title, ...(detail === undefined || detail === '' ? [] : detail.split('\n'))];
       tip.replaceChildren(
         ...lines.map((line, index) => {
           const row = container.ownerDocument.createElement('p');

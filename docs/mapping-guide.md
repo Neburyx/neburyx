@@ -133,7 +133,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `relationships` | no | The relationship types between entity types |
 | `derived` | no | Relationships Neburyx computes along a path of mapped types; always shown as derived |
 | `patterns` | no | Built-in patterns: a template bound to your types, with labels, or a definition written in your types (see [built-in definitions](#built-in-definitions)) |
-| `style_rules` | no | Kept as written and hashed; plain data only |
+| `style_rules` | no | How a node looks when one of its values matches a condition, declared once and explained in the legend; see [style rules](#style-rules) |
 
 <!-- keys: auth -->
 | Key | Required | What it does |
@@ -249,6 +249,46 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 ### Built-in definitions
 
 A `patterns` entry with a `definition` is a built-in pattern an analyst runs from the Patterns panel without building it: it names your own entity and relationship types, so it is declared in your mapping. It holds no query text and is checked when the mapping loads, exactly as a saved definition is checked against the source (a type or relationship the mapping does not have, a time order on a relationship with no time property, a fan above `heavy_op_threshold`, a cycle longer than `max_hops`): a definition that fails stops the load, naming the pattern and the problem codes and where they are, never a value. An entry has a definition or a template, not both.
+
+### Style rules
+
+A style rule changes how a node looks when one value it carries matches a condition. It is declared in the mapping, applies to one entity type, and is explained in the legend under "Style rules · from neburyx.yaml". A new rule needs only an edit of the file and a reload (see [reloading the mapping](#reloading-the-mapping-while-you-edit-it)).
+
+```yaml
+sources:
+  - id: orders
+    uri: neo4j+s://graph.example.test:7687
+    database: neo4j
+    auth: { kind: basic, username_env: ORDERS_USER, password_env: ORDERS_PASSWORD }
+    entities:
+      - type: purchase
+        label: Purchase
+        stable_id: purchaseId
+        filterable: [status, total]
+        kinds: { total: number }
+        display: { icon: document, key_properties: [total, status], state_property: status }
+    style_rules:
+      - id: held-purchase
+        label: Held for review
+        applies_to: purchase
+        when: { property: status, op: eq, value: held }
+        effect: { badge: amber }
+      - id: large-purchase
+        label: Large purchase
+        applies_to: purchase
+        when: { property: total, op: gt, value: 2000 }
+        effect: { size: larger }
+```
+
+A rule has these keys: `id` (unique in the source), `label` (the legend's text, at most 80 characters), `applies_to` (one entity type of the mapping; relationship types are not supported), `when` and `effect`.
+
+- **One condition.** `when` is `{ property, op, value }`: no expression and no text a database reads. The operators are `eq`, `in` (a list of 1 to 20 values), `gt`, `gte`, `lt`, `lte` and `between` (a list of two values, the low end and the high end, both included). `eq` and `in` suit any mapped property. The ordering operators (`gt`, `gte`, `lt`, `lte`, `between`) need a **filterable** property with a declared kind of `number`, a date kind or a time kind (`kinds`, see [an entity type](#an-entity-type)); declaring it also makes the property available to the expand filters.
+- **How values compare.** A value is compared by the kind of data the node carries: numbers by numeric value, `dateTime` as a moment in time, and the other kinds as the local value they are. A value of another kind does not match; nothing is converted, so the text `"2450"` does not match the number 2450. A value that is missing, masked or removed by your access policy gives no match.
+- **One effect.** `effect` has exactly one of `badge` or `color` (a tone: `amber`, `red`, `green`, `blue` or `gray`), `icon` (one of the icon keys of the mapping) or `size` (`larger`).
+- **Which rule wins.** For one kind of effect on one node, the first matching rule in the file wins. A node that matches several rules shows each kind of effect once, and the legend says which rule applies where two rules of one type and one kind overlap.
+- **Personal data.** A rule on a `pii` property is refused, so a rule cannot change how an item looks from a value the person is not allowed to see. Rules run after your access policy, and a rule never causes a read of the source.
+
+A rule that cannot be used stops the mapping from loading, naming the path of what is wrong and the reason, never a value: a property marked `pii`, a property that is not mapped for the type, a type that is not an entity type of the source, an `id` used twice, an operator that does not suit the property's declared kind, a value that does not suit it, or an effect that is not exactly one of the four.
 
 ### The budgets
 

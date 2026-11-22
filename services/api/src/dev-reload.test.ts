@@ -8,7 +8,7 @@ import { AppError } from './errors.js';
 import type { SourceGate, SourceGateOptions } from './gate/source-gate.js';
 import { start, type StartIo } from './start.js';
 import { memoryAppStore } from './testing/app-store.js';
-import { baseSource, fileOf, type Json } from './testing/mapping.js';
+import { baseSource, fileOf, styleRuleOf, type Json } from './testing/mapping.js';
 import { makeExportDirectory } from './testing/export-directory.js';
 import { makeWebRoot } from './testing/web-root.js';
 
@@ -191,6 +191,34 @@ describe('the dev reload', () => {
     r.save(fileOf(baseSource(), baseSource({ id: 'second' })));
     await settled(r.logs, 'mapping.reloaded');
     expect(await sourcesOf(result.app)).toEqual(['demo', 'second']);
+    await result.app.close();
+  });
+
+  it('serves a rule added by a reload with no restart: the profile lists it, and the gate opened for the new mapping holds it for the next read', async () => {
+    const r = rig(fileOf(baseSource()));
+    const result = await start(r.env, r.io);
+    if (result.exitCode !== 0) throw new Error('did not start');
+    const profileOf = async () => (await result.app.inject({ url: '/v1/sources/demo/profile' })).json() as { styleRules: { id: string; condition: string }[] };
+    expect((await profileOf()).styleRules).toEqual([]);
+    r.save(fileOf(baseSource({ style_rules: [styleRuleOf({ id: 'added' })] })));
+    await settled(r.logs, 'mapping.reloaded');
+    expect((await profileOf()).styleRules.map((rule) => rule.id)).toEqual(['added']);
+    expect(r.opened).toHaveLength(2);
+    expect(r.opened[1]?.mapping.sources[0]?.styleRules.map((rule) => rule.id)).toEqual(['added']);
+    await result.app.close();
+  });
+
+  it('keeps the working mapping and its style rules when a reload adds a rule that is refused, and says why without a value', async () => {
+    const good = styleRuleOf({ id: 'keep' });
+    const r = rig(fileOf(baseSource({ style_rules: [good] })));
+    const result = await start(r.env, r.io);
+    if (result.exitCode !== 0) throw new Error('did not start');
+    const before = (await result.app.inject({ url: '/v1/sources/demo/profile' })).headers['etag'];
+    r.save(fileOf(baseSource({ style_rules: [good, styleRuleOf({ id: 'bad', applies_to: 'SUPPLIED_TYPE_NAME_NOT_PRESENT' })] })));
+    await settled(r.logs, 'mapping.reload_refused');
+    expect(r.opened).toHaveLength(1);
+    expect((await result.app.inject({ url: '/v1/sources/demo/profile' })).headers['etag']).toBe(before);
+    expect(JSON.stringify(r.logs.find((line) => line.event === 'mapping.reload_refused'))).not.toContain('graph.example.test');
     await result.app.close();
   });
 

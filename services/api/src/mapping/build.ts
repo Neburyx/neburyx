@@ -3,6 +3,8 @@ import { PRESET_TEMPLATES, type FilterKind, type PresetTemplate } from '@neburyx
 import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
+import { entityProjection } from './projection.js';
+import { buildStyleRules } from './style-rules.js';
 import {
   MAX_EVIDENCE_PROPERTIES,
   MAX_FACET_PROBES,
@@ -348,6 +350,7 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
     report([...base, 'budgets', 'default_page'], `is above max_page (${budgets.maxPage})`);
   }
 
+  const entities = raw.entities.map((entity, i) => buildEntity(entity, [...base, 'entities', i], report));
   const model: Omit<SourceModel, 'configHash'> = {
     id: raw.id,
     uri: raw.uri,
@@ -357,11 +360,11 @@ function buildSource(raw: RawSource, index: number, report: Report): SourceModel
     ...(raw.demo_case === undefined ? {} : { demoCase: { entityType: raw.demo_case.entity.type, stableId: raw.demo_case.entity.id, caseRef: raw.demo_case.case_ref } }),
     budgets: { ...budgets, defaultPage },
     vocabulary: raw.vocabulary?.case_ref === undefined ? {} : { caseRef: raw.vocabulary.case_ref },
-    entities: raw.entities.map((entity, i) => buildEntity(entity, [...base, 'entities', i], report)),
+    entities,
     relationships: rawRelationships.map((r, i) => buildRelationship(r, [...base, 'relationships', i], entityTypes, report)),
     derived: rawDerived.map((rule, i) => buildDerived(rule, [...base, 'derived', i], entityTypes, relationshipTypes, report)),
     presets: rawPresets.map(({ entry, index }) => buildPreset(entry, [...base, 'patterns', index], entityTypes, relationshipTypes, report)),
-    styleRules: raw.style_rules ?? [],
+    styleRules: buildStyleRules(raw.style_rules ?? [], entities, relationshipTypes, new Map(entities.map((entity) => [entity.type, entityProjection(entity)])), [...base, 'style_rules'], report),
   };
   const builtIn = rawDefinitions.flatMap(({ entry, index }) => {
     const built = buildDefinition(entry, [...base, 'patterns', index], model, report);

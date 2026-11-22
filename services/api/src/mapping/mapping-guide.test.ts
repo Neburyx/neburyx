@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { PII_CLASSES } from '@neburyx/contracts';
+import { MAX_FILTER_VALUES, MAX_STYLE_LABEL, PII_CLASSES, STYLE_EFFECT_KINDS, STYLE_OPERATORS, STYLE_TONES } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { DOCS_FOLDER, GUIDE_PATH, guideBlocks, guideTable, guideText, unticked } from '../testing/guide.js';
@@ -203,5 +203,28 @@ describe('the links in the guide', () => {
 
   it('start from the docs folder', () => {
     expect(GUIDE_PATH.startsWith(DOCS_FOLDER)).toBe(true);
+  });
+});
+
+describe('the style rules section of the guide', () => {
+  const text = guideText();
+  const section = text.slice(text.indexOf('### Style rules'), text.indexOf('### The budgets'));
+
+  it('is there, and its example rules load', () => {
+    expect(section.length).toBeGreaterThan(500);
+    const block = guideBlocks().find((candidate) => candidate.heading === 'Style rules' && candidate.info === 'yaml');
+    expect(block).toBeDefined();
+    const loaded = parseMapping(block?.text ?? '', 'neburyx.yaml').sources[0];
+    expect(loaded?.styleRules.map((rule) => rule.id)).toEqual(['held-purchase', 'large-purchase']);
+  });
+
+  it('names every operator, effect kind and tone the product accepts, and the limits it checks', () => {
+    for (const word of [...STYLE_OPERATORS, ...STYLE_EFFECT_KINDS, ...STYLE_TONES]) expect(section, word).toContain(`\`${word}\``);
+    expect(section).toContain(`at most ${MAX_STYLE_LABEL} characters`);
+    expect(section).toContain(`1 to ${MAX_FILTER_VALUES} values`);
+  });
+
+  it('has the anchor the legend links to', () => {
+    expect(text).toMatch(/^### Style rules$/m);
   });
 });

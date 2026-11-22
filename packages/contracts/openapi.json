@@ -24908,10 +24908,11 @@
                 "type": "string",
                 "minLength": 1
               },
-              "badges": {
+              "styleRules": {
                 "type": "array",
                 "items": {
-                  "type": "string"
+                  "type": "string",
+                  "minLength": 1
                 }
               }
             },
@@ -32745,6 +32746,122 @@
                 "template",
                 "bind",
                 "labels"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "styleRules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "appliesTo": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "effect": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "badge": {
+                          "type": "string",
+                          "enum": [
+                            "amber",
+                            "red",
+                            "green",
+                            "blue",
+                            "gray"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "badge"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "color": {
+                          "type": "string",
+                          "enum": [
+                            "amber",
+                            "red",
+                            "green",
+                            "blue",
+                            "gray"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "color"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "icon": {
+                          "type": "string",
+                          "enum": [
+                            "generic",
+                            "person",
+                            "organization",
+                            "terminal",
+                            "network",
+                            "document",
+                            "money",
+                            "storefront",
+                            "telephone",
+                            "house",
+                            "car",
+                            "wrench",
+                            "shield",
+                            "folder"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "icon"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "size": {
+                          "type": "string",
+                          "const": "larger"
+                        }
+                      },
+                      "required": [
+                        "size"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "condition": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "appliesTo",
+                "effect",
+                "condition"
               ],
               "additionalProperties": false
             }

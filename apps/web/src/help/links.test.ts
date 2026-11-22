@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { HELP_LINKS, QUICKSTART_ANCHOR, REPOSITORY_URL } from './links.js';
+import { HELP_LINKS, QUICKSTART_ANCHOR, REPOSITORY_URL, STYLE_RULES_GUIDE } from './links.js';
 
 const SAMPLE_REPOSITORY = 'https://repository.example/owner/name';
 const published = (target: string): URL => new URL(target.replace(REPOSITORY_URL, SAMPLE_REPOSITORY));
@@ -48,6 +48,13 @@ describe('the help link targets', () => {
   it('keeps the only fragment as the fixed Quickstart anchor', () => {
     expect(QUICKSTART_ANCHOR).toBe('quickstart');
     expect(Object.values(REPOSITORY_LINKS).filter((target) => published(target).hash !== '')).toEqual([HELP_LINKS.quickstart]);
+  });
+});
+
+describe('the link to the style rules section of the mapping guide', () => {
+  it('is built from the repository address and names the guide and its section, with no query string', () => {
+    expect(STYLE_RULES_GUIDE).toBe(`${REPOSITORY_URL}/blob/main/docs/mapping-guide.md#style-rules`);
+    expect(published(STYLE_RULES_GUIDE).search).toBe('');
   });
 });
 

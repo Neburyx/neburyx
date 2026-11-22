@@ -1,12 +1,14 @@
-import type { IconKey } from '@neburyx/contracts';
+import type { IconKey, StyleTone } from '@neburyx/contracts';
 import cytoscape, { type Core, type EdgeSingular, type NodeSingular, type StylesheetJson } from 'cytoscape';
 import type { PointerTool, Position, Viewport } from '../state/presentation-state.js';
 import { CAPTION_HEIGHT, CAPTION_TOP, CAPTION_WIDTH } from './caption-layout.js';
 import { paintCaption, type CaptionPainter } from './caption-painter.js';
 import { glyphUri } from './glyphs.js';
 import { pinBadgeUri } from './pin-badge.js';
+import { styleBadgeUri } from './style-badge.js';
+import type { StyleLook } from './style-look.js';
 import { createHoverTip, type HoverTip } from './hover-tip.js';
-import { CAPTION_COLOR, CARD_BADGE_OFFSET, CARD_BADGE_SIZE, CARD_GLYPH_INSET, CARD_FONT_SIZE, CARD_HEIGHT, CARD_STACK_OPACITY, CARD_STACK_PADDING, CARD_WIDTH, AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
+import { STYLE_BADGE_SIZE, STYLE_COLOR_OUTLINE_WIDTH, STYLE_LARGER_FACTOR, STYLE_TONE_COLORS, CAPTION_COLOR, CARD_BADGE_OFFSET, CARD_BADGE_SIZE, CARD_GLYPH_INSET, CARD_FONT_SIZE, CARD_HEIGHT, CARD_STACK_OPACITY, CARD_STACK_PADDING, CARD_WIDTH, AGGREGATE_WIDTH, CAPTION_KNOCKOUT, ARROW_GAP, CAPTION_MIN_ZOOM, ARROW_SHAPE, DASH_PATTERN, DERIVED_COLOR, DOT_PATTERN, EDGE_COLOR, EDGE_WIDTH, FIT_PADDING, FOCUS_RING_GAP, FOCUS_RING_WIDTH, GLYPH_COLOR, GLYPH_SIZE, LABEL_FILL, LABEL_FONT_SIZE, NODE_DIAMETER, NODE_FILL, NODE_OUTER_DIAMETER, NODE_OUTLINE, NODE_OUTLINE_WIDTH, PIN_BADGE_SIZE, PILL_FILL, PILL_OUTLINE_WIDTH, SELECTED_HALO_OPACITY, SELECTED_HALO_PADDING, SELECTED_LINE_EXTRA, SELECTED_OUTLINE_WIDTH, TIP_GAP } from './look.js';
 import type { RelationshipLook } from './relationship-look.js';
 import { createBoxGesture, type BoxOverlay } from './box-gesture.js';
 import { createBoxOverlay } from './box-overlay.js';
@@ -39,6 +41,7 @@ interface CaptionJob {
   readonly line1: string;
   readonly line2: string;
   readonly pinned: boolean;
+  readonly style?: StyleLook;
 }
 
 const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, single: look.single === true, origin: look.origin, label: look.label ?? '', badge: look.badge ?? '', touched: look.touched === true, tip: look.tip ?? '' });
@@ -48,34 +51,52 @@ const edgeData = (look: RelationshipLook) => ({ aggregate: look.aggregate, singl
 /** A clear image that holds the caption's place in the list until the caption is painted, so the pin badge keeps its own place and size. */
 const NO_CAPTION = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 
-// The pin badge sits on the disc's edge, at 45 degrees to the upper right of the centre.
-const PIN_BADGE_X = NODE_DIAMETER / 2 + (Math.SQRT1_2 * NODE_OUTER_DIAMETER) / 2 - PIN_BADGE_SIZE / 2;
-const PIN_BADGE_Y = NODE_DIAMETER / 2 - (Math.SQRT1_2 * NODE_OUTER_DIAMETER) / 2 - PIN_BADGE_SIZE / 2;
+/**
+ * The places and sizes of the images of a node, by slot: the glyph, the caption, the pin badge and the badge of a style rule. A badge sits on the disc's edge, at 45 degrees to the upper right of the centre; the pin
+ * badge takes the lower right when the node has a style badge as well. A node a rule enlarges has every size and place scaled with its diameter, the caption hanging as far below the disc as it grows.
+ */
+function slotsOf(scale: number, lowerPin: boolean) {
+  const diameter = NODE_DIAMETER * scale;
+  const rim = (Math.SQRT1_2 * (diameter + NODE_OUTLINE_WIDTH)) / 2;
+  const rimX = diameter / 2 + rim;
+  return {
+    width: diameter,
+    height: diameter,
+    'background-width': [`${GLYPH_SIZE * scale}px`, `${CAPTION_WIDTH}px`, `${PIN_BADGE_SIZE}px`, `${STYLE_BADGE_SIZE}px`],
+    'background-height': [`${GLYPH_SIZE * scale}px`, `${CAPTION_HEIGHT}px`, `${PIN_BADGE_SIZE}px`, `${STYLE_BADGE_SIZE}px`],
+    'background-position-x': ['50%', '50%', `${rimX - PIN_BADGE_SIZE / 2}px`, `${rimX - STYLE_BADGE_SIZE / 2}px`],
+    'background-position-y': ['50%', `${CAPTION_TOP + (diameter - NODE_DIAMETER)}px`, `${diameter / 2 + (lowerPin ? rim : -rim) - PIN_BADGE_SIZE / 2}px`, `${diameter / 2 - rim - STYLE_BADGE_SIZE / 2}px`],
+  };
+}
+
+const SLOT_KEEPS = {
+  'background-fit': ['none', 'none', 'none', 'none'],
+  'background-repeat': ['no-repeat', 'no-repeat', 'no-repeat', 'no-repeat'],
+  'background-image-containment': ['inside', 'over', 'over', 'over'],
+  'background-clip': ['node', 'none', 'none', 'none'],
+};
 
 export const STYLE: StylesheetJson = [
   {
     selector: 'node',
     style: {
-      width: NODE_DIAMETER,
-      height: NODE_DIAMETER,
       'background-color': NODE_FILL,
       'border-width': NODE_OUTLINE_WIDTH,
       'border-color': NODE_OUTLINE,
       // the glyph sits inside the disc and the caption hangs below it, so the second image is drawn over the node, not clipped to it
-      'background-width': [`${GLYPH_SIZE}px`, `${CAPTION_WIDTH}px`, `${PIN_BADGE_SIZE}px`],
-      'background-height': [`${GLYPH_SIZE}px`, `${CAPTION_HEIGHT}px`, `${PIN_BADGE_SIZE}px`],
-      'background-position-x': ['50%', '50%', `${PIN_BADGE_X}px`],
-      'background-position-y': ['50%', `${CAPTION_TOP}px`, `${PIN_BADGE_Y}px`],
-      'background-fit': ['none', 'none', 'none'],
-      'background-repeat': ['no-repeat', 'no-repeat', 'no-repeat'],
-      'background-image-containment': ['inside', 'over', 'over'],
-      'background-clip': ['node', 'none', 'none'],
+      ...slotsOf(1, false),
+      ...SLOT_KEEPS,
       'bounds-expansion': CAPTION_WIDTH / 2,
       'overlay-opacity': 0,
       'z-index': 10,
       'z-index-compare': 'manual',
     },
   },
+  // The look a style rule gives a node; they come before the selection's rules, which draw over them.
+  { selector: 'node[?larger]', style: slotsOf(STYLE_LARGER_FACTOR, false) },
+  { selector: 'node[?lowerPin]', style: slotsOf(1, true) },
+  { selector: 'node[?larger][?lowerPin]', style: slotsOf(STYLE_LARGER_FACTOR, true) },
+  ...(Object.entries(STYLE_TONE_COLORS) as [keyof typeof STYLE_TONE_COLORS, string][]).map(([tone, color]) => ({ selector: `node[styleColor = "${tone}"]`, style: { 'border-color': color, 'border-width': STYLE_COLOR_OUTLINE_WIDTH } })),
   {
     selector: 'edge',
     style: {
@@ -145,6 +166,8 @@ export const STYLE: StylesheetJson = [
       'underlay-shape': 'ellipse',
     },
   },
+  // A selected node a rule enlarges keeps the enlarged size: the selection's own size would draw it small inside its scaled glyph and badges.
+  { selector: 'node[?selected][?larger]', style: { width: (NODE_OUTER_DIAMETER - SELECTED_OUTLINE_WIDTH) * STYLE_LARGER_FACTOR, height: (NODE_OUTER_DIAMETER - SELECTED_OUTLINE_WIDTH) * STYLE_LARGER_FACTOR } },
   {
     selector: 'edge[?aggregate]',
     style: {
@@ -280,15 +303,28 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
   };
 
   const glyphs = new Map<string, string>();
-  const glyphFor = (key: IconKey): string => {
-    const known = glyphs.get(key);
+  const glyphFor = (key: IconKey, tone?: StyleTone): string => {
+    const name = `${key}\u0000${tone ?? ''}`;
+    const known = glyphs.get(name);
     if (known !== undefined) return known;
-    const made = glyphUri(key, GLYPH_COLOR);
-    glyphs.set(key, made);
+    const made = glyphUri(key, tone === undefined ? GLYPH_COLOR : STYLE_TONE_COLORS[tone]);
+    glyphs.set(name, made);
+    return made;
+  };
+  const styleBadges = new Map<StyleTone, string>();
+  const styleBadgeFor = (tone: StyleTone): string => {
+    const known = styleBadges.get(tone);
+    if (known !== undefined) return known;
+    const made = styleBadgeUri(tone);
+    styleBadges.set(tone, made);
     return made;
   };
   const badge = pinBadgeUri();
-  const imagesFor = (iconKey: IconKey, pinned: boolean, caption?: string): string[] => [glyphFor(iconKey), ...(caption === undefined ? (pinned ? [NO_CAPTION] : []) : [caption]), ...(pinned ? [badge] : [])];
+  // The images in their slots: a slot that has no image yet but is followed by one holds a clear pixel, so every image keeps its own place.
+  const imagesFor = (iconKey: IconKey, pinned: boolean, caption?: string, style?: StyleLook): string[] => {
+    const marked = style?.badge !== undefined;
+    return [glyphFor(iconKey, style?.color), ...(caption === undefined ? (pinned || marked ? [NO_CAPTION] : []) : [caption]), ...(pinned ? [badge] : marked ? [NO_CAPTION] : []), ...(style?.badge === undefined ? [] : [styleBadgeFor(style.badge)])];
+  };
   // A caption is painted and encoded on a canvas of its own, which costs a millisecond or more, so an entity is drawn at once with its glyph and the captions follow in the next frames, a few at a time; the frame that adds many entities then stays short.
   let captionQueue: CaptionJob[] = [];
   let captionsScheduled = false;
@@ -305,7 +341,7 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
         const job = captionQueue.shift();
         const node = job === undefined ? undefined : cy.getElementById(job.id);
         if (job === undefined || node === undefined || node.empty() || node.data('lookKey') !== job.key) continue;
-        node.style('background-image', imagesFor(job.iconKey, job.pinned, captionFor(job.line1, job.line2)));
+        node.style('background-image', imagesFor(job.iconKey, job.pinned, captionFor(job.line1, job.line2), job.style));
       }
     } catch {
       captionQueue = [];
@@ -731,7 +767,8 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
             else node.ungrabify();
           }
           const pinned = scene.pinned.has(entity.id);
-          const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}\u0000${pinned}`;
+          const style = entity.look.style;
+          const lookKey = `${entity.look.iconKey}\u0000${entity.look.line1}\u0000${entity.look.line2}\u0000${pinned}\u0000${style?.badge ?? ''}\u0000${style?.color ?? ''}\u0000${style?.larger === true}\u0000${entity.look.tip?.detail ?? ''}`;
           if (card && node.data('lookKey') !== lookKey) {
             node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}`, title: entity.look.line1, detail: entity.look.line2 });
             node.style({
@@ -746,11 +783,11 @@ export function createCytoscapeRenderer(options: CytoscapeRendererOptions = {}):
               'background-clip': ['none', 'node'],
             });
           } else if (!card && node.data('lookKey') !== lookKey) {
-            node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}`, title: entity.look.tip?.title ?? entity.look.line1, detail: entity.look.tip?.detail ?? entity.look.line2 });
+            node.data({ lookKey, caption: `${entity.look.line1}\n${entity.look.line2}`, title: entity.look.tip?.title ?? entity.look.line1, detail: entity.look.tip?.detail ?? entity.look.line2, styleColor: style?.color ?? '', larger: style?.larger === true, lowerPin: pinned && style?.badge !== undefined });
             if (paints) {
               const known = captions.get(captionKey(entity.look.line1, entity.look.line2));
-              node.style('background-image', imagesFor(entity.look.iconKey, pinned, known));
-              if (known === undefined) captionQueue.push({ id: entity.id, key: lookKey, iconKey: entity.look.iconKey, line1: entity.look.line1, line2: entity.look.line2, pinned });
+              node.style('background-image', imagesFor(entity.look.iconKey, pinned, known, style));
+              if (known === undefined) captionQueue.push({ id: entity.id, key: lookKey, iconKey: entity.look.iconKey, line1: entity.look.line1, line2: entity.look.line2, pinned, ...(style === undefined ? {} : { style }) });
             }
           }
         }

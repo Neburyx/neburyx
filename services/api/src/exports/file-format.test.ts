@@ -96,6 +96,15 @@ describe('the JSON file', () => {
     expect(file.entities.map((entry) => entry.ref.stableId)).toEqual(['W-1', 'W-2']);
   });
 
+  it('carries the ids of the style rules a node matches in its display, and the CSV file of the same entities is the same with or without them', () => {
+    const styled = { ...node('W-1', [prop('status', 'review')]), display: { title: 'W-1', type: 'Widget', styleRules: ['review-flag'] } };
+    const plain = node('W-1', [prop('status', 'review')]);
+    const file = exportFileSchema.parse(JSON.parse(exportJsonOf(header(), [styled], []).toString('utf8')));
+    expect(file.entities[0]?.display.styleRules).toEqual(['review-flag']);
+    expect(exportFileSchema.parse(JSON.parse(exportJsonOf(header(), [plain], []).toString('utf8'))).entities[0]?.display).not.toHaveProperty('styleRules');
+    expect(entitiesCsvOf(header(), [styled])).toEqual(entitiesCsvOf(header(), [plain]));
+  });
+
   it('keeps the masked flag of every property and a keyed id as it came', () => {
     const file = exportFileSchema.parse(JSON.parse(exportJsonOf(header(), [node('tok.abc', [prop('phone', '••••••', true)])], []).toString('utf8')));
     expect(file.entities[0]?.properties[0]?.masked).toBe(true);

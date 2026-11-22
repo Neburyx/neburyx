@@ -1257,6 +1257,115 @@
   background: var(--color-control-border);
 }
 
+.legend-label-source {
+  color: var(--color-workspace-muted);
+  font-weight: normal;
+}
+
+.legend-rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-10);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend-rule {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-10);
+}
+
+.legend-rule-swatch {
+  position: relative;
+  flex: none;
+  width: var(--legend-swatch-size);
+  height: var(--legend-swatch-size);
+}
+
+.legend-rule-swatch .legend-swatch {
+  width: 100%;
+  height: 100%;
+}
+
+.legend-rule-larger .legend-swatch {
+  transform: scale(var(--style-larger-factor));
+}
+
+.legend-rule-color .legend-swatch {
+  border-width: var(--space-2);
+}
+
+.legend-rule-badge {
+  position: absolute;
+  top: calc(var(--legend-badge-size) / -3);
+  right: calc(var(--legend-badge-size) / -3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--legend-badge-size);
+  height: var(--legend-badge-size);
+  border-radius: 50%;
+  color: var(--color-surface);
+  font-size: var(--font-size-caption);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-compact);
+}
+
+.legend-tone-amber {
+  background: var(--style-tone-amber);
+  border-color: var(--style-tone-amber);
+}
+
+.legend-tone-red {
+  background: var(--style-tone-red);
+  border-color: var(--style-tone-red);
+}
+
+.legend-tone-green {
+  background: var(--style-tone-green);
+  border-color: var(--style-tone-green);
+}
+
+.legend-tone-blue {
+  background: var(--style-tone-blue);
+  border-color: var(--style-tone-blue);
+}
+
+.legend-tone-gray {
+  background: var(--style-tone-gray);
+  border-color: var(--style-tone-gray);
+}
+
+.legend-rule-color .legend-swatch.legend-tone-amber,
+.legend-rule-color .legend-swatch.legend-tone-red,
+.legend-rule-color .legend-swatch.legend-tone-green,
+.legend-rule-color .legend-swatch.legend-tone-blue,
+.legend-rule-color .legend-swatch.legend-tone-gray {
+  background: var(--color-surface);
+}
+
+.legend-rule-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.legend-rule-title {
+  overflow-wrap: anywhere;
+}
+
+.legend-rule-detail {
+  color: var(--color-workspace-muted);
+  font-size: var(--font-size-caption);
+  overflow-wrap: anywhere;
+}
+
+.legend-link {
+  color: var(--color-accent);
+}
+
 .legend-relationships {
   display: flex;
   flex-direction: column;

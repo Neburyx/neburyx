@@ -12,3 +12,6 @@ export const HELP_LINKS = {
   problem: `${REPOSITORY_URL}/issues`,
   installGuide: `${REPOSITORY_URL}/blob/main/docs/install.md`,
 } as const;
+
+/** The mapping guide at its style rules section, which the legend's "Edit rules in neburyx.yaml" link opens. */
+export const STYLE_RULES_GUIDE = `${REPOSITORY_URL}/blob/main/docs/mapping-guide.md#style-rules`;

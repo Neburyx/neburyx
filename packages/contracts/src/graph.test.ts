@@ -105,3 +105,19 @@ describe('the date of a count', () => {
     expect(countSchema.safeParse({ value: 5, quality: 'estimated', scope, observedAt: '' }).success).toBe(false);
   });
 });
+
+describe('the style rule ids of a node', () => {
+  const withDisplay = (display: Record<string, unknown>) => nodeSchema.safeParse({ ...node, display: { ...node.display, ...display } }).success;
+
+  it('accepts a list of rule ids, none, and an id the profile does not list, which the client ignores', () => {
+    expect(withDisplay({ styleRules: ['review-flag', 'high-amount'] })).toBe(true);
+    expect(withDisplay({ styleRules: [] })).toBe(true);
+    expect(withDisplay({})).toBe(true);
+  });
+
+  it('refuses an empty id, an id that is not text, and the old badges field, which nothing set', () => {
+    expect(withDisplay({ styleRules: [''] })).toBe(false);
+    expect(withDisplay({ styleRules: [1] })).toBe(false);
+    expect(withDisplay({ badges: ['x'] })).toBe(false);
+  });
+});

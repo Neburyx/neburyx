@@ -109,3 +109,14 @@ sources:
         template: linked-entities
         bind: { anchor: claimant, target: claim, via: FILED_BY }
         labels: { anchor: "Starting claimant", limit: "Max claims" }
+    style_rules:
+      - id: claim-under-review
+        label: Claim under review
+        applies_to: claim
+        when: { property: status, op: eq, value: review }
+        effect: { badge: amber }
+      - id: denied-claim
+        label: Denied claim
+        applies_to: claim
+        when: { property: status, op: eq, value: denied }
+        effect: { color: red }

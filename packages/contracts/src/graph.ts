@@ -29,7 +29,8 @@ export const propertySchema = z.strictObject({
 
 export const nodeSchema = z.strictObject({
   ref: elementRefSchema,
-  display: z.strictObject({ title: z.string(), type: z.string().min(1), badges: z.array(z.string()).optional() }),
+  /** `styleRules` lists the ids of the style rules the node matches, in mapping order; absent when none matches or the type has no rule. */
+  display: z.strictObject({ title: z.string(), type: z.string().min(1), styleRules: z.array(z.string().min(1)).optional() }),
   properties: z.array(propertySchema),
   qualityFlags: z.array(z.string()),
   provenanceRefs: z.array(z.string()),

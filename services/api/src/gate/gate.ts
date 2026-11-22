@@ -10,6 +10,7 @@ import { acquireLease, executeRead, releaseWhenClosed, type ExecuteResult, type 
 import { gapOf, readIndexSnapshot, worstGapOf, type IndexGap } from './index-guard.js';
 import { exhaustive } from './exhaustive.js';
 import type { GateDeps } from './deps.js';
+import { styledItems } from './style-rules.js';
 import { SYSTEM_PRINCIPAL } from './system-principal.js';
 import { FILE_QUERY_ID, fileQueryAuditDetail, type FileQueryAuditDetail } from './file-query.js';
 import type { FileQueryRequest, Gate, GateContext, IndexReader, GatePage, GateRequest, GateStage, Params, SystemRunner, Template } from './types.js';
@@ -85,7 +86,7 @@ async function finishPage(deps: GateDeps, progress: Progress, request: GateReque
     template.normalize(result.rows, result.plan, { sourceId: context.sourceId, hasMore: result.hasMore, model: context.model, limit: request.limit, countCap: context.budgets.countCap, params, references: deps.references }),
   );
   return inStage(deps, progress, 'redact', () => {
-    const redacted = deps.redact(items, context);
+    const redacted = styledItems(deps.redact(items, context), context);
     const held = template.heldOf === undefined ? undefined : validated.held + template.heldOf(redacted);
     // the page after this one, when there is one: the template says where it starts and the gate signs it for this request, with the hits held so far when the template counts them
     const position = template.paged && result.hasMore ? template.nextPosition?.(result.rows, request.limit) : undefined;

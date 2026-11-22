@@ -1,4 +1,5 @@
 import type { GraphNode, IconKey, SourceProfile } from '@neburyx/contracts';
+import { styleLookOf, type StyleLook } from './style-look.js';
 import { isNotReadNode, isUnmappedNode, NO_LONGER_MAPPED, SAVED_LAYOUT_NOT_READ, UNMAPPED_TITLE } from '../draft/unmapped.js';
 
 export interface EntityLook {
@@ -7,7 +8,12 @@ export interface EntityLook {
   readonly line2: string;
   /** What the hover tip says instead of the two caption lines, when they are short for the room they have. */
   readonly tip?: { readonly title: string; readonly detail: string };
+  /** The look the node's style rules give it; absent for a node none of them gives a look. */
+  readonly style?: StyleLook;
 }
+
+/** What the hover tip and the spoken description call the rules that gave a node its look. */
+export const STYLE_TIP_LABEL = 'Style';
 
 function stateOf(node: GraphNode, stateProperty: string | null): string | undefined {
   if (stateProperty === null) return undefined;
@@ -22,5 +28,8 @@ export function entityLook(node: GraphNode, profile: SourceProfile | undefined):
   const type = profile?.entityTypes.find((entry) => entry.type === node.ref.entityType);
   const typeName = type?.displayName ?? node.ref.entityType;
   const state = stateOf(node, type?.stateProperty ?? null);
-  return { iconKey: type?.icon ?? 'generic', line1: node.display.title, line2: state === undefined ? typeName : `${typeName} · ${state}` };
+  const line2 = state === undefined ? typeName : `${typeName} · ${state}`;
+  const style = styleLookOf(node, profile);
+  const base = { iconKey: style?.icon ?? type?.icon ?? 'generic', line1: node.display.title, line2 };
+  return style === undefined ? base : { ...base, style, tip: { title: node.display.title, detail: `${line2}\n${STYLE_TIP_LABEL}: ${style.labels.join(', ')}` } };
 }

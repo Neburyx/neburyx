@@ -21,6 +21,11 @@ export function baseSource(overrides: Json = {}): Json {
   };
 }
 
+/** A style rule that loads on `baseSource` (an `eq` on the stable ID of `node_a`), with any key replaced. */
+export function styleRuleOf(overrides: Json = {}): Json {
+  return { id: 'r', label: 'Review', applies_to: 'node_a', when: { property: 'id', op: 'eq', value: 'x' }, effect: { badge: 'amber' }, ...overrides };
+}
+
 export function fileOf(...sources: Json[]): string {
   return stringify({ sources }, { aliasDuplicateObjects: false, blockQuote: false });
 }

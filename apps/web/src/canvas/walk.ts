@@ -3,6 +3,8 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { partitionEdges, type LoadedGraph } from '../state/loaded-graph.js';
 import { isNotReadEdge, isNotReadNode, isUnmappedEdge, isUnmappedNode, NO_LONGER_MAPPED, SAVED_LAYOUT_NOT_READ, UNMAPPED_TITLE } from '../draft/unmapped.js';
 import { relationshipParts } from './relationship-look.js';
+import { STYLE_TIP_LABEL } from './entity-look.js';
+import { styleLookOf } from './style-look.js';
 
 /** The elements the walk visits: the drawn entities in their loaded order, then the drawn relationships in theirs, then the aggregate nodes in the order the scene gives them. */
 export function walkOrder(graph: LoadedGraph, sceneItems: readonly string[] = []): readonly string[] {
@@ -27,7 +29,8 @@ export function describeWalked(graph: LoadedGraph, profile: SourceProfile | unde
     if (isNotReadNode(node)) return [`${profile?.entityTypes.find((entry) => entry.type === node.ref.entityType)?.displayName ?? UNMAPPED_TITLE}, ${SAVED_LAYOUT_NOT_READ}`, ...(pins.has(key) ? ['pinned'] : [])].join(', ');
     if (isUnmappedNode(node)) return [`${UNMAPPED_TITLE}, ${NO_LONGER_MAPPED.toLowerCase()}`, ...(pins.has(key) ? ['pinned'] : [])].join(', ');
     const typeName = profile?.entityTypes.find((entry) => entry.type === node.ref.entityType)?.displayName ?? node.ref.entityType;
-    return [node.display.title, typeName, ...(pins.has(key) ? ['pinned'] : [])].join(', ');
+    const style = styleLookOf(node, profile);
+    return [node.display.title, typeName, ...(pins.has(key) ? ['pinned'] : []), ...(style === undefined ? [] : [`${STYLE_TIP_LABEL.toLowerCase()}: ${style.labels.join(', ')}`])].join(', ');
   }
   const edge = graph.edges.find((candidate) => edgeKey(candidate.ref) === key);
   if (edge === undefined) return undefined;

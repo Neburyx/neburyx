@@ -1,3 +1,5 @@
+import { momentKey } from '../../mapping/moment-key.js';
+
 /** When a relationship was observed, as the source gave it: a zoned `dateTime` compares as an instant, a `localDateTime` or a `date` as a local time with no zone. */
 interface Moment {
   readonly zoned: boolean;
@@ -7,28 +9,14 @@ interface Moment {
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const ZONED = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})(?:\[[^\]]*\])?$/;
-const LOCAL = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?)?$/;
-
 /** The moment a plain value stands for, or nothing when it is not a date, a dateTime or a localDateTime, or its text is not one the product can read. */
 function momentOf(value: unknown): Moment | undefined {
   if (!isObject(value) || typeof value['value'] !== 'string') return undefined;
   const text = value['value'];
-  if (value['$type'] === 'dateTime') {
-    const match = ZONED.exec(text);
-    if (match === null) return undefined;
-    const [, base, fraction = '', offset] = match;
-    const milliseconds = Date.parse(`${base ?? ''}.000${offset ?? ''}`);
-    if (Number.isNaN(milliseconds)) return undefined;
-    return { zoned: true, key: BigInt(milliseconds) * 1_000_000n + BigInt(fraction.padEnd(9, '0')), text };
-  }
-  if (value['$type'] === 'localDateTime' || value['$type'] === 'date') {
-    const match = LOCAL.exec(text);
-    if (match === null) return undefined;
-    const [, day, time = '00:00:00', fraction = ''] = match;
-    return { zoned: false, key: `${day ?? ''}T${time}.${fraction.padEnd(9, '0')}`, text };
-  }
-  return undefined;
+  const tag = value['$type'];
+  if (tag !== 'dateTime' && tag !== 'localDateTime' && tag !== 'date') return undefined;
+  const key = momentKey(tag, text);
+  return key === undefined ? undefined : { zoned: tag === 'dateTime', key, text };
 }
 
 const earlier = (left: Moment, right: Moment): boolean => left.key < right.key;

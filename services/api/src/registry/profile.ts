@@ -1,8 +1,9 @@
-import type { FilterKind, SourceProfile, TypeDescriptions } from '@neburyx/contracts';
+import type { FilterKind, SourceProfile, StyleEffect, TypeDescriptions } from '@neburyx/contracts';
 import { isKeyed, type SourceModel } from '../mapping/model.js';
 import { entityProjection, relationshipProjection } from '../mapping/projection.js';
 import { canonicalBind, sortedEntries } from './canonical.js';
 import { mappingExcerptOf } from './excerpt.js';
+import { conditionText } from './style-condition.js';
 
 /** The presets of a source as a client reads them, in the mapping's order. */
 export function presetProfilesOf(source: SourceModel): SourceProfile['presets'] {
@@ -27,6 +28,13 @@ export function typeDescriptionsOf(source: SourceModel | undefined): TypeDescrip
   const entityTypes = (source?.entities ?? []).map((entity) => ({ type: entity.type, label: entity.label, displayName: entity.display.name ?? entity.label, ...(isKeyed(entity) ? { keyed: true } : {}), ...(entity.description === undefined ? {} : { description: entity.description }) }));
   const relationshipTypes = (source?.relationships ?? []).map((relationship) => ({ type: relationship.type, ...(relationship.description === undefined ? {} : { description: relationship.description }) }));
   return { entityTypes, relationshipTypes };
+}
+
+function effectOf(rule: SourceModel['styleRules'][number]): StyleEffect {
+  const { effect } = rule;
+  if (effect.kind === 'icon') return { icon: effect.icon };
+  if (effect.kind === 'size') return { size: effect.size };
+  return effect.kind === 'badge' ? { badge: effect.tone } : { color: effect.tone };
 }
 
 export function buildSourceProfile(source: SourceModel): SourceProfile {
@@ -71,6 +79,7 @@ export function buildSourceProfile(source: SourceModel): SourceProfile {
     })),
     derivedRules: source.derived.map((rule) => ({ id: rule.id, from: rule.from, to: rule.to, via: [...rule.via], ruleVersion: rule.ruleVersion })),
     presets: presetProfilesOf(source),
+    styleRules: source.styleRules.map((rule) => ({ id: rule.id, label: rule.label, appliesTo: rule.appliesTo, effect: effectOf(rule), condition: conditionText(rule) })),
     mappingExcerpt: mappingExcerptOf(source),
   };
 }

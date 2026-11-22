@@ -1,6 +1,6 @@
 import { stringify } from 'yaml';
 import { describe, expect, it } from 'vitest';
-import { baseSource, fileOf, firstSource, load, type Json } from '../testing/mapping.js';
+import { baseSource, fileOf, firstSource, issuesOf, load, styleRuleOf, type Json } from '../testing/mapping.js';
 import { canonicalText } from './hash.js';
 import { parseMapping } from './load.js';
 
@@ -31,7 +31,7 @@ function fullSource(overrides: Json = {}): Json {
     derived: [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1 }],
     patterns: [{ id: 'p', name: 'P', template: 'shared-attribute', bind: { anchor: 'node_a', attribute: 'node_b', via: 'LINKS' } }],
     vocabulary: { case_ref: 'Referral' },
-    style_rules: [{ id: 'r' }],
+    style_rules: [styleRuleOf()],
     ...overrides,
   });
 }
@@ -55,7 +55,7 @@ describe('the mapping hash', () => {
     const reordered = stringify({
       sources: [
         {
-          style_rules: [{ id: 'r' }],
+          style_rules: [styleRuleOf()],
           vocabulary: { case_ref: 'Referral' },
           patterns: [{ bind: { via: 'LINKS', attribute: 'node_b', anchor: 'node_a' }, template: 'shared-attribute', name: 'P', id: 'p' }],
           derived: [{ rule_version: 1, via: ['LINKS', 'node_b', 'LINKS'], to: 'node_a', from: 'node_a', id: 'shared' }],
@@ -90,7 +90,7 @@ describe('the mapping hash', () => {
     ['a derived rule', fullSource({ derived: [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 2 }] })],
     ['a pattern preset', fullSource({ patterns: [{ id: 'p', name: 'Renamed', template: 'shared-attribute', bind: { anchor: 'node_a', attribute: 'node_b', via: 'LINKS' } }] })],
     ['the vocabulary', fullSource({ vocabulary: { case_ref: 'Alert' } })],
-    ['the style section', fullSource({ style_rules: [{ id: 'other' }] })],
+    ['the style section', fullSource({ style_rules: [styleRuleOf({ id: 'other' })] })],
     ['the synthetic flag', fullSource({ synthetic: true })],
     ['a budget', fullSource({ budgets: { max_hops: 3 } })],
     ['the address', fullSource({ uri: 'neo4j+s://other.example.test:7687' })],
@@ -113,13 +113,11 @@ describe('the mapping hash', () => {
     expect(hashOf(spare('SPARE_ONE'))).not.toBe(hashOf(spare('SPARE_TWO')));
   });
 
-  it('keeps and distinguishes style entries that use the key __proto__', () => {
-    const withRule = (value: string): string => `${fileOf(baseSource())}    style_rules: [{__proto__: ${value}}, {nested: {__proto__: ${value}}}]\n`;
-    const one = parseMapping(withRule('one'), 'neburyx.yaml').sources[0];
-    const two = parseMapping(withRule('two'), 'neburyx.yaml').sources[0];
-    expect(Object.getOwnPropertyNames(one?.styleRules[0] ?? {})).toEqual(['__proto__']);
-    expect(Object.getOwnPropertyNames(Object.getOwnPropertyDescriptor(one?.styleRules[1] ?? {}, 'nested')?.value ?? {})).toEqual(['__proto__']);
-    expect(one?.configHash).not.toBe(two?.configHash);
+  it('refuses a style rule that uses the key __proto__, constructor or prototype, and pollutes nothing', () => {
+    const text = `${fileOf(baseSource())}    style_rules: [{__proto__: {polluted: yes}, constructor: {prototype: {polluted: yes}}, prototype: {polluted: yes}}]\n`;
+    expect(issuesOf(text).some((issue) => issue.path.startsWith('sources[0].style_rules[0]'))).toBe(true);
+    expect(Reflect.get({}, 'polluted')).toBeUndefined();
+    expect(Reflect.get(Object.prototype, 'polluted')).toBeUndefined();
   });
 
   it('leaves a source unchanged when another source in the file changes', () => {
@@ -150,7 +148,6 @@ describe('the mapping hash', () => {
 });
 
 describe('hostile keys', () => {
-  const style = '    style_rules: [{__proto__: {polluted: yes}, constructor: {prototype: {polluted: yes}}, prototype: {polluted: yes}}]\n';
   const presets = [
     '    patterns:',
     '      - id: p',
@@ -167,10 +164,7 @@ describe('hostile keys', () => {
 
   it('keeps __proto__, constructor and prototype as own data on null-prototype objects and pollutes nothing', () => {
     const labelled = presets.replace('{__proto__: {polluted: yes}, constructor: C, prototype: P}', '{__proto__: A, constructor: C, prototype: P}');
-    const source = parseMapping(`${fileOf(baseSource())}${style}${labelled}`, 'neburyx.yaml').sources[0];
-    const [rule] = source?.styleRules ?? [];
-    expect(Object.getPrototypeOf(rule)).toBeNull();
-    expect(Object.getOwnPropertyNames(rule).sort()).toEqual(['__proto__', 'constructor', 'prototype']);
+    const source = parseMapping(`${fileOf(baseSource())}${labelled}`, 'neburyx.yaml').sources[0];
     const labels = source?.presets[0]?.labels ?? {};
     expect(Object.getPrototypeOf(labels)).toBeNull();
     expect(Object.getOwnPropertyNames(labels).sort()).toEqual(['__proto__', 'constructor', 'prototype']);

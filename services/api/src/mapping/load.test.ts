@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isSeq, LineCounter, parseDocument } from 'yaml';
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, REFUSED_MARKER, REFUSED_YAML } from '../testing/mapping.js';
+import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, REFUSED_MARKER, REFUSED_YAML, styleRuleOf } from '../testing/mapping.js';
 import { MappingError } from './diagnostics.js';
 import { loadMappingFile, MAX_MAPPING_BYTES, parseMapping } from './load.js';
 import { nodeProblems } from './subset.js';
@@ -213,7 +213,7 @@ describe('the accepted YAML subset', () => {
       vocabulary: { case_ref: 'Referral' },
       derived: [{ id: 'shared', from: 'node_a', to: 'node_a', via: ['LINKS', 'node_b', 'LINKS'], rule_version: 1 }],
       patterns: [{ id: 'p', name: 'P', template: 'shared-attribute', bind: { anchor: 'node_a', attribute: 'node_b', via: 'LINKS' } }],
-      style_rules: [{ id: 'r', nested: [1, 'two', true, null] }],
+      style_rules: [styleRuleOf({ when: { property: 'id', op: 'in', value: ['a', 'b'] } })],
     });
     expect(parseMapping(fileOf(source), 'neburyx.yaml').sources).toHaveLength(1);
   });

@@ -33,6 +33,14 @@ export const SELECTED_HALO_PADDING = (SELECTED_HALO_DIAMETER - (NODE_OUTER_DIAME
 export const FOCUS_RING_WIDTH = 1.5;
 export const FOCUS_RING_GAP = 2;
 export const PIN_BADGE_SIZE = 16;
+/** The colours of the tones a style rule may take, as `--style-tone-*` are on the page; each differs from the plain outline and from the accent of the selection and the focus ring. */
+export const STYLE_TONE_COLORS = { amber: '#e8890c', red: '#c6303e', green: '#2e8b57', blue: '#2c7be5', gray: '#59616f' } as const;
+/** The badge a rule puts on a node: a disc of its tone with a white mark, sized as the pin badge and on the rim at 45 degrees to the upper right (frame 04e). */
+export const STYLE_BADGE_SIZE = 16;
+/** A node a rule enlarges is this many times its usual diameter. */
+export const STYLE_LARGER_FACTOR = 1.5;
+/** The width of the outline of a node a rule colours, in place of the plain outline's. */
+export const STYLE_COLOR_OUTLINE_WIDTH = 2;
 export const CAPTION_FONT_SIZE = 12;
 /** The smallest size, in screen pixels, at which caption text is read; below it the captions and labels are left out. */
 export const MIN_LEGIBLE_FONT_SIZE = 7;

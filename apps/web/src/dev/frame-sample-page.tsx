@@ -40,7 +40,7 @@ const LONG_LABEL_LENGTH = 60;
 /** The sample's profile, with more neutral entity types when the address says `?legendTypes=40`, and the first type's label as one unbroken word of 60 characters when it says `?legendLabel=long`, to try the legend with a long list and a long label. */
 export function sampleProfile(search: string): SourceProfile {
   const params = new URLSearchParams(search);
-  const base = frameSampleProfile(timesOn(search));
+  const base = frameSampleProfile(timesOn(search), rulesOn(search));
   const extra = Math.max(0, Number(params.get('legendTypes') ?? 0) - base.entityTypes.length);
   const template = base.entityTypes[0];
   const more = template === undefined ? [] : Array.from({ length: extra }, (_unused, index) => ({ ...template, type: `kind-${index}`, label: `Kind ${index}`, displayName: `Kind ${index}` }));
@@ -55,6 +55,11 @@ function timesOn(search: string): boolean {
   return new URLSearchParams(search).get('times') === 'on';
 }
 
+/** `?rules=on` gives the sample's profile style rules and its entities the ids of the rules they match, to try the look of a rule and the legend's section. */
+function rulesOn(search: string): boolean {
+  return new URLSearchParams(search).get('rules') === 'on';
+}
+
 /** `?links=on` gives the holder type and the HAS_LINE relationship a source record link, and its records answer as linkable. */
 function linksOn(search: string): boolean {
   return new URLSearchParams(search).get('links') === 'on';
@@ -67,7 +72,7 @@ function knownProfile(): ProfileStore {
 
 /** The sample, with the investigation's title taken from the address (`?title=...`) to try a long one in the header. */
 export function titledSample(search: string): ClientState {
-  const state = createFrameSampleState(timesOn(search));
+  const state = createFrameSampleState(timesOn(search), rulesOn(search));
   if (exportOn(search)) giveId(state);
   const title = new URLSearchParams(search).get('title');
   if (title !== null && title !== '') state.describeInvestigation({ ...FIXTURE_RECORD, title });

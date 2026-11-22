@@ -1,5 +1,6 @@
-import type { AiSettings, FilterKind, IconKey, PatternDefinition, PiiClass, PresetTemplate } from '@neburyx/contracts';
+import type { AiSettings, FilterKind, IconKey, PatternDefinition, PiiClass, PresetTemplate, StyleOperator, StyleTone } from '@neburyx/contracts';
 import { buildLinkAddress } from './link-address.js';
+import type { StyleValue } from './style-value.js';
 
 /** The most properties a source may list under `search` in all its entity types: each is a branch of the one search read. */
 export const MAX_SEARCH_PROPERTIES = 100;
@@ -27,6 +28,20 @@ export interface DegreeDeclaration {
   readonly property: string;
   /** A second node property that holds when the customer computed the number; without it the estimate carries no date. */
   readonly observedAt?: string;
+}
+
+export type StyleEffectModel =
+  | { readonly kind: 'badge' | 'color'; readonly tone: StyleTone }
+  | { readonly kind: 'icon'; readonly icon: IconKey }
+  | { readonly kind: 'size'; readonly size: 'larger' };
+
+/** One style rule: for an entity type, a look when one carried property matches. `values` hold one value for `eq` and the ordering operators, one to twenty for `in` and the two ends (low, high) for `between`. */
+export interface StyleRuleModel {
+  readonly id: string;
+  readonly label: string;
+  readonly appliesTo: string;
+  readonly when: { readonly property: string; readonly op: StyleOperator; readonly values: readonly StyleValue[] };
+  readonly effect: StyleEffectModel;
 }
 
 export interface EntityModel {
@@ -152,7 +167,7 @@ export interface SourceModel {
   readonly presets: readonly PresetModel[];
   /** Absent when the mapping declares none, so the hash of a mapping without any is what it was. */
   readonly builtInDefinitions?: readonly BuiltInDefinitionModel[];
-  readonly styleRules: readonly unknown[];
+  readonly styleRules: readonly StyleRuleModel[];
   readonly configHash: string;
 }
 

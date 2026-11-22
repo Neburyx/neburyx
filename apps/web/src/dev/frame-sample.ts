@@ -58,6 +58,19 @@ const RELATIONSHIPS: ReadonlyArray<readonly [string, string, string, 'stored' | 
 
 const STATE_PROPERTY = 'status';
 
+/** The sample's style rules, for `?rules=on`: each reads the state property, as the rules of a mapping read a mapped property. */
+const SAMPLE_RULES: SourceProfile['styleRules'] = [
+  { id: 'review-flag', label: 'review required', appliesTo: 'ledger', effect: { badge: 'amber' }, condition: 'status = Review required' },
+  { id: 'live-ledger', label: 'live ledger', appliesTo: 'ledger', effect: { size: 'larger' }, condition: 'status = Live' },
+  { id: 'open-case', label: 'open case', appliesTo: 'casefile', effect: { color: 'blue' }, condition: 'status = Open' },
+  { id: 'contact-line', label: 'contact line', appliesTo: 'line', effect: { icon: 'shield' }, condition: 'status = Contact' },
+];
+
+const matchedRules = (entity: SampleEntity): string[] | undefined => {
+  const ids = (SAMPLE_RULES ?? []).filter((rule) => rule.appliesTo === entity.type && rule.condition === `status = ${entity.state ?? ''}`).map((rule) => rule.id);
+  return ids.length === 0 ? undefined : ids;
+};
+
 /** The relationship rows of the sample, each with a time property when `timed`: one row for each type with its two entity types. */
 function sampleRelationshipRows(timed: boolean): SourceProfile['relationshipTypes'] {
   if (!timed) return [];
@@ -70,7 +83,7 @@ function sampleRelationshipRows(timed: boolean): SourceProfile['relationshipType
   return [...rows.values()];
 }
 
-export function frameSampleProfile(timed = false): SourceProfile {
+export function frameSampleProfile(timed = false, rules = false): SourceProfile {
   const entityTypes = TYPES.map((entry) => ({ type: entry.type, label: entry.label, keyed: false, stableIdProperty: 'id', displayName: entry.label, icon: entry.icon, title: 'name', titleUsesPii: false, keyProperties: [], stateProperty: STATE_PROPERTY, searchable: [], filterable: [STATE_PROPERTY], sortable: [STATE_PROPERTY], pii: [], properties: [STATE_PROPERTY] }));
   return {
     sourceId: FRAME_SAMPLE_SOURCE,
@@ -80,13 +93,14 @@ export function frameSampleProfile(timed = false): SourceProfile {
     relationshipTypes: sampleRelationshipRows(timed),
     derivedRules: [],
     presets: [],
+    ...(rules ? { styleRules: SAMPLE_RULES } : {}),
     mappingExcerpt: FRAME_SAMPLE_MARKER,
   };
 }
 
 /** A client state holding the Explore design's graph, every entity placed where the design draws it, so the canvas can be put beside the design. */
 /** With `timed`, the stored relationships carry a time: those at an even position in October 2026 and the others in January 2026. */
-export function createFrameSampleState(timed = false): ClientState {
+export function createFrameSampleState(timed = false, rules = false): ClientState {
   const state = createClientState();
   const refOf = (id: string): ElementRef => {
     const entity = ENTITIES.find((candidate) => candidate.id === id);
@@ -95,7 +109,7 @@ export function createFrameSampleState(timed = false): ClientState {
   };
   const nodes: GraphNode[] = ENTITIES.map((entity) => ({
     ref: refOf(entity.id),
-    display: { title: entity.title, type: entity.type },
+    display: { title: entity.title, type: entity.type, ...(rules && matchedRules(entity) !== undefined ? { styleRules: matchedRules(entity) } : {}) },
     properties: entity.state === undefined ? [] : [{ key: STATE_PROPERTY, value: entity.state, dataClass: 'text' as const, masked: false }],
     qualityFlags: [],
     provenanceRefs: [FRAME_SAMPLE_MARKER],

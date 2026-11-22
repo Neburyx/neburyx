@@ -1,5 +1,5 @@
 import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
-import { addressableTextOfAtMost, aiSettingsSchema, BUILT_IN_DEFINITION_LIMITS, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, PII_CLASSES, presetTemplateSchema, type PiiClass } from '@neburyx/contracts';
+import { addressableTextOfAtMost, aiSettingsSchema, BUILT_IN_DEFINITION_LIMITS, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, MAX_STYLE_LABEL, PII_CLASSES, presetTemplateSchema, STYLE_OPERATORS, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
@@ -18,6 +18,21 @@ const description = z.string().min(1).max(300).refine((text) => isWellFormed(tex
 
 /** The kind a mapping declares for filterable properties, by property name; a hint for screens, never read by a statement. */
 const kindsSchema = z.record(property, z.enum(FILTER_KINDS));
+
+/**
+ * A style rule: for one entity type, one condition on one property and one effect. The value and the effect are checked against the type's mapping when the source is built (their reasons need it), so here only their shape is: a value of any plain kind, an effect of any plain kind.
+ */
+const styleRuleSchema = z.strictObject({
+  id: name,
+  label: z
+    .string()
+    .min(1)
+    .max(MAX_STYLE_LABEL)
+    .refine((text) => isWellFormed(text) && !/[\u0000-\u001f\u007f-\u009f]/.test(text), { message: 'must be plain text with no control characters' }),
+  applies_to: name,
+  when: z.strictObject({ property, op: z.enum(STYLE_OPERATORS), value: z.unknown() }),
+  effect: z.unknown(),
+});
 
 const envName = z.string().regex(ENV_NAME);
 
@@ -201,7 +216,7 @@ const sourceSchema = z.strictObject({
   relationships: z.array(relationshipSchema).optional(),
   derived: z.array(derivedSchema).optional(),
   patterns: z.array(patternEntrySchema).optional(),
-  style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' })).optional(),
+  style_rules: z.array(z.unknown().refine(isPlainData, { message: 'is not plain data (text, numbers, true or false, lists and maps)' }).pipe(styleRuleSchema)).optional(),
 });
 
 /** The connection part of a source entry: the one check of an id, an address, a database name and the two environment variable names that a mapping file and `neburyx init` share. */
@@ -213,6 +228,7 @@ export type RawMappingFile = z.infer<typeof mappingFileSchema>;
 export type RawSource = z.infer<typeof sourceSchema>;
 export type RawEntity = z.infer<typeof entitySchema>;
 export type RawRelationship = z.infer<typeof relationshipSchema>;
+export type RawStyleRule = z.infer<typeof styleRuleSchema>;
 export type RawDerivedRule = z.infer<typeof derivedSchema>;
 export type RawPreset = z.infer<typeof presetSchema>;
 export type RawPatternEntry = z.infer<typeof patternEntrySchema>;

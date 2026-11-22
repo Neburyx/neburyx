@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FILTER_KINDS } from './expand.js';
-import { iconKeySchema, presetTemplateSchema } from './mapping.js';
+import { iconKeySchema, MAX_STYLE_LABEL, presetTemplateSchema, STYLE_TONES } from './mapping.js';
 
 const name = z.string().min(1);
 const nameList = z.array(name);
@@ -75,6 +75,29 @@ export const presetProfileSchema = z.strictObject({
   labels: z.array(z.strictObject({ key: name, text: name })),
 });
 
+const toneSchema = z.enum(STYLE_TONES);
+
+/** What a style rule does to a node: exactly one of a badge or colour of a tone, an icon, or a larger size. */
+export const styleEffectSchema = z.union([
+  z.strictObject({ badge: toneSchema }),
+  z.strictObject({ color: toneSchema }),
+  z.strictObject({ icon: iconKeySchema }),
+  z.strictObject({ size: z.literal('larger') }),
+]);
+
+export type StyleEffect = z.infer<typeof styleEffectSchema>;
+
+/** A style rule as a screen shows it: the type it applies to, its effect and its condition in words, built by the server from the mapping's condition. */
+export const styleRuleProfileSchema = z.strictObject({
+  id: name,
+  label: z.string().min(1).max(MAX_STYLE_LABEL),
+  appliesTo: name,
+  effect: styleEffectSchema,
+  condition: name,
+});
+
+export type StyleRuleProfile = z.infer<typeof styleRuleProfileSchema>;
+
 export const sourceProfileSchema = z.strictObject({
   sourceId: name,
   synthetic: z.boolean(),
@@ -83,6 +106,8 @@ export const sourceProfileSchema = z.strictObject({
   relationshipTypes: z.array(relationshipTypeProfileSchema),
   derivedRules: z.array(derivedRuleProfileSchema),
   presets: z.array(presetProfileSchema),
+  /** The style rules in mapping order; the server always sends the list (empty for a mapping with none), and it is absent only from an older answer. */
+  styleRules: z.array(styleRuleProfileSchema).optional(),
   mappingExcerpt: z.string(),
 });
 

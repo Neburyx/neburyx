@@ -1,5 +1,5 @@
 import type { PiiClass } from '@neburyx/contracts';
-import { isKeyed, type DegreeDeclaration, type SourceModel } from '../../mapping/model.js';
+import { isKeyed, type DegreeDeclaration, type SourceModel, type StyleRuleModel } from '../../mapping/model.js';
 import { entityProjection, relationshipProjection } from '../../mapping/projection.js';
 import type { ReferenceKeys } from '../../reference/keys.js';
 
@@ -21,6 +21,8 @@ export interface EntityNormalizer {
   readonly piiClasses: Readonly<Record<string, PiiClass>>;
   /** The degree properties the mapping declares for the type, if any. */
   readonly degree?: readonly DegreeDeclaration[];
+  /** The style rules of the type, in mapping order; absent when it has none. */
+  readonly styleRules?: readonly StyleRuleModel[];
 }
 
 /** One relationship row of the mapping: a type between two entity types, with the properties of it that are shown. */
@@ -76,6 +78,7 @@ const unique = (values: readonly string[]): string[] => [...new Set(values)];
 export function normalizeModelOf(source: SourceModel): NormalizeModel {
   const entitiesByLabel = new Map<string, EntityNormalizer[]>();
   const entitiesByType = new Map<string, EntityNormalizer>();
+  const { styleRules } = source;
   for (const entity of source.entities) {
     const normalizer: EntityNormalizer = {
       type: entity.type,
@@ -89,6 +92,7 @@ export function normalizeModelOf(source: SourceModel): NormalizeModel {
       pii: entity.pii,
       piiClasses: entity.piiClasses ?? {},
       ...(entity.degree === undefined ? {} : { degree: entity.degree }),
+      ...(styleRules.some((rule) => rule.appliesTo === entity.type) ? { styleRules: styleRules.filter((rule) => rule.appliesTo === entity.type) } : {}),
     };
     entitiesByLabel.set(entity.label, [...(entitiesByLabel.get(entity.label) ?? []), normalizer]);
     entitiesByType.set(entity.type, normalizer);

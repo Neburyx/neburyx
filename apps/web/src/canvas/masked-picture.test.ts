@@ -24,6 +24,15 @@ describe('the graph with the items of a picture', () => {
     expect(swapped.edges.map((entry) => edgeKey(entry.ref))).toEqual([edgeKey(link.ref)]);
   });
 
+  it('draws the look of a node from the rule ids of the item it reads, never from the ones the loaded view holds', () => {
+    const loaded = { ...node('demo', 'A'), display: { title: 'A', type: 'type-a', styleRules: ['review'] } };
+    const read: GraphNode = { ...loaded, display: { title: 'A', type: 'type-a' } };
+    const swapped = graphWithItems(graphOf([loaded], []), { nodes: [read], edges: [] });
+    expect(swapped.nodes[0]?.display.styleRules).toBeUndefined();
+    const readWith: GraphNode = { ...loaded, display: { title: 'A', type: 'type-a', styleRules: ['hold'] } };
+    expect(graphWithItems(graphOf([loaded], []), { nodes: [readWith], edges: [] }).nodes[0]?.display.styleRules).toEqual(['hold']);
+  });
+
   it('fails when an entity or a relationship of the graph has no counterpart, so nothing is drawn as it is loaded', () => {
     const a = node('demo', 'A');
     const b = node('demo', 'B');

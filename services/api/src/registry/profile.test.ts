@@ -1,5 +1,5 @@
 import { rmSync } from 'node:fs';
-import { sourceProfileSchema } from '@neburyx/contracts';
+import { sourceProfileSchema, styleRuleProfileSchema } from '@neburyx/contracts';
 import { parse } from 'yaml';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
@@ -52,7 +52,7 @@ function fullSource(id = 'demo', overrides: Json = {}): Json {
     relationships: fullRelationships,
     derived: fullDerived,
     patterns: fullPatterns,
-    style_rules: [{ id: 'PRIVATE_STYLE' }],
+    style_rules: overrides['entities'] === undefined ? [{ id: 'PRIVATE_STYLE', label: 'Review', applies_to: 'node_a', when: { property: 'status', op: 'eq', value: 'x' }, effect: { badge: 'amber' } }] : [],
     ...overrides,
   });
 }
@@ -65,7 +65,7 @@ async function appFor(mapping: MappingModel, store: AppStore = memoryStoreWith({
   return buildApp({ webRoot, logger: createLogger({ write: () => undefined }), store, mapping });
 }
 
-const PRIVATE = ['PRIVATE-HOST', 'private-database', 'PRIVATE_USER_VAR', 'PRIVATE_PASSWORD_VAR', 'PRIVATE_LINK_PATH', 'PRIVATE_EVIDENCE_PATH', 'PRIVATE_STYLE', 'records.example.test', 'audit.example.test', 'max_page', 'maxPage'];
+const PRIVATE = ['PRIVATE-HOST', 'private-database', 'PRIVATE_USER_VAR', 'PRIVATE_PASSWORD_VAR', 'PRIVATE_LINK_PATH', 'PRIVATE_EVIDENCE_PATH', 'records.example.test', 'audit.example.test', 'max_page', 'maxPage'];
 
 async function profileOf(app: Awaited<ReturnType<typeof appFor>>, id = 'demo'): Promise<{ body: ReturnType<typeof sourceProfileSchema.parse>; text: string; etag: string }> {
   const response = await app.inject({ method: 'GET', url: `/v1/sources/${id}/profile` });
@@ -199,7 +199,7 @@ describe('the profile of a configured source', () => {
     expect(body.vocabulary).toEqual({ caseRef: null });
   });
 
-  it('never holds the address, the database, the credential names, the budgets, the link templates or the style rules', async () => {
+  it('never holds the address, the database, the credential names, the budgets or the link templates', async () => {
     const { text } = await profileOf(await appFor(mappingOf(fullSource())));
     for (const secret of PRIVATE) expect(text).not.toContain(secret);
   });
@@ -556,5 +556,68 @@ describe('property kinds beside the rest of the profile', () => {
     const app = await appFor(mappingOf(withKinds));
     expect((await app.inject({ method: 'GET', url: '/v1/sources/demo/profile', headers: { 'if-none-match': one.etag } })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/sources/demo/profile', headers: { 'if-none-match': two.etag } })).statusCode).toBe(304);
+  });
+});
+
+describe('the style rules of a profile', () => {
+  const rule = (overrides: Json): Json => ({ id: 'r', label: 'Review', applies_to: 'node_a', when: { property: 'status', op: 'eq', value: 'x' }, effect: { badge: 'amber' }, ...overrides });
+  const entity: Json = { type: 'node_a', label: 'NodeA', stable_id: 'id', filterable: ['status', 'score', 'seen'], kinds: { score: 'number', seen: 'date' } };
+  const sourceOf = (...rules: Json[]): Json => fullSource('demo', { entities: [entity, { type: 'node_b', label: 'NodeB', stable_id: 'key' }], style_rules: rules });
+
+  it('lists each rule in mapping order with its type, effect and condition in words', async () => {
+    const rules = [
+      rule({ id: 'a', label: 'Review required', when: { property: 'status', op: 'eq', value: 'review_required' } }),
+      rule({ id: 'b', label: 'High score', when: { property: 'score', op: 'gt', value: 2000 }, effect: { size: 'larger' } }),
+      rule({ id: 'c', label: 'Held', when: { property: 'status', op: 'in', value: ['open', 'held'] }, effect: { color: 'red' } }),
+      rule({ id: 'd', label: 'Mid', when: { property: 'score', op: 'between', value: [1000, 25000.5] }, effect: { icon: 'shield' } }),
+      rule({ id: 'e', label: 'Old', when: { property: 'seen', op: 'lte', value: '2026-01-01' }, effect: { badge: 'gray' } }),
+      rule({ id: 'f', label: 'Ge', when: { property: 'score', op: 'gte', value: 5 }, effect: { badge: 'blue' } }),
+      rule({ id: 'g', label: 'Lt', when: { property: 'score', op: 'lt', value: -1500 }, effect: { badge: 'green' } }),
+    ];
+    const { body } = await profileOf(await appFor(mappingOf(sourceOf(...rules))));
+    expect(body.styleRules?.map((entry) => [entry.id, entry.label, entry.appliesTo, entry.effect, entry.condition])).toEqual([
+      ['a', 'Review required', 'node_a', { badge: 'amber' }, 'status = review_required'],
+      ['b', 'High score', 'node_a', { size: 'larger' }, 'score > 2,000'],
+      ['c', 'Held', 'node_a', { color: 'red' }, 'status in (open, held)'],
+      ['d', 'Mid', 'node_a', { icon: 'shield' }, 'score between 1,000 and 25,000.5'],
+      ['e', 'Old', 'node_a', { badge: 'gray' }, 'seen <= 2026-01-01'],
+      ['f', 'Ge', 'node_a', { badge: 'blue' }, 'score >= 5'],
+      ['g', 'Lt', 'node_a', { badge: 'green' }, 'score < -1,500'],
+    ]);
+  });
+
+  it('holds an empty list for a mapping with no rules', async () => {
+    const { body } = await profileOf(await appFor(mappingOf(sourceOf())));
+    expect(body.styleRules).toEqual([]);
+  });
+
+  it('changes the ETag when a rule is edited, and answers 200 with the new profile to a client holding the old tag', async () => {
+    const first = await profileOf(await appFor(mappingOf(sourceOf(rule({})))));
+    const second = await profileOf(await appFor(mappingOf(sourceOf(rule({ label: 'Edited' })))));
+    expect(second.etag).not.toBe(first.etag);
+    const app = await appFor(mappingOf(sourceOf(rule({ label: 'Edited' }))));
+    const response = await app.inject({ method: 'GET', url: '/v1/sources/demo/profile', headers: { 'if-none-match': first.etag } });
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).styleRules[0].label).toBe('Edited');
+  });
+
+  it('holds a rule only in styleRules: the redacted mapping excerpt carries no rule text', async () => {
+    const { body, text } = await profileOf(await appFor(mappingOf(sourceOf(rule({ id: 'PRIVATE_STYLE_ID', label: 'Review' })))));
+    expect(body.styleRules?.[0]?.id).toBe('PRIVATE_STYLE_ID');
+    expect(body.mappingExcerpt).not.toContain('PRIVATE_STYLE_ID');
+    expect(body.mappingExcerpt).not.toContain('style_rules');
+    expect(text.split('PRIVATE_STYLE_ID')).toHaveLength(2);
+  });
+
+  it.each([
+    ['two effect keys', { badge: 'amber', color: 'red' }],
+    ['an unknown effect key', { glow: 'red' }],
+    ['a tone outside the set', { badge: 'purple' }],
+  ])('fails the contract parse for a rule entry with %s', (_name, effect) => {
+    const base = { id: 'r', label: 'L', appliesTo: 'node_a', condition: 'status = x' };
+    expect(styleRuleProfileSchema.safeParse({ ...base, effect }).success).toBe(false);
+    expect(styleRuleProfileSchema.safeParse({ ...base, effect: { badge: 'amber' }, extra: 1 }).success).toBe(false);
+    const { condition: _condition, ...missing } = base;
+    expect(styleRuleProfileSchema.safeParse({ ...missing, effect: { badge: 'amber' } }).success).toBe(false);
   });
 });

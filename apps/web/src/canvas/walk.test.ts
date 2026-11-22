@@ -8,6 +8,19 @@ import { describeWalked, stepWalk, walkOrder } from './walk.js';
 
 const graphOf = (nodes: GraphNode[], edges: GraphEdge[]): LoadedGraph => ({ nodes, edges, entities: { value: nodes.length, quality: 'exact', scope: 'loaded' }, relationships: { value: edges.length, quality: 'exact', scope: 'loaded' } });
 
+describe('the walk description of a node that matches style rules', () => {
+  const profile = (): ReturnType<typeof testProfile> => ({ ...testProfile(), styleRules: [{ id: 'review', label: 'Review required', appliesTo: 'type-a', effect: { badge: 'amber' }, condition: 'status = review' }] });
+  const ruled = (ids?: string[]): GraphNode => ({ ...node('a', 'n1'), display: { title: 'GAD-217', type: 'type-a', ...(ids === undefined ? {} : { styleRules: ids }) } });
+
+  it('adds the labels of the rules that gave the look at the end, after "pinned", and leaves a node with none as it was', () => {
+    const key = elementKey(ruled().ref);
+    expect(describeWalked(graphOf([ruled(['review'])], []), profile(), new Set(), key)).toBe('GAD-217, type-a, style: Review required');
+    expect(describeWalked(graphOf([ruled(['review'])], []), profile(), new Set([key]), key)).toBe('GAD-217, type-a, pinned, style: Review required');
+    expect(describeWalked(graphOf([ruled()], []), profile(), new Set(), key)).toBe('GAD-217, type-a');
+    expect(describeWalked(graphOf([ruled(['unlisted'])], []), profile(), new Set(), key)).toBe('GAD-217, type-a');
+  });
+});
+
 describe('the order of the walk', () => {
   it('lists the entities in their order and then the relationships between two loaded entities, and leaves out one whose end is not loaded', () => {
     const graph = graphOf([node('a', 'n1'), node('a', 'n2')], [edge('a', 'e1', 'n1', 'n2'), edge('a', 'e2', 'n1', 'gone'), edge('a', 'e3', 'n2', 'n1')]);

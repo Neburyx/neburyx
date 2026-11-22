@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, type Json } from '../testing/mapping.js';
+import { baseSource, expectRefused, fileOf, firstSource, issuesOf, load, styleRuleOf, type Json } from '../testing/mapping.js';
 import { parseMapping } from './load.js';
 
 const entities = [
@@ -135,9 +135,9 @@ describe('vocabulary and the style section', () => {
     expectRefused(baseSource({ vocabulary: { case_ref: '' } }), 'sources[0].vocabulary.case_ref', 'must not be empty');
   });
 
-  it('keeps every style rule entry as written without interpreting it', () => {
-    const rules = [{ id: 'r1', anything: ['goes', 1] }, 'opaque'];
-    expect(firstSource(load(baseSource({ style_rules: rules }))).styleRules).toEqual(rules);
+  it('keeps the style rules typed, in mapping order', () => {
+    const rules = [styleRuleOf({ id: 'r1' }), styleRuleOf({ id: 'r2', effect: { size: 'larger' } })];
+    expect(firstSource(load(baseSource({ style_rules: rules }))).styleRules.map((rule) => [rule.id, rule.effect.kind])).toEqual([['r1', 'badge'], ['r2', 'size']]);
   });
 
   it.each([

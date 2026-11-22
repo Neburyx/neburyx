@@ -21,13 +21,13 @@ export { healthResponseSchema } from './health.js';
 export type { HealthResponse } from './health.js';
 export { auditCountsSchema, databaseCheckSchema, migrationsCheckSchema, readyResponseSchema, sourceReachabilitySchema } from './ready.js';
 export type { AuditCounts, ReadyChecks, ReadyResponse, SourceReachability } from './ready.js';
-export { ICON_KEYS, PII_CLASSES, PRESET_TEMPLATES, iconKeySchema, piiClassSchema, presetTemplateSchema } from './mapping.js';
-export type { IconKey, PiiClass, PresetTemplate } from './mapping.js';
+export { ICON_KEYS, MAX_STYLE_LABEL, PII_CLASSES, PRESET_TEMPLATES, STYLE_EFFECT_KINDS, STYLE_OPERATORS, STYLE_TONES, iconKeySchema, piiClassSchema, presetTemplateSchema } from './mapping.js';
+export type { IconKey, PiiClass, PresetTemplate, StyleEffectKind, StyleOperator, StyleTone } from './mapping.js';
 export { addressable, addressableTextOfAtMost } from './addressable-text.js';
 export { SOURCE_STATES, demoCaseSchema, lastTestSchema, mappingSummarySchema, sourceStateSchema, sourceSummaryFieldsSchema, sourceSummarySchema, sourcesResponseSchema } from './sources.js';
 export type { DemoCase, LastTest, SourceState, SourceSummary, SourcesResponse } from './sources.js';
-export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema } from './profile.js';
-export type { SourceProfile } from './profile.js';
+export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema, styleEffectSchema, styleRuleProfileSchema } from './profile.js';
+export type { SourceProfile, StyleEffect, StyleRuleProfile } from './profile.js';
 export {
   DEGREE_BASIS_RESULT,
   DEGREE_RESULTS,

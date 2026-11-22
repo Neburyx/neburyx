@@ -48,6 +48,7 @@ sources:
         search: [transactionId]
         reference: [paymentRef]
         filterable: [status, channel, amount]
+        kinds: { amount: number }
         display: { icon: document, key_properties: [amount, channel, status], state_property: status }
       - type: merchant
         label: Merchant
@@ -166,3 +167,19 @@ sources:
           steps:
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account }
             - { relationshipTypes: [TRANSFERRED_TO], direction: out, arrivesAt: account, after: previous, within: { hours: 24 } }
+    style_rules:
+      - id: frozen-account
+        label: Frozen account
+        applies_to: account
+        when: { property: status, op: eq, value: frozen }
+        effect: { badge: amber }
+      - id: large-transaction
+        label: Large transaction
+        applies_to: transaction
+        when: { property: amount, op: gt, value: 4000 }
+        effect: { size: larger }
+      - id: reversed-transaction
+        label: Reversed transaction
+        applies_to: transaction
+        when: { property: status, op: eq, value: reversed }
+        effect: { color: red }
