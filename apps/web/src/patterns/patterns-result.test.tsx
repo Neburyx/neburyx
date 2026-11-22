@@ -24,7 +24,7 @@ async function shown(answer: (call: number) => TemplateRunResponse, pattern?: st
 }
 
 /** The run's measured time ends the sentence; its value is the clock's, so the tests read the sentence without it. */
-const withoutTime = (text: string | null): string | undefined => text?.replace(/ · \d+\.\d\d s$/, '');
+const withoutTime = (text: string | null): string | undefined => text?.replace(/ · \d+\.\d\d\ss$/, '');
 
 describe('the result of a pattern run', () => {
   it.each([
@@ -40,7 +40,7 @@ describe('the result of a pattern run', () => {
 
   it('ends the sentence with the time the run took, measured on the client', async () => {
     await shown(() => okRun(['acc-2']));
-    expect(within(summary()).getByRole('status').textContent).toMatch(/ · \d+\.\d\d s$/);
+    expect(within(summary()).getByRole('status').textContent).toMatch(/ · \d+\.\d\d\ss$/);
   });
 
   it('lists the evidence records as references under the table', async () => {

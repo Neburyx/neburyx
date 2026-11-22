@@ -80,7 +80,7 @@ test.describe('the Patterns panel on the canvas', () => {
     await runOf(page).click();
     const table = panelOf(page).getByRole('table');
     await expect(table.getByRole('row')).toHaveCount(6);
-    await expect(panelOf(page).getByRole('status').filter({ hasText: 'exact' })).toHaveText(/^5 other .+ found · exact · \d+\.\d\d s$/);
+    await expect(panelOf(page).getByRole('status').filter({ hasText: 'exact' })).toHaveText(/^5 other .+ found · exact · \d+\.\d\d\ss$/);
     await expect(table.getByRole('cell', { name: 'AC-2', exact: true })).toBeVisible();
   });
 

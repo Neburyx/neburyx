@@ -14,7 +14,7 @@ describe('the sentence of a result', () => {
   });
 
   it('keeps the singular for one exact match, the time when it is known, and the plural for a bound of one', () => {
-    expect(resultSentence(exact(1), false, false, 'account', 380)).toBe('1 other account found · exact · 0.38 s');
+    expect(resultSentence(exact(1), false, false, 'account', 380)).toBe('1 other account found · exact · 0.38\u00a0s');
     expect(resultSentence({ value: 1, quality: 'lowerBound', scope: 'matches' }, false, true, 'account', undefined)).toBe('≥ 1 accounts reached · lower bound');
   });
 });

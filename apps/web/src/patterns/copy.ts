@@ -75,9 +75,9 @@ export function addedText(outcome: AddedOutcome, count: Count): string {
   return `${added}${held}${more}`;
 }
 
-/** The sentence that leads a result: the number as its quality allows it, what was found or reached, and the quality in words; a result with no matches says so, with the quality of its count. */
+/** The sentence that leads a result (the time keeps its unit on its line): the number as its quality allows it, what was found or reached, and the quality in words; a result with no matches says so, with the quality of its count. */
 export function resultSentence(count: Count, noMatches: boolean, reached: boolean, noun: string, elapsedMs: number | undefined): string {
-  const time = elapsedMs === undefined ? '' : ` · ${secondsText(elapsedMs)}`;
+  const time = elapsedMs === undefined ? '' : ` · ${secondsText(elapsedMs).replace(' ', '\u00a0')}`;
   const quality = count.value === undefined ? PATTERNS_COPY.noCount : qualityWord(count.quality);
   if (noMatches) return `${PATTERNS_COPY.noMatches} · ${quality}${time}`;
   if (count.value === undefined) return `${PATTERNS_COPY.noCount}${time}`;
