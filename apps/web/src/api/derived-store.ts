@@ -22,6 +22,8 @@ export interface DerivedStore {
   held(ref: ElementRef, ruleId: string): DerivedNeighborsResponse['results'][number] | undefined;
   /** Puts what a rule's answer holds, and that the view does not, into the view as one loaded result, with no read of its own and without changing the selection, so that the inspector and the focus stay; undefined when there is no answer to show. */
   show(ref: ElementRef, ruleId: string): ShownOutcome | undefined;
+  /** Cancels every read in flight and drops every held answer, and what a handle taken earlier holds. */
+  clear(): void;
 }
 
 const keyOf = (person: string, investigation: string, ref: ElementRef, mask: boolean): string => JSON.stringify([person, investigation, ref.sourceId, ref.entityType, ref.stableId, mask]);
@@ -47,6 +49,10 @@ export function createDerivedStore(client: ApiClient, state: ClientState, person
       return request;
     },
     held: (ref, ruleId) => answerOf(ref)?.results.find((entry) => entry.ruleId === ruleId),
+    clear() {
+      for (const request of requests.values()) request.reset();
+      requests.clear();
+    },
     show(ref, ruleId) {
       const result = answerOf(ref)?.results.find((entry) => entry.ruleId === ruleId);
       if (result === undefined) return undefined;

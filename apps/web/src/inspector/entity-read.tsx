@@ -16,6 +16,8 @@ export interface EntityRead {
 export interface EntityReadStore {
   /** The read of an entity under a masking setting in the investigation that asked: made once and kept; ask again with its `reload`. */
   forEntity(ref: ElementRef, mask: boolean): RequestStore<GraphNode>;
+  /** Cancels every read in flight and drops every held read, and what a handle taken earlier holds. */
+  clear(): void;
 }
 
 const keyOf = (person: string, investigation: string, ref: ElementRef, mask: boolean): string => JSON.stringify([person, investigation, ref.sourceId, ref.entityType, ref.stableId, mask]);
@@ -31,6 +33,10 @@ export function createEntityReadStore(client: ApiClient, person: () => string, i
       const request = createRequestStore((signal) => client.getEntity(ref, mask ? { mask } : {}, signal));
       requests.set(key, request);
       return request;
+    },
+    clear() {
+      for (const request of requests.values()) request.reset();
+      requests.clear();
     },
   };
 }

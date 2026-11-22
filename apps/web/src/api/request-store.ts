@@ -7,6 +7,8 @@ export interface RequestStore<T> extends Store<RequestState<T>> {
   readonly reload: () => void;
   /** Stops waiting: an answer still on its way is ignored and what was answered stays. */
   readonly cancel: () => void;
+  /** Stops waiting and drops what was answered: the store is idle again, holding no data, and asks no more, so a retry kept from before cannot send the read again. */
+  readonly reset: () => void;
 }
 
 /**
@@ -16,8 +18,10 @@ export interface RequestStore<T> extends Store<RequestState<T>> {
 export function createRequestStore<T>(load: (signal: AbortSignal) => Promise<ApiResult<T>>, onFailure?: (failure: ApiFailure, reload: () => void) => void): RequestStore<T> {
   const store = createStore<RequestState<T>>({ phase: 'idle' });
   let newest: AbortController | undefined;
+  let retired = false;
 
   const reload = (): void => {
+    if (retired) return;
     newest?.abort();
     const controller = new AbortController();
     newest = controller;
@@ -43,6 +47,13 @@ export function createRequestStore<T>(load: (signal: AbortSignal) => Promise<Api
     store.setState(reduceRequest(store.getState(), { type: 'cancel' }));
   };
 
+  const reset = (): void => {
+    retired = true;
+    newest?.abort();
+    newest = undefined;
+    store.setState({ phase: 'idle' });
+  };
+
   reload();
-  return { ...store, reload, cancel };
+  return { ...store, reload, cancel, reset };
 }

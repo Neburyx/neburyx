@@ -1,11 +1,12 @@
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import { canRetry, FailureNotice } from '../failure-notice.js';
 import { PageFrame } from '../shell/page-shell.js';
 import { PageHeading } from '../shell/page-heading.js';
 import { answeredData, retainedFailure, useShellData } from '../shell/shell-data.js';
-import { useClientState, useSessionMask } from '../state/context.js';
+import { useClientState } from '../state/context.js';
+import { maskSwitchOf } from '../mask/mask-switch.js';
 import { WorkspaceShell } from '../workspace/workspace-shell.js';
 import { AttemptedSource } from './attempted-source.js';
 import { useStoreSelector } from '../state/store.js';
@@ -50,7 +51,6 @@ function arrivedByResuming(state: unknown): boolean {
 export function ExploreInvestigation({ client }: { readonly client: ApiClient }) {
   const { investigationId } = useParams();
   const state = useClientState();
-  const mask = useSessionMask();
   const shell = useShellData();
   const principalId = answeredData(shell.me)?.principal.id;
   const principalFailure = principalId === undefined ? retainedFailure(shell.me) : undefined;
@@ -59,25 +59,31 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
   const resumed = arrivedByResuming(location.state);
   const restoreAsked = restoreIntentOf(location.state);
   const [attempt, setAttempt] = useState(0);
-  const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, mask) ? { kind: 'ready' } : { kind: 'loading' }));
+  const [status, setStatus] = useState<Status>(() => (investigationId !== undefined && state.holds(investigationId, state.mask.getState()) ? { kind: 'ready' } : { kind: 'loading' }));
   const onScreen = useStoreSelector(state.investigation, (held) => held);
   const sync = draftSyncOf(state, client);
+  const maskRead = useStoreSelector(maskSwitchOf(state, client).status, (current) => current);
+  const loadingNow = useRef(false);
+  loadingNow.current = status.kind === 'loading';
   const draftKind = useStoreSelector(sync.status, (current) => current.kind);
   const restoredMissing = useStoreSelector(restoreNoticeOf(state).missing, (missing) => missing);
   const previousTitle = onScreen.id !== null && onScreen.id !== investigationId ? (onScreen.record?.title ?? null) : null;
+
+  // a change of the masking setting while the investigation is being opened opens it again with the new setting; once it is shown, the setting changes the view where it stands
+  useEffect(() => state.mask.subscribe(() => loadingNow.current && setAttempt((count) => count + 1)), [state]);
 
   // A layout effect, so that a new address never paints the previous investigation before this page has marked it as loading.
   useLayoutEffect(() => {
     if (investigationId === undefined || principalId === undefined) return undefined;
     // another investigation that is held is shown at once, unless the one on screen has changes to write first: the open then settles them
     const mustSettle = state.investigation.getState().id !== investigationId && sync.needsSettle();
-    if (!mustSettle && state.resume(investigationId, mask) !== undefined) {
+    if (!mustSettle && state.resume(investigationId, state.mask.getState()) !== undefined) {
       setStatus({ kind: 'ready' });
       return undefined;
     }
     const controller = new AbortController();
     setStatus({ kind: 'loading' });
-    void openById(client, state, investigationId, { principalId, mask }, controller.signal).then((outcome) => {
+    void openById(client, state, investigationId, { principalId, mask: state.mask.getState() }, controller.signal).then((outcome) => {
       if (controller.signal.aborted) return;
       if (outcome.kind === 'held') {
         // the open was given up (another took its place): the address goes back to the investigation that stayed on screen, which is no longer being left
@@ -93,7 +99,7 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
       }
     });
     return () => controller.abort();
-  }, [client, state, sync, navigate, investigationId, principalId, mask, attempt]);
+  }, [client, state, sync, navigate, investigationId, principalId, attempt]);
 
   if (status.kind === 'not-found') return <Message title={NOT_FOUND_TITLE} text={NOT_FOUND_TEXT} source={null} attempted={status.sourceId} />;
   const failure = status.kind === 'failed' ? status.failure : status.kind === 'loading' ? principalFailure : undefined;
@@ -120,6 +126,13 @@ export function ExploreInvestigation({ client }: { readonly client: ApiClient })
                 {TRY_AGAIN}
               </button>
             ) : null}
+          </div>
+        ) : maskRead.kind === 'failed' ? (
+          <div role="group" aria-label="Masking change failed">
+            <FailureNotice failure={maskRead.failure} />
+            <button type="button" className="secondary" onClick={maskSwitchOf(state, client).retry}>
+              {TRY_AGAIN}
+            </button>
           </div>
         ) : undefined
       }

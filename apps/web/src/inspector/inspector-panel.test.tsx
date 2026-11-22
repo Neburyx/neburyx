@@ -91,11 +91,12 @@ describe('the inspector panel', () => {
     expect(inspector()).toBeNull();
   });
 
-  it('closes when the masking setting changes', () => {
+  it('stays open when the masking setting changes, with the switch in it while the view is read again', () => {
     const rig = inspectorRig();
     select(rig.state, 'n1');
     act(() => rig.state.setMask(true));
-    expect(inspector()).toBeNull();
+    expect(inspector()).not.toBeNull();
+    expect(inInspector().getByRole('switch', { name: 'Mask sensitive values' })).toBeTruthy();
   });
 
   it('draws the Overview, Relationships and Properties tabs in that order, marks the selected one and moves between them with the arrow keys', async () => {

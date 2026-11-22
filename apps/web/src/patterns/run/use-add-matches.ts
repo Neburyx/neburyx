@@ -25,7 +25,7 @@ export interface AddResult {
 }
 
 /** Add to graph for the page shown beside the canvas, for one match or all of it: merged through the merge of a preset result, under the fixed word of a pattern built in the app. It reads and writes nothing else. */
-export function useAddMatches(sourceId: string, shown: PatternRunOk | undefined, running: boolean): AddResult {
+export function useAddMatches(sourceId: string, shown: PatternRunOk | undefined, running: boolean, mask: boolean): AddResult {
   const state = useClientState();
   const shell = useShellData();
   const expansions = useExpandStoreWhenProvided();
@@ -41,7 +41,7 @@ export function useAddMatches(sourceId: string, shown: PatternRunOk | undefined,
     onGraph: (part) => part.nodes.every((node) => held.nodes.has(elementKey(node.ref))) && part.edges.every((edge) => held.edges.has(edgeKey(edge.ref))),
     add: (part) => {
       if (shown === undefined || sourceChanged || principalId === undefined || running) return;
-      setPressed({ answer: shown, outcome: addResultToGraph(state, { nodes: part.nodes, edges: part.edges, keyPart: 'definition' }, { sourceId, principalId, expansions }) });
+      setPressed({ answer: shown, outcome: addResultToGraph(state, { nodes: part.nodes, edges: part.edges, keyPart: 'definition' }, { sourceId, principalId, mask, expansions }) });
     },
     added: pressed === undefined || pressed.answer !== shown ? undefined : pressed.outcome,
   };

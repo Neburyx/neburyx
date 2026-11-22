@@ -23,8 +23,9 @@ export const nodeKey = (id: string): string => elementKey(ref('a', 'type-a', id)
 
 export function load(state: ClientState, nodeIds: readonly string[] = ids): void {
   state.bindSource('a');
-  state.putResult(key('a'), result('a', [...nodeIds], []));
-  state.setLoaded([key('a')], nodeIds.map((id) => ref('a', 'type-a', id)), []);
+  const seed = { ...key('a'), mask: state.mask.getState() };
+  state.putResult(seed, result('a', [...nodeIds], []));
+  state.setLoaded([seed], nodeIds.map((id) => ref('a', 'type-a', id)), []);
 }
 
 export interface Shown {
@@ -66,8 +67,9 @@ export function show(state: ClientState, options: StubOptions = {}, menus: MenuR
 
 export function loadGraph(state: ClientState, nodes: readonly GraphNode[], edges: readonly GraphEdge[]): void {
   state.bindSource('a');
-  state.putResult(key('a'), { sourceId: 'a', nodes: [...nodes], edges: [...edges] });
-  state.setLoaded([key('a')], nodes.map((candidate) => candidate.ref), edges.map((candidate) => candidate.ref));
+  const seed = { ...key('a'), mask: state.mask.getState() };
+  state.putResult(seed, { sourceId: 'a', nodes: [...nodes], edges: [...edges] });
+  state.setLoaded([seed], nodes.map((candidate) => candidate.ref), edges.map((candidate) => candidate.ref));
 }
 
 export function withBuiltIns(): MenuRegistry {

@@ -772,3 +772,22 @@ describe('the time window of a stored draft', () => {
     expect(writes).toHaveLength(0);
   });
 });
+
+describe('a change of the masking setting', () => {
+  it('writes only the draft as it was before the change while the view is read again, then the draft of the view as it is, with no masking flag', async () => {
+    const { writes, state, move, page } = rig();
+    move(4);
+    state.setMask(true);
+    move(5);
+    page.fire('pagehide');
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.body.layout.nodes[0]).toMatchObject({ x: 4 });
+    const held = key('demo', 'again');
+    state.finishMaskRead({ key: { ...held, mask: true }, result: result('demo', ['A']), nodeRefs: [ref('demo', 'type-a', 'A')], edgeRefs: [] });
+    await vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS);
+    expect(writes).toHaveLength(2);
+    expect(writes[1]?.body.layout.nodes[0]).toMatchObject({ x: 5 });
+    expect(JSON.stringify(writes[1]?.body)).not.toContain('mask');
+  });
+});

@@ -4,7 +4,7 @@ import type { ClientState } from '../state/client-state.js';
 import { INSPECTOR_PANEL_TOP } from '../inspector/inspector-layout.js';
 import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { AskPanel } from './ask-panel.js';
-import { AskSessionProvider, createAskSession } from './ask-session.js';
+import { AskSessionProvider, askSessionAfterMaskChange, createAskSession } from './ask-session.js';
 import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from './panel-layout.js';
 import { ASK_COPY } from './copy.js';
 
@@ -23,6 +23,10 @@ export function bindAskPanel(state: ClientState, panels: PanelRegistry): () => v
     }
   };
   const unsubscribe = state.presentation.view.subscribe(sync);
+  // while the panel is open the panel's own hook clears the session and stops the question it asked; closed, nothing else would
+  const unsubscribeMask = state.mask.subscribe(() => {
+    if (!state.presentation.view.getState().askOpen) session.setState(askSessionAfterMaskChange(session.getState(), state.mask.getState()));
+  });
   const unregister = registerAiAction('ask', () => {
     state.presentation.setSummaryOpen(false);
     state.presentation.setAskOpen(!state.presentation.view.getState().askOpen);
@@ -30,6 +34,7 @@ export function bindAskPanel(state: ClientState, panels: PanelRegistry): () => v
   sync();
   return () => {
     unsubscribe();
+    unsubscribeMask();
     unregister();
     remove?.();
     remove = undefined;

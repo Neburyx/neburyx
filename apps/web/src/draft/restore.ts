@@ -14,7 +14,7 @@ interface RestoredItems {
 
 export type RestoreOutcome = { readonly ok: true; readonly restored: RestoredItems } | { readonly ok: false; readonly failure: ApiFailure };
 
-function chunks<T>(list: readonly T[]): T[][] {
+export function chunks<T>(list: readonly T[]): T[][] {
   const out: T[][] = [];
   for (let at = 0; at < list.length; at += MAX_READ_REFS) out.push(list.slice(at, at + MAX_READ_REFS));
   return out;

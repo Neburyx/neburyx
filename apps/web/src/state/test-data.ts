@@ -1,4 +1,5 @@
 import type { EdgeRef, ElementRef, GraphEdge, GraphNode } from '@neburyx/contracts';
+import type { ClientState } from './client-state.js';
 import type { QueryKey } from './keys.js';
 import type { GraphResult } from './server-state.js';
 
@@ -31,4 +32,14 @@ export function key(sourceId: string, params = 'seed-1'): QueryKey {
 
 export function result(sourceId: string, nodeIds: readonly string[], edges: ReadonlyArray<readonly [string, string, string]> = []): GraphResult {
   return { sourceId, nodes: nodeIds.map((id) => node(sourceId, id)), edges: edges.map(([id, from, to]) => edge(sourceId, id, from, to)) };
+}
+
+/** Changes the masking setting as the app does, with the view then read again as it was: the same items held under a key of the new setting. */
+export function setMaskKeepingView(state: ClientState, mask: boolean): void {
+  const graph = state.loadedGraph();
+  const held = state.investigation.getState();
+  const [first] = held.resultKeys;
+  state.setMask(mask);
+  if (first === undefined || held.sourceId === null) return;
+  state.finishMaskRead({ key: { ...first, params: `reread:${mask}`, mask }, result: { sourceId: held.sourceId, nodes: [...graph.nodes], edges: [...graph.edges] }, nodeRefs: held.nodeRefs, edgeRefs: held.edgeRefs });
 }

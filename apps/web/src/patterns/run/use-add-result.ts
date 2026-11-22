@@ -21,7 +21,7 @@ export interface AddResult {
 }
 
 /** Add to graph for a result shown beside the canvas: on the canvas already, busy while a run is on its way, and merged through the merge of a preset result, under `keyPart`. It reads and writes nothing else. */
-export function useAddResult(sourceId: string, shown: AddableAnswer | undefined, running: boolean, keyPart: string): AddResult {
+export function useAddResult(sourceId: string, shown: AddableAnswer | undefined, running: boolean, keyPart: string, mask: boolean): AddResult {
   const state = useClientState();
   const shell = useShellData();
   const expansions = useExpandStoreWhenProvided();
@@ -40,7 +40,7 @@ export function useAddResult(sourceId: string, shown: AddableAnswer | undefined,
       : {
           state: running ? 'running' : allLoaded ? 'onCanvas' : 'ready',
           disabled: running || allLoaded,
-          onAdd: () => setPressed({ answer: shown, outcome: addResultToGraph(state, { nodes: shown.nodes, edges: shown.edges, keyPart }, { sourceId, principalId, expansions }) }),
+          onAdd: () => setPressed({ answer: shown, outcome: addResultToGraph(state, { nodes: shown.nodes, edges: shown.edges, keyPart }, { sourceId, principalId, mask, expansions }) }),
         };
   return { add, added: pressed === undefined || pressed.answer !== shown ? undefined : pressed.outcome };
 }

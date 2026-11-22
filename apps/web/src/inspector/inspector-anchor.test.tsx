@@ -83,11 +83,11 @@ describe('the inspector stays on its entity while one of its relationships is se
     expect(shownTitle()).toBe('Title n2');
   });
 
-  it('closes when the masking setting changes while a relationship is selected', async () => {
+  it('stays open when the masking setting changes while a relationship is selected', async () => {
     const rig = await openRelationships([stored('r1', 'n1', 'n2')]);
     pick(rig, r1);
     act(() => rig.state.setMask(true));
-    expect(inspector()).toBeNull();
+    expect(inspector()).not.toBeNull();
   });
 
   it('closes when another source is bound while a relationship is selected', async () => {

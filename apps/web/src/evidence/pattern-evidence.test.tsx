@@ -48,7 +48,7 @@ describe('the evidence references of a pattern result', () => {
     const kit = await shown();
     const run = okRun(['acc-2', 'acc-3']);
     if (run.status !== 'ok') throw new Error('not ok');
-    act(() => void addResultToGraph(kit.state, run, { sourceId: 'a', principalId: 'p' }));
+    act(() => void addResultToGraph(kit.state, run, { sourceId: 'a', principalId: 'p', mask: false }));
     await settle();
     expect(within(references()).getByRole('button', { name: 'AUTH-0' })).toBeTruthy();
     act(() => kit.state.hide([elementKey(ref('a', 'kind-b', 'dev-1'))]));

@@ -20,7 +20,7 @@ function started(notice: MappingNotice | undefined, mask = false) {
   state.bindSource('demo');
   state.setMask(mask);
   const read = result('demo', ['A']);
-  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key('demo')], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: key('demo'), result: read }]);
+  state.show({ id: ID, sourceId: 'demo', record: { title: 'T', caseRef: null, status: 'open', readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [{ ...key('demo'), mask }], nodeRefs: read.nodes.map((node) => node.ref), edgeRefs: [] }, [{ key: { ...key('demo'), mask }, result: read }]);
   mappingNoticesOf(state).set(notice);
   const banner = createBuiltInBannerController();
   render(

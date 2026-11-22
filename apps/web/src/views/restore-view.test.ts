@@ -295,4 +295,15 @@ describe('restoring a view into the draft', () => {
     const { client } = rig();
     expect(await restoreNamedView(client, createClientState(), VIEW)).toEqual({ kind: 'failed' });
   });
+
+  it('stores nothing and replaces nothing when the masking setting changed while the view was being read', async () => {
+    const turn: { flip?: () => void } = {};
+    const { client, state } = await opened({ beforeRead: async () => turn.flip?.() });
+    turn.flip = () => state.setMask(true);
+    const outcome = await restoreNamedView(client, state, VIEW);
+    expect(outcome).toMatchObject({ kind: 'read-failed', failure: { code: 'ABORTED' } });
+    expect(state.server.getState().results.size).toBe(0);
+    expect(state.investigation.getState().id).toBe(INVESTIGATION_A);
+    expect(state.loadedGraph().nodes).toEqual([]);
+  });
 });

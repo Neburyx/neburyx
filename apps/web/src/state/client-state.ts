@@ -20,7 +20,12 @@ export interface ClientState {
   readonly jobs: ReadableStore<JobState>;
   /** Whether the session asks for the personal-data fields to be masked; every read of the session carries it. */
   readonly mask: ReadableStore<boolean>;
+  /** Changes the setting. Everything read with the other setting is dropped at once: the results, and the investigations set aside; the investigation shown keeps its references and holds no result until `finishMaskRead`. */
   setMask(mask: boolean): void;
+  /** Whether a change of the masking setting dropped the results of the investigation shown and they are not read again yet; its draft is not written meanwhile. */
+  readonly rereading: ReadableStore<boolean>;
+  /** Stores the items read again with the current setting as the results of the investigation shown, keeping its positions, pins and selection, and ends `rereading`. Refused with `MASK_CHANGED` for a result read with the other setting. */
+  finishMaskRead(loaded: { readonly key: QueryKey; readonly result: GraphResult; readonly nodeRefs: readonly ElementRef[]; readonly edgeRefs: readonly EdgeRef[] }): void;
   bindSource(sourceId: string): void;
   /** Returns to no source bound, but only when nothing is shown: no investigation and no loaded entity or relationship. It drops the source's results as `bindSource` does unless an investigation that is set aside still holds the source. */
   unbindSource(): void;
@@ -66,6 +71,10 @@ interface SetAside {
 export function createClientState(): ClientState {
   const server = createServerStore();
   const mask = createStore(false);
+  const rereading = createStore(false);
+  const refuseOtherMask = (keys: readonly QueryKey[]): void => {
+    if (!readFor(keys, mask.getState())) throw new StateError('MASK_CHANGED');
+  };
   const setAside = new Map<string, SetAside>();
   const investigation = createInvestigationStore();
   const nodeKeySets = new WeakMap<InvestigationState, ReadonlySet<string>>();
@@ -93,7 +102,25 @@ export function createClientState(): ClientState {
     presentation: { view, setTool, setOpenTool, setOpenMenu, select, setLayout, setLayoutDirection, setPhysics, applyLayout, setPosition, setPositions, pin, unpin, setPanelSize, clearPanelSize, setPanelCollapsed, clearPanelCollapsed, setLegendOpen, setSearchOpen, setSearchTab, requestSearch, setSheetOpen, setSupernodePanel, setSceneItems, walkTo, endWalk, forgetFocused, announceMove, setViewport, showAllHidden, showHidden, leaveFocus, setMappedTypes, resetTypeFilter, setFiltersOpen, setPatternsOpen, setPathsOpen, fitAround, requestPaths, clearPathsHandover, requestPathsFocus, clearPathsFocus, setAskOpen, setAssistantOpen, setSummaryOpen, openSummaryNotes, setSummaryNotesOnly, setPatternsPreset },
     jobs: createJobStore(),
     mask: readable(mask),
-    setMask: (next) => mask.setState(next),
+    rereading: readable(rereading),
+    setMask(next) {
+      if (mask.getState() === next) return;
+      const shown = investigation.view.getState();
+      rereading.setState(shown.nodeRefs.length > 0 || shown.edgeRefs.length > 0);
+      server.dropOtherMask(next);
+      for (const [id, held] of setAside) if (!readFor(held.investigation.resultKeys, next)) setAside.delete(id);
+      mask.setState(next);
+    },
+    finishMaskRead({ key, result, nodeRefs, edgeRefs }) {
+      refuseOtherMask([key]);
+      const bound = investigation.view.getState().sourceId;
+      if (bound === null) throw new StateError('NO_SOURCE_BOUND');
+      if (key.sourceId !== bound || result.sourceId !== bound) throw new StateError('SOURCE_MISMATCH');
+      server.put(key, result);
+      investigation.setLoaded([key], nodeRefs, edgeRefs);
+      presentation.prune();
+      rereading.setState(false);
+    },
     bindSource(sourceId) {
       const previous = investigation.view.getState().sourceId;
       if (previous === sourceId) return;
@@ -104,6 +131,7 @@ export function createClientState(): ClientState {
       }
       presentation.reset();
       investigation.bind(sourceId);
+      rereading.setState(false);
     },
     unbindSource() {
       const shown = investigation.view.getState();
@@ -117,6 +145,7 @@ export function createClientState(): ClientState {
       presentation.setAssistantOpen(false);
       presentation.setSummaryOpen(false);
       investigation.restore({ id: null, sourceId: null, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
+      rereading.setState(false);
     },
     holds(id, mask) {
       const shown = investigation.view.getState();
@@ -129,14 +158,16 @@ export function createClientState(): ClientState {
       if (shown.id === id) return readFor(shown.resultKeys, mask) ? 'current' : undefined;
       const held = setAside.get(id);
       if (held === undefined || !readFor(held.investigation.resultKeys, mask)) return undefined;
-      if (shown.id !== null) setAside.set(shown.id, { investigation: shown, presentation: presentation.snapshot() });
+      if (shown.id !== null && !rereading.getState()) setAside.set(shown.id, { investigation: shown, presentation: presentation.snapshot() });
       setAside.delete(id);
       investigation.restore(held.investigation);
+      rereading.setState(false);
       presentation.restore(held.presentation);
       return 'resumed';
     },
     show(loaded, results) {
       const shown = investigation.view.getState();
+      refuseOtherMask(results.map(({ key }) => key));
       if (shown.id === loaded.id && sameMask(shown.resultKeys, loaded.resultKeys)) return 'current';
       for (const { key, result } of results) {
         if (key.sourceId !== loaded.sourceId || result.sourceId !== loaded.sourceId) throw new StateError('SOURCE_MISMATCH');
@@ -149,19 +180,22 @@ export function createClientState(): ClientState {
         probe.load(loaded);
         for (const { key, result } of results) server.put(key, result);
       }
-      if (shown.id !== null && shown.id !== loaded.id) setAside.set(shown.id, { investigation: shown, presentation: presentation.snapshot() });
+      if (shown.id !== null && shown.id !== loaded.id && !rereading.getState()) setAside.set(shown.id, { investigation: shown, presentation: presentation.snapshot() });
       setAside.delete(loaded.id);
       if (held !== undefined) {
         investigation.restore(held.investigation);
+        rereading.setState(false);
         presentation.restore(held.presentation);
         return 'resumed';
       }
       investigation.load(loaded);
+      rereading.setState(false);
       presentation.reset();
       return 'fresh';
     },
     replace(loaded, results) {
       if (investigation.view.getState().id !== loaded.id) throw new StateError('SOURCE_MISMATCH');
+      refuseOtherMask(results.map(({ key }) => key));
       for (const { key, result } of results) {
         if (key.sourceId !== loaded.sourceId || result.sourceId !== loaded.sourceId) throw new StateError('SOURCE_MISMATCH');
       }
@@ -169,6 +203,7 @@ export function createClientState(): ClientState {
       createInvestigationStore().load(loaded);
       for (const { key, result } of results) server.put(key, result);
       investigation.load(loaded);
+      rereading.setState(false);
       presentation.reset();
     },
     forget(id) {
@@ -178,6 +213,7 @@ export function createClientState(): ClientState {
         return;
       }
       investigation.restore({ id: null, sourceId: shown.sourceId, record: null, resultKeys: [], nodeRefs: [], edgeRefs: [] });
+      rereading.setState(false);
       presentation.reset();
     },
     describeInvestigation: (record) => investigation.describe(record),
@@ -185,6 +221,7 @@ export function createClientState(): ClientState {
       const bound = investigation.view.getState().sourceId;
       if (bound === null) throw new StateError('NO_SOURCE_BOUND');
       if (key.sourceId !== bound || result.sourceId !== bound) throw new StateError('SOURCE_MISMATCH');
+      refuseOtherMask([key]);
       server.put(key, result);
     },
     setLoaded(resultKeys, nodeRefs, edgeRefs) {

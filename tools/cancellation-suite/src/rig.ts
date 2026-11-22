@@ -351,5 +351,5 @@ export async function runAndAdd(rig: Rig): Promise<void> {
   await until(() => rig.patterns.getState().result !== undefined, 'the result');
   const result = rig.patterns.getState().result;
   if (result === undefined) throw new Error('no result');
-  addResultToGraph(rig.state, result, { sourceId: result.nodes[0]?.ref.sourceId ?? '', principalId: 'person-1' });
+  addResultToGraph(rig.state, result, { sourceId: result.nodes[0]?.ref.sourceId ?? '', principalId: 'person-1', mask: rig.state.mask.getState() });
 }

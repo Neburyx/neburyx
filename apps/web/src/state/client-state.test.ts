@@ -659,3 +659,69 @@ describe('the mask of the session', () => {
     expect(seen).toEqual([true, false]);
   });
 });
+
+describe('a change of the masking setting', () => {
+  const SOURCE = 'source-a';
+  const record = { title: 'T', caseRef: null, status: 'open' as const, readOnly: false, sourceState: 'available' as const, startingEntity: null, version: 1, save: { kind: 'unsaved' as const } };
+  const read = (id: string, mask: boolean) => {
+    const readKey = { ...key(SOURCE, `open:${id}`), mask };
+    return { loaded: { id, sourceId: SOURCE, record, resultKeys: [readKey], nodeRefs: [ref(SOURCE, 'type-a', id)], edgeRefs: [] }, results: [{ key: readKey, result: result(SOURCE, [id]) }] };
+  };
+
+  it('drops every result and every investigation set aside that was read with the other setting, and the one shown holds no result', () => {
+    const state = createClientState();
+    const first = read('n1', false);
+    const second = read('n2', false);
+    state.show(first.loaded, first.results);
+    state.show(second.loaded, second.results);
+    state.setMask(true);
+    expect(state.server.getState().results.size).toBe(0);
+    expect(state.holds('n1', false)).toBe(false);
+    expect(state.holds('n1', true)).toBe(false);
+    expect(state.loadedGraph().nodes).toEqual([]);
+    expect(state.investigation.getState().nodeRefs).toEqual([ref(SOURCE, 'type-a', 'n2')]);
+    expect(state.rereading.getState()).toBe(true);
+  });
+
+  it('does the same in the other direction, and drops nothing when the setting is the one it was', () => {
+    const state = createClientState();
+    state.setMask(true);
+    const held = read('n1', true);
+    state.show(held.loaded, held.results);
+    const before = state.server.getState();
+    state.setMask(true);
+    expect(state.server.getState()).toBe(before);
+    expect(state.rereading.getState()).toBe(false);
+    state.setMask(false);
+    expect(state.server.getState().results.size).toBe(0);
+  });
+
+  it('refuses a result read with the other setting, however it arrives, and stores and replaces nothing', () => {
+    const state = createClientState();
+    const shown = read('n1', false);
+    state.show(shown.loaded, shown.results);
+    state.setMask(true);
+    const late = read('n1', false);
+    expect(() => state.putResult(late.results[0]?.key ?? key(SOURCE), late.results[0]?.result ?? result(SOURCE, []))).toThrowError(expect.objectContaining({ code: 'MASK_CHANGED' }));
+    expect(() => state.show(read('n2', false).loaded, read('n2', false).results)).toThrowError(expect.objectContaining({ code: 'MASK_CHANGED' }));
+    expect(() => state.replace(late.loaded, late.results)).toThrowError(expect.objectContaining({ code: 'MASK_CHANGED' }));
+    expect(() => state.finishMaskRead({ key: { ...key(SOURCE), mask: false }, result: result(SOURCE, ['n1']), nodeRefs: [], edgeRefs: [] })).toThrowError(expect.objectContaining({ code: 'MASK_CHANGED' }));
+    expect(state.server.getState().results.size).toBe(0);
+    expect(state.investigation.getState().id).toBe('n1');
+  });
+
+  it('gives the investigation its results back when they are read again with the new setting, keeping its pins and selection', () => {
+    const state = createClientState();
+    const shown = read('n1', false);
+    state.show(shown.loaded, shown.results);
+    const held = elementKey(ref(SOURCE, 'type-a', 'n1'));
+    state.presentation.select([held]);
+    state.presentation.pin([held]);
+    state.setMask(true);
+    state.finishMaskRead({ key: { ...key(SOURCE, 'again'), mask: true }, result: result(SOURCE, ['n1']), nodeRefs: [ref(SOURCE, 'type-a', 'n1')], edgeRefs: [] });
+    expect(state.rereading.getState()).toBe(false);
+    expect(state.loadedGraph().nodes).toHaveLength(1);
+    expect([...state.presentation.view.getState().selection]).toEqual([held]);
+    expect([...state.presentation.view.getState().pins]).toEqual([held]);
+  });
+});

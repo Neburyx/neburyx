@@ -1,10 +1,12 @@
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import type { DerivedNeighborsResponse, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { edgeKey, elementKey } from '../state/keys.js';
 import { loadGraph } from '../workspace/context-menu-kit.js';
 import { node, ref } from '../state/test-data.js';
+import { purgeOnMaskChange } from '../api/purge-on-mask-change.js';
+import { createClientState } from '../state/client-state.js';
 import { count, entity, failure, inInspector, inspectorRig, keyOf, select, TYPE } from './inspector-kit.js';
 
 const RULE = { id: 'shared-device', from: TYPE, to: TYPE, via: ['link-a', TYPE, 'link-a'], ruleVersion: 2 };
@@ -104,8 +106,9 @@ describe('the rule-derived row of the Overview', () => {
   });
 
   it('asks with the masking flag when the session masks', () => {
-    const r = rig();
-    act(() => r.state.setMask(true));
+    const state = createClientState();
+    state.setMask(true);
+    const r = inspectorRig({ state, derivedRules: [RULE] });
     select(r.state, 'n1');
     expect(r.derivedCalls.map((call) => call.mask)).toEqual([true]);
   });
@@ -221,5 +224,23 @@ describe('Show on the rule-derived row', () => {
   it('does not touch the edge keys of relationships already loaded', () => {
     expect(edgeKey(derivedEdge('n1', 'n2').ref)).toContain('shared-device');
     expect(node('a', 'n1').ref.stableId).toBe('n1');
+  });
+
+  it('sends no derived-neighbors or preview request when masking is switched on, drops the answer that named an item the view does not hold, and asks again, with the flag, only when the Overview is shown again', async () => {
+    const r = inspectorRig({ derivedRules: [RULE], client: { readRefs: async (request) => ({ ok: true, value: { nodes: request.entities.map((held) => entity(held.stableId)), edges: [], missing: { entities: [], edges: [] } } }) } });
+    purgeOnMaskChange(r.state, [r.derivedStore, r.previewStore]);
+    select(r.state, 'n1');
+    await answer(r, answerOf(1, 'exact', [entity('n9')], [derivedEdge('n1', 'n9')]));
+    const asked = { derived: r.derivedCalls.length, previews: r.previews.length };
+    expect(asked.derived).toBe(1);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: 'Properties' }));
+    await user.click(screen.getByRole('switch', { name: 'Mask sensitive values' }));
+    await waitFor(() => expect(r.state.rereading.getState()).toBe(false));
+    expect({ derived: r.derivedCalls.length, previews: r.previews.length }).toEqual(asked);
+    expect(r.derivedStore.held(ref('a', TYPE, 'n1'), 'shared-device')).toBeUndefined();
+    expect(r.state.loadedGraph().nodes.map((held) => held.ref.stableId)).not.toContain('n9');
+    await user.click(screen.getByRole('tab', { name: 'Overview' }));
+    expect(r.derivedCalls.map((call) => call.mask)).toEqual([false, true]);
   });
 });

@@ -10,6 +10,7 @@ import { inspectedKey } from './inspected.js';
 import { InspectorContext, type Inspector } from './inspector.js';
 import { useInspectorTabs } from './inspector-tabs.js';
 import { useEntityRead } from './entity-read.js';
+import { MaskControl } from './mask-control.js';
 
 function focusCanvas(): void {
   document.querySelector<HTMLElement>('.graph-canvas')?.focus({ preventScroll: true });
@@ -25,6 +26,7 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
   const tabs = useInspectorTabs(inspector.tabs);
   const [chosen, setChosen] = useState<string | undefined>(undefined);
   const anchor = useStoreSelector(inspector.anchor, (current) => current);
+  const rereading = useStoreSelector(state.rereading, (current) => current);
   const key = inspectedKey(selection, visible, anchor);
   const ref = key === undefined ? undefined : nodeRefOfKey(key);
   const node = key === undefined ? undefined : loaded.nodes.find((candidate) => elementKey(candidate.ref) === key);
@@ -32,7 +34,38 @@ function InspectorPanel({ inspector }: { readonly inspector: Inspector }) {
   const notRead = node !== undefined && isNotReadNode(node);
   const read = useEntityRead(unmapped ? undefined : ref, mask);
   const tab = tabs.find((candidate) => candidate.id === chosen) ?? tabs[0];
-  if (key === undefined || ref === undefined || node === undefined) return null;
+  if (key === undefined || ref === undefined || node === undefined) {
+    if (!rereading || anchor === undefined) return null;
+    const closeReading = (): void => {
+      inspector.dismiss(anchor);
+      focusCanvas();
+    };
+    return (
+      <div
+        className="inspector"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || event.defaultPrevented) return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeReading();
+        }}
+      >
+        <header className="inspector-header">
+          <div className="inspector-heading">
+            <div className="inspector-titles">
+              <h2 className="inspector-title">{INSPECTOR_TITLE}</h2>
+            </div>
+            <button type="button" className="legend-close" aria-label={CLOSE_INSPECTOR} onClick={closeReading}>
+              <span className="icon icon-clear" aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+        <div className="inspector-body">
+          <MaskControl />
+        </div>
+      </div>
+    );
+  }
   const shown = read.node ?? node;
   const close = (): void => {
     inspector.dismiss(key);

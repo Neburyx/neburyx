@@ -42,6 +42,13 @@ export const EMPTY_SUMMARY_SESSION: SummarySessionState = { investigationId: nul
 
 export type SummarySession = Store<SummarySessionState>;
 
+/** The session after a change of masking: the draft and the latest attempt are dropped, and the person is told when there was something. */
+export function summarySessionAfterMaskChange(held: SummarySessionState, mask: boolean): SummarySessionState {
+  if (held.mask === mask) return held;
+  const hadSomething = held.draft !== undefined || held.attempt.kind !== 'idle';
+  return { ...EMPTY_SUMMARY_SESSION, investigationId: held.investigationId, mask, attempt: hadSomething && held.investigationId !== null ? { kind: 'outcome', outcome: { kind: 'cleared', reason: 'masking' } } : { kind: 'idle' } };
+}
+
 export const createSummarySession = (): SummarySession => createStore<SummarySessionState>(EMPTY_SUMMARY_SESSION);
 
 const SummarySessionContext = createContext<SummarySession | undefined>(undefined);

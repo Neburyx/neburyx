@@ -11,7 +11,7 @@ import { citationEntries, editedOf, pressOf, settledOf, storableCountOf, summary
 import { loadedLine } from '../workspace/scope-text.js';
 import { SUMMARY_COPY } from './copy.js';
 import { assistantSessionOf } from '../assistant/assistant-session.js';
-import { EMPTY_SUMMARY_SESSION, useSummarySession, type SummarySessionState } from './summary-session.js';
+import { EMPTY_SUMMARY_SESSION, summarySessionAfterMaskChange, useSummarySession, type SummarySessionState } from './summary-session.js';
 
 type FocusTarget = 'title' | 'start' | 'draft' | 'cancel';
 
@@ -79,9 +79,8 @@ export function useSummary(onClose: () => void): SummaryModel {
     if (held.investigationId === investigationId && held.mask === mask) return;
     controller.current?.abort();
     controller.current = undefined;
-    const reason = held.investigationId !== investigationId ? 'investigation' : 'masking';
     const hadSomething = held.draft !== undefined || held.attempt.kind !== 'idle';
-    session.setState({ ...EMPTY_SUMMARY_SESSION, investigationId, mask, attempt: hadSomething && held.investigationId !== null ? { kind: 'outcome', outcome: { kind: 'cleared', reason } } : { kind: 'idle' } });
+    session.setState(held.investigationId === investigationId ? summarySessionAfterMaskChange(held, mask) : { ...EMPTY_SUMMARY_SESSION, investigationId, mask, attempt: hadSomething && held.investigationId !== null ? { kind: 'outcome', outcome: { kind: 'cleared', reason: 'investigation' } } : { kind: 'idle' } });
     if (hadSomething) setFocus('title');
   }, [investigationId, mask, session, setFocus]);
 

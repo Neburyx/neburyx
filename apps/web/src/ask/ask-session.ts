@@ -32,6 +32,14 @@ export const EMPTY_SESSION: AskSessionState = { investigationId: null, mask: fal
 
 export type AskSession = Store<AskSessionState>;
 
+/** The session after a change of masking: an answer, a heavy-operation hold, or a question still asked is replaced by the note that masking cleared it. */
+export function askSessionAfterMaskChange(held: AskSessionState, mask: boolean): AskSessionState {
+  if (held.mask === mask) return held;
+  const { stage } = held;
+  const cleared = stage.kind === 'answered' || stage.kind === 'heavy' || stage.kind === 'asking' || (stage.kind === 'failed' && stage.heavy !== undefined);
+  return { ...held, mask, stage: cleared ? { kind: 'masking-cleared' } : stage };
+}
+
 export const createAskSession = (): AskSession => createStore<AskSessionState>(EMPTY_SESSION);
 
 const AskSessionContext = createContext<AskSession | undefined>(undefined);

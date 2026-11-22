@@ -185,7 +185,7 @@ export function RunFlow({ client, sourceId, sourceName, mask, profile, definitio
   }, [onHeader, screen, named, startName, builtInName]);
 
   const shown = screen === 'result' ? run.result?.answer : undefined;
-  const add = useAddMatches(sourceId, shown, run.running);
+  const add = useAddMatches(sourceId, shown, run.running, mask);
   const evidenceOpener =
     evidence === undefined || shown === undefined
       ? undefined

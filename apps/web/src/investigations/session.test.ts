@@ -9,6 +9,7 @@ const PRINCIPAL = 'principal-1';
 
 function showing(state: ReturnType<typeof createClientState>, id: string, sourceId: string, stableId: string, mask = false) {
   const node = nodeOf(sourceId, 'kind-a', stableId);
+  state.setMask(mask);
   const key = openedKey(sourceId, PRINCIPAL, id, mask);
   return state.show({ id, sourceId, record: { title: stableId, caseRef: null, status: 'open' as const, readOnly: false, version: 1, save: { kind: 'unsaved' } }, resultKeys: [key], nodeRefs: [node.ref], edgeRefs: [] }, [{ key, result: { sourceId, nodes: [node], edges: [] } }]);
 }
@@ -107,14 +108,9 @@ describe('the cache key', () => {
     const masked = openedKey('source-a', PRINCIPAL, INVESTIGATION_A, true);
     expect(state.server.get(masked)).toBeUndefined();
     const hidden = { ...nodeOf('source-a', 'kind-a', 'A-1'), display: { title: 'A•••', type: 'kind-a' } };
-    state.putResult(masked, { sourceId: 'source-a', nodes: [hidden], edges: [] });
+    expect(() => state.putResult(masked, { sourceId: 'source-a', nodes: [hidden], edges: [] })).toThrow(expect.objectContaining({ code: 'MASK_CHANGED' }));
+    expect(state.server.get(masked)).toBeUndefined();
     expect(state.server.get(plain)?.nodes[0]?.display.title).toBe('kind-a A-1');
-    expect(state.server.get(masked)?.nodes[0]?.display.title).toBe('A•••');
-    const node = nodeOf('source-a', 'kind-a', 'A-1');
-    state.setLoaded([masked], [node.ref], []);
-    expect(state.loadedGraph().nodes.map((shown) => shown.display.title)).toEqual(['A•••']);
-    state.setLoaded([plain], [node.ref], []);
-    expect(state.loadedGraph().nodes.map((shown) => shown.display.title)).toEqual(['kind-a A-1']);
     const unmaskedOnly = createClientState();
     const only = openedKey('source-a', PRINCIPAL, INVESTIGATION_A, true);
     showing(unmaskedOnly, INVESTIGATION_A, 'source-a', 'A-1', true);

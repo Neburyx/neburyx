@@ -42,7 +42,7 @@ function show(state: ClientState, investigation: Investigation, items: { readonl
     );
     return { kind: 'shown', id: investigation.id, activation };
   } catch (error) {
-    if (error instanceof StateError) return mismatchIn(investigation.sourceId);
+    if (error instanceof StateError) return error.code === 'MASK_CHANGED' ? { kind: 'failed', failure: { code: 'ABORTED' } } : mismatchIn(investigation.sourceId);
     throw error;
   }
 }
@@ -171,7 +171,7 @@ export async function replaceWithRead(client: ApiClient, state: ClientState, ans
   try {
     state.replace({ id, sourceId, record: { ...record, title: answer.investigation.title, status: answer.investigation.status, readOnly: readOnlyOf(answer.investigation.status, answer.investigation.sourceState), sourceState: answer.investigation.sourceState, version: answer.investigation.version, save }, resultKeys: [key], nodeRefs: nodes.map((node) => node.ref), edgeRefs: edges.map((edge) => edge.ref) }, [{ key, result: { sourceId, nodes: [...nodes], edges: [...edges] } }]);
   } catch (error) {
-    if (error instanceof StateError) return { kind: 'failed', failure: { code: 'SCHEMA_MISMATCH' } };
+    if (error instanceof StateError) return { kind: 'failed', failure: { code: error.code === 'MASK_CHANGED' ? 'ABORTED' : 'SCHEMA_MISMATCH' } };
     throw error;
   }
   applyPresentation(state, draft, nodes);

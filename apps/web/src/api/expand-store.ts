@@ -202,7 +202,18 @@ export function createExpandStore(client: ApiClient, state: ClientState, person:
     return keepers;
   };
   // the record is cleared the moment the epoch changes, so it is not there when the epoch comes back
-  state.mask.subscribe(() => recordOf());
+  const maskOfEpoch = (epoch: string): unknown => {
+    const parsed: unknown = JSON.parse(epoch);
+    return Array.isArray(parsed) ? parsed[1] : undefined;
+  };
+  state.mask.subscribe(() => {
+    recordOf();
+    // what a page of the other setting left, cursors included, is dropped and not only left unread
+    const mask = state.mask.getState();
+    store.setState(new Map([...store.getState()].filter(([, held]) => maskOfEpoch(held.epoch) === mask)));
+    for (const key of [...chains.keys()]) if (maskOfEpoch(key.slice(0, key.indexOf('|'))) !== mask) chains.delete(key);
+    last.clear();
+  });
   state.investigation.subscribe(() => recordOf());
   const holds = (record: Keepers, nodeKey: string): boolean => {
     const own = record.of.get(nodeKey);

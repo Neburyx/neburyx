@@ -207,6 +207,15 @@ describe('a loaded graph larger than one request', () => {
     expect(secondLine()).toBe('1,200 shown · 7 not yet retrieved (exact)');
   });
 
+  it.each([
+    [COVERAGE_MAX_ENTITIES, [500]],
+    [COVERAGE_MAX_ENTITIES + 1, [500, 1]],
+  ])('sends %i entities in the calls %j', async (count, sizes) => {
+    const { asks } = harness({ nodes: ids(count) });
+    for (let at = 0; at < sizes.length; at += 1) await answer(asks[at], ok(counted(0, 'exact')));
+    expect(asks.map((ask) => ask.request.entities.length)).toEqual(sizes);
+  });
+
   it('joins the answers by the rules of quality: two chunks with something left give an estimate', async () => {
     const { asks } = harness({ nodes: ids(600) });
     await answer(asks[0], ok(counted(3, 'exact')));

@@ -1,12 +1,14 @@
 import { CopyButton } from '../workspace/copy-button.js';
 import { COPY_ALL, COPY_ALL_LABEL, copyLabel } from './copy.js';
 import type { InspectorTabProps } from './inspector-tabs.js';
+import { MaskControl } from './mask-control.js';
 import { propertyText } from './property-text.js';
 
 export function PropertiesTab({ node }: InspectorTabProps) {
   const lines = node.properties.map((property) => ({ key: property.key, text: propertyText(property) }));
   return (
     <div className="inspector-properties">
+      <MaskControl node={node} />
       <div className="inspector-copy-all">
         <CopyButton align="start" label={COPY_ALL_LABEL} caption={COPY_ALL} text={lines.map((line) => `${line.key}: ${line.text}`).join('\n')} />
       </div>

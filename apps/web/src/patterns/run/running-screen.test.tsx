@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../../state/test-data.js';
 import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternRunResponse } from '@neburyx/contracts';
@@ -57,7 +58,7 @@ describe('a run in progress', () => {
   it('writes no ID beside the name while masking is on', async () => {
     const { handler } = held();
     const kit = await runWorkspace({ runDefinition: handler });
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await settle();
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();
@@ -131,7 +132,7 @@ describe('a run in progress', () => {
 
   it('sends the mask when masking is on', async () => {
     const kit = await runWorkspace();
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await settle();
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();

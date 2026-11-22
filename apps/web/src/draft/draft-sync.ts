@@ -1,9 +1,9 @@
-import { ERROR_TABLE, windowSchema, type DraftWriteRequest, type ErrorCode, type QueryContextDocument } from '@neburyx/contracts';
+import { ERROR_TABLE, windowSchema, type DraftWriteRequest, type EdgeRef, type ElementRef, type ErrorCode, type QueryContextDocument } from '@neburyx/contracts';
 import type { ApiClient, ApiFailure } from '../api/client.js';
 import type { ClientState } from '../state/client-state.js';
 import { createStore, readable, type ReadableStore } from '../state/store.js';
 import { refreshRecord } from '../lifecycle/refresh-record.js';
-import { draftOf, NOTHING_KEPT, type CarriedContext, type KeptItems } from './draft-document.js';
+import { draftOf, keptFrom, NOTHING_KEPT, type CarriedContext, type KeptItems } from './draft-document.js';
 
 /** How long the draft waits after the last change before it is written. */
 export const AUTOSAVE_DELAY_MS = 3000;
@@ -128,6 +128,10 @@ export interface DraftSync {
   readonly leaving: ReadableStore<boolean>;
   /** Whether something is waiting to be written or is being written, so that leaving the investigation shown needs `settle` first. */
   needsSettle(): boolean;
+  /** The draft of the investigation shown as it would be written now; none when it cannot be written. */
+  snapshot(): Pick<DraftWriteRequest, 'layout' | 'queryContext'> | undefined;
+  /** Keeps in the draft the items of `before` that a read did not give back, as a restore does, so that the next write does not drop them. */
+  keepMissing(before: Pick<DraftWriteRequest, 'layout' | 'queryContext'>, missing: { readonly entities: readonly ElementRef[]; readonly edges: readonly EdgeRef[] }): void;
   /** Writes what is waiting before another investigation takes the place of the one shown: true when the person may go on, false when the open was cancelled. When the write fails for a reason other than a conflict it waits, with `leaving` set, until the changes are saved or `leaveAnyway` is called. */
   settle(signal?: AbortSignal): Promise<boolean>;
   /** The person chose to go on without saving: the `settle` that waits answers true. */
@@ -231,12 +235,19 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     return draftOf({ nodeRefs: held.nodeRefs, graph: state.loadedGraph(), presentation: state.presentation.view.getState(), notes: session.notes, kept: session.kept, storedFilters: session.pendingFilters, carried: session.carried, carriedTypes: session.carriedTypes, keepLists: keepListsOf(session) });
   };
 
+  /** What would be written now: while the view is read again after a change of masking, the draft as it was before, since the view holds no relationship then; none when there is none. */
+  const liveDocumentOf = (id: string, session: Session): DraftWriteRequest | undefined => {
+    if (!state.rereading.getState()) return documentOf(session);
+    return watched?.id === id ? watched.body : undefined;
+  };
+
   const readOnlyNow = (): boolean => state.investigation.getState().record?.readOnly === true;
 
   const differs = (): boolean => {
     const shown = shownSession();
     if (shown === undefined) return false;
-    return JSON.stringify(documentOf(shown.session)) !== shown.session.lastJson;
+    const live = liveDocumentOf(shown.id, shown.session);
+    return live !== undefined && JSON.stringify(live) !== shown.session.lastJson;
   };
 
   /** What there is to write: a closed or archived investigation refuses its draft, so nothing is waiting for it. */
@@ -283,7 +294,8 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   async function attempt(keepalive: boolean): Promise<WriteResult> {
     const shown = shownSession();
     if (shown === undefined || readOnlyNow()) return 'skipped';
-    const body = documentOf(shown.session);
+    const body = liveDocumentOf(shown.id, shown.session);
+    if (body === undefined) return 'skipped';
     const json = JSON.stringify(body);
     if (json === shown.session.lastJson) return 'skipped';
     writing = true;
@@ -428,6 +440,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
       setStatus(next?.conflicted === true ? { kind: 'conflict' } : IDLE);
       sendPrevious(previous);
     }
+    if (state.rereading.getState()) return;
     const shown = shownSession();
     if (shown === undefined) return;
     applyFilters(shown.session);
@@ -488,7 +501,9 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
   const onPageHide = (): void => {
     const shown = shownSession();
     if (shown === undefined || readOnlyNow()) return;
-    const json = JSON.stringify(documentOf(shown.session));
+    const live = liveDocumentOf(shown.id, shown.session);
+    if (live === undefined) return;
+    const json = JSON.stringify(live);
     if (json === shown.session.lastJson) return;
     cancel();
     if (new TextEncoder().encode(json).byteLength <= KEEPALIVE_LIMIT_BYTES) void write(true);
@@ -566,7 +581,7 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     };
   }
 
-  const unsubscribes = [state.investigation.subscribe(onChange), state.presentation.view.subscribe(onChange), state.server.subscribe(onChange)];
+  const unsubscribes = [state.investigation.subscribe(onChange), state.presentation.view.subscribe(onChange), state.server.subscribe(onChange), state.rereading.subscribe(onChange)];
   doc?.addEventListener('visibilitychange', onHidden);
   page?.addEventListener('beforeunload', onBeforeUnload);
   page?.addEventListener('pagehide', onPageHide);
@@ -608,6 +623,25 @@ export function createDraftSync(options: DraftSyncOptions): DraftSync {
     flush,
     leaving: readable(leaving),
     needsSettle: () => writing || isDirty(),
+    snapshot() {
+      const shown = shownSession();
+      if (shown === undefined) return undefined;
+      const { layout, queryContext } = documentOf(shown.session);
+      return { layout, queryContext };
+    },
+    keepMissing(before, missing) {
+      const shown = shownSession();
+      const { sourceId } = state.investigation.getState();
+      if (shown === undefined || sourceId === null) return;
+      const more = keptFrom(sourceId, before.layout, before.queryContext, missing);
+      const { kept } = shown.session;
+      // one entry for an item, the latest captured: a view that came back and was moved before it went missing again keeps its newer place
+      const latest = <T,>(list: readonly T[], identity: (entry: T) => string): T[] => [...new Map(list.map((entry) => [identity(entry), entry])).values()];
+      shown.session.kept = {
+        nodes: latest([...kept.nodes, ...more.nodes], (entry) => `${entry.t}\u0000${entry.id}`),
+        edges: latest([...kept.edges, ...more.edges], (entry) => JSON.stringify([entry.t, entry.from.t, entry.from.id, entry.to.t, entry.to.id, entry.id ?? null, entry.ruleId ?? null])),
+      };
+    },
     async settle(signal) {
       let last: WriteResult = 'saved';
       for (let round = 0; round < 3; round += 1) {

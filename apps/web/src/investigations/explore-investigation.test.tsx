@@ -1,7 +1,15 @@
 import { act, screen, waitFor } from '@testing-library/react';
+import type { ReadRefsRequest, ReadRefsResponse } from '@neburyx/contracts';
+import type { ApiResult } from '../api/client.js';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { recordingClient } from '../api/recording-client.js';
+import { failure } from '../patterns/patterns-kit.js';
 import { createClientState } from '../state/client-state.js';
+import { bindBuiltInInspector } from '../inspector/built-in-tabs.js';
+import { maskSwitchOf } from '../mask/mask-switch.js';
+import { elementKey } from '../state/keys.js';
+import { createPanelRegistryFor } from '../workspace/panel-registry.js';
 import { me, renderApp, stubFactory } from '../test-utils.js';
 import { INVESTIGATION_A, INVESTIGATION_B, investigationOf, knowing, nodeOf, readOf } from './test-data.js';
 import { BACK_TO_HOME, NOT_FOUND_TITLE, OPENING, TRY_AGAIN } from './messages.js';
@@ -241,5 +249,118 @@ describe('/explore', () => {
     const notice = await screen.findByRole('group', { name: 'Opening failed' });
     expect(notice.textContent).toContain('A needed index is still building, so the read is slow. Try again later.');
     expect(screen.getByRole('button', { name: TRY_AGAIN })).toBeTruthy();
+  });
+
+  it('shows the view where it stands when the masking switch is turned on: one read by references with the flag and no read of the investigation', async () => {
+    const asked: Array<{ readonly mask: boolean | undefined; readonly entities: number }> = [];
+    const { client, calls } = knowing([A], {
+      readRefs: async (request) => {
+        asked.push({ mask: request.mask, entities: request.entities.length });
+        return { ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } };
+      },
+    });
+    const state = createClientState();
+    const panels = createPanelRegistryFor(state);
+    bindBuiltInInspector(state, panels);
+    renderApp(`/explore/${INVESTIGATION_A}`, client, state, undefined, undefined, undefined, undefined, undefined, panels);
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    act(() => state.presentation.select([elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' })]));
+    await userEvent.setup().click(await screen.findByRole('tab', { name: 'Properties' }));
+    const before = { investigations: [...calls.getInvestigation], saved: state.rereading.getState() };
+    await userEvent.setup().click(screen.getByRole('switch', { name: 'Mask sensitive values' }));
+    await waitFor(() => expect(asked).toEqual([{ mask: true, entities: 1 }]));
+    await waitFor(() => expect(state.rereading.getState()).toBe(false));
+    expect(before.saved).toBe(false);
+    expect(calls.getInvestigation).toEqual(before.investigations);
+    expect(state.loadedGraph().nodes).toHaveLength(1);
+    expect(state.mask.getState()).toBe(true);
+  });
+
+  it.each([
+    ['a failure that can be tried again', failure('RATE_LIMITED')],
+    ['a failure that says it cannot', { ...failure('SOURCE_UNAVAILABLE'), retryable: false }],
+    ['a read that ended without an answer', { code: 'ABORTED' as const }],
+  ])('says in the page notice that the view could not be read again after %s, with Try again, and shows nothing of the view meanwhile', async (_name, broken) => {
+    let fail = true;
+    const { client } = knowing([A], {
+      readRefs: async (request) => (fail ? { ok: false, failure: broken } : { ok: true, value: { nodes: request.entities.map((ref) => nodeOf(ref.sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: [], edges: [] } } }),
+    });
+    const state = createClientState();
+    renderApp(`/explore/${INVESTIGATION_A}`, client, state);
+    await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+    act(() => maskSwitchOf(state, client).turn(true));
+    expect(await screen.findByRole('group', { name: 'Masking change failed' })).toBeTruthy();
+    expect(state.loadedGraph().nodes).toEqual([]);
+    fail = false;
+    await userEvent.setup().click(screen.getByRole('button', { name: TRY_AGAIN }));
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Masking change failed' })).toBeNull());
+    expect(state.loadedGraph().nodes).toHaveLength(1);
+  });
+
+  describe('turning the masking switch on', () => {
+    const SENTINEL = 'ZQSENTINEL Ana';
+    const real = { ...nodeOf('source-a', 'kind-a', 'A-1', SENTINEL), properties: [{ key: 'holder', value: SENTINEL, dataClass: 'name' as const, masked: false }] };
+    const hidden = { ...nodeOf('source-a', 'kind-a', 'A-1', 'Z•••'), properties: [{ key: 'holder', value: 'Z•••', dataClass: 'name' as const, masked: true, maskedBy: 'request' as const }] };
+    const KEY = elementKey({ sourceId: 'source-a', entityType: 'kind-a', stableId: 'A-1' });
+    const LOGS = ['log', 'info', 'warn', 'error', 'debug'] as const;
+
+    const heldText = (state: ReturnType<typeof createClientState>, logged: readonly unknown[]): string =>
+      JSON.stringify([state.server.getState().results, state.investigation.getState(), state.presentation.view.getState(), window.location.href, document.body.textContent, logged], (_key, value: unknown) => (value instanceof Map || value instanceof Set ? [...value] : value));
+
+    async function mounted(readRefs: (request: ReadRefsRequest) => Promise<ApiResult<ReadRefsResponse>>) {
+      const asked: Array<{ readonly name: string; readonly args: readonly unknown[] }> = [];
+      const logged: unknown[] = [];
+      for (const level of LOGS) vi.spyOn(console, level).mockImplementation((...args: unknown[]) => void logged.push(args));
+      let open: () => void = () => undefined;
+      const gate = new Promise<void>((resolve) => void (open = resolve));
+      let entityReads = 0;
+      const { client: base } = knowing([{ ...A, node: real }], {
+        readRefs,
+        getEntity: async (_ref, opts) => {
+          entityReads += 1;
+          if (entityReads === 2) await gate;
+          return { ok: true, value: opts?.mask === true ? hidden : real };
+        },
+      });
+      const client = recordingClient(base, (name, args) => void asked.push({ name, args }));
+      const state = createClientState();
+      const panels = createPanelRegistryFor(state);
+      bindBuiltInInspector(state, panels);
+      renderApp(`/explore/${INVESTIGATION_A}`, client, state, undefined, undefined, undefined, undefined, undefined, panels);
+      await screen.findByRole('heading', { name: 'kind-a A-1', level: 1 });
+      act(() => state.presentation.select([KEY]));
+      await userEvent.setup().click(await screen.findByRole('tab', { name: 'Properties' }));
+      await waitFor(() => expect(entityReads).toBeGreaterThan(0));
+      asked.length = 0;
+      return { state, client, asked, logged, release: () => open() };
+    }
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it('sends only the read of the references of the view, the read of the inspected entity and the one coverage count, and holds no value of the other setting, also when an old answer arrives late', async () => {
+      const { state, asked, logged, release } = await mounted(async (request) => ({ ok: true, value: { nodes: request.entities.map(() => hidden), edges: [], missing: { entities: [], edges: [] } } }));
+      expect(heldText(state, logged)).toContain(SENTINEL);
+      await userEvent.setup().click(screen.getByRole('switch', { name: 'Mask sensitive values' }));
+      await waitFor(() => expect(state.rereading.getState()).toBe(false));
+      await waitFor(() => expect(asked.map((call) => call.name)).toContain('graphCoverage'));
+      await act(async () => release());
+      await waitFor(() => expect(screen.queryByText(SENTINEL)).toBeNull());
+      const names = asked.map((call) => call.name);
+      expect([...new Set(names)].sort()).toEqual(['getEntity', 'graphCoverage', 'readRefs']);
+      expect(names.filter((name) => name === 'readRefs')).toHaveLength(1);
+      expect(names.filter((name) => name === 'graphCoverage')).toHaveLength(1);
+      expect(asked.find((call) => call.name === 'graphCoverage')?.args[0]).toMatchObject({ mask: true });
+      expect(heldText(state, logged)).not.toContain(SENTINEL);
+      expect(heldText(state, logged)).toContain('Z•••');
+    });
+
+    it('holds no value of the other setting when the read fails either', async () => {
+      const { state, client, logged } = await mounted(async () => ({ ok: false, failure: failure('RATE_LIMITED') }));
+      expect(heldText(state, logged)).toContain(SENTINEL);
+      await userEvent.setup().click(screen.getByRole('switch', { name: 'Mask sensitive values' }));
+      await waitFor(() => expect(maskSwitchOf(state, client).status.getState().kind).toBe('failed'));
+      expect(state.rereading.getState()).toBe(true);
+      expect(heldText(state, logged)).not.toContain(SENTINEL);
+    });
   });
 });

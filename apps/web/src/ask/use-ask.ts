@@ -9,7 +9,7 @@ import { useClientState, useSessionMask } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import { isNotInThisEdition } from './ask-failure.js';
-import { EMPTY_SESSION, useAskSession, type Answered, type AskCall, type AskSessionState, type AskStage } from './ask-session.js';
+import { EMPTY_SESSION, askSessionAfterMaskChange, useAskSession, type Answered, type AskCall, type AskSessionState, type AskStage } from './ask-session.js';
 import { addableOf } from './result-model.js';
 
 export const codePointsOf = (text: string): number => [...text].length;
@@ -82,14 +82,13 @@ export function useAsk(onClose: () => void): AskModel {
       return;
     }
     if (held.mask === mask) return;
-    const stage = held.stage.kind;
-    const cleared = stage === 'answered' || stage === 'heavy' || stage === 'asking' || (stage === 'failed' && held.stage.kind === 'failed' && held.stage.heavy !== undefined);
-    if (stage === 'asking') {
+    if (held.stage.kind === 'asking') {
       controller.current?.abort();
       controller.current = undefined;
     }
-    session.setState({ ...held, mask, stage: cleared ? { kind: 'masking-cleared' } : held.stage });
-    if (cleared) setFocus('note');
+    const next = askSessionAfterMaskChange(held, mask);
+    session.setState(next);
+    if (next.stage.kind === 'masking-cleared' && held.stage.kind !== 'masking-cleared') setFocus('note');
   }, [investigationId, mask, session, setFocus]);
 
   const settle = useCallback(
@@ -156,7 +155,7 @@ export function useAsk(onClose: () => void): AskModel {
     if (held.kind !== 'answered' || held.added !== undefined || sourceId === null || principalId === undefined || sourceChanged) return;
     const addable = addableOf(held.answer.result);
     if (addable === undefined) return;
-    const added = addResultToGraph(state, addable, { sourceId, principalId, expansions });
+    const added = addResultToGraph(state, addable, { sourceId, principalId, mask: session.getState().mask, expansions });
     setStage({ ...held, added });
   }, [expansions, principalId, session, setStage, sourceChanged, sourceId, state]);
 

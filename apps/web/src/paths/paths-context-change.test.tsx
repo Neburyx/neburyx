@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../state/test-data.js';
 import { act, cleanup, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -96,7 +97,7 @@ describe('a search belongs to the source, the investigation and the mask it was 
     expect(kit.banner.view.getState().banner?.id).toBe('heavy');
     fireEvent.click(screen.getByRole('button', { name: 'Close Paths' }));
     await settle();
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await settle();
     expect(kit.banner.view.getState().banner).toBeUndefined();
   });
@@ -109,7 +110,7 @@ describe('a search belongs to the source, the investigation and the mask it was 
     await userEvent.click(find());
     await settle();
     expect(screen.getByRole('list', { name: 'Paths found' })).toBeTruthy();
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await settle();
     expect(screen.queryByRole('list', { name: 'Paths found' })).toBeNull();
     chooseEnd('From', 'acc-1');

@@ -234,11 +234,16 @@ interface StoredInvestigation {
   deleted?: { readonly at: string; readonly purgeAfter: string };
 }
 
-function node(sourceId: string, entityType: string, stableId: string): unknown {
+/** An entity whose ID starts with this carries a personal-data name, which a read that asks for masking returns as its mask, title included. */
+const PERSONAL_ID_PREFIX = 'pii-';
+
+function node(sourceId: string, entityType: string, stableId: string, masked = false): unknown {
+  const personal = stableId.startsWith(PERSONAL_ID_PREFIX);
+  const name = masked ? 'A••• S•••' : 'Ana Silva';
   return {
     ref: { sourceId, entityType, stableId },
-    display: { title: `${entityType} ${stableId}`, type: entityType },
-    properties: [],
+    display: { title: personal ? name : `${entityType} ${stableId}`, type: entityType },
+    properties: personal ? [{ key: 'holderName', value: name, dataClass: 'name', masked, ...(masked ? { maskedBy: 'request' } : {}) }] : [],
     qualityFlags: stableId.startsWith(DUPLICATE_ID_PREFIX) ? ['duplicate-stable-id'] : [],
     provenanceRefs: [],
     authorization: { canInspect: true, canExport: true },
@@ -325,9 +330,9 @@ function createInvestigations(options: SupportServerOptions) {
   const readable = (sourceId: string): boolean => typesOf.has(sourceId) && !refused.has(sourceId);
   const exists = (sourceId: string, entityType: string, stableId: string): boolean => typesOf.get(sourceId)?.has(entityType) === true && stableId !== 'missing';
   return {
-    entity(sourceId: string, entityType: string, stableId: string, response: ServerResponse): void {
+    entity(sourceId: string, entityType: string, stableId: string, response: ServerResponse, masked = false): void {
       if (!readable(sourceId) || !exists(sourceId, entityType, stableId)) return json(response, 404, NOT_FOUND);
-      json(response, 200, node(sourceId, entityType, stableId));
+      json(response, 200, node(sourceId, entityType, stableId, masked));
     },
     read(id: string, response: ServerResponse): void {
       const stored = live(id);
@@ -547,7 +552,7 @@ function createInvestigations(options: SupportServerOptions) {
         return typeof ref['entityType'] === 'string' && typeof ref['stableId'] === 'string' ? [{ entityType: ref['entityType'], stableId: ref['stableId'] }] : [];
       });
       const found = refs.filter((ref) => exists(sourceId, ref.entityType, ref.stableId));
-      json(response, 200, { nodes: found.map((ref) => node(sourceId, ref.entityType, ref.stableId)), edges: [], missing: { entities: refs.filter((ref) => !found.includes(ref)).map((ref) => ({ sourceId, ...ref })), edges: [] } });
+      json(response, 200, { nodes: found.map((ref) => node(sourceId, ref.entityType, ref.stableId, given?.['mask'] === true)), edges: [], missing: { entities: refs.filter((ref) => !found.includes(ref)).map((ref) => ({ sourceId, ...ref })), edges: [] } });
     },
     /** The named views the list counts: none until a spec sets them, because nothing in the app saves one. */
     holdNamedViews(body: unknown, response: ServerResponse): void {
@@ -666,7 +671,7 @@ function createInvestigations(options: SupportServerOptions) {
       const createdAt = new Date().toISOString();
       const stored: StoredInvestigation = { id: randomUUID(), sourceId, title: `${entityType} ${stableId}`, status: 'open', version: 1, caseRef, entityType, stableId, createdAt, lastEditedAt: createdAt, draftVersion: 1, draftNotes: null, basedOnViewId: null, views: [] };
       held.set(stored.id, stored);
-      json(response, 201, { investigation: shown(stored, true), created: true, draft: { version: 1, notes: null, basedOnViewId: null }, entity: node(sourceId, entityType, stableId) });
+      json(response, 201, { investigation: shown(stored, true), created: true, draft: { version: 1, notes: null, basedOnViewId: null }, entity: node(sourceId, entityType, stableId, parsed.data.mask === true) });
     },
   };
 }
@@ -1023,7 +1028,7 @@ export function createSupportServer(options: SupportServerOptions): Server {
         if (kind === 'entities' && parts.length === 6 && first !== undefined && second !== undefined && third !== undefined) {
           const entityType = valueOfPathSegment(second);
           const stableId = valueOfPathSegment(third);
-          return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(first, entityType, stableId, response);
+          return entityType === undefined || stableId === undefined ? json(response, 400, INVALID) : investigations.entity(first, entityType, stableId, response, new URL(request.url ?? '/', 'http://localhost').searchParams.get('mask') === 'true');
         }
         if (kind === 'edges' && parts.length === 4 && first !== undefined) return edge(parseEdgeRefSegment(first), response);
         if (kind === 'views' && parts.length === 3) return investigations.ownedViews(new URL(request.url ?? '/', 'http://localhost').searchParams, response);

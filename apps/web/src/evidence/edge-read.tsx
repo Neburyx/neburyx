@@ -59,7 +59,7 @@ export function createEdgeReadStore(client: ApiClient, person: () => string, inv
       };
     },
     clear() {
-      for (const request of requests.values()) if (request.getState().phase === 'loading') request.cancel();
+      for (const request of requests.values()) request.reset();
       requests.clear();
       holds.clear();
       answers.setState(answers.getState() + 1);

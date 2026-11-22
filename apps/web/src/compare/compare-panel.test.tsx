@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../state/test-data.js';
 import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -396,7 +397,7 @@ describe('the limit and the set', () => {
     const button = within(bar()).getByRole('button', { name: 'Compare' });
     button.focus();
     await chooseCompare();
-    act(() => rig.state.setMask(true));
+    act(() => setMaskKeepingView(rig.state, true));
     expect(dock()).toBeNull();
     expect(document.activeElement, 'the focus goes back to the control that opened it').toBe(button);
     rig.unbind();

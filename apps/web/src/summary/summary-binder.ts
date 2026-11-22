@@ -6,7 +6,7 @@ import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { SUMMARY_COPY } from './copy.js';
 import { SUMMARY_PANEL_ID, SUMMARY_PANEL_WIDTH } from './panel-layout.js';
 import { SummaryPanel } from './summary-panel.js';
-import { SummarySessionProvider, createSummarySession, registerSummarySession } from './summary-session.js';
+import { SummarySessionProvider, createSummarySession, registerSummarySession, summarySessionAfterMaskChange } from './summary-session.js';
 
 /** Lives outside React: the panel is registered while the summary is open, and the draft outlives the panel. */
 export function bindSummaryPanel(state: ClientState, panels: PanelRegistry): () => void {
@@ -28,6 +28,10 @@ export function bindSummaryPanel(state: ClientState, panels: PanelRegistry): () 
     }
   };
   const unsubscribe = state.presentation.view.subscribe(sync);
+  // while the panel is open the panel's own hook clears the session and stops the draft it makes; closed, nothing else would
+  const unsubscribeMask = state.mask.subscribe(() => {
+    if (!state.presentation.view.getState().summaryOpen) session.setState(summarySessionAfterMaskChange(session.getState(), state.mask.getState()));
+  });
   const unregister = registerAiAction('summarize', () => {
     state.presentation.setAskOpen(false);
     state.presentation.setSummaryOpen(!state.presentation.view.getState().summaryOpen);
@@ -39,6 +43,7 @@ export function bindSummaryPanel(state: ClientState, panels: PanelRegistry): () 
   sync();
   return () => {
     unsubscribe();
+    unsubscribeMask();
     unregister();
     unregisterNotes();
     unregisterSession();

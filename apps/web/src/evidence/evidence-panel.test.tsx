@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../state/test-data.js';
 import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { EdgeRef } from '@neburyx/contracts';
@@ -146,7 +147,7 @@ describe('the relationship evidence panel', () => {
     const rig = evidenceRig();
     openOn(rig, OWNS);
     await answerEdge(rig.edgeReads[0], detailOf(OWNS));
-    act(() => rig.state.setMask(true));
+    act(() => setMaskKeepingView(rig.state, true));
     expect(panel()).toBeNull();
     openOn(rig, OWNS);
     expect(rig.edgeCalls.map((call) => call.mask)).toEqual([false, true]);
@@ -264,9 +265,9 @@ describe('the panel the selection opens', () => {
     tab.focus();
     act(() => void tab.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
     expect(panel()).toBeNull();
-    act(() => rig.state.setMask(false));
-    act(() => rig.state.setMask(true));
-    act(() => rig.state.setMask(false));
+    act(() => setMaskKeepingView(rig.state, false));
+    act(() => setMaskKeepingView(rig.state, true));
+    act(() => setMaskKeepingView(rig.state, false));
     expect(panel()).toBeNull();
     expect(rig.state.presentation.view.getState().selection.size).toBe(1);
     selectEdge(rig, SENT);

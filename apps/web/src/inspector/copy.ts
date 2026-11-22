@@ -39,3 +39,11 @@ export function leftOutText(count: number): string {
 }
 export const COUNTING_DERIVED = 'Counting rule-derived neighbors…';
 export const LINKED = 'Linked';
+export const MASK_SWITCH_LABEL = 'Mask sensitive values';
+export const MASK_NOTE = 'Fields marked pii in neburyx.yaml. Enterprise: turning masking off needs the sensitive-properties grant and is audited; a role without it stays masked.';
+export const fieldsShown = (count: number): string => (count === 1 ? '1 sensitive field is shown' : `${count} sensitive fields are shown`);
+export const fieldsMasked = (count: number): string => (count === 1 ? '1 field masked in this view' : `${count} fields masked in this view`);
+export const LOCKED_BY_POLICY = 'Locked by policy';
+export const POLICY_NOTE = 'Your role cannot view sensitive properties. An administrator can grant access, and every reveal is audited.';
+export const REREADING_VIEW = 'Re-reading the view';
+export const REREAD_FAILED = 'The view could not be read again.';

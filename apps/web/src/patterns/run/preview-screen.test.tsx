@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../../state/test-data.js';
 import { act, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternPreviewResponse } from '@neburyx/contracts';
@@ -91,7 +92,7 @@ describe('the preview screen', () => {
 
   it('shows no ID beside a name while masking is on', async () => {
     const kit = await runWorkspace();
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await settle();
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();

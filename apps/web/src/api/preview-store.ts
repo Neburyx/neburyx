@@ -17,6 +17,8 @@ export interface PreviewStore {
   readonly view: ReadableStore<number>;
   /** How many previews have been answered, counting each answer once; it changes when a preview arrives, so what depends on the previews can ask again. */
   readonly answers: ReadableStore<number>;
+  /** Cancels every preview in flight and drops every held preview, and what a handle taken earlier holds. */
+  clear(): void;
 }
 
 const keyOf = (person: string, ref: ElementRef, mask: boolean): string => JSON.stringify([person, ref.sourceId, ref.entityType, ref.stableId, mask]);
@@ -62,6 +64,11 @@ export function createPreviewStore(client: ApiClient, person: () => string, repo
       return state?.phase === 'ready' ? state.data : undefined;
     },
     forNode: (ref, mask) => open(ref, mask, true),
+    clear() {
+      for (const request of requests.values()) request.reset();
+      requests.clear();
+      changes.setState(changes.getState() + 1);
+    },
     async settle(ref, mask) {
       const key = keyOf(person(), ref, mask);
       const held = requests.get(key);

@@ -10,7 +10,7 @@ import { createPreviewStore } from '../api/preview-store.js';
 import type { RightClick } from '../canvas/scene.js';
 import { createClientState } from '../state/client-state.js';
 import { edgeKey, elementKey } from '../state/keys.js';
-import { edgeRef, node, ref } from '../state/test-data.js';
+import { edgeRef, node, ref, setMaskKeepingView } from '../state/test-data.js';
 import { loadGraph, nodeKey, show } from './context-menu-kit.js';
 import { ExpandProvider } from './expand-context.js';
 import { MENU_GROUP, MENU_ORDER, createMenuRegistry } from './menu-registry.js';
@@ -111,7 +111,7 @@ describe('the Expand neighbors and Expand by neighbor type entries of the node m
 
   it('asks for the preview of the current masking setting, with the mask flag when the session masks', async () => {
     const { previews, state, view, rightClick } = opened({ open: false });
-    state.setMask(true);
+    setMaskKeepingView(state, true);
     view.rightClick(rightClick('n1'));
     await userEvent.setup().click(byTypeRow());
     expect(previews).toHaveLength(1);
@@ -436,10 +436,10 @@ describe('what an expansion does to the loaded graph', () => {
 
   it('drops an answer that arrives after the masking changed, and one that was overtaken by a newer ask', async () => {
     const { expansions, expand, state, ref1 } = await expanded();
-    state.setMask(true);
+    setMaskKeepingView(state, true);
     await act(async () => expansions[0]?.answer({ ok: true, value: response() }));
     expect(state.loadedGraph().nodes).toHaveLength(2);
-    state.setMask(false);
+    setMaskKeepingView(state, false);
     void expand.expand(ref1, ['kind-b']);
     void expand.expand(ref1, ['kind-b']);
     await act(async () => expansions[1]?.answer({ ok: true, value: response({ nodes: [nodeOf('type-a', 'n1'), nodeOf('kind-b', 'old')], edges: [relation('old', 'n1', 'old')] }) }));
@@ -452,7 +452,7 @@ describe('what an expansion does to the loaded graph', () => {
     const { expansions, expand, state, ref1 } = await expanded();
     await act(async () => expansions[0]?.answer({ ok: true, value: response({ pages: [{ neighborType: 'kind-b', returned: 1, hasMore: true, nextCursor: 'v1.a.b', matchingTotal: { quality: 'unknown', scope: 'x' } }] }) }));
     expect(expand.of(ref1).types.get('kind-b')).toMatchObject({ hasMore: true, cursor: 'v1.a.b', loaded: 1 });
-    state.setMask(true);
+    setMaskKeepingView(state, true);
     expect(expand.of(ref1).types.size).toBe(0);
     void expand.expand(ref1, ['kind-b']);
     expect(expansions[1]?.body.mask).toBe(true);

@@ -1,3 +1,4 @@
+import { purgeOnMaskChange } from './api/purge-on-mask-change.js';
 import { Link, Outlet, type RouteObject } from 'react-router';
 import type { ApiClient } from './api/client.js';
 import { ProfileProvider } from './canvas/profile-context.js';
@@ -118,6 +119,7 @@ export function appRoutes(client: ApiClient, state: ClientState, banner?: Banner
   const edgeReads = createEdgeReadStore(reads, person, () => state.investigation.getState().id ?? '');
   dropReadsOnNewEpoch(state, edgeReads);
   const coverage = createCoverageStore(reads, person, report);
+  purgeOnMaskChange(state, [previews, derived, entityReads, coverage, { clear: () => banner?.clear() }]);
   const expansions = createExpandStore(reads, state, person, report, banner === undefined ? undefined : createHeavyGuard(previews, banner, state), tracker);
   const recent = createRecentInvestigations(client);
   const presence = createWorkspacePresence();

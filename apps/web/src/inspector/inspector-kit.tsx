@@ -1,3 +1,4 @@
+import { ApiClientProvider } from '../api/client-context.js';
 import { act, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
@@ -113,6 +114,7 @@ export function inspectorRig(options: RigOptions = {}) {
       </PanelsProvider>
     </ProfileProvider>
   ), (tree: ReactNode) => (
+    <ApiClientProvider client={client}>
     <SelectionActionsProvider registry={actions}>
       <PreviewProvider store={previewStore}>
         <DerivedProvider store={derivedStore}>
@@ -124,6 +126,7 @@ export function inspectorRig(options: RigOptions = {}) {
         </DerivedProvider>
       </PreviewProvider>
     </SelectionActionsProvider>
+    </ApiClientProvider>
   ), profile ?? undefined);
   return { state, panels, menus, shown, client, previewStore, derivedStore, entityReads, entityCalls, previews, derived, derivedCalls, edgeReads, edgeCalls, inspector: bound.inspector, evidence: evidenceBound?.evidence, compare: compareBound?.compare, actions, unbind: () => (compareBound?.unbind(), evidenceBound?.unbind(), bound.unbind(), unbindLegend()) };
 }

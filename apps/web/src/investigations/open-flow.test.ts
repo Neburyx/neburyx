@@ -277,10 +277,12 @@ describe('opening an investigation for a mask', () => {
   it('asks the API for the mask it is given and stores the answer under that mask', async () => {
     const { client } = knowing([known]);
     const state = createClientState();
+    state.setMask(true);
     await openById(client, state, INVESTIGATION_A, MASKED);
     expect(shownTitle(state)).toBe('A•••');
     expect(state.investigation.getState().resultKeys.map((key) => key.mask)).toEqual([true]);
     const opened = createClientState();
+    opened.setMask(true);
     await openEntity(client, opened, request, MASKED);
     expect(shownTitle(opened)).toBe('A•••');
     expect(opened.investigation.getState().resultKeys.map((key) => key.mask)).toEqual([true]);
@@ -292,7 +294,9 @@ describe('opening an investigation for a mask', () => {
   ])('reads again and shows the other mask when the investigation shown is %s', async (_name, first, second, title) => {
     const { client, calls } = knowing([known]);
     const state = createClientState();
+    state.setMask(first.mask);
     await openById(client, state, INVESTIGATION_A, first);
+    state.setMask(second.mask);
     expect(await openById(client, state, INVESTIGATION_A, second)).toMatchObject({ kind: 'shown', activation: 'fresh' });
     expect(calls.getEntity).toHaveLength(2);
     expect(shownTitle(state)).toBe(title);
@@ -303,23 +307,42 @@ describe('opening an investigation for a mask', () => {
   it.each([
     ['plain, then masked', CONTEXT, MASKED, 'A•••'],
     ['masked, then plain', MASKED, CONTEXT, 'Ana Silva'],
-  ])('reads again and shows the other mask when the investigation set aside was read %s', async (_name, first, second, title) => {
+  ])('reads again and shows the other mask, and holds nothing of the one set aside, when it was read %s', async (_name, first, second, title) => {
     const { client, calls } = knowing([known, other]);
     const state = createClientState();
+    state.setMask(first.mask);
     await openById(client, state, INVESTIGATION_A, first);
     await openById(client, state, INVESTIGATION_B, first);
+    state.setMask(second.mask);
     expect(await openById(client, state, INVESTIGATION_A, second)).toMatchObject({ kind: 'shown', activation: 'fresh' });
     expect(shownTitle(state)).toBe(title);
     expect(calls.getEntity).toHaveLength(3);
-    expect(state.holds(INVESTIGATION_B, first.mask)).toBe(true);
+    expect(state.holds(INVESTIGATION_B, first.mask)).toBe(false);
+    expect(state.holds(INVESTIGATION_B, second.mask)).toBe(false);
   });
 
   it('shows an entity opened for the other mask than the one the investigation was held for', async () => {
     const { client } = knowing([known]);
     const state = createClientState();
     await openEntity(client, state, request, CONTEXT);
+    state.setMask(true);
     expect(await openEntity(client, state, request, MASKED)).toMatchObject({ kind: 'shown', created: true });
     expect(shownTitle(state)).toBe('A•••');
     expect(state.loadedGraph().nodes.map((node) => JSON.stringify(node))).not.toContain('Ana Silva');
+  });
+
+  it.each(['by its identifier', 'from an entity'])('is refused, and stores and shows nothing, when the masking setting changed while the investigation was opened %s', async (how) => {
+    let release: (() => void) | undefined;
+    const gate = new Promise<void>((done) => void (release = done));
+    const { client: known_ } = knowing([known], { getEntity: async (ref) => { await gate; return { ok: true, value: nodeOf(ref.sourceId, ref.entityType, ref.stableId) }; } });
+    const client = { ...known_, openInvestigation: async (...asked: Parameters<typeof known_.openInvestigation>) => { await gate; return known_.openInvestigation(...asked); } };
+    const state = createClientState();
+    const pending = how === 'by its identifier' ? openById(client, state, INVESTIGATION_A, CONTEXT) : openEntity(client, state, request, CONTEXT);
+    await new Promise((done) => setTimeout(done, 0));
+    state.setMask(true);
+    release?.();
+    expect(await pending).toMatchObject({ kind: 'failed', failure: { code: 'ABORTED' } });
+    expect(state.server.getState().results.size).toBe(0);
+    expect(state.investigation.getState().id).toBeNull();
   });
 });

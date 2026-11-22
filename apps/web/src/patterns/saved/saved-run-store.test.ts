@@ -34,6 +34,19 @@ describe('the answer of a saved run', () => {
   });
 });
 
+describe('the answer of a saved run that arrives after the store was disposed, as it is when masking changes', () => {
+  it('stores nothing and shows nothing', async () => {
+    let answer: (() => void) | undefined;
+    const store = createSavedRunStore(fakeClient({ runSavedPattern: () => new Promise((resolve) => void (answer = () => resolve({ ok: true, value: okRun(['acc-2']) }))) }), false);
+    store.run({ id: 'p-1', kind: 'preset-run' });
+    store.dispose();
+    answer?.();
+    await settled();
+    expect(store.getState().result).toBeUndefined();
+    expect(store.getState().failure).toBeUndefined();
+  });
+});
+
 describe('the request of a saved pattern built in the app, in the store of the run view', () => {
   const store = (answer: ApiClient['runSavedPattern'] | undefined, mask = false) => {
     const sent: unknown[] = [];

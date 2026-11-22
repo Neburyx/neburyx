@@ -2,7 +2,7 @@ import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GraphNode, PatternRunOk, PatternRunResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
-import { ref } from '../../state/test-data.js';
+import { ref, setMaskKeepingView } from '../../state/test-data.js';
 import { typedNode } from '../../workspace/filters-kit.js';
 import { assertNoCodes } from '../no-codes.js';
 import { definitionHeavy, definitionOk, failure, settle } from '../patterns-kit.js';
@@ -117,7 +117,7 @@ describe('a match', () => {
 
   it('leaves out the value of a personal-data property of a type with no key properties while masking is on', async () => {
     const masked = await runWorkspace({ runDefinition: async () => ok(twoHops()) });
-    act(() => masked.state.setMask(true));
+    act(() => setMaskKeepingView(masked.state, true));
     await settle();
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();
@@ -252,7 +252,7 @@ describe('masking and the personal-data list of the mapping', () => {
       return { ok: true as const, value: { ...base, entityTypes: base.entityTypes.map((type) => (type.type === 'n-a' ? { ...type, pii: ['p-date'] } : type)) } };
     };
     const masked = await runWorkspace({ profile, runDefinition: async () => ok(listedAnswer) });
-    act(() => masked.state.setMask(true));
+    act(() => setMaskKeepingView(masked.state, true));
     await settle();
     const { openBuilder } = await import('./run-kit.js');
     await openBuilder();

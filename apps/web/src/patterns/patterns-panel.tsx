@@ -637,7 +637,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
     result === undefined || sourceChanged || principalId === undefined
       ? undefined
       : { state: (run.running ? 'running' : allLoaded ? 'onCanvas' : 'ready') as 'running' | 'onCanvas' | 'ready', disabled: run.running || allLoaded, onAdd: () => {
-          setAdded({ result, outcome: addResultToGraph(state, result, { sourceId, principalId, expansions }) });
+          setAdded({ result, outcome: addResultToGraph(state, result, { sourceId, principalId, mask, expansions }) });
         } };
 
   return (

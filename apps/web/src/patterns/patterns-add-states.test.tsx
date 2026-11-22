@@ -129,7 +129,7 @@ describe('what the outcome and the canvas show', () => {
     await add();
     const first = JSON.stringify(kit.state.loadedGraph());
     expect(kit.state.investigation.getState().edgeRefs).toHaveLength(3);
-    addResultToGraph(kit.state, result, { sourceId: 'a', principalId: 'p' });
+    addResultToGraph(kit.state, result, { sourceId: 'a', principalId: 'p', mask: false });
     expect(JSON.stringify(kit.state.loadedGraph())).toBe(first);
     const held = kit.state.loadedGraph().edges.find((edge) => 'memberCount' in edge);
     expect(held !== undefined && 'memberCount' in held ? held.memberCount : undefined).toEqual({ value: 3, quality: 'lowerBound', scope: 'x' });

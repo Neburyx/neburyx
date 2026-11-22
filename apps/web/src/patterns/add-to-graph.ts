@@ -3,6 +3,7 @@ import { outsideFocusNote } from '../canvas/focus-note.js';
 import type { ExpandStore } from '../api/expand-store.js';
 import { heldKeysOf, mergeIntoLoaded } from '../api/merge-into-loaded.js';
 import type { ClientState } from '../state/client-state.js';
+import { StateError } from '../state/errors.js';
 import { DEFAULT_FILTER_HASH, DEFAULT_POLICY_VERSION, edgeKey, elementKey } from '../state/keys.js';
 import { drawnKeys, outsideFocusKeys } from '../state/loaded-graph.js';
 
@@ -16,6 +17,8 @@ export interface AddedOutcome {
 
 export interface AddContext {
   readonly sourceId: string;
+  /** The masking setting the result was read with; a result read with the other setting than the session's now is refused. */
+  readonly mask: boolean;
   readonly principalId: string;
   /** Where a held entity is kept so that no collapse takes away an entity the person asked for. */
   readonly expansions?: Pick<ExpandStore, 'keep'> | undefined;
@@ -37,7 +40,8 @@ let added = 0;
  * Adds a finished result to the loaded graph through the merge core, the way Expand adds what it loaded: the new items are selected where drawn, and when the neighborhood focus is on and some lie outside it a screen reader is told.
  * It makes no read; the result is the page the run returned, so no neighborhood is read in full. Each add has a result key of its own.
  */
-export function addResultToGraph(state: ClientState, result: AddableResult, { sourceId, principalId, expansions }: AddContext): AddedOutcome {
+export function addResultToGraph(state: ClientState, result: AddableResult, { sourceId, principalId, mask, expansions }: AddContext): AddedOutcome {
+  if (mask !== state.mask.getState()) throw new StateError('MASK_CHANGED');
   const current = state.investigation.getState();
   const held = heldKeysOf(state);
   const serial = ++added;

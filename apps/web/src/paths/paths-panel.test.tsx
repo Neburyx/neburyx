@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../state/test-data.js';
 import { act, cleanup, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -78,7 +79,7 @@ describe('the Paths tool and its panel', () => {
 
   it('says the cap was reached when the answer says so, and sends the mask of the session', async () => {
     const kit = await pathsWorkspace({ find: async () => ({ ok: true, value: okPaths([['acc-1', 'acc-2']], { capReached: true }) }) });
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await openPaths();
     chooseEnd('From', 'acc-1');
     chooseEnd('To', 'acc-2');
@@ -203,7 +204,7 @@ describe('searching the source for an end', () => {
   it('searches over every entity type after the pause, with the mask of the session, offers the hits with their type, and chooses one without adding it to the graph', async () => {
     const hit = typedNode('far-1', 'kind-c');
     const kit = await pathsWorkspace({ search: () => searchOf([hit]) });
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     const before = kit.state.loadedGraph().nodes.length;
     await openPaths();
     fireEvent.change(screen.getByLabelText('From'), { target: { value: 'far' } });

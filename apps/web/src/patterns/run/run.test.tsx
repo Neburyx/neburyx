@@ -1,3 +1,4 @@
+import { setMaskKeepingView } from '../../state/test-data.js';
 import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PatternPreviewResponse, PatternRunResponse } from '@neburyx/contracts';
@@ -62,7 +63,7 @@ describe('running a built pattern', () => {
 
   it('sends the mask when masking is on', async () => {
     const kit = await runWorkspace();
-    act(() => kit.state.setMask(true));
+    act(() => setMaskKeepingView(kit.state, true));
     await settle();
     await openBuilder();
     await ran();

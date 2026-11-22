@@ -2,7 +2,7 @@ import type { ElementRef, ExpandRequest, ExpandResponse } from '@neburyx/contrac
 import { describe, expect, it } from 'vitest';
 import { createClientState } from '../state/client-state.js';
 import { edgeKey, elementKey } from '../state/keys.js';
-import { edgeRef, node, ref } from '../state/test-data.js';
+import { edgeRef, node, ref, setMaskKeepingView } from '../state/test-data.js';
 import { loadGraph } from '../workspace/context-menu-kit.js';
 import type { ApiResult } from './client.js';
 import { createExpandStore } from './expand-store.js';
@@ -190,7 +190,7 @@ describe('collapsing a node', () => {
   it('sends no request, with masking on as with masking off', async () => {
     for (const mask of [false, true]) {
       const { store, reply, state, asked, nodes } = rig();
-      state.setMask(mask);
+      setMaskKeepingView(state, mask);
       reply(A, { neighbors: [B, C] });
       await store.expand(A, ['kind-b']);
       const before = asked.length;
@@ -224,11 +224,21 @@ describe('collapsing a node', () => {
     expect(store.collapse(A)).toBe('nothing');
     reply(A, { neighbors: [B] });
     await store.expand(A, ['kind-b']);
-    state.setMask(true);
-    state.setMask(false);
+    setMaskKeepingView(state, true);
+    setMaskKeepingView(state, false);
     expect(store.collapsibility(A)).toBe('nothing');
     expect(store.collapse(A)).toBe('nothing');
     expect(nodes()).toContain('A');
+  });
+
+  it('holds no cursor of a page asked for under the other masking setting once the setting changes', async () => {
+    const { store, reply, state } = rig();
+    reply(A, { neighbors: [B], cursor: 'CURSOR-SENTINEL' });
+    await store.expand(A, ['kind-b']);
+    const held = () => JSON.stringify(store.view.getState(), (_key, value: unknown) => (value instanceof Map || value instanceof Set ? [...value] : value));
+    expect(held()).toContain('CURSOR-SENTINEL');
+    setMaskKeepingView(state, true);
+    expect(held()).not.toContain('CURSOR-SENTINEL');
   });
 
   it('is off while an ask for the node is running', async () => {

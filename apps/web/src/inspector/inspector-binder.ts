@@ -17,11 +17,11 @@ function insetOf(state: ClientState): number {
   return beside === undefined ? PANEL_GAP : PANEL_GAP + Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, view.panelSizes.get(beside.id) ?? beside.width)) + PANEL_GAP;
 }
 
-const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id, state.mask.getState()]);
+const epochOf = (state: ClientState): string => JSON.stringify([state.investigation.getState().id]);
 
 /**
- * Keeps the inspector's panel registered exactly while one drawn entity is selected (or one of its drawn relationships, once it was shown) and the person has not closed its inspector. It lives outside React, so leaving the page keeps nothing behind. A change of investigation,
- * source or masking closes the inspector of the entity it showed.
+ * Keeps the inspector's panel registered exactly while one drawn entity is selected (or one of its drawn relationships, once it was shown) and the person has not closed its inspector. It lives outside React, so leaving the page keeps nothing behind. A change of investigation
+ * or source closes the inspector of the entity it showed; a change of masking does not, and while the view is read again the inspector stays, since the switch that asked for it is in it.
  */
 export function bindInspector(state: ClientState, panels: PanelRegistry, inspector: Inspector): () => void {
   let remove: (() => void) | undefined;
@@ -29,7 +29,7 @@ export function bindInspector(state: ClientState, panels: PanelRegistry, inspect
   let epoch = epochOf(state);
   const Content = inspectorContent(inspector);
   const sync = (): void => {
-    const shown = inspectedKey(state.presentation.view.getState().selection, state.visibleGraph(), inspector.anchor.getState());
+    const shown = state.rereading.getState() && inspector.anchor.getState() !== undefined ? inspector.anchor.getState() : inspectedKey(state.presentation.view.getState().selection, state.visibleGraph(), inspector.anchor.getState());
     if (inspector.anchor.getState() !== shown) inspector.setAnchor(shown);
     const now = epochOf(state);
     if (now !== epoch) {
@@ -53,7 +53,7 @@ export function bindInspector(state: ClientState, panels: PanelRegistry, inspect
       remove = undefined;
     }
   };
-  const unsubscribes = [state.presentation.view.subscribe(sync), state.server.subscribe(sync), state.investigation.subscribe(sync), state.mask.subscribe(sync), inspector.dismissed.subscribe(sync)];
+  const unsubscribes = [state.presentation.view.subscribe(sync), state.server.subscribe(sync), state.investigation.subscribe(sync), state.rereading.subscribe(sync), inspector.dismissed.subscribe(sync)];
   sync();
   return () => {
     for (const unsubscribe of unsubscribes) unsubscribe();

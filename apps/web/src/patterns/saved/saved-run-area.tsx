@@ -63,7 +63,7 @@ export function SavedPresetRun({ client, sourceId, sourceName, mask, store, targ
 
   const shown = view.result !== undefined && view.result.ask.id === target.id ? view.result.answer : undefined;
   const addable = useMemo(() => (shown === undefined ? undefined : { nodes: shown.answer.nodes, edges: shown.answer.edges }), [shown]);
-  const { add, added } = useAddResult(sourceId, addable, view.running, 'saved');
+  const { add, added } = useAddResult(sourceId, addable, view.running, 'saved', mask);
   const failure = view.failure === undefined ? undefined : runFailureView(view.failure, sourceName);
   const heavy = view.heavy === undefined ? undefined : heavyParts(view.heavy);
   const unavailable = view.unavailable !== undefined && view.unavailable.id === target.id ? view.unavailable.answer : undefined;

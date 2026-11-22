@@ -415,7 +415,7 @@ export function useAssistant(): AssistantModel {
       if (turn?.outcome.kind !== 'answered' || turn.outcome.added !== undefined || sourceId === null || principalId === undefined || sourceChanged) return;
       const addable = addableOf(turn.outcome.answer.result);
       if (addable === undefined) return;
-      setOutcome(turnId, { ...turn.outcome, added: addResultToGraph(state, addable, { sourceId, principalId, expansions }) });
+      setOutcome(turnId, { ...turn.outcome, added: addResultToGraph(state, addable, { sourceId, principalId, mask, expansions }) });
     },
   };
 }

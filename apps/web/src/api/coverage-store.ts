@@ -21,6 +21,8 @@ interface CoverageInput {
 export interface CoverageStore {
   /** The request for the not-yet-retrieved count of this loaded graph, asked once for the graph as it stands; asking for another graph stops the earlier request (its remaining chunks are not sent) and ignores its answer. Nothing when nothing is loaded, which also stops the request for the graph that was. */
   forGraph(input: CoverageInput): RequestStore<NotRetrieved> | undefined;
+  /** Stops the request in flight and drops the held count, and what a handle taken earlier holds. */
+  clear(): void;
 }
 
 function chunksOf(entities: readonly CoverageEntity[]): readonly (readonly CoverageEntity[])[] {
@@ -68,6 +70,11 @@ export function createCoverageStore(client: ApiClient, person: () => string, rep
       );
       current = { key, request, stop };
       return request;
+    },
+    clear() {
+      current?.stop.abort();
+      current?.request.reset();
+      current = undefined;
     },
   };
 }
