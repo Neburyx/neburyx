@@ -1,6 +1,7 @@
 import type { ApiFailure } from '../api/client.js';
 import type { Count, PatternWithin, TemplateRunNotice } from '@neburyx/contracts';
 import { degreeCountText } from '../workspace/degree-text.js';
+import { formatNumber, qualityWord } from '../workspace/scope-text.js';
 import type { AddedOutcome } from './add-to-graph.js';
 import { BUSY_TEXT, RATE_LIMITED_TEXT, REFINE_FILTERS, TIMED_OUT_TEXT, UNAVAILABLE_TEXT } from '../banner/copy.js';
 import { GRAPH_UNCHANGED } from '../search/copy.js';
@@ -32,7 +33,9 @@ export const PATTERNS_COPY = {
   retry: TRY_AGAIN,
   /** Proposed copy (the frame and the ui-spec give none). */
   noPatterns: 'This source has no patterns.',
-  noMatches: 'No matches found.',
+  noMatches: 'No matches found',
+  found: 'found',
+  reached: 'reached',
   noCount: 'no count',
   cancelled: 'Cancelled. No new matches shown.',
   earlierResult: 'This is the result of the earlier run. The last run gave no result.',
@@ -65,6 +68,16 @@ export function addedText(outcome: AddedOutcome, count: Count): string {
   const held = heldParts.length === 0 ? '' : ` ${heldParts.join(' and ')} already loaded.`;
   const more = count.quality === 'lowerBound' ? ` The run’s count is ${degreeCountText(count)}: more matches may exist and were not loaded.` : count.quality === 'unknown' ? ' The run gave no count: more matches may exist and were not loaded.' : '';
   return `${added}${held}${more}`;
+}
+
+/** The sentence that leads a result: the number as its quality allows it, what was found or reached, and the quality in words; a result with no matches says so, with the quality of its count. */
+export function resultSentence(count: Count, noMatches: boolean, reached: boolean): string {
+  const quality = count.value === undefined ? PATTERNS_COPY.noCount : qualityWord(count.quality);
+  if (noMatches) return `${PATTERNS_COPY.noMatches} · ${quality}`;
+  if (count.value === undefined) return PATTERNS_COPY.noCount;
+  const number = formatNumber(count.value);
+  const lead = count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;
+  return `${lead} ${count.value === 1 && count.quality === 'exact' ? 'match' : 'matches'} ${reached ? PATTERNS_COPY.reached : PATTERNS_COPY.found} · ${quality}`;
 }
 
 export const timeoutLabel = (timeoutMs: number): string => `${Math.round(timeoutMs / 100) / 10} s timeout`;

@@ -12,7 +12,7 @@ export function formatNumber(value: number): string {
   return NUMBER_FORMAT.format(value);
 }
 
-function qualityWord(quality: Count['quality']): string {
+export function qualityWord(quality: Count['quality']): string {
   switch (quality) {
     case 'exact':
       return 'exact';

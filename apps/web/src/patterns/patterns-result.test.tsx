@@ -25,9 +25,10 @@ async function shown(answer: (call: number) => TemplateRunResponse, pattern?: st
 
 describe('the result of a pattern run', () => {
   it.each([
-    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 other kind-as found · exact'],
-    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 other kind-as found · estimated'],
-    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 other kind-as found · lower bound'],
+    [{ value: 3, quality: 'exact' as const, scope: 'matches' }, '3 matches found · exact'],
+    [{ value: 3, quality: 'estimated' as const, scope: 'matches' }, '~ 3 matches found · estimated'],
+    [{ value: 3, quality: 'lowerBound' as const, scope: 'matches' }, '≥ 3 matches found · lower bound'],
+    [{ value: 1, quality: 'exact' as const, scope: 'matches' }, '1 match found · exact'],
     [{ quality: 'unknown' as const, scope: 'matches' }, 'no count'],
   ])('states the count %j as %s', async (count, text) => {
     await shown(() => okRun(['acc-2'], { count } as never));
@@ -56,6 +57,26 @@ describe('the result of a pattern run', () => {
   ])('writes the notice %j as a sentence', async (notice, text) => {
     await shown(() => okRun(['acc-2'], { notices: [notice] } as never));
     expect(screen.getByText(new RegExp(text))).toBeTruthy();
+  });
+
+  it.each([
+    [{ value: 0, quality: 'exact' as const, scope: 'matches' }, 'No matches found · exact'],
+    [{ value: 0, quality: 'lowerBound' as const, scope: 'matches' }, 'No matches found · lower bound'],
+    [{ quality: 'unknown' as const, scope: 'matches' }, 'No matches found · no count'],
+  ])('says no matches were found with the quality of the count %j', async (count, text) => {
+    await shown(() => okRun([], { count } as never));
+    expect(within(summary()).getByRole('status').textContent).toBe(text);
+  });
+
+  it('reads in order: the sentence, the table, the evidence, the notices, then Add to graph', async () => {
+    await shown(() => okRun(['acc-2'], { notices: [{ code: 'noStopList' }] } as never));
+    const order = [within(summary()).getByRole('status'), screen.getByRole('table'), screen.getByText(/^Evidence:/), screen.getByText(/no stop list/), screen.getByRole('button', { name: 'Add to graph' })];
+    order.slice(1).forEach((element, index) => expect((order[index]?.compareDocumentPosition(element) ?? 0) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy());
+  });
+
+  it('reads a linked-entities result as matches reached', async () => {
+    await shown(() => okRun(['acc-2'], { templateId: 'linked-entities', presetId: 'connected-accounts', links: [{ match: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-2' }, hops: 1 }], count: { value: 1, quality: 'exact', scope: 'matches' } } as never), 'Connected accounts');
+    expect(within(summary()).getByRole('status').textContent).toBe('1 match reached · exact');
   });
 
   it('shows how a linked match was reached', async () => {

@@ -1,8 +1,6 @@
 import type { TemplateRunOk } from '@neburyx/contracts';
-import type { Count } from '@neburyx/contracts';
-import { formatNumber } from '../workspace/scope-text.js';
 import { elementKey } from '../state/keys.js';
-import { addedText, noticeText, PATTERNS_COPY } from './copy.js';
+import { addedText, noticeText, PATTERNS_COPY, resultSentence } from './copy.js';
 import type { AddedOutcome } from './add-to-graph.js';
 
 type Ref = TemplateRunOk['matchIds'][number];
@@ -31,26 +29,6 @@ function linkOf(result: TemplateRunOk, match: Ref, titles: ReadonlyMap<string, s
   return `${link.hops} ${link.hops === 1 ? 'hop' : 'hops'}${through === undefined ? '' : ` via ${through}`}`;
 }
 
-const QUALITY_WORDS: Record<Count['quality'], string> = { exact: 'exact', estimated: 'estimated', lowerBound: 'lower bound', unknown: 'no count' };
-
-const plural = (noun: string, number: number): string => {
-  if (number === 1) return noun;
-  if (/[^aeiou]y$/i.test(noun)) return `${noun.slice(0, -1)}ies`;
-  return /(s|x|ch|sh)$/i.test(noun) ? `${noun}es` : `${noun}s`;
-};
-
-/** The sentence that leads a result: the number as the count's quality allows it, what was found, and the quality in words. */
-function resultSentence(result: TemplateRunOk, noun: string): string {
-  const { count } = result;
-  const reached = result.links !== undefined;
-  if (count.value === undefined) return PATTERNS_COPY.noCount;
-  const number = formatNumber(count.value);
-  const lead = count.quality === 'estimated' ? `~ ${number}` : count.quality === 'lowerBound' ? `≥ ${number}` : number;
-  const name = plural(noun.toLowerCase(), count.value);
-  return `${lead} ${reached ? name : `other ${name}`} ${reached ? 'reached' : 'found'} · ${QUALITY_WORDS[count.quality]}`;
-}
-
-/** The count with its quality in the words of the UI, and the table of matches with what they share, the notices and the evidence references. */
 export interface AddControl {
   /** `onCanvas`: everything of the result is already loaded; `running`: a run is in flight; `ready`: the result can be added. */
   readonly state: 'ready' | 'onCanvas' | 'running';
@@ -58,14 +36,14 @@ export interface AddControl {
   readonly onAdd: () => void;
 }
 
+/** A result in reading order: the sentence with the count and its quality, the table of matches with what they share, the evidence references, the notices, then Add to graph and what adding did. */
 export function PatternResult({ result, matchHeading, sharedHeading, add, added, evidenceOpener }: { readonly result: TemplateRunOk; readonly matchHeading: string; readonly sharedHeading: string; readonly add?: AddControl; readonly added?: AddedOutcome; readonly evidenceOpener?: (reference: string) => (() => void) | undefined }) {
   const titles = new Map(result.nodes.map((node) => [elementKey(node.ref), node.display.title]));
   const evidence = [...new Set(result.edges.flatMap((edge) => edge.evidenceRefs))];
   return (
     <section className="patterns-result" aria-label={PATTERNS_COPY.result}>
       <p className="patterns-summary" role="status">
-        {result.matchIds.length === 0 && result.count.value !== 0 ? `${PATTERNS_COPY.noMatches} ` : null}
-        {result.matchIds.length === 0 && result.count.value === 0 ? `${PATTERNS_COPY.noMatches.replace(/\.$/, '')} · ${QUALITY_WORDS[result.count.quality]}` : resultSentence(result, matchHeading)}
+        {resultSentence(result.count, result.matchIds.length === 0, result.links !== undefined)}
       </p>
       {result.matchIds.length === 0 ? null : (
         <table className="patterns-table">
