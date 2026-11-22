@@ -67,7 +67,7 @@ describe('saving a built-in run from its form', () => {
       if (found === null) throw new Error(`no row for ${label}`);
       return within(found);
     };
-    expect(row('Window (UTC)').getByText('21–28 Oct 2026')).toBeTruthy();
+    expect(row('Window · UTC').getByText('21–28 Oct 2026')).toBeTruthy();
     expect(row('Max matching accounts').getByText('25')).toBeTruthy();
     expect(dialog().queryByText(/Min shared/)).toBeNull();
     expect(dialog().getByRole('group', { name: 'Visibility' })).toBeTruthy();
@@ -201,7 +201,7 @@ describe('saving a built-in run from its form', () => {
     await userEvent.click(saveButton());
     await submit();
     expect(screen.getByLabelText('Max matching accounts')).toHaveProperty('value', '25');
-    expect(screen.getByLabelText('Window (UTC): from')).toHaveProperty('value', '2026-10-21');
+    expect(screen.getByLabelText('Window · UTC: from')).toHaveProperty('value', '2026-10-21');
     expect(document.querySelector('.patterns-result')?.innerHTML).toBe(resultBefore);
   });
 

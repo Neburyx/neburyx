@@ -70,7 +70,7 @@ test.describe('Home: Start from a pattern', () => {
     await page.keyboard.press('Enter');
     await expect(panelOf(page)).toBeVisible();
     await expect(page).toHaveURL(/\/explore$/);
-    await expect(panelOf(page).getByRole('heading', { name: 'Shared addresses', level: 2 })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared addresses', exact: true, pressed: true })).toBeVisible();
     await expect(panelOf(page).getByLabel('Starting account')).toBeFocused();
   });
 
@@ -81,7 +81,7 @@ test.describe('Home: Start from a pattern', () => {
     await page.getByRole('button', { name: 'Run Shared devices' }).click();
     await expect(panelOf(page)).toBeVisible();
     await expect(page).toHaveURL(/\/explore$/);
-    await expect(panelOf(page).getByRole('heading', { name: 'Shared devices', level: 2 })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true, pressed: true })).toBeVisible();
     await expect(panelOf(page).getByText(/to run this pattern\./)).toBeVisible();
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeDisabled();
     const runs: string[] = [];
@@ -89,6 +89,7 @@ test.describe('Home: Start from a pattern', () => {
       const { pathname } = new URL(request.url());
       if (request.method() === 'POST' && /^\/v1\/templates\/[^/]+\/run$/.test(pathname)) runs.push(pathname);
     });
+    await panelOf(page).getByRole('button', { name: 'Search the source' }).click();
     await panelOf(page).getByRole('searchbox', { name: 'Search the source' }).fill('AC-1');
     await panelOf(page).getByLabel('Starting account').selectOption({ label: 'account AC-1' });
     await panelOf(page).getByRole('button', { name: 'Run pattern' }).click();
@@ -118,7 +119,7 @@ test.describe('Home: Start from a pattern', () => {
     await expect(chooserOf(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Run Shared addresses' }).click();
     await expect(page).toHaveURL(address);
-    await expect(panelOf(page).getByRole('heading', { name: 'Shared addresses', level: 2 })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared addresses', exact: true, pressed: true })).toBeVisible();
     await expect(panelOf(page).getByLabel('Starting account')).toHaveValue(/AC-1/);
   });
 });

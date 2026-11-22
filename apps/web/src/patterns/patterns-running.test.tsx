@@ -75,11 +75,11 @@ describe('running, cancel and stale answers', () => {
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(run());
     await settle();
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Back to patterns' }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Shared devices' }), { key: 'Escape' });
     await settle();
     expect(held[0]?.sent.signal?.aborted).toBe(true);
     expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Back to patterns' }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Shared devices' }), { key: 'Escape' });
     await settle();
     expect(screen.queryByRole('complementary', { name: 'Patterns' })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Patterns' }));
@@ -93,10 +93,11 @@ describe('running, cancel and stale answers', () => {
     await userEvent.click(run());
     await settle();
     await choosePreset('Shared addresses');
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(held[0]?.sent.signal?.aborted).toBe(true);
+    expect(screen.queryByText(/^Running/)).toBeNull();
+    expect(run()).toHaveProperty('disabled', false);
     await userEvent.click(run());
     await settle();
-    expect(held[0]?.sent.signal?.aborted).toBe(true);
     act(() => held[0]?.answer({ ok: true, value: okRun(['old-1'], { presetId: 'shared-addresses' }) }));
     act(() => held[1]?.answer({ ok: true, value: okRun(['new-1'], { presetId: 'shared-addresses' }) }));
     await settle();

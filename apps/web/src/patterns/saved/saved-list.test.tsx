@@ -35,7 +35,7 @@ describe('the list of the panel', () => {
     expect(screen.getAllByRole('heading', { level: 3 }).map((entry) => entry.textContent)).toEqual(['Built-in · 3', 'My patterns · 0', 'Shared on this source · 0']);
     const builtIn = section(/Built-in/);
     expect(builtIn.getAllByRole('listitem')).toHaveLength(3);
-    expect(builtIn.getByRole('button', { name: 'Run Shared devices' })).toBeTruthy();
+    expect(builtIn.getByRole('button', { name: 'Shared devices' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^More:/ })).toBeNull();
     expect(screen.getByText('Shared patterns can be run or copied. Only their owner can change or delete them.')).toBeTruthy();
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
@@ -61,7 +61,7 @@ describe('the list of the panel', () => {
     await savedWorkspace();
     expect(section(/My patterns/).getByText('Start from a built-in pattern, or create your own. Saved patterns appear here.')).toBeTruthy();
     expect(section(/Shared on this source/).getByText('Nobody has shared a pattern on this source.')).toBeTruthy();
-    expect(section(/Built-in/).getAllByText(/→ USES →/)).toHaveLength(1);
+    expect(section(/Built-in/).queryAllByText(/→ USES →/)).toHaveLength(0);
   });
 
   it('filters the rows of each section on the client as the text is typed, says when none of a section matches, and sends nothing', async () => {

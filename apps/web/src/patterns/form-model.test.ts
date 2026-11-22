@@ -1,6 +1,7 @@
 import { paramsJsonSchemaOf } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { buildParams, fieldsOf, FORM_ERRORS, plainName, stepsOf, windowKey } from './form-model.js';
+import { buildParams, fieldsOf, FORM_ERRORS, observedAtOf, plainName, stepsOf, windowKey, windowLabelOf } from './form-model.js';
+import { profiled } from '../search/search-test-kit.js';
 import { CONNECTED, SHARED_DEVICES } from './patterns-kit.js';
 
 const choices = { entityTypes: [{ value: 'kind-b', text: 'B' }], relationshipTypes: [{ value: 'USES', text: 'USES' }] };
@@ -64,5 +65,25 @@ describe('the numbers a field offers', () => {
     expect(stepsOf({ min: 1, max: 40 })).toEqual({ steps: [1, 2, 3, 5, 10, 25, 40], whole: false });
     expect(stepsOf({})).toEqual({ steps: [1, 2, 3, 5, 10, 25, 50, 100, 200, 500, 1000], whole: false });
     expect(stepsOf({ min: 10 }).steps[0]).toBe(10);
+  });
+});
+
+describe('the label of a window', () => {
+  const preset = { ...SHARED_DEVICES, bind: { ...SHARED_DEVICES.bind, via: 'USES' }, labels: [] };
+
+  it('is the preset’s own label with the zone, else "Observed" and the property that dates the relationship, else "Window"', () => {
+    expect(windowLabelOf({ labels: [{ key: 'window', text: 'Between' }] }, 'event_time')).toBe('Between · UTC');
+    expect(windowLabelOf({ labels: [{ key: 'window', text: 'Time · UTC' }] }, 'event_time')).toBe('Time · UTC');
+    expect(windowLabelOf(preset, 'event_time')).toBe('Observed event_time · UTC');
+    expect(windowLabelOf(preset, undefined)).toBe('Window · UTC');
+  });
+
+  it('is read from the relationship the preset follows, and from none when that relationship is not dated or not in the profile', () => {
+    const [first] = profiled('a', ['kind-a']).relationshipTypes;
+    if (first === undefined) throw new Error('the profile has no relationship type');
+    const profile = { relationshipTypes: [{ ...first, type: 'USES', observedAt: 'event_time' }, { ...first, type: 'OTHER', observedAt: null }] };
+    expect(observedAtOf(profile, preset)).toBe('event_time');
+    expect(observedAtOf(profile, { ...preset, bind: { ...preset.bind, via: 'OTHER' } })).toBeUndefined();
+    expect(observedAtOf(undefined, preset)).toBeUndefined();
   });
 });

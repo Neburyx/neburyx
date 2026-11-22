@@ -23,9 +23,11 @@ describe('the Patterns panel: open and run a preset', () => {
     expect(rows.map((row) => row.querySelector('.pattern-row-name')?.textContent)).toEqual(['Shared devices', 'Shared addresses', 'Connected accounts']);
     expect(screen.queryByText(/Suspicious/)).toBeNull();
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
-    await userEvent.click(screen.getByRole('button', { name: 'Run Shared addresses' }));
-    expect(screen.getByRole('heading', { level: 2, name: 'Shared addresses' })).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Shared addresses' }));
+    expect(screen.getByRole('button', { name: 'Shared addresses', pressed: true })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Shared addresses', pressed: true }));
+    expect(screen.getByRole('button', { name: 'Shared addresses', pressed: false })).toBeTruthy();
+    expect(screen.queryByLabelText('Starting account')).toBeNull();
     expect(screen.getByRole('heading', { level: 2, name: 'Patterns' })).toBeTruthy();
   });
 
@@ -138,7 +140,7 @@ describe('the Patterns panel: open and run a preset', () => {
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([claimant, claims]) }) });
     await openPatterns();
     expect(within(screen.getByRole('region', { name: /^Built-in/ })).getAllByRole('listitem').map((row) => row.querySelector('.pattern-row-name')?.textContent)).toEqual(['Shared addresses', 'Claims by claimant']);
-    await userEvent.click(screen.getByRole('button', { name: 'Run Shared addresses' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Shared addresses' }));
     expect(screen.getByLabelText('Starting claimant')).toBeTruthy();
   });
 });

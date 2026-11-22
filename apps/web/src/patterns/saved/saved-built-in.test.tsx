@@ -6,6 +6,7 @@ import type { ApiResult } from '../../api/client.js';
 import { failure, listOf, listed, okRun, openBuiltIn, patternsWorkspace, selectAccount, settle } from '../patterns-kit.js';
 import { openTab, savedWorkspace } from './saved-list.test.js';
 import { setMaskKeepingView } from '../../state/test-data.js';
+import { profiled } from '../../search/search-test-kit.js';
 import { UNAVAILABLE_TEXT } from './saved-copy.js';
 
 afterEach(() => {
@@ -43,12 +44,23 @@ describe('a saved built-in run in the list', () => {
     await openTab(/My patterns/);
     const li = rowOf('Devices week');
     expect(li.textContent).toContain('Shared devices · v1');
-    expect(li.textContent).toContain('Window (UTC) 21–28 Oct 2026, Max matching accounts 25');
+    expect(li.textContent).toContain('Window · UTC 21–28 Oct 2026, Max matching accounts 25');
     expect(li.textContent).toContain('Not run yet');
     expect(li.textContent).toContain('Private');
     expect(li.textContent).not.toContain('held-acc-9');
     await userEvent.click(menuOf('Devices week'));
     expect(document.body.textContent).not.toContain('held-acc-9');
+  });
+});
+
+describe('the window of a saved built-in run in the list', () => {
+  it('is named as the form names it: Observed, the property that dates the relationship the preset follows, then the zone', async () => {
+    const profile = async () => {
+      const base = profiled('a', ['kind-a', 'kind-b', 'kind-c']);
+      return { ok: true as const, value: { ...base, relationshipTypes: base.relationshipTypes.map((row, index) => (index === 0 ? { ...row, type: 'USES', observedAt: 'event_time' } : row)) } };
+    };
+    await savedWorkspace({ profile, patterns: { listPatterns: async () => page([row()]) } });
+    expect(rowOf('Devices week').textContent).toContain('Observed event_time · UTC 21–28 Oct 2026, Max matching accounts 25');
   });
 });
 

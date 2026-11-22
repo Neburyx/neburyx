@@ -236,19 +236,18 @@ export const openPatterns = async (): Promise<void> => {
   await settle();
 };
 
-/** Opens the panel and the form of a built-in pattern: Run on its row of the list. */
+/** Opens the panel and the form of a built-in pattern: its card is chosen. */
 export const openBuiltIn = async (name: string = SHARED_DEVICES.name): Promise<void> => {
   await openPatterns();
   await settle();
-  fireEvent.click(screen.getByRole('button', { name: `Run ${name}` }));
+  fireEvent.click(screen.getByRole('button', { name }));
   await settle();
 };
 
-/** Goes back to the list from a form and opens the form of another built-in pattern. */
+/** Chooses the card of another built-in pattern while a form is open. */
 export const choosePreset = async (name: string): Promise<void> => {
-  fireEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
-  await settle();
-  fireEvent.click(screen.getByRole('button', { name: `Run ${name}` }));
+  const card = screen.getByRole('button', { name });
+  if (card.getAttribute('aria-pressed') !== 'true') fireEvent.click(card);
   await settle();
 };
 
@@ -258,13 +257,13 @@ export const selectAccount = (state: ClientState, id: string): void => {
 
 /** Chooses a range of dates for the window of the form: the range is entered after choosing "Custom range". */
 export const setWindow = (from: string, to: string): void => {
-  fireEvent.change(screen.getByLabelText('Window (UTC)'), { target: { value: 'custom' } });
-  fireEvent.change(screen.getByLabelText('Window (UTC): from'), { target: { value: from } });
-  fireEvent.change(screen.getByLabelText('Window (UTC): to'), { target: { value: to } });
+  fireEvent.change(screen.getByLabelText('Window · UTC'), { target: { value: 'custom' } });
+  fireEvent.change(screen.getByLabelText('Window · UTC: from'), { target: { value: from } });
+  fireEvent.change(screen.getByLabelText('Window · UTC: to'), { target: { value: to } });
 };
 
 export const chooseWindow = (value: string): void => {
-  fireEvent.change(screen.getByLabelText('Window (UTC)'), { target: { value } });
+  fireEvent.change(screen.getByLabelText('Window · UTC'), { target: { value } });
 };
 
 /** Sets a number field of the form: a step is chosen, any other number is entered after choosing "Custom". */

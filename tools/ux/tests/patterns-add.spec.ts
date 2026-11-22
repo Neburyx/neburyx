@@ -16,7 +16,7 @@ async function open(page: Page): Promise<void> {
 }
 
 async function run(page: Page, pattern: string, startLabel: string, limit?: string): Promise<void> {
-  await panelOf(page).getByRole('button', { name: `Run ${pattern}`, exact: true }).click();
+  await panelOf(page).getByRole('button', { name: pattern, exact: true }).click();
   await panelOf(page).getByLabel(startLabel).selectOption({ index: 1 });
   if (limit !== undefined) await setNumber(panelOf(page), 'Max matching accounts', limit);
   await panelOf(page).getByRole('button', { name: 'Run pattern' }).click();

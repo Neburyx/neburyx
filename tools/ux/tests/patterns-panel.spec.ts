@@ -11,7 +11,7 @@ const toolOf = (page: Page) => page.getByRole('button', { name: 'Patterns', exac
 const runOf = (page: Page) => panelOf(page).getByRole('button', { name: 'Run pattern' });
 const startOf = (page: Page) => panelOf(page).getByLabel('Starting account');
 const rowsOf = (page: Page) => panelOf(page).getByRole('heading', { level: 4 });
-const backOf = (page: Page) => panelOf(page).getByRole('button', { name: 'Back to patterns' });
+const cardOf = (page: Page) => panelOf(page).getByRole('button', { name: 'Shared devices', exact: true });
 
 async function open(page: Page): Promise<void> {
   await toolOf(page).click();
@@ -21,7 +21,7 @@ async function open(page: Page): Promise<void> {
 /** Opens the list and then the form of Shared devices with its Run. */
 async function openForm(page: Page): Promise<void> {
   await open(page);
-  await panelOf(page).getByRole('button', { name: 'Run Shared devices' }).click();
+  await panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }).click();
   await expect(startOf(page)).toBeVisible();
 }
 
@@ -51,7 +51,7 @@ test.describe('the Patterns panel on the canvas', () => {
     await open(page);
     await expect(panelOf(page).getByRole('heading', { name: 'Built-in · 3' })).toBeVisible();
     await expect(rowsOf(page).filter({ hasText: /^(Shared devices|Shared addresses|Connected accounts)$/ })).toHaveText(['Shared devices', 'Shared addresses', 'Connected accounts']);
-    await expect(panelOf(page).getByRole('button', { name: /^Run (Shared devices|Shared addresses|Connected accounts)$/ })).toHaveCount(3);
+    await expect(panelOf(page).getByRole('button', { name: /^(Shared devices|Shared addresses|Connected accounts)$/ })).toHaveCount(3);
     await expect(panelOf(page).getByRole('button', { name: /^More: (Shared devices|Shared addresses|Connected accounts)$/ })).toHaveCount(0);
     await expect(panelOf(page).getByText(/Suspicious/)).toHaveCount(0);
   });
@@ -59,19 +59,19 @@ test.describe('the Patterns panel on the canvas', () => {
   test('filters the rows of every section with the search and says when a section has none', async ({ page }) => {
     await open(page);
     await panelOf(page).getByRole('searchbox', { name: 'Search patterns' }).fill('addresses');
-    await expect(panelOf(page).getByRole('button', { name: 'Run Shared addresses' })).toBeVisible();
-    await expect(panelOf(page).getByRole('button', { name: 'Run Shared devices' })).toHaveCount(0);
+    await expect(panelOf(page).getByRole('button', { name: 'Shared addresses', exact: true })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toHaveCount(0);
     await expect(panelOf(page).getByText('No pattern in this section matches the search.').first()).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toHaveValue('');
-    await expect(panelOf(page).getByRole('button', { name: 'Run Shared devices' })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', exact: true })).toBeVisible();
   });
 
   test('says the source has no patterns when it offers none', async ({ page }) => {
     await page.request.post('/__support/patterns-mode', { data: { noPresets: true } });
     await open(page);
     await expect(panelOf(page).getByText('This source has no built-in patterns.')).toBeVisible();
-    await expect(panelOf(page).getByRole('button', { name: /^Run (Shared (devices|addresses)|Connected accounts)$/ })).toHaveCount(0);
+    await expect(panelOf(page).getByRole('button', { name: /^(Shared (devices|addresses)|Connected accounts)$/ })).toHaveCount(0);
   });
 
   test('runs Shared devices from the preset account and shows the other five accounts of the ring with an exact count', async ({ page }) => {
@@ -84,17 +84,30 @@ test.describe('the Patterns panel on the canvas', () => {
     await expect(table.getByRole('cell', { name: 'AC-2', exact: true })).toBeVisible();
   });
 
-  test('opens the form of a built-in pattern with Back to patterns, and Back returns to the list with the result kept for the form', async ({ page }) => {
+  test('folds the two dates of a custom window into the select once both are set and the focus leaves them, and Change dates opens them again', async ({ page }) => {
     await openForm(page);
-    await expect(panelOf(page).getByRole('heading', { name: 'Shared devices', level: 2 })).toBeVisible();
+    const window = panelOf(page).getByLabel('Observed lastSeen · UTC', { exact: true });
+    await window.selectOption('custom');
+    await panelOf(page).getByLabel('Observed lastSeen · UTC: from').fill('2026-10-21');
+    await panelOf(page).getByLabel('Observed lastSeen · UTC: to').fill('2026-10-28');
+    await panelOf(page).getByLabel('Starting account').focus();
+    await expect(panelOf(page).getByLabel('Observed lastSeen · UTC: from')).toHaveCount(0);
+    await expect(window.locator('option:checked')).toHaveText('21–28 Oct 2026');
+    await panelOf(page).getByRole('button', { name: 'Change dates' }).click();
+    await expect(panelOf(page).getByLabel('Observed lastSeen · UTC: from')).toBeFocused();
+  });
+
+  test('opens the form of a built-in pattern under its card in the list, and choosing the card again closes the form with the result kept for it', async ({ page }) => {
+    await openForm(page);
+    await expect(cardOf(page)).toHaveAttribute('aria-pressed', 'true');
     await chooseStart(page);
     await runOf(page).click();
     await expect(panelOf(page).getByRole('table')).toBeVisible();
-    await backOf(page).click();
+    await cardOf(page).click();
     await expect(panelOf(page).getByRole('heading', { name: 'Patterns', level: 2 })).toBeVisible();
     await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
     await expect(panelOf(page).getByRole('table')).toHaveCount(0);
-    await panelOf(page).getByRole('button', { name: 'Run Shared devices' }).click();
+    await panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }).click();
     await expect(panelOf(page).getByRole('table')).toBeVisible();
   });
 
@@ -153,7 +166,7 @@ test.describe('the Patterns panel on the canvas', () => {
     await openForm(page);
     await expect(startOf(page)).toBeFocused();
     const limit = panelOf(page).getByLabel('Max matching accounts');
-    const order = [startOf(page), panelOf(page).getByRole('searchbox', { name: 'Search the source' }), panelOf(page).getByLabel('Window (UTC)', { exact: true }), panelOf(page).getByLabel('Min shared'), limit];
+    const order = [startOf(page), panelOf(page).getByRole('button', { name: 'Search the source' }), panelOf(page).getByLabel('Observed lastSeen · UTC', { exact: true }), panelOf(page).getByLabel('Min shared'), limit];
     for (const field of order) {
       // a date field has a stop for each of its parts, so Tab is pressed until the field is reached
       for (let presses = 0; presses < 4 && !(await field.evaluate((element) => element === document.activeElement)); presses += 1) await page.keyboard.press('Tab');

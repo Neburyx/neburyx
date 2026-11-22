@@ -9,7 +9,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-const formOf = (): string | undefined => screen.queryByRole('button', { name: 'Back to patterns' }) === null ? undefined : screen.getByRole('heading', { level: 2 }).textContent ?? '';
+const formOf = (): string | undefined => document.querySelector('.pattern-card[data-selected="true"] .pattern-card-name')?.textContent ?? undefined;
 
 const openFromHome = async (state: Awaited<ReturnType<typeof patternsWorkspace>>['state'], preset: string): Promise<void> => {
   act(() => {
@@ -31,7 +31,7 @@ describe('the Patterns panel opened with a preset handed over by Home', () => {
     const { state } = await patternsWorkspace();
     await openFromHome(state, 'gone');
     expect(formOf()).toBeUndefined();
-    expect(screen.getByRole('button', { name: 'Run Shared devices' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Shared devices' })).toBeTruthy();
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
@@ -43,7 +43,7 @@ describe('the Patterns panel opened with a preset handed over by Home', () => {
     await settle();
     await openPatterns();
     expect(formOf()).toBeUndefined();
-    expect(screen.getByRole('button', { name: 'Run Shared devices' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Shared devices' })).toBeTruthy();
   });
 
   it('forgets a preset that was handed over when the panel is closed before its list was shown', async () => {

@@ -13,7 +13,7 @@ test.describe('the Patterns panel on each pack', () => {
     await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
     await page.getByRole('button', { name: 'Patterns', exact: true }).click();
     await expect(page.getByRole('complementary', { name: 'Patterns' }).getByRole('heading', { name: 'Built-in · 2' })).toBeVisible();
-    await expect(page.getByRole('complementary', { name: 'Patterns' }).getByRole('button', { name: /^Run (Shared addresses|Claims by claimant)$/ })).toHaveCount(2);
+    await expect(page.getByRole('complementary', { name: 'Patterns' }).getByRole('button', { name: /^(Shared addresses|Claims by claimant)$/ })).toHaveCount(2);
     await expect(page.getByRole('complementary', { name: 'Patterns' }).getByRole('heading', { level: 4 }).filter({ hasText: /^(Shared addresses|Claims by claimant)$/ })).toHaveText(['Shared addresses', 'Claims by claimant']);
   });
 
@@ -44,24 +44,23 @@ test.describe('the Patterns panel on each pack', () => {
       await expect(page).toHaveURL(/\/explore\/[0-9a-f-]{36}$/);
       await page.getByRole('button', { name: 'Patterns', exact: true }).click();
       const panel = page.getByRole('complementary', { name: 'Patterns' });
-      await panel.getByRole('button', { name: `Run ${pack.preset}` }).click();
+      await panel.getByRole('button', { name: pack.preset, exact: true }).click();
       await setNumber(panel, pack.limit, '5');
       await panel.getByRole('button', { name: 'Run pattern' }).click();
-      await expect(panel.locator('.patterns-result')).toBeVisible();
-      const fromForm = await panel.locator('.patterns-result').innerText();
+      await expect(panel.locator('.patterns-result:visible')).toBeVisible();
+      const fromForm = await panel.locator('.patterns-result:visible').innerText();
       expect(fromForm).toMatch(/AUTH-/);
       expect(fromForm).toMatch(/lower bound|≥/i);
       await panel.getByRole('button', { name: 'Save pattern', exact: true }).click();
       await page.getByRole('dialog').getByLabel('Name').fill('Saved from the form');
       await page.getByRole('dialog').getByRole('button', { name: 'Save pattern' }).click();
       await expect(panel.getByText('Pattern saved.')).toBeVisible();
-      await panel.getByRole('button', { name: 'Back to patterns' }).click();
       const row = panel.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Saved from the form', level: 4 }) });
       await expect(row).toContainText(`${pack.limit} 5`);
       await row.getByRole('button', { name: 'Run Saved from the form' }).click();
       await panel.getByRole('button', { name: 'Run pattern' }).click();
-      await expect(panel.locator('.patterns-result')).toBeVisible();
-      expect(await panel.locator('.patterns-result').innerText()).toBe(fromForm);
+      await expect(panel.locator('.patterns-result:visible')).toBeVisible();
+      expect(await panel.locator('.patterns-result:visible').innerText()).toBe(fromForm);
     });
   }
 });

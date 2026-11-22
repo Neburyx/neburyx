@@ -8,6 +8,7 @@ import { RowMenu, type MenuEntry } from './row-menu.js';
 import { TypologyRows, type TypologyActions } from './typology-rows.js';
 import type { ApiClient } from '../../api/client.js';
 import { SAVED_COPY } from './saved-copy.js';
+import { legendGlyph } from '../../workspace/legend-panel.js';
 import { controlsOf, countText, kindLineOf, lastRunText } from './saved-model.js';
 import type { SavedList } from './use-saved-patterns.js';
 
@@ -41,14 +42,21 @@ interface Props {
   readonly actions: RowActions;
   /** The display name of an entity type. */
   readonly nameOf: (type: string) => string;
+  /** The label of the window of a built-in pattern, as the form writes it. */
+  readonly windowOf?: (preset: Preset) => string;
+  /** The icon key of an entity type, for the glyph on a built-in card. */
+  readonly iconOf?: (type: string) => string;
   readonly newRef?: React.RefObject<HTMLButtonElement | null>;
+  /** The built-in pattern chosen on its card, and its form with its result, drawn under the cards. */
+  readonly selectedPresetId?: string | undefined;
+  readonly presetPanel?: React.ReactNode;
 }
 
 /**
  * The one list of the Patterns panel: a search, and three sections: the built-in patterns, the person's own and those shared on the source, each with its count and its rows, then the footnote. The search is on the client and covers the rows
  * read so far; a section whose list has more pages says so and keeps Load more.
  */
-export function SavedList({ list, sourceName, presets, definitions, words, actions, nameOf, newRef }: Props) {
+export function SavedList({ list, sourceName, presets, definitions, words, actions, nameOf, windowOf, iconOf, newRef, selectedPresetId, presetPanel }: Props) {
   const [text, setText] = useState('');
   const searchId = useId();
   const search = useRef<HTMLInputElement>(null);
@@ -73,6 +81,7 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
   const searching = text.trim() !== '';
   const builtIn = useRef<HTMLHeadingElement>(null);
   const groups = useMemo(() => groupsOf(definitions, text), [definitions, text]);
+  const selectedCardShown = presets?.some((preset) => preset.id === selectedPresetId && rowMatches(text, preset.name, presetSummary(preset, nameOf))) === true;
   return (
     <div className="pattern-list">
       <input id={searchId} ref={search} type="search" className="pattern-search" aria-label={SAVED_COPY.searchLabel} placeholder={SAVED_COPY.searchLabel} value={text} onChange={(event) => setText(event.target.value)} />
@@ -89,7 +98,8 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
       {groups.named.length > 0 && groups.general.length === 0 && presets?.length === 0 ? null : (
       <Section id="built-in" label={groups.named.length === 0 ? SAVED_COPY.builtIn : `${SAVED_COPY.builtIn} · ${SAVED_COPY.builtInGeneral}`} count={presets === undefined ? undefined : String(presets.length + groups.general.length)} headingRef={builtIn}>
         {words === undefined || groups.general.length === 0 ? null : <TypologyRows items={groups.general} client={words.client} sourceId={words.sourceId} sourceName={sourceName} mask={words.mask} actions={words.actions} />}
-        {presets === undefined ? null : <BuiltInRows presets={presets} text={text} actions={actions} nameOf={nameOf} hasOthers={groups.general.length > 0} />}
+        {presets === undefined ? null : <BuiltInRows presets={presets} text={text} actions={actions} nameOf={nameOf} hasOthers={groups.general.length > 0} selectedId={selectedPresetId} iconOf={iconOf} />}
+        <div hidden={!selectedCardShown}>{presetPanel}</div>
       </Section>
       )}
       {state.phase === 'failed' ? (
@@ -106,10 +116,10 @@ export function SavedList({ list, sourceName, presets, definitions, words, actio
             </p>
           ) : null}
           <Section id="mine" label={SAVED_COPY.mine} count={countText(mine.length, more)}>
-            {mine.length === 0 && !more ? <EmptyMine newRef={newRef} onNew={actions.newPattern} onSeeBuiltIn={() => builtIn.current?.focus()} /> : <SavedRows items={mine} empty={SAVED_COPY.emptyMine} text={text} presets={presets} actions={actions} nameOf={nameOf} />}
+            {mine.length === 0 && !more ? <EmptyMine newRef={newRef} onNew={actions.newPattern} onSeeBuiltIn={() => builtIn.current?.focus()} /> : <SavedRows items={mine} empty={SAVED_COPY.emptyMine} text={text} presets={presets} actions={actions} nameOf={nameOf} windowOf={windowOf} />}
           </Section>
           <Section id="shared" label={SAVED_COPY.shared} count={countText(shared.length, more)}>
-            <SavedRows items={shared} empty={SAVED_COPY.emptyShared} text={text} presets={presets} actions={actions} nameOf={nameOf} />
+            <SavedRows items={shared} empty={SAVED_COPY.emptyShared} text={text} presets={presets} actions={actions} nameOf={nameOf} windowOf={windowOf} />
           </Section>
           {state.moreFailure === undefined ? null : (
             <p className="patterns-error" role="alert">
@@ -154,32 +164,34 @@ function Section({ id, label, count, headingRef, children }: { readonly id: stri
   );
 }
 
-function BuiltInRows({ presets, text, actions, nameOf, hasOthers }: { readonly presets: readonly Preset[]; readonly text: string; readonly actions: RowActions; readonly nameOf: Props['nameOf']; readonly hasOthers: boolean }) {
+function BuiltInRows({ presets, text, actions, nameOf, hasOthers, selectedId, iconOf }: { readonly presets: readonly Preset[]; readonly text: string; readonly actions: RowActions; readonly nameOf: Props['nameOf']; readonly hasOthers: boolean; readonly selectedId: string | undefined; readonly iconOf: Props['iconOf'] }) {
   if (presets.length === 0) return hasOthers ? null : <p className="search-panel-note">{SAVED_COPY.noBuiltIn}</p>;
   const rows = presets.map((preset) => ({ preset, summary: presetSummary(preset, nameOf) })).filter((row) => rowMatches(text, row.preset.name, row.summary));
   if (rows.length === 0) return hasOthers ? null : <p className="search-panel-note">{SAVED_COPY.noneInSection}</p>;
   return (
     <ul className="pattern-rows">
-      {rows.map(({ preset, summary }) => (
-        <li key={preset.id} className="pattern-row">
-          <div className="pattern-row-head">
-            <h4 className="pattern-row-name">{preset.name}</h4>
-          </div>
-          {summary === '' ? null : <p className="search-panel-note">{summary}</p>}
-          <div className="patterns-actions">
-            <button type="button" className="primary" aria-label={`${SAVED_COPY.run} ${preset.name}`} onClick={() => actions.runPreset(preset)}>
-              {SAVED_COPY.run}
+      {rows.map(({ preset }) => (
+        <li key={preset.id} className="pattern-row pattern-card" data-selected={selectedId === preset.id}>
+          <h4 className="pattern-row-name">
+            <button type="button" className="pattern-card-button" aria-pressed={selectedId === preset.id} onClick={() => actions.runPreset(preset)}>
+              {iconOf === undefined ? null : <img src={legendGlyph(iconOf(preset.bind['attribute'] ?? preset.bind['target'] ?? preset.bind['anchor'] ?? ''))} alt="" className="pattern-card-glyph" />}
+              <span className="pattern-card-name">{preset.name}</span>
+              {selectedId === preset.id ? (
+                <span className="pattern-card-check" aria-hidden="true">
+                  ✓
+                </span>
+              ) : null}
             </button>
-          </div>
+          </h4>
         </li>
       ))}
     </ul>
   );
 }
 
-function SavedRows({ items, empty, text, presets, actions, nameOf }: { readonly items: readonly ListedPattern[]; readonly empty: string; readonly text: string; readonly presets: Props['presets']; readonly actions: RowActions; readonly nameOf: Props['nameOf'] }) {
+function SavedRows({ items, empty, text, presets, actions, nameOf, windowOf }: { readonly items: readonly ListedPattern[]; readonly empty: string; readonly text: string; readonly presets: Props['presets']; readonly actions: RowActions; readonly nameOf: Props['nameOf']; readonly windowOf: Props['windowOf'] }) {
   if (items.length === 0) return <p className="search-panel-note">{empty}</p>;
-  const rows = items.map((item) => ({ item, summary: savedSummary(item, presets, nameOf) })).filter((row) => rowMatches(text, row.item.name, row.summary));
+  const rows = items.map((item) => ({ item, summary: savedSummary(item, presets, nameOf, windowOf) })).filter((row) => rowMatches(text, row.item.name, row.summary));
   if (rows.length === 0) return <p className="search-panel-note">{SAVED_COPY.noneInSection}</p>;
   return (
     <ul className="pattern-rows">

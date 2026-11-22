@@ -51,9 +51,9 @@ test.describe('the Patterns panel by keyboard', () => {
     await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
   });
 
-  test('runs a built-in pattern: Run on its row, the start field, Run pattern, and Back to patterns', async ({ page }) => {
-    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
-    await expect(headingOf(page, 'Shared devices')).toBeVisible();
+  test('runs a built-in pattern: its card, the start field and Run pattern, with the list kept above the form', async ({ page }) => {
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
+    await expect(panelOf(page).getByRole('button', { name: 'Shared devices', pressed: true })).toBeVisible();
     const start = panelOf(page).getByLabel('Starting account');
     await expect(start).toBeFocused();
     await page.keyboard.press('ArrowDown');
@@ -62,12 +62,13 @@ test.describe('the Patterns panel by keyboard', () => {
     await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
     await expect(panelOf(page).getByRole('table').getByRole('row')).toHaveCount(6);
     await expect(panelOf(page).getByRole('status').filter({ hasText: 'exact' })).toHaveText('5 · exact');
-    await press(page, panelOf(page).getByRole('button', { name: 'Back to patterns' }));
     await expect(panelOf(page).getByRole('searchbox', { name: 'Search patterns' })).toBeVisible();
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true, pressed: true }));
+    await expect(panelOf(page).getByLabel('Starting account')).toHaveCount(0);
   });
 
   test('saves a built-in run by keyboard: Save pattern follows Run pattern, the dialog keeps the focus and Escape gives it back', async ({ page }) => {
-    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
     await panelOf(page).getByLabel('Max matching accounts').focus();
     await page.keyboard.press('Tab');
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeFocused();
@@ -87,7 +88,7 @@ test.describe('the Patterns panel by keyboard', () => {
   });
 
   test('shows the field error and opens no dialog when Save pattern is pressed on a form that is not valid', async ({ page }) => {
-    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
     await setNumber(panelOf(page), 'Max matching accounts', '0');
     await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
     await expect(panelOf(page).getByRole('alert')).toBeVisible();
@@ -225,7 +226,7 @@ test.describe('the Patterns panel by keyboard', () => {
 
   test('Tab follows the reading order of the list with a visible focus ring on each stop', async ({ page }) => {
     await expect(panelOf(page).getByRole('button', { name: 'More: Shared by Pat' })).toBeVisible();
-    await expect(panelOf(page).getByRole('button', { name: 'Run Connected accounts' })).toBeVisible();
+    await expect(panelOf(page).getByRole('button', { name: 'Connected accounts', exact: true })).toBeVisible();
     await page.keyboard.press('Shift');
     await panelOf(page).getByRole('button', { name: 'Close Patterns' }).focus();
     // the Run of the pattern that is out of date is disabled, so it is no stop
@@ -240,9 +241,9 @@ test.describe('the Patterns panel by keyboard', () => {
       'Close Patterns',
       '+ New pattern',
       'Search patterns',
-      'Run Shared devices',
-      'Run Shared addresses',
-      'Run Connected accounts',
+      'Shared devices',
+      'Shared addresses',
+      'Connected accounts',
       'Run Device ring',
       'More: Device ring',
       'Change pattern',

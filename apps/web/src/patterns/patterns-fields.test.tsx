@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
+import { profiled } from '../search/search-test-kit.js';
 import { choosePreset, failure, listOf, openBuiltIn, openPatterns, patternsWorkspace, selectAccount, settle, CONNECTED, PRESETS, SHARED_ADDRESSES, setNumber, setWindow, chooseWindow } from './patterns-kit.js';
 
 afterEach(() => {
@@ -13,9 +14,9 @@ const labels = (): string[] => [...document.querySelectorAll('.patterns-panel .s
 
 describe('the form of a pattern', () => {
   it.each([
-    ['Shared devices', ['Starting account', 'Window (UTC)', 'Min shared', 'Max matching accounts']],
-    ['Shared addresses', ['Starting account', 'Window (UTC)', 'Min shared', 'Limit']],
-    ['Connected accounts', ['Starting account', 'Direction', 'Hops', 'Window (UTC)', 'Limit']],
+    ['Shared devices', ['Starting account', 'Window · UTC', 'Min shared', 'Max matching accounts']],
+    ['Shared addresses', ['Starting account', 'Window · UTC', 'Min shared', 'Limit']],
+    ['Connected accounts', ['Starting account', 'Direction', 'Hops', 'Window · UTC', 'Limit']],
   ])('has the fields the schema declares for %s, with the preset’s labels or plain names, and no other', async (name, expected) => {
     await patternsWorkspace();
     await openBuiltIn();
@@ -35,7 +36,7 @@ describe('the form of a pattern', () => {
   it('shows a preset with no labels with the parameters’ plain names', async () => {
     await patternsWorkspace({ list: async () => ({ ok: true, value: listOf([{ ...SHARED_ADDRESSES, labels: [] }]) }) });
     await openBuiltIn('Shared addresses');
-    expect(labels()).toEqual(['Anchor', 'Window (UTC)', 'Min shared', 'Limit']);
+    expect(labels()).toEqual(['Anchor', 'Window · UTC', 'Min shared', 'Limit']);
   });
 
   it('sends a window of two dates, a limit and a minimum, and sends nothing for a cleared window', async () => {
@@ -85,20 +86,20 @@ describe('the form of a pattern', () => {
     const kit = await patternsWorkspace();
     await openBuiltIn();
     selectAccount(kit.state, 'acc-1');
-    const select = screen.getByLabelText('Window (UTC)');
+    const select = screen.getByLabelText('Window · UTC');
     expect([...select.querySelectorAll('option')].map((option) => option.textContent)).toEqual(['Any time', 'Last 7 days', 'Last 14 days', 'Last 30 days', 'Last 90 days', 'Custom range…']);
-    expect(screen.queryByLabelText('Window (UTC): from')).toBeNull();
+    expect(screen.queryByLabelText('Window · UTC: from')).toBeNull();
     chooseWindow('days:14');
     await userEvent.click(run());
     await settle();
     expect(kit.sent[0]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' }, window: { days: 14 } });
     setWindow('2026-10-21', '2026-10-28');
-    expect(screen.getByLabelText('Window (UTC)').querySelector('option[value="custom"]')?.textContent).toBe('21–28 Oct 2026');
+    expect(screen.getByLabelText('Window · UTC').querySelector('option[value="custom"]')?.textContent).toBe('21–28 Oct 2026');
     await userEvent.click(run());
     await settle();
     expect(kit.sent[1]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' }, window: { from: '2026-10-21', to: '2026-10-28' } });
     chooseWindow('days:7');
-    expect(screen.queryByLabelText('Window (UTC): from')).toBeNull();
+    expect(screen.queryByLabelText('Window · UTC: from')).toBeNull();
     await userEvent.click(run());
     await settle();
     expect(kit.sent[2]?.request.params).toEqual({ ref: { entityType: 'kind-a', stableId: 'acc-1' }, window: { days: 7 } });
@@ -152,9 +153,45 @@ describe('the form of a pattern', () => {
     await userEvent.click(run());
     await settle();
     expect(screen.getByText('The end date is before the start date.')).toBeTruthy();
-    expect(screen.getByLabelText('Window (UTC)').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByLabelText('Window · UTC').getAttribute('aria-invalid')).toBe('true');
     chooseWindow(choice);
     expect(screen.queryByText('The end date is before the start date.')).toBeNull();
-    expect(screen.getByLabelText('Window (UTC)').getAttribute('aria-invalid')).toBe('false');
+    expect(screen.getByLabelText('Window · UTC').getAttribute('aria-invalid')).toBe('false');
+  });
+
+  it('writes the window as the frames do: "Observed" and the property that dates the relationship the preset follows, then "· UTC", in the form, the dialog and the saved row', async () => {
+    const profile = async () => {
+      const base = profiled('a', ['kind-a', 'kind-b', 'kind-c']);
+      return { ok: true as const, value: { ...base, relationshipTypes: base.relationshipTypes.map((row, index) => (index === 0 ? { ...row, type: 'USES', observedAt: 'event_time' } : row)) } };
+    };
+    await patternsWorkspace({ profile });
+    await openBuiltIn();
+    expect(screen.getByLabelText('Observed event_time · UTC')).toBeTruthy();
+    expect(screen.queryByLabelText('Window · UTC')).toBeNull();
+  });
+
+  it('shows the list of built-in patterns above the form of the chosen one, and its result below the form, in one panel with no screen to go back from', async () => {
+    const kit = await patternsWorkspace();
+    await openBuiltIn();
+    selectAccount(kit.state, 'acc-1');
+    await userEvent.click(run());
+    await settle();
+    const card = screen.getByRole('button', { name: 'Connected accounts', pressed: false });
+    const form = screen.getByLabelText('Starting account');
+    const result = document.querySelector('.patterns-result');
+    if (result === null) throw new Error('no result');
+    expect(card.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(form.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back to patterns' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Shared devices', pressed: true })).toBeTruthy();
+  });
+
+  it('keeps the search of the source behind a link under the starting entity until it is asked for, and gives it the focus', async () => {
+    const kit = await patternsWorkspace();
+    await openBuiltIn();
+    selectAccount(kit.state, 'acc-1');
+    expect(screen.queryByRole('searchbox', { name: 'Search the source' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Search the source' }));
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search the source' }));
   });
 });

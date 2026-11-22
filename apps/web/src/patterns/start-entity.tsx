@@ -21,6 +21,8 @@ interface Props {
   readonly selectRef: React.Ref<HTMLSelectElement>;
   /** The id of the select, so that two fields in one panel (the preset form and the builder's run) each have their label. */
   readonly id?: string;
+  /** The search of the source is behind a link until it is asked for, so that the field reads as the select of the design. */
+  readonly collapsedSearch?: boolean;
 }
 
 type Found =
@@ -73,8 +75,9 @@ export function useEntitySearch(client: ApiClient, sourceId: string, mask: boole
 /**
  * The starting entity is chosen, never typed as an identifier: from the selected and loaded entities of its type, or from a search of the source narrowed to that type. Typed text only ever reaches the search route.
  */
-export function StartEntityField({ client, sourceId, mask, label, entityType, candidates, chosenKey, onChoose, selectRef, id = 'patterns-start' }: Props) {
+export function StartEntityField({ client, sourceId, mask, label, entityType, candidates, chosenKey, onChoose, selectRef, id = 'patterns-start', collapsedSearch = false }: Props) {
   const [text, setText] = useState('');
+  const [searching, setSearching] = useState(false);
   const { found, asked } = useEntitySearch(client, sourceId, mask, entityType, text);
 
   const listed = new Set(candidates.map((node) => elementKey(node.ref)));
@@ -104,7 +107,13 @@ export function StartEntityField({ client, sourceId, mask, label, entityType, ca
           </option>
         ))}
       </select>
-      <input type="search" className="patterns-input" aria-label={PATTERNS_COPY.searchLabel} placeholder={PATTERNS_COPY.searchLabel} autoComplete="off" value={text} onChange={(event) => setText(event.target.value)} />
+      {collapsedSearch && !searching && text === '' ? (
+        <button type="button" className="link" onClick={() => setSearching(true)}>
+          {PATTERNS_COPY.searchLabel}
+        </button>
+      ) : (
+        <input type="search" className="patterns-input" aria-label={PATTERNS_COPY.searchLabel} placeholder={PATTERNS_COPY.searchLabel} autoComplete="off" autoFocus={collapsedSearch && searching} value={text} onChange={(event) => setText(event.target.value)} />
+      )}
       {found.kind === 'failed' ? (
         <p className="patterns-error" role="alert">
           {PATTERNS_COPY.searchFailed}

@@ -927,3 +927,43 @@
   padding: 0;
   border: 0;
 }
+
+.pattern-card {
+  padding: 0;
+}
+
+.pattern-card[data-selected='true'] {
+  border-color: var(--color-accent);
+}
+
+.pattern-card .pattern-row-name {
+  margin: 0;
+}
+
+.pattern-card-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  width: 100%;
+  padding: var(--space-8) var(--space-10);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pattern-card-name {
+  flex: 1;
+}
+
+.pattern-card-glyph {
+  width: var(--space-16);
+  height: var(--space-16);
+}
+
+.pattern-card-check {
+  color: var(--color-accent);
+}
+

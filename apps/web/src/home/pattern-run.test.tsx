@@ -29,7 +29,7 @@ function rig(sources: readonly string[] = ['source-a']) {
 }
 
 const panel = () => screen.getByRole('complementary', { name: 'Patterns' });
-const checked = (): string[] => [within(panel()).getByRole('heading', { level: 2 }).textContent ?? ''];
+const checked = (): string[] => within(panel()).getAllByRole('button', { pressed: true }).map((card) => card.querySelector('.pattern-card-name')?.textContent ?? '');
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
 
 describe('Home: Run → on a pattern', () => {

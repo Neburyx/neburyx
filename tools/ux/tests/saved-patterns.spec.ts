@@ -94,7 +94,7 @@ test.describe('saved patterns in the Patterns panel', () => {
   });
 
   test('saves a built-in run from its form, lists it with its pattern and parameters, and runs it from its row with the answer of the form', async ({ page }) => {
-    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
     await setNumber(panelOf(page), 'Max matching accounts', '7');
     await expect(panelOf(page).getByRole('button', { name: 'Run pattern' })).toBeEnabled();
     await press(page, panelOf(page).getByRole('button', { name: 'Run pattern' }));
@@ -110,7 +110,6 @@ test.describe('saved patterns in the Patterns panel', () => {
     await press(page, dialog.getByRole('button', { name: 'Save pattern' }));
     await expect(panelOf(page).getByText('Pattern saved.')).toBeVisible();
     await expect(panelOf(page).getByRole('table').getByRole('row')).toHaveCount(fromForm);
-    await press(page, panelOf(page).getByRole('button', { name: 'Back to patterns' }));
     const row = rowOf(page, 'Devices, small');
     await expect(row).toContainText('Shared devices · v1');
     await expect(row).toContainText('Max matching accounts 7');
@@ -122,7 +121,7 @@ test.describe('saved patterns in the Patterns panel', () => {
   });
 
   test('refuses a name the person already uses when a built-in run is saved, and keeps the dialog with the name', async ({ page }) => {
-    await press(page, panelOf(page).getByRole('button', { name: 'Run Shared devices' }));
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
     await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
     await dialogOf(page).getByLabel('Name').fill('Device ring');
     await press(page, dialogOf(page).getByRole('button', { name: 'Save pattern' }));

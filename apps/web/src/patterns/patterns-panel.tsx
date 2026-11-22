@@ -22,7 +22,7 @@ import { heavyHeadline, heavyLine } from '../banner/heavy-banner.js';
 import { Dialog } from '../views/dialog.js';
 import { RUN_COPY } from './run/run-copy.js';
 import { EDITOR_SUBTITLE, failureView, type FailureView, listSubtitle, maxHopsOf, maxPageOf, PATTERNS_COPY, SHELL_COPY, startHint, timeoutLabel } from './copy.js';
-import { buildParams, fieldsOf, labelOf, type FormValues } from './form-model.js';
+import { buildParams, fieldsOf, labelOf, observedAtOf, type FormValues } from './form-model.js';
 import { PatternForm } from './pattern-form.js';
 import { RunFailure } from './run-failure.js';
 import { PatternResult } from './pattern-result.js';
@@ -107,7 +107,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   };
   const cancelOrClose = useRef<() => void>(close);
   // the builder is a second view of the panel; the list stays mounted, hidden, so its form is as it was on the way back
-  const [view, setView] = useState<'list' | 'builder' | 'preset' | 'run' | 'saved-preset'>('list');
+  const [view, setView] = useState<'list' | 'builder' | 'run' | 'saved-preset'>('list');
   // the saved pattern whose run the run view shows, and the store of the saved run of a built-in pattern
   const [savedItem, setSavedItem] = useState<ListedPattern | undefined>(undefined);
   // the draft the editor handed to the preview, and what the screen of the run says under the heading
@@ -117,7 +117,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   const [copiedFrom, setCopiedFrom] = useState<BuiltInDefinition | undefined>(undefined);
   const [runHeader, setRunHeader] = useState<RunHeader | undefined>(undefined);
   const [presetId, setPresetId] = useState<string | undefined>(undefined);
-  // the run of a built-in pattern is kept while the panel is open, so that going back to the list and to the form again shows the result under its own pattern
+  // the run of a built-in pattern is kept while the panel is open, so that choosing its card again after closing the form shows the result under its own pattern
   const presetRun = usePatternRun(client, sourceId ?? '', mask);
   const loadTemplates = useCallback((signal: AbortSignal) => sourceId === null ? Promise.resolve({ ok: true as const, value: { sourceId: '', templates: [], presets: [] } }) : client.listTemplates(sourceId, signal), [client, sourceId]);
   const templates = useRequest(loadTemplates);
@@ -129,7 +129,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     state.presentation.setPatternsPreset(undefined);
     if (templateData.presets.some((candidate) => candidate.id === handed)) {
       setPresetId(handed);
-      setView('preset');
+      setView('list');
     }
   }, [state, templateData]);
   const viewRef = useRef(view);
@@ -282,6 +282,9 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
     }
   };
   useEffect(() => {
+    if (view === 'list') cancelOrClose.current = presetRun.running && presetId !== undefined ? presetRun.cancel : close;
+  }, [view, presetRun.running, presetRun.cancel, presetId]);
+  useEffect(() => {
     if (view === 'saved-preset') cancelOrClose.current = presetView.running ? presetStore.cancel : close;
   }, [view, presetView.running, presetStore]);
   const before = useRef(view);
@@ -312,7 +315,7 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
   return (
     <div className="patterns-panel" ref={root}>
       <div className="search-panel-header">
-        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'preset' ? (templateData?.presets.find((candidate) => candidate.id === presetId)?.name ?? PATTERNS_COPY.title) : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : view === 'saved-preset' ? (savedItem?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
+        <h2 className="search-panel-heading">{view === 'list' ? PATTERNS_COPY.title : view === 'run' ? (runHeader?.title ?? RUN_COPY.previewTitle) : view === 'saved-preset' ? (savedItem?.name ?? PATTERNS_COPY.title) : (editingView?.title ?? SHELL_COPY.newPattern)}</h2>
         <button type="button" className="legend-close" aria-label={view === 'builder' ? PATTERNS_COPY.closeBuilder : PATTERNS_COPY.close} onClick={view === 'builder' || (view === 'run' && savedItem === undefined) ? closeGuarded : close}>
           <span className="icon icon-clear" aria-hidden="true" />
         </button>
@@ -379,15 +382,20 @@ function PatternsBody({ hasDraft, restarted, onRestartedSeen }: BodyProps) {
               }}
               onRunPreset={(preset) => {
                 setNotice(undefined);
-                if (presetRun.ask?.id !== preset.id) presetRun.clear();
-                setPresetId(preset.id);
-                setView('preset');
+                if (presetRun.ask?.id !== preset.id) {
+                  presetRun.cancel();
+                  presetRun.clear();
+                }
+                setPresetId(presetId === preset.id ? undefined : preset.id);
               }}
+              selectedPresetId={presetId}
+              presetPanel={
+                templateData !== undefined && presetId !== undefined && templateData.presets.some((candidate) => candidate.id === presetId) ? (
+                  <PatternsWorkbench client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} list={templateData} presetId={presetId} run={presetRun} onSaved={(notice) => { setNotice(notice); saved.reload(); }} />
+                ) : null
+              }
             />
           </div>
-          {view === 'preset' && templateData !== undefined && presetId !== undefined && templateData.presets.some((candidate) => candidate.id === presetId) ? (
-            <PatternsWorkbench client={client} sourceId={sourceId} sourceName={sourceName} mask={mask} list={templateData} presetId={presetId} run={presetRun} close={close} escape={cancelOrClose} onBack={() => setView('list')} onSaved={(notice) => { setNotice(notice); saved.reload(); }} />
-          ) : null}
           {view === 'saved-preset' && savedItem !== undefined ? (
             <SavedPresetRun
               client={client}
@@ -525,13 +533,10 @@ interface WorkbenchProps {
   /** The built-in pattern whose form this is. */
   readonly presetId: string;
   readonly run: ReturnType<typeof usePatternRun>;
-  readonly close: () => void;
-  readonly escape: React.MutableRefObject<() => void>;
-  readonly onBack: () => void;
   readonly onSaved: (notice: Notice) => void;
 }
 
-function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId, run, close, escape, onBack, onSaved }: WorkbenchProps) {
+function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId, run, onSaved }: WorkbenchProps) {
   const state = useClientState();
   const profile = useProfile();
   const graph = useLoadedGraph();
@@ -562,6 +567,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
         : fieldsOf(preset, template.paramsSchema, {
             entityTypes: (profile?.entityTypes ?? []).map((type) => ({ value: type.type, text: type.displayName })),
             relationshipTypes: (profile?.relationshipTypes ?? []).map((type) => ({ value: type.type, text: type.type })),
+            observedAt: observedAtOf(profile, preset),
           }),
     [preset, template, profile],
   );
@@ -624,7 +630,6 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
     setValues((previous) => ({ ...previous, ...(page === undefined ? {} : { limit: String(page) }), ...(hops === undefined ? {} : { maxHops: String(hops) }) }));
   }, [run.failure]);
 
-  escape.current = run.running ? run.cancel : close;
 
   const heavy = run.heavy === undefined ? undefined : heavyDecisionOfRun(run.heavy);
   const timeout = source?.timeoutMs;
@@ -659,11 +664,6 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
 
   return (
     <>
-      <div className="patterns-actions">
-        <button type="button" className="secondary" onClick={onBack}>
-          {PATTERNS_COPY.backToList}
-        </button>
-      </div>
       <StartEntityField
         client={client}
         sourceId={sourceId}
@@ -677,6 +677,7 @@ function PatternsWorkbench({ client, sourceId, sourceName, mask, list, presetId,
           run.clear();
         }}
         selectRef={startField}
+        collapsedSearch
       />
       <PatternForm fields={fields} values={values} errors={errors} onChange={change} />
       <div className="patterns-actions">

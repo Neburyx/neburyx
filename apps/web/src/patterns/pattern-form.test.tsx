@@ -10,7 +10,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-const WINDOW: Field = { name: 'window', label: 'Window (UTC)', kind: 'window' };
+const WINDOW: Field = { name: 'window', label: 'Window · UTC', kind: 'window' };
 const HOPS: Field = { name: 'maxHops', label: 'Hops', kind: 'integer', min: 1, max: 4 };
 
 function Harness({ fields, initial, errors = {} }: { readonly fields: readonly Field[]; readonly initial: FormValues; readonly errors?: Readonly<Record<string, string>> }) {
@@ -58,21 +58,21 @@ describe('a retained number that the list does not hold', () => {
 describe('a window that holds a range', () => {
   it('shows the range alone in the select, opens the dates again from Change dates, and closes them when the focus leaves', async () => {
     render(<Harness fields={[WINDOW]} initial={{ 'window.mode': 'custom', 'window.from': '2026-10-21', 'window.to': '2026-10-28' }} />);
-    expect(screen.getByLabelText('Window (UTC)').querySelector('option[value="custom"]')?.textContent).toBe('21–28 Oct 2026');
-    expect(screen.queryByLabelText('Window (UTC): from')).toBeNull();
+    expect(screen.getByLabelText('Window · UTC').querySelector('option[value="custom"]')?.textContent).toBe('21–28 Oct 2026');
+    expect(screen.queryByLabelText('Window · UTC: from')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Change dates' }));
-    expect(screen.getByLabelText('Window (UTC): from')).toHaveProperty('value', '2026-10-21');
+    expect(screen.getByLabelText('Window · UTC: from')).toHaveProperty('value', '2026-10-21');
     expect(screen.queryByRole('button', { name: 'Change dates' })).toBeNull();
-    expect(document.activeElement).toBe(screen.getByLabelText('Window (UTC): from'));
-    fireEvent.blur(screen.getByLabelText('Window (UTC): to'), { relatedTarget: document.body });
-    expect(screen.queryByLabelText('Window (UTC): from')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText('Window · UTC: from'));
+    fireEvent.blur(screen.getByLabelText('Window · UTC: to'), { relatedTarget: document.body });
+    expect(screen.queryByLabelText('Window · UTC: from')).toBeNull();
     expect(screen.getByRole('button', { name: 'Change dates' })).toBeTruthy();
   });
 
   it('keeps the dates open while one is missing, and points the error at the controls', () => {
     render(<Harness fields={[WINDOW]} initial={{ 'window.mode': 'custom', 'window.from': '2026-10-21' }} errors={{ window: 'Set both dates, or clear both.' }} />);
-    expect(screen.getByLabelText('Window (UTC): to')).toBeTruthy();
+    expect(screen.getByLabelText('Window · UTC: to')).toBeTruthy();
     const error = screen.getByRole('alert');
-    for (const control of [screen.getByLabelText('Window (UTC)'), screen.getByLabelText('Window (UTC): from'), screen.getByLabelText('Window (UTC): to')]) expect(control.getAttribute('aria-describedby')).toBe(error.id);
+    for (const control of [screen.getByLabelText('Window · UTC'), screen.getByLabelText('Window · UTC: from'), screen.getByLabelText('Window · UTC: to')]) expect(control.getAttribute('aria-describedby')).toBe(error.id);
   });
 });

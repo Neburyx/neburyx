@@ -49,11 +49,10 @@ describe('opening the builder from the Patterns panel', () => {
 
   it('closes the panel on Escape from the builder even while a preset run is on its way', async () => {
     const kit = await builderWorkspace({ run: () => new Promise(() => undefined) });
-    await userEvent.click(screen.getByRole('button', { name: 'Run Shared devices' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Shared devices' }));
     selectAccount(kit.state, 'acc-1');
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
-    await userEvent.click(screen.getByRole('button', { name: 'Back to patterns' }));
     await openBuilder();
     await chooseStart('n-a');
     fireEvent.keyDown(startSelect(), { key: 'Escape' });
@@ -124,7 +123,7 @@ describe('leaving and coming back', () => {
     expect(startSelect().value).toBe('n-b');
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Discard this draft?' })).getByRole('button', { name: 'Discard draft' }));
-    expect(screen.getByRole('button', { name: 'Run Shared devices' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Shared devices' })).toBeTruthy();
     await openBuilder();
     expect(startSelect().value).toBe('');
   });

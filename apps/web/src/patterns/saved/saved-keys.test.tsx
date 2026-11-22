@@ -22,8 +22,7 @@ describe('the hand-off from Home', () => {
       kit.state.presentation.setPatternsOpen(true);
     });
     await settle();
-    expect(screen.getByRole('heading', { level: 2, name: 'Connected accounts' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Back to patterns' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Connected accounts', pressed: true })).toBeTruthy();
     expect(kit.state.presentation.view.getState().patternsPreset).toBeUndefined();
   });
 });
@@ -35,7 +34,7 @@ describe('the list by keyboard and Escape', () => {
     expect(screen.getByRole('searchbox', { name: 'Search patterns' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Run Alpha' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'More: Alpha' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Run Shared devices' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Shared devices' })).toBeTruthy();
   });
 
   it('cancels a saved run on its way with Escape, and closes the panel with the next Escape', async () => {
@@ -54,11 +53,11 @@ describe('the list by keyboard and Escape', () => {
 
   it('cancels a preset run on its way with Escape from its form, as before', async () => {
     await savedWorkspace({ run: () => new Promise(() => undefined), patterns: { runSavedPattern: async () => ({ ok: true, value: definitionOk(['acc-2']) }) } });
-    await userEvent.click(screen.getByRole('button', { name: 'Run Shared devices' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Shared devices' }));
     await settle();
     await userEvent.click(screen.getByRole('button', { name: 'Run pattern' }));
     await settle();
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Back to patterns' }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Shared devices' }), { key: 'Escape' });
     await settle();
     expect(screen.getByText('Cancelled. No new matches shown.')).toBeTruthy();
     expect(screen.getByRole('complementary', { name: 'Patterns' })).toBeTruthy();

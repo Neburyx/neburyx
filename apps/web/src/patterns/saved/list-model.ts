@@ -13,13 +13,13 @@ export function presetSummary(preset: Pick<Preset, 'bind'>, nameOf: (type: strin
 }
 
 /** The chain of a saved pattern in a line: from its definition, or, for a saved run of a built-in pattern, from the binding of that pattern. */
-export function savedSummary(item: ListedPattern, presets: readonly Preset[] | undefined, nameOf: (type: string) => string): string {
+export function savedSummary(item: ListedPattern, presets: readonly Preset[] | undefined, nameOf: (type: string) => string, windowOf?: (preset: Preset) => string): string {
   if (item.kind === 'definition') {
     const parsed = patternDefinitionSchema.safeParse(item.definition);
     return parsed.success ? pathSummary(parsed.data, nameOf) : '';
   }
   const preset = presets?.find((candidate) => candidate.id === item.presetId);
-  const params = paramsInWords(preset ?? { labels: [] }, item.params);
+  const params = paramsInWords(preset ?? { labels: [] }, item.params, preset === undefined ? undefined : windowOf?.(preset));
   return [preset === undefined ? '' : presetSummary(preset, nameOf), params].filter((part) => part !== '').join(' · ');
 }
 

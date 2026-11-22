@@ -312,13 +312,13 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await openEntity(page, 'banking-demo', `PP-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
     await openPatternList(page);
-    await expect(patternsPanel(page).getByRole('button', { name: 'Run Shared devices' })).toBeVisible();
+    await expect(patternsPanel(page).getByRole('button', { name: 'Shared devices', exact: true })).toBeVisible();
   },
   "Explore with the Patterns panel's preset form": async (page) => {
     await openEntity(page, 'banking-demo', `PF-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
     await openPatternList(page);
-    await patternsPanel(page).getByRole('button', { name: 'Run Shared devices' }).click();
+    await patternsPanel(page).getByRole('button', { name: 'Shared devices', exact: true }).click();
     await expect(patternsPanel(page).getByRole('button', { name: 'Run pattern' })).toBeVisible();
   },
   "Explore with the Patterns panel's Heavy operation state": async (page) => {
@@ -326,7 +326,7 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
     await openPatternList(page);
     const panel = patternsPanel(page);
-    await panel.getByRole('button', { name: 'Run Shared devices' }).click();
+    await panel.getByRole('button', { name: 'Shared devices', exact: true }).click();
     await panel.getByLabel('Starting account').selectOption({ index: 1 });
     await setNumber(panel, 'Min shared', '2');
     await panel.getByRole('button', { name: 'Run pattern' }).click();
@@ -384,7 +384,7 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
     await openEntity(page, 'banking-demo', `PB-${unique()}`);
     await expect(page.getByRole('application', { name: 'Graph canvas' })).toBeVisible();
     await openPatternList(page);
-    await patternsPanel(page).getByRole('button', { name: 'Run Shared devices' }).click();
+    await patternsPanel(page).getByRole('button', { name: 'Shared devices', exact: true }).click();
     await patternsPanel(page).getByRole('button', { name: 'Save pattern', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Save pattern' })).toBeVisible();
   },

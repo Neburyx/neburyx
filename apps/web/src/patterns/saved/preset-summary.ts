@@ -63,13 +63,13 @@ const textOf = (value: unknown): string | undefined => {
 };
 
 /** The stored parameters of a saved run in a line, for its row: the preset's own labels, or the parameter's plain name, in the order stored; the starting entity is not a parameter and is never listed. */
-export function paramsInWords(preset: Pick<Preset, 'labels'>, params: Readonly<Record<string, unknown>>): string {
+export function paramsInWords(preset: Pick<Preset, 'labels'>, params: Readonly<Record<string, unknown>>, windowText?: string): string {
   return Object.entries(params)
     .filter(([key]) => key !== 'ref')
     .flatMap(([key, value]) => {
       const text = textOf(value);
       const label = preset.labels.find((entry) => entry.key === key)?.text ?? plainName(key);
-      return text === undefined ? [] : [`${isRecord(value) ? windowLabel(label) : label} ${text}`];
+      return text === undefined ? [] : [`${isRecord(value) ? (windowText ?? windowLabel(label)) : label} ${text}`];
     })
     .join(', ');
 }

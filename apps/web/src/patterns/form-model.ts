@@ -45,13 +45,22 @@ export function plainName(name: string): string {
 }
 
 /** The label of a window field: it always says the zone. */
-export const windowLabel = (label: string): string => (/\bUTC\b/.test(label) ? label : `${label} (UTC)`);
+export const windowLabel = (label: string): string => (/\bUTC\b/.test(label) ? label : `${label} · UTC`);
+
+/** The property that dates the relationship the preset follows, from the profile: the time the window is about. */
+export const observedAtOf = (profile: Pick<SourceProfile, 'relationshipTypes'> | undefined, preset: Preset): string | undefined => profile?.relationshipTypes.find((row) => row.type === preset.bind['via'])?.observedAt ?? undefined;
+
+/** The label of a window as the frames write it: the preset's own, else "Observed <the dating property> · UTC". */
+export const windowLabelOf = (preset: Pick<Preset, 'labels'>, observedAt: string | undefined): string =>
+  windowLabel(preset.labels.find((label) => label.key === 'window')?.text ?? (observedAt === undefined ? 'Window' : `Observed ${observedAt}`));
 
 export const labelOf = (preset: Preset, key: string): string => preset.labels.find((label) => label.key === key)?.text ?? plainName(key);
 
 export interface FieldChoices {
   readonly entityTypes: readonly FieldOption[];
   readonly relationshipTypes: readonly FieldOption[];
+  /** The property that dates the relationship the preset follows, for the label of the window. */
+  readonly observedAt?: string | undefined;
 }
 
 /**
@@ -68,7 +77,7 @@ export function fieldsOf(preset: Preset, paramsSchema: Record<string, unknown>, 
     const schema = asRecord(raw) ?? {};
     const label = labelOf(preset, name);
     if (name === 'window') {
-      fields.push({ name, label: windowLabel(label), kind: 'window' });
+      fields.push({ name, label: windowLabelOf(preset, choices.observedAt), kind: 'window' });
       continue;
     }
     const choice = CHOICE_OF[name];
