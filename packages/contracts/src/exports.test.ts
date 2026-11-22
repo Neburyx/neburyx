@@ -44,6 +44,8 @@ describe('the export contract', () => {
     expect(exportFileSchema.safeParse({ header, entities: [], relationships: [] }).success).toBe(true);
     expect(exportFileSchema.safeParse({ header: { ...header, lines: ['a'] }, entities: [], relationships: [] }).success).toBe(false);
     expect(exportFileSchema.safeParse({ header: { ...header, masking: { maskedFields: 3 } }, entities: [], relationships: [] }).success).toBe(true);
+    expect(exportFileSchema.safeParse({ header: { ...header, masking: { maskedFields: 0 } }, entities: [], relationships: [] }).success).toBe(true);
+    expect(exportFileSchema.safeParse({ header: { ...header, masking: { maskedFields: -1 } }, entities: [], relationships: [] }).success).toBe(false);
     expect(exportFileSchema.safeParse({ header: { ...header, scope: 'whole graph' }, entities: [], relationships: [] }).success).toBe(false);
   });
 

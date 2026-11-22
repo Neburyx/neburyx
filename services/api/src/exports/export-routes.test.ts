@@ -282,12 +282,25 @@ describe('a file made with the mask flag', () => {
     await rig.stop();
   });
 
-  it('says masking is off when nothing in the view is marked pii, whatever the request asked', async () => {
+  it.each(['json', 'csv'] as const)('says masking is on with no field masked when the %s file was asked to be masked and nothing in the view is marked pii', async (format) => {
     const rig = await startExportRig();
     const investigation = await rig.open();
-    const response = await rig.create(investigation.id, { kind: 'view', format: 'json', entities: [el('gadget', 'GT-1')], mask: true });
+    const response = await rig.create(investigation.id, { kind: 'view', format, entities: [el('gadget', 'GT-1')], mask: true });
     expect(response.statusCode).toBe(201);
-    expect(await storedText(rig, 'json')).toContain('masking: off');
+    const text = await storedText(rig, format);
+    expect(text).toContain('masking: on · 0 fields masked');
+    expect(text).not.toContain('masking: off');
+    if (format === 'json') expect(exportFileSchema.parse(JSON.parse(text)).header.masking).toEqual({ maskedFields: 0 });
+    expect(rows(rig)).toMatchObject([{ masked: true, maskedFieldCount: 0 }]);
+    expect(rig.events.filter((event) => event.action === 'export.create')).toEqual([expect.objectContaining({ detail: { export: expect.objectContaining({ maskedFields: 0 }) } })]);
+    await rig.stop();
+  });
+
+  it.each(['json', 'csv'] as const)('says masking is off when the %s file was not asked to be masked and nothing was', async (format) => {
+    const rig = await startExportRig();
+    const investigation = await rig.open();
+    await rig.create(investigation.id, { kind: 'view', format, entities: [el('gadget', 'GT-1')] });
+    expect(await storedText(rig, format)).toContain('masking: off');
     expect(rows(rig)).toMatchObject([{ masked: false, maskedFieldCount: 0 }]);
     await rig.stop();
   });

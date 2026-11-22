@@ -57,8 +57,8 @@ export const exportSchema = z.strictObject({
   expiresAt: z.string().min(1),
 });
 
-/** What the header says about masking: `off`, or how many distinct fields in the file are masked. */
-export const exportMaskingSchema = z.union([z.literal('off'), z.strictObject({ maskedFields: z.number().int().positive() })]);
+/** What the header says about masking: `off` (not asked for and nothing masked), or how many distinct fields in the file are masked, which is zero when masking was asked for and nothing needed it. */
+export const exportMaskingSchema = z.union([z.literal('off'), z.strictObject({ maskedFields: z.number().int().nonnegative() })]);
 
 export const exportHeaderSchema = z.strictObject({
   source: z.string().min(1),

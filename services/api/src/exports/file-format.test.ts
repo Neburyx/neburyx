@@ -41,7 +41,7 @@ const edge = (id: string, extra: Partial<GraphEdge> = {}): GraphEdge => ({
   qualityFlags: [],
   ...extra,
 });
-const header = (over: Partial<Parameters<typeof exportHeaderOf>[0]> = {}) => exportHeaderOf({ source: 'demo', exportedAt: AT, shown: 10, notRetrieved: { value: 38, quality: 'estimated', scope }, uncounted: 0, maskedFields: 0, omitted: false, ...over });
+const header = (over: Partial<Parameters<typeof exportHeaderOf>[0]> = {}) => exportHeaderOf({ source: 'demo', exportedAt: AT, shown: 10, notRetrieved: { value: 38, quality: 'estimated', scope }, uncounted: 0, maskedFields: 0, requested: false, omitted: false, ...over });
 
 describe('the export header', () => {
   it.each(counts)('states a %s count with its label, and no number when it is unknown', (_name, count, line) => {
@@ -63,6 +63,19 @@ describe('the export header', () => {
     expect(built.lines.slice(4)).toEqual(['masking: 4 critical fields masked', 'Some items may be hidden by your access.']);
     expect(built.masking).toEqual({ maskedFields: 4 });
     expect(header().masking).toBe('off');
+    expect(header().lines[4]).toBe('masking: off');
+  });
+
+  it('says masking is on with no field masked when it was asked for and nothing needed it, and never off then', () => {
+    const built = header({ requested: true });
+    expect(built.lines[4]).toBe('masking: on · 0 fields masked');
+    expect(built.masking).toEqual({ maskedFields: 0 });
+    expect(exportHeaderSchema.parse(built)).toEqual(built);
+    expect(header({ requested: true, maskedFields: 2 }).lines[4]).toBe('masking: 2 critical fields masked');
+    expect(header({ maskedFields: 2 }).masking).toEqual({ maskedFields: 2 });
+  });
+
+  it('does not count the sentence about hidden items as a number', () => {
     expect(JSON.stringify(header({ omitted: true }))).not.toMatch(/\d+ (items|elements) /);
   });
 

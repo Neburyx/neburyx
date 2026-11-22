@@ -516,7 +516,8 @@ function createInvestigations(options: SupportServerOptions) {
       if (parsed.data.format === 'png') {
         const shown = parsed.data.entities.length;
         const maskedFields = parsed.data.mask === true && parsed.data.entities.some((ref) => ref.stableId.startsWith(PERSONAL_ID_PREFIX)) ? 1 : 0;
-        const header = { source: found.sourceId, exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown, notRetrieved: { value: 38, quality: 'estimated', scope: 'not yet retrieved' }, uncounted: 0 }, masking: maskedFields === 0 ? 'off' : { maskedFields }, lines: ['source: ' + found.sourceId, 'exported time: 10 Nov 2026, 10:15:00 UTC', 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, maskedFields === 0 ? 'masking: off' : `masking: ${maskedFields} critical fields masked`] };
+        const requested = parsed.data.mask === true;
+        const header = { source: found.sourceId, exported: '2026-11-10T10:15:00.000Z', scope: 'current view (partial)', coverage: { shown, notRetrieved: { value: 38, quality: 'estimated', scope: 'not yet retrieved' }, uncounted: 0 }, masking: maskedFields === 0 && !requested ? 'off' : { maskedFields }, lines: ['source: ' + found.sourceId, 'exported time: 10 Nov 2026, 10:15:00 UTC', 'scope: current view (partial)', `coverage: ${shown} shown · ~38 not yet retrieved (estimated)`, maskedFields > 0 ? `masking: ${maskedFields} critical fields masked` : requested ? 'masking: on · 0 fields masked' : 'masking: off'] };
         return json(response, 201, { format: 'png', filename: 'neburyx-export-20261110T101500Z.png', header });
       }
       const exportId = randomUUID();

@@ -121,6 +121,9 @@ describe('POST /v1/investigations/{id}/exports with format png', () => {
     expect(plain.header.masking).toBe('off');
     expect(masked.header.masking).toEqual({ maskedFields: expect.any(Number) });
     expect(masked.header.lines).toContain(`masking: ${typeof masked.header.masking === 'object' ? masked.header.masking.maskedFields : 0} critical fields masked`);
+    const none = pngExportSchema.parse((await rig.create(investigation.id, { kind: 'view', format: 'png', entities: [el('gadget', 'GT-1')], mask: true })).json());
+    expect(none.header.masking).toEqual({ maskedFields: 0 });
+    expect(none.header.lines).toContain('masking: on · 0 fields masked');
     await rig.stop();
   });
 

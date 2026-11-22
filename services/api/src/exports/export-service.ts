@@ -69,8 +69,8 @@ function exportRecordOf(row: ExportRow): ExportRecord {
   return { id: row.id, status: row.status, format: row.format, filename: row.filename, sizeBytes: row.sizeBytes, createdAt: row.createdAt, expiresAt: row.expiresAt };
 }
 
-function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }, summary?: ExportSummary): Buffer {
-  const header = exportHeaderOf({ source, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, omitted: read.omitted });
+function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, requested: boolean, read: { readonly nodes: readonly GraphNode[]; readonly edges: readonly GraphEdge[]; readonly omitted: boolean; readonly maskedFields: number; readonly notRetrieved: Parameters<typeof exportHeaderOf>[0]['notRetrieved']; readonly uncounted: number }, summary?: ExportSummary): Buffer {
+  const header = exportHeaderOf({ source, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, requested, omitted: read.omitted });
   if (format === 'json') return exportJsonOf(header, read.nodes, read.edges, summary);
   return zipOf([
     { name: ENTITIES_FILE, bytes: entitiesCsvOf(header, read.nodes) },
@@ -79,7 +79,7 @@ function exportBytesOf(format: ExportFormat, source: string, exportedAt: Date, r
   ]);
 }
 
-type ExportRead = Parameters<typeof exportBytesOf>[3] & { readonly unresolvedCount: number };
+type ExportRead = Parameters<typeof exportBytesOf>[4] & { readonly unresolvedCount: number };
 
 export function createExportService(deps: Deps): ExportService {
   const now = deps.clock ?? (() => new Date());
@@ -133,7 +133,7 @@ export function createExportService(deps: Deps): ExportService {
       if (format === 'png') {
         // the browser draws from its own view, so a view in which the read left something out would show more than a file would
         if (read.omitted || read.unresolved) throw new AppError('INVALID_REQUEST', { reason: 'export-view-changed' });
-        const header = exportHeaderOf({ source: sourceId, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, omitted: false });
+        const header = exportHeaderOf({ source: sourceId, exportedAt, shown: read.nodes.length, notRetrieved: read.notRetrieved, uncounted: read.uncounted, maskedFields: read.maskedFields, requested: call.request.mask === true, omitted: false });
         await record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields } });
         return { format, filename: exportFilename(format, exportedAt), header };
       }
@@ -147,7 +147,7 @@ export function createExportService(deps: Deps): ExportService {
           throw error;
         }
       }
-      const bytes = exportBytesOf(format, sourceId, exportedAt, read, included?.section);
+      const bytes = exportBytesOf(format, sourceId, exportedAt, call.request.mask === true, read, included?.section);
       const id = randomUUID();
       const row = await deps.store.insertExport({ id, investigationId: call.investigationId, requestedBy: call.principal.id, policyVersion: deps.policyVersion(sourceId), sourceIdentityHash: stored.investigation.sourceIdentityHash, format, retentionDays: retentionOf(deps.mapping).exportsDays });
 
@@ -156,7 +156,7 @@ export function createExportService(deps: Deps): ExportService {
         if (call.signal?.aborted === true) throw new Error('cancelled');
         const written = await deps.files.write(id, bytes);
         storageKey = written.storageKey;
-        await deps.store.completeExport(id, { filename: exportFilename(format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: read.maskedFields > 0, maskedFieldCount: read.maskedFields }, (transaction) =>
+        await deps.store.completeExport(id, { filename: exportFilename(format, exportedAt), storageKey: written.storageKey, sizeBytes: written.sizeBytes, sha256: written.sha256, masked: call.request.mask === true || read.maskedFields > 0, maskedFieldCount: read.maskedFields }, (transaction) =>
           record({ traceId: call.traceId, principal: call.principal, sourceId, action: EXPORT_CREATE_AUDIT_ACTION, detail: { format, entities: read.nodes.length, relationships: read.edges.length, maskedFields: read.maskedFields, ...(included === undefined ? {} : { summary: { runId: included.runId, kept: included.kept, dropped: included.dropped } }) } }, transaction),
         );
       } catch (error) {
