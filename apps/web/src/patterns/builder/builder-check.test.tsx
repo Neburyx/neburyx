@@ -5,7 +5,7 @@ import type { PatternValidateResponse } from '@neburyx/contracts';
 import { failure, settle } from '../patterns-kit.js';
 import { addStepButton, afterDebounce, buildStep, builderWorkspace, chooseArrival, chooseDirection, chooseStart, cleanup, field, openBuilder, screen, startSelect, stepCard, toggleType, userEvent, within } from './builder-kit.js';
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 }));
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();

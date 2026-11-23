@@ -205,7 +205,7 @@ describe('Remove step with conditions, and Preview', () => {
   });
 
   it('keeps Preview off until the source has checked this very pattern, then turns it on', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 });
     const preview = (): HTMLButtonElement => screen.getByRole('button', { name: 'Preview' }) as HTMLButtonElement;
     await builderWorkspace();
     await openBuilder();

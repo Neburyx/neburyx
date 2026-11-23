@@ -6,7 +6,7 @@ import { assertNoCodes } from '../no-codes.js';
 import { failure } from '../patterns-kit.js';
 import { afterDebounce, buildStep, builderPanel, builderWorkspace, chooseStart, cleanup, openBuilder } from './builder-kit.js';
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 }));
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();

@@ -4,7 +4,7 @@ import type { SourceProfile } from '@neburyx/contracts';
 import { settle } from '../patterns-kit.js';
 import { addCondition, buildStep, chooseStart, cleanup, conditionRow, conditionsProfile, conditionsWorkspace, editRow, openBuilder, openStep, rowField, screen, stepCard, userEvent, within } from './builder-kit.js';
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 }));
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();

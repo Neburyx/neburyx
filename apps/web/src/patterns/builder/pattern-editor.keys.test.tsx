@@ -4,7 +4,7 @@ import type { PatternValidateResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../../api/client.js';
 import { addCondition, afterDebounce, buildStep, builderPanel, chooseStart, cleanup, conditionRow, conditionsWorkspace, openBuilder, openStep, rowField, screen, stepCard, userEvent, within } from './builder-kit.js';
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 }));
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();

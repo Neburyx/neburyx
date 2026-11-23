@@ -2,7 +2,7 @@ import { fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addStepButton, afterDebounce, buildStep, chooseArrival, chooseDirection, chooseStart, cleanup, conditionsWorkspace, openBuilder, openStep, screen, stepCard, toggleType, userEvent, within } from './builder-kit.js';
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 }));
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();
