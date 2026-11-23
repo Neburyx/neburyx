@@ -14,6 +14,7 @@ export interface Manifest {
 const MAX_MESSAGES = 40;
 const MAX_NEIGHBOURS = 100;
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isText = (value: unknown): value is string => typeof value === 'string' && value.trim() !== '' && value.length <= 2000;
 
 /** Reads a manifest, refusing any shape it does not know; the message names the field and never holds a value. */
@@ -24,13 +25,13 @@ export function parseManifest(text: string): { readonly manifest: Manifest; read
   } catch {
     throw new UsageError('the manifest is not JSON');
   }
-  const object = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : undefined;
+  const object = isRecord(raw) ? raw : undefined;
   if (object === undefined) throw new UsageError('the manifest is not an object');
   const known = ['name', 'sourceId', 'anchor', 'neighbourType', 'neighbours', 'messages'];
   const extra = Object.keys(object).filter((key) => !known.includes(key));
   if (extra.length > 0) throw new UsageError(`the manifest has a field it does not know: ${extra[0] ?? ''}`.slice(0, 80));
   const anchor = object['anchor'];
-  const anchorObject = typeof anchor === 'object' && anchor !== null ? (anchor as Record<string, unknown>) : undefined;
+  const anchorObject = isRecord(anchor) ? anchor : undefined;
   const messages = object['messages'];
   const neighbours = object['neighbours'];
   if (!isText(object['name'])) throw new UsageError('the manifest field name is missing or not text');
@@ -40,7 +41,7 @@ export function parseManifest(text: string): { readonly manifest: Manifest; read
   if (typeof neighbours !== 'number' || !Number.isInteger(neighbours) || neighbours < 1 || neighbours > MAX_NEIGHBOURS) throw new UsageError(`the manifest field neighbours is not a whole number from 1 to ${MAX_NEIGHBOURS}`);
   if (!Array.isArray(messages) || messages.length === 0 || messages.length > MAX_MESSAGES || !messages.every(isText)) throw new UsageError(`the manifest field messages is not a list of 1 to ${MAX_MESSAGES} texts`);
   return {
-    manifest: { name: object['name'], sourceId: object['sourceId'], anchor: { entityType: anchorObject['entityType'], stableId: anchorObject['stableId'] }, neighbourType: object['neighbourType'], neighbours, messages: [...(messages as string[])] },
+    manifest: { name: object['name'], sourceId: object['sourceId'], anchor: { entityType: anchorObject['entityType'], stableId: anchorObject['stableId'] }, neighbourType: object['neighbourType'], neighbours, messages: messages.filter(isText) },
     sha256: createHash('sha256').update(text, 'utf8').digest('hex'),
   };
 }

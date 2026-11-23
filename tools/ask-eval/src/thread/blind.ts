@@ -11,16 +11,13 @@ export interface ArmRepeat {
 export interface KeyEntry {
   readonly repeat: number;
   readonly turn: number;
-  /** Label to arm, for this turn of this repeat. */
   readonly labels: Readonly<Record<string, string>>;
 }
 
 export interface BlindOutput {
-  /** One set per repeat, by repeat number, as text for the scorer. */
   readonly sets: ReadonlyMap<number, string>;
   /** The key: label to arm per turn per repeat, the seed and the manifest hash. Never referred to by a set. */
   readonly key: { readonly seed: string; readonly manifestSha256: string; readonly entries: readonly KeyEntry[]; readonly sets: Readonly<Record<string, string>>; readonly noAnswer: readonly string[] };
-  /** The expected answers of each set (repeat, turn, label), the slots the scores must cover exactly. */
   readonly slots: readonly { readonly repeat: number; readonly turn: number; readonly label: string }[];
 }
 
@@ -41,7 +38,11 @@ export function permutationOf(arms: readonly string[], random: () => number): st
   const order = [...arms];
   for (let index = order.length - 1; index > 0; index -= 1) {
     const other = Math.floor(random() * (index + 1));
-    [order[index], order[other]] = [order[other] as string, order[index] as string];
+    const here = order[index];
+    const there = order[other];
+    if (here === undefined || there === undefined) continue;
+    order[index] = there;
+    order[other] = here;
   }
   return order;
 }
@@ -56,11 +57,11 @@ function answerText(answer: unknown): string {
   if (!isRecord(answer)) return NO_ANSWER;
   const parts: string[] = [];
   if (Array.isArray(answer['sentences'])) for (const sentence of answer['sentences']) if (isRecord(sentence) && typeof sentence['text'] === 'string') parts.push(`- ${sentence['text']} [${Array.isArray(sentence['cites']) ? sentence['cites'].join(', ') : ''}]`);
-  if (isRecord(answer['table']) && Array.isArray(answer['table']['rows'])) {
-    const table = answer['table'];
+  const table = answer['table'];
+  if (isRecord(table) && Array.isArray(table['rows'])) {
     if (typeof table['title'] === 'string') parts.push(`Table: ${table['title']}`);
     if (Array.isArray(table['columns'])) parts.push(`| ${table['columns'].join(' | ')} | cites |`);
-    for (const row of table['rows'] as unknown[]) if (isRecord(row) && Array.isArray(row['cells'])) parts.push(`| ${row['cells'].join(' | ')} | ${Array.isArray(row['cites']) ? row['cites'].join(', ') : ''} |`);
+    for (const row of table['rows']) if (isRecord(row) && Array.isArray(row['cells'])) parts.push(`| ${row['cells'].join(' | ')} | ${Array.isArray(row['cites']) ? row['cites'].join(', ') : ''} |`);
   }
   for (const name of ['sentence', 'pointer', 'lastCallNote', 'noDescription']) if (typeof answer[name] === 'string') parts.push(`(server note) ${answer[name]}`);
   return parts.length === 0 ? NO_ANSWER : parts.join('\n');
@@ -121,7 +122,9 @@ export function blindSets(repeats: readonly ArmRepeat[], options: { readonly see
       const order = permutationOf(arms, random);
       const labels: Record<string, string> = {};
       order.forEach((arm, index) => {
-        labels[LABELS[index] as string] = arm;
+        const name = LABELS[index];
+        if (name === undefined) throw new UsageError(`there are more arms than labels (${LABELS.length})`);
+        labels[name] = arm;
       });
       entries.push({ repeat, turn, labels });
       out.push(`## Turn ${turn}`);

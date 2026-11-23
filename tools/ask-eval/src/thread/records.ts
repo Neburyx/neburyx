@@ -18,7 +18,6 @@ interface CallRecord {
   /** What the model was sent after the system text: the messages with the lines of the reads. Real text over the run's own data; kept in the run file for the scorer's lines only. */
   readonly valuesText: string;
   readonly replyText: string | null;
-  /** The names of the tools the model was bound to for this call (names only), where the call record holds them. */
   readonly toolsOffered: readonly string[] | null;
 }
 

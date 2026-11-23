@@ -654,9 +654,8 @@ describe('the records and the audit of an agent turn', () => {
     const [run] = store.runs;
     const agentEvents = modelEvents(r);
     expect(agentEvents).toHaveLength(2);
-    for (const event of agentEvents) expect((event.detail as { ai: { runId?: string } }).ai.runId).toBe(run?.id);
+    for (const event of agentEvents) expect(event.detail).toMatchObject({ ai: { runId: run?.id } });
     expect(run?.callStarts).toHaveLength(1 + agentEvents.length);
-    // the names of the tools the model was bound to are stored with each agent call (names only); the router call has none
     expect(run?.callStarts[0]?.toolsOffered).toBeUndefined();
     for (const start of run?.callStarts.slice(1) ?? []) expect(start.toolsOffered?.split(',')).toEqual(expect.arrayContaining(['answer', 'view']));
   });

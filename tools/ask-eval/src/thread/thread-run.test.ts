@@ -69,6 +69,18 @@ describe('the thread run command: refusals before any request', () => {
   });
 });
 
+describe('the help', () => {
+  it('names the key folder under the name the parser accepts, and lists the options the commands need', async () => {
+    const r = io();
+    expect(await runCli(['thread', 'nonsense'], r.io, hooks)).toBe(2);
+    const usage = r.err.join('\n');
+    expect(usage).toContain('--key-folder <another folder>');
+    expect(usage).not.toMatch(/--key </u);
+    const flags = [...new Set([...usage.matchAll(/--([a-z-]+)/gu)].map((match) => match[1] ?? ''))].filter((name) => name !== 'dry-run');
+    expect(flags).toEqual(expect.arrayContaining(['calibrations', 'allowed-tools', 'key-folder', 'key-file']));
+  });
+});
+
 describe('the dry run', () => {
   it('prints the messages, repeats, arm, model, limit and the most calls, reads only allowlisted names of the settings file, and makes no request', async () => {
     const f = files();

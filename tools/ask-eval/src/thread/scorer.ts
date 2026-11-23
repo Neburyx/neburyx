@@ -21,7 +21,6 @@ export interface Score {
 }
 
 export interface ScoreFile {
-  /** Who scored: `codex`, `opus` run by the harness, or a name given to scores ingested from a file. */
   readonly scorer: string;
   /** `harness` when this tool ran the scorer and counted its calls; `ingested` for scores made outside it. */
   readonly origin: 'harness' | 'ingested';
@@ -124,6 +123,9 @@ export function countedRunner(runner: Runner, maxCalls: number): { readonly run:
 
 type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => { readonly stdin: { end(text: string): void } | null; readonly stdout: NodeJS.ReadableStream | null; readonly stderr: NodeJS.ReadableStream | null; on(event: 'close', listener: (code: number | null) => void): unknown; on(event: 'error', listener: () => void): unknown };
 
+/** The real `spawn` as the runners use it; the wrapper is the one place the library's wider child type is narrowed to what the runners read of it. */
+const realSpawn: Spawn = (command, args, options) => nodeSpawn(command, [...args], options);
+
 const QUOTA = /usage limit|quota|rate limit|try again at/iu;
 
 /** The environment a scorer is given: a short allowlist of what its program needs to run and sign in with its own account, and nothing of the product's settings, database or provider key. */
@@ -150,7 +152,7 @@ function runCommand(spawn: Spawn, command: string, args: readonly string[], prom
 }
 
 /** The Codex CLI as the workflows call it: the named model, high effort, read-only, an empty working folder of its own, an environment of its own and the prompt on its input; out of quota is `ScorerUnavailable`. */
-export function codexRunner(spawn: Spawn = nodeSpawn as unknown as Spawn, env: NodeJS.ProcessEnv = process.env): Runner {
+export function codexRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     const reply = join(dir, 'reply.txt');
@@ -170,7 +172,7 @@ export function codexRunner(spawn: Spawn = nodeSpawn as unknown as Spawn, env: N
  * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, an empty working folder of its own and an environment of its own. With no tool a
  * run is one model call; the CLI states the turns it made, and that figure is the count of calls, so a run that made more than one is counted in full and refused by the cap.
  */
-export function opusRunner(spawn: Spawn = nodeSpawn as unknown as Spawn, env: NodeJS.ProcessEnv = process.env): Runner {
+export function opusRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     try {

@@ -36,9 +36,7 @@ export function linesOfAnswer(records: TurnRecords): AnswerLines | undefined {
 }
 
 export interface CitedLines {
-  /** Each cited key with the line the model was shown for it. */
   readonly mapped: ReadonlyMap<string, string>;
-  /** The cited keys for which no line was found: reported, never invented. */
   readonly missing: readonly string[];
   /** Entries of `cites` that are not a list of text keys: reported, never skipped silently. */
   readonly malformed: number;

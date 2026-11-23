@@ -1,6 +1,6 @@
 import { UsageError } from '../questions.js';
 import type { KeyEntry } from './blind.js';
-import { scoreProblems, zeroNoAnswers, type Score, type ScoreFile } from './scorer.js';
+import { scoreProblems, zeroNoAnswers, type ScoreFile } from './scorer.js';
 import type { Calibration } from './schemas.js';
 
 type Criterion = 'c1' | 'c2' | 'c3' | 'c4';
@@ -21,7 +21,6 @@ export interface ArmFigures {
   readonly median: number | undefined;
   readonly countedMedian: number | undefined;
   readonly criteria: Readonly<Record<Criterion, number>>;
-  /** The criteria over the counted repeats only. */
   readonly countedCriteria: Readonly<Record<Criterion, number>>;
   /** The criterion, turn and repeat of every point a counted repeat did not earn. */
   readonly misses: readonly { readonly repeat: number; readonly turn: number; readonly criterion: Criterion }[];
@@ -87,7 +86,7 @@ export function unblind(files: readonly ScoreFile[], key: KeyFile, calibrations:
     const misses: { repeat: number; turn: number; criterion: Criterion }[] = [];
     let turns = 0;
     for (const entry of chosen) {
-      for (const score of zeroNoAnswers(entry.file.scores, noAnswer) as readonly Score[]) {
+      for (const score of zeroNoAnswers(entry.file.scores, noAnswer)) {
         if (byLabel.get(`${score.repeat}/${score.turn}/${score.label}`) !== arm) continue;
         const held = totals.get(score.repeat) ?? { total: 0, scorer: entry.file.scorer, counted: entry.counted, indicative: entry.indicative };
         held.total += score.c1 + score.c2 + score.c3 + score.c4;
@@ -122,7 +121,6 @@ interface Finding {
   readonly bar: string;
   readonly figure: string;
   readonly kind: string;
-  /** Where the miss is: criterion, turn or set; ids and counts only. */
   readonly where: string;
 }
 

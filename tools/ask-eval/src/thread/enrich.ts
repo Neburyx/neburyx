@@ -13,7 +13,6 @@ export interface EnrichedRepeat {
   readonly file: RepeatFile;
   /** The records of each turn that has a trace id, in the order of the turns; a turn with no trace id has none. */
   readonly records: readonly (TurnRecords | undefined)[];
-  /** The evidence of each turn whose records were read. */
   readonly evidence: readonly (TurnEvidence | undefined)[];
   /** True when the settings of the runs of the repeat differ from one turn to another: the repeat is not one measurement. */
   readonly inconsistent: boolean;

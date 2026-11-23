@@ -24,7 +24,7 @@ const THREAD_USAGE = `usage:
   ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--calibrations <file>,...] [--text-arm <arm>] <scores file>...
   ask-eval thread facts [--call-limit <n>] [--prices <file>] <records file>...
   ask-eval thread calibrate --key-file <key file> --a <scores file> --b <scores file> --out <file>
-  ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
+  ask-eval thread blind --seed <text> --sets <folder> --key-folder <another folder> <records file>...
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder> --database-env-file <env file>)`;
 
 /** What a thread run needs of the outside world: the product's HTTP surface (a stand-in in tests) and the clock. */
@@ -33,7 +33,6 @@ export interface ThreadDeps {
   readonly now?: () => number;
   /** The read-only connection to the run's own test database; absent, the real one is made from the env file. */
   readonly database?: (envFile: string) => Promise<{ readonly db: Db; readonly close: () => Promise<void> }>;
-  /** The scorer runners; absent, the real Codex and Opus runners. */
   readonly runners?: { readonly codex: Runner; readonly opus: Runner };
   /** How long the records of a turn are waited for; absent, a bounded real wait. */
   readonly waiting?: Waiting;
@@ -114,7 +113,8 @@ const realHttp = (base: string): Http => async (method, path, body) => {
     header: (name) => response.headers.get(name) ?? undefined,
     json: () => {
       try {
-        return JSON.parse(text) as unknown;
+        const parsed: unknown = JSON.parse(text);
+        return parsed;
       } catch {
         return undefined;
       }
@@ -227,7 +227,7 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   }
 }
 
-/** `ask-eval thread blind`: the blind sets of the given records files (arms and repeats read from them), written to `--sets`, and the key written to a different folder `--key`. */
+/** `ask-eval thread blind`: the blind sets of the given records files (arms and repeats read from them), written to `--sets`, and the key written to a different folder `--key-folder`. */
 function runBlind(args: readonly string[], io: CliIo): number {
   const { values, rest } = parse(args, true);
   const seed = values.get('seed');
@@ -256,7 +256,8 @@ function runBlind(args: readonly string[], io: CliIo): number {
 
 const readJson = (path: string, what: string): unknown => {
   try {
-    return JSON.parse(readFileSync(resolve(path), 'utf8')) as unknown;
+    const parsed: unknown = JSON.parse(readFileSync(resolve(path), 'utf8'));
+    return parsed;
   } catch {
     throw new UsageError(`${what} cannot be read`);
   }

@@ -25,5 +25,10 @@ export async function connectDb(envFile: string): Promise<{ readonly db: Db; rea
     throw new UsageError('the database cannot be reached');
   }
   await client.query('SET default_transaction_read_only = on');
-  return { db: { query: async (text, values) => ({ rows: (await client.query(text, [...values])).rows as Record<string, unknown>[] }) }, close: () => client.end() };
+  const query: Db['query'] = async (text, values) => {
+    const result = await client.query(text, [...values]);
+    const rows: Record<string, unknown>[] = result.rows;
+    return { rows };
+  };
+  return { db: { query }, close: () => client.end() };
 }

@@ -42,7 +42,6 @@ export interface TurnRecord {
   readonly ms: number;
   readonly httpStatus: number;
   readonly status: TurnStatus;
-  /** The answer as the product returned it. */
   readonly answer: unknown;
 }
 
@@ -184,8 +183,9 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
       const status: TurnStatus = decided.status !== 'failed' && traceId === undefined ? 'failed' : decided.status;
       turns.push({ n: index + 1, message, traceId, ms: Math.max(0, Math.round(options.now() - started)), httpStatus: response.status, status, answer: decided.answer });
       if (remaining !== undefined) remaining -= settings.callLimit;
-      if (index === 0 && options.verifyFirstTurn !== undefined && status !== 'failed') {
-        const problem = await options.verifyFirstTurn(turns[0] as TurnRecord);
+      const first = turns[0];
+      if (index === 0 && first !== undefined && options.verifyFirstTurn !== undefined && status !== 'failed') {
+        const problem = await options.verifyFirstTurn(first);
         if (problem !== undefined) {
           ended = 'failed';
           stoppedBecause = problem;

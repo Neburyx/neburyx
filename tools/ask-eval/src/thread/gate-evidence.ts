@@ -47,14 +47,16 @@ export function gateEvidenceOf(records: TurnRecords, expected: { readonly reads:
   const read = records.events.filter((event) => !MODEL_OR_TURN.test(event.action) && event.sourceId === expected.sourceId);
   const gateEvents = read.filter((event) => event.result === 'success' || event.result === 'partial').length;
   const failedEvents = read.length - gateEvents;
-  const gated = { verdict: (records.run === undefined ? 'unverified' : expected.reads === 0 ? 'passed' : gateEvents >= expected.reads ? 'passed' : 'failed') as PieceVerdict, reads: expected.reads, gateEvents, failedEvents };
+  const gatedVerdict: PieceVerdict = records.run === undefined ? 'unverified' : expected.reads === 0 || gateEvents >= expected.reads ? 'passed' : 'failed';
+  const gated = { verdict: gatedVerdict, reads: expected.reads, gateEvents, failedEvents };
   const routerSha = records.calls[0]?.instructionsSha256;
   const agentCalls = records.calls.filter((call) => routerSha !== undefined && call.instructionsSha256 !== routerSha);
   const parsed = agentCalls.map((call) => (call.replyText === null ? [] : calledIn(call.replyText)));
   const unparsed = parsed.filter((names) => names === undefined).length;
   const calledNames = [...new Set(parsed.flatMap((names) => names ?? []))].sort();
   const calledOutside = calledNames.filter((name) => !allowedSet.has(name));
-  const called = { verdict: (records.run === undefined || unparsed > 0 || agentCalls.length === 0 ? (calledOutside.length > 0 ? 'failed' : 'unverified') : calledOutside.length > 0 ? 'failed' : 'passed') as PieceVerdict, names: calledNames, outside: calledOutside, unparsed };
+  const calledVerdict: PieceVerdict = calledOutside.length > 0 ? 'failed' : records.run === undefined || unparsed > 0 || agentCalls.length === 0 ? 'unverified' : 'passed';
+  const called = { verdict: calledVerdict, names: calledNames, outside: calledOutside, unparsed };
   const withoutNames = agentCalls.filter((call) => call.toolsOffered === null).length;
   const offeredNames = [...new Set(agentCalls.flatMap((call) => call.toolsOffered ?? []))].sort();
   const offeredOutside = offeredNames.filter((name) => !allowedSet.has(name));

@@ -1,12 +1,10 @@
 import type { EnrichedRepeat } from './enrich.js';
 
 export interface Prices {
-  /** Dollars per million tokens. */
   readonly input: number;
   readonly output: number;
   readonly cacheRead: number;
   readonly cacheWrite: number;
-  /** The date of the price list these are from. */
   readonly date: string;
 }
 
