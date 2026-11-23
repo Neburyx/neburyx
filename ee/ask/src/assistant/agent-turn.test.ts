@@ -167,6 +167,7 @@ describe('a view question on the agent', () => {
     expect(instructions).toContain('a sentence about what a read did not return cites that read\'s own line, and states only what that line says');
     expect(instructions).toContain('take the second step: read the neighbours of that element (expand or linked-entities) before you say the rest is not shown, within the steps allowed');
     expect(instructions).toContain('The line c1 never replaces a read');
+    expect(instructions).toContain('that the Relationships lines do not answer is answered by reading its neighbours');
     expect(instructions).toContain('a sentence that the view shows no relationship is no answer to it');
     expect(instructions).toContain('find that element in the lines, then take the second step');
     expect(instructions).toContain('exactly as that line writes it, with its label');
@@ -174,19 +175,43 @@ describe('a view question on the agent', () => {
     expect(instructions).toContain('Name a link between two elements only when a relationship line you cite holds it');
   });
 
-  it('shows the corrected sentence the model sends again after a check removed it, together with the kept one, and the feedback told it to send every sentence again', async () => {
+  it('shows the corrected sentence the model sends again after a check removed it, together with the kept one, and the feedback told it to mend and send every sentence again', async () => {
     const store = createMemoryAssistantRunStore();
+    const kept = { text: `${V.title} A-1 is in view.`, cites: ['n1'] };
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-1 has 7311 rows.`, cites: ['n1'] }] } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-2 is in view.`, cites: ['n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [kept, { text: `${V.title} A-2 has 7311 rows.`, cites: ['n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [kept, { text: `${V.title} A-2 is in view too.`, cites: ['n2'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, runStore: store });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }, { text: `${V.title} A-2 is in view.` }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: kept.text }, { text: `${V.title} A-2 is in view too.` }] });
     const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
-    expect(told).toContain('Your next answer replaces this one: call answer again with every sentence you want shown');
+    expect(told).toContain('Your next answer replaces this one if any of its sentences is kept: call answer again with every sentence you want shown');
     expect(told).toContain('copy a figure as the line writes it, with its label');
+    expect(told).toContain('Leave a sentence out when no line holds its figure, name or comparison, or when it states a conclusion; never add a cite only to keep it.');
+    expect(told).not.toContain('left out, not reworded');
+  });
+
+  it('tells the model that a sentence removed for verdict wording is left out, and a table that the whole table is sent again with the removed rows corrected', async () => {
+    const verdictModel = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-2 is guilty of fraud.`, cites: ['n2'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const storeA = createMemoryAssistantRunStore();
+    const a = await rig({ reply: VIEW, agent: { model: verdictModel, maxCalls: 8 }, runStore: storeA });
+    await answerOf(a.route.handler(a.request(VIEW_BODY)));
+    expect((storeA.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n')).toContain('A sentence removed for verdict wording is left out, not reworded.');
+    const tableModel = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} Z-9`], cites: ['n9'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const storeB = createMemoryAssistantRunStore();
+    const b = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model: tableModel, maxCalls: 8 }, runStore: storeB });
+    await answerOf(b.route.handler(b.request(VIEW_BODY)));
+    const told = (storeB.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('call answer again with the whole table, the kept rows and each removed row corrected as its reason says');
+    expect(told).not.toContain('every sentence you want shown');
   });
 
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
@@ -878,8 +903,8 @@ describe('counts and what the model is told of a removal, through the answer too
     expect(JSON.stringify(answer)).not.toContain('Removed:');
     expect(JSON.stringify(answer)).not.toContain(removed.text);
     const [, told] = feedbackOf(model);
-    expect(told).toMatch(/^Checked: 1 sentences kept, 1 removed\. Your next answer replaces this one: call answer again with every sentence you want shown, the kept ones and each removed one corrected/u);
-    expect(told).toContain('A removed sentence is not dropped because it was removed');
+    expect(told).toMatch(/^Checked: 1 sentences kept, 1 removed\. Your next answer replaces this one if any of its sentences is kept: call answer again with every sentence you want shown, the kept ones and each removed one corrected/u);
+    expect(told).toContain('Leave a sentence out when no line holds its figure');
     expect(told.endsWith(`\n${removalNoteOf([{ text: removed.text, reason: 'number' }])}`)).toBe(true);
     const clean = answering([kept]);
     await turn(clean, listed(2));
@@ -891,7 +916,7 @@ describe('counts and what the model is told of a removal, through the answer too
     const model = answering([invented]);
     await turn(model, listed(2));
     const [, told] = feedbackOf(model);
-    expect(told).toMatch(/^Checked: 0 sentences kept, 1 removed\. Your next answer replaces this one/u);
+    expect(told).toMatch(/^Checked: 0 sentences kept, 1 removed\. Your next answer replaces this one if any of its sentences is kept/u);
     expect(told.endsWith(`\n${removalNoteOf([{ text: invented.text, reason: 'name' }])}`)).toBe(true);
     expect(told).not.toContain('A-2');
   });
