@@ -22,7 +22,7 @@ const panel = async (response: AssistantThreadResponse) => {
 };
 
 describe('the answers of the stored turns, in the card of a live answer (frame AS19a)', () => {
-  it('shows the question as typed and the sentences with numbered markers of the elements they cite, the same element with the same number, and no model, coverage or read steps', async () => {
+  it('shows the question as typed and the sentences with numbered markers of the elements they cite, the same element with the same number, and, for an answer stored without a model (the server\'s own), no drafted tag, model, coverage or read steps', async () => {
     await panel(
       thread([
         turn(1, { question: 'What is connected to this account?', answer: { blocks: [{ kind: 'sentences', items: [{ item: text('Account A-1 is held at Bank 7.'), cites: [REF_A, REF_B] }, { item: text('Account A-2 is in view.'), cites: [REF_B] }] }] } }),
@@ -34,9 +34,23 @@ describe('the answers of the stored turns, in the card of a live answer (frame A
     expect(within(first).getAllByRole('button').map((button) => button.textContent)).toEqual(['[1]', '[2]']);
     const second = screen.getByText(/Account A-2 is in view\./).closest('p') as HTMLElement;
     expect(within(second).getAllByRole('button').map((button) => button.textContent)).toEqual(['[2]']);
-    expect(screen.getByText(ASSISTANT_COPY.drafted)).toBeTruthy();
+    expect(screen.queryByText(ASSISTANT_COPY.drafted)).toBeNull();
     expect(screen.queryByText(new RegExp(ASSISTANT_COPY.modelTag))).toBeNull();
     expect(screen.queryByText(ASSISTANT_COPY.coverage)).toBeNull();
+  });
+
+  it('draws the sentences of an answer of the server, the refusal of Ask and a summary cited as the other answers, with no drafted tag and with the markers of what the summary cites', async () => {
+    await panel(
+      thread([
+        turn(1, { route: 'view', question: 'What do the types mean?', answer: { blocks: [{ kind: 'sentences', items: [{ item: text('Entity type widget: A thing that is sold.'), cites: [] }] }] } }),
+        turn(2, { route: 'ask', outcome: 'refused', question: 'Something else?', answer: { blocks: [{ kind: 'refusal', sentence: text('That question is not one of this source.') }] } }),
+        turn(3, { route: 'ask', question: 'Find it', answer: { blocks: [{ kind: 'sentences', items: [{ item: text('Two widgets match.'), cites: [REF_A, REF_B] }] }] } }),
+      ]),
+    );
+    expect(await screen.findByText('Entity type widget: A thing that is sold.')).toBeTruthy();
+    expect(screen.getByText('That question is not one of this source.')).toBeTruthy();
+    expect(within(screen.getByText('Two widgets match.').closest('p') as HTMLElement).getAllByRole('button').map((button) => button.textContent)).toEqual(['[1]', '[2]']);
+    expect(screen.queryByText(ASSISTANT_COPY.drafted)).toBeNull();
   });
 
   it('draws the model and the coverage card of an answer that was stored with them, the coverage after the sources as frame AS19a draws it, and neither for an answer stored without them', async () => {

@@ -68,6 +68,20 @@ describe('the stored form of an answer', () => {
     expect(bindingsApproved(swapped, context, stored?.keyOf as never, 'demo')).toBe(false);
   });
 
+  it('stores an answer of the server from the operator\'s text, a refusal of Ask and the cited summary of an Ask answer, each as the block that holds what the person saw', () => {
+    const meaning = storedAnswerOf({ status: 'meaning', described: [{ typeKind: 'entity', type: 'widget', description: 'A thing that is sold.' }], noDescription: { sentence: 'The mapping gives gadget no description.', names: ['gadget'] } } as AssistantTurnAnswer, false)?.answer;
+    expect(meaning?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'frozen', text: 'Entity type widget: A thing that is sold.', cites: [] }, { form: 'frozen', text: 'The mapping gives gadget no description.', cites: [] }] }]);
+    const none = storedAnswerOf({ status: 'no-description', route: 'view', sentence: 'The mapping gives gadget no description.', names: ['gadget'] } as AssistantTurnAnswer, false)?.answer;
+    expect(none?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'frozen', text: 'The mapping gives gadget no description.', cites: [] }] }]);
+    const refused = storedAnswerOf({ status: 'answered', route: 'ask', answer: { refused: { cause: 'no-intent', sentence: 'That question is not one of this source.' } } } as unknown as AssistantTurnAnswer, false)?.answer;
+    expect(refused?.blocks).toEqual([{ kind: 'refusal', sentence: { form: 'frozen', text: 'That question is not one of this source.' } }]);
+    const summary = { sentences: [{ text: 'Two widgets match.', cites: ['k1'] }], citations: [{ key: 'k1', element: REF, type: 'widget', title: 'Jordan Lee' }] };
+    const asked = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: {} }, summary } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
+    expect(asked(true)?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'frozen', text: 'Two widgets match.', cites: [REF] }] }]);
+    expect(asked(false)?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'unbound', text: 'Two widgets match.', cites: [REF] }] }]);
+    expect(storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: {} } } } } as unknown as AssistantTurnAnswer, false)).toBeUndefined();
+  });
+
   it('keeps twelve sentences of the model and the three fixed lines, cutting nothing', () => {
     const sentences = Array.from({ length: 12 }, (_, index) => ({ text: `Sentence ${index + 1}.`, cites: ['n1'] }));
     const stored = written(viewAnswer({ sentences, pointer: 'P.', noDescription: 'N.', lastCallNote: 'L.' }), false).answer;

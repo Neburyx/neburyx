@@ -57,6 +57,15 @@ export interface StoredAnswerResult {
 
 const withMade = (result: StoredAnswerResult, made: Pick<StoredAnswer, 'model' | 'coverage'>): StoredAnswerResult => ({ ...result, answer: { ...made, ...result.answer } });
 
+/** The stored form of Ask's own answer inside a turn: its refusal as a refusal block, and its cited summary as a block of sentences, written with the mask on as frozen and otherwise as written (unbound, since nothing was sent to a model to classify them against). */
+function askAnswerStored(ask: Extract<AssistantTurnAnswer, { answer: unknown }>['answer'], maskOn: boolean, result: (blocks: Block[], refs?: ReadonlyMap<string, Cite>) => StoredAnswerResult, sentences: (list: readonly Sentence[], refs: ReadonlyMap<string, Cite>) => unknown[]): StoredAnswerResult | undefined {
+  if ('refused' in ask) return result([{ kind: 'refusal', sentence: { form: 'frozen', text: ask.refused.sentence } }]);
+  const { summary } = ask.answered;
+  if (summary === undefined) return undefined;
+  const refs = new Map(summary.citations.map((citation) => [citation.key, citation.element] as const));
+  return result([{ kind: 'sentences', items: sentences(summary.sentences, refs) }] as Block[], refs);
+}
+
 export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, classify?: ClassifyItem): StoredAnswerResult | undefined {
   const fixed = (text: string): TextItem => ({ form: 'frozen', text });
   const citedRefs = (keys: readonly string[], refs: ReadonlyMap<string, Cite>): Cite[] => keys.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : []));
@@ -73,7 +82,15 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
     return { answer: { blocks }, keyOf: (ref) => inverse.get(JSON.stringify(ref)) };
   };
   if (answer.status === 'not-answered') return result([{ kind: 'refusal', sentence: fixed(answer.sentence) }]);
+  // what the server answers from the operator's own text, with no model and no element: each type and its description, and the fixed sentence for the types that have none
+  if (answer.status === 'meaning') {
+    const described = answer.described.map((entry) => ({ ...fixed(`${entry.typeKind === 'entity' ? 'Entity' : 'Relationship'} type ${entry.type}: ${entry.description}`), cites: [] as Cite[] }));
+    const missing = answer.noDescription === undefined ? [] : [{ ...fixed(answer.noDescription.sentence), cites: [] as Cite[] }];
+    return result([{ kind: 'sentences', items: [...described, ...missing] }] as Block[]);
+  }
+  if (answer.status === 'no-description') return result([{ kind: 'sentences', items: [{ ...fixed(answer.sentence), cites: [] as Cite[] }] }] as Block[]);
   if (answer.status !== 'answered') return undefined;
+  if ('answer' in answer) return askAnswerStored(answer.answer, maskOn, result, sentences);
   if (answer.route === 'refuse') {
     const refs = answer.overview === undefined ? new Map<string, Cite>() : refsOf(answer.overview.citations);
     return result([{ kind: 'refusal', sentence: fixed(answer.sentence), ...(answer.overview === undefined ? {} : { overview: sentences(answer.overview.sentences, refs) }) }] as Block[], refs);

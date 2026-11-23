@@ -266,12 +266,14 @@ export function ViewAnswerCard({
           {heading}
         </h4>
       )}
-      <div className="summary-tags">
-        <span className="summary-tag summary-tag-accent">
-          {ASSISTANT_COPY.drafted}
-        </span>
-        {stored && answer.model === "" ? null : <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>}
-      </div>
+      {stored && answer.model === "" ? null : (
+        <div className="summary-tags">
+          <span className="summary-tag summary-tag-accent">
+            {ASSISTANT_COPY.drafted}
+          </span>
+          <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>
+        </div>
+      )}
       {answer.blocks.map(blockOf)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {answer.pointer === undefined ? null : <p className="assistant-pointer">{answer.pointer}</p>}
