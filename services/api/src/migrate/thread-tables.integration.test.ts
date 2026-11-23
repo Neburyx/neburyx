@@ -60,7 +60,7 @@ async function withStore<T>(database: TestDatabase, work: (store: AssistantThrea
 }
 
 const count = async (database: TestDatabase, table: string, where = 'true'): Promise<number> => Number((await rows(database.ownerUrl, `SELECT count(*)::int AS n FROM ${table} WHERE ${where}`))[0]?.['n']);
-const ALLOWED_TURN_COLUMNS = ['id', 'thread_id', 'seq', 'at', 'route', 'outcome', 'cause', 'question_hash', 'intent', 'template_id', 'entities', 'citation_refs', 'steps', 'model_ref', 'prompt_version', 'tokens_in', 'tokens_out', 'run_id'];
+const ALLOWED_TURN_COLUMNS = ['id', 'thread_id', 'seq', 'at', 'route', 'outcome', 'cause', 'question_hash', 'intent', 'template_id', 'entities', 'citation_refs', 'steps', 'model_ref', 'prompt_version', 'tokens_in', 'tokens_out', 'run_id', 'question_text', 'mask_on', 'answer', 'sensitivity_version'];
 const TEXT_TABLES = ['assistant_threads', 'assistant_turns', 'assistant_investigation_epochs', 'assistant_thread_clears'];
 const ALLOWED_COLUMNS: Readonly<Record<string, readonly string[]>> = { assistant_threads: ['id', 'investigation_id', 'user_id', 'created_at', 'last_turn_at'], assistant_turns: ALLOWED_TURN_COLUMNS, assistant_investigation_epochs: ['investigation_id', 'epoch'], assistant_thread_clears: ['investigation_id', 'user_id', 'cleared_at'] };
 
@@ -79,16 +79,16 @@ describe('the column list of the thread tables', () => {
     const database = await seeded();
     const differences = async (): Promise<string[]> => (await Promise.all(TEXT_TABLES.map(async (table) => ((await columnsOf(database, table)).join() === (ALLOWED_COLUMNS[table] ?? []).join() ? '' : table)))).filter((name) => name !== '');
     expect(await differences()).toEqual([]);
-    await rows(database.ownerUrl, 'ALTER TABLE assistant_turns ADD COLUMN question_text text');
+    await rows(database.ownerUrl, 'ALTER TABLE assistant_turns ADD COLUMN note_text text');
     expect(await differences()).toEqual(['assistant_turns']);
   });
 });
 
 describe('the thread tables of the assistant', () => {
-  it('have the columns of the decisions and no column that can hold text', async () => {
+  it('have the columns of the decisions, and the text only in the four columns of 0013', async () => {
     const database = await seeded();
     expect(await columnsOf(database, 'assistant_threads')).toEqual(['id', 'investigation_id', 'user_id', 'created_at', 'last_turn_at']);
-    expect(await columnsOf(database, 'assistant_turns')).toEqual(['id', 'thread_id', 'seq', 'at', 'route', 'outcome', 'cause', 'question_hash', 'intent', 'template_id', 'entities', 'citation_refs', 'steps', 'model_ref', 'prompt_version', 'tokens_in', 'tokens_out', 'run_id']);
+    expect(await columnsOf(database, 'assistant_turns')).toEqual(['id', 'thread_id', 'seq', 'at', 'route', 'outcome', 'cause', 'question_hash', 'intent', 'template_id', 'entities', 'citation_refs', 'steps', 'model_ref', 'prompt_version', 'tokens_in', 'tokens_out', 'run_id', 'question_text', 'mask_on', 'answer', 'sensitivity_version']);
     expect(await columnsOf(database, 'assistant_investigation_epochs')).toEqual(['investigation_id', 'epoch']);
     expect(await columnsOf(database, 'assistant_thread_clears')).toEqual(['investigation_id', 'user_id', 'cleared_at']);
   });
