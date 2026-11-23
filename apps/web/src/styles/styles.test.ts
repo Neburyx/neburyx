@@ -71,7 +71,7 @@ describe('the stylesheets', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
     expect(tokens).toMatch(/--region-top:\s*64px;/);
     const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
-    expect(workspace).toMatch(/\.region-tool-strip \{[^}]*top: var\(--region-top\);[^}]*left: var\(--space-16\);/s);
+    expect(workspace).toMatch(/\.region-tool-strip \{[^}]*top: max\(var\(--region-top\), calc\(var\(--scope-bottom, 0px\) \+ var\(--space-4\)\)\);[^}]*left: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.region-toggles \{[^}]*bottom: var\(--space-16\);[^}]*left: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.region-zoom-controls \{[^}]*right: var\(--space-16\);[^}]*bottom: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.panel-dock \{[^}]*padding: var\(--space-16\);/s);

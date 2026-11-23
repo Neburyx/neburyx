@@ -366,7 +366,10 @@ export function stubSizeObserver(): { readonly resize: (element: Element, width:
   const originalRect = Element.prototype.getBoundingClientRect;
   Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
     const size = sizes.get(this);
-    return { ...originalRect.call(this), width: size?.width ?? 0, height: size?.height ?? 0 };
+    const base = originalRect.call(this);
+    const width = size?.width ?? 0;
+    const height = size?.height ?? 0;
+    return { ...base, width, height, right: base.left + width, bottom: base.top + height };
   };
   globalThis.ResizeObserver = class implements ResizeObserver {
     constructor(private readonly callback: ResizeObserverCallback) {}

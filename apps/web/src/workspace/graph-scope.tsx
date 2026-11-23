@@ -1,4 +1,4 @@
-import { Fragment, useMemo, type ReactNode } from 'react';
+import { Fragment, useEffect, useMemo, useRef, type ReactNode, type RefObject } from 'react';
 import type { Count } from '@neburyx/contracts';
 import type { NotRetrieved } from '../api/coverage-store.js';
 import { createStore, readable, useStoreSelector, type ReadableStore } from '../state/store.js';
@@ -31,6 +31,28 @@ export function useNotRetrieved(): NotRetrieved {
 }
 
 const NO_KEYS: ReadonlySet<string> = new Set();
+const SCOPE_BOTTOM = '--scope-bottom';
+
+/** Gives the canvas region the distance from its top to the bottom of the scope lines, so what stands under them (the tool strip) can start below them when they wrap to more lines. */
+function usePublishedBottom(scope: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const element = scope.current;
+    if (element === null) return undefined;
+    const region = element.parentElement;
+    if (region === null) return undefined;
+    const publish = (): void => {
+      const box = element.getBoundingClientRect();
+      region.style.setProperty(SCOPE_BOTTOM, `${Math.ceil(box.bottom - region.getBoundingClientRect().top)}px`);
+    };
+    publish();
+    const sizes = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(publish);
+    sizes?.observe(element);
+    return () => {
+      sizes?.disconnect();
+      region.style.removeProperty(SCOPE_BOTTOM);
+    };
+  }, [scope]);
+}
 
 export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, onLeaveFocus, notRetrieved, onShowHidden, savedLayout = false }: { readonly savedLayout?: boolean; readonly graph: LoadedGraph; readonly hidden: ReadonlySet<string>; readonly filtered: ReadonlySet<string>; readonly outside?: ReadonlySet<string>; readonly onLeaveFocus?: () => void; readonly notRetrieved: NotRetrieved; readonly onShowHidden?: () => void }) {
   const loaded = graph.nodes.map((node) => elementKey(node.ref));
@@ -60,8 +82,10 @@ export function GraphScopeLines({ graph, hidden, filtered, outside = NO_KEYS, on
     hiddenByFiltersLine(filteredOnlyCount(loaded, hidden, filtered, outside)),
     notDrawnLine(partitionEdges(graph).notDrawable.length),
   ].filter((part) => part !== undefined);
+  const element = useRef<HTMLDivElement>(null);
+  usePublishedBottom(element);
   return (
-    <div className="graph-scope" role="group" aria-label="Graph scope">
+    <div ref={element} className="graph-scope" role="group" aria-label="Graph scope">
       <p>
         {parts.flatMap((part, at) => (at === 0 ? [part] : [' · ', part]))}
       </p>

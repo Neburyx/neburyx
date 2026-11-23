@@ -22,6 +22,7 @@ describe('what the canvas keeps clear of the right-hand panels', () => {
 
   it('keeps the starting hint in the area the panels leave free, between the tool strip and 16 px left of the panels, wrapping when it is narrow', () => {
     const rule = ruleOf('.canvas-region[data-panels-right] .starting-hint');
+    expect(rule).toContain('top: max(var(--region-top), calc(var(--scope-bottom, 0px) + var(--space-4)))');
     expect(rule).toContain('right: calc(var(--space-16) + var(--panel-reserved-right))');
     expect(rule).toContain('left: max(var(--tool-strip-clear), calc(var(--panel-reserved-left, 0px) + var(--space-16)))');
     expect(rule).toContain('overflow-wrap: anywhere');

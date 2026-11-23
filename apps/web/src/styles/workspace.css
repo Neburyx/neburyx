@@ -342,7 +342,7 @@
 }
 
 .region-tool-strip {
-  top: var(--region-top);
+  top: max(var(--region-top), calc(var(--scope-bottom, 0px) + var(--space-4)));
   left: var(--space-16);
 }
 
@@ -2210,7 +2210,7 @@
 }
 
 .canvas-region[data-panels-right] .starting-hint {
-  top: var(--region-top);
+  top: max(var(--region-top), calc(var(--scope-bottom, 0px) + var(--space-4)));
   right: calc(var(--space-16) + var(--panel-reserved-right));
   left: max(var(--tool-strip-clear), calc(var(--panel-reserved-left, 0px) + var(--space-16)));
   width: fit-content;

@@ -43,6 +43,7 @@ export const EXEMPT: Readonly<Record<string, string>> = {
   'deletion.spec.ts': 'sets 1280 and 1440 itself in one test',
   'draft-reload.spec.ts': 'drags from offsets of the canvas box, so the result does not depend on the width',
   'evidence-selection.spec.ts': 'clicks near the edge of the canvas box, relative to the box',
+  'scope-strip.spec.ts': 'measures offsets from the canvas region, so the result does not depend on the width',
   'keyboard-canvas.spec.ts': 'right-clicks at an offset from the corner of the canvas box',
   'modifier-click.spec.ts': 'clicks at an offset from the corner of the canvas box',
   'derived-evidence.spec.ts': 'sets 1440 x 900 and 1280 x 720 itself',
