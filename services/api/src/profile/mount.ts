@@ -47,6 +47,8 @@ export interface ExtensionMount {
   readonly askPatternFindFor?: (context: { readonly principal: Principal; readonly traceId: string }) => ExtensionRequest['askPatternFind'];
   /** The descriptions of the types of a source, read from the live mapping. */
   readonly typeDescriptions?: ExtensionRequest['typeDescriptions'];
+  readonly sensitiveKeys?: ExtensionRequest['sensitiveKeys'];
+  readonly sensitivityVersion?: ExtensionRequest['sensitivityVersion'];
   /** The signal that is aborted when the client gives up the request. */
   readonly signalOf?: (request: FastifyRequest) => AbortSignal;
   /** Aborts the signal of a request, as a client that gives up does; used when a stream outlives its limit. */
@@ -129,6 +131,8 @@ export function mountExtensionRoutes(app: FastifyInstance, extension: ProfileExt
               ...(askPatterns === undefined ? {} : { askPatterns }),
               ...(askPatternFind === undefined ? {} : { askPatternFind }),
               ...(mount.typeDescriptions === undefined ? {} : { typeDescriptions: mount.typeDescriptions }),
+              ...(mount.sensitiveKeys === undefined ? {} : { sensitiveKeys: mount.sensitiveKeys }),
+              ...(mount.sensitivityVersion === undefined ? {} : { sensitivityVersion: mount.sensitivityVersion }),
               ...(askRunner === undefined ? {} : { askRunner }),
               ...(readElements === undefined ? {} : { readElements }),
               ...(readSourceElements === undefined ? {} : { readSourceElements }),

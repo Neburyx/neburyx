@@ -6,7 +6,7 @@ export { ACCESS_DENIED_ENTRIES, ASK_UNSUPPORTED_ENTRIES, CONFLICT_ENTRIES, ERROR
 export type { ErrorEntry } from './error-table.js';
 export { buildOpenApiDocument } from './openapi.js';
 export type { OpenApiDocument } from './openapi.js';
-export { EXTENSION_STREAM_MEDIA_TYPE, EXTENSION_STREAM_RESERVED_EVENTS, ExtensionRefusal, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
+export { EXTENSION_STREAM_MEDIA_TYPE, EXTENSION_STREAM_RESERVED_EVENTS, ExtensionRefusal, SENSITIVE_TITLE_KEY, extensionRefusalSchema, parseExtensionRefusal } from './extension.js';
 export type { ExtensionRefusalFields } from './extension.js';
 export type { ConfigureContext, ConfigureSourceBudgets, ConfigureOutcome, ConfigureWarning, ExtensionLogger, AskRun, AskRunner, AskRunInput, AskRunScope, ExtensionRequest, TypeDescriptions, ExtensionRoute, ExtensionRouteMethod, ExtensionRouteStream, ExtensionRouteGroup, ExtensionRoutePermission, ProfileExtension, RecordJob, RecordQueue } from './extension.js';
 export { AI_CACHE_TTLS, AI_DEFAULTS, AI_EFFORTS, AI_LIMITS, AI_PROVIDERS, SUMMARY_DEFAULTS, aiSettingsSchema, aiStatusResponseSchema } from './ai.js';

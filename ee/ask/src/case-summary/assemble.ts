@@ -1,5 +1,6 @@
 import { canonicalText } from '../questions/canonical.js';
 import { decimalKey, temporalKey, type RankedProperty } from '@neburyx/ee-ai-runtime';
+import { SENSITIVE_TITLE_KEY } from '@neburyx/contracts';
 import type { Count, ElementRef, GraphEdge, GraphNode, GraphProperty, SummaryReading } from '@neburyx/contracts';
 
 /**
@@ -39,6 +40,23 @@ export interface AssembledText {
   readonly relationshipEnds?: ReadonlyMap<string, readonly (readonly [string, string])[]>;
   /** The properties each element's ranking may rest on, by the element's key. */
   readonly rankedValues?: ReadonlyMap<string, readonly RankedProperty[]>;
+  /** The key and the text of every value sent for each element, cited or not, as structured pairs (the title under `SENSITIVE_TITLE_KEY`): what a classifier of a stored answer reads, so that it parses no line. */
+  readonly sentValues?: ReadonlyMap<string, readonly SentValue[]>;
+}
+
+/** One value sent to the model: the key of its property, its text as the line holds it, and whether the gate had masked it (a masked text is the mask, not the value). */
+export interface SentValue {
+  readonly key: string;
+  readonly text: string;
+  readonly masked: boolean;
+}
+
+/** The text a value is written with, as a person would read it: a string as it is, any other value as JSON. */
+const valueText = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value) ?? '');
+
+/** The values sent for an element: each property that has one, and the title. */
+export function sentValuesOf(properties: readonly GraphProperty[], title?: string): SentValue[] {
+  return [...(title === undefined ? [] : [{ key: SENSITIVE_TITLE_KEY, text: title, masked: false }]), ...properties.flatMap((property) => (property.value === undefined ? [] : [{ key: property.key, text: valueText(property.value), masked: property.masked }]))];
 }
 
 /**
@@ -128,6 +146,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
   const propertyKeys = new Map<string, readonly string[]>();
   const rankedValues = new Map<string, readonly RankedProperty[]>();
   const relationshipEnds = new Map<string, readonly (readonly [string, string])[]>();
+  const sentValues = new Map<string, readonly SentValue[]>();
   const nodes = [...reading.nodes].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const edges = [...reading.edges].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const nodeKeys = new Map<string, string>();
@@ -140,6 +159,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
     carriesPropertyValues ||= properties.carriesValue;
     propertyKeys.set(key, valueKeysOf(node.properties));
     rankedValues.set(key, rankedOf(node.properties));
+    sentValues.set(key, sentValuesOf(node.properties, node.display.title));
     const line = `${key} | ${JSON.stringify(node.display.type)} | title: ${JSON.stringify(node.display.title)} | id: ${JSON.stringify(node.ref.stableId)}${properties.text === '' ? '' : ` | ${properties.text}`}`;
     lines.set(key, line);
     out.push(line);
@@ -155,6 +175,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
     carriesPropertyValues ||= detail.carriesValue;
     propertyKeys.set(key, valueKeysOf(edge.properties));
     rankedValues.set(key, rankedOf(edge.properties));
+    sentValues.set(key, sentValuesOf(edge.properties));
     if (detail.inexact !== undefined) inexactCounts.push(detail.inexact);
     if (detail.unknownCount) unknownCountKeys.add(key);
     const line = [key, JSON.stringify(edge.type), `${endOf(edge.from)} -> ${endOf(edge.to)}`, ...detail.parts].join(' | ');
@@ -163,5 +184,5 @@ export function assembleText(reading: SummaryReading): AssembledText {
   });
   if (edges.length === 0) out.push('(none)');
   if (reading.unresolved > 0) out.push(`${reading.unresolved} references could not be read.`);
-  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, relationshipEnds, rankedValues };
+  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, relationshipEnds, rankedValues, sentValues };
 }

@@ -66,7 +66,17 @@ export interface ExtensionRequest {
   readonly askPatternFind?: (sourceId: string, id: string) => Promise<AskPatternOffer | undefined>;
   /** The plain-text descriptions the mapping gives the types of a source, read from the live mapping; mapping text only, never data. Absent, no description reaches a model. */
   readonly typeDescriptions?: (sourceId: string) => TypeDescriptions;
+  /**
+   * The property keys the mapping marks as personal data (`pii`) for each entity type of a source, which is exactly what the mask switch hides; a type with none is absent, a relationship has none; the title is the key `SENSITIVE_TITLE_KEY`
+   * for a type whose title is built from such a property. Keys only, never a value; read from the live mapping. Absent, nothing can be classified as free of sensitive values.
+   */
+  readonly sensitiveKeys?: (sourceId: string) => ReadonlyMap<string, readonly string[]>;
+  /** A fingerprint of those keys for every type of the source's mapping: it changes when any of them changes. */
+  readonly sensitivityVersion?: (sourceId: string) => string;
 }
+
+/** The key under which `sensitiveKeys` names the title of an entity type that is built from a personal property. */
+export const SENSITIVE_TITLE_KEY = '(title)';
 
 /** The types of one source with the description the mapping gives each, when it gives one: the server tells which types have a meaning to quote and which have none. */
 export interface TypeDescriptions {

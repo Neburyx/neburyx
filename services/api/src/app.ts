@@ -54,6 +54,7 @@ import type { Gate, IndexReader, TemplateCatalog } from './gate/types.js';
 import type { JobRunner } from './jobs/runner.js';
 import type { MappingModel } from './mapping/model.js';
 import { buildSourceProfile, typeDescriptionsOf } from './registry/profile.js';
+import { sensitiveKeysOf, sensitivityVersionOf } from './mapping/sensitivity.js';
 import { matchesEntityTag } from './registry/etag.js';
 import { identityHashOf } from './registry/identity-hash.js';
 import { summariesOf } from './registry/summary.js';
@@ -428,6 +429,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       askPatternsFor: (context) => askPatternLists.current?.(context),
       askPatternFindFor: (context) => askPatternFinders.current?.(context),
       typeDescriptions: (sourceId) => typeDescriptionsOf(mapping.sources.find((source) => source.id === sourceId)),
+      sensitiveKeys: (sourceId) => sensitiveKeysOf(mapping.sources.find((source) => source.id === sourceId)),
+      sensitivityVersion: (sourceId) => sensitivityVersionOf(mapping.sources.find((source) => source.id === sourceId)),
       readElementsFor: (context) => elementReaders.current?.(context),
       readSourceElementsFor: (context) => elementReaders.source?.(context),
       investigationReadableFor: (context) => investigationChecks.current?.(context),
