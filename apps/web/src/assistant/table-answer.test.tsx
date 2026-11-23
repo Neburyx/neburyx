@@ -253,4 +253,19 @@ describe('the Assistant panel: a table answer', () => {
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([label, 'Reserve', ASSISTANT_COPY.citeColumn]);
     expect(screen.getByText(note)).toBeTruthy();
   });
+
+  it('draws a table beside a sentence that cites a read line, with the marker of the read and the markers of the rows', async () => {
+    const base = tableAnswer();
+    if (base.status !== 'answered' || !('blocks' in base)) throw new Error('not blocks');
+    const answer: AssistantTurnAnswer = {
+      ...base,
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'The view does not show every element.', cites: ['c1'] }] }, ...base.blocks],
+      citations: [...base.citations, { key: 'c1', kind: 'read', label: 'View coverage', finding: '2 shown · exact' }],
+    };
+    await draw(answer);
+    expect(screen.getByText('The view does not show every element.')).toBeTruthy();
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByRole('button', { name: /^Citation \d+/ })).toHaveLength(2);
+    expect(screen.getByText('Sources · 2')).toBeTruthy();
+  });
 });

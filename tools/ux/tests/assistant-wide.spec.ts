@@ -27,7 +27,7 @@ async function answerWithTable(page: Page): Promise<void> {
   const answer: AssistantTurnAnswer = {
     status: 'answered',
     route: 'view',
-    table: { title: 'Accounts · 6 rows', columns: ['Element', 'A rather long column label to widen it', 'Another long column label'], rows: Array.from({ length: 6 }, (_, index) => ({ cells: [`row-${index + 1}`, `a long cell text for row ${index + 1} of the table`, 'value'], cites: ['n1'] })) },
+    blocks: [{ kind: 'table', table: { title: 'Accounts · 6 rows', columns: ['Element', 'A rather long column label to widen it', 'Another long column label'], rows: Array.from({ length: 6 }, (_, index) => ({ cells: [`row-${index + 1}`, `a long cell text for row ${index + 1} of the table`, 'value'], cites: ['n1'] })), note: 'Each row selects its elements on the graph.' } }],
     citations: [{ key: 'n1', kind: 'entity', ref: cited }],
     coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '6 accounts in view shown · exact' },
     model: 'claude-sonnet-5-5',

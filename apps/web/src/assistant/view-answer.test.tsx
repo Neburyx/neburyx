@@ -57,7 +57,7 @@ describe('the Assistant panel: an answer from the view', () => {
   it('draws a marker for a sentence that cites a read line, and shows what the server wrote of that read when it is pressed', async () => {
     const answer: AssistantTurnAnswer = {
       ...ANSWER,
-      sentences: [...ANSWER.sentences, { text: 'The read states 25 matches shown, as a lower bound.', cites: ['s1'] }],
+      blocks: [...ANSWER.blocks, { kind: 'sentences', sentences: [{ text: 'The read states 25 matches shown, as a lower bound.', cites: ['s1'] }] }],
       citations: [...ANSWER.citations, { key: 's1', kind: 'read', label: 'expand', finding: '25 matches shown · lower bound' }],
     } as AssistantTurnAnswer;
     const h = harness(async () => ok(answer));

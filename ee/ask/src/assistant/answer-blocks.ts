@@ -33,7 +33,7 @@ export function combineOutcomes(outcomes: readonly Judged[], basis: AnswerBasis,
     const citation = known.get(key);
     return citation === undefined ? [] : [citation];
   });
-  const elements = citations.filter((citation) => citation.kind !== 'description').length;
+  const elements = citations.filter((citation) => citation.kind !== 'description' && citation.kind !== 'read').length;
   const summary = summaries.length > 0 ? summaries.join(' ') : `The answer cites ${elements} of the ${basis.assembled.keys.size} elements the reads returned.`;
   const noDescription = outcomes.find((outcome) => outcome.noDescription !== undefined)?.noDescription;
   return { blocks, citations, coverage: { retrieval: first.coverage.retrieval, summary }, model: first.model, leftOut, ...(noDescription === undefined ? {} : { noDescription }) };
