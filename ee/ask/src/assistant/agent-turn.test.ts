@@ -104,6 +104,19 @@ describe('a view question on the agent', () => {
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'The gadget count is 169,756, which is exact.' }] });
   });
 
+  it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
+    const answered = (cites: string[]) =>
+      fakeModel()
+        .respondWithTools([{ name: 'view', args: {} }])
+        .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 has 169,756 gadget (exact).', cites }] } }])
+        .respond(new AIMessage('Done.'));
+    const both = await rig({ reply: VIEW, agent: { model: answered(['n1', 's1']), maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    expect(await answerOf(both.route.handler(both.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ cites: ['n1', 's1'] }] });
+    const lineOnly = await rig({ reply: VIEW, agent: { model: answered(['s1']), maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    expect(await answerOf(lineOnly.route.handler(lineOnly.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered' });
+  });
+
   it('removes a count that the degree read does not state', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
@@ -152,6 +165,18 @@ describe('a view question on the agent', () => {
     expect(answer).toMatchObject({ status: 'answered' });
     expect(answer).not.toHaveProperty('lastCallNote');
     expect(answer).not.toHaveProperty('stoppedAt');
+  });
+
+  it('does not ask the router again for a reply that is an explanation, and goes to the agent', async () => {
+    const answerModel = () =>
+      fakeModel()
+        .respondWithTools([{ name: 'view', args: {} }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+        .respond(new AIMessage('Done.'));
+    const routeCalls = (r: Rig) => r.events.filter((event) => event.action === 'assistant.route').length;
+    const prose = await rig({ reply: ok('No listed intent counts these, so nothing fits.'), agent: { model: answerModel() } });
+    expect(await answerOf(prose.route.handler(prose.request(VIEW_BODY)))).toMatchObject({ status: 'answered' });
+    expect(routeCalls(prose)).toBe(1);
   });
 
   it('is not called for a verdict the router refuses', async () => {

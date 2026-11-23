@@ -117,7 +117,7 @@ export async function routerRequests(source: LoadedSource, input: RouteInput): P
   const notARoute: ModelProvider = {
     async complete(request) {
       seen.push(request.values);
-      return { status: 'ok', text: 'not a route', usage: { kind: 'unknown' }, model: 'probe', prompt: promptRecordOf(request) };
+      return { status: 'ok', text: '{"route":', usage: { kind: 'unknown' }, model: 'probe', prompt: promptRecordOf(request) };
     },
   };
   await routeMessage(source, notARoute, 'probe', input);

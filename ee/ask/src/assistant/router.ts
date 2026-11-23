@@ -70,6 +70,8 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
       const values = call === 1 ? asked : `${asked}\n\n${NOT_A_ROUTE_NOTE}`;
       if (estimateTokens(instructions.text, values) > options.maxInputTokens()) return call === 1 ? { status: 'too-large' } : { status: 'unplaced', calls: call - 1 };
       const outcome = await routeOnce(options, instructions, input, values, signal, call);
+      // a reply with no object in it at all (an explanation) is not asked for again: the agent places the message
+      if (outcome === 'prose') return { status: 'unplaced', calls: call };
       if (outcome !== 'not-a-route') return outcome;
     }
     return { status: 'unplaced', calls: allowed };
@@ -77,7 +79,7 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
 }
 
 /** One call of the router: a route, a failure, or `not-a-route` for a reply that is not one. */
-async function routeOnce(options: RouterOptions, instructions: AssistantInstructions, input: RouterInput, values: string, signal: AbortSignal, call: number): Promise<RouterOutcome | 'not-a-route'> {
+async function routeOnce(options: RouterOptions, instructions: AssistantInstructions, input: RouterInput, values: string, signal: AbortSignal, call: number): Promise<RouterOutcome | 'not-a-route' | 'prose'> {
   let answer;
   const record = startModelCall({ modelRef: options.model.modelRef, promptId: ROUTER_PROMPT_ID, promptVersion: ROUTER_PROMPT_VERSION, instructionsSha256: instructions.sha256, instructions: instructions.text, values });
   try {
@@ -100,5 +102,6 @@ async function routeOnce(options: RouterOptions, instructions: AssistantInstruct
   const read = readAssistantRoute(answer.text);
   const fits = read.ok && (input.accepts?.(read.reply) ?? true);
   record.end({ aborted: signal.aborted, ...(fits ? {} : { notARoute: true }) });
+  if (!read.ok && !answer.text.includes('{')) return 'prose';
   return read.ok && fits ? { status: 'routed', reply: read.reply, calls: call } : 'not-a-route';
 }
