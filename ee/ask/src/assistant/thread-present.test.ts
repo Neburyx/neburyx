@@ -90,6 +90,17 @@ describe('what a read sends of a stored thread', () => {
     expect(open).toMatchObject({ label: { state: 'text', text: 'Jordan Lee holds' }, items: [{ item: { state: 'text' } }, { item: { state: 'segments' } }, { item: { state: 'text', text: 'Jordan.' } }] });
   });
 
+  it('sends a stored result as stored whatever the mask, the version of the sensitivity and a change of the mapping and back: a masked title written with the mask on never comes back in clear', () => {
+    const result = { kind: 'ask-result', templateId: 'entity', outcome: 'complete', values: [], lines: [{ label: 'Entity', item: { form: 'frozen', text: 'J••• L•••' } }], rows: [], paths: [], notices: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } } as const;
+    const stored = writtenOff({ maskOn: true, answer: { blocks: [result] } as unknown as StoredAnswer });
+    // the version is the one written, then another (the mapping changed), then the first again, and the mask is on and off at return
+    for (const [mask, version] of [[true, 'sv1:a'], [false, 'sv1:a'], [true, 'sv1:b'], [false, 'sv1:b'], [true, 'sv1:a'], [true, undefined]] as const) {
+      const block = presentThread(read(turn(stored)), mask, version).turns[0]?.answer?.blocks[0];
+      expect(block).toEqual(result);
+      expect(JSON.stringify(block)).not.toContain('Jordan');
+    }
+  });
+
   it('keeps the count of the earlier turns and the clearing', () => {
     expect(presentThread({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' }, false, undefined)).toEqual({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' });
   });

@@ -1,4 +1,4 @@
-import { SENSITIVE_TITLE_KEY, type ElementRef, type ReadAnswer } from '@neburyx/contracts';
+import { SENSITIVE_TITLE_KEY, type EdgeRef, type ElementRef, type ReadAnswer, type StoredAskResult } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import type { CitationEntry } from '../summary/summary-model.js';
 import { ASSISTANT_COPY } from './copy.js';
@@ -25,6 +25,8 @@ function itemTextOf(item: Item, valueFor: ValueOf): string {
 
 /** What the card draws of a stored answer: its blocks as a live answer's (the fixed sentence and the overview of a refusal beside them), and the cited elements numbered in the order they are first cited. */
 export interface StoredView {
+  /** The results of Ask the answer holds, in order. */
+  readonly askResults: readonly StoredAskResult[];
   /** The elements the answer cites, in the order they are first cited, as references (what a read by reference is asked for). */
   readonly refs: readonly Cited[];
   readonly blocks: ViewAnswer['blocks'];
@@ -46,8 +48,10 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
   const sentencesOf = (items: readonly { readonly item: Item; readonly cites: readonly Cited[] }[]) => items.map((each) => ({ text: itemTextOf(each.item, valueFor), cites: each.cites.map(keyOf) }));
   const blocks: ViewAnswer['blocks'][number][] = [];
   const refusals: StoredView['refusals'][number][] = [];
+  const askResults: StoredAskResult[] = [];
   for (const block of answer.blocks) {
-    if (block.kind === 'sentences') blocks.push({ kind: 'sentences', sentences: sentencesOf(block.items) } as ViewAnswer['blocks'][number]);
+    if (block.kind === 'ask-result') askResults.push(block);
+    else if (block.kind === 'sentences') blocks.push({ kind: 'sentences', sentences: sentencesOf(block.items) } as ViewAnswer['blocks'][number]);
     else if (block.kind === 'list') blocks.push({ kind: 'list', ...(block.label === undefined ? {} : { label: block.label.state === 'text' ? block.label.text : ASSISTANT_COPY.storedWithheld }), items: sentencesOf(block.items) } as ViewAnswer['blocks'][number]);
     else if (block.kind === 'table') {
       const columns = block.columns.map((column) => (column.state === 'text' ? column.text : ASSISTANT_COPY.storedWithheld));
@@ -57,7 +61,7 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
       refusals.push({ sentence: block.sentence.state === 'text' ? block.sentence.text : ASSISTANT_COPY.storedWithheld, overview });
     }
   }
-  return { blocks, refusals, entries: [...numbers.values()], refs: [...numbers.values()].flatMap((entry) => (refsByKey.has(entry.graphKey) ? [refsByKey.get(entry.graphKey) as Cited] : [])) };
+  return { askResults, blocks, refusals, entries: [...numbers.values()], refs: [...numbers.values()].flatMap((entry) => (refsByKey.has(entry.graphKey) ? [refsByKey.get(entry.graphKey) as Cited] : [])) };
 }
 
 /** The value a binding draws from what the gate returned for its element under the current mask, as the text a live answer writes it: a string, a number or a boolean as it is. Nothing when the element was not returned, holds no such property, or holds a value of another kind. */
@@ -70,13 +74,21 @@ export const valueFromReads = (reads: Pick<RefReads, 'nodes'>): ValueOf => (bind
   return undefined;
 };
 
-/** The elements whose values the shown answers draw: each element a binding names, once, in the order first named. */
-export function boundElementsOf(answers: readonly ReadAnswer[]): ElementRef[] {
-  const seen = new Map<string, ElementRef>();
-  const itemsOf = (block: Block): Item[] =>
+/** The elements the shown answers draw from a read by reference: each element a binding names and each element a stored result of Ask holds as a reference, once, in the order first named. */
+export function boundElementsOf(answers: readonly ReadAnswer[]): (ElementRef | EdgeRef)[] {
+  const seen = new Map<string, ElementRef | EdgeRef>();
+  const add = (ref: ElementRef | EdgeRef): void => void seen.set(refKeyOf(ref), ref);
+  const itemsOf = (block: Exclude<Block, { kind: 'ask-result' }>): Item[] =>
     block.kind === 'sentences' || block.kind === 'list' ? block.items.map((each) => each.item) : block.kind === 'table' ? [...block.columns, ...block.rows.flatMap((row) => row.cells)] : [block.sentence, ...(block.overview ?? []).map((each) => each.item)];
   for (const answer of answers)
-    for (const item of answer.blocks.flatMap(itemsOf))
-      if (item.state === 'segments') for (const segment of item.segments) if (isBinding(segment) && 'entityType' in segment.element) seen.set(refKeyOf(segment.element), segment.element);
+    for (const block of answer.blocks) {
+      if (block.kind === 'ask-result') {
+        for (const row of block.rows) if (row.form === 'ref') add(row.ref);
+        for (const line of block.lines) if (line.item?.form === 'ref') add(line.item.ref);
+        for (const path of block.paths) for (const step of path.steps) for (const end of [step.from, step.to]) if (end.form === 'ref') add(end.ref);
+        continue;
+      }
+      for (const item of itemsOf(block)) if (item.state === 'segments') for (const segment of item.segments) if (isBinding(segment) && 'entityType' in segment.element) add(segment.element);
+    }
   return [...seen.values()];
 }

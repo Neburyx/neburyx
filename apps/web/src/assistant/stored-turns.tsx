@@ -3,6 +3,7 @@ import { ASSISTANT_COPY, causeText, earlierText, sourcesText } from './copy.js';
 import { storedViewOf, valueFromReads, type ValueOf } from './stored-answer.js';
 import type { RefReads } from './stored-reads.js';
 import type { ViewAnswer } from './assistant-session.js';
+import { StoredAskCard } from './stored-ask-card.js';
 import { StoredSources } from './stored-sources.js';
 import { ViewAnswerCard } from './view-answer-card.js';
 
@@ -23,12 +24,15 @@ function RowParts({ turn }: { readonly turn: Turn }) {
   );
 }
 
-function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn['answer']>; readonly valueFor: ValueOf }) {
+function StoredAnswer({ answer, valueFor, intent, reads }: { readonly answer: NonNullable<Turn['answer']>; readonly valueFor: ValueOf; readonly intent: string | undefined; readonly reads: RefReads }) {
   const view = storedViewOf(answer, valueFor);
   // an answer stored before the model and the coverage were kept has neither, and the card draws neither
   const shown = { status: 'answered', route: 'view', blocks: view.blocks, citations: [], coverage: answer.coverage ?? { retrieval: '', summary: '' }, model: answer.model ?? '', calls: 0 } as unknown as ViewAnswer;
   return (
     <>
+      {view.askResults.map((result, index) => (
+        <StoredAskCard key={index} result={result} intent={intent} reads={reads} />
+      ))}
       {view.refusals.map((refusal, index) => (
         <div key={index} className="assistant-stored-refusal">
           <p className="assistant-refusal-sentence">{refusal.sentence}</p>
@@ -77,7 +81,7 @@ export function StoredTurns({ turns, earlier, reads, drawsValues }: { readonly t
                   <RowParts turn={turn} />
                 </p>
               ) : (
-                <StoredAnswer answer={turn.answer} valueFor={valueFor} />
+                <StoredAnswer answer={turn.answer} valueFor={valueFor} intent={turn.intent} reads={reads} />
               )}
             </li>
           ),

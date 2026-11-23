@@ -175,3 +175,9 @@ export const GROUP_MEMBERS_SHOWN = 5;
 export const sourcesText = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'source' : 'sources'}`;
 export const earlierText = (count: number): string => `${count.toLocaleString('en-US')} earlier ${count === 1 ? 'turn is' : 'turns are'} not shown.`;
 export const causeText = (cause: string): string => `${cause.charAt(0).toUpperCase()}${cause.slice(1).replace(/-/g, ' ')}`;
+
+/** What an earlier answer tells of what the thread did not keep of a result, each in its own unit. */
+export const rowsNotKept = (count: number): string => `${count.toLocaleString('en-US')} more ${count === 1 ? 'row is' : 'rows are'} not kept in the thread.`;
+export const pathsNotKept = (count: number): string => `${count.toLocaleString('en-US')} more ${count === 1 ? 'path is' : 'paths are'} not kept in the thread.`;
+export const linesNotKept = (count: number): string => `${count.toLocaleString('en-US')} more ${count === 1 ? 'count line is' : 'count lines are'} not kept in the thread.`;
+export const noticeEntriesNotKept = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'entry of a notice is' : 'entries of notices are'} not kept in the thread.`;

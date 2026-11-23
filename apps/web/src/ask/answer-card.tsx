@@ -25,7 +25,7 @@ export function countFigure({ count, noun }: CountFact): string {
 /** The count and its quality word, spoken in one phrase. */
 export const countSpoken = (fact: CountFact): string => `${countFigure(fact)}, ${QUALITY_WORDS[fact.count.quality].toLowerCase()}`;
 
-function CountStrip({ fact, caution }: { readonly fact: CountFact; readonly caution?: boolean }) {
+export function CountStrip({ fact, caution }: { readonly fact: CountFact; readonly caution?: boolean }) {
   const exact = fact.count.quality === 'exact';
   return (
     <div className={caution === true ? 'ask-count ask-count-caution' : 'ask-count'}>

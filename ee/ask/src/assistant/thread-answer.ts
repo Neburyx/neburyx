@@ -1,5 +1,5 @@
 import type { AssistantThreadTurnWrite, AssistantTurnAnswer, StoredAnswer } from '@neburyx/contracts';
-import { THREAD_SEGMENTS_MAX } from '@neburyx/contracts';
+import { THREAD_SEGMENTS_MAX, storedAskResultOf } from '@neburyx/contracts';
 import { classifyItem, type Classified, type ClassifyContext } from './sensitive-items.js';
 
 type Cite = AssistantThreadTurnWrite['citationRefs'][number];
@@ -61,9 +61,10 @@ const withMade = (result: StoredAnswerResult, made: Pick<StoredAnswer, 'model' |
 function askAnswerStored(ask: Extract<AssistantTurnAnswer, { answer: unknown }>['answer'], maskOn: boolean, result: (blocks: Block[], refs?: ReadonlyMap<string, Cite>) => StoredAnswerResult, sentences: (list: readonly Sentence[], refs: ReadonlyMap<string, Cite>) => unknown[]): StoredAnswerResult | undefined {
   if ('refused' in ask) return result([{ kind: 'refusal', sentence: { form: 'frozen', text: ask.refused.sentence } }]);
   const { summary } = ask.answered;
-  if (summary === undefined) return undefined;
-  const refs = new Map(summary.citations.map((citation) => [citation.key, citation.element] as const));
-  return result([{ kind: 'sentences', items: sentences(summary.sentences, refs) }] as Block[], refs);
+  const refs = new Map((summary?.citations ?? []).map((citation) => [citation.key, citation.element] as const));
+  const card = storedAskResultOf(ask, maskOn);
+  const blocks = [...(summary === undefined ? [] : [{ kind: 'sentences', items: sentences(summary.sentences, refs) }]), ...(card === undefined ? [] : [card])];
+  return blocks.length === 0 ? undefined : result(blocks as Block[], refs);
 }
 
 export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, classify?: ClassifyItem): StoredAnswerResult | undefined {
@@ -122,7 +123,7 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
 export function bindingsApproved(stored: StoredAnswer, context: ClassifyContext, keyOf: (ref: Cite) => string | undefined, sourceId: string | undefined): boolean {
   type Segment = { readonly literal: string } | { readonly element: Cite; readonly property: string };
   const itemsOf = (block: Block): { readonly item: { readonly form: string; readonly segments?: readonly Segment[] }; readonly cites: readonly Cite[] }[] =>
-    block.kind === 'sentences' || block.kind === 'list' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
+    block.kind === 'ask-result' ? [] : block.kind === 'sentences' || block.kind === 'list' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
   for (const { item, cites } of stored.blocks.flatMap(itemsOf)) {
     if (item.form !== 'bound') continue;
     if (context.sentValues === undefined || context.sensitiveKeys === undefined) return false;

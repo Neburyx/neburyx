@@ -76,10 +76,15 @@ describe('the stored form of an answer', () => {
     const refused = storedAnswerOf({ status: 'answered', route: 'ask', answer: { refused: { cause: 'no-intent', sentence: 'That question is not one of this source.' } } } as unknown as AssistantTurnAnswer, false)?.answer;
     expect(refused?.blocks).toEqual([{ kind: 'refusal', sentence: { form: 'frozen', text: 'That question is not one of this source.' } }]);
     const summary = { sentences: [{ text: 'Two widgets match.', cites: ['k1'] }], citations: [{ key: 'k1', element: REF, type: 'widget', title: 'Jordan Lee' }] };
-    const asked = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: {} }, summary } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
-    expect(asked(true)?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'frozen', text: 'Two widgets match.', cites: [REF] }] }]);
-    expect(asked(false)?.blocks).toEqual([{ kind: 'sentences', items: [{ form: 'unbound', text: 'Two widgets match.', cites: [REF] }] }]);
-    expect(storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: {} } } } } as unknown as AssistantTurnAnswer, false)).toBeUndefined();
+    const asked = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: {}, outcome: 'complete', result: { templateId: 'entity', result: { ref: REF, display: { title: 'T', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } } }, summary } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
+    expect(asked(true)?.blocks[0]).toEqual({ kind: 'sentences', items: [{ form: 'frozen', text: 'Two widgets match.', cites: [REF] }] });
+    expect(asked(false)?.blocks[0]).toEqual({ kind: 'sentences', items: [{ form: 'unbound', text: 'Two widgets match.', cites: [REF] }] });
+    expect(asked(false)?.blocks[1]).toMatchObject({ kind: 'ask-result' });
+    const node = { ref: REF, display: { title: 'Jordan Lee', type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } };
+    const alone = (maskOn: boolean) => storedAnswerOf({ status: 'answered', route: 'ask', answer: { answered: { intent: 'x', entities: { widget: 'typed' }, outcome: 'complete', result: { templateId: 'entity', result: node } } } } as unknown as AssistantTurnAnswer, maskOn)?.answer;
+    expect(alone(true)?.blocks).toEqual([expect.objectContaining({ kind: 'ask-result', values: [{ name: 'widget', text: 'typed' }], lines: [{ label: 'Entity', item: { form: 'frozen', text: 'Jordan Lee' } }] })]);
+    expect(alone(false)?.blocks).toEqual([expect.objectContaining({ kind: 'ask-result', lines: [{ label: 'Entity', item: { form: 'ref', ref: REF } }] })]);
+    expect(JSON.stringify(alone(false))).not.toContain('Jordan Lee');
   });
 
   it('keeps twelve sentences of the model and the three fixed lines, cutting nothing', () => {

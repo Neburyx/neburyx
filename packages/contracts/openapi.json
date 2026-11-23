@@ -11311,6 +11311,903 @@
                             "properties": {
                               "kind": {
                                 "type": "string",
+                                "const": "ask-result"
+                              },
+                              "templateId": {
+                                "type": "string",
+                                "enum": [
+                                  "shared-attribute",
+                                  "linked-entities",
+                                  "entity",
+                                  "degree-preview",
+                                  "expand",
+                                  "derived-rule-run",
+                                  "derived-edge-support",
+                                  "search",
+                                  "shortest-paths",
+                                  "file-query",
+                                  "saved-pattern"
+                                ]
+                              },
+                              "outcome": {
+                                "type": "string",
+                                "enum": [
+                                  "complete",
+                                  "partial"
+                                ]
+                              },
+                              "label": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "values": {
+                                "maxItems": 20,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 256
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "text"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "count": {
+                                "type": "object",
+                                "properties": {
+                                  "count": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "quality": {
+                                        "type": "string",
+                                        "enum": [
+                                          "exact",
+                                          "estimated",
+                                          "lowerBound",
+                                          "unknown"
+                                        ]
+                                      },
+                                      "scope": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "observedAt": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "quality",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "noun": {
+                                    "type": "string",
+                                    "enum": [
+                                      "match",
+                                      "row"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "count",
+                                  "noun"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "listed": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "lines": {
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "label": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 120
+                                    },
+                                    "count": {
+                                      "type": "object",
+                                      "properties": {
+                                        "value": {
+                                          "type": "integer",
+                                          "minimum": 0,
+                                          "maximum": 9007199254740991
+                                        },
+                                        "quality": {
+                                          "type": "string",
+                                          "enum": [
+                                            "exact",
+                                            "estimated",
+                                            "lowerBound",
+                                            "unknown"
+                                          ]
+                                        },
+                                        "scope": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "observedAt": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "quality",
+                                        "scope"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    "shown": {
+                                      "type": "integer",
+                                      "minimum": 0,
+                                      "maximum": 9007199254740991
+                                    },
+                                    "more": {
+                                      "type": "boolean"
+                                    },
+                                    "item": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "form": {
+                                              "type": "string",
+                                              "const": "frozen"
+                                            },
+                                            "text": {
+                                              "type": "string",
+                                              "minLength": 1,
+                                              "maxLength": 300
+                                            }
+                                          },
+                                          "required": [
+                                            "form",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "form": {
+                                              "type": "string",
+                                              "const": "ref"
+                                            },
+                                            "ref": {
+                                              "type": "object",
+                                              "properties": {
+                                                "sourceId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "entityType": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "stableId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "sourceId",
+                                                "entityType",
+                                                "stableId"
+                                              ],
+                                              "additionalProperties": false
+                                            }
+                                          },
+                                          "required": [
+                                            "form",
+                                            "ref"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "label"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "rows": {
+                                "maxItems": 25,
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "form": {
+                                          "type": "string",
+                                          "const": "frozen"
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "minLength": 1,
+                                          "maxLength": 300
+                                        }
+                                      },
+                                      "required": [
+                                        "form",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "form": {
+                                          "type": "string",
+                                          "const": "ref"
+                                        },
+                                        "ref": {
+                                          "anyOf": [
+                                            {
+                                              "type": "object",
+                                              "properties": {
+                                                "sourceId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "entityType": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                },
+                                                "stableId": {
+                                                  "type": "string",
+                                                  "minLength": 1
+                                                }
+                                              },
+                                              "required": [
+                                                "sourceId",
+                                                "entityType",
+                                                "stableId"
+                                              ],
+                                              "additionalProperties": false
+                                            },
+                                            {
+                                              "anyOf": [
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "sourceId": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    },
+                                                    "type": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    },
+                                                    "from": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    },
+                                                    "to": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    },
+                                                    "stableId": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "sourceId",
+                                                    "type",
+                                                    "from",
+                                                    "to",
+                                                    "stableId"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "sourceId": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    },
+                                                    "aggregate": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "type": {
+                                                          "type": "string",
+                                                          "minLength": 1
+                                                        },
+                                                        "from": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "sourceId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "entityType": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "stableId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "sourceId",
+                                                            "entityType",
+                                                            "stableId"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        },
+                                                        "to": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "sourceId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "entityType": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "stableId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "sourceId",
+                                                            "entityType",
+                                                            "stableId"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "type",
+                                                        "from",
+                                                        "to"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "sourceId",
+                                                    "aggregate"
+                                                  ],
+                                                  "additionalProperties": false
+                                                },
+                                                {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "sourceId": {
+                                                      "type": "string",
+                                                      "minLength": 1
+                                                    },
+                                                    "derived": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "ruleId": {
+                                                          "type": "string",
+                                                          "minLength": 1
+                                                        },
+                                                        "from": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "sourceId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "entityType": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "stableId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "sourceId",
+                                                            "entityType",
+                                                            "stableId"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        },
+                                                        "to": {
+                                                          "type": "object",
+                                                          "properties": {
+                                                            "sourceId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "entityType": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            },
+                                                            "stableId": {
+                                                              "type": "string",
+                                                              "minLength": 1
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "sourceId",
+                                                            "entityType",
+                                                            "stableId"
+                                                          ],
+                                                          "additionalProperties": false
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "ruleId",
+                                                        "from",
+                                                        "to"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "sourceId",
+                                                    "derived"
+                                                  ],
+                                                  "additionalProperties": false
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "form",
+                                        "ref"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "paths": {
+                                "maxItems": 25,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "hops": {
+                                      "type": "integer",
+                                      "minimum": 1,
+                                      "maximum": 4
+                                    },
+                                    "steps": {
+                                      "minItems": 1,
+                                      "maxItems": 4,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "relationshipType": {
+                                            "type": "string",
+                                            "minLength": 1,
+                                            "maxLength": 200
+                                          },
+                                          "from": {
+                                            "anyOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "form": {
+                                                    "type": "string",
+                                                    "const": "frozen"
+                                                  },
+                                                  "text": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 300
+                                                  }
+                                                },
+                                                "required": [
+                                                  "form",
+                                                  "text"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "form": {
+                                                    "type": "string",
+                                                    "const": "ref"
+                                                  },
+                                                  "ref": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "sourceId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "entityType": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "stableId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "sourceId",
+                                                      "entityType",
+                                                      "stableId"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "form",
+                                                  "ref"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          },
+                                          "to": {
+                                            "anyOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "form": {
+                                                    "type": "string",
+                                                    "const": "frozen"
+                                                  },
+                                                  "text": {
+                                                    "type": "string",
+                                                    "minLength": 1,
+                                                    "maxLength": 300
+                                                  }
+                                                },
+                                                "required": [
+                                                  "form",
+                                                  "text"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "form": {
+                                                    "type": "string",
+                                                    "const": "ref"
+                                                  },
+                                                  "ref": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "sourceId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "entityType": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "stableId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "sourceId",
+                                                      "entityType",
+                                                      "stableId"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "form",
+                                                  "ref"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "relationshipType",
+                                          "from",
+                                          "to"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "hops",
+                                    "steps"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "pathCut": {
+                                "type": "object",
+                                "properties": {
+                                  "capReached": {
+                                    "type": "boolean"
+                                  },
+                                  "partial": {
+                                    "type": "boolean"
+                                  },
+                                  "retained": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "requested": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "capReached",
+                                  "partial"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "notices": {
+                                "maxItems": 7,
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "stopListSkipped"
+                                        }
+                                      },
+                                      "required": [
+                                        "code"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "noStopList"
+                                        }
+                                      },
+                                      "required": [
+                                        "code"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "undatedExcluded"
+                                        }
+                                      },
+                                      "required": [
+                                        "code"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "readBounded"
+                                        }
+                                      },
+                                      "required": [
+                                        "code"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "evidenceCut"
+                                        }
+                                      },
+                                      "required": [
+                                        "code"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "windowNotApplied"
+                                        },
+                                        "relationshipTypes": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "code",
+                                        "relationshipTypes"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "code": {
+                                          "type": "string",
+                                          "const": "supernodesSkipped"
+                                        },
+                                        "entities": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "sourceId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "entityType": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "stableId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "sourceId",
+                                              "entityType",
+                                              "stableId"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "code",
+                                        "entities"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "stop": {
+                                "type": "object",
+                                "properties": {
+                                  "estimate": {
+                                    "type": "object",
+                                    "properties": {
+                                      "value": {
+                                        "type": "integer",
+                                        "minimum": 0,
+                                        "maximum": 9007199254740991
+                                      },
+                                      "quality": {
+                                        "type": "string",
+                                        "enum": [
+                                          "exact",
+                                          "estimated",
+                                          "lowerBound",
+                                          "unknown"
+                                        ]
+                                      },
+                                      "scope": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "observedAt": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "quality",
+                                      "scope"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  "threshold": {
+                                    "type": "integer",
+                                    "exclusiveMinimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "estimate",
+                                  "threshold"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "omitted": {
+                                "type": "object",
+                                "properties": {
+                                  "rows": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "paths": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "lines": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "noticeEntries": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "rows",
+                                  "paths",
+                                  "lines",
+                                  "noticeEntries"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "templateId",
+                              "outcome",
+                              "values",
+                              "lines",
+                              "rows",
+                              "paths",
+                              "notices",
+                              "omitted"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
                                 "const": "list"
                               },
                               "label": {
