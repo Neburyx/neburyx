@@ -59,12 +59,26 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 function answerText(answer: unknown): string {
   if (!isRecord(answer)) return NO_ANSWER;
   const parts: string[] = [];
-  if (Array.isArray(answer['sentences'])) for (const sentence of answer['sentences']) if (isRecord(sentence) && typeof sentence['text'] === 'string') parts.push(`- ${sentence['text']} [${Array.isArray(sentence['cites']) ? sentence['cites'].join(', ') : ''}]`);
-  const table = answer['table'];
-  if (isRecord(table) && Array.isArray(table['rows'])) {
+  const sentenceLine = (sentence: unknown): void => {
+    if (isRecord(sentence) && typeof sentence['text'] === 'string') parts.push(`- ${sentence['text']} [${Array.isArray(sentence['cites']) ? sentence['cites'].join(', ') : ''}]`);
+  };
+  const tableLines = (table: unknown): void => {
+    if (!isRecord(table) || !Array.isArray(table['rows'])) return;
     if (typeof table['title'] === 'string') parts.push(`Table: ${table['title']}`);
     if (Array.isArray(table['columns'])) parts.push(`| ${table['columns'].join(' | ')} | cites |`);
     for (const row of table['rows']) if (isRecord(row) && Array.isArray(row['cells'])) parts.push(`| ${row['cells'].join(' | ')} | ${Array.isArray(row['cites']) ? row['cites'].join(', ') : ''} |`);
+    if (typeof table['note'] === 'string') parts.push(`(server note) ${table['note']}`);
+  };
+  // The blocks of an answer in the order the model gave them; the earlier shape (sentences and a table beside each other) is still read, for the records of earlier runs.
+  if (Array.isArray(answer['blocks'])) {
+    for (const block of answer['blocks']) {
+      if (!isRecord(block)) continue;
+      if (block['kind'] === 'sentences' && Array.isArray(block['sentences'])) block['sentences'].forEach(sentenceLine);
+      else if (block['kind'] === 'table') tableLines(block['table']);
+    }
+  } else {
+    if (Array.isArray(answer['sentences'])) answer['sentences'].forEach(sentenceLine);
+    tableLines(answer['table']);
   }
   if (Array.isArray(answer['described'])) for (const entry of answer['described']) if (isRecord(entry) && typeof entry['type'] === 'string' && typeof entry['description'] === 'string') parts.push(`- ${entry['type']}: ${entry['description']}`);
   const none = answer['noDescription'];

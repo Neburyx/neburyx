@@ -113,6 +113,18 @@ describe('the blind sets', () => {
     expect(none.sets.get(1)).toContain('(server note) The mapping has no description for X.');
   });
 
+  it('shows the blocks of an answer in order: sentences with their cites, a table as the person sees it with the cites of each row, and the note the server wrote', () => {
+    const blocks = [{ kind: 'sentences', sentences: [{ text: 'Alpha sentence.', cites: ['n1'] }] }, { kind: 'table', table: { title: 'Amounts', columns: ['Id', 'Amount'], rows: [{ cells: ['TX-1', '10'], cites: ['r1'] }, { cells: ['TX-2', '20'], cites: ['r2', 's1'] }], note: 'Amounts are in the unit of the mapping.' } }, { kind: 'sentences', sentences: [{ text: 'Closing sentence.', cites: ['c1'] }] }];
+    const shown = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { ...answer('x'), sentences: undefined, blocks } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options()).sets.get(1) ?? '';
+    const at = (text: string) => shown.indexOf(text);
+    expect(at('Alpha sentence. [n1]')).toBeGreaterThan(-1);
+    expect(at('Table: Amounts')).toBeGreaterThan(at('Alpha sentence.'));
+    expect(shown).toContain('| Id | Amount | cites |');
+    expect(shown).toContain('| TX-2 | 20 | r2, s1 |');
+    expect(shown).toContain('(server note) Amounts are in the unit of the mapping.');
+    expect(at('Closing sentence. [c1]')).toBeGreaterThan(at('TX-2'));
+  });
+
   it('scores a response that is not an answer as no answer: nothing to score, no point, and the slot is recorded in the key', () => {
     const output = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { status: 'not-answered', sentence: 'x' } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options());
     expect(output.key.noAnswer).toHaveLength(1);

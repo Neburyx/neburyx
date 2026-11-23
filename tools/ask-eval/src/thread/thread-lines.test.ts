@@ -51,6 +51,15 @@ describe('the lines an answer cites', () => {
     expect([...cited.mapped.keys()]).toEqual(['n1', 's1']);
   });
 
+  it('reads the cites of the blocks of an answer, sentences blocks and table blocks in order, and counts a block of no known kind as malformed', () => {
+    const values = 'human: Question:\nq\ntool: Keys are renumbered.\nr1: transaction: TX-1\nr2: transaction: TX-2\ns1: read of expand: 25 matches shown · lower bound';
+    const lines = linesOfAnswer(records({ calls: [call(2, { valuesText: values, replyText: ANSWER_REPLY })] }));
+    const blocks = [{ kind: 'sentences', sentences: [{ text: 'a', cites: ['s1'] }] }, { kind: 'table', table: { rows: [{ cells: ['TX-1'], cites: ['r1'] }, { cells: ['TX-2'], cites: ['r2'] }] } }, { kind: 'list' }];
+    const cited = citedLinesOf({ blocks }, lines);
+    expect([...cited.mapped.keys()]).toEqual(['r1', 'r2', 's1']);
+    expect(cited.malformed).toBe(1);
+  });
+
   it('reads the lines of a table answer from the cites of its rows, and the formats of the first blind sets of the trial (read lines `s1:` and `r1:`)', () => {
     const values = 'human: Question:\nq\ntool: Keys are renumbered.\nr1: transaction: TX-1\nr2: transaction: TX-2\ns1: read of expand: 25 matches shown · lower bound';
     const lines = linesOfAnswer(records({ calls: [call(2, { valuesText: values, replyText: ANSWER_REPLY })] }));

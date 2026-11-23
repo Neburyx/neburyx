@@ -50,7 +50,7 @@ export interface CitedLines {
   readonly malformed: number;
 }
 
-/** The lines the sentences of an answer cite (`sentences[].cites`, or `table.rows[].cites`). */
+/** The lines the sentences of an answer cite (`blocks[]` sentences' `cites` and table rows' `cites`). */
 export function citedLinesOf(answer: unknown, lines: AnswerLines | undefined): CitedLines {
   const keys = new Set<string>();
   let malformed = 0;
@@ -69,8 +69,21 @@ export function citedLinesOf(answer: unknown, lines: AnswerLines | undefined): C
         }
       }
     };
-    collect(answer['sentences']);
-    if (isRecord(answer['table'])) collect(answer['table']['rows']);
+    // The blocks of an answer (sentences blocks and table blocks), or the earlier shape of the records of earlier runs.
+    if (Array.isArray(answer['blocks'])) {
+      for (const block of answer['blocks']) {
+        if (!isRecord(block)) {
+          malformed += 1;
+          continue;
+        }
+        if (block['kind'] === 'sentences') collect(block['sentences']);
+        else if (block['kind'] === 'table' && isRecord(block['table'])) collect(block['table']['rows']);
+        else malformed += 1;
+      }
+    } else {
+      collect(answer['sentences']);
+      if (isRecord(answer['table'])) collect(answer['table']['rows']);
+    }
   }
   const mapped = new Map<string, string>();
   const missing: string[] = [];
