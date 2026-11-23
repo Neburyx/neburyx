@@ -27,6 +27,17 @@ function tableText(columns: readonly string[], rows: readonly { readonly cells: 
   return [[...columns, sourceLabel].join("\t"), ...rows.map((row) => [...row.cells, row.source].join("\t"))].join("\n");
 }
 
+/** A time stamp shown as date and time is two parts that never break inside, with the space between them the only place the stamp may break. */
+function stampOf(text: string, kind: string | undefined): ReactNode {
+  const match = kind === "stamp" ? /^(\d{4}-\d{2}-\d{2}) (\S.*)$/.exec(text) : null;
+  if (match === null) return text;
+  return (
+    <>
+      <span className="assistant-stamp-part">{match[1]}</span> <span className="assistant-stamp-part">{match[2]}</span>
+    </>
+  );
+}
+
 /** One table block of an answer: its caption row with Copy table, the header and rows with a Source cell, its notices and its note. Folds and copies on its own. */
 export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSelectRow, onShowSource }: TableBlockProps) {
   const [unfolded, setUnfolded] = useState(false);
@@ -40,11 +51,18 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   };
   const scroller = useRef<HTMLDivElement>(null);
   const [scrollsOn, setScrollsOn] = useState(false);
+  const [tight, setTight] = useState(false);
   useEffect(() => {
     const element = scroller.current;
     if (element === null) return undefined;
     const measure = (): void => {
       setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
+      // a table is tight when it overflows with its time stamps kept whole: measured without the breaks, so that a wider panel lets them go
+      const wasTight = element.classList.contains("assistant-table-tight");
+      element.classList.remove("assistant-table-tight");
+      const overflows = element.scrollWidth > element.clientWidth;
+      if (wasTight) element.classList.add("assistant-table-tight");
+      setTight(overflows);
       // the full title of a row is drawn over its cell up to the Source column: how far that is from the cell
       const title = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
       const source = element.querySelector<HTMLElement>("th:last-child");
@@ -58,7 +76,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
       element.removeEventListener("scroll", measure);
       observer?.disconnect();
     };
-  }, [table.rows.length, unfolded]);
+  }, [table.rows.length, unfolded, tight]);
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));
@@ -97,7 +115,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
               <span className="assistant-table-title-clip">{cell}</span>
             </td>
           ) : (
-            <td key={column} className={classOf(column)}>{cellOf(cell, kinds[column] ?? "text", table.rows, column)}</td>
+            <td key={column} className={classOf(column)}>{stampOf(cellOf(cell, kinds[column] ?? "text", table.rows, column), kinds[column])}</td>
           )
         ))}
         <td className="assistant-table-cite">
@@ -126,7 +144,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         <span className="visually-hidden" role="status">{copy === "copied" ? ASSISTANT_COPY.tableCopied : copy === "failed" ? ASSISTANT_COPY.tableCopyFailed : ""}</span>
       </div>
       {copy === "failed" ? <p className="assistant-table-notice" role="note">{ASSISTANT_COPY.tableCopyFailed}</p> : null}
-      <div ref={scroller} className={scrollsOn ? "assistant-table-scroll assistant-table-scrolls" : "assistant-table-scroll"}>
+      <div ref={scroller} className={`assistant-table-scroll${scrollsOn ? " assistant-table-scrolls" : ""}${tight ? " assistant-table-tight" : ""}`}>
         <table className="assistant-table">
           <caption className="visually-hidden">{table.title}</caption>
           <thead>

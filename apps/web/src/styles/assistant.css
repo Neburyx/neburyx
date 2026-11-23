@@ -806,6 +806,15 @@
   overflow-wrap: normal;
 }
 
+/* a table that is too wide even with its title column at its floor lets a time stamp break between its date and its time, before it scrolls */
+.assistant-table-tight .assistant-table .assistant-table-stamp {
+  white-space: normal;
+}
+
+.assistant-stamp-part {
+  white-space: nowrap;
+}
+
 .assistant-table td.assistant-table-title-cell,
 .assistant-table th.assistant-table-title-cell {
   width: 100%;

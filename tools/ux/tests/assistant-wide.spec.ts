@@ -39,6 +39,24 @@ async function answerWithTable(page: Page): Promise<void> {
   await expect(panel(page).getByRole('table', { name: 'Accounts · 6 rows' })).toBeVisible();
 }
 
+async function answerWithStamps(page: Page): Promise<void> {
+  const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+  const rows = Array.from({ length: 3 }, (_, index) => ({ cells: [`Transaction TX-00485633${index}`, `${1664 + index}.72`, index % 2 === 0 ? 'cash machine' : 'night deposit', `2022-09-09T23:5${index}:00Z`], cites: ['n1'] }));
+  const answer: AssistantTurnAnswer = {
+    status: 'answered',
+    route: 'view',
+    blocks: [{ kind: 'table', table: { title: 'Transactions · 3 rows', columns: ['Transaction', 'Amount', 'Channel', 'Timestamp'], rows, note: 'Each row selects its elements on the graph.' } }],
+    citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+    coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '3 transactions in view shown · exact' },
+    model: 'claude-sonnet-5-5',
+    calls: 2,
+  };
+  await page.route((url) => url.pathname === '/v1/assistant/turns', (route) => route.fulfill({ json: answer }));
+  await page.getByLabel('Your message').fill('show them as a table');
+  await page.keyboard.press('Enter');
+  await expect(panel(page).getByRole('table', { name: 'Transactions · 3 rows' })).toBeVisible();
+}
+
 async function answerWithList(page: Page): Promise<void> {
   const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
   const answer: AssistantTurnAnswer = {
@@ -207,5 +225,32 @@ test.describe('the wide Assistant panel', () => {
     const whole = await list.evaluate((element) => [...element.querySelectorAll('li')].map((item) => item.scrollWidth <= item.clientWidth));
     expect(whole).toEqual([true, true]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  test('keeps every time stamp on one line in the wide panel, where the table has room', async ({ page }) => {
+    await openWorkspace(page);
+    await wideButton(page).click();
+    await answerWithStamps(page);
+    const oneLine = await panel(page).getByRole('table').evaluate((element) => [...element.querySelectorAll('tbody tr')].map((row) => new Set([...(row.children[3] as HTMLElement).querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1));
+    expect(oneLine).toEqual([true, true, true]);
+  });
+
+  test('lets the time stamps break at the default width, keeps them on one line when the panel goes wide, and whole and clear of Source when it goes back', async ({ page }) => {
+    await openWorkspace(page);
+    await answerWithStamps(page);
+    const table = panel(page).getByRole('table');
+    const stamps = () => table.evaluate((element) => {
+      const source = element.querySelector('th:last-child') as HTMLElement;
+      return [...element.querySelectorAll('tbody tr')].map((row) => {
+        const cell = row.children[3] as HTMLElement;
+        return { oneLine: new Set([...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1, clear: cell.getBoundingClientRect().right <= source.getBoundingClientRect().left + 1, clipped: cell.scrollWidth > cell.clientWidth };
+      });
+    });
+    for (const stamp of await stamps()) expect(stamp).toMatchObject({ clear: true, clipped: false });
+    await wideButton(page).click();
+    await expect.poll(async () => (await stamps()).every((stamp) => stamp.oneLine)).toBe(true);
+    await wideButton(page).click();
+    await expect.poll(async () => (await stamps()).every((stamp) => stamp.clear && !stamp.clipped)).toBe(true);
+    expect(await panel(page).locator('.assistant-table-scroll').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
   });
 });

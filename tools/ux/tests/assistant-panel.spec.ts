@@ -574,10 +574,12 @@ test.describe('the Assistant panel', () => {
           const box = cell.getBoundingClientRect();
           return { text: cell.textContent, clipped: cell.scrollWidth > cell.clientWidth, insideLeft: box.left >= scrollerBox.left - 1, clearOfSource: box.right <= source.getBoundingClientRect().left + 1 };
         }),
+        oneLine: rowsOf.map((row) => new Set([...(row.children[2] as HTMLElement).querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().top))).size === 1),
         titles: rowsOf.map((row) => { const cell = row.children[0] as HTMLElement; const clip = cell.querySelector('.assistant-table-title-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth, tooltip: cell.getAttribute('title') }; }),
       };
     });
     expect(measured.scrolls).toBe(false);
+    expect(measured.oneLine).toEqual([true, true, true]);
     for (const [index, instant] of measured.instants.entries()) expect(instant).toEqual({ text: `2022-09-09 22:3${index}:00`, clipped: false, insideLeft: true, clearOfSource: true });
     for (const title of measured.titles) expect(title.tooltip).toBe(title.text);
     expect(measured.titles.some((title) => title.cut)).toBe(true);
@@ -664,6 +666,44 @@ test.describe('the Assistant panel', () => {
     expect(await markers.first().getAttribute('title')).toBe(await markers.first().getAttribute('aria-label'));
     const cut = await table.evaluate((element) => [...element.querySelectorAll('tbody tr')].map((row) => [2].map((column) => (row.children[column] as HTMLElement).scrollWidth > (row.children[column] as HTMLElement).clientWidth)).flat());
     expect(cut).toEqual([false, false, false]);
+  });
+
+  test('keeps the date and the time of every time stamp whole in a mixed answer at the default panel width: a sentence, a table of four columns and a list', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page);
+    const ref = (stableId: string) => ({ sourceId: 'banking-demo', entityType: 'account', stableId });
+    const rows = Array.from({ length: 5 }, (_, index) => ({ cells: [`Transaction TX-00485633${index}`, `${1664 + index}.72`, index % 2 === 0 ? 'cash machine' : 'night deposit', `2022-09-09T23:5${index}:00Z`], cites: ['n1'] }));
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [
+        { kind: 'sentences', sentences: [{ text: 'Two accounts are in view.', cites: ['n1', 'n2'] }] },
+        { kind: 'table', table: { title: 'Transactions · 5 rows', columns: ['Transaction', 'Amount', 'Channel', 'Timestamp'], rows, note: 'Each row selects its elements on the graph.' } },
+        { kind: 'list', label: 'Channels', items: [{ text: 'cash machine: a few.', cites: ['n1'] }, { text: 'night deposit: a few.', cites: ['n2'] }] },
+      ],
+      citations: [{ key: 'n1', kind: 'entity', ref: ref('AC-1') }, { key: 'n2', kind: 'entity', ref: ref('AC-2') }],
+      coverage: { retrieval: '2 shown · 0 not yet retrieved (exact)', summary: 'The answer cites 2 of the 2 shown elements.' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, answer);
+    await open(page);
+    await page.getByLabel('Your message').fill('count them, show the five largest, list the channels');
+    await page.keyboard.press('Enter');
+    const table = panel(page).getByRole('table', { name: 'Transactions · 5 rows' });
+    await expect(table).toBeVisible();
+    const measured = await table.evaluate((element) => {
+      const source = element.querySelector('th:last-child') as HTMLElement;
+      return [...element.querySelectorAll('tbody tr')].map((row) => {
+        const cell = row.children[3] as HTMLElement;
+        const box = cell.getBoundingClientRect();
+        const parts = [...cell.querySelectorAll('.assistant-stamp-part')].map((part) => Math.round(part.getBoundingClientRect().height));
+        return { clipped: cell.scrollWidth > cell.clientWidth, clear: box.right <= source.getBoundingClientRect().left + 1, text: cell.textContent, partsOneLine: parts.every((height) => height < 24) };
+      });
+    });
+    for (const [index, stamp] of measured.entries()) expect(stamp).toEqual({ clipped: false, clear: true, text: `2022-09-09 23:5${index}:00`, partsOneLine: true });
+    expect(await panel(page).locator('.assistant-table-scroll').evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
   for (const width of [1440, 1280]) {
