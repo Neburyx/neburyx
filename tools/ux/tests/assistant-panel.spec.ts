@@ -984,7 +984,7 @@ test.describe('the Assistant panel', () => {
   const summaryDraft = (sourceId: string) =>
     summaryResponseSchema.parse({
       status: 'ok',
-      blocks: [{ kind: 'sentences', sentences: [{ text: 'AC-1 is an account.', cites: ['n1'], storable: true }] }],
+      sentences: [{ text: 'AC-1 is an account.', cites: ['n1'], storable: true }],
       citations: [{ key: 'n1', kind: 'entity', ref: { sourceId, entityType: 'account', stableId: 'AC-1' } }],
       coverage: { retrieval: '1 shown · ~38 not yet retrieved (estimated)', summary: 'The draft cites 1 of the 1 shown elements' },
       removedCount: 0,
