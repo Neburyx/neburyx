@@ -33,13 +33,14 @@ type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: numb
 const RESEND_SENTENCES = 'Your next answer replaces this one if any of its sentences is kept: call answer again with every sentence you want shown, the kept ones and each removed one corrected as its reason says (copy a figure as the line writes it, with its label; cite every element a count or an all, each or latest sentence speaks of). Leave a sentence out when no line holds its figure, name or comparison, or when it states a conclusion; never add a cite only to keep it.';
 const RESEND_TABLE = 'Your next answer replaces this one if any of its rows is kept: call answer again with the whole table, the kept rows and each removed row corrected as its reason says (a cell copies a figure of the lines its row cites, with its label). Leave a row out when no line holds its figure or name; never add a cite only to keep it.';
 const VERDICT_LEFT_OUT = ' A sentence removed for verdict wording is left out, not reworded.';
+const VERDICT_ROW_LEFT_OUT = ' A row removed for verdict wording is left out, not reworded.';
 
 type RemovalForm = 'sentences' | 'table';
 
 const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound, rejected, form }) =>
   removed === 0
     ? `Checked: all ${kept} sentences kept. Reply "${FINAL_TEXT}".`
-    : `Checked: ${kept} sentences kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. ${form === 'table' ? RESEND_TABLE : RESEND_SENTENCES}${verdictFound ? VERDICT_LEFT_OUT : ''} Or reply "${FINAL_TEXT}" to leave the answer as it stands.${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
+    : `Checked: ${kept} ${form === 'table' ? 'rows' : 'sentences'} kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. ${form === 'table' ? RESEND_TABLE : RESEND_SENTENCES}${verdictFound ? (form === 'table' ? VERDICT_ROW_LEFT_OUT : VERDICT_LEFT_OUT) : ''} Or reply "${FINAL_TEXT}" to leave the answer as it stands.${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
 
 interface AgentTurnSettings {
   readonly maxCalls: number;
