@@ -105,6 +105,23 @@ describe('a view question on the agent', () => {
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'The gadget count is 169,756, which is exact.' }] });
   });
 
+  it('keeps a cited sentence for each part of a two-part count question, one of them saying a count is not yet retrieved, and the instructions tell the model to answer every part with a count as a number', async () => {
+    const store = createMemoryAssistantRunStore();
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The relationships of A-1 are not yet retrieved by type: the read states all types 184,533 (exact).', cites: ['n1', 's1'] }, { text: 'Account A-1 has 169,756 gadget relationships (exact).', cites: ['n1', 's1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }), runStore: store });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: expect.stringContaining('not yet retrieved') }, { text: 'Account A-1 has 169,756 gadget relationships (exact).' }] });
+    const instructions = store.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    expect(instructions).toContain('answer every part, each in a sentence of its own');
+    expect(instructions).toContain('State a count as a number with its quality');
+    expect(instructions).toContain('a part is never left out');
+    expect(instructions).toContain('not yet retrieved');
+  });
+
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
     const answered = (cites: string[]) =>
       fakeModel()
