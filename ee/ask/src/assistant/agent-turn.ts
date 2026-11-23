@@ -195,7 +195,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
 
     const rules = instructions.text.split(REPLY_FORMAT_HEADING)[0] ?? '';
     const source = scope.options.folder()?.source(scope.sourceId);
-    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and set the answer's pointer to canvas-expand (the server writes the sentence; never write it yourself). For a message that asks how many there are, read the degree preview of the element: its line states the connected elements by type with their quality; answer in plain words such as \"Account X has 169,756 transactions (exact)\", keeping the figure and the quality as the line writes them, and cite the line, never a total no line states; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
+    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and set the answer's pointer to canvas-expand (the server writes the sentence; never write it yourself). For a message that asks how many there are, read the degree preview of the element: its line states the connected elements by type with their quality; answer in plain words, for example \"X has 169,756 connected elements of type T (exact)\" with the type as the line names it, keeping the figure and the quality as the line writes them, and cite the line, never a total no line states; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
 
     const tools: AgentTool[] = readable.map((tool) => ({
       name: tool.name,
@@ -333,7 +333,10 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     if (allowedCalls < 1) return { kind: 'limit', limit: 'calls', reads: entries };
     const beforeCall = (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }): boolean => estimateTokens(request.system, `${request.messages.join('\n')}\n${request.tools}`) <= settings.maxInputTokens;
     try {
-      if ((await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall })).refused) limited ??= 'input';
+      const ran = await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall });
+      if (ran.refused) limited ??= 'input';
+      // an answer is marked with the call limit only when the limit cut the reading short; one given on the last call with no read wanted is not
+      else if (ran.reserveRefused) limited ??= 'calls';
     } catch (error) {
       if (error instanceof AuditUnavailableError || (error instanceof Error && 'code' in error && error.code === 'AUDIT_UNAVAILABLE')) throw error;
       else if (scope.request.signal.aborted) throw new Error('the request was cancelled');

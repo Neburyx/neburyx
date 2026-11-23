@@ -1,11 +1,12 @@
-import { ASK_SAVED_PATTERN_NOTE, readAssistantRoute, type AskFolder, type AssistantRouterReply } from '@neburyx/contracts';
+import { ASK_SAVED_PATTERN_NOTE, ASSISTANT_REFUSAL_CAUSES, readAssistantRoute, type AskFolder, type AssistantRouterReply } from '@neburyx/contracts';
 import { AuditUnavailableError, type AuditedModelCall, type FailureCode } from '@neburyx/ee-ai-runtime';
 import { estimateTokens } from '../case-summary/assemble.js';
 import { noteModelAnswer, startModelCall } from './turn-audit.js';
 import { buildAssistantInstructions, type AssistantInstructions } from './instructions.js';
 
 export const ROUTER_PROMPT_ID = 'assistant.route';
-export const ROUTER_PROMPT_VERSION = 10;
+// 11: the reply is constrained to a route object by the provider's structured output
+export const ROUTER_PROMPT_VERSION = 11;
 export const ROUTER_AUDIT_ACTION = 'assistant.route';
 
 const NO_KEYS = '(none)';
@@ -76,13 +77,15 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
 }
 
 /** The shape the provider constrains the router's reply to, so that its first reply is a route object and never prose; the reply is still read strictly by `readAssistantRoute`. */
+const ROUTE_NAMES = ['view', 'meaning', 'ask', 'clarify', 'refuse'] as const satisfies readonly AssistantRouterReply['route'][];
+
 const ROUTE_REPLY_SCHEMA = {
   type: 'object',
   properties: {
-    route: { type: 'string', enum: ['view', 'meaning', 'ask', 'clarify', 'refuse'] },
+    route: { type: 'string', enum: ROUTE_NAMES },
     intent: { type: 'string' },
     role: { type: 'string' },
-    cause: { type: 'string', enum: ['verdict', 'raw-query', 'other-source', 'unplaced'] },
+    cause: { type: 'string', enum: [...ASSISTANT_REFUSAL_CAUSES] },
     types: { type: 'array', items: { type: 'string' } },
     entities: { type: 'object', additionalProperties: { type: 'string' } },
     elements: { type: 'object', additionalProperties: { type: 'string' } },

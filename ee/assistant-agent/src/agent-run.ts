@@ -58,6 +58,8 @@ export interface AgentRun {
   readonly modelCalls: number;
   /** Whether `beforeCall` ended the run by refusing a request. */
   readonly refused: boolean;
+  /** That the model asked for a read of the run's own tools after the last call was kept for the final tool: the call limit cut its reading short. */
+  readonly reserveRefused: boolean;
 }
 
 const END_TEXT = 'Done.';
@@ -89,6 +91,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
   const allowed = new Set(options.tools.map((entry) => entry.name));
   const called: { name: string; args: unknown }[] = [];
   const offered: string[][] = [];
+  let reserveRefused = false;
   let failure: { readonly error: unknown } | undefined;
   let queue: Promise<void> = Promise.resolve();
   const structured: StructuredToolInterface[] = options.tools.map(
@@ -138,6 +141,8 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     },
     wrapToolCall: async (request, handler) => {
       const { name, id } = request.toolCall;
+      // a read the model asked for after the calls were kept for the answer: the call limit cut the reading short
+      if (allowed.has(name) && reserved() && name !== options.finalTool) reserveRefused = true;
       if (!allowed.has(name) || (reserved() && name !== options.finalTool)) return new ToolMessage({ content: 'This tool is not available now.', tool_call_id: id ?? name, name });
       try {
         return await handler(request);
@@ -154,5 +159,5 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     throw failure?.error ?? error;
   }
   if (failure !== undefined) throw failure.error;
-  return { offered, called, modelCalls, refused };
+  return { offered, called, modelCalls, refused, reserveRefused };
 }

@@ -54,6 +54,13 @@ describe('the agent run', () => {
     expect(log).toEqual([]);
   });
 
+  it('reports a read the model asked for after the last call was kept for the answer, and none when it asked for none', async () => {
+    const wanting = fakeModel().respondWithTools([{ name: 'read_view', args: {} }]).respondWithTools([{ name: 'read_view', args: {} }, { name: 'answer', args: { text: 'x' } }]);
+    expect((await runAgent({ ...base(controlOf()), maxCalls: 2, model: wanting, tools: [reader([]), answerTool([])] })).reserveRefused).toBe(true);
+    const content = fakeModel().respondWithTools([{ name: 'read_view', args: {} }]).respondWithTools([{ name: 'answer', args: { text: 'x' } }]).respond(new AIMessage('Done.'));
+    expect((await runAgent({ ...base(controlOf()), maxCalls: 2, model: content, tools: [reader([]), answerTool([])] })).reserveRefused).toBe(false);
+  });
+
   it('offers and runs only the final tool on the last allowed call', async () => {
     const log: string[] = [];
     const model = fakeModel().respondWithTools([{ name: 'read_view', args: {} }]).respondWithTools([{ name: 'read_view', args: {} }, { name: 'answer', args: { text: 'x' } }]);
