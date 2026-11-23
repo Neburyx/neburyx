@@ -195,13 +195,13 @@ describe('the tool loop through the real application', () => {
   };
   const entityReads = (rig: Awaited<ReturnType<typeof assistantRig>>) => rig.rig.executor.calls.filter((call) => call.templateId === 'entity-load').length;
 
-  it('asks the model for the next step after the first read, answers its checked sentences when it calls answer, and counts the router call, three agent calls and one step', async () => {
+  it('asks the model for the next step after the first read, answers its checked sentences when it calls answer, and counts the router call, two agent calls and one step', async () => {
     const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"done":true}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
     const answer = await rig.post({ ...rig.body, message: 'Show W-1' });
     expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'Ana Silva is listed.', cites: ['r1'] }], reads: [{ tool: 'widgetById', kind: 'intent', read: true }] });
-    expect(rig.stub.bodies).toHaveLength(4);
-    expect(everything(rig).filter((event) => event.action === 'assistant.agent')).toHaveLength(3);
-    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 4, steps: 1, outcome: 'answered' } } }]);
+    expect(rig.stub.bodies).toHaveLength(3);
+    expect(everything(rig).filter((event) => event.action === 'assistant.agent')).toHaveLength(2);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 3, steps: 1, outcome: 'answered' } } }]);
     await rig.stop();
   });
 
@@ -211,7 +211,7 @@ describe('the tool loop through the real application', () => {
     const answer = await rig.post({ ...rig.body, message: 'Show W-1 and W-2' });
     expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask' });
     expect(entityReads(rig) - before).toBe(2);
-    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 5, steps: 2 } } }]);
+    expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 4, steps: 2 } } }]);
     await rig.stop();
   });
 
@@ -220,10 +220,10 @@ describe('the tool loop through the real application', () => {
     let read = 0;
     const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"tool":"widgetById","values":{"id":"W-2"}}', '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode(`W-${++read}`) }] } : undefined) });
     const answer = await rig.post({ ...rig.body, message: 'Show W-1 and W-2' });
-    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 5 });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 4 });
     const events = everything(rig);
-    expect(events.filter((event) => event.action === 'assistant.agent')).toHaveLength(4);
-    expect(events.filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 5, steps: 2, outcome: 'answered' } } }]);
+    expect(events.filter((event) => event.action === 'assistant.agent')).toHaveLength(3);
+    expect(events.filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 4, steps: 2, outcome: 'answered' } } }]);
     expect(JSON.stringify(events)).not.toContain('appears on two widgets');
     await rig.stop();
   });
@@ -440,20 +440,20 @@ describe('the view route and a continue in the running application', () => {
     await rig.stop();
   });
 
-  it('answers the view route from the elements in view: the router call and three audited agent calls, the source read through the gate, and the values only in what the provider received after the read', async () => {
+  it('answers the view route from the elements in view: the router call and two audited agent calls, the source read through the gate, and the values only in what the provider received after the read', async () => {
     const replies = ['{"route":"view"}', '{"tool":"view","values":{}}', DONE, JSON.stringify({ sentences: [{ text: 'Widget W-1 is owned by Ana Silva.', cites: ['n1'] }] })];
     const rig = await assistantRig({ reply: () => replies.shift() ?? '' });
     const before = rig.rig.executor.calls.length;
     const keys = ['W-1', 'W-2'].map((id) => JSON.stringify(['node', 'demo', 'widget', id]));
     const answer = await rig.post({ ...rig.body, message: 'Who owns the first one?', viewElementKeys: keys });
     expect(answer.statusCode).toBe(200);
-    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view', calls: 4, citations: [{ key: 'n1', kind: 'entity' }] });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', route: 'view', calls: 3, citations: [{ key: 'n1', kind: 'entity' }] });
     expect(rig.rig.executor.calls.length).toBeGreaterThan(before);
-    expect(rig.stub.bodies).toHaveLength(4);
+    expect(rig.stub.bodies).toHaveLength(3);
     expect(rig.stub.bodies[0]).not.toContain('Ana Silva');
     expect(rig.stub.bodies[1]).not.toContain('Ana Silva');
     expect(rig.stub.bodies[2]).toContain('Ana Silva');
-    expect(rig.events.filter((event) => event.action === 'assistant.agent')).toHaveLength(3);
+    expect(rig.events.filter((event) => event.action === 'assistant.agent')).toHaveLength(2);
     expect(JSON.stringify(rig.events)).not.toContain('Ana Silva');
     await rig.stop();
   });
@@ -549,7 +549,7 @@ describe('the closing event of a turn in the running application', () => {
   const timedOut = (call: ExecuteCall): ExecuteOutcome | undefined => (call.templateId === 'entity-load' ? { status: 'timeout' } : undefined);
 
   const outcomes: { name: string; reply: string; then?: readonly string[]; options?: Partial<Parameters<typeof assistantRig>[0]>; body?: (rig: Rig) => object; closing: Record<string, unknown> }[] = [
-    { name: 'answered', reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}', then: [DONE, ANSWER_OF_W1], closing: { route: 'ask', outcome: 'answered', intent: 'widgetById', templateId: 'entity', steps: 1, modelCalls: 4 } },
+    { name: 'answered', reply: '{"route":"ask","intent":"widgetById","entities":{"id":"W-1"}}', then: [DONE, ANSWER_OF_W1], closing: { route: 'ask', outcome: 'answered', intent: 'widgetById', templateId: 'entity', steps: 1, modelCalls: 3 } },
     { name: 'refused', reply: '{"route":"refuse","cause":"verdict"}', closing: { route: 'refuse', outcome: 'refused', cause: 'verdict', modelCalls: 1 } },
     { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, closing: { route: 'view', outcome: 'refused', cause: 'not-answered', modelCalls: 3 } },
     { name: 'view', reply: '{"route":"view"}', closing: { route: 'view', outcome: 'refused', cause: 'not-answered', modelCalls: 2 } },
@@ -798,7 +798,7 @@ describe('the stored runs of a turn in the running application', () => {
   };
 
   const outcomes = [
-    { name: 'answered', reply: ASK, then: [DONE, ANSWER_OF_W1], words: 3, calls: 4 },
+    { name: 'answered', reply: ASK, then: [DONE, ANSWER_OF_W1], words: 3, calls: 3 },
     { name: 'refused', reply: '{"route":"refuse","cause":"verdict"}', words: 3, calls: 1 },
     { name: 'unplaced', reply: `${REPLY_CANARY} is no route`, words: 3, calls: 3 },
     { name: 'failed', reply: ASK, options: { answer: timedOut }, words: 3, calls: 2 },
@@ -932,7 +932,7 @@ describe('the thread of an investigation in the running application', () => {
   /** The replies of a first turn the agent answers over its read of W-1 (the router's, `{"done":true}` and the answer), then those of the next turn. */
   const answeredThen = (...next: string[]) => sequenceOf(ASK, DONE, ANSWER_OF_W1, ...next);
   /** The model calls of the answered first turn: the router's, the read, the answer and the agent's last reply. */
-  const FIRST_TURN_CALLS = 4;
+  const FIRST_TURN_CALLS = 3;
 
   it('keeps an answered turn and a refused turn, answers them back to their person as kinds and counts, and holds no text of the message, the value or the reply', async () => {
     current = FIRST;
