@@ -296,8 +296,32 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
   );
 }
 
+const INSTANT_IN_TEXT = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})?/gu;
+/** A date, a time of day or an instant as a sentence writes it. */
+const TEMPORAL_LITERAL_IN_TEXT = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})?|\d{4}-\d{2}-\d{2}|(?<![\d:])\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})?(?![\d:])/gu;
+
+/** The parts of an instant a sentence may write for it, each an exact part of what the line holds and no rounding: the instant, its date, its time with or without the zone, and its hours and minutes when the seconds are nothing. */
+function partsOfInstant(instant: string): string[] {
+  const time = /^(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/u.exec(instant.slice(11));
+  if (time === null) return [instant, instant.slice(0, 10)];
+  const [, hours = '', minutes = '', seconds = '', fraction = '', zone = ''] = time;
+  const parts = [instant, instant.slice(0, 10), instant.slice(11), `${hours}:${minutes}:${seconds}${fraction}`];
+  if (fraction === '') parts.push(`${hours}:${minutes}:${seconds}${zone}`, ...(seconds === '00' ? [`${hours}:${minutes}${zone}`, `${hours}:${minutes}`] : []));
+  return parts;
+}
+
+/** Whether a date, a time or an instant written in a sentence is an exact part of an instant that one of the lines holds. */
+const isTemporalPartOf = (literal: string, lines: readonly string[]): boolean => lines.some((line) => [...line.matchAll(INSTANT_IN_TEXT)].some((found) => partsOfInstant(found[0]).includes(literal)));
+
+/** The sentence with the dates and times it writes as exact parts of the instants of the cited lines blanked to the same length: they are no numbers to find on a line, and positions stay. */
+function withoutTemporalParts(text: string, lines: readonly string[]): string {
+  return text.replace(TEMPORAL_LITERAL_IN_TEXT, (found) => (isTemporalPartOf(found, lines) ? ' '.repeat(found.length) : found));
+}
+
 function numbersHold(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): boolean {
-  const stated = numbersIn(sentence.text);
+  // a date or a time that is an exact part of an instant of a cited line is judged with the instant, not as numbers
+  const scanned = withoutTemporalParts(sentence.text, sentence.cites.map((cite) => assembled.lines.get(cite) ?? ''));
+  const stated = numbersIn(scanned);
   const written = countElements ? writtenNumbersIn(sentence.text, assembled) : [];
   if (stated.length === 0 && written.length === 0) return true;
   if (sentence.cites.some((cite) => assembled.unknownCountKeys.has(cite))) return false;
@@ -305,10 +329,10 @@ function numbersHold(sentence: SummarySentence, assembled: CheckedText, countEle
   const elementCites = descriptions === undefined ? sentence.cites : sentence.cites.filter((cite) => !descriptions.has(cite));
   // a sentence that cites an element holds the numbers of the element lines alone; one that cites only meanings may restate their numbers
   const numberCites = elementCites.length === 0 ? sentence.cites : elementCites;
-  const numbers = countElements ? [...numberMentionsIn(sentence.text), ...written].filter((mention) => !countsCitedElements(mention.value, mention.after, sentence, assembled)).map((mention) => mention.value) : stated;
+  const numbers = countElements ? [...numberMentionsIn(scanned), ...written].filter((mention) => !countsCitedElements(mention.value, mention.after, sentence, assembled)).map((mention) => mention.value) : stated;
   const cited = new Set(numberCites.flatMap((cite) => [...numbersIn(assembled.lines.get(cite) ?? ''), ...writtenValuesOfLine(assembled.lines.get(cite) ?? '')]));
   if (!numbers.every((number) => cited.has(number))) return false;
-  const standalone = [...numbersIn(sentence.text, true), ...written.map((number) => number.value)];
+  const standalone = [...numbersIn(scanned, true), ...written.map((number) => number.value)];
   return assembled.inexactCounts.every((count) => !standalone.includes(count.value) || sentence.text.includes(count.phrase));
 }
 
@@ -780,8 +804,108 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   return claimed.value === undefined || compareValues(dataClass, claimed.value, top[1].value) === 0;
 }
 
+const RANGE_LITERAL = '(?:\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?(?:Z|[+-]\\d{2}:\\d{2})?|\\d{4}-\\d{2}-\\d{2}|\\d{1,2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,9})?)?(?:Z|[+-]\\d{2}:\\d{2})?|[-+]?\\d[\\d,]*(?:\\.\\d+)?)';
+const RANGE = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:between|from)\\s+["“]?(${RANGE_LITERAL})["”]?\\s+(?:and|to)\\s+["“]?(${RANGE_LITERAL})["”]?(?![\\p{L}\\p{N}_-])`, 'iu');
+
+/** The instant of a class that a line holds as the value whose key is `value`: the text the line writes for it. */
+const instantOfLine = (line: string, dataClass: string, value: string): string | undefined =>
+  [...line.matchAll(dataClass === 'date' ? /\d{4}-\d{2}-\d{2}(?![\dT])/gu : INSTANT_IN_TEXT)].map((found) => found[0]).find((instant) => temporalKey(dataClass, instant) === value);
+
+/**
+ * A sentence that gives the range of a property over a set (`between A and B`, `from A to B`) is verified like a ranking: it names one orderable property of the cited elements, every element of the ranked type that was sent is cited with a
+ * shown value of it, A is the least value among them and B the greatest. A figure is the value as the line writes it; a date or a time of an instant is an exact part of the instant the line holds for the least or the greatest, never a rounding; a
+ * date the sentence gives besides (`on 2022-09-09`) is the date of every one of them. A partly cited set, a mixed class, a wrong end and a masked or missing value are not verified.
+ */
+function rangeHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const text = sentence.text.normalize('NFC');
+  const range = RANGE.exec(text);
+  if (range === null) return true;
+  const [whole = '', first = '', second = ''] = range;
+  const cited = citedElements(sentence, assembled);
+  const carries = (key: string): readonly RankedProperty[] => assembled.rankedValues?.get(key) ?? [];
+  if (assembled.rankedValues === undefined) return false;
+  const typeOf = (key: string): string | undefined => assembled.elementTypes?.get(key);
+  const outside = text.replace(whole, ' ');
+  // every pair of a type and an orderable property that the cited elements hold is a candidate for what the range is over
+  const pairs = [...new Map(cited.flatMap((key) => {
+    const type = typeOf(key);
+    return type === undefined ? [] : carries(key).filter((entry) => ORDERED_CLASSES.has(entry.dataClass)).map((entry) => [`${type}\u0000${entry.key}\u0000${entry.dataClass}`, { type, property: entry.key, dataClass: entry.dataClass }] as const);
+  }))].map(([, pair]) => pair);
+  const temporal = (literal: string): boolean => /^\d{4}-\d{2}-\d{2}|^\d{1,2}:\d{2}/u.test(literal);
+  // the ends are both dates or times, or both figures; a pair of another kind is no range over a set
+  if (temporal(first) !== temporal(second)) return true;
+  const ofTime = temporal(first);
+  // an end that is a time of day or an instant is of a property that holds a time, not of one that holds a day alone
+  const ofATime = !/^\d{4}-\d{2}-\d{2}$/u.test(first) || !/^\d{4}-\d{2}-\d{2}$/u.test(second);
+  const fitting = pairs.filter((pair) => (ofTime ? TIME_CLASSES.has(pair.dataClass) && (!ofATime || pair.dataClass !== 'date') : pair.dataClass === 'number'));
+  // a property of another class that the sentence happens to name is no property of this range
+  const keyNamed = [...new Set(fitting.map((pair) => pair.property))].filter((key) => termIn(key, outside));
+  if (keyNamed.length > 1) return false;
+  const wordOf = new Map(typesSent(assembled).map(({ type, word }) => [type, word]));
+  const flat = flatten(outside);
+  const plural = (word: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}_-])${word.endsWith('y') ? `${escapeRegex(word.slice(0, -1))}ies` : `${escapeRegex(word)}(?:s|es)`}(?![\\p{L}\\p{N}_-])`, 'iu').test(flat);
+  // figures that name no property: a range over the figures of a set only when the sentence names a cited type by its plural noun, as for dates and times; a singular subject (`Account A-1 was active from 2019 to 2021`) is judged as before
+  const needsPlural = keyNamed.length === 0 && !ofTime;
+  const named = (type: string): boolean => {
+    const word = wordOf.get(type);
+    return word !== undefined && (needsPlural ? plural(flatten(word).trim()) : termIn(word, outside));
+  };
+  if (needsPlural && !fitting.some((pair) => named(pair.type))) return true;
+  let candidates = fitting.filter((pair) => keyNamed.length === 0 || pair.property === keyNamed[0]);
+  // a sentence that names a type with its noun is about that type alone: an element of another type cited beside it is context
+  const namedTypes = new Set(candidates.filter((pair) => named(pair.type)).map((pair) => pair.type));
+  // more than one type named: not verified, whichever of them would hold
+  if (namedTypes.size > 1) return false;
+  if (namedTypes.size > 0) candidates = candidates.filter((pair) => namedTypes.has(pair.type));
+  if (candidates.length === 0) return keyNamed.length === 0;
+  /** Whether the range holds over one property of one type: the whole set of its type is cited with values, A is the least, B the greatest, and a time of day or a date beside it is the one of every element. */
+  const verifies = (rankedType: string, property: string): boolean => {
+    const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
+    const members = [...(assembled.elementTypes ?? [])].filter(([key, type]) => type === rankedType && !lines.has(key)).map(([key]) => key);
+    const values = new Map<string, { readonly dataClass: string; readonly value: string }>();
+    for (const key of members) {
+      const entry = carries(key).find((candidate) => candidate.key === property);
+      if (!cited.includes(key) || entry === undefined || entry.value === undefined || !ORDERED_CLASSES.has(entry.dataClass)) return false;
+      values.set(key, { dataClass: entry.dataClass, value: entry.value });
+    }
+    const classes = new Set([...values.values()].map((held) => held.dataClass));
+    const [dataClass] = classes;
+    if (dataClass === undefined || classes.size !== 1) return false;
+    const ordered = [...values].sort(([, left], [, right]) => compareValues(dataClass, left.value, right.value));
+    const least = ordered[0];
+    const greatest = ordered[ordered.length - 1];
+    if (least === undefined || greatest === undefined) return false;
+    const holders = (end: readonly [string, { readonly value: string }]): string[] => ordered.filter(([, held]) => compareValues(dataClass, held.value, end[1].value) === 0).map(([key]) => key);
+    const endHolds = (literal: string, end: readonly [string, { readonly dataClass: string; readonly value: string }]): boolean => {
+      if (dataClass === 'number') return decimalKey(/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/u.test(literal.replace(/^[-+]/u, '')) ? literal.replaceAll(',', '') : literal) === end[1].value;
+      return holders(end).some((key) => {
+        const instant = instantOfLine(assembled.lines.get(key) ?? '', dataClass, end[1].value);
+        return instant !== undefined && (dataClass === 'date' ? literal === instant : partsOfInstant(instant).includes(literal));
+      });
+    };
+    if (!endHolds(first, least) || !endHolds(second, greatest)) return false;
+    // an end that is a time of day says that every instant of the set lies in that window of one day: the set shares one date
+    if (dataClass !== 'number' && (!/^\d{4}-/u.test(first) || !/^\d{4}-/u.test(second))) {
+      const dates = new Set(members.map((key) => instantOfLine(assembled.lines.get(key) ?? '', dataClass, values.get(key)?.value ?? '')?.slice(0, 10)));
+      if (dates.size !== 1 || dates.has(undefined)) return false;
+    }
+    // a date the sentence gives besides the range is the date of every element of the set
+    if (dataClass !== 'number') {
+      for (const other of text.replace(whole, ' ').matchAll(TEMPORAL_LITERAL_IN_TEXT)) {
+        if (!/^\d{4}-\d{2}-\d{2}$/u.test(other[0])) continue;
+        if (!members.every((key) => instantOfLine(assembled.lines.get(key) ?? '', dataClass, values.get(key)?.value ?? '')?.startsWith(other[0]) === true)) return false;
+      }
+    }
+    return true;
+  };
+  // no type is named and more than one could be what the range is over: the sentence holds only when exactly one of them verifies it
+  const candidateTypes = new Set(candidates.map((pair) => pair.type));
+  if (candidateTypes.size > 1) return new Set(candidates.filter((pair) => verifies(pair.type, pair.property)).map((pair) => pair.type)).size === 1;
+  return candidates.some((pair) => verifies(pair.type, pair.property));
+}
+
 function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
-  return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && claimsAreBacked(sentence, assembled);
+  return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && rangeHolds(sentence, assembled) && claimsAreBacked(sentence, assembled);
 }
 
 /** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
@@ -806,14 +930,16 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   const ordinary = ordinaryWords(assembled);
   const sentTokens = identifierTokens(sent);
   const text = sentence.text.normalize('NFC');
-  for (const quoted of text.matchAll(QUOTED)) if (!occursWhole(quoted[1] ?? '', sent)) return false;
+  // a quoted date or time that is an exact part of an instant of the text sent is found where that instant stands
+  for (const quoted of text.matchAll(QUOTED)) if (!occursWhole(quoted[1] ?? '', sent) && !isTemporalPartOf(quoted[1] ?? '', [sent])) return false;
   // a decimal point between digits is not the end of a sentence: it is taken out so that what follows is not read as the start of one
   const unquoted = text.replace(QUOTED, ' ').replace(/(\d)\.(\d)/gu, '$1 $2');
   for (const token of unquoted.match(IDENTIFIER_LIKE) ?? []) {
     // a word joined with underscores between letters or digits is one name (a relationship type): it is found whole in the text sent, never as a mix of the parts of others; Markdown emphasis around a word is not one
     if (!sentTokens.has(token) && token.split('-').some((part) => /[\p{L}\p{N}]_[\p{L}\p{N}]/u.test(part) && !known.has(part.replace(/^_+|_+$/gu, '').toLowerCase()))) return false;
     if (!/\d/.test(token) || !/[\p{L}_-]/u.test(token)) continue;
-    if (!sentTokens.has(token)) return false;
+    // a date written as a part of an instant of the text sent is no identifier to find whole
+    if (!sentTokens.has(token) && !isTemporalPartOf(token, [sent])) return false;
   }
   // a key of a property written with a capital inside (`paidValue`) is a name the text sent gave when it holds that word whole: its capital is not the start of a name
   const withoutIdentifiers = unquoted.replace(IDENTIFIER_LIKE, (token) => (/\d/.test(token) || (/\p{Ll}\p{Lu}/u.test(token) && sentTokens.has(token)) ? ' '.repeat(token.length) : token));
@@ -864,7 +990,7 @@ function breaksCountRule(sentence: SummarySentence, assembled: CheckedText): boo
 function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): RemovalReason {
   if (!citationsHold(sentence, assembled)) return 'citation';
   if (!numbersHold(sentence, assembled, countElements)) return breaksCountRule(sentence, assembled) ? 'count' : 'number';
-  if (!comparedElementsHold(sentence, assembled) || !rankingHolds(sentence, assembled)) return 'comparison';
+  if (!comparedElementsHold(sentence, assembled) || !rankingHolds(sentence, assembled) || !rangeHolds(sentence, assembled)) return 'comparison';
   if (!claimsAreBacked(sentence, assembled)) return 'citation';
   return 'name';
 }

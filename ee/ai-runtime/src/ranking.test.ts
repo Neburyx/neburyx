@@ -318,6 +318,161 @@ describe.each([
       expect(verdict(`The latest ${time} is 2022-09-09T10:00:00Z[UTC].`, all, zone)).toBe('comparison');
     });
 
+    it('verifies a range between a least and a greatest value, given as parts of the instants of the lines, and removes a wrong one', () => {
+      const instants = times(['2022-09-09T22:33:00Z', '2022-09-09T23:10:00Z', '2022-09-09T23:57:00Z'], 'dateTime');
+      const said = (range: string, date = 'on "2022-09-09", '): string => `The listed ${type}s carry ${time} ${date}${range}.`;
+      expect(verdict(said('between "22:33:00Z" and "23:57:00Z"'), all, instants)).toBe('kept');
+      expect(verdict(said('from 22:33:00Z to 23:57:00Z'), all, instants)).toBe('kept');
+      expect(verdict(said('between "22:33" and "23:57"'), all, instants)).toBe('kept');
+      expect(verdict(said('between 2022-09-09T22:33:00Z and 2022-09-09T23:57:00Z', ''), all, instants)).toBe('kept');
+      expect(verdict(said('between "22:34:00Z" and "23:57:00Z"'), all, instants)).toBe('number');
+      expect(verdict(said('between "22:33:00Z" and "23:56:00Z"'), all, instants)).toBe('number');
+      expect(verdict(said('between "23:57:00Z" and "22:33:00Z"'), all, instants)).toBe('comparison');
+      expect(verdict(said('between "22:33:00Z" and "23:57:00Z"', 'on "2022-09-10", '), all, instants)).toBe('number');
+      expect(verdict(said('between "22:33:00Z" and "23:57:00Z"'), ['n1', 'n3'], instants)).toBe('comparison');
+      // no property of the set is named: the figures are judged as before, as parts of the instants the lines hold
+      expect(verdict(`The listed ${type}s carry times between "22:33:00Z" and "23:57:00Z".`, all, instants)).toBe('kept');
+    });
+
+    it('removes a range of times of day over instants of different dates, and judges figures that name no property of the set as before', () => {
+      const days = times(['2022-09-09T22:33:00Z', '2022-09-10T01:00:00Z', '2022-09-10T23:57:00Z'], 'dateTime');
+      expect(verdict(`The listed ${type}s carry ${time} between "22:33:00Z" and "23:57:00Z".`, all, days)).toBe('comparison');
+      expect(verdict(`The listed ${type}s carry ${time} between 2022-09-09T22:33:00Z and 2022-09-10T23:57:00Z.`, all, days)).toBe('kept');
+      // ordinary sentences with two figures that name no property are no range over the set
+      const held = build(['10', '2', '7']);
+      const lines = new Map(held.lines).set('n1', held.lines.get('n1')?.concat('; openedYear: 2019; closedYear: 2021; limitLow: 100; limitHigh: 5000') ?? '');
+      const ranked = new Map(held.rankedValues).set('n1', [...(held.rankedValues?.get('n1') ?? []), { key: 'openedYear', dataClass: 'number', value: '2019' }, { key: 'closedYear', dataClass: 'number', value: '2021' }, { key: 'limitLow', dataClass: 'number', value: '100' }, { key: 'limitHigh', dataClass: 'number', value: '5000' }]);
+      const extended = { ...held, lines, text: [...lines.values()].join('\n'), rankedValues: ranked };
+      expect(verdict(`${a} was active from 2019 to 2021.`, ['n1'], extended)).toBe('kept');
+      expect(verdict(`${a} covers amounts between 100 and 5000.`, ['n1'], extended)).toBe('kept');
+      expect(verdict(`${a} was active from 2019 to 2022.`, ['n1'], extended)).toBe('number');
+    });
+
+    it('holds a time or a date written in any sentence as an exact part of an instant of a cited line: the sentence of the run, over 25 elements, with no property named', () => {
+      const literals = Array.from({ length: 25 }, (_, index) => `2022-09-10T23:${String(55 + (index % 5)).padStart(2, '0')}:00Z`);
+      const keysOf = literals.map((_, index) => `n${index + 1}`);
+      const lines = new Map(keysOf.map((id, index) => [id, `${id} | "${type}" | title: "Thing ${index + 1}" | id: "${id}x" | ${time}: "${literals[index]}"`]));
+      const crowd: CheckedText = { ...build(['1']), lines, text: [...lines.values()].join('\n'), keys: new Map(keysOf.map((id) => [id, true])), elementTypes: new Map(keysOf.map((id) => [id, `entity ${type}`])), propertyKeys: new Map(keysOf.map((id) => [id, [time]])), elementNames: new Map(keysOf.map((id, index) => [id, [`Thing ${index + 1}`, `${id}x`]])), rankedValues: new Map(keysOf.map((id, index) => [id, [{ key: time, dataClass: 'dateTime', value: temporalKey('dateTime', literals[index] ?? '') ?? '' }]])), readKeys: new Set(), readElements: new Map() };
+      const said = (text: string, cites: string[] = keysOf) => judgeSentences([{ text, cites }], crowd).rejected.map((entry) => entry.reason);
+      expect(said(`All 25 ${type}s are completed, time-stamped between 23:55 and 23:59 on 2022-09-10.`)).toEqual([]);
+      expect(said(`All 25 ${type}s are completed, time-stamped between 23:55:00Z and 23:59:00Z on 2022-09-10.`)).toEqual([]);
+      expect(said(`All 25 ${type}s are completed, time-stamped between 23:54 and 23:59 on 2022-09-10.`)).toEqual(['number']);
+      expect(said(`All 25 ${type}s are completed, time-stamped between 23:55 and 23:59 on 2022-09-11.`)).toEqual(['number']);
+      expect(said(`All 25 ${type}s are completed, time-stamped between 23:55 and 23:59 on 2022-09-10.`, keysOf.slice(0, 24))).not.toEqual([]);
+      // the property is not named as its key (time-stamped): the ends of a range of times are those of the one time property the cited elements carry, the least and the greatest
+      const early = literals.map((_, index) => `2022-09-10T23:${String(50 + (index % 10)).padStart(2, '0')}:00Z`);
+      const spread: CheckedText = { ...crowd, lines: new Map(keysOf.map((id, index) => [id, `${id} | "${type}" | title: "Thing ${index + 1}" | id: "${id}x" | ${time}: "${early[index]}"`])), rankedValues: new Map(keysOf.map((id, index) => [id, [{ key: time, dataClass: 'dateTime', value: temporalKey('dateTime', early[index] ?? '') ?? '' }]])) };
+      const spreadText = { ...spread, text: [...spread.lines.values()].join('\n') };
+      const spreadSaid = (text: string) => judgeSentences([{ text, cites: keysOf }], spreadText).rejected.map((entry) => entry.reason);
+      expect(spreadSaid(`All 25 ${type}s are completed, time-stamped between 23:55 and 23:59 on 2022-09-10.`)).toEqual(['comparison']);
+      expect(spreadSaid(`All 25 ${type}s are completed, time-stamped between 23:50 and 23:59 on 2022-09-10.`)).toEqual([]);
+    });
+
+    it('tries each time property of the cited elements when none is named: a context element with a time property of its own does not remove a right range, two candidates keep the one that fits, and a set cited in part verifies nothing', () => {
+      const base = times(['2022-09-01', '2022-09-05', '2022-09-10'], 'date');
+      // a context element of another type, cited beside the set, with a day property of its own
+      const ctxLines = new Map(base.lines).set('n9', `n9 | "${other}" | title: "Holder Z" | id: "n9x" | born: "1980-03-04"`);
+      const ctxRanked = new Map(base.rankedValues).set('n9', [{ key: 'born', dataClass: 'date', value: temporalKey('date', '1980-03-04') ?? '' }]);
+      const withContext: CheckedText = { ...base, lines: ctxLines, text: [...ctxLines.values()].join('\n'), rankedValues: ctxRanked };
+      const cites = [...all, 'n9'];
+      expect(verdict(`The ${type}s were filed between 2022-09-01 and 2022-09-10.`, cites, withContext)).toBe('kept');
+      expect(verdict(`The ${type}s were filed between 2022-09-01 and 2022-09-09.`, cites, withContext)).not.toBe('kept');
+      // two time properties on the set: only one fits the ends
+      const instants = ['2022-09-09T22:33:00Z', '2022-09-09T23:10:00Z', '2022-09-09T23:57:00Z'];
+      const closed = ['2022-09-09T20:00:00Z', '2022-09-09T21:00:00Z', '2022-09-09T22:00:00Z'];
+      const twoLines = new Map(all.map((id, index) => [id, `${id} | "${type}" | title: "${names[index]}" | id: "${id}x" | ${time}: "${instants[index]}"; closedAt: "${closed[index]}"`]));
+      const two: CheckedText = { ...times(instants, 'dateTime'), lines: twoLines, text: [...twoLines.values()].join('\n'), rankedValues: new Map(all.map((id, index) => [id, [{ key: time, dataClass: 'dateTime', value: temporalKey('dateTime', instants[index] ?? '') ?? '' }, { key: 'closedAt', dataClass: 'dateTime', value: temporalKey('dateTime', closed[index] ?? '') ?? '' }]])) };
+      expect(verdict(`The ${type}s were completed between 20:00 and 22:00 on 2022-09-09.`, all, two)).toBe('kept');
+      expect(verdict(`The ${type}s were completed between 22:33 and 23:57 on 2022-09-09.`, all, two)).toBe('kept');
+      expect(verdict(`The ${type}s were completed between 20:00 and 23:57 on 2022-09-09.`, all, two)).toBe('comparison');
+      // a candidate of a set that is cited in part cannot verify the range, so the partly cited set is not kept by it
+      expect(verdict(`The ${type}s were completed between 22:33 and 23:57 on 2022-09-09.`, ['n1', 'n3'], two)).toBe('comparison');
+    });
+
+    it('chooses the (type, property) candidate that the sentence is about: a context element of another type with the same key is no part of the set, and a type named with its noun is the only candidate', () => {
+      const instants = ['2022-09-10T23:50:00Z', '2022-09-10T23:55:00Z', '2022-09-10T23:59:00Z'];
+      const base = times(instants, 'dateTime');
+      // a context element of another type that carries the same key
+      const withOne = (extra: readonly [string, string][]): CheckedText => {
+        const lines = new Map(base.lines);
+        const ranked = new Map(base.rankedValues);
+        const types = new Map(base.elementTypes);
+        for (const [id, instant] of extra) {
+          lines.set(id, `${id} | "${other}" | title: "Holder ${id}" | id: "${id}x" | ${time}: "${instant}"`);
+          ranked.set(id, [{ key: time, dataClass: 'dateTime', value: temporalKey('dateTime', instant) ?? '' }]);
+          types.set(id, `entity ${other}`);
+        }
+        return { ...base, lines, keys: new Map([...base.keys, ...extra.map(([id]) => [id, true] as const)]), text: [...lines.values()].join('\n'), rankedValues: ranked, elementTypes: types, elementNames: new Map([...(base.elementNames ?? []), ...extra.map(([id]) => [id, [`Holder ${id}`, `${id}x`]] as const)]) };
+      };
+      const one = withOne([['n9', '2022-09-10T20:00:00Z']]);
+      const cites = [...all, 'n9'];
+      expect(verdict(`The ${type}s were created between 23:50 and 23:59 on 2022-09-10.`, cites, one)).toBe('kept');
+      expect(verdict(`The ${type}s were created between 23:50 and 23:58 on 2022-09-10.`, cites, one)).not.toBe('kept');
+      expect(verdict(`The ${type}s were created between 23:50 and 23:59 on 2022-09-10.`, all, one)).toBe('kept');
+      // the context type is a whole set cited with values whose ends fit the sentence, and the sentence names the other type: it cannot be chosen
+      const fits = withOne([['n8', '2022-09-10T20:00:00Z'], ['n9', '2022-09-10T22:00:00Z']]);
+      expect(verdict(`The ${type}s were created between 20:00 and 22:00 on 2022-09-10.`, [...all, 'n8', 'n9'], fits)).not.toBe('kept');
+      expect(verdict(`The ${other}s were created between 20:00 and 22:00 on 2022-09-10.`, [...all, 'n8', 'n9'], fits)).toBe('kept');
+    });
+
+    it('keeps only the named keys that fit the ends, checks figure ranges of a named plural type like time ranges, and removes a sentence that names more than one type', () => {
+      const instants = ['2022-09-10T23:50:00Z', '2022-09-10T23:55:00Z', '2022-09-10T23:59:00Z'];
+      const base = times(instants, 'dateTime');
+      // the set holds a figure and a time; the sentence names both keys but the ends are times
+      const both = new Map(base.rankedValues);
+      const lines = new Map(base.lines);
+      all.forEach((id, index) => {
+        both.set(id, [...(both.get(id) ?? []), { key, dataClass: 'number', value: '5' }]);
+        lines.set(id, `${lines.get(id) ?? ''}; ${key}: 5`);
+      });
+      const withFigure: CheckedText = { ...base, lines, text: [...lines.values()].join('\n'), rankedValues: both };
+      expect(verdict(`The ${type}s, with ${key} 5, carry ${time} between "23:50" and "23:59".`, all, withFigure)).toBe('kept');
+      expect(verdict(`The ${type}s, with ${key} 5, carry ${time} between "23:50" and "23:58".`, all, withFigure)).not.toBe('kept');
+      // a figure range over a named plural type is the least and the greatest of its figures
+      const payments = build(['50', '100', '500']);
+      expect(verdict(`The ${type}s range between 50 and 500.`, all, payments)).toBe('kept');
+      expect(verdict(`The ${type}s range between 100 and 500.`, all, payments)).toBe('comparison');
+      expect(verdict(`${b} was active from 100 to 500.`, ['n2', 'n3'], payments)).toBe('kept');
+      // two types named: not verified, whichever would hold
+      const context = new Map(base.lines);
+      const types = new Map(base.elementTypes);
+      const ranked = new Map(base.rankedValues);
+      for (const [id, instant] of [['n8', '2022-09-10T09:00:00Z'], ['n9', '2022-09-10T10:00:00Z']] as const) {
+        context.set(id, `${id} | "${other}" | title: "Holder ${id}" | id: "${id}x" | ${time}: "${instant}"`);
+        types.set(id, `entity ${other}`);
+        ranked.set(id, [{ key: time, dataClass: 'dateTime', value: temporalKey('dateTime', instant) ?? '' }]);
+      }
+      const crowd: CheckedText = { ...base, lines: context, keys: new Map([...base.keys, ['n8', true], ['n9', true]]), text: [...context.values()].join('\n'), elementTypes: types, rankedValues: ranked, elementNames: new Map([...(base.elementNames ?? []), ['n8', ['Holder n8', 'n8x']], ['n9', ['Holder n9', 'n9x']]]) };
+      const every = [...all, 'n8', 'n9'];
+      expect(verdict(`The ${type}s sent by a ${other} were created between 09:00 and 10:00 on 2022-09-10.`, every, crowd)).toBe('comparison');
+      expect(verdict(`The ${type}s sent by a ${other} were created between 23:50 and 23:59 on 2022-09-10.`, every, crowd)).toBe('comparison');
+      // no type named, two types: held only when exactly one of them verifies it
+      expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, every, crowd)).toBe('kept');
+      expect(verdict(`These were created between 09:00 and 23:59 on 2022-09-10.`, every, crowd)).not.toBe('kept');
+    });
+
+    it('takes a time of day of an instant only as an exact part of it, never a rounding, and a part that is no part as a number to find', () => {
+      const seconds = times(['2022-09-09T22:33:30Z', '2022-09-09T23:10:00Z', '2022-09-09T23:57:00Z'], 'dateTime');
+      expect(verdict(`The listed ${type}s carry ${time} between "22:33:30Z" and "23:57:00Z".`, all, seconds)).toBe('kept');
+      expect(verdict(`The listed ${type}s carry ${time} between "22:33" and "23:57:00Z".`, all, seconds)).toBe('number');
+      expect(verdict(`The listed ${type}s carry ${time} between "22:34:00Z" and "23:57:00Z".`, all, seconds)).toBe('number');
+    });
+
+    it('verifies the range of a date, and of a number, and refuses a mixed class and a masked or missing value', () => {
+      const days = times(['2022-09-01', '2022-09-05', '2022-09-09'], 'date');
+      expect(verdict(`The listed ${type}s carry ${time} between 2022-09-01 and 2022-09-09.`, all, days)).toBe('kept');
+      expect(verdict(`The listed ${type}s carry ${time} between 2022-09-02 and 2022-09-09.`, all, days)).toBe('number');
+      const numbers = build(['10', '2', '7']);
+      expect(verdict(`The listed ${type}s carry ${key} between 2 and 10.`, all, numbers)).toBe('kept');
+      expect(verdict(`The listed ${type}s carry ${key} between 2 and 9.`, all, numbers)).toBe('number');
+      expect(verdict(`The listed ${type}s carry ${key} between 3 and 10.`, all, numbers)).not.toBe('kept');
+      expect(verdict(`The listed ${type}s carry ${key} between 2 and 10.`, all, build(['10', undefined, '7']))).not.toBe('kept');
+      const instants = times(['2022-09-09T22:33:00Z', '2022-09-09T23:10:00Z', '2022-09-09T23:57:00Z'], 'dateTime');
+      const mixed = new Map(instants.rankedValues);
+      mixed.set('n3', [{ key: time, dataClass: 'date', value: temporalKey('date', '2022-09-09') ?? '' }]);
+      expect(verdict(`The listed ${type}s carry ${time} between "22:33:00Z" and "23:57:00Z".`, all, { ...instants, rankedValues: mixed })).toBe('comparison');
+    });
+
     it('does not rank mixed classes', () => {
       const base = times(['2022-09-10', '2021-01-02', '2023-12-31'], 'date');
       const ranked = new Map(base.rankedValues);

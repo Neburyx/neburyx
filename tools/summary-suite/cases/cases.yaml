@@ -76,8 +76,8 @@ cases:
     not_retrieved: { value: 99998, quality: "lowerBound" }
     entities:
       - { key: "m1", type: "merchant", id: "MR-0", name: "MR-0" }
-      - { key: "a1", type: "account", id: "AC-0100", name: "AC-0100", props: { paidAmount: { value: 4200, class: "number" }, openedOn: { value: "2026-01-05", class: "date" } } }
-      - { key: "a2", type: "account", id: "AC-0101", name: "AC-0101", props: { paidAmount: { value: 5000, class: "number" }, openedOn: { value: "2025-12-31", class: "date" } } }
+      - { key: "a1", type: "account", id: "AC-0100", name: "AC-0100", props: { paidAmount: { value: 4200, class: "number" }, openedOn: { value: "2026-01-05", class: "date" }, seenAt: { value: "2022-09-09T22:33:00Z", class: "dateTime" } } }
+      - { key: "a2", type: "account", id: "AC-0101", name: "AC-0101", props: { paidAmount: { value: 5000, class: "number" }, openedOn: { value: "2025-12-31", class: "date" }, seenAt: { value: "2022-09-09T23:57:00Z", class: "dateTime" } } }
     relationships:
       - { key: "r1", type: "PAID_TO", from: "a1", to: "m1", observed_at: "2026-04-01" }
       - { key: "r2", type: "PAID_TO", from: "a2", to: "m1", observed_at: "2026-04-02" }
@@ -98,6 +98,9 @@ cases:
       - { id: "s8", label: "keep", plain_view: true, text: "The account AC-0101 has the largest paidAmount, 5000.", cites: ["a1", "a2"] }
       - { id: "s9", label: "remove", rule: "comparison", text: "The account AC-0100 has the largest paidAmount, 4200.", cites: ["a1", "a2"] }
       - { id: "s10", label: "keep", plain_view: true, text: "The account AC-0101 has the earliest openedOn, 2025-12-31.", cites: ["a1", "a2"] }
+      - { id: "s11", label: "keep", plain_view: true, text: "The accounts AC-0100 and AC-0101 carry seenAt on \"2022-09-09\", between \"22:33:00Z\" and \"23:57:00Z\".", cites: ["a1", "a2"] }
+      - { id: "s12", label: "remove", rule: "comparison", text: "The accounts AC-0100 and AC-0101 carry seenAt on \"2022-09-09\", between \"23:57:00Z\" and \"22:33:00Z\".", cites: ["a1", "a2"] }
+      - { id: "s13", label: "keep", plain_view: true, text: "The accounts AC-0100 and AC-0101 were seen between 22:33 and 23:57 on 2022-09-09.", cites: ["a1", "a2"] }
   - id: repeated-payments-between-two-accounts
     pack: banking-fraud
     source_case: repeated-payments-to-one-account
@@ -183,9 +186,9 @@ cases:
     title: "One claimant filed three claims"
     entities:
       - { key: "c1", type: "claimant", id: "CT-00300", name: "Jory Kell" }
-      - { key: "k1", type: "claim", id: "CL-001007", name: "CL-001007", props: { claimedAmount: { value: "1200.50", class: "number" } } }
-      - { key: "k2", type: "claim", id: "CL-001504", name: "CL-001504", props: { claimedAmount: { value: "1200.5", class: "number" } } }
-      - { key: "k3", type: "claim", id: "CL-001968", name: "CL-001968", props: { claimedAmount: { value: "900", class: "number" } } }
+      - { key: "k1", type: "claim", id: "CL-001007", name: "CL-001007", props: { claimedAmount: { value: "1200.50", class: "number" }, filedAt: { value: "2022-09-09T08:00:00Z", class: "dateTime" } } }
+      - { key: "k2", type: "claim", id: "CL-001504", name: "CL-001504", props: { claimedAmount: { value: "1200.5", class: "number" }, filedAt: { value: "2022-09-09T09:30:00Z", class: "dateTime" } } }
+      - { key: "k3", type: "claim", id: "CL-001968", name: "CL-001968", props: { claimedAmount: { value: "900", class: "number" }, filedAt: { value: "2022-09-09T10:15:00Z", class: "dateTime" } } }
     relationships:
       - { key: "r1", type: "FILED_BY", from: "k1", to: "c1" }
       - { key: "r2", type: "FILED_BY", from: "k2", to: "c1" }
@@ -207,6 +210,10 @@ cases:
       - { id: "s8", label: "remove", rule: "comparison", text: "The claim CL-001007 has the largest claimedAmount, 1200.50.", cites: ["k1", "k2", "k3"] }
       - { id: "s9", label: "keep", plain_view: true, text: "The claim CL-001968 has the smallest claimedAmount, 900.", cites: ["k1", "k2", "k3"] }
       - { id: "s10", label: "remove", rule: "comparison", text: "The claim CL-001968 has the smallest claimedAmount, 900.", cites: ["k2", "k3"] }
+      - { id: "s11", label: "keep", plain_view: true, text: "The claims CL-001007, CL-001504 and CL-001968 carry filedAt on \"2022-09-09\", between \"08:00:00Z\" and \"10:15:00Z\".", cites: ["k1", "k2", "k3"] }
+      - { id: "s12", label: "remove", rule: "comparison", text: "The claims CL-001007, CL-001504 and CL-001968 carry filedAt on \"2022-09-09\", between \"08:00:00Z\" and \"10:15:00Z\".", cites: ["k1", "k3"] }
+      - { id: "s13", label: "remove", rule: "comparison", text: "The claims CL-001007, CL-001504 and CL-001968 carry filedAt on \"2022-09-09\", between \"10:15:00Z\" and \"08:00:00Z\".", cites: ["k1", "k2", "k3"] }
+      - { id: "s14", label: "keep", plain_view: true, text: "The claims CL-001007, CL-001504 and CL-001968 were filed between 08:00 and 10:15 on 2022-09-09.", cites: ["k1", "k2", "k3"] }
   - id: same-text-different-addresses
     pack: insurance-claims
     source_case: same-text-different-addresses

@@ -230,11 +230,29 @@ function wordMentionsIn(text: string, quotedToo = false): { readonly value: stri
   });
 }
 
+/** The ways an instant may be written in part, each an exact part of the line's instant (the date, the time of day with or without its zone, hours and minutes when the seconds are nothing). */
+function instantParts(instant: string): string[] {
+  const at = instant.indexOf('T');
+  const date = instant.slice(0, at);
+  const time = instant.slice(at + 1);
+  const bare = time.replace(/(Z|[+-]\d\d:\d\d)$/u, '');
+  const parts = [instant, date, time, bare];
+  if (!bare.includes('.') && bare.endsWith(':00')) parts.push(bare.slice(0, 5), `${bare.slice(0, 5)}${time.slice(bare.length)}`);
+  return parts;
+}
+
+/** The sentence with each date or time it writes as an exact part of an instant of the cited lines taken out: those are judged with the instant, and are no numbers to find on a line. */
+function withoutInstantParts(text: string, cited: readonly string[]): string {
+  const parts = new Set(cited.flatMap((line) => line.match(/\d{4}-\d\d-\d\dT[\d:.]+(?:Z|[+-]\d\d:\d\d)?/gu) ?? []).flatMap(instantParts));
+  return text.replace(/\d{4}-\d\d-\d\d(?:T[\d:.]+(?:Z|[+-]\d\d:\d\d)?)?|(?<![\d:])\d{1,2}:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)?(?![\d:])/gu, (found) => (parts.has(found) ? ' '.repeat(found.length) : found));
+}
+
 export function numbersUnsupported(sentence: SummarySentence, sent: string): string[] {
   const lines = linesOfKeys(sent);
   const supported = new Set(sentence.cites.flatMap((key) => numbersOfLine(lines.get(key) ?? '')));
+  const text = withoutInstantParts(sentence.text, sentence.cites.map((key) => lines.get(key) ?? ''));
   const written = wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || opensCount(found.after, lines));
-  return [...mentionsIn(sentence.text), ...written].filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
+  return [...mentionsIn(text), ...written].filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
 }
 
 export function expectNumbersCited(sentences: readonly SummarySentence[], sent: string): void {
@@ -377,4 +395,70 @@ export function rankingBroken(sentence: SummarySentence, sent: string, classes: 
   if (figure === null) return named.length === 0;
   const claimed = dataClass === 'number' ? scaledDecimal(figure[0].replaceAll(',', '')) : timeAsNumber(figure[0], dataClass === 'date' && figure[0].includes('T') ? 'dateTime' : dataClass);
   return claimed === undefined || claimed !== top[1];
+}
+
+
+const RANGE_OF = /(?:between|from)\s+["“]?([-+]?\d[^"”\s]*)["”]?\s+(?:and|to)\s+["“]?([-+]?\d[^"”\s]*?)["”]?(?:\.(?:\s|$)|[\s,;]|$)/iu;
+
+/**
+ * The suite's own statement of the rule for a range (`between A and B`, `from A to B`) over a property of a set: the sentence names a property of the cited elements, every element of that type is cited with a value of it, A is the least value
+ * among them and B the greatest, each as written on the line of an element that holds it (a time of day as an exact part of the instant). Returns whether the sentence breaks the rule.
+ */
+export function rangeBroken(sentence: SummarySentence, sent: string, classes: ReadonlyMap<string, string>): boolean {
+  const found = RANGE_OF.exec(sentence.text);
+  if (found === null) return false;
+  const held = heldElementsOf(sent);
+  const cited = sentence.cites.filter((key) => held.has(key));
+  const words = new Set((sentence.text.replace(found[0], ' ').match(/[\p{L}\p{N}_]+/gu) ?? []).map((word) => word.toLowerCase().replace(/s$/u, '')));
+  const pairs = [...new Map(cited.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])].map((property) => [`${held.get(key)?.type}\u0000${property}`, { type: held.get(key)?.type ?? '', property }] as const)))].map(([, pair]) => pair);
+  const isDay = (literal: string): boolean => /^\d{4}-\d\d-\d\d$/u.test(literal);
+  const isTime = (literal: string): boolean => /^\d{4}-\d\d-\d\d|^\d{1,2}:\d\d/u.test(literal);
+  // the ends are both dates or times, or both figures
+  if (isTime(found[1] ?? '') !== isTime(found[2] ?? '')) return false;
+  const ofTime = isTime(found[1] ?? '');
+  const fitting = pairs.filter((pair) => {
+    const kind = classes.get(pair.property) ?? '';
+    return ofTime ? ['date', 'dateTime'].includes(kind) && (kind !== 'date' || (isDay(found[1] ?? '') && isDay(found[2] ?? ''))) : kind === 'number';
+  });
+  const keys = [...new Set(fitting.map((pair) => pair.property))].filter((key) => words.has(key.toLowerCase()));
+  if (keys.length > 1) return true;
+  const tokens = new Set((sentence.text.replace(found[0], ' ').match(/[\p{L}\p{N}_]+/gu) ?? []).map((word) => word.toLowerCase()));
+  const plural = (type: string): boolean => [`${type}s`, `${type}es`, `${type.replace(/y$/u, '')}ies`].some((form) => tokens.has(form));
+  // figures that name no property: a range over a set only when a cited type is named by its plural noun
+  const needsPlural = keys.length === 0 && !ofTime;
+  const named = (type: string): boolean => (needsPlural ? plural(type.toLowerCase()) : words.has(type.toLowerCase()));
+  if (needsPlural && !fitting.some((pair) => named(pair.type))) return false;
+  let candidates = fitting.filter((pair) => keys.length === 0 || pair.property === keys[0]);
+  const namedTypes = new Set(candidates.filter((pair) => named(pair.type)).map((pair) => pair.type));
+  if (namedTypes.size > 1) return true;
+  if (namedTypes.size > 0) candidates = candidates.filter((pair) => namedTypes.has(pair.type));
+  if (candidates.length === 0) return keys.length > 0;
+  /** Whether the range is broken over one property of one type. */
+  const brokenFor = (type: string, property: string): boolean => {
+    const dataClass = classes.get(property);
+    if (dataClass !== 'dateTime' && dataClass !== 'date' && dataClass !== 'number') return true;
+    const numbers = new Map<string, bigint>();
+    for (const [key, element] of [...held].filter(([, candidate]) => candidate.type === type)) {
+      const value = element.values.get(property);
+      if (!cited.includes(key) || value === undefined || value.masked) return true;
+      const number = dataClass === 'number' ? scaledDecimal(value.raw) : timeAsNumber(value.raw, dataClass);
+      if (number === undefined) return true;
+      numbers.set(key, number);
+    }
+    const low = [...numbers.values()].reduce((best, next) => (next < best ? next : best));
+    const high = [...numbers.values()].reduce((best, next) => (next > best ? next : best));
+    const holds = (literal: string, end: bigint): boolean =>
+      [...numbers].filter(([, number]) => number === end).some(([key]) => {
+        const raw = String(held.get(key)?.values.get(property)?.raw);
+        return dataClass === 'number' ? scaledDecimal(literal.replaceAll(',', '')) === end : instantParts(raw.includes('T') ? raw : `${raw}T00:00:00`).includes(literal) && (dataClass === 'dateTime' || literal === raw);
+      });
+    if (!holds(found[1] ?? '', low) || !holds(found[2] ?? '', high)) return true;
+    // an end that is a time of day says the whole set lies in a window of one day
+    if (dataClass !== 'number' && (!/^\d{4}-/u.test(found[1] ?? '') || !/^\d{4}-/u.test(found[2] ?? ''))) return new Set([...held].filter(([, candidate]) => candidate.type === type).map(([, candidate]) => String(candidate.values.get(property)?.raw).slice(0, 10))).size !== 1;
+    return false;
+  };
+  const candidateTypes = new Set(candidates.map((pair) => pair.type));
+  // no type is named and more than one could be what the range is over: it holds only when exactly one of them verifies it
+  if (candidateTypes.size > 1) return new Set(candidates.filter((pair) => !brokenFor(pair.type, pair.property)).map((pair) => pair.type)).size !== 1;
+  return candidates.every((pair) => brokenFor(pair.type, pair.property));
 }

@@ -5,7 +5,7 @@ import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { caseOf, classesOf, keyMapOf, loadCases, parseCases, readingOf, sentenceInKeys, type LabelledCase, type LabelledSentence } from './cases.js';
-import { countRuleBroken, defined, holdsVerdict, keysOfSentText, numbersUnsupported, rankingBroken, sentencesOf } from './checks.js';
+import { countRuleBroken, defined, holdsVerdict, keysOfSentText, numbersUnsupported, rangeBroken, rankingBroken, sentencesOf } from './checks.js';
 import { checkedReplyOf, replyOf, startRig } from './testing/rig.js';
 import { scoreLabelled, scoreSummary } from './score.js';
 
@@ -32,7 +32,7 @@ function brokenRules(labelled: LabelledCase, sentence: LabelledSentence, sent: s
   if (numbersUnsupported(asked, sent).length > 0 || countRuleBroken(asked, sent)) rules.push('number');
   if (labelled.invented_names.some((name) => asked.text.toLowerCase().includes(name.toLowerCase()))) rules.push('name');
   if (holdsVerdict(asked, sent)) rules.push('verdict');
-  if (rankingBroken(asked, sent, classesOf(labelled))) rules.push('comparison');
+  if (rankingBroken(asked, sent, classesOf(labelled)) || rangeBroken(asked, sent, classesOf(labelled))) rules.push('comparison');
   return rules;
 }
 

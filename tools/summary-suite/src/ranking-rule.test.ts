@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { classesOf, keyMapOf, loadCases, readingOf, sentenceInKeys, type LabelledCase } from './cases.js';
-import { defined, rankingBroken } from './checks.js';
+import { defined, rangeBroken, rankingBroken } from './checks.js';
 import { mutatedChecks, type Mutation } from './mutants.js';
 import { replyOf, startRig } from './testing/rig.js';
 
@@ -16,7 +16,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-const NO_RANKING_TEST: Mutation = { name: 'the ranking test', from: 'return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && claimsAreBacked(sentence, assembled);', to: 'return comparedElementsHold(sentence, assembled) && claimsAreBacked(sentence, assembled);' };
+const NO_RANKING_TEST: Mutation = { name: 'the ranking test', from: 'return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && rangeHolds(sentence, assembled) && claimsAreBacked(sentence, assembled);', to: 'return comparedElementsHold(sentence, assembled) && rangeHolds(sentence, assembled) && claimsAreBacked(sentence, assembled);' };
 const NO_TIE_RULE: Mutation = { name: 'the tie rule', from: 'if (top === undefined || (next !== undefined && compareValues(dataClass, top[1].value, next[1].value) === 0)) return false;', to: 'if (top === undefined) return false;' };
 const NO_MASKED_RULE: Mutation = {
   name: 'the rule of a missing or masked value',
@@ -87,5 +87,43 @@ describe('the suite\'s own rule leaves a property named with a ranking word, and
   it('takes a ranking word joined by a hyphen for a ranking', () => {
     expect(rankingBroken({ text: 'Item A is the highest-value widget, 10.', cites: ['n1'] }, sent, classes)).toBe(true);
     expect(rankingBroken({ text: 'Item A is a non-maximum widget.', cites: ['n1'] }, sent, classes)).toBe(false);
+  });
+});
+
+describe('the suite\'s own rule for a range', () => {
+  const sent = ['n1 | "widget" | title: "Item A" | id: "W-1" | seenAt: "2022-09-09T22:33:00Z"; openedYear: 2019; closedYear: 2021', 'n2 | "widget" | title: "Item B" | id: "W-2" | seenAt: "2022-09-10T01:00:00Z"; openedYear: 2018; closedYear: 2020'].join('\n');
+  const classes = new Map([['seenAt', 'dateTime'], ['openedYear', 'number'], ['closedYear', 'number']]);
+
+  it('leaves figures that name no property of the set alone, and refuses times of day over instants of two dates', () => {
+    expect(rangeBroken({ text: 'Item A was active from 2019 to 2021.', cites: ['n1'] }, sent, classes)).toBe(false);
+    expect(rangeBroken({ text: 'The widgets carry seenAt between "22:33:00Z" and "01:00:00Z".', cites: ['n1', 'n2'] }, sent, classes)).toBe(true);
+    expect(rangeBroken({ text: 'The widgets carry seenAt between 2022-09-09T22:33:00Z and 2022-09-10T01:00:00Z.', cites: ['n1', 'n2'] }, sent, classes)).toBe(false);
+  });
+
+  it('tries each time property of the cited elements when none is named, and ignores one of a context element', () => {
+    const two = ['n1 | "widget" | title: "Item A" | id: "W-1" | filedDate: "2022-09-01"', 'n2 | "widget" | title: "Item B" | id: "W-2" | filedDate: "2022-09-10"', 'n3 | "person" | title: "Holder" | id: "P-1" | born: "1980-03-04"'].join('\n');
+    const days = new Map([['filedDate', 'date'], ['born', 'date']]);
+    expect(rangeBroken({ text: 'The widgets were filed between 2022-09-01 and 2022-09-10.', cites: ['n1', 'n2', 'n3'] }, two, days)).toBe(false);
+    expect(rangeBroken({ text: 'The widgets were filed between 2022-09-01 and 2022-09-09.', cites: ['n1', 'n2', 'n3'] }, two, days)).toBe(true);
+  });
+
+  it('chooses the type and property the sentence is about: a context element with the same key is no part of the set', () => {
+    const lines = ['n1 | "widget" | title: "Item A" | id: "W-1" | createdAt: "2022-09-10T23:50:00Z"', 'n2 | "widget" | title: "Item B" | id: "W-2" | createdAt: "2022-09-10T23:59:00Z"', 'n3 | "person" | title: "Holder" | id: "P-1" | createdAt: "2022-09-10T20:00:00Z"'].join('\n');
+    const kinds = new Map([['createdAt', 'dateTime']]);
+    expect(rangeBroken({ text: 'The widgets were created between 23:50 and 23:59 on 2022-09-10.', cites: ['n1', 'n2', 'n3'] }, lines, kinds)).toBe(false);
+    expect(rangeBroken({ text: 'The widgets were created between 23:50 and 23:58 on 2022-09-10.', cites: ['n1', 'n2', 'n3'] }, lines, kinds)).toBe(true);
+  });
+
+  it('keeps only the named keys that fit the ends, checks figure ranges of a named plural type, and refuses a sentence that names two types', () => {
+    const lines = ['n1 | "widget" | title: "Item A" | id: "W-1" | amount: 5; createdAt: "2022-09-10T23:50:00Z"', 'n2 | "widget" | title: "Item B" | id: "W-2" | amount: 5; createdAt: "2022-09-10T23:59:00Z"', 'n3 | "person" | title: "Holder" | id: "P-1" | createdAt: "2022-09-10T09:00:00Z"', 'n4 | "person" | title: "Other" | id: "P-2" | createdAt: "2022-09-10T10:00:00Z"'].join('\n');
+    const kinds = new Map([['createdAt', 'dateTime'], ['amount', 'number']]);
+    expect(rangeBroken({ text: 'The widgets, with amount 5, were created between 23:50 and 23:59 on 2022-09-10.', cites: ['n1', 'n2'] }, lines, kinds)).toBe(false);
+    expect(rangeBroken({ text: 'The widgets, with amount 5, were created between 23:50 and 23:58 on 2022-09-10.', cites: ['n1', 'n2'] }, lines, kinds)).toBe(true);
+    const payments = ['n1 | "payment" | title: "P-1" | id: "p1" | value: 50', 'n2 | "payment" | title: "P-2" | id: "p2" | value: 100', 'n3 | "payment" | title: "P-3" | id: "p3" | value: 500'].join('\n');
+    const figures = new Map([['value', 'number']]);
+    expect(rangeBroken({ text: 'The payments range between 50 and 500.', cites: ['n1', 'n2', 'n3'] }, payments, figures)).toBe(false);
+    expect(rangeBroken({ text: 'The payments range between 100 and 500.', cites: ['n1', 'n2', 'n3'] }, payments, figures)).toBe(true);
+    expect(rangeBroken({ text: 'P-2 was active from 100 to 500.', cites: ['n2', 'n3'] }, payments, figures)).toBe(false);
+    expect(rangeBroken({ text: 'The widgets sent by a person were created between 09:00 and 10:00 on 2022-09-10.', cites: ['n1', 'n2', 'n3', 'n4'] }, lines, kinds)).toBe(true);
   });
 });
