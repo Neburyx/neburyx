@@ -47,7 +47,7 @@ describe('what a turn leaves in its thread', () => {
 });
 
 describe('what the panel is told of a thread', () => {
-  const stored = { seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'widgetById', citedElements: 2, steps: 1 };
+  const stored = { id: '0192f000-0000-7000-8000-0000000000bb', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'widgetById', citedElements: 2, steps: 1 };
 
   it('holds the kind and end of each turn and when the previous thread was cleared, and nothing else', () => {
     expect(assistantThreadResponseSchema.safeParse({ turns: [stored], earlierTurns: 0, previousThreadClearedAt: null }).success).toBe(true);
