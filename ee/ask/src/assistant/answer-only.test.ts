@@ -42,6 +42,6 @@ describe('the checked answer tool is the only output', () => {
     let keys: string[] = [];
     const r = await rig({ reply: VIEW, agent: { model: fakeModel().respond(new AIMessage(TEXT)), onRun: (run) => (keys = Object.keys(run).sort()) } });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(keys).toEqual(['assembled', 'called', 'modelCalls', 'offered', 'refused', 'reserveRefused']);
+    expect(keys).toEqual(['assembled', 'called', 'modelCalls', 'offered', 'refused', 'reserveRefused', 'trimmed']);
   });
 });
