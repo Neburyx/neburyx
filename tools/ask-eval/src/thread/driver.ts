@@ -12,10 +12,10 @@ export type Http = (method: 'GET' | 'POST', path: string, body?: unknown) => Pro
 export interface RepeatSettings {
   readonly model: string;
   readonly callLimit: number;
-  readonly effort?: string;
+  readonly effort?: string | undefined;
   /** Where the effort and the model come from: the settings file or the product's default. */
-  readonly effortSource?: string;
-  readonly modelSource?: string;
+  readonly effortSource?: string | undefined;
+  readonly modelSource?: string | undefined;
 }
 
 export interface RepeatOptions {
@@ -38,7 +38,7 @@ type TurnStatus = 'answered' | 'refused' | 'waiting' | 'failed' | 'other';
 export interface TurnRecord {
   readonly n: number;
   readonly message: string;
-  readonly traceId: string | undefined;
+  readonly traceId?: string | undefined;
   readonly ms: number;
   readonly httpStatus: number;
   readonly status: TurnStatus;
@@ -63,7 +63,7 @@ export interface RepeatFile {
   readonly turns: readonly TurnRecord[];
   readonly ended: RepeatEnd;
   /** Why the repeat ended before its last message: a cause, never a value. */
-  readonly stoppedBecause?: string;
+  readonly stoppedBecause?: string | undefined;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);

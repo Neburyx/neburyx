@@ -2,6 +2,7 @@ import { spawn as nodeSpawn, type SpawnOptions } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseApprovalFile } from './schemas.js';
 
 export interface Slot {
   readonly repeat: number;
@@ -24,13 +25,16 @@ export interface ScoreFile {
   readonly scorer: string;
   /** `harness` when this tool ran the scorer and counted its calls; `ingested` for scores made outside it. */
   readonly origin: 'harness' | 'ingested';
-  /** The invocations the harness made (a count it enforced); absent for an ingested file. */
-  readonly invocations?: number;
+  /** The set these scores are for: its repeat and the hash of its text, so that scores of another set or of an edited one are not taken for these. */
+  readonly repeat: number;
+  readonly setSha256: string;
+  /** The calls the harness counted and enforced; absent for an ingested file. */
+  readonly invocations?: number | undefined;
   readonly scores: readonly Score[];
 }
 
-/** A scorer run: the prompt goes in, the reply text comes out. A failure to run is `ScorerUnavailable`. */
-export type Runner = (prompt: string) => Promise<string>;
+/** A scorer run: the prompt goes in, the reply text and the number of model calls the run made come out. A failure to run is `ScorerUnavailable`. */
+export type Runner = (prompt: string) => Promise<{ readonly text: string; readonly calls: number }>;
 
 export class ScorerUnavailable extends Error {
   constructor(cause: string) {
@@ -97,20 +101,22 @@ export async function scoreSet(runner: Runner, rubric: string, set: string, slot
   const prompt = promptOf(rubric, set);
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const reply = await runner(attempt === 1 ? prompt : `${prompt}\n\nYour last reply was not valid: ${RESPONSE_SHAPE}`);
-    const scores = parseScores(reply);
+    const scores = parseScores(reply.text);
     if (scores !== undefined && scoreProblems(slots, scores).length === 0) return scores;
   }
   throw new Error(`the scorer's replies for ${name} are not scores that cover its answers exactly`);
 }
 
-/** A runner that stops at a number of invocations: the count the approver approved. */
-export function countedRunner(runner: Runner, maxInvocations: number): { readonly run: Runner; readonly made: () => number } {
+/** A runner that stops at a number of model calls: the count the approver approved. A run that reports more calls than were left is refused after the fact and counted in full. */
+export function countedRunner(runner: Runner, maxCalls: number): { readonly run: Runner; readonly made: () => number } {
   let made = 0;
   return {
     run: async (prompt) => {
-      if (made >= maxInvocations) throw new ScorerUnavailable(`the approved number of invocations (${maxInvocations}) is used up`);
-      made += 1;
-      return runner(prompt);
+      if (made >= maxCalls) throw new ScorerUnavailable(`the approved number of calls (${maxCalls}) is used up`);
+      const result = await runner(prompt);
+      made += result.calls;
+      if (made > maxCalls) throw new ScorerUnavailable(`the run made ${made} calls and the approved number is ${maxCalls}`);
+      return result;
     },
     made: () => made,
   };
@@ -120,9 +126,19 @@ type Spawn = (command: string, args: readonly string[], options: SpawnOptions) =
 
 const QUOTA = /usage limit|quota|rate limit|try again at/iu;
 
-function runCommand(spawn: Spawn, command: string, args: readonly string[], prompt: string): Promise<{ readonly code: number | null; readonly out: string; readonly err: string }> {
+/** The environment a scorer is given: a short allowlist of what its program needs to run and sign in with its own account, and nothing of the product's settings, database or provider key. */
+function scorerEnv(source: NodeJS.ProcessEnv, own: readonly string[]): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const name of ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'USER', ...own]) {
+    const value = source[name];
+    if (value !== undefined) env[name] = value;
+  }
+  return env;
+}
+
+function runCommand(spawn: Spawn, command: string, args: readonly string[], prompt: string, options: { readonly cwd: string; readonly env: NodeJS.ProcessEnv }): Promise<{ readonly code: number | null; readonly out: string; readonly err: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: options.cwd, env: options.env });
     let out = '';
     let err = '';
     child.stdout?.on('data', (chunk: Buffer) => (out += chunk.toString()));
@@ -133,29 +149,46 @@ function runCommand(spawn: Spawn, command: string, args: readonly string[], prom
   });
 }
 
-/** The Codex CLI as the workflows call it: the named model, high effort, read-only, the prompt on its input; out of quota is `ScorerUnavailable`. */
-export function codexRunner(spawn: Spawn = nodeSpawn as unknown as Spawn): Runner {
+/** The Codex CLI as the workflows call it: the named model, high effort, read-only, an empty working folder of its own, an environment of its own and the prompt on its input; out of quota is `ScorerUnavailable`. */
+export function codexRunner(spawn: Spawn = nodeSpawn as unknown as Spawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     const reply = join(dir, 'reply.txt');
     try {
-      const result = await runCommand(spawn, 'codex', ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-s', 'read-only', '--skip-git-repo-check', '-C', dir, '-o', reply, '-'], prompt);
+      const args = ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-c', 'shell_environment_policy.inherit="none"', '-s', 'read-only', '--skip-git-repo-check', '-C', dir, '-o', reply, '-'];
+      const result = await runCommand(spawn, 'codex', args, prompt, { cwd: dir, env: scorerEnv(env, ['OPENAI_API_KEY', 'CODEX_HOME']) });
       if (QUOTA.test(`${result.out}\n${result.err}`)) throw new ScorerUnavailable('out of quota');
       if (result.code !== 0) throw new ScorerUnavailable('the command failed');
-      return readFileSync(reply, 'utf8');
+      return { text: readFileSync(reply, 'utf8'), calls: 1 };
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   };
 }
 
-/** An Opus agent run by the harness through the Claude CLI in print mode with no tools; out of quota is `ScorerUnavailable`. */
-export function opusRunner(spawn: Spawn = nodeSpawn as unknown as Spawn): Runner {
+/**
+ * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, an empty working folder of its own and an environment of its own. With no tool a
+ * run is one model call; the CLI states the turns it made, and that figure is the count of calls, so a run that made more than one is counted in full and refused by the cap.
+ */
+export function opusRunner(spawn: Spawn = nodeSpawn as unknown as Spawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
-    const result = await runCommand(spawn, 'claude', ['-p', '--model', 'opus', '--allowedTools', '', '--output-format', 'text'], prompt);
-    if (QUOTA.test(`${result.out}\n${result.err}`) && result.code !== 0) throw new ScorerUnavailable('out of quota');
-    if (result.code !== 0) throw new ScorerUnavailable('the command failed');
-    return result.out;
+    const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
+    try {
+      const args = ['-p', '--model', 'opus', '--tools', '', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json'];
+      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: scorerEnv(env, ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR']) });
+      if (QUOTA.test(`${result.out}\n${result.err}`) && result.code !== 0) throw new ScorerUnavailable('out of quota');
+      if (result.code !== 0) throw new ScorerUnavailable('the command failed');
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(result.out);
+      } catch {
+        throw new ScorerUnavailable('the reply is not the JSON the command was asked for');
+      }
+      if (!isRecord(parsed) || typeof parsed['result'] !== 'string' || typeof parsed['num_turns'] !== 'number' || !Number.isInteger(parsed['num_turns']) || parsed['num_turns'] < 1) throw new ScorerUnavailable('the reply does not state the calls it made');
+      return { text: parsed['result'], calls: parsed['num_turns'] };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   };
 }
 
@@ -168,14 +201,11 @@ export interface Approval {
 
 /** Reads an approval file: the approver's written confirmation of the exception and the number of invocations; anything else is no approval. */
 export function parseApproval(text: string): Approval | undefined {
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    return parseApprovalFile(JSON.parse(text));
   } catch {
     return undefined;
   }
-  if (!isRecord(parsed) || parsed['exceptionConfirmed'] !== true || typeof parsed['invocations'] !== 'number' || !Number.isInteger(parsed['invocations']) || parsed['invocations'] < 1 || typeof parsed['by'] !== 'string' || typeof parsed['at'] !== 'string') return undefined;
-  return { exceptionConfirmed: true, invocations: parsed['invocations'], by: parsed['by'], at: parsed['at'] };
 }
 
 /** The agreement of two scorers on the same slots, per criterion and overall, in percent; the overall below 90 marks the set indicative. */

@@ -19,7 +19,7 @@ export interface BlindOutput {
   /** One set per repeat, by repeat number, as text for the scorer. */
   readonly sets: ReadonlyMap<number, string>;
   /** The key: label to arm per turn per repeat, the seed and the manifest hash. Never referred to by a set. */
-  readonly key: { readonly seed: string; readonly manifestSha256: string; readonly entries: readonly KeyEntry[] };
+  readonly key: { readonly seed: string; readonly manifestSha256: string; readonly entries: readonly KeyEntry[]; readonly sets: Readonly<Record<string, string>>; readonly noAnswer: readonly string[] };
   /** The expected answers of each set (repeat, turn, label), the slots the scores must cover exactly. */
   readonly slots: readonly { readonly repeat: number; readonly turn: number; readonly label: string }[];
 }
@@ -112,6 +112,8 @@ export function blindSets(repeats: readonly ArmRepeat[], options: { readonly see
   const sets = new Map<number, string>();
   const entries: KeyEntry[] = [];
   const slots: { repeat: number; turn: number; label: string }[] = [];
+  const noAnswer: string[] = [];
+  const hashes: Record<string, string> = {};
   for (const repeat of numbers) {
     const mine = repeats.filter((entry) => entry.repeat === repeat);
     const out: string[] = [`# Set ${repeat}`, ''];
@@ -130,9 +132,13 @@ export function blindSets(repeats: readonly ArmRepeat[], options: { readonly see
         const record = source?.enriched.file.turns[index];
         const evidence = source?.enriched.evidence[index];
         out.push(`### Answer ${label}`);
-        if (record === undefined || record.status === 'failed') out.push(NO_ANSWER);
-        else {
-          out.push(answerText(record.answer), `Coverage: ${coverageText(record.answer, `repeat ${repeat} turn ${turn} of arm ${arm}`)}`);
+        if (record === undefined || record.status === 'failed') {
+          out.push(NO_ANSWER);
+          noAnswer.push(`${repeat}/${turn}/${label}`);
+        } else {
+          const shown = answerText(record.answer);
+          if (shown === NO_ANSWER) noAnswer.push(`${repeat}/${turn}/${label}`);
+          out.push(shown, `Coverage: ${coverageText(record.answer, `repeat ${repeat} turn ${turn} of arm ${arm}`)}`);
           for (const [key, line] of evidence?.citations.mapped ?? []) out.push(`Cited line ${key}: ${line}`);
           if ((evidence?.citations.missing.length ?? 0) > 0) out.push(`Cited keys with no line: ${evidence?.citations.missing.join(', ') ?? ''}`);
           const earlier = (source?.enriched.file.turns ?? []).slice(0, index);
@@ -149,6 +155,7 @@ export function blindSets(repeats: readonly ArmRepeat[], options: { readonly see
     const leaked = leakIn(text, options.forbidden);
     if (leaked !== undefined) throw new Error(`a blind set of repeat ${repeat} holds identifying text (${leaked.length} characters)`);
     sets.set(repeat, text);
+    hashes[String(repeat)] = createHash('sha256').update(text, 'utf8').digest('hex');
   }
-  return { sets, key: { seed: options.seed, manifestSha256: options.manifestSha256, entries }, slots };
+  return { sets, key: { seed: options.seed, manifestSha256: options.manifestSha256, entries, sets: hashes, noAnswer }, slots };
 }

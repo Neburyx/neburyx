@@ -1,14 +1,16 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { AI_DEFAULTS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
-import { factsOf, type Prices } from './facts.js';
-import { checkBars, textDecision, unblind, type Bars } from './report.js';
-import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile, type Slot } from './scorer.js';
+import { factsOf } from './facts.js';
+import { checkBars, textDecision, unblind } from './report.js';
+import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, type Runner, type Score, type ScoreFile } from './scorer.js';
+import { parseBars, parseCalibration, parseEnriched, parseIngested, parseKeyFile, parseLedger, parsePrices, parseRepeatFile, parseScoreFile, type Calibration } from './schemas.js';
 import { blindSets, type ArmRepeat } from './blind.js';
 import { readTurnRecords, type Waiting } from './records.js';
-import { enrichRepeat, type EnrichedRepeat } from './enrich.js';
+import { enrichRepeat } from './enrich.js';
 import { connectDb } from './db.js';
 import type { Db } from './records.js';
 import { runRepeat, type Http, type RepeatFile, type RepeatSettings, type TurnRecord } from './driver.js';
@@ -19,9 +21,9 @@ const THREAD_USAGE = `usage:
   ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> --out <file>
   ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
   ask-eval thread score --ingest <scores file> --scorer-name <name> --slots <key file> --set <file> --out <file>
-  ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--indicative-scorers <names>] [--text-arm <arm>] <scores file>...
-  ask-eval thread facts --call-limit <n> [--prices <file>] <records file>...
-  ask-eval thread calibrate --a <scores file> --b <scores file>
+  ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--calibrations <file>,...] [--text-arm <arm>] <scores file>...
+  ask-eval thread facts [--call-limit <n>] [--prices <file>] <records file>...
+  ask-eval thread calibrate --key-file <key file> --a <scores file> --b <scores file> --out <file>
   ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder> --database-env-file <env file>)`;
 
@@ -44,7 +46,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'indicative-scorers', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'allowed-tools', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'calibrations', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'allowed-tools', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
@@ -199,12 +201,10 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   const out = values.get('out');
   const allowedTools = (values.get('allowed-tools') ?? '').split(',').filter((name) => name !== '');
   if (input === undefined || envFile === undefined || out === undefined || allowedTools.length === 0) throw new UsageError(THREAD_USAGE);
-  let file: RepeatFile;
-  try {
-    file = JSON.parse(readFileSync(resolve(input), 'utf8')) as RepeatFile;
-  } catch {
-    throw new UsageError('the run file cannot be read');
-  }
+  const file: RepeatFile = parseRepeatFile(readJson(input, 'the run file'), 'the run file');
+  const target = resolve(out);
+  checkPrivateTarget(target, false);
+  requireOutsideGitTree(target, 'an output file');
   const connection = await (deps.database ?? connectDb)(resolve(envFile));
   try {
     const waiting = deps.waiting ?? { attempts: RECORD_WAITS, delayMs: RECORD_WAIT_MS, sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
@@ -240,12 +240,7 @@ function runBlind(args: readonly string[], io: CliIo): number {
   prepareOutFolder(setsFolder);
   prepareOutFolder(keyPath);
   const inputs: ArmRepeat[] = rest.map((path) => {
-    let enriched: EnrichedRepeat;
-    try {
-      enriched = JSON.parse(readFileSync(resolve(path), 'utf8')) as EnrichedRepeat;
-    } catch {
-      throw new UsageError('a records file cannot be read');
-    }
+    const enriched = parseEnriched(readJson(path, 'a records file'), 'a records file');
     return { arm: enriched.file.arm, repeat: enriched.file.repeat, enriched };
   });
   const names = rest.flatMap((path) => [path, basename(path), basename(path).replace(/\.[^.]*$/u, '')]);
@@ -282,41 +277,65 @@ function noAnswerSlots(set: string, repeat: number): Set<string> {
   return found;
 }
 
-/** `ask-eval thread score`: scores one blind set with the named scorer, or ingests scores made elsewhere; the scores are validated against the exact slots of the set. */
+const sha256Of = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex');
+
+/** The calls of an approval already used, kept in a file beside it, so that one approval is spent once across sets, retries and commands. */
+function ledgerPath(approvalPath: string): string {
+  return `${resolve(approvalPath)}.ledger.json`;
+}
+
+function usedUnderApproval(approvalPath: string): number {
+  const path = ledgerPath(approvalPath);
+  return existsSync(path) ? parseLedger(readJson(path, 'the approval ledger'), 'the approval ledger').used : 0;
+}
+
+function spend(approvalPath: string, used: number): void {
+  writePrivateFile(ledgerPath(approvalPath), `${JSON.stringify({ used })}\n`, true);
+}
+
+/** `ask-eval thread score`: scores one blind set with the named scorer, or ingests scores made elsewhere; the scores are validated against the exact slots of the set and carry the set's hash. */
 async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): Promise<number> {
   const { values } = parse(args);
   const setPath = values.get('set');
   const slotsPath = values.get('slots');
   const out = values.get('out');
   if (setPath === undefined || slotsPath === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
+  const target = resolve(out);
+  checkPrivateTarget(target, false);
+  requireOutsideGitTree(target, 'an output file');
   const set = readFileSync(resolve(setPath), 'utf8');
   const repeat = Number(/^# Set (\d+)/u.exec(set)?.[1] ?? NaN);
   if (!Number.isInteger(repeat)) throw new UsageError('the set file is not a blind set');
-  const slotsFile = readJson(slotsPath, 'the slots file');
-  const slots = ((typeof slotsFile === 'object' && slotsFile !== null ? (slotsFile as { slots?: Slot[] }).slots : undefined) ?? []).filter((slot) => slot.repeat === repeat);
-  if (slots.length === 0) throw new UsageError('the slots file holds no slot of this set');
+  const key = parseKeyFile(readJson(slotsPath, 'the key file'), 'the key file');
+  const setSha256 = sha256Of(set);
+  if (key.key.sets[String(repeat)] !== setSha256) throw new UsageError('the set file is not the set the key was made with');
+  const slots = key.slots.filter((slot) => slot.repeat === repeat);
   const none = noAnswerSlots(set, repeat);
   let file: ScoreFile;
   const ingest = values.get('ingest');
   if (ingest !== undefined) {
     const name = values.get('scorer-name');
     if (name === undefined) throw new UsageError(THREAD_USAGE);
-    const parsed = readJson(ingest, 'the scores file') as { scores?: Score[] };
-    file = { scorer: name, origin: 'ingested', scores: zeroNoAnswers(parsed.scores ?? [], none) };
+    const ingested = parseIngested(readJson(ingest, 'the scores file'), 'the scores file');
+    file = { scorer: name, origin: 'ingested', repeat, setSha256, scores: zeroNoAnswers(ingested.scores, none) };
   } else {
     const rubricPath = values.get('rubric');
     const scorer = values.get('scorer');
     if (rubricPath === undefined || (scorer !== 'codex' && scorer !== 'opus')) throw new UsageError(THREAD_USAGE);
     const runners = deps.runners ?? { codex: codexRunner(), opus: opusRunner() };
     let limit: number;
+    const approvalPath = values.get('approval');
     if (scorer === 'codex') {
-      const approvalPath = values.get('approval');
       const approval = approvalPath === undefined ? undefined : parseApproval(readFileSync(resolve(approvalPath), 'utf8'));
-      if (approval === undefined) {
+      if (approval === undefined || approvalPath === undefined) {
         io.err('Codex is not invoked: the approver\'s written confirmation of the exception to the live-call rule and the approved number of invocations are required (--approval)');
         return 2;
       }
-      limit = approval.invocations;
+      limit = approval.invocations - usedUnderApproval(approvalPath);
+      if (limit < 1) {
+        io.err('Codex is not invoked: the approved number of invocations is used up');
+        return 2;
+      }
     } else {
       const max = wholeNumber(values.get('max-calls'), 'max-calls', 1, 100);
       if (max === undefined) throw new UsageError('--scorer opus needs --max-calls');
@@ -327,32 +346,48 @@ async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): P
     try {
       scores = await scoreSet(counted.run, readFileSync(resolve(rubricPath), 'utf8'), set, slots, `set ${repeat}`);
     } catch (error) {
-      if (error instanceof ScorerUnavailable) {
-        io.err(error.message);
-        return 1;
-      }
       io.err(error instanceof Error ? error.message : 'the scorer failed');
       return 1;
+    } finally {
+      if (scorer === 'codex' && approvalPath !== undefined) spend(approvalPath, usedUnderApproval(approvalPath) + counted.made());
     }
-    file = { scorer, origin: 'harness', invocations: counted.made(), scores: zeroNoAnswers(scores, none) };
+    file = { scorer, origin: 'harness', repeat, setSha256, invocations: counted.made(), scores: zeroNoAnswers(scores, none) };
   }
   const problems = scoreProblems(slots, file.scores);
   if (problems.length > 0) {
     for (const problem of problems.slice(0, 5)) io.err(problem);
     return 1;
   }
-  writeChecked(resolve(out), `${JSON.stringify(file, null, 2)}\n`, false);
-  io.out(`scores written: ${file.scores.length} by ${file.scorer} (${file.origin}${file.invocations === undefined ? '' : `, ${file.invocations} invocations`})`);
+  writeChecked(target, `${JSON.stringify(file, null, 2)}\n`, false);
+  io.out(`scores written: ${file.scores.length} by ${file.scorer} (${file.origin}${file.invocations === undefined ? '' : `, ${file.invocations} calls`})`);
   return 0;
 }
 
-/** `ask-eval thread calibrate`: the agreement of two scorers on the same set. */
+/** `ask-eval thread calibrate`: the agreement of two scorers on the same complete set, written as the artifact the report requires to count or mark another scorer's repeats. */
 function runCalibrate(args: readonly string[], io: CliIo): number {
   const { values } = parse(args);
   const a = values.get('a');
   const b = values.get('b');
-  if (a === undefined || b === undefined) throw new UsageError(THREAD_USAGE);
-  const result = agreement((readJson(a, 'the first scores file') as ScoreFile).scores, (readJson(b, 'the second scores file') as ScoreFile).scores);
+  const keyPath = values.get('key-file');
+  const out = values.get('out');
+  if (a === undefined || b === undefined || keyPath === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
+  const target = resolve(out);
+  checkPrivateTarget(target, false);
+  requireOutsideGitTree(target, 'an output file');
+  const key = parseKeyFile(readJson(keyPath, 'the key file'), 'the key file');
+  const first = parseScoreFile(readJson(a, 'the first scores file'), 'the first scores file');
+  const second = parseScoreFile(readJson(b, 'the second scores file'), 'the second scores file');
+  if (first.scorer === second.scorer) throw new UsageError('the two scores files are of the same scorer');
+  if (first.repeat !== second.repeat || first.setSha256 !== second.setSha256) throw new UsageError('the two scores files are not for the same set');
+  if (key.key.sets[String(first.repeat)] !== first.setSha256) throw new UsageError('the scores are not for a set of this key');
+  const slots = key.slots.filter((slot) => slot.repeat === first.repeat);
+  for (const file of [first, second]) {
+    const problems = scoreProblems(slots, file.scores);
+    if (problems.length > 0) throw new UsageError(`the scores of ${file.scorer} do not cover the set exactly: ${problems[0] ?? ''}`);
+  }
+  const result = agreement(first.scores, second.scores);
+  const artifact: Calibration = { repeat: first.repeat, setSha256: first.setSha256, scorers: [first.scorer, second.scorer], slots: result.slots, agreement: { overall: result.overall, c1: result.c1, c2: result.c2, c3: result.c3, c4: result.c4 }, indicative: result.indicative };
+  writeChecked(target, `${JSON.stringify(artifact, null, 2)}\n`, false);
   io.out(`slots compared: ${result.slots}`);
   io.out(`agreement: C1 ${result.c1.toFixed(1)}% · C2 ${result.c2.toFixed(1)}% · C3 ${result.c3.toFixed(1)}% · C4 ${result.c4.toFixed(1)}% · overall ${result.overall.toFixed(1)}%`);
   io.out(result.indicative ? 'indicative: the overall agreement is below 90 percent' : 'the agreement is at or above 90 percent');
@@ -367,19 +402,18 @@ function runReport(args: readonly string[], io: CliIo): number {
   const primary = values.get('primary');
   const product = values.get('product');
   if (keyPath === undefined || barsPath === undefined || primary === undefined || product === undefined || rest.length === 0) throw new UsageError(THREAD_USAGE);
-  const key = (readJson(keyPath, 'the key file') as { key: { entries: never[] } }).key;
-  const bars = readJson(barsPath, 'the bars file') as Bars;
-  const files = rest.map((path) => readJson(path, 'a scores file') as ScoreFile);
-  const indicative = (values.get('indicative-scorers') ?? '').split(',').filter((name) => name !== '');
-  const arms = unblind(files, key, { primary, indicativeScorers: indicative });
+  const key = parseKeyFile(readJson(keyPath, 'the key file'), 'the key file');
+  const bars = parseBars(readJson(barsPath, 'the bars file'), 'the bars file');
+  const files = rest.map((path) => parseScoreFile(readJson(path, 'a scores file'), 'a scores file'));
+  const calibrations = (values.get('calibrations') ?? '').split(',').filter((path) => path !== '').map((path) => parseCalibration(readJson(path, 'a calibration file'), 'a calibration file'));
+  const arms = unblind(files, key, calibrations, primary);
   for (const arm of arms) {
     io.out(`arm ${arm.arm}: ${arm.repeats.map((entry) => `repeat ${entry.repeat} ${entry.total}${entry.indicative ? ' (indicative)' : ''}${entry.counted ? '' : ' (not counted)'}`).join(', ')}; median ${arm.median ?? 'none'}; counts C1 ${arm.criteria.c1} C2 ${arm.criteria.c2} C3 ${arm.criteria.c3} C4 ${arm.criteria.c4}`);
   }
   const report = checkBars(arms, product, bars);
   for (const line of report.lines) io.out(line);
   for (const finding of report.findings) io.out(`finding: ${finding.bar}: ${finding.figure}: ${finding.kind}: ${finding.where}`);
-  const textArm = values.get('text-arm');
-  if (textArm !== undefined) io.out(`decision: ${textDecision(arms, product, textArm)}`);
+  io.out(`decision: ${textDecision(arms, product, values.get('text-arm'))}`);
   return report.status === 'met' ? 0 : 1;
 }
 
@@ -387,10 +421,10 @@ function runReport(args: readonly string[], io: CliIo): number {
 function runFacts(args: readonly string[], io: CliIo): number {
   const { values, rest } = parse(args, true);
   const limit = wholeNumber(values.get('call-limit'), 'call-limit', 1, 10);
-  if (limit === undefined || rest.length === 0) throw new UsageError(THREAD_USAGE);
+  if (rest.length === 0) throw new UsageError(THREAD_USAGE);
   const pricesPath = values.get('prices');
-  const prices = pricesPath === undefined ? undefined : (readJson(pricesPath, 'the prices file') as Prices);
-  const facts = factsOf(rest.map((path) => readJson(path, 'a records file') as EnrichedRepeat), { callLimit: limit, ...(prices === undefined ? {} : { prices }) });
+  const prices = pricesPath === undefined ? undefined : parsePrices(readJson(pricesPath, 'the prices file'), 'the prices file');
+  const facts = factsOf(rest.map((path) => parseEnriched(readJson(path, 'a records file'), 'a records file')), { ...(limit === undefined ? {} : { callLimit: limit }), ...(prices === undefined ? {} : { prices }) });
   for (const turn of facts.turns) io.out(`repeat ${turn.repeat} turn ${turn.turn}: calls ${turn.calls ?? 'unknown'}, tokens in ${turn.inputTokens ?? 'unknown'} out ${turn.outputTokens ?? 'unknown'} cache read ${turn.cacheReadTokens ?? 'unknown'} write ${turn.cacheWriteTokens ?? 'unknown'}, ${turn.ms} ms${turn.cost === undefined ? '' : `, cost ${turn.cost.toFixed(4)}`}`);
   io.out(`calls per turn: mean ${facts.callsMean?.toFixed(2) ?? 'none'}, median ${facts.callsMedian ?? 'none'}, p95 ${facts.callsP95 ?? 'none'}; median time ${facts.medianMs ?? 'none'} ms`);
   io.out(facts.p95Verdict);
