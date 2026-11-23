@@ -46,13 +46,26 @@ describe('the guard of the versions of deepagents and LangChain', () => {
   it('update mode leaves the record unchanged when a guarded suite fails, and writes the resolved versions when all passed', () => {
     const lock = lockOf(Object.fromEntries(ALL_GUARDED.map((name) => [name, ['2.0.0']])));
     const written: string[] = [];
-    expect(updateRecord({ suitesPassed: () => false, lockText: lock, write: (text) => written.push(text) })).toBe(false);
+    expect(updateRecord({ suitesPassed: () => false, lockText: lock, write: (text) => written.push(text) })).toEqual({ written: false, problems: ['a guarded suite failed: the record is left unchanged'] });
     expect(written).toEqual([]);
-    expect(updateRecord({ suitesPassed: () => true, lockText: lock, write: (text) => written.push(text) })).toBe(true);
+    expect(updateRecord({ suitesPassed: () => true, lockText: lock, write: (text) => written.push(text) })).toEqual({ written: true, problems: [] });
     expect((JSON.parse(written[0] ?? '') as { versions: Record<string, string> }).versions['deepagents']).toBe('2.0.0');
   });
 
-  it('holds on the real repository: exact pins in the package file, and a record that matches the lockfile', () => {
+  it('update mode refuses to write when a guarded package resolves to no version or to several, and never runs the suites then', () => {
+    const base = Object.fromEntries(ALL_GUARDED.map((name) => [name, ['2.0.0']]));
+    const written: string[] = [];
+    let ran = false;
+    const several = updateRecord({ suitesPassed: () => (ran = true), lockText: lockOf({ ...base, langsmith: ['2.0.0', '2.0.1'] }), write: (text) => written.push(text) });
+    expect(several).toEqual({ written: false, problems: ['langsmith resolves to 2.0.0 and 2.0.1 in pnpm-lock.yaml: it must resolve to exactly one version'] });
+    const none = { ...base } as Record<string, string[]>;
+    delete none['deepagents'];
+    expect(updateRecord({ suitesPassed: () => (ran = true), lockText: lockOf(none), write: (text) => written.push(text) }).problems).toEqual(['deepagents resolves to no version in pnpm-lock.yaml: it must resolve to exactly one version']);
+    expect(written).toEqual([]);
+    expect(ran).toBe(false);
+  });
+
+  it.skipIf(process.env['NBX_UPDATE_TOOL_GUARD'] === '1')('holds on the real repository: exact pins in the package file, and a record that matches the lockfile', () => {
     expect(pinProblems(readFileSync(packagePath, 'utf8'))).toEqual([]);
     const record = (JSON.parse(readFileSync(recordPath, 'utf8')) as { versions: Record<string, string> }).versions;
     expect(recordProblems(record, readFileSync(lockPath, 'utf8'))).toEqual([]);
@@ -61,6 +74,7 @@ describe('the guard of the versions of deepagents and LangChain', () => {
   it.skipIf(process.env['NBX_UPDATE_TOOL_GUARD'] !== '1')('update mode on the repository: runs the guarded suites, then writes the record', () => {
     const run = (args: string[]) => spawnSync('pnpm', args, { cwd: repoRoot, stdio: 'inherit' }).status === 0;
     const suitesPassed = () => run(['--filter', '@neburyx/ee-assistant-agent', 'test']) && run(['--filter', '@neburyx/ee-ask', 'exec', 'vitest', 'run', 'src/assistant/tool-allowlist.test.ts', 'src/assistant/answer-only.test.ts', 'src/assistant/agent-turn.test.ts']);
-    expect(updateRecord({ suitesPassed, lockText: readFileSync(lockPath, 'utf8'), write: (text) => writeFileSync(recordPath, text) }), 'a guarded suite failed: the record is left unchanged').toBe(true);
+    const result = updateRecord({ suitesPassed, lockText: readFileSync(lockPath, 'utf8'), write: (text) => writeFileSync(recordPath, text) });
+    expect(result.problems, 'the record is left unchanged').toEqual([]);
   });
 });

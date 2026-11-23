@@ -52,9 +52,12 @@ function recordText(lockText: string): string {
   return `${JSON.stringify({ note: 'The versions of the packages the allowlist suite of the offered tools was last run against. Written only by the update mode of that check (tools/workspace-checks), after the guarded suites passed; never edit it by hand.', versions }, null, 2)}\n`;
 }
 
-/** The update mode: the record is written from the lockfile only when the guarded suites passed in this run; a failing suite leaves it unchanged. Returns whether it was written. */
-export function updateRecord(run: { readonly suitesPassed: () => boolean; readonly lockText: string; readonly write: (text: string) => void }): boolean {
-  if (!run.suitesPassed()) return false;
+/** The update mode: the record is written from the lockfile only when every guarded package resolves to exactly one version and the guarded suites passed in this run; otherwise it is left unchanged and the reason is returned. */
+export function updateRecord(run: { readonly suitesPassed: () => boolean; readonly lockText: string; readonly write: (text: string) => void }): { readonly written: boolean; readonly problems: readonly string[] } {
+  const locked = lockVersions(run.lockText);
+  const unresolved = ALL_GUARDED.filter((name) => (locked.get(name) ?? []).length !== 1).map((name) => `${name} resolves to ${(locked.get(name) ?? []).join(' and ') || 'no version'} in pnpm-lock.yaml: it must resolve to exactly one version`);
+  if (unresolved.length > 0) return { written: false, problems: unresolved };
+  if (!run.suitesPassed()) return { written: false, problems: ['a guarded suite failed: the record is left unchanged'] };
   run.write(recordText(run.lockText));
-  return true;
+  return { written: true, problems: [] };
 }

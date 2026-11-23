@@ -8,6 +8,3 @@ const FIXTURE_PATTERN_KEYS = ['pat_1'] as const;
 const FIXED_TOOL_NAMES = ['view', 'ai-notes', 'ai-summary', 'typology', 'answer'] as const;
 
 export const ALLOWED_TOOL_NAMES: readonly string[] = [...TEMPLATE_TOOL_NAMES, ...FIXTURE_INTENT_NAMES, ...FIXTURE_PATTERN_KEYS, ...FIXED_TOOL_NAMES];
-
-/** Tools deepagents 1.17.0 always assembles and its exclusion removes before a model sees them. Nothing else outside the allowlist may be assembled. */
-export const KNOWN_REMOVED_FRAMEWORK_TOOLS = ['read_file', 'task'] as const;

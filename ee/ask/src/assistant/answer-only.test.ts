@@ -9,25 +9,26 @@ afterAll(removeAskFolders);
 const VIEW = ok('{"route":"view"}');
 const TEXT = 'LEAK-CANARY the model writes this itself';
 
-/** Everything a turn leaves: the answer, the audit events and the stored run record. A text the model wrote outside `answer` is in none of them. */
-const leftBy = async (script: (model: ReturnType<typeof fakeModel>) => ReturnType<typeof fakeModel>): Promise<{ readonly answer: unknown; readonly everything: string }> => {
+/** Everything a turn leaves: the answer, the audit events and the stored run record without the replies as the provider gave them (the record keeps those by design). A text the model wrote outside `answer` is in none of them. */
+const leftBy = async (script: (model: ReturnType<typeof fakeModel>) => ReturnType<typeof fakeModel>): Promise<{ readonly answer: unknown; readonly everything: string; readonly requests: number }> => {
   const store = createMemoryAssistantRunStore();
   const r = await rig({ reply: VIEW, runStore: store, agent: { model: script(fakeModel()) } });
   const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
   for (let step = 0; step < 10; step += 1) await Promise.resolve();
-  // the stored record holds the reply as the provider gave it, so the text the model wrote is in the record of the call by design; the answer and the audit events never hold it
-  return { answer, everything: JSON.stringify([answer, r.events]) };
+  const stored = store.runs.map((run) => ({ ...run, callEnds: run.callEnds.map(({ replyText: _reply, ...rest }) => rest), callStarts: run.callStarts.map(({ valuesText: _values, instructionsText: _instructions, ...rest }) => rest) }));
+  return { answer, everything: JSON.stringify([answer, r.events, stored]), requests: r.events.filter((event) => event.action === 'assistant.agent').length };
 };
 
 describe('the checked answer tool is the only output', () => {
-  it('shows no text the model writes after answer, in the answer or in any audit event', async () => {
-    const { answer, everything } = await leftBy((model) =>
+  it('shows no text the model writes beside answer, in the answer, any audit event or the stored record, and the reply that carried it was really consumed', async () => {
+    const { answer, everything, requests } = await leftBy((model) =>
       model
         .respondWithTools([{ name: 'view', args: {} }])
-        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
-        .respond(new AIMessage(TEXT)),
+        .respond(new AIMessage({ content: TEXT, tool_calls: [{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] }, id: 'call-answer' }] })),
     );
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    // the read and the reply that held the text and the answer: both were asked for
+    expect(requests).toBe(2);
     expect(everything).not.toContain('LEAK-CANARY');
   });
 
