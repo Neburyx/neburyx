@@ -2,17 +2,23 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { prepareOutFolder, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
+import { enrichRepeat } from './enrich.js';
+import { connectDb } from './db.js';
+import type { Db } from './records.js';
 import { runRepeat, type Http, type RepeatFile, type RepeatSettings, type TurnRecord } from './driver.js';
 import { parseManifest } from './manifest.js';
 import { readSettingsFile } from './settings-file.js';
 
 const THREAD_USAGE = `usage:
+  ask-eval thread records --file <run file> --database-env-file <env file> --out <file>
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)`;
 
 /** What a thread run needs of the outside world: the product's HTTP surface (a stand-in in tests) and the clock. */
 export interface ThreadDeps {
   readonly http?: (base: string) => Http;
   readonly now?: () => number;
+  /** The read-only connection to the run's own test database; absent, the real one is made from the env file. */
+  readonly database?: (envFile: string) => Promise<{ readonly db: Db; readonly close: () => Promise<void> }>;
   readonly verifyFirstTurn?: (settings: RepeatSettings) => (turn: TurnRecord) => Promise<string | undefined>;
 }
 
@@ -22,7 +28,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[]): { readonly values: Map<string, string>; readonly dryRun: boolean } {
@@ -99,6 +105,7 @@ function settingsOf(values: Map<string, string>): RepeatSettings {
 
 /** `ask-eval thread run`: one or more repeats of the thread against a running product, written as run files. Returns the exit code: 0 complete, 1 a repeat ended early, 2 usage. */
 export async function runThread(argv: readonly string[], io: CliIo, deps: ThreadDeps = {}): Promise<number> {
+  if (argv[0] === 'records') return await runRecords(argv.slice(1), io, deps);
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
   const { values, dryRun } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
@@ -136,4 +143,31 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
     }
   }
   return incomplete ? 1 : 0;
+}
+
+/** `ask-eval thread records`: reads the records of every turn of a run file by trace id and writes them beside it. A turn whose records are incomplete is named; no figure is made from it as if it were complete. */
+async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps): Promise<number> {
+  const { values } = parse(args);
+  const input = values.get('file');
+  const envFile = values.get('database-env-file');
+  const out = values.get('out');
+  if (input === undefined || envFile === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
+  let file: RepeatFile;
+  try {
+    file = JSON.parse(readFileSync(resolve(input), 'utf8')) as RepeatFile;
+  } catch {
+    throw new UsageError('the run file cannot be read');
+  }
+  const connection = await (deps.database ?? connectDb)(resolve(envFile));
+  try {
+    const enriched = await enrichRepeat(file, connection.db);
+    writePrivateFile(resolve(out), `${JSON.stringify(enriched, null, 2)}\n`, false);
+    const incomplete = enriched.records.flatMap((entry, index) => (entry === undefined ? [`turn ${index + 1}: no trace id`] : entry.problems.map((problem) => `turn ${index + 1}: ${problem}`)));
+    io.out(`turns read: ${enriched.records.filter((entry) => entry !== undefined).length} of ${file.turns.length}`);
+    if (enriched.inconsistent) io.out('the settings of the runs of this repeat differ from one turn to another');
+    for (const line of incomplete) io.out(line);
+    return incomplete.length > 0 || enriched.inconsistent ? 1 : 0;
+  } finally {
+    await connection.close();
+  }
 }
