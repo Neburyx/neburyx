@@ -69,7 +69,7 @@ describe('the Assistant thread: the answer after tool steps', () => {
     const answer: AssistantTurnAnswer = {
       status: 'answered',
       route: 'ask',
-      sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }] }],
       citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }],
       coverage: { retrieval: '2 shown · exact', summary: 'The answer cites 1 of the 2 elements the reads returned.' },
       model: 'claude-test',
@@ -93,7 +93,7 @@ describe('the Assistant thread: an answer after steps that cites the line of a r
     const answer: AssistantTurnAnswer = {
       status: 'answered',
       route: 'ask',
-      sentences: [{ text: 'The read of the second tool found 0 matches.', cites: ['s2'] }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'The read of the second tool found 0 matches.', cites: ['s2'] }] }],
       citations: [],
       coverage: { retrieval: 'read 1, a: 1 match shown · exact; read 2, b: 0 matches shown · exact', summary: 'The answer cites 0 of the 1 elements the reads returned.' },
       model: 'claude-test',
@@ -148,7 +148,7 @@ describe('the Assistant thread: a turn that reached a limit', () => {
     const answer: AssistantTurnAnswer = {
       status: 'answered',
       route: 'ask',
-      sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }] }],
       citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }],
       coverage: { retrieval: '2 shown · exact', summary: 'The answer cites 1 of the 2 elements the reads returned.' },
       model: 'claude-test',

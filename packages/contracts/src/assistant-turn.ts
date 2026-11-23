@@ -186,6 +186,11 @@ export const ASSISTANT_TABLE_ROWS_MAX = 25;
 export const ASSISTANT_TABLE_LABEL_MAX = 40;
 export const ASSISTANT_TABLE_CELL_MAX = 80;
 export const ASSISTANT_TABLE_CITES_MAX = 6;
+/** The bounds of the blocks of one answer: how many, and the sentences and table rows in all of them. */
+export const ASSISTANT_BLOCKS_MAX = 4;
+export const ASSISTANT_SENTENCES_MAX = 12;
+/** The note of a table block: up to six clauses of a label (80), " in ", a unit (20) and a full stop, then the fixed sentence of 42 characters. */
+export const ASSISTANT_TABLE_NOTE_MAX = 700;
 
 /** A table the model drafted, kept row by row by the checks: the title and the counts are the server's, every row cites the elements it reads. `droppedRows` is how many rows the checks removed; `moreNotShown` how many rows the model wrote beyond the row limit. */
 export const assistantTableSchema = z
@@ -193,12 +198,33 @@ export const assistantTableSchema = z
     title: text,
     columns: z.array(text.max(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
     rows: z.array(z.strictObject({ cells: z.array(z.string().max(ASSISTANT_TABLE_CELL_MAX)), cites: z.array(text).min(1).max(ASSISTANT_TABLE_CITES_MAX) })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
+    /** The footnote the server writes: the units of the columns from the mapping, then the fixed sentence. */
+    note: text.max(ASSISTANT_TABLE_NOTE_MAX),
     droppedRows: z.number().int().positive().optional(),
     moreNotShown: z.number().int().positive().optional(),
   })
   .refine((table) => table.rows.every((row) => row.cells.length === table.columns.length), { message: 'a row has a cell for each column', path: ['rows'] });
 
 export type AssistantTable = z.infer<typeof assistantTableSchema>;
+
+const assistantSentencesBlockSchema = z.strictObject({ kind: z.literal('sentences'), sentences: z.array(summarySentenceSchema).min(1).max(ASSISTANT_SENTENCES_MAX) });
+const assistantTableBlockSchema = z.strictObject({ kind: z.literal('table'), table: assistantTableSchema });
+
+/** The blocks of an answer in the order the model gave them: sentences and tables, one to four, with at most 12 sentences and 25 table rows in all. */
+export const assistantBlocksSchema = z
+  .array(z.discriminatedUnion('kind', [assistantSentencesBlockSchema, assistantTableBlockSchema]))
+  .min(1)
+  .max(ASSISTANT_BLOCKS_MAX)
+  .refine((blocks) => blocks.reduce((count, block) => count + (block.kind === 'sentences' ? block.sentences.length : 0), 0) <= ASSISTANT_SENTENCES_MAX, { message: 'at most 12 sentences in all the blocks' })
+  .refine((blocks) => blocks.reduce((count, block) => count + (block.kind === 'table' ? block.table.rows.length : 0), 0) <= ASSISTANT_TABLE_ROWS_MAX, { message: 'at most 25 table rows in all the blocks' });
+
+export type AssistantBlocks = z.infer<typeof assistantBlocksSchema>;
+export type AssistantBlock = AssistantBlocks[number];
+
+/** The sentences of all the sentences blocks of an answer, in order. */
+export const sentencesOfBlocks = (blocks: AssistantBlocks) => blocks.flatMap((block) => (block.kind === 'sentences' ? block.sentences : []));
+/** The tables of an answer, in order. */
+export const tablesOfBlocks = (blocks: AssistantBlocks) => blocks.flatMap((block) => (block.kind === 'table' ? [block.table] : []));
 
 /** The most sentences of the overview that may stand beside a verdict refusal. */
 export const ASSISTANT_OVERVIEW_SENTENCES_MAX = 12;
@@ -302,7 +328,7 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
     status: z.literal('answered'),
     route: z.literal('view'),
-    sentences: z.array(summarySentenceSchema).min(1).max(12),
+    blocks: assistantBlocksSchema,
     citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(1),
     /** The two lines of coverage the server writes: what was read and what is not yet retrieved, and how much of what was read the sentences cite. */
     coverage: z.strictObject({ retrieval: text, summary: text, /** Written by the server when the answer rests on sentences of an attached summary: which of them, in words. */ summaryCited: text.optional() }),
@@ -321,7 +347,7 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
     status: z.literal('answered'),
     route: z.enum(['ask', 'view']),
-    sentences: z.array(summarySentenceSchema).min(1).max(12),
+    blocks: assistantBlocksSchema,
     /** `title` is the element's title as the result gave it (masked as it was asked), so an element that is not drawn is still named. */
     citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(0),
     coverage: z.strictObject({ retrieval: text, summary: text }),
@@ -345,7 +371,7 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
     status: z.literal('answered'),
     route: z.literal('view'),
-    table: assistantTableSchema,
+    blocks: assistantBlocksSchema,
     citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(1),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     /** The fixed sentence for a type in the question that the mapping does not describe, beside the table. */
@@ -361,7 +387,7 @@ export const assistantTurnAnswerSchema = z.union([
   z.strictObject({
     status: z.literal('answered'),
     route: z.literal('view'),
-    table: assistantTableSchema,
+    blocks: assistantBlocksSchema,
     citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(1),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     noDescription: text.optional(),

@@ -71,7 +71,7 @@ export interface ExtensionRequest {
 /** The types of one source with the description the mapping gives each, when it gives one: the server tells which types have a meaning to quote and which have none. */
 export interface TypeDescriptions {
   /** `keyed`: the identifier of an element of the type is a token the server made (its stable ID is also a personal field), so a typed value cannot stand for one. */
-  readonly entityTypes: readonly { readonly type: string; readonly label: string; readonly displayName: string; readonly description?: string; readonly keyed?: boolean }[];
+  readonly entityTypes: readonly { readonly type: string; readonly label: string; readonly displayName: string; readonly description?: string; readonly keyed?: boolean; /** The label and unit the mapping gives a property, by property name. */ readonly propertyDisplay?: Readonly<Record<string, { readonly label?: string; readonly unit?: string }>> }[];
   readonly relationshipTypes: readonly { readonly type: string; readonly description?: string }[];
 }
 

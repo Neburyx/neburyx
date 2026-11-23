@@ -3,6 +3,7 @@ import {
   ExtensionRefusal,
   assistantTurnAuditDetailSchema,
   isTokenCount,
+  tablesOfBlocks,
   tokenCount,
   type AssistantTurnAnswer,
   type AssistantTurnAuditDetail,
@@ -54,6 +55,7 @@ interface TurnNotes {
   selectedElements?: number;
   cause?: string;
   summary?: { readonly kept: number; readonly dropped: number };
+  tableRowsLeftOut?: number;
   /** That the reads being made are made again after a decision; and the record of the waiting turn this turn goes on from. */
   replaying?: boolean;
   resumes?: string;
@@ -78,6 +80,8 @@ export interface TurnNote {
   readonly cause?: string;
   /** How many sentences of an attached summary still held and how many did not. */
   readonly summary?: { readonly kept: number; readonly dropped: number };
+  /** How many rows of tables the answer left out whole (no table of it is shown), counted as dropped rows in the closing event. */
+  readonly tableRowsLeftOut?: number;
 }
 
 /** Notes what the route of a turn knows; outside a turn it does nothing. */
@@ -93,6 +97,7 @@ export function noteTurn(change: TurnNote): void {
     if (change.selectedElements !== undefined) notes.selectedElements = change.selectedElements;
     if (change.cause !== undefined) notes.cause = change.cause;
     if (change.summary !== undefined) notes.summary = change.summary;
+    if (change.tableRowsLeftOut !== undefined) notes.tableRowsLeftOut = change.tableRowsLeftOut;
   });
 }
 
@@ -191,15 +196,20 @@ interface Ending {
   readonly table?: { readonly shown: number; readonly dropped?: number; readonly notShown?: number };
 }
 
-const tableOf = (answer: { readonly table: { readonly rows: readonly unknown[]; readonly droppedRows?: number; readonly moreNotShown?: number } }): NonNullable<Ending['table']> => ({ shown: answer.table.rows.length, ...(answer.table.droppedRows === undefined ? {} : { dropped: answer.table.droppedRows }), ...(answer.table.moreNotShown === undefined ? {} : { notShown: answer.table.moreNotShown }) });
+const tableOf = (tables: readonly { readonly rows: readonly unknown[]; readonly droppedRows?: number; readonly moreNotShown?: number }[], leftOut: number): NonNullable<Ending['table']> => {
+  const dropped = tables.reduce((sum, table) => sum + (table.droppedRows ?? 0), leftOut);
+  const notShown = tables.reduce((sum, table) => sum + (table.moreNotShown ?? 0), 0);
+  return { shown: tables.reduce((sum, table) => sum + table.rows.length, 0), ...(dropped === 0 ? {} : { dropped }), ...(notShown === 0 ? {} : { notShown }) };
+};
 
 function endingOf(notes: TurnNotes, answer: AssistantTurnAnswer): Ending {
   switch (answer.status) {
     case 'answered':
       if (answer.route === 'refuse') return { route: 'refuse', outcome: 'refused', result: 'refused', cause: answer.cause, ...(answer.overview === undefined ? {} : { citedElements: answer.overview.citations.length }) };
-      if ('table' in answer) return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length, table: tableOf(answer), ...(answer.status === 'answered' && 'stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
-      if (answer.route === 'view') return { route: 'view', outcome: 'answered', result: 'success', citedElements: answer.citations.length };
-      if ('sentences' in answer) return { route: 'ask', outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(answer.stoppedAt === undefined ? {} : { cause: `limit-${answer.stoppedAt}` }) };
+      if ('blocks' in answer) {
+        const tables = tablesOfBlocks(answer.blocks);
+        return { route: answer.route, outcome: 'answered', result: 'success', citedElements: answer.citations.length, ...(tables.length === 0 && (notes.tableRowsLeftOut ?? 0) === 0 ? {} : { table: tableOf(tables, notes.tableRowsLeftOut ?? 0) }), ...('stoppedAt' in answer && answer.stoppedAt !== undefined ? { cause: `limit-${answer.stoppedAt}` } : {}) };
+      }
       if ('refused' in answer.answer) return { route: 'ask', outcome: 'refused', result: 'refused', cause: answer.answer.refused.cause, ...(answer.answer.refused.valueNotFit === undefined ? {} : { valueKind: answer.answer.refused.valueNotFit.kind }), ...(answer.answer.refused.intent === undefined ? {} : { intent: answer.answer.refused.intent }) };
       return {
         route: 'ask',
@@ -301,7 +311,7 @@ function endingFor(request: ExtensionRequest, notes: TurnNotes, outcome: { reado
 /** The things an accepted answer cited, as references: the element or relationship of each citation of an answer from the view, or of the summary of an Ask answer. */
 function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): AssistantThreadTurnWrite['citationRefs'] {
   if (notes.citedRefs !== undefined) return notes.citedRefs;
-  if ('answer' in outcome && outcome.answer.status === 'answered' && ('sentences' in outcome.answer || 'table' in outcome.answer)) return outcome.answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]));
+  if ('answer' in outcome && outcome.answer.status === 'answered' && 'blocks' in outcome.answer) return outcome.answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]));
   if (!('answer' in outcome) || outcome.answer.status !== 'answered' || outcome.answer.route !== 'ask' || !('answer' in outcome.answer) || !('answered' in outcome.answer.answer)) return [];
   return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
 }

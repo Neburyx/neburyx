@@ -11,6 +11,17 @@ const jsonOf = (text: string | undefined): Json | undefined => {
 
 const toolUse = (name: string, input: Json): Json[] => [{ type: 'tool_use', id: `toolu_${name}_${Math.random().toString(36).slice(2, 8)}`, name, input }];
 
+/** The reply a case gives for `answer` in the shapes it is written in ({sentences} or {columns, rows}), as the tool's input: the blocks of one kind. */
+function blocksOf(reply: Json): Json {
+  if ('blocks' in reply) return reply;
+  const { noDescription, ...rest } = reply;
+  const extra = noDescription === undefined ? {} : { noDescription };
+  if ('sentences' in rest) return { blocks: [{ kind: 'sentences', sentences: rest['sentences'] }], ...extra };
+  if ('columns' in rest) return { blocks: [{ kind: 'table', columns: rest['columns'], rows: rest['rows'] }], ...extra };
+  if (typeof rest['table'] === 'object' && rest['table'] !== null && 'columns' in rest['table']) return { blocks: [{ kind: 'table', columns: rest['table']['columns'], rows: (rest['table'] as Json)['rows'] }], ...extra };
+  return reply;
+}
+
 /**
  * The model stand-in of a test, for the assistant's agent. A case writes the replies of a turn as text, in order: the router's, then the next read of each step (`{"tool":…}`) or `{"done":true}`, then the sentences
  * of the answer. A request that carries tools is a call of the agent, and the following replies are read as that script: the router's own `ask` reply is the first read, a request for a tool is a tool call, and
@@ -39,7 +50,7 @@ export function createAgentScript() {
       if (step?.['done'] === true) {
         answered = true;
         const reply = jsonOf(next());
-        return reply === undefined ? [{ type: 'text', text: 'Done.' }] : toolUse('answer', reply);
+        return reply === undefined ? [{ type: 'text', text: 'Done.' }] : toolUse('answer', blocksOf(reply));
       }
       if (step !== undefined && typeof step['tool'] === 'string') return toolUse(step['tool'], (step['values'] ?? {}) as Json);
       return [{ type: 'text', text }];

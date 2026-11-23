@@ -797,6 +797,66 @@
   margin: 0;
 }
 
+/* a table block: caption row, rows that select, source link, footnote */
+.assistant-table-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+  margin-top: var(--space-8);
+}
+
+.assistant-table-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.assistant-table-copy,
+.assistant-table-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.assistant-table-row {
+  cursor: pointer;
+}
+
+.assistant-table-footnote {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+/* the select button leaves the layout until it has the focus */
+.assistant-row-select {
+  position: absolute;
+  width: var(--border-width);
+  height: var(--border-width);
+  margin: calc(-1 * var(--border-width));
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.assistant-row-select:focus-visible {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  clip: auto;
+  overflow: visible;
+}
+
 /* the overview beside a refusal of a verdict */
 .assistant-overview {
   display: flex;

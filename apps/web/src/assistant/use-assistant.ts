@@ -75,10 +75,10 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: Assistant
     case 'answered':
       if (answer.route === 'refuse') {
         // the overview is drawn as an answer from the view is, so it is given the shape of one
-        const overview: ViewAnswer | undefined = answer.overview === undefined ? undefined : { status: 'answered', route: 'view', ...answer.overview, calls: 1 };
+        const overview: ViewAnswer | undefined = answer.overview === undefined ? undefined : overviewAsAnswer(answer.overview);
         return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence, ...(overview === undefined ? {} : { overview, entries: entriesOf(overview) }) };
       }
-      if ('sentences' in answer || 'table' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer), ...('followUps' in answer && answer.followUps !== undefined ? { followUps: answer.followUps } : {}) };
+      if ('blocks' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer), ...('followUps' in answer && answer.followUps !== undefined ? { followUps: answer.followUps } : {}) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused, reads: answer.reads };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, reads: answer.reads, stoppedAt: answer.stoppedAt, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
@@ -193,7 +193,7 @@ export function useAssistant(): AssistantModel {
           setFocus(turnId);
           return;
         }
-        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: 'table' in answer ? answer.table.rows : answer.sentences, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation])) }, state.visibleGraph(), (type) => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type));
+        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: answer.blocks.flatMap((block) => (block.kind === 'sentences' ? block.sentences.map(({ cites }) => ({ cites })) : block.table.rows.map(({ cites }) => ({ cites })))), citations: answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation])) }, state.visibleGraph(), (type) => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type));
         if ('tooLong' in outcome) {
           store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId), notice: { kind: 'too-long', ...outcome.tooLong } });
           if (retry.kind === 'message') restoreInput(retry.text);
@@ -420,4 +420,10 @@ export function useAssistant(): AssistantModel {
       setOutcome(turnId, { ...turn.outcome, added: addResultToGraph(state, addable, { sourceId, principalId, mask, expansions }) });
     },
   };
+}
+
+/** The overview beside a refusal is drawn as an answer from the view is, so it is given the shape of one: one sentences block. */
+function overviewAsAnswer(overview: NonNullable<Extract<AssistantTurnAnswer, { status: 'answered'; route: 'refuse' }>['overview']>): ViewAnswer {
+  const { sentences, ...rest } = overview;
+  return { status: 'answered', route: 'view', blocks: [{ kind: 'sentences', sentences }], ...rest, calls: 1 };
 }

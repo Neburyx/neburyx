@@ -20,7 +20,7 @@ const decisionOf = (request: AssistantTurnRequest | undefined) => (request !== u
 const ANSWERED: AssistantTurnAnswer = {
   status: 'answered',
   route: 'ask',
-  sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }],
+  blocks: [{ kind: 'sentences', sentences: [{ text: 'Account acc-1 is listed.', cites: ['n1'] }] }],
   citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-1' } }],
   coverage: { retrieval: '2 shown · exact', summary: 'The answer cites 1 of the 2 elements the reads returned.' },
   model: 'claude-test',
@@ -109,7 +109,7 @@ describe('the confirmation card of a heavy step', () => {
         { key: 'r1', kind: 'entity', ref: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-9' }, title: 'Eversiais Interiors Inc.' },
         { key: 'r5', kind: 'relationship', ref: { sourceId: 'a', relType: 'MADE_FROM', stableId: 'rel-9', from: { sourceId: 'a', entityType: 'kind-a', stableId: 'acc-9' }, to: { sourceId: 'a', entityType: 'kind-b', stableId: 'gt-1' } } as never, title: 'MADE_FROM: Eversiais Interiors Inc. → GT-1' },
       ],
-      sentences: [{ text: 'Eversiais Interiors Inc. is linked to GT-1.', cites: ['r1', 'r5'] }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'Eversiais Interiors Inc. is linked to GT-1.', cites: ['r1', 'r5'] }] }],
     } as AssistantTurnAnswer;
     const h = harness(async () => ok(named));
     render(h.tree());

@@ -24,9 +24,9 @@ describe('the checked answer tool is the only output', () => {
     const { answer, everything, requests } = await leftBy((model) =>
       model
         .respondWithTools([{ name: 'view', args: {} }])
-        .respond(new AIMessage({ content: TEXT, tool_calls: [{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] }, id: 'call-answer' }] })),
+        .respond(new AIMessage({ content: TEXT, tool_calls: [{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] }] }, id: 'call-answer' }] })),
     );
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is in view.' }] }] });
     // the read and the reply that held the text and the answer: both were asked for
     expect(requests).toBe(2);
     expect(everything).not.toContain('LEAK-CANARY');

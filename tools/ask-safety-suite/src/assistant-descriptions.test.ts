@@ -63,7 +63,7 @@ describe('an m line sent to the model for a view question', () => {
     expect(sent).toContain(`m1: entity type Widget: ${JSON.stringify(OPERATOR_TEXT)}`);
     const section = sent.slice(sent.indexOf('What the types mean'));
     expect(section).not.toContain('W-1');
-    expect(answer.body).not.toMatchObject({ status: 'answered', sentences: expect.anything() });
+    expect(answer.body).not.toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: expect.anything() }] });
     await rig.close();
   });
 

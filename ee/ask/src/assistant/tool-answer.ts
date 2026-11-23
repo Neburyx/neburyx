@@ -6,6 +6,7 @@ import { checkedTextOf } from '../case-summary/judge.js';
 import { listedElements } from '../summary/index.js';
 import { countOf, coverageOf, degreeCountsOf, inexactCountOf } from './coverage.js';
 import { rowsPhrase, subjectPluralOf, subjectTypeOf } from './table.js';
+import { noteOfTable } from './blocks.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import { refId } from '../summary/title.js';
@@ -31,9 +32,9 @@ export interface ToolAnswerInput {
 }
 
 export type ToolAnswerOutcome =
-  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
+  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
   /** The answer as a table (the router chose the form): rows that each cite an element a read returned. */
-  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
+  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote and the names of the profile. */
   | { readonly kind: 'noDescription'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported'; readonly calls: number }
@@ -306,7 +307,9 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
         } else {
           shownOf = `${shown.length} of ${inReads} ${plural.toLowerCase()} read shown · exact`;
         }
-        return { kind: 'table', table: { title, columns: [...draft.columns], rows: shown, ...(rows.length < draft.rows.length ? { droppedRows: draft.rows.length - rows.length } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
+        const droppedRows = draft.rows.length - rows.length + draft.uncited;
+        const note = noteOfTable({ columns: draft.columns, rows: shown, lines: basis.checkedText.lines, elements: assembled.keys, descriptions: input.scope.request.typeDescriptions?.(input.scope.sourceId) });
+        return { kind: 'table', table: { title, columns: [...draft.columns], rows: shown, note, ...(droppedRows > 0 ? { droppedRows } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) }, citations: tableCitations, coverage: { retrieval: coverage, summary: shownOf }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
       }
       const cited = new Set(drafted.sentences.flatMap((sentence) => sentence.cites));
       const citations = [...cited].flatMap((key) => {

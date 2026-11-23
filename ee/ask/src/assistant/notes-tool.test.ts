@@ -1,4 +1,4 @@
-import { AI_NOTES_MAX_SENTENCES, ExtensionRefusal, type AiNotesCapability } from '@neburyx/contracts';
+import { AI_NOTES_MAX_SENTENCES, ExtensionRefusal, type AiNotesCapability, sentencesOfBlocks, type AssistantBlocks } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { answerOf, nodeOf, ok, rig, routeAsk } from '../testing/assistant-rig.js';
@@ -60,19 +60,19 @@ describe('a turn that reads the person\'s own AI notes', () => {
     const answer = await answerOf(r.route.handler(r.request(undefined, { aiNotes: capability([stored('tok-1')], seen) })));
     expect(seen).toEqual(['inv-1']);
     expect(readsOf(answer).find((entry) => entry['kind'] === 'ai-notes')).toMatchObject({ tool: 'ai-notes', read: true, rows: 2, quality: 'exact', partial: false });
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['r1', 'r2'] }] });
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['r1', 'r2'] }] }] });
   });
 
   it('holds a sentence that cites an a key to the elements it rests on: a figure only the note states is dropped, and a key that was not returned is dropped', async () => {
     const r = await turn(sentences({ text: 'There are 17 widgets in the note.', cites: ['a1'] }, { text: 'Account A-1 is linked to Account A-2.', cites: ['a9'] }, { text: 'Account A-1 is linked to Account A-2 (a1).', cites: ['a1'] }));
     const answer = await answerOf(r.route.handler(r.request(undefined, { aiNotes: capability([stored('tok-1')]) })));
-    expect((answer as { sentences: { text: string }[] }).sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is linked to Account A-2.']);
+    expect(sentencesOfBlocks((answer as { blocks: AssistantBlocks }).blocks).map((sentence) => sentence.text)).toEqual(['Account A-1 is linked to Account A-2.']);
   });
 
   it('takes the a key out of a mixed bracketed group of keys and keeps the others, so a sentence that cites both is not dropped', async () => {
     const r = await turn(sentences({ text: 'Account A-1 is linked to Account A-2 (a1, r1).', cites: ['a1', 'r1'] }));
     const answer = await answerOf(r.route.handler(r.request(undefined, { aiNotes: capability([stored('tok-1')]) })));
-    expect((answer as { sentences: { text: string }[] }).sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is linked to Account A-2.']);
+    expect(sentencesOfBlocks((answer as { blocks: AssistantBlocks }).blocks).map((sentence) => sentence.text)).toEqual(['Account A-1 is linked to Account A-2.']);
   });
 
   it('does not return an entry over the bounds of an entry, says how many were not read without any wording, and lists the read as partial', async () => {

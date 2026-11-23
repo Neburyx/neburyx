@@ -30,7 +30,7 @@ const GOOD_ROW = { cells: ['W-1', 'widget'], cites: ['n1'] };
 /** A bad row is gone from the body, the good row stays, and the answer counts the one row it dropped. */
 function expectDropped(body: Record<string, unknown>, sentinel: string): void {
   expect(JSON.stringify(body)).not.toContain(sentinel);
-  expect(body).toMatchObject({ status: 'answered', table: { rows: [GOOD_ROW], droppedRows: 1 } });
+  expect(body).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [GOOD_ROW], droppedRows: 1 } }] });
 }
 
 const rigOf = (): Promise<AssistantRig> => startAssistantRig({ stub, respond: (call) => (call.templateId === 'file-query' ? entityRows(widget(2)) : undefined) });
@@ -40,7 +40,7 @@ describe('a table answer', () => {
   it('accepts a row of cells copied from the element it cites, and no cell, label or title reaches an event or a log line', async () => {
     const rig = await rigOf();
     const answer = await turnOf(rig, table(['Element', 'Type'], [{ cells: ['W-1', 'widget'], cites: ['n1'] }]));
-    expect(answer.body).toMatchObject({ status: 'answered', route: 'view', table: { columns: ['Element', 'Type'] } });
+    expect(answer.body).toMatchObject({ status: 'answered', route: 'view', blocks: [{ kind: 'table', table: { columns: ['Element', 'Type'] } }] });
     expectNoValue([rig.events(), rig.logs], ['W-1']);
     await rig.close();
   });
@@ -98,9 +98,9 @@ describe('a table answer', () => {
   });
 
   it.each(['SENTINEL-K1', 'SENTINEL-K2', '48291.17', 'SENTINEL-A7'])('canary: the dropped-row check fails for a body that kept the bad row (%s), as it would if the row check were removed', (sentinel) => {
-    const kept = { status: 'answered', table: { rows: [GOOD_ROW, { cells: [sentinel, 'widget'], cites: ['n1'] }] } };
+    const kept = { status: 'answered', blocks: [{ kind: 'table', table: { rows: [GOOD_ROW, { cells: [sentinel, 'widget'], cites: ['n1'] }] } }] };
     expect(() => expectDropped(kept, sentinel)).toThrow();
-    const unmarked = { status: 'answered', table: { rows: [GOOD_ROW] } };
+    const unmarked = { status: 'answered', blocks: [{ kind: 'table', table: { rows: [GOOD_ROW] } }] };
     expect(() => expectDropped(unmarked, sentinel)).toThrow();
   });
 

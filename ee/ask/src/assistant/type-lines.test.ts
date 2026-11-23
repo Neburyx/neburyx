@@ -1,3 +1,4 @@
+import { sentencesOfBlocks, tablesOfBlocks, type AssistantBlocks } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
 import type { TypeDescriptions } from '@neburyx/contracts';
 import { VIEW_BODY, answerOf, ok, rig } from '../testing/assistant-rig.js';
@@ -34,8 +35,8 @@ describe('the meaning lines of the view call', () => {
   it('keeps a sentence that cites an m line, with a description citation beside the element citations', async () => {
     const t = await rig({ view: reply([{ text: 'A widget is a small unit that holds up to 12 parts.', cites: ['m1'] }, { text: 'Account A-1 is in view.', cites: ['n1'] }]) });
     const answer = await answerOf(t.route.handler(t.request(VIEW_BODY, { typeDescriptions: () => descriptions })));
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
-    expect(answer.sentences).toHaveLength(2);
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
+    expect(sentencesOfBlocks(answer.blocks)).toHaveLength(2);
     expect(answer.citations.map((citation) => [citation.key, citation.kind])).toEqual([['n1', 'entity'], ['m1', 'description']]);
     expect(answer.citations[1]).toMatchObject({ typeKind: 'entity', type: 'Widget', description: WIDGET });
   });

@@ -101,7 +101,10 @@ export const ASSISTANT_COPY = {
   sentences: 'Answer from the view',
   sentencesFromReads: 'Answer from the reads',
   coverage: 'Server-authored coverage',
-  citeColumn: 'Cite',
+  citeColumn: 'Source',
+  copyTable: 'Copy table',
+  tableCopied: 'Copied',
+  tableCopyFailed: 'Could not copy the table',
   groupHide: '(hide)',
   showAll: 'Show all',
   foldClose: 'Fold the rows again',
@@ -127,6 +130,9 @@ export const ASSISTANT_COPY = {
 } as const;
 
 const rowsOf = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'row' : 'rows'}`;
+export const showSourceLabel = (number: number): string => `Show source [${number}]`;
+export const selectRowLabel = (position: number): string => `Select row ${position} on graph`;
+
 export const foldedRowsText = (count: number): string => `… ${count.toLocaleString('en-US')} more ${count === 1 ? 'row' : 'rows'} …`;
 export const moreNotShownText = (shown: number, more: number): string => `${rowsOf(shown)} ${shown === 1 ? 'is' : 'are'} shown. ${more.toLocaleString('en-US')} more ${more === 1 ? 'row was' : 'rows were'} not shown. Narrow the view or ask for a smaller set.`;
 export const droppedRowsText = (count: number): string => `${rowsOf(count)} ${count === 1 ? 'was' : 'were'} left out because ${count === 1 ? 'it' : 'they'} did not hold up against the elements cited.`;

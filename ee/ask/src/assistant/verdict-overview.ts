@@ -1,4 +1,4 @@
-import { ASSISTANT_REFUSAL_SENTENCES, assistantTurnAnswerSchema, ExtensionRefusal, readViewKeys, type AssistantTurnAnswer, type ExtensionRequest } from '@neburyx/contracts';
+import { ASSISTANT_REFUSAL_SENTENCES, assistantTurnAnswerSchema, ExtensionRefusal, readViewKeys, sentencesOfBlocks, type AssistantTurnAnswer, type ExtensionRequest } from '@neburyx/contracts';
 import { AuditUnavailableError } from '@neburyx/ee-ai-runtime';
 import { stepsOf } from './steps.js';
 import type { ViewInput, ViewOutcome, ViewProgress } from './view-answer.js';
@@ -65,9 +65,10 @@ export async function verdictRefusal(input: VerdictOverviewInput): Promise<Assis
   if (outcome.status !== 'answered') return plain();
   const { answer } = outcome;
   // a table answer has no sentences: the overview is never asked for one
-  if (!('sentences' in answer)) return plain();
+  const sentences = sentencesOfBlocks(answer.blocks);
+  if (sentences.length === 0) return plain();
   const citations = answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation]));
-  const drawn = { ...plain(), overview: { sentences: [...answer.sentences], citations, coverage: { retrieval: answer.coverage.retrieval, summary: answer.coverage.summary }, model: answer.model } };
+  const drawn = { ...plain(), overview: { sentences: [...sentences], citations, coverage: { retrieval: answer.coverage.retrieval, summary: answer.coverage.summary }, model: answer.model } };
   const checked = assistantTurnAnswerSchema.safeParse(drawn);
   return checked.success ? checked.data : plain();
 }

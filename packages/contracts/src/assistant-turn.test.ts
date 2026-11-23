@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
+import { sentencesOfBlocks, tablesOfBlocks, ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_CHOICE_INVALID_SENTENCE, ASSISTANT_CLARIFICATION_MAX_CANDIDATES, ASSISTANT_CONFIRMATION_INVALID_SENTENCE, ASSISTANT_LIMITS, ASSISTANT_LIMIT_SENTENCES, ASSISTANT_PLAN_MAX_CHARACTERS, ASSISTANT_REFUSAL_CAUSES, ASSISTANT_REFUSAL_SENTENCES, ASSISTANT_SUMMARY_INVALID_SENTENCE, ASSISTANT_VIEW_KEYS_MAX, assistantClarificationQuestion, assistantTurnAnswerSchema, assistantTurnRequestSchema } from './assistant-turn.js';
 
 const body = { sourceId: 'banking', investigationId: 'inv-1', message: 'Which accounts share a device?', viewElementKeys: ['n1', 'n2'] };
 
@@ -47,7 +47,7 @@ describe('the assistant turn request: a message or a continue', () => {
 
 describe('the assistant turn answer: the view route', () => {
   const ref = { sourceId: 'demo', entityType: 'widget', stableId: 'W-1' };
-  const view = { status: 'answered', route: 'view', sentences: [{ text: 'Widget W-1 is here.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' }, model: 'claude-sonnet-5-5', calls: 2 };
+  const view = { status: 'answered', route: 'view', blocks: [{ kind: 'sentences', sentences: [{ text: 'Widget W-1 is here.', cites: ['n1'] }] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' }, model: 'claude-sonnet-5-5', calls: 2  };
 
   it('accepts sentences with the citations they name, the model and the calls', () => {
     expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
@@ -74,15 +74,15 @@ describe('the assistant turn answer: the view route', () => {
 
   it('accepts a citation of a meaning line, alone or beside an element, and refuses one with a member it does not have', () => {
     const description = { key: 'm1', kind: 'description', typeKind: 'entity', type: 'Widget', description: 'A widget is a small unit.' };
-    expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: [{ text: 'A widget is a small unit.', cites: ['m1'] }], citations: [description] }).success).toBe(true);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, blocks: [{ kind: 'sentences', sentences: [{ text: 'A widget is a small unit.', cites: ['m1'] }] }], citations: [description] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [...view.citations, description] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [{ ...description, ref }] }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [{ ...description, description: 'x'.repeat(301) }] }).success).toBe(false);
   });
 
   it('refuses no sentence, more than 12, no citation, a citation of no known form and an unknown member', () => {
-    expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: [] }).success).toBe(false);
-    expect(assistantTurnAnswerSchema.safeParse({ ...view, sentences: Array.from({ length: 13 }, () => view.sentences[0]) }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, blocks: [{ kind: 'sentences', sentences: [] }] }).success).toBe(false);
+    expect(assistantTurnAnswerSchema.safeParse({ ...view, blocks: [{ kind: 'sentences', sentences: Array.from({ length: 13 }, () => ({ text: 'x', cites: ['n1'] })) }] }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [] }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, citations: [{ key: 'n1', kind: 'entity', ref: { nope: 1 } }] }).success).toBe(false);
     expect(assistantTurnAnswerSchema.safeParse({ ...view, extra: 1 }).success).toBe(false);
@@ -296,7 +296,7 @@ describe('the limit status of a turn', () => {
   });
 
   it('lets a citation of an answer after tool steps carry the title of the element as the result gave it, and no other member', () => {
-    const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [read, read] };
+    const answer = { status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] }], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [read, read]  };
     const cite = { key: 'r1', kind: 'entity', ref: { sourceId: 'banking', entityType: 'widget', stableId: 'A-1' } };
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [{ ...cite, title: 'Account A-1' }] }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, citations: [{ ...cite, title: '' }] }).success).toBe(false);
@@ -304,7 +304,7 @@ describe('the limit status of a turn', () => {
   });
 
   it('names the limit that ended the reading of an answered turn, in the answer after tool steps and in Ask’s single read, and no other value', () => {
-    const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['s1'] }], citations: [], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [read, read] };
+    const answer = { status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is listed.', cites: ['s1'] }] }], citations: [], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [read, read]  };
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, stoppedAt: 'rows' }).success).toBe(true);
     expect(assistantTurnAnswerSchema.safeParse({ ...answer, stoppedAt: 'tokens' }).success).toBe(false);
   });
@@ -312,7 +312,7 @@ describe('the limit status of a turn', () => {
 
 describe('the answer of the ask route after tool steps', () => {
   const ref = { sourceId: 'banking', entityType: 'widget', stableId: 'A-1' };
-  const answer = { status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '2 shown', summary: 'The answer cites 1 of the 2 elements the reads returned.' }, model: 'm', calls: 4, steps: 2, reads: [{ tool: 'a', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }, { tool: 'b', kind: 'template', read: false }] };
+  const answer = { status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is listed.', cites: ['n1'] }] }], citations: [{ key: 'n1', kind: 'entity', ref }], coverage: { retrieval: '2 shown', summary: 'The answer cites 1 of the 2 elements the reads returned.' }, model: 'm', calls: 4, steps: 2, reads: [{ tool: 'a', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }, { tool: 'b', kind: 'template', read: false }]  };
 
   it('accepts the sentences with their citations, the coverage, the model, the calls and at least two steps', () => {
     expect(assistantTurnAnswerSchema.safeParse(answer).success).toBe(true);
@@ -348,7 +348,7 @@ describe('the summary an assistant turn carries', () => {
 });
 
 describe('the view answer that rests on a summary', () => {
-  const view = { status: 'answered', route: 'view', sentences: [{ text: 'x', cites: ['n1'] }], citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'k', stableId: 's' } }], coverage: { retrieval: '1 shown', summary: 'The draft cites 1 of the 1 shown elements.' }, model: 'm', calls: 2 };
+  const view = { status: 'answered', route: 'view', blocks: [{ kind: 'sentences', sentences: [{ text: 'x', cites: ['n1'] }] }], citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'k', stableId: 's' } }], coverage: { retrieval: '1 shown', summary: 'The draft cites 1 of the 1 shown elements.' }, model: 'm', calls: 2  };
 
   it('carries the positions of the summary sentences it cites and the line that says so, each only when there are some', () => {
     expect(assistantTurnAnswerSchema.safeParse(view).success).toBe(true);
@@ -424,14 +424,14 @@ describe('the events of a streamed turn', () => {
 
 describe('the table answers', () => {
   const cite = { key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'widget', stableId: 'W-1' } };
-  const table = { title: 'widgets · 1 row', columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }] };
-  const view = { status: 'answered', route: 'view', table, citations: [cite], coverage: { retrieval: 'r', summary: '1 of 1 widgets in view shown · exact' }, model: 'm', calls: 2 };
+  const table = { title: 'widgets · 1 row', note: 'Each row selects its elements on the graph.', columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }] };
+  const view = { status: 'answered', route: 'view', blocks: [{ kind: 'table', table }], citations: [cite], coverage: { retrieval: 'r', summary: '1 of 1 widgets in view shown · exact' }, model: 'm', calls: 2 };
   const loop = { ...view, steps: 2, reads: [{ tool: 'view', kind: 'view', read: true, rows: 1, quality: 'exact', partial: false }] };
   const parses = (answer: unknown): boolean => assistantTurnAnswerSchema.safeParse(answer).success;
 
   it('takes the table of the view call and the table after tool steps, with the counts of rows dropped and not shown', () => {
     expect(parses(view)).toBe(true);
-    expect(parses({ ...view, table: { ...table, droppedRows: 2, moreNotShown: 5 } })).toBe(true);
+    expect(parses({ ...view, blocks: [{ kind: 'table', table: { ...table, droppedRows: 2, moreNotShown: 5 } }] })).toBe(true);
     expect(parses({ ...view, noDescription: 'The mapping has no description for Widget, so I cannot say what it means.' })).toBe(true);
     expect(parses(loop)).toBe(true);
     expect(parses({ ...loop, stoppedAt: 'steps' })).toBe(true);
@@ -449,13 +449,53 @@ describe('the table answers', () => {
       ['26 rows', { ...table, rows: Array.from({ length: 26 }, () => ({ cells: ['Account A-1', 'widget'], cites: ['n1'] })) }],
       ['zero dropped', { ...table, droppedRows: 0 }],
       ['an extra member', { ...table, extra: 1 }],
+      ['no note', { ...table, note: undefined }],
+      ['a note of 701 characters', { ...table, note: 'n'.repeat(701) }],
     ];
-    for (const [name, bad] of cases) expect(parses({ ...view, table: bad }), name).toBe(false);
+    for (const [name, bad] of cases) expect(parses({ ...view, blocks: [{ kind: 'table', table: bad }] }), name).toBe(false);
+    expect(parses({ ...view, table })).toBe(false);
     expect(parses({ ...view, sentences: [{ text: 'x', cites: ['n1'] }] })).toBe(false);
     expect(parses({ ...view, route: 'ask' })).toBe(false);
   });
 });
 
+
+describe('the blocks of an answer', () => {
+  const cite = { key: 'n1', kind: 'entity', ref: { sourceId: 'a', entityType: 'widget', stableId: 'W-1' } };
+  const sentencesBlock = (count = 1) => ({ kind: 'sentences', sentences: Array.from({ length: count }, () => ({ text: 'Account A-1 is in view.', cites: ['n1'] })) });
+  const tableBlock = (rows = 1) => ({ kind: 'table', table: { title: 'widgets · 1 row', note: 'Each row selects its elements on the graph.', columns: ['Element'], rows: Array.from({ length: rows }, () => ({ cells: ['Account A-1'], cites: ['n1'] })) } });
+  const answerOf = (blocks: unknown) => ({ status: 'answered', route: 'view', blocks, citations: [cite], coverage: { retrieval: 'r', summary: 's' }, model: 'm', calls: 2 });
+  const parses = (blocks: unknown): boolean => assistantTurnAnswerSchema.safeParse(answerOf(blocks)).success;
+
+  it('keeps the blocks in the order they are given, a sentences block then a table block and the other way round', () => {
+    const parsed = assistantTurnAnswerSchema.parse(answerOf([sentencesBlock(), tableBlock(), sentencesBlock()]));
+    expect(parsed.status === 'answered' && 'blocks' in parsed ? parsed.blocks.map((block) => block.kind) : []).toEqual(['sentences', 'table', 'sentences']);
+    expect(parses([tableBlock(), sentencesBlock()])).toBe(true);
+  });
+
+  it('refuses no block, five blocks, a block of an unknown kind and a block with a member its kind does not have', () => {
+    expect(parses([])).toBe(false);
+    expect(parses([sentencesBlock(), tableBlock(), sentencesBlock(), tableBlock(), sentencesBlock()])).toBe(false);
+    expect(parses([sentencesBlock(), tableBlock(), sentencesBlock(), tableBlock()])).toBe(true);
+    expect(parses([{ kind: 'list', items: [] }])).toBe(false);
+    expect(parses([{ ...sentencesBlock(), extra: 1 }])).toBe(false);
+    expect(parses([{ kind: 'sentences', table: {} }])).toBe(false);
+  });
+
+  it('holds at most 12 sentences in all the sentences blocks and 25 table rows in all the table blocks', () => {
+    expect(parses([sentencesBlock(6), sentencesBlock(6)])).toBe(true);
+    expect(parses([sentencesBlock(7), sentencesBlock(6)])).toBe(false);
+    expect(parses([tableBlock(13), tableBlock(12)])).toBe(true);
+    expect(parses([tableBlock(13), tableBlock(13)])).toBe(false);
+  });
+
+  it('reads the sentences and the tables of the blocks, in order', () => {
+    const parsed = assistantTurnAnswerSchema.parse(answerOf([sentencesBlock(2), tableBlock(3), sentencesBlock(1)]));
+    if (parsed.status !== 'answered' || !('blocks' in parsed)) throw new Error('not a blocks answer');
+    expect(sentencesOfBlocks(parsed.blocks)).toHaveLength(3);
+    expect(tablesOfBlocks(parsed.blocks).map((table) => table.rows.length)).toEqual([3]);
+  });
+});
 
 describe('the ask route answering a value that does not fit', () => {
   const refused = { cause: 'value-not-fit', sentence: 'There is no widget with that id. Nothing was run.', intent: 'shared', valueNotFit: { kind: 'not-found', needed: 'widget' } };

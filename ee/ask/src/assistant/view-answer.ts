@@ -4,6 +4,7 @@ import { prepareSummary } from '../case-summary/prepare.js';
 import type { AssembledText } from '../case-summary/assemble.js';
 import { citationsOf, retrievalLine, summaryLine } from '../case-summary/coverage.js';
 import { ASSISTANT_TABLE_ROWS_MAX } from '@neburyx/contracts';
+import { noteOfTable } from './blocks.js';
 import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE, typeOfKey } from './table.js';
 import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
@@ -371,7 +372,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
           const answer = {
             status: 'answered' as const,
             route: 'view' as const,
-            table: { title: `${plural} · ${rowsPhrase(shown.length)}`, columns: [...table.columns], rows: shown.map((row) => ({ cells: [...row.cells], cites: [...row.cites] })), ...(table.rows.length - rows.length > 0 ? { droppedRows: table.rows.length - rows.length } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) },
+            blocks: [{ kind: 'table' as const, table: { title: `${plural} · ${rowsPhrase(shown.length)}`, columns: [...table.columns], rows: shown.map((row) => ({ cells: [...row.cells], cites: [...row.cites] })), note: noteOfTable({ columns: table.columns, rows: shown, lines: assembled.lines, elements: assembled.keys, descriptions: input.typeDescriptions }), ...(table.rows.length - rows.length + table.uncited > 0 ? { droppedRows: table.rows.length - rows.length + table.uncited } : {}), ...(cut > 0 ? { moreNotShown: cut } : {}) } }],
             citations: elementCitations,
             coverage: { retrieval: retrievalLine(viewReading), summary: `${shown.length} of ${inView} ${plural.toLowerCase()} in view shown · exact` },
             ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }),
@@ -383,7 +384,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         const elementCitations = [...citationsOf(sentences, assembled)];
         const citations = [...elementCitations, ...descriptionCitationsOf(sentences, typeLines)];
         const positions = [...cited].sort((a, b) => a - b);
-        const answer = { status: 'answered' as const, route: 'view' as const, sentences: [...sentences], ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }), citations, coverage: { ...coverageOf(viewReading, sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
+        const answer = { status: 'answered' as const, route: 'view' as const, blocks: [{ kind: 'sentences' as const, sentences: [...sentences] }], ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }), citations, coverage: { ...coverageOf(viewReading, sentences, input.summary === undefined ? undefined : { inView, assembled }), ...(cited.size === 0 ? {} : { summaryCited: citedLineOf(positions) }) }, ...(cited.size === 0 ? {} : { summarySentencesCited: positions }), model: drafted.model, calls: progress.calls + input.callsUsed };
         return outcome({ status: 'answered', answer, cited: elementCitations.length });
       }
       default: {

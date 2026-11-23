@@ -105,7 +105,7 @@ describe('the Assistant panel: follow-ups under an answer', () => {
 const sentenceAnswer = (followUps: NonNullable<Extract<AssistantTurnAnswer, { status: 'answered'; route: 'ask' }>['followUps']> | undefined): AssistantTurnAnswer => ({
   status: 'answered',
   route: 'ask',
-  sentences: [{ text: 'acc-1 is listed.', cites: ['r1'] }],
+  blocks: [{ kind: 'sentences', sentences: [{ text: 'acc-1 is listed.', cites: ['r1'] }] }],
   citations: [{ key: 'r1', kind: 'entity', ref: ENTITY.ref, title: 'acc-1' }],
   coverage: { retrieval: '1 shown', summary: 'The answer cites 1 of the 1 elements the reads returned.' },
   model: 'configured-model',

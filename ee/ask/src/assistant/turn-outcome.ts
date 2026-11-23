@@ -1,6 +1,6 @@
 import { ASK_TEMPLATE_IDS, valueNotFitSentence, type AskAnswer, type AssistantRead, type AssistantFailureKind, type AssistantLimit } from '@neburyx/contracts';
 import { buildToolRegistry } from './tool-registry.js';
-import type { ToolAnswerOutcome } from './tool-answer.js';
+import type { BlocksAnswer } from './answer-blocks.js';
 import type { PlanStep } from './plan-token.js';
 import type { ToolRequest } from './tool-request.js';
 import type { StepScope } from './tool-step.js';
@@ -34,9 +34,8 @@ export type LoopOutcome =
   | { readonly kind: 'finished'; readonly answer: Answered; readonly steps: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
   /** A heavy step the analyst has to confirm: nothing of it was read. The steps before it and the counters are what a decision needs to go on. */
   | { readonly kind: 'waiting'; readonly wait: { readonly request: ToolRequest; readonly answer: Answered }; readonly steps: readonly PlanStep[]; readonly counters: { readonly steps: number; readonly rows: number; readonly calls: number }; readonly reads: readonly AssistantRead[]; readonly fromView: boolean }
-  /** The checked answer after tool steps: sentences that cite the elements the steps returned. */
-  | { readonly kind: 'table'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'table' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
-  | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit; /** The answer of the last read of one of the folder's questions, which the follow-ups of an Ask answer are built from. */ readonly askAnswer?: Answered }
+  /** The checked answer: the blocks the model gave that the checks kept, in order, with the elements they cite. `askAnswer` is the answer of the last read of one of the folder's questions, which the follow-ups of an answer on the ask route are built from. */
+  | { readonly kind: 'blocks'; readonly answer: BlocksAnswer; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit; readonly askAnswer?: Answered }
   | { readonly kind: 'no-description'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind }

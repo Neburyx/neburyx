@@ -58,7 +58,7 @@ describe('a turn that drafts the AI case summary', () => {
     // 5 calls: the router and the step call are made, one is kept for the answer
     expect(seen[0]?.maxCalls).toBe(4);
     expect(readsOf(answer).find((entry) => entry['kind'] === 'ai-summary')).toMatchObject({ tool: 'ai-summary', read: true, rows: 2, quality: 'exact', partial: false });
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['r1', 'r2'] }] });
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['r1', 'r2'] }] }] });
   });
 
   it('counts every call the summarizer made in the turn\'s calls', async () => {

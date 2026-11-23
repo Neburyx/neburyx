@@ -7843,30 +7843,139 @@
                 "type": "string",
                 "const": "view"
               },
-              "sentences": {
+              "blocks": {
                 "minItems": 1,
-                "maxItems": 12,
+                "maxItems": 4,
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "text": {
-                      "type": "string",
-                      "minLength": 1
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "sentences"
+                        },
+                        "sentences": {
+                          "minItems": 1,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "cites": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "cites"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "sentences"
+                      ],
+                      "additionalProperties": false
                     },
-                    "cites": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "minLength": 1
-                      }
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "table"
+                        },
+                        "table": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "columns": {
+                              "minItems": 1,
+                              "maxItems": 6,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "rows": {
+                              "minItems": 1,
+                              "maxItems": 25,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "cells": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 80
+                                    }
+                                  },
+                                  "cites": {
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "cells",
+                                  "cites"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "note": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 700
+                            },
+                            "droppedRows": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "moreNotShown": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "columns",
+                            "rows",
+                            "note"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "table"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "text",
-                    "cites"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               },
               "citations": {
@@ -8238,7 +8347,7 @@
             "required": [
               "status",
               "route",
-              "sentences",
+              "blocks",
               "citations",
               "coverage",
               "model",
@@ -8260,30 +8369,139 @@
                   "view"
                 ]
               },
-              "sentences": {
+              "blocks": {
                 "minItems": 1,
-                "maxItems": 12,
+                "maxItems": 4,
                 "type": "array",
                 "items": {
-                  "type": "object",
-                  "properties": {
-                    "text": {
-                      "type": "string",
-                      "minLength": 1
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "sentences"
+                        },
+                        "sentences": {
+                          "minItems": 1,
+                          "maxItems": 12,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "cites": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "cites"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "sentences"
+                      ],
+                      "additionalProperties": false
                     },
-                    "cites": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "minLength": 1
-                      }
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "table"
+                        },
+                        "table": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "columns": {
+                              "minItems": 1,
+                              "maxItems": 6,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "rows": {
+                              "minItems": 1,
+                              "maxItems": 25,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "cells": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 80
+                                    }
+                                  },
+                                  "cites": {
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "cells",
+                                  "cites"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "note": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 700
+                            },
+                            "droppedRows": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "moreNotShown": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "columns",
+                            "rows",
+                            "note"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "table"
+                      ],
+                      "additionalProperties": false
                     }
-                  },
-                  "required": [
-                    "text",
-                    "cites"
-                  ],
-                  "additionalProperties": false
+                  ]
                 }
               },
               "citations": {
@@ -8837,7 +9055,7 @@
             "required": [
               "status",
               "route",
-              "sentences",
+              "blocks",
               "citations",
               "coverage",
               "model",
@@ -8858,71 +9076,140 @@
                 "type": "string",
                 "const": "view"
               },
-              "table": {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "columns": {
-                    "minItems": 1,
-                    "maxItems": 6,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 40
-                    }
-                  },
-                  "rows": {
-                    "minItems": 1,
-                    "maxItems": 25,
-                    "type": "array",
-                    "items": {
+              "blocks": {
+                "minItems": 1,
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "cells": {
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "maxLength": 80
-                          }
+                        "kind": {
+                          "type": "string",
+                          "const": "sentences"
                         },
-                        "cites": {
+                        "sentences": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 12,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "minLength": 1
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "cites": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "cites"
+                            ],
+                            "additionalProperties": false
                           }
                         }
                       },
                       "required": [
-                        "cells",
-                        "cites"
+                        "kind",
+                        "sentences"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "table"
+                        },
+                        "table": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "columns": {
+                              "minItems": 1,
+                              "maxItems": 6,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "rows": {
+                              "minItems": 1,
+                              "maxItems": 25,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "cells": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 80
+                                    }
+                                  },
+                                  "cites": {
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "cells",
+                                  "cites"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "note": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 700
+                            },
+                            "droppedRows": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "moreNotShown": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "columns",
+                            "rows",
+                            "note"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "table"
                       ],
                       "additionalProperties": false
                     }
-                  },
-                  "droppedRows": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "moreNotShown": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  }
-                },
-                "required": [
-                  "title",
-                  "columns",
-                  "rows"
-                ],
-                "additionalProperties": false
+                  ]
+                }
               },
               "citations": {
                 "minItems": 1,
@@ -9279,7 +9566,7 @@
             "required": [
               "status",
               "route",
-              "table",
+              "blocks",
               "citations",
               "coverage",
               "model",
@@ -9298,71 +9585,140 @@
                 "type": "string",
                 "const": "view"
               },
-              "table": {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "type": "string",
-                    "minLength": 1
-                  },
-                  "columns": {
-                    "minItems": 1,
-                    "maxItems": 6,
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 40
-                    }
-                  },
-                  "rows": {
-                    "minItems": 1,
-                    "maxItems": 25,
-                    "type": "array",
-                    "items": {
+              "blocks": {
+                "minItems": 1,
+                "maxItems": 4,
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
                       "type": "object",
                       "properties": {
-                        "cells": {
-                          "type": "array",
-                          "items": {
-                            "type": "string",
-                            "maxLength": 80
-                          }
+                        "kind": {
+                          "type": "string",
+                          "const": "sentences"
                         },
-                        "cites": {
+                        "sentences": {
                           "minItems": 1,
-                          "maxItems": 6,
+                          "maxItems": 12,
                           "type": "array",
                           "items": {
-                            "type": "string",
-                            "minLength": 1
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "cites": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "cites"
+                            ],
+                            "additionalProperties": false
                           }
                         }
                       },
                       "required": [
-                        "cells",
-                        "cites"
+                        "kind",
+                        "sentences"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "const": "table"
+                        },
+                        "table": {
+                          "type": "object",
+                          "properties": {
+                            "title": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "columns": {
+                              "minItems": 1,
+                              "maxItems": 6,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 40
+                              }
+                            },
+                            "rows": {
+                              "minItems": 1,
+                              "maxItems": 25,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "cells": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "maxLength": 80
+                                    }
+                                  },
+                                  "cites": {
+                                    "minItems": 1,
+                                    "maxItems": 6,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  }
+                                },
+                                "required": [
+                                  "cells",
+                                  "cites"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "note": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 700
+                            },
+                            "droppedRows": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            },
+                            "moreNotShown": {
+                              "type": "integer",
+                              "exclusiveMinimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "title",
+                            "columns",
+                            "rows",
+                            "note"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "table"
                       ],
                       "additionalProperties": false
                     }
-                  },
-                  "droppedRows": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "moreNotShown": {
-                    "type": "integer",
-                    "exclusiveMinimum": 0,
-                    "maximum": 9007199254740991
-                  }
-                },
-                "required": [
-                  "title",
-                  "columns",
-                  "rows"
-                ],
-                "additionalProperties": false
+                  ]
+                }
               },
               "citations": {
                 "minItems": 1,
@@ -9851,7 +10207,7 @@
             "required": [
               "status",
               "route",
-              "table",
+              "blocks",
               "citations",
               "coverage",
               "model",

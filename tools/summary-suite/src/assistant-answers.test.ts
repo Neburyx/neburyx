@@ -1,3 +1,4 @@
+import { sentencesOfBlocks, tablesOfBlocks } from '@neburyx/contracts';
 import type { SummarySentence } from '@neburyx/contracts';
 import { buildSummaryInstructions, createAuditedModelCall, promptRecordOf, type ModelProvider } from '@neburyx/ee-ask';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -98,7 +99,7 @@ type Path = (mutation: Mutation | undefined, reply: Script, evidence: Counted) =
 
 const viewPath: Path = async (mutation, reply, evidence) => {
   const outcome = await viewAnswer(mutation, reply, evidence);
-  return outcome.status === 'answered' && 'sentences' in outcome.answer ? outcome.answer.sentences.map((sentence) => sentence.text) : [];
+  return outcome.status === 'answered' && 'blocks' in outcome.answer ? sentencesOfBlocks(outcome.answer.blocks).map((sentence) => sentence.text) : [];
 };
 const toolPath: Path = async (mutation, reply, evidence) => {
   const outcome = await toolAnswer(mutation, reply, evidence);
@@ -230,7 +231,7 @@ const tableOf = (columns: string[], ...rows: { cells: string[]; cites: string[] 
 
 const tableViewPath = async (mutation: Mutation | undefined, reply: Script, evidence: Counted): Promise<string[][]> => {
   const outcome = await viewAnswer(mutation, reply, evidence, 'table');
-  return outcome.status === 'answered' && 'table' in outcome.answer ? outcome.answer.table.rows.map((row) => row.cells) : [];
+  return outcome.status === 'answered' && 'blocks' in outcome.answer ? tablesOfBlocks(outcome.answer.blocks).flatMap((table) => table.rows.map((row) => row.cells)) : [];
 };
 const tableToolPath = async (mutation: Mutation | undefined, reply: Script, evidence: Counted): Promise<string[][]> => {
   const outcome = await toolAnswer(mutation, reply, evidence, 'table');
@@ -244,11 +245,11 @@ describe.each([['a table answer from the view', tableViewPath, true], ['a table 
   };
   const COLUMNS = ['Element', 'Type'];
 
-  it('keeps the row that copies the element it cites and drops a row that cites a key nobody sent; a row that cites nothing refuses the reply whole', async () => {
+  it('keeps the row that copies the element it cites and drops a row that cites a key nobody sent; a row that cites nothing is dropped and counted, and no other row is lost for it', async () => {
     const evidence = await viewOf(labelled);
     const good = rowOf(evidence);
     expect(await path(undefined, tableOf(COLUMNS, good, rowOf(evidence, { cites: ['n99'] })), evidence)).toEqual([good.cells]);
-    expect(await path(undefined, tableOf(COLUMNS, good, rowOf(evidence, { cites: [] })), evidence)).toEqual([]);
+    expect(await path(undefined, tableOf(COLUMNS, good, rowOf(evidence, { cites: [] })), evidence)).toEqual([good.cells]);
   });
 
   it('drops a row with a number its cited element does not hold, and the canary shows it when the test of the numbers is taken out', async () => {

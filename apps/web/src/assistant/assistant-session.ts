@@ -46,13 +46,8 @@ export type Failure =
   | { readonly kind: 'follow-up-invalid' }
   | { readonly kind: 'summary-invalid'; readonly sentence: string };
 
-/** An answer of sentences that cite elements: from the view, or after tool steps (then it carries the number of steps). */
-export type SentencesAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>;
-
-/** An answer written as a table whose every row cites elements: from the view, or after tool steps. */
-export type TableAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>;
-
-export type ViewAnswer = SentencesAnswer | TableAnswer;
+/** An answer of blocks (sentences and tables) whose every sentence and row cites elements: from the view, or after tool steps. */
+export type ViewAnswer = Extract<AssistantTurnAnswer, { status: 'answered'; blocks: unknown }>;
 
 export type Outcome =
   | { readonly kind: 'pending'; readonly call: 'message'; readonly steps?: readonly TurnStep[] }

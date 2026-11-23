@@ -17,7 +17,7 @@ const rowsOf = (count: number) => Array.from({ length: count }, (_, index) => ({
 const tableAnswer = (rows = 2, extra: { droppedRows?: number; moreNotShown?: number; noDescription?: string; pointer?: string; lastCallNote?: string } = {}): AssistantTurnAnswer => ({
   status: 'answered',
   route: 'view',
-  table: { title: `figures · ${rows} rows`, columns: ['Element', 'Code'], rows: rowsOf(rows), ...(extra.droppedRows === undefined ? {} : { droppedRows: extra.droppedRows }), ...(extra.moreNotShown === undefined ? {} : { moreNotShown: extra.moreNotShown }) },
+  blocks: [{ kind: 'table', table: { title: `figures · ${rows} rows`, columns: ['Element', 'Code'], rows: rowsOf(rows), note: 'Each row selects its elements on the graph.', ...(extra.droppedRows === undefined ? {} : { droppedRows: extra.droppedRows }), ...(extra.moreNotShown === undefined ? {} : { moreNotShown: extra.moreNotShown }) } }],
   citations: [
     { key: 'n1', kind: 'entity', ref: A },
     { key: 'n2', kind: 'entity', ref: B },
@@ -45,14 +45,15 @@ async function draw(answer: AssistantTurnAnswer) {
 }
 
 describe('the Assistant panel: a table answer', () => {
-  it('shows the tags, the title as the table caption, a header with a Cite column, a chip on every row, the sources and the coverage', async () => {
+  it('shows the tags, the title as the table caption, a header with a Source column, a marker, a source link and a select button on every row, the sources and the coverage', async () => {
     await draw(tableAnswer());
     expect(screen.getByText('Model: stub-model')).toBeTruthy();
     const table = screen.getByRole('table', { name: 'figures · 2 rows' });
     expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Element', 'Code', ASSISTANT_COPY.citeColumn]);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows).toHaveLength(2);
-    for (const row of rows) expect(within(row).getAllByRole('button')).toHaveLength(1);
+    for (const row of rows) expect(within(row).getAllByRole('button')).toHaveLength(3);
+    expect(screen.getByText('Each row selects its elements on the graph.')).toBeTruthy();
     expect(screen.getByText('Sources · 2')).toBeTruthy();
     expect(screen.getByText('2 of 2 figures in view shown · exact')).toBeTruthy();
     expect(screen.queryByText(ASSISTANT_COPY.moreNotShownTitle)).toBeNull();
@@ -61,16 +62,18 @@ describe('the Assistant panel: a table answer', () => {
   it('selects the element a row cites from its chip', async () => {
     const h = await draw(tableAnswer());
     const table = screen.getByRole('table');
-    await userEvent.click(need(within(table).getAllByRole('button')[0]));
+    await userEvent.click(need(within(table).getAllByRole('button', { name: /^Citation 1/ })[0]));
     expect([...h.state.presentation.view.getState().selection]).toEqual([elementKey(A)]);
   });
 
   it('puts one chip for each element a row cites, in the order of its cites', async () => {
     const answer = tableAnswer();
-    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table');
-    const two = { ...answer, table: { ...answer.table, rows: [{ cells: ['item-1', 'code-1'], cites: ['n2', 'n1'] }] } };
+    if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not blocks');
+    const block = answer.blocks[0];
+    if (block?.kind !== 'table') throw new Error('not a table');
+    const two: AssistantTurnAnswer = { ...answer, blocks: [{ kind: 'table', table: { ...block.table, rows: [{ cells: ['item-1', 'code-1'], cites: ['n2', 'n1'] }] } }] };
     await draw(two);
-    const chips = within(screen.getByRole('table')).getAllByRole('button');
+    const chips = within(screen.getByRole('table')).getAllByRole('button', { name: /^Citation/ });
     expect(chips.map((chip) => chip.getAttribute('aria-label'))).toEqual([expect.stringContaining('Citation 1'), expect.stringContaining('Citation 2')]);
     expect(chips[0]?.getAttribute('aria-label')).toContain('ent-2');
   });
@@ -131,5 +134,100 @@ describe('the Assistant panel: a table answer', () => {
     chip.focus();
     await userEvent.keyboard('{Enter}');
     expect([...h.state.presentation.view.getState().selection].length).toBe(1);
+  });
+
+  it('opens the Sources list at the first cited element from the link icon of a row, named by its number', async () => {
+    await draw(tableAnswer());
+    const link = within(screen.getByRole('table')).getAllByRole('button', { name: 'Show source [1]' })[0];
+    await userEvent.click(need(link));
+    const row = await screen.findByRole('button', { name: /^Sources: 1,/ });
+    expect(document.activeElement).toBe(row);
+  });
+
+  it('selects the elements of a row from a click on the row and from its select button, and not from a click on a marker twice', async () => {
+    const h = await draw(tableAnswer());
+    const table = screen.getByRole('table');
+    await userEvent.click(within(table).getByText('item-2'));
+    expect([...h.state.presentation.view.getState().selection]).toEqual([elementKey(B)]);
+    await userEvent.click(within(table).getByRole('button', { name: 'Select row 1 on graph' }));
+    expect([...h.state.presentation.view.getState().selection]).toEqual([elementKey(A)]);
+  });
+
+  it('copies the table as tab-separated text, header first, with the markers, and says Copied', async () => {
+    let written = '';
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { written = text; } } });
+    await draw(tableAnswer());
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect(written).toBe(['Element\tCode\tSource', 'item-1\tcode-1\t[1]', 'item-2\tcode-2\t[2]'].join('\n'));
+    expect(await screen.findByText(ASSISTANT_COPY.tableCopied, { selector: 'span:not(.visually-hidden)' })).toBeTruthy();
+  });
+
+  it('copies only the visible rows of a folded table', async () => {
+    let written = '';
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { written = text; } } });
+    await draw(tableAnswer(25));
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect(written.split('\n')).toHaveLength(1 + 3 + 1);
+  });
+
+  it('says so when the clipboard refuses', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('no'); } } });
+    await draw(tableAnswer());
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect((await screen.findAllByText(ASSISTANT_COPY.tableCopyFailed)).length).toBeGreaterThan(0);
+  });
+
+  it('names the table by its caption', async () => {
+    await draw(tableAnswer());
+    expect(screen.getByRole('table', { name: 'figures · 2 rows' }).querySelector('caption')?.textContent).toBe('figures · 2 rows');
+  });
+
+  it('copies every row of an unfolded table', async () => {
+    let written = '';
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { written = text; } } });
+    await draw(tableAnswer(25));
+    await userEvent.click(screen.getByRole('button', { name: foldedRowsText(21) }));
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect(written.split('\n')).toHaveLength(26);
+  });
+
+  it('copies a masked cell as it is drawn, masked', async () => {
+    let written = '';
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { written = text; } } });
+    const answer = tableAnswer();
+    if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not blocks');
+    const block = answer.blocks[0];
+    if (block?.kind !== 'table') throw new Error('not a table');
+    await draw({ ...answer, blocks: [{ kind: 'table', table: { ...block.table, rows: [{ cells: ['\u2022\u2022\u2022\u2022', 'code-1'], cites: ['n1'] }] } }] });
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect(written.split('\n')[1]).toBe('\u2022\u2022\u2022\u2022\tcode-1\t[1]');
+  });
+
+  it('folds two tables of one answer each on its own', async () => {
+    const answer = tableAnswer(25);
+    if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not blocks');
+    const block = answer.blocks[0];
+    if (block?.kind !== 'table') throw new Error('not a table');
+    const second = { kind: 'table' as const, table: { ...block.table, title: 'second · 25 rows' } };
+    await draw({ ...answer, blocks: [block, second] });
+    const [one, two] = screen.getAllByRole('table');
+    await userEvent.click(within(need(one)).getByRole('button', { name: foldedRowsText(21) }));
+    expect(within(need(one)).getByText('item-4')).toBeTruthy();
+    expect(within(need(two)).queryByText('item-4')).toBeNull();
+  });
+
+  it('announces Copied once in the status region, and the failure in it too', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => undefined } });
+    await draw(tableAnswer());
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    await screen.findAllByText(ASSISTANT_COPY.tableCopied);
+    const regions = screen.getAllByRole('status').filter((node) => node.textContent === ASSISTANT_COPY.tableCopied);
+    expect(regions).toHaveLength(1);
+    cleanup();
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('no'); } } });
+    await draw(tableAnswer());
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    await screen.findAllByText(ASSISTANT_COPY.tableCopyFailed);
+    expect(screen.getAllByRole('status').some((node) => node.textContent === ASSISTANT_COPY.tableCopyFailed)).toBe(true);
   });
 });

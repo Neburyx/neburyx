@@ -1,4 +1,4 @@
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_READ_FINDING_MAX, askRunResultSchema, type AskRunResult } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_READ_FINDING_MAX, askRunResultSchema, type AskRunResult, sentencesOfBlocks, type AssistantBlocks } from '@neburyx/contracts';
 import { findingCitationOf } from './tool-answer.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
@@ -25,7 +25,7 @@ const turn = (r: Rig) => (r.events.find((event) => event.action === TURN_CLOSED_
 const setup = (answer: FixtureReply | (() => FixtureReply), extra: Parameters<typeof rig>[0] = {}) => rig({ reply: SHARED, step: sequence(TOOL, DONE), answer, run: () => ({ status: 'ok', result: okResult() }), ...extra });
 
 describe('the title of a citation', () => {
-  const answerWith = (title: string | undefined) => assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }], citations: [{ key: 'r1', kind: 'entity', ref: { sourceId: 'a', entityType: 'widget', stableId: 'A-1' }, ...(title === undefined ? {} : { title }) }], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [{ tool: 't', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }, { tool: 'u', kind: 'intent', read: false }] });
+  const answerWith = (title: string | undefined) => assistantTurnAnswerSchema.safeParse({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] }], citations: [{ key: 'r1', kind: 'entity', ref: { sourceId: 'a', entityType: 'widget', stableId: 'A-1' }, ...(title === undefined ? {} : { title }) }], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 4, steps: 2, reads: [{ tool: 't', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }, { tool: 'u', kind: 'intent', read: false }] });
 
   it('is cut to what the schema allows, counted as the schema counts it, for a long entity title, a relationship title of two long ends, emoji, and a cut that would fall inside a pair; and is none when blank', () => {
     const cases = ['é'.repeat(1000), `MADE_FROM: ${'A'.repeat(300)} → ${'B'.repeat(300)}`, '😀'.repeat(500), `${'a'.repeat(399)}😀tail`, 'Account A-1'];
@@ -76,12 +76,12 @@ describe('the answer after tool steps', () => {
   it('drops a number that is not in the lines it cites and keeps the supported sentence', async () => {
     const r = await setup(sentences({ text: 'There are 17 accounts.', cites: ['r1'] }, { text: 'Account A-1 is listed.', cites: ['r1'] }));
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] }] });
   });
 
   it('shows the count of the elements the reads listed and cited, and removes the next count', async () => {
     const shown = await setup(sentences({ text: '2 widgets are listed.', cites: ['r1', 'r2'] }));
-    expect(await answerOf(shown.route.handler(shown.request()))).toMatchObject({ status: 'answered', sentences: [{ text: '2 widgets are listed.', cites: ['r1', 'r2'] }] });
+    expect(await answerOf(shown.route.handler(shown.request()))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: '2 widgets are listed.', cites: ['r1', 'r2'] }] }] });
     const wrong = await setup(sentences({ text: '3 widgets are listed.', cites: ['r1', 'r2'] }));
     expect(await answerOf(wrong.route.handler(wrong.request()))).toMatchObject({ status: 'not-answered' });
   });
@@ -90,7 +90,7 @@ describe('the answer after tool steps', () => {
     const listed = (count: number): AskRunResult => askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: count, scope: 'test' }, matchIds: [], nodes: Array.from({ length: count }, (_, index) => nodeOf(`A-${index + 1}`)), edges: [], notices: [], warnings: [] } });
     const cites = Array.from({ length: 25 }, (_, index) => `r${index + 1}`);
     const shown = await setup(sentences({ text: '25 widgets are listed.', cites }), { run: () => ({ status: 'ok', result: listed(25) }) });
-    expect(await answerOf(shown.route.handler(shown.request()))).toMatchObject({ status: 'answered', sentences: [{ text: '25 widgets are listed.' }] });
+    expect(await answerOf(shown.route.handler(shown.request()))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: '25 widgets are listed.' }] }] });
     const wrong = await setup(sentences({ text: '26 widgets are listed.', cites }), { run: () => ({ status: 'ok', result: listed(25) }) });
     expect(await answerOf(wrong.route.handler(wrong.request()))).toMatchObject({ status: 'not-answered' });
   });
@@ -114,7 +114,7 @@ describe('the answer after tool steps', () => {
   it('keeps the read citation of a sentence whose count of the cited elements stands beside a number its read line holds', async () => {
     const r = await setup(sentences({ text: 'The read shows 1 match, and 2 widgets are listed.', cites: ['s1', 'r1', 'r2'] }));
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'The read shows 1 match, and 2 widgets are listed.' }], citations: expect.arrayContaining([expect.objectContaining({ key: 's1', kind: 'read', finding: expect.stringContaining('1 match shown') })]) });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'The read shows 1 match, and 2 widgets are listed.' }] }], citations: expect.arrayContaining([expect.objectContaining({ key: 's1', kind: 'read', finding: expect.stringContaining('1 match shown') })]) });
   });
 
   it('removes the sentence when the count of the cited elements is wrong though the number of its read line is right', async () => {
@@ -153,7 +153,7 @@ describe('the answer after tool steps', () => {
   const survivors = async (result: () => ReturnType<typeof okResult>, ...texts: { text: string; cites: string[] }[]) => {
     const r = await setup(sentences(...texts), second(result));
     const answer = await answerOf(r.route.handler(r.request()));
-    return answer.status === 'answered' && 'sentences' in answer ? answer.sentences.map((sentence) => sentence.text) : [];
+    return answer.status === 'answered' && 'blocks' in answer ? sentencesOfBlocks(answer.blocks).map((sentence) => sentence.text) : [];
   };
 
   it('drops a number of a read whose count is a lower bound when the sentence leaves out the phrase of the line, and keeps it with the phrase', async () => {
@@ -243,9 +243,9 @@ describe('the properties in the lines of a tool result', () => {
   it('keeps a sentence that states the amount of a transaction a tool returned, and drops the same sentence with an amount the line does not hold', async () => {
     const kept = await setup(sentences({ text: 'Account A-2 has an amount of 4200.', cites: ['r2'] }), { run: () => ({ status: 'ok', result: withProperties() }) });
     const keptAnswer = await answerOf(kept.route.handler(kept.request()));
-    expect(keptAnswer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-2 has an amount of 4200.' }] });
+    expect(keptAnswer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-2 has an amount of 4200.' }] }] });
     const planted = await setup(sentences({ text: 'Account A-2 has an amount of 4300.', cites: ['r2'] }), { run: () => ({ status: 'ok', result: withProperties() }) });
-    expect(await answerOf(planted.route.handler(planted.request()))).not.toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-2 has an amount of 4300.' }] });
+    expect(await answerOf(planted.route.handler(planted.request()))).not.toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: 'Account A-2 has an amount of 4300.' }] }] });
   });
 });
 

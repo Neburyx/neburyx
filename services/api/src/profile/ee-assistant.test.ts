@@ -199,7 +199,7 @@ describe('the tool loop through the real application', () => {
   it('asks the model for the next step after the first read, answers its checked sentences when it calls answer, and counts the router call, two agent calls and one step', async () => {
     const rig = await assistantRig({ maxSteps: 4, reply: sequence(ROUTE, '{"done":true}', ANSWER), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
     const answer = await rig.post({ ...rig.body, message: 'Show W-1' });
-    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'Ana Silva is listed.', cites: ['r1'] }], reads: [{ tool: 'widgetById', kind: 'intent', read: true }] });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Ana Silva is listed.', cites: ['r1'] }] }], reads: [{ tool: 'widgetById', kind: 'intent', read: true }]  });
     expect(rig.stub.bodies).toHaveLength(3);
     expect(everything(rig).filter((event) => event.action === 'assistant.agent')).toHaveLength(2);
     expect(everything(rig).filter((event) => event.action === 'assistant.turn.closed')).toMatchObject([{ detail: { turn: { modelCalls: 3, steps: 1, outcome: 'answered' } } }]);
@@ -256,7 +256,7 @@ describe('the ask route through the real gate', () => {
     const before = rig.rig.executor.calls.filter((call) => call.templateId === 'entity-load').length;
     const answer = await rig.post({ ...rig.body, message: 'Show widget W-1' });
     expect(answer.statusCode).toBe(200);
-    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'Widget W-1 is listed.', cites: ['r1'] }], reads: [{ tool: 'widgetById', kind: 'intent', read: true }] });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'Widget W-1 is listed.', cites: ['r1'] }] }], reads: [{ tool: 'widgetById', kind: 'intent', read: true }]  });
     expect(rig.rig.executor.calls.filter((call) => call.templateId === 'entity-load')).toHaveLength(before + 1);
     const events = rig.rig.events.filter((event) => event.action === 'assistant.ask');
     expect(events).toHaveLength(1);
@@ -317,7 +317,7 @@ describe('a file query through the real gate in the running application', () => 
     const rig = await assistantRig({ reply: sequenceOf(REPLY, DONE, JSON.stringify({ sentences: [{ text: 'Widget W-1 is listed.', cites: ['r1'] }] })), fileQuery: { status: 'rows', rows: [{ n: widgetNode('W-1') }, { n: widgetNode('W-2') }] } });
     const before = rig.rig.executor.calls.length;
     const answer = await rig.post({ ...rig.body, message: 'Query widget W-1' });
-    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ cites: ['r1'] }], coverage: expect.anything(), reads: [{ tool: 'queryById', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }] });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ cites: ['r1'] }] }], coverage: expect.anything(), reads: [{ tool: 'queryById', kind: 'intent', read: true, rows: 2, quality: 'exact', partial: false }]  });
     const calls = rig.rig.executor.calls.slice(before).filter((call) => call.templateId === 'file-query');
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ accessMode: 'READ', parameters: { id: 'W-1' } });
@@ -329,7 +329,7 @@ describe('a file query through the real gate in the running application', () => 
     const rig = await assistantRig({ reply: sequenceOf(REPLY, DONE, JSON.stringify({ sentences: [{ text: 'The query found no widget.', cites: ['s1'] }] })), fileQuery: { status: 'rows', rows: [] } });
     const answer = await rig.post({ ...rig.body, message: 'Query widget W-1' });
     expect(rig.stub.bodies[2]).toContain('Nothing was found.');
-    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'The query found no widget.' }], reads: [{ tool: 'queryById', kind: 'intent' }] });
+    expect(answer.json()).toMatchObject({ status: 'answered', route: 'ask', blocks: [{ kind: 'sentences', sentences: [{ text: 'The query found no widget.' }] }], reads: [{ tool: 'queryById', kind: 'intent' }]  });
     await rig.stop();
   });
 
@@ -1280,7 +1280,7 @@ describe('the application tools through the real application', () => {
     const answer = await rig.post({ ...rig.body, message: 'Which shape is a fan-in?' });
     expect(entityReads(rig) - before).toBe(1);
     const parsed = assistantTurnAnswerSchema.parse(answer.json());
-    expect(parsed).toMatchObject({ status: 'answered', sentences: [{ cites: ['t1'] }], steps: 2 });
+    expect(parsed).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['t1'] }] }], steps: 2  });
     expect(JSON.stringify(parsed)).toContain('"kind":"typology"');
     expect(rig.stub.bodies.at(-1)).toContain('t1:');
     await rig.stop();
@@ -1309,7 +1309,7 @@ describe('the application tools through the real application', () => {
     store.investigations.push({ ...mine, id: OTHER, ownerId: '0192f000-0000-7000-8000-0000000000bb' });
     store.drafts.push({ ...draft, id: '0192f000-0000-7000-8000-0000000000d9', investigationId: OTHER, aiNotes: { entries: [note('tok-other', '‹widget#1› is someone else\'s note.')] } });
     const answer = await rig.post({ ...rig.body, message: 'Show W-1 and my notes' });
-    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', sentences: [{ cites: ['r1'] }] });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['r1'] }] }] });
     const last = rig.stub.bodies.at(-1) ?? '';
     expect(last).toContain('Ana Silva is mine.');
     expect(last).toContain('a1:');
@@ -1347,7 +1347,7 @@ describe('the application tools through the real application', () => {
     const answerJson = JSON.stringify({ sentences: [{ text: 'Ana Silva is a widget.', cites: ['a1'] }] });
     const rig = await assistantRig({ withSummary: true, threadStore: createMemoryAssistantThreadStore(), maxSteps: 4, reply: sequence(ROUTE, '{"tool":"ai-summary","values":{}}', summaryJson, '{"done":true}', answerJson), answer: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode('W-1') }] } : undefined) });
     const answer = await rig.post({ ...rig.body, message: 'Show W-1 and summarize the view', viewElementKeys: [JSON.stringify(['node', 'demo', 'widget', 'W-1'])] });
-    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', calls: 5, sentences: [{ text: 'Ana Silva is a widget.' }] });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'answered', calls: 5, blocks: [{ kind: 'sentences', sentences: [{ text: 'Ana Silva is a widget.' }] }] });
     expect(JSON.stringify(answer.json())).toContain('"kind":"ai-summary"');
     expect(rig.stub.bodies).toHaveLength(5);
     await rig.stop();
@@ -1412,7 +1412,7 @@ describe('the larger of two amounts in the lines of a tool result, through the r
   });
 
   it('keeps the larger named from two lines that both show an amount, and the largest named from one line only with the line of the read', async () => {
-    expect(await turn([{ text: 'The larger is 5000, against 4200.', cites: ['r1', 'r2'] }])).toMatchObject({ answer: { status: 'answered', sentences: [{ cites: ['r1', 'r2'] }] } });
+    expect(await turn([{ text: 'The larger is 5000, against 4200.', cites: ['r1', 'r2'] }])).toMatchObject({ answer: { status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['r1', 'r2'] }] }] } });
     expect(await turn([{ text: '5000 is the largest of those shown.', cites: ['r2', 's1'] }])).toMatchObject({ answer: { status: 'answered' } });
   });
 
@@ -1440,7 +1440,7 @@ describe('a table answer through the real application', () => {
 
   it('answers a table when the router chose the form', async () => {
     const { answer } = await turn(table([{ cells: ['W-1', 'widget'], cites: ['n1'] }]), false);
-    expect(answer).toMatchObject({ status: 'answered', route: 'view', table: { columns: ['Element', 'Type'], rows: [{ cells: ['W-1', 'widget'], cites: ['n1'] }] } });
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', blocks: [{ kind: 'table', table: { columns: ['Element', 'Type'], rows: [{ cells: ['W-1', 'widget'], cites: ['n1'] }] } }] });
   });
 
   it('with masking on, never sends the unmasked value of a masked property, and drops a row that writes it', async () => {
@@ -1450,7 +1450,7 @@ describe('a table answer through the real application', () => {
     expect(sent.length).toBeGreaterThanOrEqual(3);
     for (const body of sent) expect(body).not.toContain('Ana Silva');
     expect(JSON.stringify(answer)).not.toContain('Ana Silva');
-    expect(answer).toMatchObject({ status: 'answered', table: { rows: [{ cells: ['W-1', 'widget'] }], droppedRows: 1 } });
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [{ cells: ['W-1', 'widget'] }], droppedRows: 1 } }] });
   });
 });
 

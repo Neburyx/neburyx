@@ -13,26 +13,30 @@ export interface TableRow {
 export interface TableDraft {
   readonly columns: readonly string[];
   readonly rows: readonly TableRow[];
+  /** The rows the reply wrote with no cite: they are dropped and counted, and no other row is lost for them. */
+  readonly uncited: number;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isText = (value: unknown, max: number, empty: boolean): value is string => typeof value === 'string' && (empty || value.trim() !== '') && value.length <= max && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
 
-/** The table of a reply of the exact shape `{"columns":[...],"rows":[{"cells":[...],"cites":[...]}]}`; any bound broken, any other member, a cell count that differs from the columns, is undefined. */
+/** The table of a reply of the exact shape `{"columns":[...],"rows":[{"cells":[...],"cites":[...]}]}`; any bound broken, any other member, a cell count that differs from the columns, is undefined. A row with an empty `cites` is dropped and counted in `uncited`. */
 export function parseTable(value: unknown): TableDraft | undefined {
   if (!isRecord(value) || Object.keys(value).sort().join() !== 'columns,rows') return undefined;
   const { columns, rows } = value;
   if (!Array.isArray(columns) || columns.length < 1 || columns.length > ASSISTANT_TABLE_COLUMNS_MAX || !columns.every((label): label is string => isText(label, ASSISTANT_TABLE_LABEL_MAX, false))) return undefined;
   if (!Array.isArray(rows) || rows.length < 1 || rows.length > TABLE_REPLY_ROWS_MAX) return undefined;
   const kept: TableRow[] = [];
+  let uncited = 0;
   for (const row of rows as unknown[]) {
     if (!isRecord(row) || Object.keys(row).sort().join() !== 'cells,cites') return undefined;
     const { cells, cites } = row;
     if (!Array.isArray(cells) || cells.length !== columns.length || !cells.every((cell): cell is string => isText(cell, ASSISTANT_TABLE_CELL_MAX, true))) return undefined;
-    if (!Array.isArray(cites) || cites.length < 1 || cites.length > ASSISTANT_TABLE_CITES_MAX || !cites.every((cite): cite is string => typeof cite === 'string' && cite !== '')) return undefined;
-    kept.push({ cells, cites });
+    if (!Array.isArray(cites) || cites.length > ASSISTANT_TABLE_CITES_MAX || !cites.every((cite): cite is string => typeof cite === 'string' && cite !== '')) return undefined;
+    if (cites.length === 0) uncited += 1;
+    else kept.push({ cells, cites });
   }
-  return { columns, rows: kept };
+  return { columns, rows: kept, uncited };
 }
 
 /** A row read as one sentence for the checks: its cells joined, cited by the keys of the row. The column labels are judged apart (a label is no name of an element), so they are not in the text the name and number checks read. */

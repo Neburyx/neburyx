@@ -187,7 +187,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     const view = await turnRig({ reply: ok('{"route":"view","form":"table"}'), view: ok(JSON.stringify({ table: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }, { cells: ['Account A-2'], cites: ['n2'] }] } })) });
     const result = await run(view, { ...VIEW_BODY, investigationId: INVESTIGATION });
     const answer = 'value' in result ? assistantTurnAnswerSchema.parse(result.value) : undefined;
-    if (answer?.status !== 'answered' || answer.route !== 'view' || !('table' in answer)) throw new Error('not a table answer');
+    if (answer?.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a table answer');
     const [kept] = stored(view);
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);

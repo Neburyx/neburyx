@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASSISTANT_SUMMARY_INVALID_SENTENCE, assistantTurnAuditDetailSchema, auditDetailSchema, type ElementRefs, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ASSISTANT_SUMMARY_INVALID_SENTENCE, assistantTurnAuditDetailSchema, auditDetailSchema, type ElementRefs, type RecordJob, type RecordQueue, sentencesOfBlocks, type AssistantBlocks } from '@neburyx/contracts';
 import { createCheckRunner, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { sealToken, type SealInput } from '../case-summary/token.js';
 import type { TokenKeys } from '../case-summary/token-keys.js';
@@ -42,7 +42,7 @@ describe('a follow-up answered with an attached summary', () => {
     const t = await withSummary({ view: reply([{ text: 'Account A-3 shares a device with account A-1.', cites: ['n3', 'n1'] }]) });
     const answer = await answerOf(turn(t, tokenOf()));
     expect(answer).toMatchObject({ status: 'answered', route: 'view' });
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(answer.citations.map((citation) => citation.key)).toEqual(['n3', 'n1']);
     expect(t.elementReads).toHaveLength(2);
     expect(t.elementReads[0]?.refs).toMatchObject({ entities: [{ stableId: 'A-1' }, { stableId: 'A-2' }] });
@@ -78,7 +78,7 @@ describe('a follow-up answered with an attached summary', () => {
   it('counts the elements in view only in the coverage lines', async () => {
     const t = await withSummary({ view: reply([{ text: 'Account A-3 shares a device with account A-1.', cites: ['n3', 'n1'] }]) });
     const answer = await answerOf(turn(t, tokenOf()));
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(answer.coverage.retrieval.startsWith('2 shown')).toBe(true);
     expect(answer.coverage.summary).toBe('The draft cites 1 of the 2 shown elements.');
   });
@@ -185,7 +185,7 @@ describe('a sentence of the summary cited as a whole', () => {
 
   it('replaces the key of a summary sentence by the elements it cites, and says which sentence the answer rests on', async () => {
     const answer = await answered('Account A-1 shares a device with account A-3.', ['s1']);
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n3']);
     expect((answer as { summarySentencesCited?: number[] }).summarySentencesCited).toEqual([1]);
     expect((answer.coverage as { summaryCited?: string }).summaryCited).toBe("Cites the summary's sentence 1.");
@@ -193,8 +193,8 @@ describe('a sentence of the summary cited as a whole', () => {
 
   it('removes a sentence key in brackets from the text, as an element key is', async () => {
     const answer = await answered('Account A-1 shares a device with account A-3 (s1).', ['s1']);
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
-    expect(answer.sentences[0]?.text).not.toContain('s1');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
+    expect(sentencesOfBlocks(answer.blocks)[0]?.text).not.toContain('s1');
   });
 
   it('drops a sentence that holds a sentence key outside brackets', async () => {
@@ -209,7 +209,7 @@ describe('a sentence of the summary cited as a whole', () => {
 
   it('writes no line and no field when the answer cites elements only', async () => {
     const answer = await answered('Account A-1 is in view.', ['n1']);
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect((answer as { summarySentencesCited?: number[] }).summarySentencesCited).toBeUndefined();
     expect((answer.coverage as { summaryCited?: string }).summaryCited).toBeUndefined();
   });
@@ -217,7 +217,7 @@ describe('a sentence of the summary cited as a whole', () => {
   it('names several sentences in words', async () => {
     const token = tokenOf({ sentences: [DRAFT.sentences[0] ?? { text: '', cites: [] }, { text: 'Account A-2 is listed.', cites: ['n2'] }] });
     const answer = await answered('Account A-1 and account A-2 and account A-3 are listed.', ['s1', 's2'], token);
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
     expect((answer.coverage as { summaryCited?: string }).summaryCited).toBe("Cites the summary's sentences 1 and 2.");
   });
 });
@@ -322,8 +322,8 @@ describe('the sentence keys in the text of a reply', () => {
 
   it.each([['(s1, n1)'], ['(n1; s1)'], ['[s1 and n1]']])('takes a sentence key out of a bracketed group that also holds an element key: %s', async (group) => {
     const answer = await answeredWith(`Account A-1 shares a device with account A-3 ${group}.`, ['s1']);
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
-    expect(answer.sentences[0]?.text).not.toMatch(/s1/);
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
+    expect(sentencesOfBlocks(answer.blocks)[0]?.text).not.toMatch(/s1/);
     expect((answer as { summarySentencesCited?: number[] }).summarySentencesCited).toEqual([1]);
   });
 
@@ -331,8 +331,8 @@ describe('the sentence keys in the text of a reply', () => {
     const token = tokenOf({ sentences: [DRAFT.sentences[0] ?? { text: '', cites: [] }, { text: 'Account A-2 is listed.', cites: ['n2'] }] });
     const t = await withSummary({ view: reply([{ text: 'Account A-1 and account A-2 and account A-3 are listed (s1 and s2).', cites: ['s1', 's2'] }]) });
     const answer = await answerOf(turn(t, token));
-    if (answer.status !== 'answered' || answer.route !== 'view' || !('sentences' in answer)) throw new Error('not a view answer');
-    expect(answer.sentences[0]?.text).not.toMatch(/s1|s2/);
+    if (answer.status !== 'answered' || answer.route !== 'view' || !('blocks' in answer)) throw new Error('not a view answer');
+    expect(sentencesOfBlocks(answer.blocks)[0]?.text).not.toMatch(/s1|s2/);
   });
 
   it('does not take an id that ends in an s and a number for a sentence key', async () => {

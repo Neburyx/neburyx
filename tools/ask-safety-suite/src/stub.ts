@@ -33,6 +33,16 @@ const jsonOf = (text: string | undefined): Json | undefined => {
   }
 };
 
+/** The reply a case gives for `answer` in the shapes it is written in ({sentences} or {columns, rows}), as the tool's input: the blocks of one kind. */
+function blocksOf(reply: Json): Json {
+  if ('blocks' in reply) return reply;
+  const { noDescription, ...rest } = reply;
+  const extra = noDescription === undefined ? {} : { noDescription };
+  if ('sentences' in rest) return { blocks: [{ kind: 'sentences', sentences: rest['sentences'] }], ...extra };
+  if ('columns' in rest) return { blocks: [{ kind: 'table', columns: rest['columns'], rows: rest['rows'] }], ...extra };
+  return reply;
+}
+
 /**
  * What the assistant's agent is told over the wire. A case writes the replies of a turn as text, in order: the router's, then the next read of each step (`{"tool":…}`) or `{"done":true}`, then the answer's sentences.
  * A request that carries tools is a call of the agent, and the next reply is read as that script: the router's own `ask` reply, when it names values itself, is the first read, a request for a tool is a tool call, and `{"done":true}` is the call of
@@ -52,7 +62,7 @@ function agentScript(routerReply: () => string | undefined, answerOnly: () => bo
       answered = true;
       let reply = jsonOf(next());
       if (reply?.['done'] === true) reply = jsonOf(next());
-      return reply === undefined ? [{ type: 'text', text: 'Done.' }] : toolUse('answer', reply);
+      return reply === undefined ? [{ type: 'text', text: 'Done.' }] : toolUse('answer', blocksOf(reply));
     }
     if (!started) {
       started = true;
@@ -70,7 +80,7 @@ function agentScript(routerReply: () => string | undefined, answerOnly: () => bo
     if (step?.['done'] === true) {
       answered = true;
       const reply = jsonOf(next());
-      return reply === undefined ? [{ type: 'text', text: 'Done.' }] : toolUse('answer', reply);
+      return reply === undefined ? [{ type: 'text', text: 'Done.' }] : toolUse('answer', blocksOf(reply));
     }
     if (step !== undefined && typeof step['tool'] === 'string') return toolUse(step['tool'], (step['values'] ?? {}) as Json);
     return [{ type: 'text', text }];

@@ -217,11 +217,8 @@ async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting
       return { status: 'answered', route: 'ask', answer: { refused: outcome.refused }, ...(outcome.reads.length === 0 ? {} : { reads: [...outcome.reads] }) };
     case 'limit':
       return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit], reads: [...outcome.reads] };
-    case 'sentences':
-      return { status: 'answered', route, sentences: [...outcome.answer.sentences], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.answer.lastCallNote === undefined ? {} : { lastCallNote: outcome.answer.lastCallNote }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
-    case 'table':
-      // a table is asked only on the view route; the ask route never carries the form
-      return { status: 'answered', route: 'view', table: outcome.answer.table, citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.answer.lastCallNote === undefined ? {} : { lastCallNote: outcome.answer.lastCallNote }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
+    case 'blocks':
+      return { status: 'answered', route, blocks: [...outcome.answer.blocks], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.answer.lastCallNote === undefined ? {} : { lastCallNote: outcome.answer.lastCallNote }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
     case 'no-description':
       return { status: 'no-description', route, sentence: outcome.sentence, names: [...outcome.names] };
     case 'unsupported':
@@ -407,7 +404,7 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       if (looped === undefined) return undefined;
       const turn = await loopAnswer(looped, run.route, waitingOf(request, body, body.message, run.startedAt, run.form));
       // an answer of the ask route that rests on a read of one of the folder's questions carries the follow-ups of Ask's own answer to that read
-      if (turn?.status === 'answered' && 'sentences' in turn && run.route === 'ask' && looped.kind === 'sentences' && looped.askAnswer !== undefined) {
+      if (turn?.status === 'answered' && turn.route === 'ask' && 'blocks' in turn && run.route === 'ask' && looped.kind === 'blocks' && looped.askAnswer !== undefined) {
         const chips = followUpsFor(request, body)({ answered: looped.askAnswer });
         if (chips.length > 0) return { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) };
       }

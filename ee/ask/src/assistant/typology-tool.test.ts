@@ -1,3 +1,4 @@
+import { sentencesOfBlocks, type AssistantBlocks } from '@neburyx/contracts';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, answerOf, ok, rig, routeAsk, type Rig } from '../testing/assistant-rig.js';
@@ -61,7 +62,7 @@ describe('a turn that reads the typology', () => {
     const answer = await answerOf(r.route.handler(r.request()));
     // the one run is the router's own ask read; the typology step reads nothing from the source
     expect(r.runs).toHaveLength(1);
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, sentences: [{ cites: ['t1'] }] });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, blocks: [{ kind: 'sentences', sentences: [{ cites: ['t1'] }] }] });
     const reads = (answer as { reads?: readonly Record<string, unknown>[] }).reads ?? [];
     expect(reads.find((entry) => entry['kind'] === 'typology')).toMatchObject({ tool: 'typology', read: true, lines: 2, quality: 'exact', partial: false });
     expect(reads.find((entry) => entry['kind'] === 'typology')).not.toHaveProperty('rows');
@@ -71,8 +72,8 @@ describe('a turn that reads the typology', () => {
   it('shows the model each line with its key, and drops a sentence that cites a typology line it was not given or any key the turn does not hold', async () => {
     const r = await turn(sentences({ text: 'A fan-in is when many sources send money to one receiver.', cites: ['t1'] }, { text: 'A cycle is shown.', cites: ['t9'] }, { text: 'Something else.', cites: ['n1'] }));
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['t1'] }] });
-    expect((answer as { sentences: unknown[] }).sentences).toHaveLength(1);
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['t1'] }] }] });
+    expect(sentencesOfBlocks((answer as { blocks: AssistantBlocks }).blocks)).toHaveLength(1);
   });
 
   it('shows a sentence that cites only typology lines with no source chips', async () => {

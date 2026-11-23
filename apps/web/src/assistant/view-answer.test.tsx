@@ -18,10 +18,10 @@ const EDGE = edge('a', 'rel-1', 'ent-1', 'ent-2');
 const ANSWER: AssistantTurnAnswer = {
   status: 'answered',
   route: 'view',
-  sentences: [
+  blocks: [{ kind: 'sentences', sentences: [
     { text: 'ent-1 and ent-2 are linked.', cites: ['n1', 'n2'] },
     { text: 'ent-2 has one relationship.', cites: ['e1', 'n2'] },
-  ],
+  ] }],
   citations: [
     { key: 'n1', kind: 'entity', ref: A },
     { key: 'n2', kind: 'entity', ref: B },
@@ -229,7 +229,7 @@ describe('the Assistant panel: what a type means', () => {
   const MEANING = { key: 'm1', kind: 'description' as const, typeKind: 'entity' as const, type: 'Widget', description: 'A widget that <script>holds</script> a balance, in a_very_long_word_'.concat('x'.repeat(120)) };
   const WITH_MEANING: AssistantTurnAnswer = {
     ...ANSWER,
-    sentences: [{ text: 'A widget holds a balance.', cites: ['m1'] }, { text: 'ent-2 has one relationship.', cites: ['n2'] }],
+    blocks: [{ kind: 'sentences', sentences: [{ text: 'A widget holds a balance.', cites: ['m1'] }, { text: 'ent-2 has one relationship.', cites: ['n2'] }] }],
     citations: [{ key: 'n2', kind: 'entity', ref: B }, MEANING],
     noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.',
   };
@@ -339,14 +339,14 @@ describe('the Assistant panel: markers and the Sources control', () => {
   });
 
   it('draws no marker for a cited key that has no entry, and no Sources control for an answer that cites nothing', async () => {
-    await answered({ ...ANSWER, sentences: [{ text: 'Nothing here is cited.', cites: [] }, { text: 'One is.', cites: ['n1', 'unknown'] }], citations: [{ key: 'n1', kind: 'entity', ref: A }] });
+    await answered({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'Nothing here is cited.', cites: [] }, { text: 'One is.', cites: ['n1', 'unknown'] }] }], citations: [{ key: 'n1', kind: 'entity', ref: A }] });
     expect(Array.from(need(screen.getByText('One is.')).querySelectorAll('button')).map((button) => button.textContent)).toEqual(['[1]']);
     expect(need(screen.getByText('Nothing here is cited.')).querySelector('button')).toBeNull();
     expect(screen.getByRole('button', { name: 'Sources · 1' })).toBeTruthy();
   });
 
   it('shows no marker and no Sources control for an answer in which no sentence cites anything', async () => {
-    await answered({ ...ANSWER, sentences: [{ text: 'Nothing here is cited.', cites: [] }], citations: [] });
+    await answered({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'Nothing here is cited.', cites: [] }] }], citations: [] });
     expect(screen.getByText('Nothing here is cited.')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Citation / })).toBeNull();
     expect(screen.queryByRole('button', { name: SOURCES })).toBeNull();
@@ -354,7 +354,7 @@ describe('the Assistant panel: markers and the Sources control', () => {
 
   it('keeps the description of a relationship type usable, with no number, a marker or a Sources control', async () => {
     const meaning = { key: 'm1', kind: 'description' as const, typeKind: 'relationship' as const, type: 'LINK', description: 'A link between two things.' };
-    await answered({ ...ANSWER, sentences: [{ text: 'A link joins two things.', cites: ['m1'] }], citations: [meaning] });
+    await answered({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'A link joins two things.', cites: ['m1'] }] }], citations: [meaning] });
     const chip = screen.getByRole('button', { name: /^About LINK:/ });
     await userEvent.click(chip);
     expect(chip.getAttribute('aria-expanded')).toBe('true');
@@ -371,7 +371,7 @@ describe('the Assistant panel: markers and the Sources control', () => {
 
   it('shows the descriptions of types without a number, a marker or a Sources control', async () => {
     const meaning = { key: 'm1', kind: 'description' as const, typeKind: 'entity' as const, type: 'Widget', description: 'A widget.' };
-    await answered({ ...ANSWER, sentences: [{ text: 'A widget holds a balance.', cites: ['m1'] }], citations: [meaning] });
+    await answered({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'A widget holds a balance.', cites: ['m1'] }] }], citations: [meaning] });
     expect(screen.getByRole('button', { name: /^About Widget:/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Citation / })).toBeNull();
     expect(screen.queryByRole('button', { name: SOURCES })).toBeNull();
@@ -397,10 +397,10 @@ describe('the Assistant panel: repeated shapes in the Sources list', () => {
   const EDGES = [OWNS, HELD, ...RECEIVED];
   const GROUPED: AssistantTurnAnswer = {
     ...ANSWER,
-    sentences: [
+    blocks: [{ kind: 'sentences', sentences: [
       { text: 'The account is owned and held.', cites: ['own-1', 'held-1'] },
       { text: '25 transactions were received.', cites: RECEIVED.map((held) => held.ref.stableId) },
-    ],
+    ] }],
     citations: EDGES.map((held) => ({ key: held.ref.stableId, kind: 'relationship' as const, ref: held.ref })),
   };
 
@@ -452,7 +452,7 @@ describe('the Assistant panel: repeated shapes in the Sources list', () => {
   });
 
   it('opens a closed list from a range marker and puts focus on the row of the first number when the run is not grouped', async () => {
-    const h = harness(async () => ok({ ...ANSWER, sentences: [{ text: 'Three are cited.', cites: ['n1', 'n2', 'e1'] }] }));
+    const h = harness(async () => ok({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'Three are cited.', cites: ['n1', 'n2', 'e1'] }] }] }));
     shown(h);
     render(h.tree());
     await typeAndSend('what is linked?');
@@ -463,7 +463,7 @@ describe('the Assistant panel: repeated shapes in the Sources list', () => {
   });
 
   it('leaves focus on the Sources control when the list is closed and opened again after a range marker was pressed', async () => {
-    const h = harness(async () => ok({ ...ANSWER, sentences: [{ text: 'Three are cited.', cites: ['n1', 'n2', 'e1'] }] }));
+    const h = harness(async () => ok({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'Three are cited.', cites: ['n1', 'n2', 'e1'] }] }] }));
     shown(h);
     render(h.tree());
     await typeAndSend('what is linked?');
@@ -477,7 +477,7 @@ describe('the Assistant panel: repeated shapes in the Sources list', () => {
   });
 
   it('keeps a repeated citation inside a run apart: only the runs of three or more consecutive numbers fold', async () => {
-    const h = harness(async () => ok({ ...ANSWER, sentences: [{ text: 'Mixed.', cites: ['n1', 'n2', 'e1', 'n1'] }] }));
+    const h = harness(async () => ok({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'Mixed.', cites: ['n1', 'n2', 'e1', 'n1'] }] }] }));
     shown(h);
     render(h.tree());
     await typeAndSend('what is linked?');
@@ -526,7 +526,7 @@ describe('the Assistant panel: the keyboard path of the answer sources', () => {
     const edges = Array.from({ length: 8 }, (_, index) => ({ ...edge('a', `r-${index}`, `x-${index}`, 'ent-1'), type: 'SHARED' }));
     const answer: AssistantTurnAnswer = {
       ...ANSWER,
-      sentences: [{ text: 'Eight are shared.', cites: edges.map((held) => edgeKey(held.ref)) }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'Eight are shared.', cites: edges.map((held) => edgeKey(held.ref)) }] }],
       citations: edges.map((held) => ({ key: edgeKey(held.ref), kind: 'relationship' as const, ref: held.ref })),
     };
     const h = harness(async () => ok(answer));

@@ -380,7 +380,7 @@ test.describe('the Assistant panel', () => {
       await answerWith(page, {
         status: 'answered',
         route: 'view',
-        sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }],
+        blocks: [{ kind: 'sentences', sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }] }],
         citations: [{ key: 'n1', kind: 'entity', ref: cited }],
         coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
         model: 'claude-sonnet-5-5',
@@ -445,7 +445,7 @@ test.describe('the Assistant panel', () => {
     await answerWith(page, {
       status: 'answered',
       route: 'view',
-      sentences: [{ text: 'Seven relationships join AC-1 to other accounts.', cites: refs.map((_, index) => `r${index + 1}`) }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'Seven relationships join AC-1 to other accounts.', cites: refs.map((_, index) => `r${index + 1}`) }] }],
       citations: refs.map((ref, index) => ({ key: `r${index + 1}`, kind: 'relationship' as const, ref })),
       coverage: { retrieval: '8 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 7 of the 7 shown relationships.' },
       model: 'claude-sonnet-5-5',
@@ -483,7 +483,7 @@ test.describe('the Assistant panel', () => {
       const answer: AssistantTurnAnswer = {
         status: 'answered',
         route: 'view',
-        sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }],
+        blocks: [{ kind: 'sentences', sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }] }],
         citations: [{ key: 'n1', kind: 'entity', ref: cited }],
         coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
         model: 'claude-sonnet-5-5',
@@ -515,7 +515,7 @@ test.describe('the Assistant panel', () => {
       const answer: AssistantTurnAnswer = {
         status: 'answered',
         route: 'view',
-        table: { title: 'Accounts · 12 rows', columns: ['Element', 'A rather long column label to widen it', 'Another long column label'], rows: Array.from({ length: 12 }, (_, index) => ({ cells: [`row-${index + 1}`, `a long cell text for row ${index + 1} of the table`, 'value'], cites: ['n1'] })), moreNotShown: 3, droppedRows: 1 },
+        blocks: [{ kind: 'table', table: { title: 'Accounts · 12 rows', columns: ['Element', 'A rather long column label to widen it', 'Another long column label'], rows: Array.from({ length: 12 }, (_, index) => ({ cells: [`row-${index + 1}`, `a long cell text for row ${index + 1} of the table`, 'value'], cites: ['n1'] })), note: 'Each row selects its elements on the graph.', moreNotShown: 3, droppedRows: 1 } }],
         citations: [{ key: 'n1', kind: 'entity', ref: cited }],
         coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '12 of 15 accounts in view shown · exact' },
         model: 'claude-sonnet-5-5',
@@ -527,7 +527,7 @@ test.describe('the Assistant panel', () => {
       await page.keyboard.press('Enter');
       const table = panel(page).getByRole('table', { name: 'Accounts · 12 rows' });
       await expect(table).toBeVisible();
-      await expect(table.getByRole('columnheader', { name: 'Cite' })).toBeVisible();
+      await expect(table.getByRole('columnheader', { name: 'Source' })).toBeVisible();
       await expect(table.getByRole('row')).toHaveCount(1 + 3 + 1 + 1);
       await expect(table.getByRole('button', { name: /^Citation 1, / })).toHaveCount(4);
       await expect(table.getByRole('button', { name: '… 8 more rows …' })).toBeVisible();
@@ -599,7 +599,7 @@ test.describe('the Assistant panel', () => {
       const answer: AssistantTurnAnswer = {
         status: 'answered',
         route: 'view',
-        sentences: [{ text: 'An account holds a balance and takes part in transfers and payments.', cites: ['m1'] }, { text: 'Account AC-1 is in view.', cites: ['n1'] }],
+        blocks: [{ kind: 'sentences', sentences: [{ text: 'An account holds a balance and takes part in transfers and payments.', cites: ['m1'] }, { text: 'Account AC-1 is in view.', cites: ['n1'] }] }],
         citations: [{ key: 'n1', kind: 'entity', ref: cited }, { key: 'm1', kind: 'description', typeKind: 'entity', type: 'Account', description }],
         coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
         noDescription: 'The mapping has no description for Gizmo, so I cannot say what it means.',
@@ -662,7 +662,7 @@ test.describe('the Assistant panel', () => {
       const answer: AssistantTurnAnswer = {
         status: 'answered',
         route: 'ask',
-        sentences: [{ text: 'Account AC-1 shares a device with account AC-2.', cites: ['r1', 'r2'] }],
+        blocks: [{ kind: 'sentences', sentences: [{ text: 'Account AC-1 shares a device with account AC-2.', cites: ['r1', 'r2'] }] }],
         citations: [
           { key: 'r1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } },
           { key: 'r2', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-2' } },
@@ -714,7 +714,7 @@ test.describe('the Assistant panel', () => {
       const done: AssistantTurnAnswer = {
         status: 'answered',
         route: 'ask',
-        sentences: [{ text: 'Device DEV-884 is used by two accounts.', cites: ['s2'] }],
+        blocks: [{ kind: 'sentences', sentences: [{ text: 'Device DEV-884 is used by two accounts.', cites: ['s2'] }] }],
         citations: [],
         coverage: { retrieval: 'read 1: 2 shown · exact; read 2: 25 shown · ≥ 1,200 not yet retrieved', summary: 'The answer cites 0 of the 25 elements the reads returned.' },
         model: 'claude-sonnet-5-5',
@@ -782,7 +782,7 @@ test.describe('the Assistant panel', () => {
     const answer: AssistantTurnAnswer = {
       status: 'answered',
       route: 'view',
-      sentences: ids.map((id, index) => ({ text: `Account ${id} is in view, number ${index + 1} of ${ids.length}.`, cites: [`n${index + 1}`] })),
+      blocks: [{ kind: 'sentences', sentences: ids.map((id, index) => ({ text: `Account ${id} is in view, number ${index + 1} of ${ids.length}.`, cites: [`n${index + 1}`] })) }],
       citations: ids.map((id, index) => ({ key: `n${index + 1}`, kind: 'entity' as const, ref: { sourceId: 'banking-demo', entityType: 'account', stableId: id } })),
       coverage: { retrieval: '10 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 10 of the 10 shown elements.' },
       model: 'claude-sonnet-5-5',
@@ -809,7 +809,7 @@ test.describe('the Assistant panel', () => {
     const long: AssistantTurnAnswer = {
       status: 'answered',
       route: 'view',
-      sentences: ids.map((id, index) => ({ text: `Account ${id} is in view, number ${index + 1} of ${ids.length}.`, cites: [`n${index + 1}`] })),
+      blocks: [{ kind: 'sentences', sentences: ids.map((id, index) => ({ text: `Account ${id} is in view, number ${index + 1} of ${ids.length}.`, cites: [`n${index + 1}`] })) }],
       citations: ids.map((id, index) => ({ key: `n${index + 1}`, kind: 'entity' as const, ref: { sourceId: 'banking-demo', entityType: 'account', stableId: id } })),
       coverage: { retrieval: '10 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 10 of the 10 shown elements.' },
       model: 'claude-sonnet-5-5',
@@ -984,7 +984,7 @@ test.describe('the Assistant panel', () => {
   const summaryDraft = (sourceId: string) =>
     summaryResponseSchema.parse({
       status: 'ok',
-      sentences: [{ text: 'AC-1 is an account.', cites: ['n1'], storable: true }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'AC-1 is an account.', cites: ['n1'], storable: true }] }],
       citations: [{ key: 'n1', kind: 'entity', ref: { sourceId, entityType: 'account', stableId: 'AC-1' } }],
       coverage: { retrieval: '1 shown · ~38 not yet retrieved (estimated)', summary: 'The draft cites 1 of the 1 shown elements' },
       removedCount: 0,
@@ -1012,7 +1012,7 @@ test.describe('the Assistant panel', () => {
     const view: AssistantTurnAnswer = {
       status: 'answered',
       route: 'view',
-      sentences: [{ text: 'AC-1 is an account.', cites: ['n1'] }],
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'AC-1 is an account.', cites: ['n1'] }] }],
       citations: [{ key: 'n1', kind: 'entity', ref: { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' } }],
       coverage: { retrieval: '1 shown · ~38 not yet retrieved (estimated)', summary: 'The draft cites 1 of the 1 shown elements.', summaryCited: "Cites the summary's sentence 1." },
       summarySentencesCited: [1],

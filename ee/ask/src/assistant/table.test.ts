@@ -16,7 +16,7 @@ describe('the reading of a table reply', () => {
   const ok = { columns: ['Element', 'Type'], rows: [{ cells: ['Account A-1', 'widget'], cites: ['n1'] }] };
 
   it('reads the exact shape, with every row held and the cells of a row in the order of the columns', () => {
-    expect(parseTable(ok)).toEqual(ok);
+    expect(parseTable(ok)).toEqual({ ...ok, uncited: 0 });
   });
 
   it.each([
@@ -42,6 +42,12 @@ describe('the reading of a table reply', () => {
     expect(parseTable(cell(41))).toBeUndefined();
     expect(parseTable({ ...ok, columns: ['😀'.repeat(20), 'Type'] })).toBeDefined();
     expect(parseTable({ ...ok, columns: ['😀'.repeat(21), 'Type'] })).toBeUndefined();
+  });
+
+  it('drops a row that cites nothing and counts it, and keeps every other row', () => {
+    const draft = parseTable({ columns: ['Element', 'Type'], rows: [{ cells: ['a', 'b'], cites: ['n1'] }, { cells: ['c', 'd'], cites: [] }, { cells: ['e', 'f'], cites: ['n2'] }] });
+    expect(draft?.rows.map((row) => row.cells[0])).toEqual(['a', 'e']);
+    expect(draft?.uncited).toBe(1);
   });
 
   it('reads a row as one sentence of its cells, without the labels', () => {

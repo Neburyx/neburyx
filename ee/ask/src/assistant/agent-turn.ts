@@ -4,7 +4,9 @@ import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentRun, type
 import { AuditUnavailableError, removalNoteOf, type AuditedCallContext, type CheckRunner, type RejectedSentence } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
-import { judgeTableRows, parseTable, rowSentenceOf } from './table.js';
+import { judgeTableRows, rowSentenceOf } from './table.js';
+import { combineOutcomes, type BlocksAnswer } from './answer-blocks.js';
+import { parseBlocksInput } from './blocks.js';
 import { viewCoverageOf } from '../case-summary/coverage.js';
 import { assembleResults, answerBasisOf, failureOf, outcomeOfDraft, typeNamesOf, withElementsOfNotes, type ReadDone, type ToolAnswerOutcome } from './tool-answer.js';
 import { readNotRead, readOfAnswer, readOfNothing, readOfNotes, readOfSummary, readOfTypology, readOfView } from './reads.js';
@@ -14,7 +16,7 @@ import type { Tool } from './tool-registry.js';
 import { runToolStep, type StepResult, type StepScope } from './tool-step.js';
 import { shareSteps, stepsOf } from './steps.js';
 import { noDescriptionSentence, undescribedNamesOf } from './type-lines.js';
-import { noteModelAnswer, notePropertyValuesSent, noteReplaying, startModelCall } from './turn-audit.js';
+import { noteModelAnswer, noteTurn, notePropertyValuesSent, noteReplaying, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 const AGENT_AUDIT_ACTION = 'assistant.agent';
@@ -77,15 +79,15 @@ export interface AgentTurnInput {
   readonly resume?: ResumeState;
 }
 
-type Standing = Extract<ToolAnswerOutcome, { kind: 'sentences' | 'table' }> | Extract<ToolAnswerOutcome, { kind: 'noDescription' | 'unsupported' }>;
+type Standing = BlocksAnswer | Extract<ToolAnswerOutcome, { kind: 'noDescription' | 'unsupported' }>;
 
-const sentenceSchema = z.object({ text: z.string().min(1), cites: z.array(z.string()) });
-/** The fixed sentence of the pointer the model named, on an answer that stands: the model never writes it. */
-const withPointer = <T extends { readonly kind: 'sentences' | 'table' }>(outcome: T, pointer: AssistantPointer | undefined): T => (pointer === undefined ? outcome : { ...outcome, pointer: ASSISTANT_POINTER_SENTENCES[pointer] });
 const noDescriptionSchema = z.array(z.string()).optional();
 const pointerSchema = z.enum(ASSISTANT_POINTERS).optional();
-const answerSchema = z.object({ sentences: z.array(sentenceSchema).min(1), noDescription: noDescriptionSchema, pointer: pointerSchema });
-const tableSchema = z.object({ columns: z.array(z.string()).min(1), rows: z.array(z.object({ cells: z.array(z.string()), cites: z.array(z.string()) })).min(1), noDescription: noDescriptionSchema, pointer: pointerSchema });
+/** The fixed sentence of the pointer the model named, on an answer that stands: the model never writes it. */
+const withPointer = (answer: BlocksAnswer, pointer: AssistantPointer | undefined): BlocksAnswer => (pointer === undefined ? answer : { ...answer, pointer: ASSISTANT_POINTER_SENTENCES[pointer] });
+/** The input the model is offered for `answer`: the blocks are checked one by one in the call, so that an input that is not valid gets the tool's own fixed result and not a schema error. */
+const answerSchema = z.object({ blocks: z.array(z.record(z.string(), z.unknown())).min(1), noDescription: noDescriptionSchema, pointer: pointerSchema });
+const NOT_VALID = 'The answer is not valid: give one to four blocks, each { kind: "sentences", sentences: [{ text, cites }] } or, when a table was asked for, { kind: "table", columns, rows: [{ cells, cites }] }, within the bounds. Call answer again.';
 
 function paramsSchema(tool: Tool): z.ZodObject<z.ZodRawShape> {
   return z.strictObject(Object.fromEntries(tool.parameters.map((name) => [name, z.string().min(1)])));
@@ -264,45 +266,64 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     }));
     tools.push({
       name: ANSWER_TOOL,
-      description: scope.form === 'table' ? 'Give the final answer as a table: columns, and one row for each element, with the row\'s own values in cells and the keys of the elements it rests on in cites. Call it once when you have what you need.' : 'Give the final answer: short sentences, each with the keys of the elements it rests on in cites. Call it once when you have what you need.',
-      schema: scope.form === 'table' ? tableSchema : answerSchema,
+      description: `Give the final answer as blocks, in the order you want them shown: { kind: "sentences", sentences: [{ text, cites }] } for short sentences, each with the keys of the elements it rests on in cites${scope.form === 'table' ? ', and { kind: "table", columns, rows: [{ cells, cites }] } for the table that was asked for: one row for each element, with the row\'s own values in cells and the keys of the elements it rests on in cites' : ''}. At most four blocks. Call it once when you have what you need.`,
+      schema: answerSchema,
       run: async (args) => {
         stepsOf(scope.request).answering();
         // an answer written on the last call the turn allows, where no read was offered: said so in a fixed sentence, whether the model was done or not
         const isLast = control.calls + control.extra + input.callsUsed >= settings.maxCalls;
         const basis = answerBasisOf({ reads, ...(view === undefined ? {} : { view }), scope, message: input.message });
         if (basis === undefined) return NOT_ANSWERED;
-        if (scope.form === 'table') {
-          const draft = parseTable({ columns: args['columns'], rows: args['rows'] });
-          const askedNames = tableSchema.shape.noDescription.parse(args['noDescription']);
-          const named = askedNames === undefined ? undefined : undescribedNamesOf(askedNames, basis.typeLines);
-          if (draft === undefined) return 'The table is not valid: use the columns and rows shape, within the bounds. Call answer again.';
-          const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
-          if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
-          const tabled = outcomeOfDraft({ drafted: { status: 'drafted', table: draft, sentences: judgedRows.kept, removed: judgedRows.removed, calls: 0, verdictFound: judgedRows.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: judgedRows.positions, lastNames: named });
-          if (tabled.kind === 'sentences' || tabled.kind === 'table') {
-            standing = withPointer(tabled, tableSchema.shape.pointer.parse(args['pointer']));
-            onLastCall = isLast;
-          } else standing ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
-          // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown
-          if ((tabled.kind === 'sentences' || tabled.kind === 'table') && judgedRows.removed === 0 && !judgedRows.verdictFound) control.stop = true;
-          return feedback({ kept: judgedRows.kept.length, removed: judgedRows.removed, verdictFound: judgedRows.verdictFound, rejected: judgedRows.rejected, form: 'table' });
+        const parsed = answerSchema.safeParse(args);
+        const inputs = parsed.success ? parseBlocksInput(parsed.data.blocks, scope.form === 'table') : undefined;
+        if (!parsed.success || inputs === undefined) return NOT_VALID;
+        const named = parsed.data.noDescription === undefined ? undefined : undescribedNamesOf(parsed.data.noDescription, basis.typeLines);
+        const judgedBlocks: Extract<ToolAnswerOutcome, { kind: 'sentences' | 'table' }>[] = [];
+        let other: Extract<ToolAnswerOutcome, { kind: 'noDescription' | 'unsupported' }> | undefined;
+        let kept = 0;
+        let removed = 0;
+        let verdictFound = false;
+        let droppedWithTable = 0;
+        const rejected: RejectedSentence[] = [];
+        for (const block of inputs) {
+          if (block.kind === 'table') {
+            const draft = block.draft;
+            const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
+            if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
+            kept += judgedRows.kept.length;
+            rejected.push(...judgedRows.rejected);
+            removed += judgedRows.removed + draft.uncited;
+            verdictFound ||= judgedRows.verdictFound;
+            const tabled = outcomeOfDraft({ drafted: { status: 'drafted', table: draft, sentences: judgedRows.kept, removed: judgedRows.removed, calls: 0, verdictFound: judgedRows.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: judgedRows.positions, lastNames: named });
+            if (tabled.kind === 'sentences' || tabled.kind === 'table') judgedBlocks.push(tabled);
+            else {
+              // a table with no row left is left out, and its rows are counted with those of the table that is shown
+              droppedWithTable += draft.rows.length + draft.uncited;
+              other ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
+            }
+            continue;
+          }
+          const checked = await options.checks.run(judgeCheck, { sentences: withElementsOfNotes(block.sentences, basis.noteElements), text: basis.checkedText }, { timeoutMs: settings.timeoutMs, signal });
+          if (checked.status === 'refused') return 'The answer could not be checked. Reply "Done."';
+          const judged = checked.value;
+          kept += judged.kept.length;
+          rejected.push(...judged.rejected);
+          removed += judged.removed;
+          verdictFound ||= judged.verdictFound;
+          const outcome = outcomeOfDraft({ drafted: { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls: 0, verdictFound: judged.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: [], lastNames: named });
+          if (outcome.kind === 'sentences' || outcome.kind === 'table') judgedBlocks.push(outcome);
+          else other ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
         }
-        const parsed = answerSchema.parse(args);
-        const named = parsed.noDescription === undefined ? undefined : undescribedNamesOf(parsed.noDescription, basis.typeLines);
-        const sentences: readonly SummarySentence[] = parsed.sentences.map((sentence) => ({ text: sentence.text, cites: sentence.cites }));
-        const checked = await options.checks.run(judgeCheck, { sentences: withElementsOfNotes(sentences, basis.noteElements), text: basis.checkedText }, { timeoutMs: settings.timeoutMs, signal });
-        if (checked.status === 'refused') return 'The answer could not be checked. Reply "Done."';
-        const judged = checked.value;
-        const outcome = outcomeOfDraft({ drafted: { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls: 0, verdictFound: judged.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: [], lastNames: named });
-        if (outcome.kind === 'sentences' || outcome.kind === 'table') {
-          standing = withPointer(outcome, parsed.pointer);
+        const combined = verdictFound ? undefined : combineOutcomes(judgedBlocks, basis, droppedWithTable);
+        if (combined !== undefined) {
+          standing = withPointer(combined, parsed.data.pointer);
           onLastCall = isLast;
+          noteTurn({ tableRowsLeftOut: combined.blocks.some((block) => block.kind === 'table') ? 0 : droppedWithTable });
         }
-        else standing ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
+        else standing ??= other;
         // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it
-        if ((outcome.kind === 'sentences' || outcome.kind === 'table') && judged.removed === 0 && !judged.verdictFound) control.stop = true;
-        return feedback({ kept: judged.kept.length, removed: judged.removed, verdictFound: judged.verdictFound, rejected: judged.rejected });
+        if (combined !== undefined && removed === 0 && combined.leftOut === 0 && !verdictFound) control.stop = true;
+        return feedback({ kept, removed: removed + (combined?.leftOut ?? 0), verdictFound, rejected, form: inputs.every((block) => block.kind === 'table') ? 'table' : 'sentences' });
       },
     });
 
@@ -394,8 +415,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     const found = standing;
     const stoppedAt = limited === undefined ? {} : { stoppedAt: limited };
     const lastCall = onLastCall && limited === undefined ? { lastCallNote: ASSISTANT_LAST_CALL_SENTENCE } : {};
-    if (found?.kind === 'sentences') return { kind: 'sentences', answer: { ...found, ...lastCall }, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt, ...(askAnswer === undefined ? {} : { askAnswer }) };
-    if (found?.kind === 'table') return { kind: 'table', answer: { ...found, ...lastCall }, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt };
+    if (found !== undefined && 'blocks' in found) return { kind: 'blocks', answer: { ...found, ...lastCall }, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt, ...(askAnswer === undefined ? {} : { askAnswer }) };
     if (found?.kind === 'noDescription') return { kind: 'no-description', sentence: found.sentence, names: found.names, calls: input.callsUsed + modelCalls };
     if (found?.kind === 'unsupported') return { kind: 'unsupported' };
     if (limited !== undefined) return { kind: 'limit', limit: limited, reads: entries };

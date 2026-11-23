@@ -5,14 +5,15 @@ import { drawnKeys } from "../state/loaded-graph.js";
 import { elementKey, edgeKey } from "../state/keys.js";
 import { SUMMARY_COPY } from "../summary/copy.js";
 import { pressOf, type CitationEntry } from "../summary/summary-model.js";
-import { ASSISTANT_COPY, citationRangeLabel, droppedRowsText, foldedRowsText, moreNotShownText } from "./copy.js";
+import { ASSISTANT_COPY, citationRangeLabel } from "./copy.js";
 import { ReadSteps } from "./read-steps.js";
 import { markerGroups } from "./marker-runs.js";
 import { SourcesList } from "./sources-list.js";
-import type { SentencesAnswer, TableAnswer, ViewAnswer } from "./assistant-session.js";
+import { TableBlock } from "./table-block.js";
+import type { ViewAnswer } from "./assistant-session.js";
 
-const TABLE_FOLD_ABOVE = 10;
-const TABLE_FOLD_HEAD = 3;
+type Block = ViewAnswer["blocks"][number];
+type SentencesBlock = Extract<Block, { kind: "sentences" }>;
 
 const labelOf = (entry: CitationEntry): string =>
   entry.label ??
@@ -32,13 +33,11 @@ export function ViewAnswerCard({
 }) {
   const titleId = useId();
   const sourcesId = useId();
-  const tableTitleId = useId();
   const graph = useVisibleGraph();
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
   const [note, setNote] = useState("");
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
-  const [unfolded, setUnfolded] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [focusRequest, setFocusRequest] = useState<{ readonly number: number; readonly tick: number } | undefined>(undefined);
   const meanings = new Map(
@@ -96,7 +95,7 @@ export function ViewAnswerCard({
   );
   const descriptionKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => meanings.has(key));
   const readKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => reads.has(key));
-  const sentencesOf = (shown: SentencesAnswer) => (
+  const sentencesOf = (shown: SentencesBlock) => (
     <ol className="summary-sentences">
       {shown.sentences.map((sentence, index) => (
         <li key={index} className="summary-block">
@@ -169,64 +168,44 @@ export function ViewAnswerCard({
       ))}
     </ol>
   );
-  const tableOf = (shown: TableAnswer) => {
-    const { table } = shown;
-    const longTable = table.rows.length > TABLE_FOLD_ABOVE;
-    const folds = longTable && !unfolded;
-    const rows = table.rows.map((row, index) => ({ row, index }));
-    const visible = folds ? [...rows.slice(0, TABLE_FOLD_HEAD), ...rows.slice(-1)] : rows;
-    const foldedCount = table.rows.length - TABLE_FOLD_HEAD - 1;
-    const foldRow = (
-      <tr key="fold" className="assistant-table-fold">
-        <td colSpan={table.columns.length + 1}>
-          <button type="button" className="assistant-table-fold-button" aria-expanded={!folds} onClick={() => setUnfolded(!unfolded)}>
-            {folds ? foldedRowsText(foldedCount) : ASSISTANT_COPY.foldClose}
-          </button>
-        </td>
-      </tr>
-    );
-    const body = visible.flatMap((entry, position) => {
-      const line = (
-        <tr key={entry.index}>
-          {entry.row.cells.map((cell, column) => (
-            <td key={column}>{cell}</td>
-          ))}
-          <td className="assistant-table-cite">
-            <span className="summary-chips">{entry.row.cites.map((key) => {
-              const cited = byKey.get(key);
-              return cited === undefined ? null : <span key={key}>{markerOf(cited)}</span>;
-            })}</span>
-          </td>
-        </tr>
-      );
-      return longTable && position === TABLE_FOLD_HEAD - 1 ? [line, foldRow] : [line];
-    });
-    return (
-      <>
-        <p id={tableTitleId} className="assistant-table-title">{table.title}</p>
-        <div className="assistant-table-scroll">
-          <table className="assistant-table" aria-labelledby={tableTitleId}>
-            <thead>
-              <tr>
-                {table.columns.map((column, index) => (
-                  <th key={index} scope="col">{column}</th>
-                ))}
-                <th scope="col">{ASSISTANT_COPY.citeColumn}</th>
-              </tr>
-            </thead>
-            <tbody>{body}</tbody>
-          </table>
-        </div>
-        {table.moreNotShown === undefined ? null : (
-          <div className="assistant-table-notice" role="note">
-            <strong>{ASSISTANT_COPY.moreNotShownTitle}</strong>
-            <p>{moreNotShownText(table.rows.length, table.moreNotShown)}</p>
-          </div>
-        )}
-        {table.droppedRows === undefined ? null : <p className="assistant-table-notice" role="note">{droppedRowsText(table.droppedRows)}</p>}
-      </>
-    );
+  const showSourceOf = (entry: CitationEntry): void => {
+    setSourcesOpen(true);
+    setFocusRequest({ number: entry.number, tick: (focusRequest?.tick ?? 0) + 1 });
   };
+  const entriesOf = (cites: readonly string[]): readonly CitationEntry[] => cites.flatMap((key) => byKey.get(key) ?? []);
+  const markersOf = (cites: readonly string[]) =>
+    markerGroups(entriesOf(cites), sources && entries.length > 0).map((group) => (
+      <span key={group.kind === "run" ? `${group.first.key}-run` : group.entry.key}>
+        {group.kind === "run" ? runMarkerOf(group.first, group.last) : markerOf(group.entry)}
+      </span>
+    ));
+  const markerTextOf = (cites: readonly string[]): string =>
+    markerGroups(entriesOf(cites), sources && entries.length > 0)
+      .map((group) => (group.kind === "run" ? `[${group.first.number}–${group.last.number}]` : `[${group.entry.number}]`))
+      .join(" ");
+  const selectRow = (cites: readonly string[]): void => {
+    const keys = entriesOf(cites).map((entry) => entry.graphKey).filter((key) => drawn.has(key));
+    if (keys.length === 0) {
+      setNote(SUMMARY_COPY.gone);
+      return;
+    }
+    setNote("");
+    state.presentation.select(keys);
+  };
+  const blockOf = (block: Block, index: number) =>
+    block.kind === "sentences" ? (
+      <div key={index}>{sentencesOf(block)}</div>
+    ) : (
+      <TableBlock
+        key={index}
+        table={block.table}
+        markersOf={markersOf}
+        markerTextOf={markerTextOf}
+        firstEntryOf={(cites) => entriesOf(cites)[0]}
+        onSelectRow={selectRow}
+        onShowSource={sources && entries.length > 0 ? showSourceOf : undefined}
+      />
+    );
   return (
     <section className="assistant-view-answer" aria-labelledby={titleId}>
       {heading === undefined ? (
@@ -251,7 +230,7 @@ export function ViewAnswerCard({
         </span>
         <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>
       </div>
-      {"table" in answer ? tableOf(answer) : sentencesOf(answer)}
+      {answer.blocks.map(blockOf)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {answer.pointer === undefined ? null : <p className="assistant-pointer">{answer.pointer}</p>}
       {answer.lastCallNote === undefined ? null : <p className="assistant-pointer">{answer.lastCallNote}</p>}

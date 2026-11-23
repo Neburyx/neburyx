@@ -361,7 +361,7 @@ function scriptedAgentModel(options: RigOptions): AgentChatModel {
     const text = replyTextOf(options.step, 'assistant.step');
     const step = jsonOf(text);
     if (step?.['done'] === true) {
-      const answered = jsonOf(replyTextOf(options.answer, 'assistant.answer'));
+      const answered = blocksOf(jsonOf(replyTextOf(options.answer, 'assistant.answer')));
       return answered === undefined ? new AIMessage('Done.') : new AIMessage({ content: '', tool_calls: [{ name: 'answer', args: answered, id: 'answer', type: 'tool_call' }] });
     }
     if (step !== undefined && typeof step['tool'] === 'string') return new AIMessage({ content: '', tool_calls: [{ name: step['tool'], args: (step['values'] ?? {}) as Record<string, unknown>, id: `step-${step['tool']}`, type: 'tool_call' }] });
@@ -384,3 +384,18 @@ export const refusalOf = async (promise: Promise<unknown>): Promise<ExtensionRef
   }
   return undefined;
 };
+
+/** The reply a test script gives for `answer` in the shapes of the scripts ({sentences} or {columns, rows}), as the input of the tool: the blocks of one kind. */
+function blocksOf(reply: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (reply === undefined || 'blocks' in reply) return reply;
+  const { noDescription, ...rest } = reply;
+  const extra = noDescription === undefined ? {} : { noDescription };
+  if ('sentences' in rest) return { blocks: [{ kind: 'sentences', sentences: rest['sentences'] }], ...extra };
+  if ('columns' in rest) return { blocks: [{ kind: 'table', columns: rest['columns'], rows: rest['rows'] }], ...extra };
+  if (isTable(rest['table'])) return { blocks: [{ kind: 'table', columns: rest['table'].columns, rows: rest['table'].rows }], ...extra };
+  return reply;
+}
+
+function isTable(value: unknown): value is { columns: unknown; rows: unknown } {
+  return typeof value === 'object' && value !== null && 'columns' in value && 'rows' in value;
+}
