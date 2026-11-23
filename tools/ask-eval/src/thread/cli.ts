@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { prepareOutFolder, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
+import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile, type Slot } from './scorer.js';
 import { blindSets, type ArmRepeat } from './blind.js';
 import { enrichRepeat, type EnrichedRepeat } from './enrich.js';
 import { connectDb } from './db.js';
@@ -12,6 +13,9 @@ import { readSettingsFile } from './settings-file.js';
 
 const THREAD_USAGE = `usage:
   ask-eval thread records --file <run file> --database-env-file <env file> --out <file>
+  ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
+  ask-eval thread score --ingest <scores file> --scorer-name <name> --slots <key file> --set <file> --out <file>
+  ask-eval thread calibrate --a <scores file> --b <scores file>
   ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)`;
 
@@ -21,6 +25,8 @@ export interface ThreadDeps {
   readonly now?: () => number;
   /** The read-only connection to the run's own test database; absent, the real one is made from the env file. */
   readonly database?: (envFile: string) => Promise<{ readonly db: Db; readonly close: () => Promise<void> }>;
+  /** The scorer runners; absent, the real Codex and Opus runners. */
+  readonly runners?: { readonly codex: Runner; readonly opus: Runner };
   readonly verifyFirstTurn?: (settings: RepeatSettings) => (turn: TurnRecord) => Promise<string | undefined>;
 }
 
@@ -30,7 +36,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
@@ -114,6 +120,8 @@ function settingsOf(values: Map<string, string>): RepeatSettings {
 export async function runThread(argv: readonly string[], io: CliIo, deps: ThreadDeps = {}): Promise<number> {
   if (argv[0] === 'records') return await runRecords(argv.slice(1), io, deps);
   if (argv[0] === 'blind') return runBlind(argv.slice(1), io);
+  if (argv[0] === 'score') return await runScore(argv.slice(1), io, deps);
+  if (argv[0] === 'calibrate') return runCalibrate(argv.slice(1), io);
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
   const { values, dryRun } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
@@ -209,5 +217,105 @@ function runBlind(args: readonly string[], io: CliIo): number {
   writePrivateFile(resolve(keyPath, 'key.json'), `${JSON.stringify({ key: output.key, slots: output.slots }, null, 2)}\n`, false);
   io.out(`sets written: ${output.sets.size}`);
   io.out(`answers to score: ${output.slots.length}`);
+  return 0;
+}
+
+const readJson = (path: string, what: string): unknown => {
+  try {
+    return JSON.parse(readFileSync(resolve(path), 'utf8')) as unknown;
+  } catch {
+    throw new UsageError(`${what} cannot be read`);
+  }
+};
+
+/** The slots of a set the generator wrote as no answer: they score zero on every criterion whatever a scorer says. */
+function noAnswerSlots(set: string, repeat: number): Set<string> {
+  const found = new Set<string>();
+  let turn = 0;
+  let label = '';
+  for (const line of set.split('\n')) {
+    const turnMatch = /^## Turn (\d+)$/u.exec(line);
+    if (turnMatch !== null) turn = Number(turnMatch[1]);
+    const labelMatch = /^### Answer ([A-D])$/u.exec(line);
+    if (labelMatch !== null) label = labelMatch[1] ?? '';
+    if (line.startsWith('(no answer:') && label !== '') found.add(`${repeat}/${turn}/${label}`);
+  }
+  return found;
+}
+
+/** `ask-eval thread score`: scores one blind set with the named scorer, or ingests scores made elsewhere; the scores are validated against the exact slots of the set. */
+async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): Promise<number> {
+  const { values } = parse(args);
+  const setPath = values.get('set');
+  const slotsPath = values.get('slots');
+  const out = values.get('out');
+  if (setPath === undefined || slotsPath === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
+  const set = readFileSync(resolve(setPath), 'utf8');
+  const repeat = Number(/^# Set (\d+)/u.exec(set)?.[1] ?? NaN);
+  if (!Number.isInteger(repeat)) throw new UsageError('the set file is not a blind set');
+  const slotsFile = readJson(slotsPath, 'the slots file');
+  const slots = ((typeof slotsFile === 'object' && slotsFile !== null ? (slotsFile as { slots?: Slot[] }).slots : undefined) ?? []).filter((slot) => slot.repeat === repeat);
+  if (slots.length === 0) throw new UsageError('the slots file holds no slot of this set');
+  const none = noAnswerSlots(set, repeat);
+  let file: ScoreFile;
+  const ingest = values.get('ingest');
+  if (ingest !== undefined) {
+    const name = values.get('scorer-name');
+    if (name === undefined) throw new UsageError(THREAD_USAGE);
+    const parsed = readJson(ingest, 'the scores file') as { scores?: Score[] };
+    file = { scorer: name, origin: 'ingested', scores: zeroNoAnswers(parsed.scores ?? [], none) };
+  } else {
+    const rubricPath = values.get('rubric');
+    const scorer = values.get('scorer');
+    if (rubricPath === undefined || (scorer !== 'codex' && scorer !== 'opus')) throw new UsageError(THREAD_USAGE);
+    const runners = deps.runners ?? { codex: codexRunner(), opus: opusRunner() };
+    let limit: number;
+    if (scorer === 'codex') {
+      const approvalPath = values.get('approval');
+      const approval = approvalPath === undefined ? undefined : parseApproval(readFileSync(resolve(approvalPath), 'utf8'));
+      if (approval === undefined) {
+        io.err('Codex is not invoked: the approver\'s written confirmation of the exception to the live-call rule and the approved number of invocations are required (--approval)');
+        return 2;
+      }
+      limit = approval.invocations;
+    } else {
+      const max = wholeNumber(values.get('max-calls'), 'max-calls', 1, 100);
+      if (max === undefined) throw new UsageError('--scorer opus needs --max-calls');
+      limit = max;
+    }
+    const counted = countedRunner(runners[scorer], limit);
+    let scores: Score[];
+    try {
+      scores = await scoreSet(counted.run, readFileSync(resolve(rubricPath), 'utf8'), set, slots, `set ${repeat}`);
+    } catch (error) {
+      if (error instanceof ScorerUnavailable) {
+        io.err(error.message);
+        return 1;
+      }
+      io.err(error instanceof Error ? error.message : 'the scorer failed');
+      return 1;
+    }
+    file = { scorer, origin: 'harness', invocations: counted.made(), scores: zeroNoAnswers(scores, none) };
+  }
+  const problems = scoreProblems(slots, file.scores);
+  if (problems.length > 0) {
+    for (const problem of problems.slice(0, 5)) io.err(problem);
+    return 1;
+  }
+  writePrivateFile(resolve(out), `${JSON.stringify(file, null, 2)}\n`, false);
+  io.out(`scores written: ${file.scores.length} by ${file.scorer} (${file.origin}${file.invocations === undefined ? '' : `, ${file.invocations} invocations`})`);
+  return 0;
+}
+
+/** `ask-eval thread calibrate`: the agreement of two scorers on the same set. */
+function runCalibrate(args: readonly string[], io: CliIo): number {
+  const { values } = parse(args);
+  const a = values.get('a');
+  const b = values.get('b');
+  if (a === undefined || b === undefined) throw new UsageError(THREAD_USAGE);
+  const result = agreement((readJson(a, 'the first scores file') as ScoreFile).scores, (readJson(b, 'the second scores file') as ScoreFile).scores);
+  io.out(`slots compared: ${result.slots}`);
+  io.out(`agreement: C1 ${result.c1.toFixed(1)}% · C2 ${result.c2.toFixed(1)}% · C3 ${result.c3.toFixed(1)}% · C4 ${result.c4.toFixed(1)}% · overall ${result.overall.toFixed(1)}%`);
+  io.out(result.indicative ? 'indicative: the overall agreement is below 90 percent' : 'the agreement is at or above 90 percent');
   return 0;
 }
