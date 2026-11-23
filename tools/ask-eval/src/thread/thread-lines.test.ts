@@ -54,9 +54,18 @@ describe('the lines an answer cites', () => {
   it('reads the cites of the blocks of an answer, sentences blocks and table blocks in order, and counts a block of no known kind as malformed', () => {
     const values = 'human: Question:\nq\ntool: Keys are renumbered.\nr1: transaction: TX-1\nr2: transaction: TX-2\ns1: read of expand: 25 matches shown · lower bound';
     const lines = linesOfAnswer(records({ calls: [call(2, { valuesText: values, replyText: ANSWER_REPLY })] }));
-    const blocks = [{ kind: 'sentences', sentences: [{ text: 'a', cites: ['s1'] }] }, { kind: 'table', table: { rows: [{ cells: ['TX-1'], cites: ['r1'] }, { cells: ['TX-2'], cites: ['r2'] }] } }, { kind: 'list' }];
+    const blocks = [{ kind: 'sentences', sentences: [{ text: 'a', cites: ['s1'] }] }, { kind: 'table', table: { rows: [{ cells: ['TX-1'], cites: ['r1'] }, { cells: ['TX-2'], cites: ['r2'] }] } }, { kind: 'mystery' }];
     const cited = citedLinesOf({ blocks }, lines);
     expect([...cited.mapped.keys()]).toEqual(['r1', 'r2', 's1']);
+    expect(cited.malformed).toBe(1);
+  });
+
+  it('reads the cites of the items of a list block, a malformed item counted and no line invented', () => {
+    const values = 'human: Question:\nq\ntool: Keys are renumbered.\nr1: transaction: TX-1\nr2: transaction: TX-2';
+    const lines = linesOfAnswer(records({ calls: [call(2, { valuesText: values, replyText: ANSWER_REPLY })] }));
+    const cited = citedLinesOf({ blocks: [{ kind: 'list', label: 'Senders', items: [{ text: 'a', cites: ['r1'] }, { text: 'b', cites: ['r2', 'r9'] }, { text: 'c' }] }] }, lines);
+    expect([...cited.mapped.keys()]).toEqual(['r1', 'r2']);
+    expect(cited.missing).toEqual(['r9']);
     expect(cited.malformed).toBe(1);
   });
 

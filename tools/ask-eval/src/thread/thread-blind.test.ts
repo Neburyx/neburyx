@@ -125,6 +125,17 @@ describe('the blind sets', () => {
     expect(at('Closing sentence. [c1]')).toBeGreaterThan(at('TX-2'));
   });
 
+  it('shows a list block with its label and each item with its cites, in the order of the blocks', () => {
+    const blocks = [{ kind: 'sentences', sentences: [{ text: 'Opening sentence.', cites: ['n1'] }] }, { kind: 'list', label: 'Receiving accounts', items: [{ text: 'First item.', cites: ['r1'] }, { text: 'Second item.', cites: ['r2', 'c1'] }] }, { kind: 'list', items: [{ text: 'Unlabelled item.', cites: ['n2'] }] }];
+    const shown = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { ...answer('x'), sentences: undefined, blocks } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options()).sets.get(1) ?? '';
+    const at = (text: string) => shown.indexOf(text);
+    expect(at('List: Receiving accounts')).toBeGreaterThan(at('Opening sentence.'));
+    expect(at('- First item. [r1]')).toBeGreaterThan(at('List: Receiving accounts'));
+    expect(shown).toContain('- Second item. [r2, c1]');
+    expect(at('- Unlabelled item. [n2]')).toBeGreaterThan(at('Second item.'));
+    expect(shown.match(/List:/gu)?.length).toBe(1);
+  });
+
   it('scores a response that is not an answer as no answer: nothing to score, no point, and the slot is recorded in the key', () => {
     const output = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { status: 'not-answered', sentence: 'x' } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options());
     expect(output.key.noAnswer).toHaveLength(1);

@@ -69,7 +69,7 @@ export function citedLinesOf(answer: unknown, lines: AnswerLines | undefined): C
         }
       }
     };
-    // The blocks of an answer (sentences blocks and table blocks), or the earlier shape of the records of earlier runs.
+    // The blocks of an answer (sentences, table and list blocks), or the earlier shape of the records of earlier runs.
     if (Array.isArray(answer['blocks'])) {
       for (const block of answer['blocks']) {
         if (!isRecord(block)) {
@@ -77,6 +77,7 @@ export function citedLinesOf(answer: unknown, lines: AnswerLines | undefined): C
           continue;
         }
         if (block['kind'] === 'sentences') collect(block['sentences']);
+        else if (block['kind'] === 'list') collect(block['items']);
         else if (block['kind'] === 'table' && isRecord(block['table'])) collect(block['table']['rows']);
         else malformed += 1;
       }

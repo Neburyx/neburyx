@@ -75,6 +75,10 @@ function answerText(answer: unknown): string {
       if (!isRecord(block)) continue;
       if (block['kind'] === 'sentences' && Array.isArray(block['sentences'])) block['sentences'].forEach(sentenceLine);
       else if (block['kind'] === 'table') tableLines(block['table']);
+      else if (block['kind'] === 'list' && Array.isArray(block['items'])) {
+        if (typeof block['label'] === 'string') parts.push(`List: ${block['label']}`);
+        block['items'].forEach(sentenceLine);
+      }
     }
   } else {
     if (Array.isArray(answer['sentences'])) answer['sentences'].forEach(sentenceLine);
