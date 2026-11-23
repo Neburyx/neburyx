@@ -1037,6 +1037,42 @@ describe('counts and what the model is told of a removal, through the answer too
     expect(feedbackOf(model).join('\n')).toContain('without its label as written');
   });
 
+  describe('a ranking over the elements a read listed', () => {
+    const VALUES = [1200.5, 1664.72, 99];
+    const ranked = (values: readonly unknown[], over: Partial<{ masked: boolean }> = {}): AskRunResult =>
+      askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: values.length, scope: 'test' }, matchIds: [], nodes: values.map((value, index) => ({ ...nodeOf(`A-${index + 1}`), properties: [{ key: 'amountValue', value, dataClass: 'number', masked: over.masked === true }] })), edges: [], notices: [], warnings: [] } });
+    const title = (index: number): string => `${V.title} A-${index}`;
+    const all = keys(3);
+
+    it('keeps the largest of the cited elements with its figure, in a sentence that says only that', async () => {
+      const text = `${title(2)} has the largest amountValue, 1664.72.`;
+      expect(await turn(answering([{ text, cites: all }]), ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [{ text }] });
+      const smallest = `${title(3)} has the smallest amountValue, 99.`;
+      expect(await turn(answering([{ text: smallest, cites: all }]), ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [{ text: smallest }] });
+    });
+
+    it('removes the wrong element, the wrong figure and a ranking that leaves one element out, and tells the model that it cannot be verified', async () => {
+      for (const [text, cites] of [[`${title(1)} has the largest amountValue, 1664.72.`, all], [`${title(2)} has the largest amountValue, 1200.5.`, all], [`${title(2)} has the largest amountValue, 1664.72.`, keys(2)]] as const) {
+        const right = { text: `${title(2)} is listed.`, cites: ['r2'] };
+        const model = answering([{ text, cites: [...cites] }], [right]);
+        expect(await turn(model, ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [right] });
+        expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text, reason: 'comparison' }]));
+      }
+    });
+
+    it('removes a ranking over a masked value, and no masked value reaches the answer', async () => {
+      const text = `${title(2)} has the largest amountValue, 1664.72.`;
+      const answer = await turn(answering([{ text, cites: all }]), ranked(['SECRET-A', 'SECRET-B', 'SECRET-C'], { masked: true }));
+      expect(answer).toMatchObject({ status: 'not-answered' });
+      expect(JSON.stringify(answer)).not.toContain('SECRET');
+    });
+
+    it('keeps an honest statement that the elements do not show who sent the largest figure', async () => {
+      const text = 'The elements do not show who sent the largest figure.';
+      expect(await turn(answering([{ text, cites: ['s1'] }]), ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [{ text }] });
+    });
+  });
+
   it('names each removed sentence and its reason to the model, and nothing when none is removed', async () => {
     const kept = { text: `${V.title} A-1 is listed.`, cites: ['r1'] };
     const removed = { text: `${V.title} A-2 has 7311 rows.`, cites: ['r2'] };
