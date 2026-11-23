@@ -165,13 +165,15 @@ export function useAssistant(): AssistantModel {
       const controller = new AbortController();
       open.add(controller);
       requests.current.set(turnId, controller);
+      const sentId = crypto.randomUUID();
+      store.setState({ ...store.getState(), turns: store.getState().turns.map((turn) => (turn.id === turnId ? { ...turn, turnIds: [...(turn.turnIds ?? []), sentId] } : turn)) });
       // each step the server reports is added to the pending turn, which shows the finished reads and the one in progress; a step that arrives after the turn has settled is dropped
       const onStep = (step: TurnStep): void => {
         if (controller.signal.aborted || store.getState().epoch !== epoch) return;
         const turn = store.getState().turns.find((held) => held.id === turnId);
         if (turn?.outcome.kind === 'pending') setOutcome(turnId, { ...turn.outcome, steps: [...(turn.outcome.steps ?? []), step] });
       };
-      void client.assistantTurn(request, controller.signal, onStep).then((result: ApiResult<AssistantTurnAnswer>) => {
+      void client.assistantTurn({ ...request, turnId: sentId }, controller.signal, onStep).then((result: ApiResult<AssistantTurnAnswer>) => {
         open.delete(controller);
         if (requests.current.get(turnId) === controller) requests.current.delete(turnId);
         if (controller.signal.aborted || store.getState().epoch !== epoch) return;
@@ -389,7 +391,7 @@ export function useAssistant(): AssistantModel {
       if (turn?.outcome.kind !== 'waiting' || common === undefined) return;
       const { waiting } = turn.outcome;
       // a cancel that does not arrive leaves the turn cancelled here; the confirmation expires, and nothing is read without a decision
-      void client.assistantTurn({ sourceId: common.sourceId, investigationId: common.investigationId, ...(common.mask === undefined ? {} : { mask: common.mask }), viewElementKeys: [...waiting.viewElementKeys], message: waiting.message, confirmation: { pendingId: waiting.pendingId, plan: waiting.plan, decision: 'cancel' } }, new AbortController().signal).then(() => undefined);
+      void client.assistantTurn({ sourceId: common.sourceId, investigationId: common.investigationId, ...(common.mask === undefined ? {} : { mask: common.mask }), viewElementKeys: [...waiting.viewElementKeys], message: waiting.message, confirmation: { pendingId: waiting.pendingId, plan: waiting.plan, decision: 'cancel' }, turnId: crypto.randomUUID() }, new AbortController().signal).then(() => undefined);
       setOutcome(turnId, { kind: 'cancelled' });
       restoreInput(turn.message);
       setFocus('input');

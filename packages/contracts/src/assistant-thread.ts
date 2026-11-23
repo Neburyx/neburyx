@@ -154,6 +154,8 @@ export type ReadAnswer = z.infer<typeof readAnswerSchema>;
 
 /** One stored turn as the panel is told of it: what kind of turn it was and how it ended, never a hash, a reference, a token or a run id. */
 export const assistantThreadTurnSchema = z.strictObject({
+  /** The id of the turn: the one its request carried when the panel gave one, else the server's. */
+  id: z.uuid(),
   seq: z.number().int().min(1),
   at: z.iso.datetime(),
   route: z.enum(THREAD_TURN_ROUTES),

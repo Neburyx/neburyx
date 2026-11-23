@@ -40,6 +40,8 @@ export interface AssistantThreadStore {
   epoch(investigationId: string): Promise<number>;
   /** Appends a turn to the person's thread, created if there is none, for the epoch the turn read; safe to write twice. */
   append(turn: AssistantThreadTurnWrite, epoch: number): Promise<AppendResult>;
+  /** Whether an id a panel gave a turn is free for this person's thread of this investigation: it is not when a turn of another person's thread, or of another investigation, already has it. A turn of the same thread with the id is the same turn tried again. */
+  turnIdTaken(turnId: string, investigationId: string, userId: string): Promise<boolean>;
   /** The caller's own thread of the investigation, its most recent `limit` turns and how many older ones there are, and when the caller's previous thread was cleared if they have no thread since. */
   read(investigationId: string, userId: string, limit: number): Promise<AssistantThreadRead>;
   /** The caller's own most recent `limit` turns of the investigation with the references they ran and cited, oldest first; none for a caller with no thread. */
@@ -72,8 +74,9 @@ const UPSERT_THREAD =
 const NEXT_SEQ = 'SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM assistant_turns WHERE thread_id = $1';
 const INSERT_TURN =
   'INSERT INTO assistant_turns (id, thread_id, seq, at, route, outcome, cause, question_hash, intent, template_id, entities, citation_refs, steps, model_ref, prompt_version, tokens_in, tokens_out, run_id, question_text, mask_on, answer, sensitivity_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) ON CONFLICT (id) DO NOTHING';
+const TURN_OWNER = 'SELECT h.investigation_id, h.user_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE t.id = $1';
 const READ_TURNS =
-  'SELECT t.seq, t.at, t.route, t.outcome, t.cause, t.intent, t.steps, jsonb_array_length(t.citation_refs) AS cited, t.question_text, t.mask_on, t.answer, t.sensitivity_version, h.id AS thread_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
+  'SELECT t.id, t.seq, t.at, t.route, t.outcome, t.cause, t.intent, t.steps, jsonb_array_length(t.citation_refs) AS cited, t.question_text, t.mask_on, t.answer, t.sensitivity_version, h.id AS thread_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
 const READ_CONTEXT =
   'SELECT t.route, t.outcome, t.cause, t.intent, t.entities, t.citation_refs FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
 const COUNT_TURNS = 'SELECT count(*)::int AS n FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2';
@@ -138,6 +141,11 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
   }
 
   return {
+    turnIdTaken: (turnId, investigationId, userId) =>
+      withClient(async (client) => {
+        const owner = (await client.query(TURN_OWNER, [turnId])).rows[0];
+        return owner !== undefined && (String(owner['investigation_id']) !== investigationId || String(owner['user_id']) !== userId);
+      }),
     epoch: (investigationId) =>
       withClient(async (client) => {
         const result = await client.query(READ_EPOCH, [investigationId]);
@@ -181,6 +189,7 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           await client.query('COMMIT');
           const parsed = assistantThreadResponseSchema.parse({
             turns: [...recent].reverse().map((row) => ({
+              id: String(row['id']),
               seq: numberOf(row['seq']),
               at: isoOf(row['at']),
               route: row['route'],
@@ -268,6 +277,11 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
     reopen(investigationId) {
       state(investigationId).open = true;
     },
+    async turnIdTaken(turnId, investigationId, userId) {
+      fail('epoch');
+      for (const [name, thread] of threads) if (thread.turns.some((held) => held.id === turnId)) return name !== key(investigationId, userId);
+      return false;
+    },
     async epoch(investigationId) {
       fail('epoch');
       return state(investigationId).epoch;
@@ -293,6 +307,7 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
       const first = Math.max(0, all.length - limit);
       return {
         turns: all.slice(first).map((turn, index) => ({
+          id: turn.id,
           seq: first + index + 1,
           at: turn.at.toISOString(),
           route: turn.route,

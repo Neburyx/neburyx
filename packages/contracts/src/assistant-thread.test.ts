@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ASK_FOLDER_LIMITS } from './ask-folder.js';
 import { ASK_SUMMARY_MAX_CITATIONS } from './ask.js';
-import { ASSISTANT_VIEW_KEYS_MAX } from './assistant-turn.js';
+import { ASSISTANT_VIEW_KEYS_MAX, assistantTurnRequestSchema } from './assistant-turn.js';
 import { THREAD_READ_TURNS_CEILING, assistantThreadResponseSchema, assistantThreadTurnWriteSchema, threadEntitySchema, type AssistantThreadTurnWrite } from './assistant-thread.js';
 
 const HASH = 'a'.repeat(64);
@@ -80,5 +80,24 @@ describe('the stored form of an answer', () => {
 
   it('refuses a free member beside the model and the coverage', () => {
     expect(written({ model: 'm', coverage: { retrieval: 'r', summary: 's', text: 'x' }, blocks: [{ kind: 'sentences', items: [sentence] }] })).toBe(false);
+  });
+});
+
+describe('the id of a turn', () => {
+  const ID = '0192f000-0000-7000-8000-0000000000aa';
+  const row = { seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 0, steps: 0 };
+
+  it('is told to the panel for every turn, as a uuid, and a turn without one is refused', () => {
+    expect(assistantThreadResponseSchema.safeParse({ turns: [{ id: ID, ...row }], earlierTurns: 0, previousThreadClearedAt: null }).success).toBe(true);
+    expect(assistantThreadResponseSchema.safeParse({ turns: [row], earlierTurns: 0, previousThreadClearedAt: null }).success).toBe(false);
+    expect(assistantThreadResponseSchema.safeParse({ turns: [{ id: 'not-a-uuid', ...row }], earlierTurns: 0, previousThreadClearedAt: null }).success).toBe(false);
+  });
+
+  it('may be given by a request of each kind, as a uuid only', () => {
+    const base = { sourceId: 's', investigationId: 'i', viewElementKeys: [] };
+    expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello', turnId: ID }).success).toBe(true);
+    expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello' }).success).toBe(true);
+    expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello', turnId: 'x' }).success).toBe(false);
+    expect(assistantTurnRequestSchema.safeParse({ ...base, message: 'hello', turnId: 5 }).success).toBe(false);
   });
 });

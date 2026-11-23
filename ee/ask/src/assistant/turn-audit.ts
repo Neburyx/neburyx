@@ -31,7 +31,7 @@ type Usage = { readonly kind: 'known'; readonly inputTokens: number; readonly ou
 interface TurnNotes {
   /** Opens the turn's run when the turn passes its first checks. */
   readonly open: (started: { readonly sourceId: string; readonly investigationId: string }) => TurnRun;
-  readonly openThread: (started: { readonly investigationId: string }) => Promise<TurnThread | undefined>;
+  readonly openThread: (started: { readonly investigationId: string; readonly turnId?: string }) => Promise<TurnThread | undefined>;
   run?: TurnRun;
   thread?: TurnThread;
   questionHash?: string;
@@ -125,7 +125,7 @@ export const stampProvenance = <T extends AssistantTurnAnswer>(answer: T, proven
 };
 
 /** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
-export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string; readonly question?: string; readonly maskOn?: boolean }): Promise<void> => {
+export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly turnId?: string; readonly questionHash?: string; readonly question?: string; readonly maskOn?: boolean }): Promise<void> => {
   const notes = scope.getStore();
   if (notes === undefined) return;
   notes.started = { sourceId: started.sourceId, investigationId: started.investigationId };
@@ -134,7 +134,7 @@ export const noteTurnStarted = async (started: { readonly sourceId: string; read
   if (started.questionHash !== undefined) notes.questionHash = started.questionHash;
   if (started.question !== undefined) notes.question = started.question;
   notes.maskOn = started.maskOn === true;
-  notes.thread = await notes.openThread(notes.started);
+  notes.thread = await notes.openThread({ ...notes.started, ...(started.turnId === undefined ? {} : { turnId: started.turnId }) });
 };
 
 /** The caller's last `limit` turns of the thread of the turn that is running; none outside a turn, before the turn started or when the thread cannot be read. */

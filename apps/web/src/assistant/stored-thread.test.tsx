@@ -18,9 +18,9 @@ const ok = <T,>(value: T): ApiResult<T> => ({ ok: true, value });
 const refused = (code: 'INTERNAL_ERROR' | 'NOT_FOUND'): ApiResult<AssistantThreadResponse> => ({ ok: false, failure: { code, message: 'no', retryable: false, traceId: 'tr-1' } });
 const STORED: AssistantThreadResponse = {
   turns: [
-    { seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 3, steps: 1 },
-    { seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 },
-    { seq: 3, at: '2026-11-18T10:06:00.000Z', route: 'view', outcome: 'refused', cause: 'not-answered', citedElements: 0, steps: 0 },
+    { id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 3, steps: 1 },
+    { id: '0192f000-0000-7000-8000-000000000002', seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 },
+    { id: '0192f000-0000-7000-8000-000000000003', seq: 3, at: '2026-11-18T10:06:00.000Z', route: 'view', outcome: 'refused', cause: 'not-answered', citedElements: 0, steps: 0 },
   ],
   earlierTurns: 0,
   previousThreadClearedAt: null,
@@ -182,7 +182,7 @@ describe('the stored thread in the panel', () => {
     await screen.findByText(ASSISTANT_COPY.storedLoading);
     await typeAndSend('sent first');
     await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
-    const own = { seq: 4, at: '2020-01-01T00:00:00.000Z', route: 'refuse' as const, outcome: 'refused' as const, cause: 'verdict', citedElements: 0, steps: 0, question: 'sent first' };
+    const own = { id: h.sent[0]?.turnId ?? 'none', seq: 4, at: '2020-01-01T00:00:00.000Z', route: 'refuse' as const, outcome: 'refused' as const, cause: 'verdict', citedElements: 0, steps: 0, question: 'sent first' };
     await act(async () => {
       wait.resolve(ok({ ...STORED, turns: [...STORED.turns, own] }));
     });
@@ -193,14 +193,48 @@ describe('the stored thread in the panel', () => {
     expect(earlier.compareDocumentPosition(screen.getByText('sent first')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('matches a live turn to its stored turn by its question and not by a clock: the newest stored turns that are the live ones are left out whatever their times, an earlier turn with the same words stays, and a live turn that was not written takes none', () => {
-    const turn = (question: string, at = '2026-01-01T00:00:00.000Z') => ({ question, at });
-    const stored = [turn('same'), turn('other', '2030-01-01T00:00:00.000Z'), turn('same', '1999-01-01T00:00:00.000Z')];
-    expect(withoutLiveTurns(stored, ['same']).map((entry) => entry.question)).toEqual(['same', 'other']);
-    expect(withoutLiveTurns(stored, ['other', 'same']).map((entry) => entry.question)).toEqual(['same']);
-    expect(withoutLiveTurns(stored, ['same', 'never written']).map((entry) => entry.question)).toEqual(['same', 'other']);
-    expect(withoutLiveTurns(stored, []).length).toBe(3);
-    expect(withoutLiveTurns([{ question: undefined }, { question: 'a' }], ['a']).length).toBe(1);
+  it('leaves out the stored turns whose ids belong to turns of this session, and no other, whatever their words or their times', () => {
+    const turn = (id: string, question: string) => ({ id, question });
+    const stored = [turn('a', 'same'), turn('b', 'other'), turn('c', 'same')];
+    expect(withoutLiveTurns(stored, new Set(['c'])).map((entry) => entry.id)).toEqual(['a', 'b']);
+    expect(withoutLiveTurns(stored, new Set(['b', 'c'])).map((entry) => entry.id)).toEqual(['a']);
+    expect(withoutLiveTurns(stored, new Set()).length).toBe(3);
+    expect(withoutLiveTurns(stored, new Set(['zzz'])).length).toBe(3);
+  });
+
+  it('shows an earlier stored turn with the same words as a question sent while the thread was read, when that new turn is pending, and again when it failed: only the turn with its id is left out', async () => {
+    const wait = deferred<ApiResult<AssistantThreadResponse>>();
+    let release: (value: ApiResult<AssistantTurnAnswer>) => void = () => undefined;
+    const pending = new Promise<ApiResult<AssistantTurnAnswer>>((done) => (release = done));
+    const h = harness(() => pending, 1000, () => wait.promise);
+    render(h.tree());
+    await screen.findByText(ASSISTANT_COPY.storedLoading);
+    await typeAndSend('same words');
+    const earlier = { id: '0192f000-0000-7000-8000-0000000000e1', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'refuse' as const, outcome: 'refused' as const, cause: 'verdict', citedElements: 0, steps: 0, question: 'same words' };
+    await act(async () => wait.resolve(ok({ turns: [earlier], earlierTurns: 0, previousThreadClearedAt: null })));
+    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeTruthy();
+    expect(screen.getAllByText('same words')).toHaveLength(2);
+    // the request that is out carries an id of its own, which is not the earlier turn's
+    expect(h.sent[0]?.turnId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(h.sent[0]?.turnId).not.toBe(earlier.id);
+    await act(async () => release({ ok: false, failure: { code: 'INTERNAL_ERROR', message: 'no', retryable: true, traceId: 'tr-1' } }));
+    const stored = (screen.getByRole('heading', { name: ASSISTANT_COPY.storedHeading }).closest('section') as HTMLElement);
+    expect(within(stored).getAllByText('same words')).toHaveLength(1);
+  });
+
+  it('leaves out the stored turn of a turn of this session by the id its request carried, also when it was a choice or a continue and carried no question, and a turn of the session whose id is not stored takes none', async () => {
+    const wait = deferred<ApiResult<AssistantThreadResponse>>();
+    const h = harness(async () => ok(REFUSE), 1000, () => wait.promise);
+    render(h.tree());
+    await screen.findByText(ASSISTANT_COPY.storedLoading);
+    await typeAndSend('first');
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
+    const sentId = h.sent[0]?.turnId ?? 'none';
+    const row = (id: string, seq: number, question?: string) => ({ id, seq, at: '2026-11-18T10:00:00.000Z', route: 'ask' as const, outcome: 'answered' as const, intent: 'x', citedElements: 0, steps: 0, ...(question === undefined ? {} : { question }) });
+    await act(async () => wait.resolve(ok({ turns: [row('0192f000-0000-7000-8000-0000000000e2', 1, 'older'), row(sentId, 2)], earlierTurns: 0, previousThreadClearedAt: null })));
+    const list = (await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading })).closest('section') as HTMLElement;
+    expect(within(list).getAllByRole('listitem')).toHaveLength(1);
+    expect(screen.getAllByText('first')).toHaveLength(1);
   });
 
   it('asks for the thread under the masking the session has, at the first opening and after the switch changes either way', async () => {

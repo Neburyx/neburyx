@@ -13,7 +13,7 @@ const REF_A = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
 const REF_B = { sourceId: 'demo', entityType: 'widget', stableId: 'A-2' };
 const text = (value: string) => ({ state: 'text' as const, text: value });
 const WITHHELD = { state: 'withheld' as const };
-const turn = (seq: number, over: Partial<AssistantThreadResponse['turns'][number]>): AssistantThreadResponse['turns'][number] => ({ seq, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 2, steps: 0, ...over });
+const turn = (seq: number, over: Partial<AssistantThreadResponse['turns'][number]>): AssistantThreadResponse['turns'][number] => ({ id: `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 2, steps: 0, ...over });
 const thread = (turns: AssistantThreadResponse['turns']): AssistantThreadResponse => ({ turns, earlierTurns: 0, previousThreadClearedAt: null });
 const panel = async (response: AssistantThreadResponse) => {
   const h = harness(async () => ok(REFUSE), 1000, async () => ok(response));

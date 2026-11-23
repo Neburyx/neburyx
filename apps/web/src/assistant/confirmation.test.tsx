@@ -197,7 +197,7 @@ describe('the confirmation card of a heavy step', () => {
   });
 
   it('shows a stored turn that was waiting with the fixed line and no button', async () => {
-    const h = harness(async () => ok(VIEW_ANSWER), 1000, async () => ({ ok: true, value: { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'waiting', intent: 'shared', citedElements: 0, steps: 1 }], earlierTurns: 0, previousThreadClearedAt: null } }));
+    const h = harness(async () => ok(VIEW_ANSWER), 1000, async () => ({ ok: true, value: { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'waiting', intent: 'shared', citedElements: 0, steps: 1 }], earlierTurns: 0, previousThreadClearedAt: null } }));
     render(h.tree());
     expect(await screen.findByText(ASSISTANT_COPY.waitingClosed)).toBeTruthy();
     expect(screen.queryByRole('button', { name: ASSISTANT_COPY.confirm })).toBeNull();

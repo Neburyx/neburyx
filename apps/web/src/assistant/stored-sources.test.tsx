@@ -18,7 +18,7 @@ const A = ref('a', 'type-a', 'ent-1');
 const B = ref('a', 'type-a', 'ent-2');
 const EDGE = edge('a', 'rel-1', 'ent-1', 'ent-2');
 const STORED: AssistantThreadResponse = {
-  turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 3, steps: 0, question: 'What links them?', answer: { blocks: [{ kind: 'sentences', items: [{ item: { state: 'text', text: 'They are linked.' }, cites: [A, B, EDGE.ref] }] }] } }],
+  turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 3, steps: 0, question: 'What links them?', answer: { blocks: [{ kind: 'sentences', items: [{ item: { state: 'text', text: 'They are linked.' }, cites: [A, B, EDGE.ref] }] }] } }],
   earlierTurns: 0,
   previousThreadClearedAt: null,
 };

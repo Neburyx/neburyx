@@ -21,7 +21,7 @@ const read = (nodes: GraphNode[], edges = [EDGE], missing: ReadRefsResponse['mis
 const empty = { values: [], lines: [], rows: [], paths: [], notices: [], noticeTotals: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
 const block = (over: Partial<ReadAskResult>): ReadAskResult => ({ kind: 'ask-result', templateId: 'file-query', outcome: 'complete', ...empty, ...over }) as ReadAskResult;
 const thread = (result: ReadAskResult, over: Record<string, unknown> = {}): AssistantThreadResponse => ({
-  turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', citedElements: 0, steps: 0, intent: 'find_accounts', question: 'Find them', answer: { blocks: [result] }, ...over } as AssistantThreadResponse['turns'][number]],
+  turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', citedElements: 0, steps: 0, intent: 'find_accounts', question: 'Find them', answer: { blocks: [result] }, ...over } as AssistantThreadResponse['turns'][number]],
   earlierTurns: 0,
   previousThreadClearedAt: null,
 });
@@ -148,7 +148,7 @@ describe('the stored result of an Ask answer in the panel', () => {
     expect(screen.queryByRole('button', { name: /continue/i })).toBeNull();
     h.stop();
     cleanup();
-    const old = open({ turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 3, steps: 1 }], earlierTurns: 0, previousThreadClearedAt: null });
+    const old = open({ turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 3, steps: 1 }], earlierTurns: 0, previousThreadClearedAt: null });
     expect(await screen.findByText('shared-devices')).toBeTruthy();
     old.stop();
   });

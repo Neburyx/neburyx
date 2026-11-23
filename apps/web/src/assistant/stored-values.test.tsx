@@ -31,7 +31,7 @@ const node = (id: string, properties: { key: string; value?: unknown; masked?: b
 const read = (nodes: GraphNode[], missing: string[] = []): ApiResult<ReadRefsResponse> => ok({ nodes, edges: [], missing: { entities: missing.map(ref), edges: [] } });
 const bindingItem = (id: string, property: string, before = 'The holder is ', after = '.') => ({ state: 'segments' as const, segments: [{ literal: before }, { element: ref(id), property }, { literal: after }] });
 const thread = (items: { item: ReturnType<typeof bindingItem> | { state: 'text'; text: string }; cites: ReturnType<typeof ref>[] }[]): AssistantThreadResponse => ({
-  turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: items.length, steps: 0, question: 'Who?', answer: { blocks: [{ kind: 'sentences', items }] } }],
+  turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: items.length, steps: 0, question: 'Who?', answer: { blocks: [{ kind: 'sentences', items }] } }],
   earlierTurns: 0,
   previousThreadClearedAt: null,
 });
@@ -86,7 +86,7 @@ describe('the bound values of a stored answer, drawn from their elements under t
 
   it('shows a loading state while the read runs, and draws a table cell from its element', async () => {
     const wait = deferred<ApiResult<ReadRefsResponse>>();
-    const response: AssistantThreadResponse = { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 1, steps: 0, answer: { blocks: [{ kind: 'table', columns: [{ state: 'text', text: 'Holder' }], rows: [{ cells: [{ state: 'segments', segments: [{ element: ref('A-1'), property: 'holder' }] }], cites: [ref('A-1')] }] }] } }], earlierTurns: 0, previousThreadClearedAt: null };
+    const response: AssistantThreadResponse = { turns: [{ id: '0192f000-0000-7000-8000-000000000001', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 1, steps: 0, answer: { blocks: [{ kind: 'table', columns: [{ state: 'text', text: 'Holder' }], rows: [{ cells: [{ state: 'segments', segments: [{ element: ref('A-1'), property: 'holder' }] }], cites: [ref('A-1')] }] }] } }], earlierTurns: 0, previousThreadClearedAt: null };
     const h = open(response, () => wait.promise);
     expect(await screen.findByText(ASSISTANT_COPY.valuesLoading)).toBeTruthy();
     await act(async () => wait.resolve(read([node('A-1', [{ key: 'holder', value: 'Maria Gomez' }])])));

@@ -76,6 +76,8 @@ export type Outcome =
 
 export interface Turn {
   readonly id: number;
+  /** The ids of the requests this turn sent (its message, then a choice, a continue or a decision), each the id the server gives the turn it writes for it, so that the thread read can tell these turns from the earlier ones. */
+  readonly turnIds?: readonly string[];
   readonly message: string;
   readonly outcome: Outcome;
   /** The turn was started by pressing a follow-up, so its message is the follow-up's label and is not the analyst's to type again. */

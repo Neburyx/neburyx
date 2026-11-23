@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { assistantThreadTurnWriteSchema, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
+import { ExtensionRefusal, assistantThreadTurnWriteSchema, type AssistantThreadTurnWrite, type ExtensionLogger, type ExtensionRequest, type RecordQueue } from '@neburyx/contracts';
 import { AssistantThreadStoreError, type AssistantContextTurn, type AssistantThreadStore } from './thread-store.js';
 
 export interface TurnThreadDeps {
@@ -27,10 +27,20 @@ export interface TurnThread {
  * The thread side of a turn. The investigation's epoch is read first, before the turn does any other work, and the write at the end is refused by the database when the epoch has moved, so a turn that began before a close cannot write after it.
  * A turn whose epoch cannot be read writes nothing; the failure is counted as a failed record write, and the turn is answered as before.
  */
-export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionRequest, started: { readonly investigationId: string }): Promise<TurnThread | undefined> {
+export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionRequest, started: { readonly investigationId: string; readonly turnId?: string }): Promise<TurnThread | undefined> {
   const store = deps.threads();
   if (store === undefined) return undefined;
-  const turnId = randomUUID();
+  const turnId = started.turnId ?? randomUUID();
+  // an id the panel chose that another person's thread or another investigation already holds is refused before the turn does anything: it would otherwise be written as a turn that is already stored
+  if (started.turnId !== undefined) {
+    let taken = false;
+    try {
+      taken = await store.turnIdTaken(started.turnId, started.investigationId, request.principalId);
+    } catch {
+      taken = false;
+    }
+    if (taken) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'turn-id' });
+  }
   const startedAt = deps.now();
 
   const failed = (step: string): void => {

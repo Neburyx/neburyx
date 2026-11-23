@@ -430,3 +430,47 @@ describe('the writes of a thread never change a turn and never outlive the inves
     expect(JSON.stringify(turn.r.events)).not.toContain(CANARY);
   });
 });
+
+describe('the id of a turn that the panel gave', () => {
+  const TURN_ID = '0192f000-0000-7000-8000-0000000000c1';
+  const OTHER = '0192f000-0000-7000-8000-000000000002';
+  const body = (over: Record<string, unknown> = {}) => ({ ...VIEW_BODY, investigationId: INVESTIGATION, turnId: TURN_ID, ...over });
+  const view = () => turnRig({ view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })) });
+
+  it('writes the turn under the id its request carried, and the read of the thread tells the panel that id', async () => {
+    const turn = await view();
+    await run(turn, body());
+    expect(stored(turn).map((kept) => kept.id)).toEqual([TURN_ID]);
+    const read = await turn.threads.read(INVESTIGATION, PERSON, 10);
+    expect(read.turns.map((entry) => entry.id)).toEqual([TURN_ID]);
+  });
+
+  it('gives a turn whose request carried no id an id of its own, and reads it the same way', async () => {
+    const turn = await view();
+    await run(turn, { ...VIEW_BODY, investigationId: INVESTIGATION });
+    const [kept] = stored(turn);
+    expect(kept?.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await turn.threads.read(INVESTIGATION, PERSON, 10)).turns[0]?.id).toBe(kept?.id);
+  });
+
+  it('writes one turn when the same request is tried again, and refuses an id another person or another investigation already holds, before anything is read or asked, and writes nothing for it', async () => {
+    const turn = await view();
+    await run(turn, body());
+    const again = await run(turn, body());
+    expect('value' in again).toBe(true);
+    expect(stored(turn)).toHaveLength(1);
+    const takenByOther = await run(turn, body(), { principalId: OTHER });
+    expect('error' in takenByOther ? (takenByOther.error as { code?: string }).code : undefined).toBe('INVALID_REQUEST');
+    expect(stored(turn, OTHER)).toEqual([]);
+    const takenElsewhere = await run(turn, body({ investigationId: '0192f000-0000-7000-8000-0000000000b2' }));
+    expect('error' in takenElsewhere ? (takenElsewhere.error as { code?: string }).code : undefined).toBe('INVALID_REQUEST');
+    expect(stored(turn)).toHaveLength(1);
+  });
+
+  it('answers a turn as before when the store cannot say whether the id is taken', async () => {
+    const threads = createMemoryAssistantThreadStore({ failOn: 'epoch' });
+    const turn = await turnRig({ view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })) }, threads);
+    const result = await run(turn, body());
+    expect('value' in result).toBe(true);
+  });
+});

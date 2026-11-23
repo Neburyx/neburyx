@@ -4,7 +4,7 @@ import { presentThread } from './thread-present.js';
 import type { AssistantThreadRead } from './thread-store.js';
 
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
-const turn = (stored?: StoredTurnText) => ({ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view' as const, outcome: 'answered' as const, citedElements: 1, steps: 0, ...(stored === undefined ? {} : { stored }) });
+const turn = (stored?: StoredTurnText) => ({ id: '0192f000-0000-7000-8000-0000000000f1', seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view' as const, outcome: 'answered' as const, citedElements: 1, steps: 0, ...(stored === undefined ? {} : { stored }) });
 const read = (...turns: ReturnType<typeof turn>[]): AssistantThreadRead => ({ turns, earlierTurns: 0, previousThreadClearedAt: null });
 const answer: StoredAnswer = {
   blocks: [

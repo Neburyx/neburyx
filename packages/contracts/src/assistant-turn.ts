@@ -10,7 +10,8 @@ const text = z.string().min(1);
 export const ASSISTANT_VIEW_KEYS_MAX = SUMMARY_DEFAULTS.maxElements;
 
 /** `POST /v1/assistant/turns`: a message as typed, and the keys of the elements in view, never their content. */
-const turnBase = { sourceId: text, investigationId: text, mask: z.boolean().optional(), viewElementKeys: z.array(text).max(ASSISTANT_VIEW_KEYS_MAX) };
+/** The id the person's panel gives a request, so that the turn the server writes for it carries that id and the panel can tell the stored turn from the turns it sent itself. */
+const turnBase = { sourceId: text, investigationId: text, turnId: z.uuid().optional(), mask: z.boolean().optional(), viewElementKeys: z.array(text).max(ASSISTANT_VIEW_KEYS_MAX) };
 
 /** What a clarification or a follow-up gives the panel to send when it is chosen: the intent, the roles whose value is an element (each read again through the gate), the entities, and the token that binds them to this person and investigation. */
 export const assistantChoiceSchema = z.strictObject({
