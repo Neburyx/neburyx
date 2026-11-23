@@ -159,10 +159,12 @@ class AuditedChatModel extends BaseChatModel {
     const { hook } = this;
     if (!AUDIT_LABEL.test(hook.promptId) || !Number.isInteger(hook.promptVersion) || hook.promptVersion < 0) throw new AuditUnavailableError();
     const prompt = promptOf(hook, messages);
-    const trace = hook.trace?.({ instructions: systemTextOf(messages), instructionsSha256: prompt.sha256, values: valuesOf(messages) });
+    // the record holds what is sent: the history without the thinking blocks
+    const sent = withoutThinking(messages);
+    const trace = hook.trace?.({ instructions: systemTextOf(messages), instructionsSha256: prompt.sha256, values: valuesOf(sent) });
     let message: AIMessageChunk;
     try {
-      message = await this.inner.invoke(hook.cache === undefined ? withoutThinking(messages) : withCacheMarkers(withoutThinking(messages), hook.cache.ttl), options.signal === undefined ? {} : { signal: options.signal });
+      message = await this.inner.invoke(hook.cache === undefined ? sent : withCacheMarkers(sent, hook.cache.ttl), options.signal === undefined ? {} : { signal: options.signal });
     } catch (error) {
       const code = failureCodeOf(error, options.signal?.aborted === true);
       const failure = failureDetailOf(error);

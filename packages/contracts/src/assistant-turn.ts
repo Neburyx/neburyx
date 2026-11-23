@@ -104,7 +104,7 @@ export const ASSISTANT_POINTERS = ['canvas-expand'] as const;
 export type AssistantPointer = (typeof ASSISTANT_POINTERS)[number];
 
 export const ASSISTANT_POINTER_SENTENCES: Readonly<Record<AssistantPointer, string>> = {
-  'canvas-expand': 'I read neighbours but do not change the canvas. Use Expand on the canvas to add them to the graph.',
+  'canvas-expand': 'I do not change the canvas. Use Expand on the canvas to add neighbours to the graph.',
 };
 
 export const ASSISTANT_NOT_ANSWERED_SENTENCE = 'I can’t support an answer from this investigation.';
