@@ -131,11 +131,11 @@ describe('a view question on the agent', () => {
     const store = createMemoryAssistantRunStore();
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { text: `${V.title} A-1 is in view.`, cites: ['n1'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { cites: ['n1'] }] });
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { cites: ['n1'] }] }] });
     const sent = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
     expect(sent).toMatch(/c1: view coverage: 2 entities shown \(2 [^)]+\) · 0 relationships shown · /u);
     // the sentence that cites only the line gets a marker of its own, written by the server
