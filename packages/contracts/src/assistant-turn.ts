@@ -99,6 +99,8 @@ export const ASSISTANT_CLARIFICATION_MAX_CANDIDATES = 5;
 /** The question of a clarification, naming the entity type as the profile calls it. */
 export const assistantClarificationQuestion = (typeName: string): string => `Which ${/^[A-Z][a-z]/.test(typeName) ? typeName.charAt(0).toLowerCase() + typeName.slice(1) : typeName} do you mean?`;
 
+export const ASSISTANT_LAST_CALL_SENTENCE = 'Written on the last model call this turn allows; ask again to read further.';
+
 /** What the Assistant may point the analyst to instead of doing it: the model names one of these in its answer and the server writes the sentence. */
 export const ASSISTANT_POINTERS = ['canvas-expand'] as const;
 export type AssistantPointer = (typeof ASSISTANT_POINTERS)[number];
@@ -306,6 +308,8 @@ export const assistantTurnAnswerSchema = z.union([
     noDescription: text.optional(),
     /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
     pointer: text.optional(),
+    /** The fixed sentence (`ASSISTANT_LAST_CALL_SENTENCE`) of an answer written on the last model call the turn allows, when no limit cut the reading: written by the server. */
+    lastCallNote: text.optional(),
     model: text,
     calls: z.number().int().positive(),
   }),
@@ -321,6 +325,8 @@ export const assistantTurnAnswerSchema = z.union([
     noDescription: text.optional(),
     /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
     pointer: text.optional(),
+    /** The fixed sentence (`ASSISTANT_LAST_CALL_SENTENCE`) of an answer written on the last model call the turn allows, when no limit cut the reading: written by the server. */
+    lastCallNote: text.optional(),
     model: text,
     calls: z.number().int().positive(),
     steps: z.number().int().min(1),
@@ -342,6 +348,8 @@ export const assistantTurnAnswerSchema = z.union([
     noDescription: text.optional(),
     /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
     pointer: text.optional(),
+    /** The fixed sentence (`ASSISTANT_LAST_CALL_SENTENCE`) of an answer written on the last model call the turn allows, when no limit cut the reading: written by the server. */
+    lastCallNote: text.optional(),
     model: text,
     calls: z.number().int().positive(),
   }),
@@ -355,6 +363,8 @@ export const assistantTurnAnswerSchema = z.union([
     noDescription: text.optional(),
     /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
     pointer: text.optional(),
+    /** The fixed sentence (`ASSISTANT_LAST_CALL_SENTENCE`) of an answer written on the last model call the turn allows, when no limit cut the reading: written by the server. */
+    lastCallNote: text.optional(),
     model: text,
     calls: z.number().int().positive(),
     steps: z.number().int().min(1),

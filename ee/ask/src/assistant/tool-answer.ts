@@ -31,9 +31,9 @@ export interface ToolAnswerInput {
 }
 
 export type ToolAnswerOutcome =
-  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string }
+  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
   /** The answer as a table (the router chose the form): rows that each cite an element a read returned. */
-  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string }
+  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string; readonly lastCallNote?: string }
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote and the names of the profile. */
   | { readonly kind: 'noDescription'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported'; readonly calls: number }

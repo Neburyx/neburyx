@@ -224,6 +224,7 @@ export function ViewAnswerCard({
       {"table" in answer ? tableOf(answer) : sentencesOf(answer)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {answer.pointer === undefined ? null : <p className="assistant-pointer">{answer.pointer}</p>}
+      {answer.lastCallNote === undefined ? null : <p className="assistant-pointer">{answer.lastCallNote}</p>}
       {entries.length === 0 || !sources ? null : (
         <div className="assistant-sources">
           <button

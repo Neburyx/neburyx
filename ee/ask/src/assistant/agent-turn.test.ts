@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
-import { ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
+import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, degreeResult, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
@@ -138,6 +138,19 @@ describe('a view question on the agent', () => {
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 3 } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).not.toHaveProperty('stoppedAt');
+    expect(answer).toMatchObject({ lastCallNote: ASSISTANT_LAST_CALL_SENTENCE });
+  });
+
+  it('carries no note on an answer given while reads were still allowed', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 6 } });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered' });
+    expect(answer).not.toHaveProperty('lastCallNote');
     expect(answer).not.toHaveProperty('stoppedAt');
   });
 

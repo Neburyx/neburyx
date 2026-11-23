@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { ASSISTANT_LAST_CALL_SENTENCE } from '@neburyx/contracts';
 import { removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
 import { plainNode, plainRelationship } from '../../../services/api/src/testing/normalize-fixtures.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
@@ -94,8 +95,8 @@ describe('a turn that would run past a limit is stopped, through the real applic
   it('stops at the calls setting: no more calls to the provider than calls', async () => {
     const turn = await turnWith({ maxCalls: 3 });
     expectAtMost('calls', turn.calls, 3);
-    // the model answers on the last call it may make and asks for no read it is refused: the limit cut nothing short, so none is marked
-    expect(turn.body).toMatchObject({ status: 'answered' });
+    // the model answers on the last call it may make and asks for no read it is refused: no limit is marked, and the answer says it was written on the last call
+    expect(turn.body).toMatchObject({ status: 'answered', lastCallNote: ASSISTANT_LAST_CALL_SENTENCE });
     expect(turn.body).not.toHaveProperty('stoppedAt');
   });
 

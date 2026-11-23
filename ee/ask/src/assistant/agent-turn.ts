@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ASSISTANT_POINTER_SENTENCES, ASSISTANT_POINTERS, type AskAnswer, type AssistantLimit, type AssistantPointer, type AssistantRead, type SummaryReading, type SummarySentence } from '@neburyx/contracts';
+import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_POINTERS, type AskAnswer, type AssistantLimit, type AssistantPointer, type AssistantRead, type SummaryReading, type SummarySentence } from '@neburyx/contracts';
 import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentControl, type AgentTool, type AuditedModelHook } from '@neburyx/ee-assistant-agent';
 import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
@@ -123,6 +123,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     let steps = 0;
     let rows = 0;
     let limited: AssistantLimit | undefined;
+    let onLastCall = false;
     let askAnswer: Extract<AskAnswer, { answered: unknown }>['answered'] | undefined;
     // the lines of notes and of a summary the application drafted are model-written context beside the elements, never a source of the checks
     const render = (): string => {
@@ -236,6 +237,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
       schema: scope.form === 'table' ? tableSchema : answerSchema,
       run: async (args) => {
         stepsOf(scope.request).answering();
+        // an answer written on the last call the turn allows, where no read was offered: said so in a fixed sentence, whether the model was done or not
+        if (control.calls + control.extra + input.callsUsed >= settings.maxCalls) onLastCall = true;
         const basis = answerBasisOf({ reads, ...(view === undefined ? {} : { view }), scope, message: input.message });
         if (basis === undefined) return NOT_ANSWERED;
         if (scope.form === 'table') {
@@ -349,8 +352,9 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     if (ended !== undefined) return ended;
     const found = standing;
     const stoppedAt = limited === undefined ? {} : { stoppedAt: limited };
-    if (found?.kind === 'sentences') return { kind: 'sentences', answer: found, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt, ...(askAnswer === undefined ? {} : { askAnswer }) };
-    if (found?.kind === 'table') return { kind: 'table', answer: found, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt };
+    const lastCall = onLastCall && limited === undefined ? { lastCallNote: ASSISTANT_LAST_CALL_SENTENCE } : {};
+    if (found?.kind === 'sentences') return { kind: 'sentences', answer: { ...found, ...lastCall }, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt, ...(askAnswer === undefined ? {} : { askAnswer }) };
+    if (found?.kind === 'table') return { kind: 'table', answer: { ...found, ...lastCall }, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt };
     if (found?.kind === 'noDescription') return { kind: 'no-description', sentence: found.sentence, names: found.names, calls: input.callsUsed + modelCalls };
     if (found?.kind === 'unsupported') return { kind: 'unsupported' };
     if (limited !== undefined) return { kind: 'limit', limit: limited, reads: entries };
