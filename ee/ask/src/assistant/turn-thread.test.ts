@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, auditDetailSchema, type AssistantThreadTurnWrite, type ExtensionRequest, type RecordJob, type RecordQueue } from '@neburyx/contracts';
+import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, auditDetailSchema, tablesOfBlocks, type AssistantThreadTurnWrite, type ExtensionRequest, type RecordJob, type RecordQueue } from '@neburyx/contracts';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, fileQueryResult, heavyResult, ok, okResult, rig, routeAsk, sign, type Rig, type RigOptions } from '../testing/assistant-rig.js';
@@ -195,7 +195,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
     expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
-    expect(kept?.answer).toEqual({ blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'Element' }], rows: answer.table.rows.map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
+    expect(kept?.answer).toEqual({ blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'Element' }], rows: tablesOfBlocks(answer.blocks).flatMap((shown) => shown.rows).map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
     const closed = view.r.events.find((event) => event.action === TURN_CLOSED_ACTION);
     expect(closed?.detail).toMatchObject({ turn: { route: 'view', outcome: 'answered', citedElements: 2, form: 'table', tableRowsShown: 2 } });
     expect((closed?.detail as { turn: Record<string, unknown> }).turn).not.toHaveProperty('tableRowsDropped');

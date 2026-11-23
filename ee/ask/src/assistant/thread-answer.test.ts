@@ -7,7 +7,12 @@ import { classifyItem, type ClassifyContext } from './sensitive-items.js';
 const REF = { sourceId: 'demo', entityType: 'widget', stableId: 'A-1' };
 const citation = { key: 'n1', kind: 'entity', ref: REF } as const;
 const base = { id: crypto.randomUUID(), investigationId: crypto.randomUUID(), userId: crypto.randomUUID(), at: new Date(), route: 'view', outcome: 'answered', questionHash: 'a'.repeat(64), entities: [], citationRefs: [], steps: 0, maskOn: false } as const;
-const viewAnswer = (over: Record<string, unknown>): AssistantTurnAnswer => ({ status: 'answered', route: 'view', citations: [citation], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, ...over }) as AssistantTurnAnswer;
+/** An answer of the view route in the blocks form: `sentences` and `table` of `over` become the blocks, the rest stays as it is. */
+const viewAnswer = (over: Record<string, unknown>): AssistantTurnAnswer => {
+  const { sentences, table, ...rest } = over;
+  const blocks = [...(table === undefined ? [] : [{ kind: 'table', table: { note: 'n', ...(table as object) } }]), ...(sentences === undefined ? [] : [{ kind: 'sentences', sentences }])];
+  return { status: 'answered', route: 'view', citations: [citation], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, blocks, ...rest } as AssistantTurnAnswer;
+};
 const written = (answer: AssistantTurnAnswer, maskOn: boolean) => assistantThreadTurnWriteSchema.parse({ ...base, maskOn, question: 'Q?', answer: storedAnswerOf(answer, maskOn)?.answer });
 
 describe('the stored form of an answer', () => {
@@ -18,6 +23,18 @@ describe('the stored form of an answer', () => {
       expect(stored?.blocks[0]).toEqual({ kind: 'table', columns: [{ form, text: 'Name' }, { form, text: 'Note' }], rows: [{ cells: [{ form, text: 'Ana' }, { form, text: '' }], cites: [REF] }] });
       expect(stored?.blocks[1]).toEqual({ kind: 'sentences', items: [{ form: 'frozen', text: 'A fixed description sentence.', cites: [] }, { form: 'frozen', text: 'A fixed pointer sentence.', cites: [] }, { form: 'frozen', text: 'A fixed note.', cites: [] }] });
     }
+  });
+
+  it('keeps the blocks of an answer in the order the model gave them, each in its own stored block, with the fixed lines last', () => {
+    const answer = {
+      status: 'answered', route: 'view', citations: [citation], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, pointer: 'A fixed pointer sentence.',
+      blocks: [{ kind: 'sentences', sentences: [{ text: 'First.', cites: ['n1'] }] }, { kind: 'table', table: { title: 'T', columns: ['Name'], rows: [{ cells: ['Ana'], cites: ['n1'] }], note: 'n' } }, { kind: 'sentences', sentences: [{ text: 'Last.', cites: ['n1'] }] }],
+    } as AssistantTurnAnswer;
+    const stored = written(answer, true).answer;
+    expect(stored?.blocks.map((block) => block.kind)).toEqual(['sentences', 'table', 'sentences', 'sentences']);
+    expect(stored?.blocks[0]).toMatchObject({ items: [{ text: 'First.' }] });
+    expect(stored?.blocks[2]).toMatchObject({ items: [{ text: 'Last.' }] });
+    expect(stored?.blocks[3]).toMatchObject({ items: [{ text: 'A fixed pointer sentence.' }] });
   });
 
   it('keeps twelve sentences of the model and the three fixed lines, cutting nothing', () => {
@@ -96,7 +113,7 @@ describe('the stored form of an answer', () => {
       const cites = ['n1', 'n2', 'n3'];
       const refOf = (id: string) => ({ ...REF, stableId: id });
       const citations = ['n1', 'n2', 'n3'].map((key, index) => ({ key, kind: 'entity', ref: refOf(`A-${index + 1}`) }));
-      const table = (cell: string) => storedAnswerOf({ status: 'answered', route: 'view', citations, coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, table: { title: 'T', columns: ['C'], rows: [{ cells: [cell], cites }] } } as AssistantTurnAnswer, false, (text, cited) => classifyItem(text, cited, wide));
+      const table = (cell: string) => storedAnswerOf({ status: 'answered', route: 'view', citations, coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, blocks: [{ kind: 'table', table: { title: 'T', columns: ['C'], rows: [{ cells: [cell], cites }], note: 'n' } }] } as AssistantTurnAnswer, false, (text, cited) => classifyItem(text, cited, wide));
       const cell = (result: ReturnType<typeof table>) => (result?.answer.blocks[0]?.kind === 'table' ? result.answer.blocks[0].rows[0]?.cells[0] : undefined);
       expect(cell(table('Jordan Lee'))).toMatchObject({ form: 'bound' });
       expect(cell(table('Maria Gomez'))).toMatchObject({ form: 'unbound', text: 'Maria Gomez' });

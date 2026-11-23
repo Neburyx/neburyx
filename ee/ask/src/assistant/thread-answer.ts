@@ -47,8 +47,7 @@ function itemOf(text: string, cited: readonly string[], refs: ReadonlyMap<string
 }
 
 /**
- * The stored form of an answer that a turn ended with, or nothing for an answer that has no stored form yet. The fixed sentences of the server are kept as they are written, `frozen`, in either case. Only the answers that carry sentences, a
- * table or a refusal have a form here; the other shapes join when the answer is one list of blocks.
+ * The stored form of an answer that a turn ended with, or nothing for an answer that has no stored form yet. The fixed sentences of the server are kept as they are written, `frozen`, in either case. Only the answers that carry blocks (sentences and tables) or a refusal have a form here.
  */
 export interface StoredAnswerResult {
   readonly answer: StoredAnswer;
@@ -81,14 +80,15 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
   // the fixed sentences of the server (a type with no description, a pointer, the note of the last call) are a block of their own, kept as written
   const server = [answer.noDescription, answer.pointer, answer.lastCallNote].flatMap((text) => (text === undefined || text === '' ? [] : [{ ...fixed(text), cites: [] as Cite[] }]));
   const fixedBlock: Block[] = server.length === 0 ? [] : [{ kind: 'sentences', items: server }];
-  if ('table' in answer) {
-    const { table } = answer;
+  if (!('blocks' in answer)) return undefined;
+  const stored: Block[] = answer.blocks.map((block): Block => {
+    if (block.kind === 'sentences') return { kind: 'sentences', items: sentences(block.sentences, refs) } as Block;
+    const { table } = block;
     const labels = table.columns.map((label) => ({ form: maskOn ? ('frozen' as const) : classify?.(label, [])?.form === 'frozen' ? ('frozen' as const) : ('unbound' as const), text: label }));
     const rows = table.rows.map((row) => ({ cells: row.cells.map((cell) => itemOf(cell, row.cites.filter((key) => refs.has(key)), refs, maskOn, 80, classify)), cites: citedRefs(row.cites, refs) }));
-    return result([{ kind: 'table', columns: labels, rows }, ...fixedBlock], refs);
-  }
-  if (!('sentences' in answer)) return undefined;
-  return result([{ kind: 'sentences', items: sentences(answer.sentences, refs) }, ...fixedBlock] as Block[], refs);
+    return { kind: 'table', columns: labels, rows };
+  });
+  return result([...stored, ...fixedBlock], refs);
 }
 
 /**
