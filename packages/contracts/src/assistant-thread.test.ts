@@ -58,3 +58,27 @@ describe('what the panel is told of a thread', () => {
     expect(assistantThreadResponseSchema.safeParse({ turns: Array.from({ length: THREAD_READ_TURNS_CEILING + 1 }, (_unused, index) => ({ ...stored, seq: index + 1 })), earlierTurns: 0, previousThreadClearedAt: null }).success).toBe(false);
   });
 });
+
+describe('the stored form of an answer', () => {
+  const written = (answer: unknown) => assistantThreadTurnWriteSchema.safeParse(turn({ route: 'view', question: 'Q?', maskOn: true, answer })).success;
+  const sentence = { form: 'frozen', text: 'One.', cites: [REF] };
+
+  it('still takes an answer of sentences, a table and a refusal that holds no list, with or without the model and the coverage', () => {
+    expect(written({ blocks: [{ kind: 'sentences', items: [sentence] }] })).toBe(true);
+    expect(written({ model: 'm', coverage: { retrieval: 'r', summary: 's' }, blocks: [{ kind: 'sentences', items: [sentence] }] })).toBe(true);
+    expect(written({ blocks: [{ kind: 'refusal', sentence: { form: 'frozen', text: 'No.' } }] })).toBe(true);
+  });
+
+  it('takes a list with an optional label and items that are cited as sentences, and refuses a list with no item, one item too many, a free member or a label longer than its bound', () => {
+    expect(written({ blocks: [{ kind: 'list', items: [sentence] }] })).toBe(true);
+    expect(written({ blocks: [{ kind: 'list', label: { form: 'frozen', text: 'Label' }, items: [sentence] }] })).toBe(true);
+    expect(written({ blocks: [{ kind: 'list', items: [] }] })).toBe(false);
+    expect(written({ blocks: [{ kind: 'list', items: Array.from({ length: 13 }, () => sentence) }] })).toBe(false);
+    expect(written({ blocks: [{ kind: 'list', items: [sentence], extra: 'x' }] })).toBe(false);
+    expect(written({ blocks: [{ kind: 'list', label: { form: 'frozen', text: 'x'.repeat(200) }, items: [sentence] }] })).toBe(false);
+  });
+
+  it('refuses a free member beside the model and the coverage', () => {
+    expect(written({ model: 'm', coverage: { retrieval: 'r', summary: 's', text: 'x' }, blocks: [{ kind: 'sentences', items: [sentence] }] })).toBe(false);
+  });
+});

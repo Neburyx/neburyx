@@ -82,6 +82,14 @@ describe('what a read sends of a stored thread', () => {
     expect(without.turns[0]?.answer).not.toHaveProperty('coverage');
   });
 
+  it('sends a list block item by item as it sends sentences, its label withheld under the mask when it is unbound, and an item that is bound as segments', () => {
+    const list: StoredAnswer = { blocks: [{ kind: 'list', label: { form: 'unbound', text: 'Jordan Lee holds' }, items: [{ form: 'frozen', text: 'Two items.', cites: [REF] }, { form: 'bound', segments: [{ element: REF, property: 'holder' }], cites: [REF] }, { form: 'unbound', text: 'Jordan.', cites: [REF] }] }] };
+    const masked = presentThread(read(turn(writtenOff({ answer: list }))), true, 'sv1:a').turns[0]?.answer?.blocks[0];
+    expect(masked).toEqual({ kind: 'list', label: { state: 'withheld' }, items: [{ item: { state: 'text', text: 'Two items.' }, cites: [REF] }, { item: { state: 'segments', segments: [{ element: REF, property: 'holder' }] }, cites: [REF] }, { item: { state: 'withheld' }, cites: [REF] }] });
+    const open = presentThread(read(turn(writtenOff({ answer: list }))), false, 'sv1:a').turns[0]?.answer?.blocks[0];
+    expect(open).toMatchObject({ label: { state: 'text', text: 'Jordan Lee holds' }, items: [{ item: { state: 'text' } }, { item: { state: 'segments' } }, { item: { state: 'text', text: 'Jordan.' } }] });
+  });
+
   it('keeps the count of the earlier turns and the clearing', () => {
     expect(presentThread({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' }, false, undefined)).toEqual({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' });
   });

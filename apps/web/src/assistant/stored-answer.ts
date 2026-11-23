@@ -48,6 +48,7 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
   const refusals: StoredView['refusals'][number][] = [];
   for (const block of answer.blocks) {
     if (block.kind === 'sentences') blocks.push({ kind: 'sentences', sentences: sentencesOf(block.items) } as ViewAnswer['blocks'][number]);
+    else if (block.kind === 'list') blocks.push({ kind: 'list', ...(block.label === undefined ? {} : { label: block.label.state === 'text' ? block.label.text : ASSISTANT_COPY.storedWithheld }), items: sentencesOf(block.items) } as ViewAnswer['blocks'][number]);
     else if (block.kind === 'table') {
       const columns = block.columns.map((column) => (column.state === 'text' ? column.text : ASSISTANT_COPY.storedWithheld));
       blocks.push({ kind: 'table', table: { title: '', columns, rows: block.rows.map((row) => ({ cells: row.cells.map((cell) => itemTextOf(cell, valueFor)), cites: row.cites.map(keyOf) })), note: '' } } as ViewAnswer['blocks'][number]);
@@ -73,7 +74,7 @@ export const valueFromReads = (reads: Pick<RefReads, 'nodes'>): ValueOf => (bind
 export function boundElementsOf(answers: readonly ReadAnswer[]): ElementRef[] {
   const seen = new Map<string, ElementRef>();
   const itemsOf = (block: Block): Item[] =>
-    block.kind === 'sentences' ? block.items.map((each) => each.item) : block.kind === 'table' ? [...block.columns, ...block.rows.flatMap((row) => row.cells)] : [block.sentence, ...(block.overview ?? []).map((each) => each.item)];
+    block.kind === 'sentences' || block.kind === 'list' ? block.items.map((each) => each.item) : block.kind === 'table' ? [...block.columns, ...block.rows.flatMap((row) => row.cells)] : [block.sentence, ...(block.overview ?? []).map((each) => each.item)];
   for (const answer of answers)
     for (const item of answer.blocks.flatMap(itemsOf))
       if (item.state === 'segments') for (const segment of item.segments) if (isBinding(segment) && 'entityType' in segment.element) seen.set(refKeyOf(segment.element), segment.element);

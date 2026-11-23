@@ -32,6 +32,7 @@ function presentAnswer(stored: StoredTurnText, maskNow: boolean, verified: boole
     ...(answer.coverage === undefined ? {} : { coverage: answer.coverage }),
     blocks: answer.blocks.map((block): ReadAnswer['blocks'][number] => {
       if (block.kind === 'sentences') return { kind: 'sentences', items: block.items.map((sentence: StoredItem & { readonly cites: readonly unknown[] }) => ({ item: item(sentence), cites: sentence.cites as never })) };
+      if (block.kind === 'list') return { kind: 'list', ...(block.label === undefined ? {} : { label: labelOf(block.label) }), items: block.items.map((entry: StoredItem & { readonly cites: readonly unknown[] }) => ({ item: item(entry), cites: entry.cites as never })) };
       if (block.kind === 'table') return { kind: 'table', columns: block.columns.map(labelOf), rows: block.rows.map((row) => ({ cells: row.cells.map(item), cites: row.cites })) };
       return { kind: 'refusal', sentence: labelOf(block.sentence), ...(block.overview === undefined ? {} : { overview: block.overview.map((sentence) => ({ item: item(sentence), cites: sentence.cites })) }) };
     }),

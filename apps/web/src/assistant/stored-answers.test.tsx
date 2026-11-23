@@ -85,6 +85,20 @@ describe('the answers of the stored turns, in the card of a live answer (frame A
     expect(within(table).getAllByRole('button', { name: new RegExp(`^${ASSISTANT_COPY.citationNumber}`) }).map((button) => button.textContent)).toEqual(['[1]', '[2]']);
   });
 
+  it('shows a list block as the live card shows it, with its label, its items numbered by their citations, and the masking notice for an item or a label that was withheld', async () => {
+    await panel(
+      thread([
+        turn(1, { answer: { blocks: [{ kind: 'list', label: text('The accounts in view'), items: [{ item: text('Account A-1.'), cites: [REF_A] }, { item: WITHHELD, cites: [REF_B] }] }] } }),
+        turn(2, { answer: { blocks: [{ kind: 'list', label: WITHHELD, items: [{ item: text('Only item.'), cites: [REF_A] }] }] } }),
+      ]),
+    );
+    expect(await screen.findByText('The accounts in view')).toBeTruthy();
+    const first = screen.getByText(/Account A-1\./).closest('li') as HTMLElement;
+    expect(within(first).getByRole('button', { name: new RegExp(`^${ASSISTANT_COPY.citationNumber}`) }).textContent).toBe('[1]');
+    expect(screen.getAllByText(ASSISTANT_COPY.storedWithheld)).toHaveLength(2);
+    expect(screen.getByText('Only item.')).toBeTruthy();
+  });
+
   it('shows the fixed sentence of a refusal and the overview beside it, and a withheld fixed sentence by the notice', async () => {
     await panel(
       thread([

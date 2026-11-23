@@ -67,6 +67,7 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
       ORIGINAL.set(withCites, sentence.text);
       return withCites;
     });
+  const labelItem = (label: string): TextItem => ({ form: maskOn ? 'frozen' : classify?.(label, [])?.form === 'frozen' ? 'frozen' : 'unbound', text: label });
   const result = (blocks: Block[], refs: ReadonlyMap<string, Cite> = new Map()): StoredAnswerResult => {
     const inverse = new Map([...refs].map(([key, ref]) => [JSON.stringify(ref), key] as const));
     return { answer: { blocks }, keyOf: (ref) => inverse.get(JSON.stringify(ref)) };
@@ -85,6 +86,7 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
   if (!('blocks' in answer)) return undefined;
   const stored: Block[] = answer.blocks.map((block): Block => {
     if (block.kind === 'sentences') return { kind: 'sentences', items: sentences(block.sentences, refs) } as Block;
+    if (block.kind === 'list') return { kind: 'list', ...(block.label === undefined ? {} : { label: labelItem(block.label) }), items: sentences(block.items, refs) } as Block;
     const { table } = block;
     const labels = table.columns.map((label) => ({ form: maskOn ? ('frozen' as const) : classify?.(label, [])?.form === 'frozen' ? ('frozen' as const) : ('unbound' as const), text: label }));
     const rows = table.rows.map((row) => ({ cells: row.cells.map((cell) => itemOf(cell, row.cites.filter((key) => refs.has(key)), refs, maskOn, 80, classify)), cites: citedRefs(row.cites, refs) }));
@@ -103,7 +105,7 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
 export function bindingsApproved(stored: StoredAnswer, context: ClassifyContext, keyOf: (ref: Cite) => string | undefined, sourceId: string | undefined): boolean {
   type Segment = { readonly literal: string } | { readonly element: Cite; readonly property: string };
   const itemsOf = (block: Block): { readonly item: { readonly form: string; readonly segments?: readonly Segment[] }; readonly cites: readonly Cite[] }[] =>
-    block.kind === 'sentences' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
+    block.kind === 'sentences' || block.kind === 'list' ? block.items.map((item) => ({ item, cites: item.cites })) : block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((item) => ({ item, cites: row.cites }))) : (block.overview ?? []).map((item) => ({ item, cites: item.cites }));
   for (const { item, cites } of stored.blocks.flatMap(itemsOf)) {
     if (item.form !== 'bound') continue;
     if (context.sentValues === undefined || context.sensitiveKeys === undefined) return false;

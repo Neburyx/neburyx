@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ASK_FOLDER_LIMITS, isParameterName } from './ask-folder.js';
 import { ASK_SUMMARY_MAX_CITATIONS, ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
-import { ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, ASSISTANT_TABLE_ROWS_MAX, ASSISTANT_VIEW_KEYS_MAX } from './assistant-turn.js';
+import { ASSISTANT_LIST_ITEMS_MAX, ASSISTANT_LIST_LABEL_MAX, ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, ASSISTANT_TABLE_ROWS_MAX, ASSISTANT_VIEW_KEYS_MAX } from './assistant-turn.js';
 import { edgeRefSchema, elementRefSchema } from './graph.js';
 
 const wholeCount = z.number().int().nonnegative();
@@ -70,6 +70,7 @@ export const storedAnswerSchema = z.strictObject({
     .array(
       z.discriminatedUnion('kind', [
         z.strictObject({ kind: z.literal('sentences'), items: z.array(storedSentence).min(1).max(12) }),
+        z.strictObject({ kind: z.literal('list'), label: textItem(ASSISTANT_LIST_LABEL_MAX).optional(), items: z.array(storedSentence).min(1).max(ASSISTANT_LIST_ITEMS_MAX) }),
         z
           .strictObject({
             kind: z.literal('table'),
@@ -138,6 +139,7 @@ export const readAnswerSchema = z.strictObject({
     .array(
       z.discriminatedUnion('kind', [
         z.strictObject({ kind: z.literal('sentences'), items: z.array(z.object({ item: readItem, cites: readCited }).strict()).min(1).max(12) }),
+        z.strictObject({ kind: z.literal('list'), label: z.union([readText, readWithheld]).optional(), items: z.array(z.object({ item: readItem, cites: readCited }).strict()).min(1).max(ASSISTANT_LIST_ITEMS_MAX) }),
         z.strictObject({ kind: z.literal('table'), columns: z.array(z.union([readText, readWithheld])).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX), rows: z.array(z.strictObject({ cells: z.array(readItem).max(ASSISTANT_TABLE_COLUMNS_MAX), cites: readCited })).min(1).max(ASSISTANT_TABLE_ROWS_MAX) }),
         z.strictObject({ kind: z.literal('refusal'), sentence: z.union([readText, readWithheld]), overview: z.array(z.object({ item: readItem, cites: readCited }).strict()).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX).optional() }),
       ]),

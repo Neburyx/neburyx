@@ -9,8 +9,8 @@ const citation = { key: 'n1', kind: 'entity', ref: REF } as const;
 const base = { id: crypto.randomUUID(), investigationId: crypto.randomUUID(), userId: crypto.randomUUID(), at: new Date(), route: 'view', outcome: 'answered', questionHash: 'a'.repeat(64), entities: [], citationRefs: [], steps: 0, maskOn: false } as const;
 /** An answer of the view route in the blocks form: `sentences` and `table` of `over` become the blocks, the rest stays as it is. */
 const viewAnswer = (over: Record<string, unknown>): AssistantTurnAnswer => {
-  const { sentences, table, ...rest } = over;
-  const blocks = [...(table === undefined ? [] : [{ kind: 'table', table: { note: 'n', ...(table as object) } }]), ...(sentences === undefined ? [] : [{ kind: 'sentences', sentences }])];
+  const { sentences, table, blocks: given, ...rest } = over;
+  const blocks = (given as unknown[] | undefined) ?? [...(table === undefined ? [] : [{ kind: 'table', table: { note: 'n', ...(table as object) } }]), ...(sentences === undefined ? [] : [{ kind: 'sentences', sentences }])];
   return { status: 'answered', route: 'view', citations: [citation], coverage: { retrieval: 'x', summary: 'y' }, model: 'm', calls: 1, blocks, ...rest } as AssistantTurnAnswer;
 };
 const written = (answer: AssistantTurnAnswer, maskOn: boolean) => assistantThreadTurnWriteSchema.parse({ ...base, maskOn, question: 'Q?', answer: storedAnswerOf(answer, maskOn)?.answer });
@@ -46,6 +46,26 @@ describe('the stored form of an answer', () => {
     const refusal = storedAnswerOf({ status: 'not-answered', route: 'view', sentence: 'A fixed sentence.' } as AssistantTurnAnswer, false)?.answer;
     expect(refusal).not.toHaveProperty('model');
     expect(refusal).not.toHaveProperty('coverage');
+  });
+
+  it('stores a list block with its label and its items as it stores sentences: frozen under the mask, classified with it off, with the cites of each item', () => {
+    const list = viewAnswer({ blocks: [{ kind: 'list', label: 'The holders', items: [{ text: 'First item.', cites: ['n1'] }, { text: 'Second item.', cites: ['n1'] }] }] });
+    for (const [maskOn, form] of [[true, 'frozen'], [false, 'unbound']] as const) {
+      const stored = written(list, maskOn).answer;
+      expect(stored?.blocks[0]).toEqual({ kind: 'list', label: { form, text: 'The holders' }, items: [{ form, text: 'First item.', cites: [REF] }, { form, text: 'Second item.', cites: [REF] }] });
+    }
+    const noLabel = written(viewAnswer({ blocks: [{ kind: 'list', items: [{ text: 'Only item.', cites: ['n1'] }] }] }), true).answer;
+    expect(noLabel?.blocks[0]).not.toHaveProperty('label');
+  });
+
+  it('binds a value in an item of a list as it binds one in a sentence, and refuses a binding to an element the item does not cite', () => {
+    const values = new Map([['n1', [{ key: 'holder', text: 'Jordan Lee', masked: false }]]]);
+    const context: ClassifyContext = { sentValues: values, sent: ['n1'], typeOf: () => 'widget', sensitiveKeys: new Map([['widget', ['holder']]]) };
+    const stored = storedAnswerOf(viewAnswer({ blocks: [{ kind: 'list', items: [{ text: 'Jordan Lee is listed.', cites: ['n1'] }] }] }), false, (text, cited) => classifyItem(text, cited, context));
+    expect(stored?.answer.blocks[0]).toMatchObject({ kind: 'list', items: [{ form: 'bound' }] });
+    expect(bindingsApproved(stored?.answer as never, context, stored?.keyOf as never, 'demo')).toBe(true);
+    const swapped = JSON.parse(JSON.stringify(stored?.answer).replace('"property":"holder"', '"property":"other"')) as NonNullable<typeof stored>['answer'];
+    expect(bindingsApproved(swapped, context, stored?.keyOf as never, 'demo')).toBe(false);
   });
 
   it('keeps twelve sentences of the model and the three fixed lines, cutting nothing', () => {
