@@ -25,11 +25,9 @@ function namesSentOf(held: AssembledText['keys'] extends ReadonlyMap<string, inf
   return [...new Set([...(held.title === undefined ? parse(written?.[1]) : [held.title]), ...id])];
 }
 
-/** The entities each element is or joins, with the title the text sent gives each: a count of entities cited through relationships leaves out the ones the sentence names apart. */
+/** The entities each element is or joins: a count of entities cited through relationships is a count of these. */
 function endsOf(assembled: AssembledText): ReadonlyMap<string, readonly EntityEnd[]> {
-  const named = new Map<string, readonly string[]>();
-  for (const [key, held] of assembled.keys) if (held.kind === 'entity') named.set(`${held.ref.entityType}\u0000${held.ref.stableId}`, namesSentOf(held, assembled.lines.get(key) ?? ''));
-  return new Map([...assembled.keys].map(([key, held]) => [key, held.kind === 'entity' ? [[held.ref.entityType, held.ref.stableId, ...(named.get(`${held.ref.entityType}\u0000${held.ref.stableId}`) ?? [])] as const] : (assembled.relationshipEnds?.get(key) ?? []).map(([type, id]) => [type, id, ...(named.get(`${type}\u0000${id}`) ?? [])] as const)] as const));
+  return new Map([...assembled.keys].map(([key, held]) => [key, held.kind === 'entity' ? [[held.ref.entityType, held.ref.stableId] as const] : (assembled.relationshipEnds?.get(key) ?? []).map(([type, id]) => [type, id] as const)] as const));
 }
 
 /** What the checks read of the text, without the references each key stands for, which a worker thread would have to copy; with the instructions, the words the model was told to use. */

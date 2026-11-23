@@ -181,8 +181,20 @@ function countsCitedOfType(found: { readonly value: string; readonly after: stri
   const text = sentence.text.normalize('NFC');
   const tail = found.after.normalize('NFC');
   const before = text.slice(0, text.length - tail.length).replace(/\S+$/u, '');
+  // the entities the cited elements are or join: an edge line writes its ends as the keys of the entity lines (`e1 | "TYPE" | n1 -> n2 | …`)
+  // an edge line writes its ends as the keys of the entity lines, or, for an end that was not read, as its type and id (`e1 | "TYPE" | n1 -> an end that was not read ("type" "id") | …`)
+  const endsOfEdge = (line: string | undefined): { readonly key: string; readonly type: string }[] => {
+    const written = /^e\d+ \| "[^"]*" \| (.+?) -> (.+?)(?: \||$)/u.exec(line ?? '')?.slice(1, 3) ?? [];
+    return written.flatMap((end) => {
+      const unread = /^an end that was not read \(("(?:[^"\\]|\\.)*") ("(?:[^"\\]|\\.)*")\)$/u.exec(end);
+      if (unread !== null) return [{ key: `unread ${unread[1]} ${unread[2]}`, type: `entity ${String(JSON.parse(unread[1] ?? '""'))}` }];
+      const type = /^n\d+$/u.test(end) ? typeOfLine(end, lines.get(end)) : undefined;
+      return type === undefined ? [] : [{ key: end, type }];
+    });
+  };
+  const ends = [...new Map(cited.flatMap((item) => (item.key.startsWith('n') ? [{ key: item.key, type: item.type }] : endsOfEdge(lines.get(item.key)))).map((item) => [item.key, item] as const)).values()];
   const candidates = [
-    ...[...new Set(cited.map((item) => item.type))].map((type) => ({ name: nameOfType(type), accepts: (held: string) => held === type })),
+    ...[...new Set([...cited.map((item) => item.type), ...ends.map((item) => item.type)])].map((type) => ({ name: nameOfType(type), accepts: (held: string) => held === type })),
     { name: 'entity', accepts: (held: string) => held.startsWith('entity ') },
     { name: 'relationship', accepts: (held: string) => held.startsWith('relationship ') },
     { name: 'element', accepts: () => true },
@@ -193,11 +205,18 @@ function countsCitedOfType(found: { readonly value: string; readonly after: stri
     const rest = tail.slice(head[0].length);
     const outside = `${before.slice(0, before.length - (precedingList?.exec(before)?.[0].length ?? 0))} ${rest.slice(followingList?.exec(rest)?.[0].length ?? 0)}`;
     const group = cited.filter((item) => candidate.accepts(item.type));
+    // the entities of the candidate's kind the cited relationships bring in beyond the cited ones: the ends are then the only population, counted as they are
+    const endGroup = candidate.name === 'element' ? [] : ends.filter((item) => candidate.accepts(item.type) && item.type.startsWith('entity '));
+    const citedEntities = group.filter((item) => item.type.startsWith('entity '));
+    if (endGroup.length > citedEntities.length) return Number(found.value) > 0 && endGroup.length === Number(found.value);
     const namesOf = (key: string): string[] => namesOfLine(lines.get(key)).map((name) => name.normalize('NFC'));
     const counted = group.filter((item) => !namesOf(item.key).some((name) => wholeIn(name, outside) && !group.some((other) => other.key !== item.key && namesOf(other.key).includes(name))));
     return Number(found.value) > 0 && (group.length === Number(found.value) || counted.length === Number(found.value));
   });
 }
+
+/** `no two widgets share an owner`: the number is a pair of the set, not a count of what is cited. */
+const PAIRWISE = /(?<![\p{L}\p{N}_-])(?:no|any)\s+$/iu;
 
 /** Whether a text opens with the name of a type of the lines sent, or of a kind: a count. */
 const opensCount = (after: string, lines: Map<string, string>): boolean =>
@@ -222,11 +241,11 @@ function wordValue(word: string): number | undefined {
 }
 
 /** The cardinals written in words in a text, outside quotes unless asked, with the text after each. */
-function wordMentionsIn(text: string, quotedToo = false): { readonly value: string; readonly after: string }[] {
+function wordMentionsIn(text: string, quotedToo = false): { readonly value: string; readonly after: string; readonly before: string }[] {
   const outside = quotedToo ? text : text.replace(/"[^"]+"/gu, (quoted) => ' '.repeat(quoted.length));
   return [...outside.matchAll(/(?<![\p{L}\p{N}_-])[a-z]+(?:-[a-z]+)?(?![\p{L}\p{N}_-])/giu)].flatMap((found) => {
     const value = wordValue(found[0]);
-    return value === undefined ? [] : [{ value: String(value), after: text.slice(found.index + found[0].length) }];
+    return value === undefined ? [] : [{ value: String(value), after: text.slice(found.index + found[0].length), before: text.slice(0, found.index) }];
   });
 }
 
@@ -251,7 +270,7 @@ export function numbersUnsupported(sentence: SummarySentence, sent: string): str
   const lines = linesOfKeys(sent);
   const supported = new Set(sentence.cites.flatMap((key) => numbersOfLine(lines.get(key) ?? '')));
   const text = withoutInstantParts(sentence.text, sentence.cites.map((key) => lines.get(key) ?? ''));
-  const written = wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || opensCount(found.after, lines));
+  const written = wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || (opensCount(found.after, lines) && !PAIRWISE.test(found.before)));
   return [...mentionsIn(text), ...written].filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
 }
 
@@ -265,7 +284,7 @@ export function expectNumbersCited(sentences: readonly SummarySentence[], sent: 
 /** A sentence that states a number beside a count the text gives as not known, or the number of an inexact count without the phrase that labels it; an exact count needs no label. */
 export function countRuleBroken(sentence: SummarySentence, sent: string): boolean {
   const lines = linesOfKeys(sent);
-  const stated = [...numbersIn(sentence.text), ...wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || opensCount(found.after, lines)).map((found) => found.value)];
+  const stated = [...numbersIn(sentence.text), ...wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || (opensCount(found.after, lines) && !PAIRWISE.test(found.before))).map((found) => found.value)];
   return sentence.cites.some((key) => {
     const members = /\| members: ([^|]+)/u.exec(lines.get(key) ?? '')?.[1]?.trim();
     if (members === undefined) return false;

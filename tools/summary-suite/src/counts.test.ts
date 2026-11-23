@@ -269,7 +269,8 @@ describe('the suite\'s own rule for the count of cited elements', () => {
     ['1 widget is listed.', ['n5', 'n6']],
     ['2 money movements are listed.', ['n7', 'n8']],
     ['1 relationship is listed.', ['e1', 'n3']],
-    ['2 entities are listed.', ['n1', 'n2', 'e1']],
+    ['2 entities are listed.', ['n1', 'n2']],
+    ['4 entities are joined.', ['n1', 'n2', 'e1']],
     ['3 elements are listed.', ['n1', 'n2', 'e1']],
   ])('supports a correct count: %s', (text, cites) => {
     expect(unsupported(text, cites)).toEqual([]);
@@ -288,5 +289,37 @@ describe('the suite\'s own rule for the count of cited elements', () => {
     ['In total 1 relationship is listed.', ['e1']],
   ])('does not support a number that is no count of the cited elements: %s', (text, cites) => {
     expect(unsupported(text, cites)).not.toEqual([]);
+  });
+});
+
+describe.each([
+  { pack: 'banking-fraud', one: 'account', ones: 'accounts' },
+  { pack: 'insurance-claims', one: 'claim', ones: 'claims' },
+])('the suite\'s own rule for a count through a relationship, on $pack', ({ one, ones }) => {
+  const sent = [`n1 | "${one}" | title: "Alpha" | id: "a1"`, `n2 | "${one}" | title: "Beta" | id: "b2"`, `n3 | "${one}" | title: "Gamma" | id: "g3"`, 'e1 | "LINKED" | n1 -> n2 | stored | members: 7 (exact)', 'e2 | "LINKED" | n1 -> n3 | stored | members: 7 (exact)'].join('\n');
+  const unsupported = (text: string, cites: string[]): string[] => numbersUnsupported({ text, cites }, sent);
+
+  it('keeps the count of the distinct entities at the ends of the cited relationships, in words and in digits', () => {
+    expect(unsupported(`The relationships join 3 ${ones}.`, ['e1', 'e2'])).toEqual([]);
+    expect(unsupported(`The relationships join three ${ones}.`, ['e1', 'e2'])).toEqual([]);
+    expect(unsupported(`The relationship joins 2 ${ones}.`, ['n1', 'e1'])).toEqual([]);
+  });
+
+  it('removes the count of the cited entities alone, a count that is not the number of ends, and a count with a name adjusted for', () => {
+    expect(unsupported(`The relationship joins 1 ${one}.`, ['n1', 'e1'])).toEqual(['1']);
+    expect(unsupported(`The relationships join 2 ${ones}.`, ['e1', 'e2'])).toEqual(['2']);
+    expect(unsupported(`The relationships join 4 ${ones}.`, ['e1', 'e2'])).toEqual(['4']);
+    expect(unsupported(`2 ${ones} sent to Gamma.`, ['e1', 'e2'])).toEqual(['2']);
+  });
+
+  it('counts an end that was not read by its type and id, and no entity twice', () => {
+    const unread = [`n1 | "${one}" | title: "Alpha" | id: "a1"`, `e1 | "LINKED" | n1 -> an end that was not read (${JSON.stringify(one)} "b2") | stored | members: 7 (exact)`].join('\n');
+    expect(numbersUnsupported({ text: `The relationship joins 2 ${ones}.`, cites: ['n1', 'e1'] }, unread)).toEqual([]);
+    expect(numbersUnsupported({ text: `The relationship joins 1 ${one}.`, cites: ['n1', 'e1'] }, unread)).toEqual(['1']);
+  });
+
+  it('takes no two and any two for a pair of the set, as the product does, and a digit for a count', () => {
+    for (const opening of ['No two', 'Any two']) expect(unsupported(`${opening} ${ones} share an owner.`, ['e1', 'e2']), opening).toEqual([]);
+    expect(unsupported(`Four ${ones} share an owner.`, ['e1', 'e2'])).toEqual(['4']);
   });
 });

@@ -107,67 +107,66 @@ describe.each(VOCABULARIES)('a count of the $name that the sentence cites throug
   });
 });
 
-describe.each(VOCABULARIES)('a count of the $name that the sentence cites, with a target it names apart', (vocabulary) => {
+describe.each(VOCABULARIES)('a count of the $name that the sentence cites, beside the relationship that joins them', (vocabulary) => {
   const type = vocabulary.thing.toLowerCase();
-  /** Three entities joined by two relationships that end at the third; `names` is what the text sent gives each (the title, and an id only where a line prints it). */
-  const joined = (titles: readonly [string, string, string], names: readonly [readonly string[], readonly string[], readonly string[]], extra = '', members = '1'): CheckedText => {
+  const names = ['Alpha', 'Beta', 'Gamma'];
+  /** Entity lines for the first `entities` of the three, and one relationship line from the first to each of the others; the count a line prints is 7, so that no digit of a count is backed by it. */
+  const joined = (entities: number, targets: number): CheckedText => {
     const lines = new Map<string, string>();
     const elementTypes = new Map<string, string>();
     const elementEnds = new Map<string, readonly EntityEnd[]>();
     const elementNames = new Map<string, readonly string[]>();
-    const [first = '', second = '', target = ''] = vocabulary.ids;
-    const ends = (id: string, index: number): EntityEnd => [type, id, ...(names[index] ?? [])];
-    [first, second].forEach((id, index) => {
-      const key = `r${index + 1}`;
-      lines.set(key, `${key}: ${vocabulary.link}: ${vocabulary.thing} ${titles[index] ?? ''} → ${vocabulary.thing} ${titles[2]} | stored | members: ${members} (exact)${extra}`);
+    const [first = '', second = '', third = ''] = vocabulary.ids;
+    const ids = [first, second, third];
+    for (let index = 0; index < entities; index += 1) {
+      const key = `e${index + 1}`;
+      lines.set(key, `${key}: ${type}: ${vocabulary.thing} ${names[index] ?? ''}`);
+      elementTypes.set(key, `entity ${type}`);
+      elementEnds.set(key, [[type, ids[index] ?? '']]);
+      elementNames.set(key, [names[index] ?? '']);
+    }
+    for (let index = 1; index <= targets; index += 1) {
+      const key = `r${index}`;
+      lines.set(key, `${key}: ${vocabulary.link}: ${vocabulary.thing} Alpha → ${vocabulary.thing} ${names[index] ?? ''} | stored | members: 7 (exact)`);
       elementTypes.set(key, `relationship ${vocabulary.link}`);
-      elementEnds.set(key, [ends(id, index), ends(target, 2)]);
-      elementNames.set(key, [`${vocabulary.thing} ${titles[index] ?? ''} → ${vocabulary.thing} ${titles[2]}`]);
-    });
+      elementEnds.set(key, [[type, first], [type, ids[index] ?? '']]);
+      elementNames.set(key, [`${vocabulary.thing} Alpha → ${vocabulary.thing} ${names[index] ?? ''}`]);
+    }
     return { text: [...lines.values()].join('\n'), keys: new Map([...lines.keys()].map((key) => [key, true] as const)), lines, inexactCounts: [], unknownCountKeys: new Set(), elementTypes, elementEnds, elementNames };
   };
-  const kept = (sentence: string, over: CheckedText): boolean => judgeSentences([{ text: sentence, cites: ['r1', 'r2'] }], over).kept.length === 1;
-  const plain = joined(['Alpha', 'Beta', 'Gamma'], [['Alpha'], ['Beta'], ['Gamma']]);
+  const kept = (sentence: string, cites: string[], over: CheckedText): boolean => judgeSentences([{ text: sentence, cites }], over).kept.length === 1;
 
-  it('leaves the target out of the count when the sentence names it, in words and in digits, and counts the three when it names none', () => {
-    expect(kept(`Two ${vocabulary.things} sent to Gamma.`, plain)).toBe(true);
-    expect(kept(`2 ${vocabulary.things} sent to Gamma.`, plain)).toBe(true);
-    expect(kept(`Three ${vocabulary.things} are joined by the two relationships.`, plain)).toBe(true);
-    expect(kept(`Four ${vocabulary.things} sent to Gamma.`, plain)).toBe(false);
-    expect(kept(`4 ${vocabulary.things} sent to Gamma.`, plain)).toBe(false);
-    expect(kept(`Five ${vocabulary.things} are joined by the two relationships.`, plain)).toBe(false);
+  it('counts the distinct entities at the ends when a cited relationship joins one that is not cited: the cited entity alone is no count of them', () => {
+    const one = joined(1, 1);
+    expect(kept(`The relationship joins 2 ${vocabulary.things}.`, ['e1', 'r1'], one)).toBe(true);
+    expect(kept(`The relationship joins two ${vocabulary.things}.`, ['e1', 'r1'], one)).toBe(true);
+    expect(kept(`The relationship joins 1 ${vocabulary.thing.toLowerCase()}.`, ['e1', 'r1'], one)).toBe(false);
+    expect(kept(`The relationship joins 3 ${vocabulary.things}.`, ['e1', 'r1'], one)).toBe(false);
+    // with every end cited, the cited entities are the ends and the count is as it was
+    const all = joined(3, 2);
+    expect(kept(`The relationships join 3 ${vocabulary.things}.`, ['e1', 'e2', 'e3', 'r1', 'r2'], all)).toBe(true);
+    expect(kept(`The relationships join 2 ${vocabulary.things}.`, ['e1', 'e2', 'e3', 'r1', 'r2'], all)).toBe(false);
   });
 
-  it('subtracts no name that two of the cited entities share: it names neither of them apart', () => {
-    const shared = joined(['Same', 'Same', 'Other'], [['Same'], ['Same'], ['Other']], '', '7');
-    expect(kept(`Two ${vocabulary.things} sent to Same.`, shared)).toBe(false);
-    expect(kept(`1 ${vocabulary.thing.toLowerCase()} sent to Same.`, shared)).toBe(false);
-    expect(kept(`Two ${vocabulary.things} sent to Other.`, shared)).toBe(true);
+  it('verifies no count of entities when a cited entity has no end data of its own', () => {
+    const all = joined(3, 1);
+    const elementEnds = new Map(all.elementEnds);
+    elementEnds.delete('e3');
+    const missing: CheckedText = { ...all, elementEnds };
+    // Alpha and Gamma are cited and Alpha → Beta: three widgets, of which only two have ends known
+    for (const count of ['2', '3']) expect(kept(`The elements show ${count} ${vocabulary.things}.`, ['e1', 'e3', 'r1'], missing), count).toBe(false);
+    expect(kept(`The elements show 2 ${vocabulary.things}.`, ['e1', 'e3', 'r1'], all)).toBe(false);
+    expect(kept(`The elements show 3 ${vocabulary.things}.`, ['e1', 'e3', 'r1'], all)).toBe(true);
   });
 
-  it('knows the list of end names that belongs to the count, so that only the target is apart', () => {
-    expect(kept(`Two ${vocabulary.things}, Alpha and Beta, sent to Gamma.`, plain)).toBe(true);
-    expect(kept(`2 ${vocabulary.things}, Alpha and Beta, sent to Gamma.`, plain)).toBe(true);
-    // a list that is no part of the count leaves the count as it was
-    expect(kept(`Three ${vocabulary.things}, Alpha and Beta, sent to Gamma.`, plain)).toBe(true);
-    expect(kept(`Four ${vocabulary.things}, Alpha and Beta, sent to Gamma.`, plain)).toBe(false);
-  });
-
-  it('matches only a name the text sent gave the entity, never its stable id that no line prints', () => {
-    const [, , target = ''] = vocabulary.ids;
-    // the id is in the text sent as the value of an unrelated property, never as the entity's identity
-    const unsent = joined(['Alpha', 'Beta', 'Gamma'], [['Alpha'], ['Beta'], ['Gamma']], ` | reference: "${target}"`);
-    expect(kept(`Two ${vocabulary.things} sent to ${target}.`, unsent)).toBe(false);
-    // the id is a name once a line prints it as the entity's identity
-    const printed = joined(['Alpha', 'Beta', 'Gamma'], [['Alpha'], ['Beta'], ['Gamma', target]], ` | reference: "${target}"`);
-    expect(kept(`Two ${vocabulary.things} sent to ${target}.`, printed)).toBe(true);
-    expect(kept(`Two ${vocabulary.things} sent to Gamma.`, printed)).toBe(true);
-  });
-
-  it('reads an end name and the sentence in the same normal form', () => {
-    const decomposed = joined(['Alpha', 'Beta', 'Cafe\u0301'], [['Alpha'], ['Beta'], ['Cafe\u0301']]);
-    expect(kept(`Two ${vocabulary.things} sent to Caf\u00e9.`, decomposed)).toBe(true);
-    expect(kept(`Two ${vocabulary.things} sent to Cafe\u0301.`, decomposed)).toBe(true);
-    expect(kept(`Four ${vocabulary.things} sent to Caf\u00e9.`, decomposed)).toBe(false);
+  it('keeps the count of cited entities with none adjusted for a name when no relationship adds an end, and counts no name apart through a relationship', () => {
+    const entities = joined(3, 0);
+    expect(kept(`3 ${vocabulary.things} were read.`, ['e1', 'e2', 'e3'], entities)).toBe(true);
+    expect(kept(`2 ${vocabulary.things}, Alpha and Beta, sent to Gamma.`, ['e1', 'e2', 'e3'], entities)).toBe(true);
+    // the known limit: two of the three ends, the target named apart, is no count of the ends
+    const through = joined(1, 2);
+    expect(kept(`2 ${vocabulary.things} sent to Gamma.`, ['r1', 'r2'], through)).toBe(false);
+    expect(kept(`Two ${vocabulary.things} sent to Gamma.`, ['r1', 'r2'], through)).toBe(false);
+    expect(kept(`3 ${vocabulary.things} are joined by the two relationships.`, ['r1', 'r2'], through)).toBe(true);
   });
 });

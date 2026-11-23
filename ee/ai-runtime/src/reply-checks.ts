@@ -1,8 +1,8 @@
 import type { SummarySentence } from '@neburyx/contracts';
 import type { CheckModule } from './check-runner.js';
 
-/** An entity an element is or joins: its entity type, its stable id, and the other names the text sent gives it (its title). */
-export type EntityEnd = readonly [type: string, id: string, ...names: string[]];
+/** An entity an element is or joins: its entity type and its stable id. */
+export type EntityEnd = readonly [type: string, id: string];
 
 /** What the checks read of the text that was sent: the text, the line of each element by key, which keys exist, the counts the text gives as not exact and the keys whose count it gives as not known. */
 export interface CheckedText {
@@ -296,26 +296,25 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
     return wanted > 0 && (matching.length === wanted || matching.filter((key) => !apart(key)).length === wanted);
   };
   const citedTypes = new Set([...new Set(sentence.cites)].flatMap((key) => (lines.has(key) || types.get(key) === undefined ? [] : [types.get(key) ?? ''])));
-  // the entities of one type that the cited elements are or join (a relationship that ends at an entity of the type counts that entity once): a count of them is exact when it equals how many distinct there are, less the ones the sentence names apart from the count, as a target or a subject
+  // the entities that the cited elements are or join (a relationship that ends at an entity counts that entity once): a count through a relationship is exact when it equals how many distinct entities of the type there are among the cited ends, and no name is adjusted for
   const endsCited = sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => assembled.elementEnds?.get(key) ?? []);
+  const endsOf = (ofType: (entityType: string) => boolean): Set<string> => new Set(endsCited.filter(([type]) => ofType(type)).map(([type, id]) => `${type}\u0000${id}`));
+  const citedEntities = (ofType: (entityType: string) => boolean): number => new Set([...sentence.cites].filter((key) => !lines.has(key) && types.get(key)?.startsWith('entity ') === true && ofType((types.get(key) ?? '').slice('entity '.length)))).size;
+  // the cited relationships bring in entities that are not cited themselves: the ends are then the only population, and a count of the cited entities says nothing of them
+  // a cited entity with no end data of its own leaves the population unknown: no count of entities is verified, so that no smaller count is kept
+  const unknownEnds = assembled.elementEnds !== undefined && [...sentence.cites].some((key) => !lines.has(key) && types.get(key)?.startsWith('entity ') === true && assembled.elementEnds?.get(key) === undefined);
+  const joinsMore = (ofType: (entityType: string) => boolean): boolean => unknownEnds || endsOf(ofType).size > citedEntities(ofType);
   const entityTypes = new Set(endsCited.map(([type]) => type));
-  // the names the text sent gives each end (its title, and its id only where the line prints it as one: the id of `EntityEnd` itself only tells two ends apart), in the form the sentence is read in; a name two ends share names neither apart
-  const identities = new Map(endsCited.map(([type, id, ...names]) => [`${type}\u0000${id}`, names.map((name) => name.normalize('NFC'))] as const));
-  const holders = new Map<string, Set<string>>();
-  for (const [identity, names] of identities) for (const name of names) holders.set(name, (holders.get(name) ?? new Set()).add(identity));
-  const endNames = [...holders.keys()];
   const countedEnds = (entityType: string): boolean => {
     const end = typeWordLength(tail, elementTypeName(`entity ${entityType}`));
-    if (end === undefined || wanted === 0) return false;
-    const distinct = [...identities].filter(([identity]) => identity.startsWith(`${entityType}\u0000`));
-    const outside = outsideTheList(text.slice(0, text.length - tail.length).replace(/\S+$/u, ''), tail.slice(end), [...namesOfElements(assembled), ...endNames]);
-    const apart = distinct.filter(([identity, names]) => names.some((name) => holders.get(name)?.size === 1 && holders.get(name)?.has(identity) === true && occursWhole(name, outside))).length;
-    return distinct.length === wanted || distinct.length - apart === wanted;
+    return !unknownEnds && end !== undefined && wanted > 0 && endsOf((type) => type === entityType).size === wanted;
   };
+  const allEnds = endsOf(() => true);
   return (
     [...entityTypes].some(countedEnds) ||
-    [...citedTypes].some((type) => counted(elementTypeName(type), (held) => held === type)) ||
-    counted('entity', (held) => !held.startsWith('relationship ')) ||
+    [...citedTypes].some((type) => !(type.startsWith('entity ') && joinsMore((entityType) => entityType === type.slice('entity '.length))) && counted(elementTypeName(type), (held) => held === type)) ||
+    (!unknownEnds && typeWordLength(tail, 'entity') !== undefined && wanted > 0 && allEnds.size === wanted) ||
+    (!joinsMore(() => true) && counted('entity', (held) => !held.startsWith('relationship '))) ||
     counted('relationship', (held) => held.startsWith('relationship ')) ||
     counted('element', () => true)
   );
