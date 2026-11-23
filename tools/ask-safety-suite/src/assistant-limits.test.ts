@@ -257,8 +257,9 @@ describe('the turns that start without a typed message are bound too, through th
 });
 
 describe('the number of earlier turns the router is shown is the setting, through the real application', () => {
-  const countOfEarlier = (plain: ModelStub): number => {
-    const body = JSON.parse(plain.requests.at(-1) ?? '{}') as { messages?: { content?: unknown }[] };
+  const countOfEarlier = (plain: ModelStub, from: number): number => {
+    // the router's request: the first of the last turn (a message it cannot place goes on to the agent, whose request is the last)
+    const body = JSON.parse(plain.requests[from] ?? '{}') as { messages?: { content?: unknown }[] };
     const text = body.messages?.map((entry) => (typeof entry.content === 'string' ? entry.content : JSON.stringify(entry.content))).join('\n') ?? '';
     return (text.match(/ask "widgetById"/g) ?? []).length;
   };
@@ -269,8 +270,9 @@ describe('the number of earlier turns the router is shown is the setting, throug
       await rig.turn(`Show W-${at}`, [JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: `W-${at}` } }), '{"done":true}']);
       await rig.threadWritten(at);
     }
+    const before = plain.requests.length;
     await rig.turn('and what else about it?', ['{"route":"refuse","cause":"unplaced"}']);
-    const count = countOfEarlier(plain);
+    const count = countOfEarlier(plain, before);
     await rig.close();
     await plain.close();
     return count;
