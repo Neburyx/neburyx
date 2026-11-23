@@ -10,7 +10,7 @@ export interface Prices {
   readonly date: string;
 }
 
-export interface TurnFacts {
+interface TurnFacts {
   readonly repeat: number;
   readonly turn: number;
   readonly traceId: string | undefined;
