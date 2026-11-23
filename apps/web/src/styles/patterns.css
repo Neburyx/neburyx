@@ -975,7 +975,9 @@
   height: var(--space-16);
 }
 
-.pattern-card-check {
-  color: var(--color-accent);
+.icon.pattern-card-check {
+  width: var(--check-icon-size);
+  height: var(--check-icon-size);
+  background: var(--color-accent);
 }
 

@@ -150,9 +150,7 @@ function BuiltInRows({ presets, actions, hasOthers, selectedId, iconOf }: { read
               {iconOf === undefined ? null : <img src={legendGlyph(iconOf(preset.bind['attribute'] ?? preset.bind['target'] ?? preset.bind['anchor'] ?? ''))} alt="" className="pattern-card-glyph" />}
               <span className="pattern-card-name">{preset.name}</span>
               {selectedId === preset.id ? (
-                <span className="pattern-card-check" aria-hidden="true">
-                  ✓
-                </span>
+                <span className="icon icon-check pattern-card-check" aria-hidden="true" />
               ) : null}
             </button>
           </h4>

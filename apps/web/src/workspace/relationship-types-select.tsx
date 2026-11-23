@@ -28,7 +28,7 @@ export function RelationshipTypesSelect({ types, off, onToggle }: Props) {
         <p className="neighbor-types-note">{FILTERS_PANEL_COPY.noRelationshipTypes}</p>
       ) : (
         <>
-          <button type="button" ref={opener} className="filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} onClick={() => setOpen(!open)}>
+          <button type="button" ref={opener} className="select-control filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} onClick={() => setOpen(!open)}>
             <span id={`${id}-closed`}>{selectedRelationshipTypesText(types.filter((type) => !off.has(type)).length, types.length)}</span>
           </button>
           {open ? (

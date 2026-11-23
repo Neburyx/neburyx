@@ -70,6 +70,7 @@ export function FiltersPanel() {
             {types.map((type) => (
               <li key={type.type}>
                 <button type="button" className="filter-chip" aria-pressed={!off.has(type.type)} onClick={() => state.setEntityTypeOff(type.type, !off.has(type.type))}>
+                  {off.has(type.type) ? null : <span className="icon icon-check" aria-hidden="true" />}
                   {type.displayName}
                 </button>
               </li>

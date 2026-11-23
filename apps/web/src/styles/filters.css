@@ -2,7 +2,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-12);
+  gap: var(--space-8);
   padding: var(--space-16);
   color: var(--color-text-strong);
   font-size: var(--font-size-body);
@@ -17,14 +17,17 @@
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-6);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .filter-chip {
-  padding: var(--space-4) var(--space-10);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-10);
   border: 0;
   border-radius: var(--radius-panel);
   background: var(--color-key-chip);
@@ -40,8 +43,10 @@
   color: var(--color-accent);
 }
 
-.filter-chip[aria-pressed='true']::before {
-  content: '✓ ';
+.filter-chip .icon {
+  width: var(--check-icon-size);
+  height: var(--check-icon-size);
+  background: currentColor;
 }
 
 .filter-chip[aria-pressed='false'] {
@@ -58,29 +63,12 @@
   display: block;
   width: 100%;
   height: var(--header-button-height);
-  padding: 0 calc(var(--space-12) + var(--tool-icon-size)) 0 var(--space-12);
-  border: var(--border-width) solid var(--color-control-border);
   border-radius: var(--radius-panel);
-  background: var(--color-surface) url('../assets/select-chevron.svg') no-repeat right var(--space-10) center / var(--tool-icon-size);
-  color: var(--color-text);
-  font: inherit;
   font-size: var(--font-size-body);
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
-}
-
-.filter-select:hover:not(:disabled) {
-  background-color: var(--color-surface-muted);
-}
-
-.filter-select:disabled {
-  border-color: var(--color-workspace-border);
-  background-color: var(--color-surface-muted);
-  color: var(--color-text-muted);
-  cursor: default;
 }
 
 /* the time window select is as tall and as round as the other selects of the panel */
@@ -115,7 +103,7 @@
 }
 
 .filters-result {
-  margin: 0;
+  margin: 0 0 calc(var(--space-2) * -1);
   color: var(--color-text-strong);
   font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);

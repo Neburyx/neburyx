@@ -91,7 +91,7 @@ function ChoiceBlock({ on, items, typeName, type, property, declared, condition,
       <span className="supernode-label" id={`${id}-label`}>
         {label}
       </span>
-      <button type="button" ref={opener} className="filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
+      <button type="button" ref={opener} className="select-control filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
         <span id={`${id}-closed`}>{chosen.length === 0 ? PROPERTY_FILTER_COPY.any : chosen.join(', ')}</span>
       </button>
       {open ? (
@@ -185,7 +185,7 @@ function RangeBlock({ on, items, typeName, type, property, declared, condition, 
       <span className="supernode-label" id={`${id}-label`}>
         {label}
       </span>
-      <button type="button" ref={opener} className="filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
+      <button type="button" ref={opener} className="select-control filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
         <span id={`${id}-closed`}>{rangeText(kind, held?.from, held?.to)}</span>
       </button>
       {open ? (

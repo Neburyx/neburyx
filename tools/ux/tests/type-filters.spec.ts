@@ -17,6 +17,21 @@ test.describe('type filters', () => {
     });
   });
 
+  test('draws a chosen chip with the product check icon and a switched-off chip without it, and the select buttons as the product draws a select', async ({ page }) => {
+    await filtersButton(page).click();
+    const chips = panel(page).getByRole('button', { pressed: true });
+    expect(await chips.count()).toBeGreaterThan(1);
+    await expect(chips.first().locator('.icon-check')).toHaveCount(1);
+    await expect(chips.first()).not.toContainText('✓');
+    await chips.first().click();
+    await expect(panel(page).getByRole('button', { pressed: false }).first().locator('.icon-check')).toHaveCount(0);
+    const select = page.locator('.filter-select').first();
+    await expect(select).toHaveClass(/select-control/);
+    await expect(select).toHaveCSS('appearance', 'none');
+    expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/^url\(/);
+    expect(await select.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight))).toBeGreaterThan(20);
+  });
+
   test('opens on the first chip, switches a type off from the keyboard, counts it, and resets', async ({ page }) => {
     await filtersButton(page).click();
     await expect(filtersButton(page)).toHaveAttribute('aria-pressed', 'true');

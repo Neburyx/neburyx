@@ -111,7 +111,9 @@ test.describe('saved patterns in the Patterns panel', () => {
     const radio = dialog.getByRole('radio').first();
     await expect(radio).toHaveCSS('appearance', 'none');
     const [radioBox, checkBox] = [await radio.boundingBox(), await dialog.getByRole('checkbox').boundingBox()];
-    expect(radioBox?.width).toBe(checkBox?.width);
+    expect(radioBox?.width ?? -1).toBe(checkBox?.width ?? -2);
+    await expect(radio).toBeChecked();
+    expect(await radio.evaluate((element) => getComputedStyle(element).backgroundImage), 'the chosen radio draws its dot').toContain('radial-gradient');
     await expect(radio).toHaveCSS('border-radius', '50%');
     const row = dialog.locator('.save-summary-row').first();
     const left = (await row.locator('dt').boundingBox())?.x ?? 0;

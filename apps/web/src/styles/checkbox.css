@@ -75,6 +75,11 @@ input[type='radio']:hover:not(:disabled):not(:checked) {
 
 input[type='radio']:disabled {
   border-color: var(--color-workspace-border);
-  background: var(--color-surface-muted);
+  background-color: var(--color-surface-muted);
   cursor: default;
+}
+
+input[type='radio']:checked:disabled {
+  border-color: var(--color-control-border);
+  background: radial-gradient(circle, var(--color-icon) 0 38%, var(--color-surface-muted) 42%);
 }
