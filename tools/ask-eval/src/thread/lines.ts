@@ -40,16 +40,28 @@ export interface CitedLines {
   readonly mapped: ReadonlyMap<string, string>;
   /** The cited keys for which no line was found: reported, never invented. */
   readonly missing: readonly string[];
+  /** Entries of `cites` that are not a list of text keys: reported, never skipped silently. */
+  readonly malformed: number;
 }
 
 /** The lines the sentences of an answer cite (`sentences[].cites`, or `table.rows[].cites`). */
 export function citedLinesOf(answer: unknown, lines: AnswerLines | undefined): CitedLines {
   const keys = new Set<string>();
+  let malformed = 0;
   const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
   if (isRecord(answer)) {
     const collect = (list: unknown): void => {
       if (!Array.isArray(list)) return;
-      for (const entry of list) if (isRecord(entry) && Array.isArray(entry['cites'])) for (const key of entry['cites']) if (typeof key === 'string') keys.add(key);
+      for (const entry of list) {
+        if (!isRecord(entry) || !Array.isArray(entry['cites'])) {
+          malformed += 1;
+          continue;
+        }
+        for (const key of entry['cites']) {
+          if (typeof key === 'string') keys.add(key);
+          else malformed += 1;
+        }
+      }
     };
     collect(answer['sentences']);
     if (isRecord(answer['table'])) collect(answer['table']['rows']);
@@ -61,5 +73,5 @@ export function citedLinesOf(answer: unknown, lines: AnswerLines | undefined): C
     if (line === undefined) missing.push(key);
     else mapped.set(key, line);
   }
-  return { mapped, missing };
+  return { mapped, missing, malformed };
 }

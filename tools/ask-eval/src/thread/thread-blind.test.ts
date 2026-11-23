@@ -10,10 +10,13 @@ import type { EnrichedRepeat } from './enrich.js';
 import type { TurnRecords } from './records.js';
 
 const answer = (text: string, cites: string[] = ['n1']) => ({ status: 'answered', route: 'view', sentences: [{ text, cites }], coverage: { retrieval: '1 shown · exact', summary: 'The answer cites 1 of the 1 elements.' } });
-const records = (key: string, line: string): TurnRecords => ({ traceId: 't', run: { outcome: 'ok', calls: 2, settings: {} }, calls: [{ number: 2, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn: 1, tokensOut: 1, valuesText: `human: Question:\nq\ntool: Keys are renumbered.\n${key} | ${line}`, replyText: '[{"type":"tool_use","id":"x","name":"answer","input":{}}]', toolsOffered: null }], events: [], summaryCalls: 0, reconciled: undefined, problems: [] });
-function repeatOf(arm: string, repeat: number, turns: { message: string; answer: unknown; status?: 'answered' | 'failed'; trace?: string }[]): ArmRepeat {
+const records = (key: string, line: string): TurnRecords => ({ traceId: 't', run: { id: 'run-id-1', outcome: 'ok', finished: true, calls: 2, settings: {} }, calls: [{ number: 2, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn: 1, tokensOut: 1, instructionsSha256: 'sha-x', instructionsText: '', valuesText: `human: Question:\nq\ntool: Keys are renumbered.\n${key} | ${line}`, replyText: '[{"type":"tool_use","id":"x","name":"answer","input":{}}]', toolsOffered: null }], events: [], summaryCalls: 0, summaryUsage: [], reconciled: undefined, problems: [] });
+function repeatOf(arm: string, repeat: number, turns: { message: string; answer: unknown; status?: 'answered' | 'failed'; trace?: string }[], expected: readonly string[] = turns.map((turn) => turn.message), sha = 'abc'): ArmRepeat {
   const file: RepeatFile = {
-    manifest: { name: 'private-manifest-name', sha256: 'abc' },
+    manifest: { name: 'private-manifest-name', sha256: sha },
+    sourceId: 'demo',
+    repeat,
+    expectedMessages: expected,
     arm,
     head: 'headsha1',
     settings: { model: 'model-secret-name', callLimit: 7 },
@@ -23,7 +26,9 @@ function repeatOf(arm: string, repeat: number, turns: { message: string; answer:
     turns: turns.map((turn, index) => ({ n: index + 1, message: turn.message, traceId: turn.trace ?? `trace-${arm}-${repeat}-${index + 1}`, ms: 1, httpStatus: 200, status: turn.status ?? 'answered', answer: turn.answer })),
     ended: 'complete',
   };
-  const enriched: EnrichedRepeat = { file, records: turns.map((_, index) => records('n1', `line of ${arm === 'arm-refs' ? 'zulu' : 'yankee'} turn ${index + 1}`)), inconsistent: false, disagreeing: [] };
+  const lineOf = (index: number) => `line of ${arm === 'arm-refs' ? 'zulu' : 'yankee'} turn ${index + 1}`;
+  const gate = { gated: { verdict: 'passed' as const, reads: 0, gateEvents: 0, failedEvents: 0 }, called: { verdict: 'passed' as const, names: [], outside: [], unparsed: 0 }, offered: { verdict: 'passed' as const, names: [], outside: [], callsWithoutNames: 0 } };
+  const enriched: EnrichedRepeat = { file, records: turns.map((_, index) => records('n1', lineOf(index))), evidence: turns.map((_, index) => ({ citations: { callNumber: 2, mapped: [['n1', `n1 | ${lineOf(index)}`] as const], missing: [], malformed: 0 }, gate })), inconsistent: false, disagreeing: [] };
   return { arm, repeat, enriched };
 }
 const TURNS = [{ message: 'first question', answer: answer('Alpha is in view.') }, { message: 'second question', answer: answer('Beta is in view.') }];
@@ -67,13 +72,36 @@ describe('the blind sets', () => {
     expect(one.slots).toHaveLength(2);
   });
 
-  it('puts a failed turn and a turn never run in as no answer, so every repeat has all its slots', () => {
-    const failed = repeatOf('arm-refs', 1, [{ message: 'q1', answer: answer('Alpha is in view.') }, { message: 'q2', answer: { status: 'unavailable' }, status: 'failed' }]);
-    const longer = repeatOf('arm-text', 1, [...TURNS, { message: 'q3', answer: answer('Delta is in view.') }]);
-    const output = blindSets([failed, longer], options());
+  it('puts a failed turn and a turn never run in as no answer, so every repeat has all its expected slots, also when every repeat stopped early', () => {
+    const expected = ['q1', 'q2', 'q3'];
+    const failed = repeatOf('arm-refs', 1, [{ message: 'q1', answer: answer('Alpha is in view.') }, { message: 'q2', answer: { status: 'unavailable' }, status: 'failed' }], expected);
+    const short = repeatOf('arm-text', 1, [{ message: 'q1', answer: { status: 'unavailable' }, status: 'failed' }], expected);
+    const output = blindSets([failed, short], options());
     const set = output.sets.get(1) ?? '';
-    expect(set.match(/\(no answer: this turn did not run or did not give an answer\)/gu)?.length).toBeGreaterThanOrEqual(2);
+    expect(set.match(/\(no answer: this turn did not run or did not give an answer\)/gu)?.length).toBe(5);
     expect(output.slots).toHaveLength(6);
+    const none = blindSets([repeatOf('arm-refs', 1, [], expected), repeatOf('arm-text', 1, [], expected)], options());
+    expect(none.slots).toHaveLength(6);
+  });
+
+  it('refuses a run given twice, a run of another manifest or of other messages, a run that is not the repeat it says, and a missing arm or repeat', () => {
+    const one = repeatOf('arm-refs', 1, TURNS);
+    expect(() => blindSets([one, one, repeatOf('arm-text', 1, TURNS)], options())).toThrow(/given twice/u);
+    expect(() => blindSets([one, repeatOf('arm-text', 1, TURNS, undefined, 'other')], options())).toThrow(/another manifest/u);
+    expect(() => blindSets([one, repeatOf('arm-text', 1, TURNS, ['x', 'y'])], options())).toThrow(/other messages/u);
+    expect(() => blindSets([one, { ...repeatOf('arm-text', 1, TURNS), repeat: 2 }], options())).toThrow(/says arm arm-text repeat 1/u);
+    expect(() => blindSets([one, repeatOf('arm-text', 2, TURNS)], options())).toThrow(/is missing/u);
+    expect(() => blindSets([], options())).toThrow(/no run/u);
+  });
+
+  it('writes every coverage line in one neutral form, and fails naming the turn when a coverage line cannot be made neutral', () => {
+    const odd = { ...answer('Alpha is in view.'), coverage: { retrieval: '6  shown • all types 184,533 (lowerBound)', summary: 'Cites 1 of 1.' } };
+    const set = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: odd }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options()).sets.get(1) ?? '';
+    expect(set).toContain('Coverage: 6 shown · all types 184,533 (lower bound) | Cites 1 of 1.');
+    for (const coverage of [undefined, { retrieval: 'no figures here', summary: 'x' }, { retrieval: 7, summary: 'x' }]) {
+      const bad = { ...answer('Alpha.'), coverage };
+      expect(() => blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: bad }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options())).toThrow(/repeat 1 turn 1 of arm arm-refs: the (coverage|retrieval)/u);
+    }
   });
 });
 

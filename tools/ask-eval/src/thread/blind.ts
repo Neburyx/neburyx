@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { EnrichedRepeat } from './enrich.js';
-import { citedLinesOf, linesOfAnswer } from './lines.js';
+import { UsageError } from '../questions.js';
 
 export interface ArmRepeat {
   readonly arm: string;
@@ -66,10 +66,21 @@ function answerText(answer: unknown): string {
   return parts.length === 0 ? NO_ANSWER : parts.join('\n');
 }
 
-function coverageText(answer: unknown): string {
-  if (!isRecord(answer) || !isRecord(answer['coverage'])) return '(none)';
+const QUALITY = /\b(exact|estimated|lower[ -]?bound|unknown)\b/iu;
+
+/**
+ * The coverage lines of an answer in one neutral form: whitespace collapsed, the separators made one, the quality words written one way. Each line must hold a count and a quality label, so a format that cannot be
+ * made neutral fails and names the turn rather than reaching a scorer in an arm-specific shape.
+ */
+function coverageText(answer: unknown, where: string): string {
+  if (!isRecord(answer) || answer['status'] !== 'answered' || answer['route'] === 'refuse') return '(none)';
   const coverage = answer['coverage'];
-  return [coverage['retrieval'], coverage['summary']].filter((part): part is string => typeof part === 'string').map((part) => part.replace(/\s+/gu, ' ').trim()).join(' | ');
+  if (!isRecord(coverage)) throw new UsageError(`${where}: the coverage lines are missing, so they cannot be made neutral`);
+  const lines = ['retrieval', 'summary'].map((name) => coverage[name]).filter((line) => line !== undefined);
+  if (lines.length === 0 || !lines.every((line): line is string => typeof line === 'string')) throw new UsageError(`${where}: the coverage lines are not text, so they cannot be made neutral`);
+  const retrieval = coverage['retrieval'];
+  if (typeof retrieval === 'string' && (!/\d/u.test(retrieval) || !QUALITY.test(retrieval))) throw new UsageError(`${where}: the retrieval line holds no count or no quality label, so it cannot be made neutral`);
+  return lines.map((line) => line.replace(/[·•|]/gu, ' · ').replace(/lower[ -]?bound/giu, 'lower bound').replace(/\s+/gu, ' ').trim()).join(' | ');
 }
 
 /** The leak check: a forbidden text (an arm name, a trace id, a model name, a manifest or file name) in a written set fails and names the turn. */
@@ -83,18 +94,28 @@ export function leakIn(set: string, forbidden: readonly string[]): string | unde
  */
 export function blindSets(repeats: readonly ArmRepeat[], options: { readonly seed: string; readonly manifestSha256: string; readonly forbidden: readonly string[] }): BlindOutput {
   const random = generator(options.seed);
+  if (repeats.length === 0) throw new UsageError('no run was given');
+  const seen = new Set<string>();
+  for (const entry of repeats) {
+    const file = entry.enriched.file;
+    const identity = `${entry.arm}/${entry.repeat}`;
+    if (seen.has(identity)) throw new UsageError(`the run of arm ${entry.arm} repeat ${entry.repeat} was given twice`);
+    seen.add(identity);
+    if (file.arm !== entry.arm || file.repeat !== entry.repeat) throw new UsageError(`a records file says arm ${file.arm} repeat ${file.repeat} but was given as arm ${entry.arm} repeat ${entry.repeat}`);
+    if (file.manifest.sha256 !== options.manifestSha256) throw new UsageError(`the run of arm ${entry.arm} repeat ${entry.repeat} was made from another manifest`);
+    if (JSON.stringify(file.expectedMessages) !== JSON.stringify(repeats[0]?.enriched.file.expectedMessages)) throw new UsageError(`the run of arm ${entry.arm} repeat ${entry.repeat} was to send other messages than the first run`);
+  }
   const arms = [...new Set(repeats.map((entry) => entry.arm))].sort();
   const numbers = [...new Set(repeats.map((entry) => entry.repeat))].sort((a, b) => a - b);
-  const turnCount = Math.max(...repeats.map((entry) => entry.enriched.file.turns.length === 0 ? 0 : Math.max(...entry.enriched.file.turns.map((turn) => turn.n))), 0);
-  const manifestTurns = Math.max(turnCount, ...repeats.map((entry) => entry.enriched.file.turns.length));
+  for (const arm of arms) for (const repeat of numbers) if (!seen.has(`${arm}/${repeat}`)) throw new UsageError(`the run of arm ${arm} repeat ${repeat} is missing`);
+  const expected = repeats[0]?.enriched.file.expectedMessages ?? [];
   const sets = new Map<number, string>();
   const entries: KeyEntry[] = [];
   const slots: { repeat: number; turn: number; label: string }[] = [];
   for (const repeat of numbers) {
     const mine = repeats.filter((entry) => entry.repeat === repeat);
-    const expected = Math.max(...mine.map((entry) => entry.enriched.file.turns.length), manifestTurns);
     const out: string[] = [`# Set ${repeat}`, ''];
-    for (let turn = 1; turn <= expected; turn += 1) {
+    for (let turn = 1; turn <= expected.length; turn += 1) {
       const order = permutationOf(arms, random);
       const labels: Record<string, string> = {};
       order.forEach((arm, index) => {
@@ -102,20 +123,18 @@ export function blindSets(repeats: readonly ArmRepeat[], options: { readonly see
       });
       entries.push({ repeat, turn, labels });
       out.push(`## Turn ${turn}`);
-      const first = mine[0]?.enriched.file.turns[turn - 1];
-      out.push(`Message: ${first?.message ?? '(not run)'}`, '');
+      out.push(`Message: ${expected[turn - 1] ?? ''}`, '');
       for (const [label, arm] of Object.entries(labels)) {
         const source = mine.find((entry) => entry.arm === arm);
         const index = turn - 1;
         const record = source?.enriched.file.turns[index];
-        const turnRecords = source?.enriched.records[index];
+        const evidence = source?.enriched.evidence[index];
         out.push(`### Answer ${label}`);
         if (record === undefined || record.status === 'failed') out.push(NO_ANSWER);
         else {
-          out.push(answerText(record.answer), `Coverage: ${coverageText(record.answer)}`);
-          const cited = citedLinesOf(record.answer, turnRecords === undefined ? undefined : linesOfAnswer(turnRecords));
-          for (const [key, line] of cited.mapped) out.push(`Cited line ${key}: ${line}`);
-          if (cited.missing.length > 0) out.push(`Cited keys with no line: ${cited.missing.join(', ')}`);
+          out.push(answerText(record.answer), `Coverage: ${coverageText(record.answer, `repeat ${repeat} turn ${turn} of arm ${arm}`)}`);
+          for (const [key, line] of evidence?.citations.mapped ?? []) out.push(`Cited line ${key}: ${line}`);
+          if ((evidence?.citations.missing.length ?? 0) > 0) out.push(`Cited keys with no line: ${evidence?.citations.missing.join(', ') ?? ''}`);
           const earlier = (source?.enriched.file.turns ?? []).slice(0, index);
           if (earlier.length > 0) {
             out.push('Earlier in this answerer\'s thread:');

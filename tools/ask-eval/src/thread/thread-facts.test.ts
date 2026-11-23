@@ -3,10 +3,10 @@ import { factsOf } from './facts.js';
 import type { EnrichedRepeat } from './enrich.js';
 import type { TurnRecords } from './records.js';
 
-const call = (number: number, tokensIn: number | null = 100, tokensOut: number | null = 10) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn, tokensOut, valuesText: '', replyText: null, toolsOffered: null });
-const event = (action: string, cacheRead: number | 'unknown' | null = 1000, cacheWrite: number | 'unknown' | null = 200) => ({ action, result: 'success', tokensIn: null, tokensOut: null, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, modelCalls: null });
-const records = (calls: number, over: Partial<TurnRecords> = {}): TurnRecords => ({ traceId: 't', run: { outcome: 'ok', calls, settings: {} }, calls: Array.from({ length: calls }, (_, index) => call(index + 1)), events: [event('assistant.route'), ...Array.from({ length: calls - 1 }, () => event('assistant.agent'))], summaryCalls: 0, reconciled: undefined, problems: [], ...over });
-const repeat = (turns: { ms: number; records: TurnRecords | undefined }[]): EnrichedRepeat => ({ file: { manifest: { name: 'm', sha256: 'x' }, arm: 'a', head: 'h', settings: { model: 'm', callLimit: 7 }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: turns.map((turn, index) => ({ n: index + 1, message: 'q', traceId: `t${index}`, ms: turn.ms, httpStatus: 200, status: 'answered', answer: {} })), ended: 'complete' }, records: turns.map((turn) => turn.records), inconsistent: false, disagreeing: [] });
+const call = (number: number, tokensIn: number | null = 100, tokensOut: number | null = 10) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn, tokensOut, instructionsSha256: 'sha-x', instructionsText: '', valuesText: '', replyText: null, toolsOffered: null });
+const event = (action: string, cacheRead: number | 'unknown' | null = 1000, cacheWrite: number | 'unknown' | null = 200) => ({ action, result: 'success', sourceId: 'demo', tokensIn: null, tokensOut: null, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, modelCalls: null });
+const records = (calls: number, over: Partial<TurnRecords> = {}): TurnRecords => ({ traceId: 't', run: { id: 'r', outcome: 'ok', finished: true, calls, settings: {} }, calls: Array.from({ length: calls }, (_, index) => call(index + 1)), events: [event('assistant.route'), ...Array.from({ length: calls - 1 }, () => event('assistant.agent'))], summaryCalls: 0, summaryUsage: [], reconciled: undefined, problems: [], ...over });
+const repeat = (turns: { ms: number; records: TurnRecords | undefined }[]): EnrichedRepeat => ({ file: { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'a', head: 'h', settings: { model: 'm', callLimit: 7 }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: turns.map((turn, index) => ({ n: index + 1, message: 'q', traceId: `t${index}`, ms: turn.ms, httpStatus: 200, status: 'answered', answer: {} })), ended: 'complete' }, records: turns.map((turn) => turn.records), evidence: [], inconsistent: false, disagreeing: [] });
 const PRICES = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, date: '2026-11-01' };
 
 describe('the facts of a run', () => {
@@ -18,16 +18,18 @@ describe('the facts of a run', () => {
     const noPrices = factsOf([repeat([{ ms: 1, records: records(3) }])], { callLimit: 7 });
     expect(noPrices.incomplete).toContain('no prices given: tokens only, not accepted as evidence');
     expect(noPrices.evidence).toBe(false);
-    expect(factsOf([repeat([{ ms: 1, records: records(3) }])], { callLimit: 7, prices: { ...PRICES, date: '' } }).incomplete).toContain('the prices carry no date: not accepted as evidence');
+    expect(factsOf([repeat([{ ms: 1, records: records(3) }])], { callLimit: 7, prices: { ...PRICES, date: '' } }).incomplete).toContain('the prices carry no valid date: not accepted as evidence');
   });
 
   it('gives the mean, median and 95th percentile of calls per turn, the median time, the cost per turn and per run, and counts the calls of a summary', () => {
-    const turns = [2, 3, 4, 4, 5, 5, 3, 4, 6, 3, 4, 2, 3, 4, 5, 4, 3, 4, 7, 4].map((calls, index) => ({ ms: 1000 + index, records: records(calls, index === 0 ? { summaryCalls: 1 } : {}) }));
+    const turns = [2, 3, 4, 4, 5, 5, 3, 4, 6, 3, 4, 2, 3, 4, 5, 4, 3, 4, 7, 4].map((calls, index) => ({ ms: 1000 + index, records: records(calls, index === 0 ? { summaryCalls: 1, summaryUsage: [{ number: 1, status: 'answered', tokensIn: 50, tokensOut: 5 }], events: [event('assistant.route'), event('assistant.agent'), event('ai.case-summary')] } : {}) }));
     const facts = factsOf([repeat(turns)], { callLimit: 7, prices: PRICES });
     expect(facts.turns[0]?.calls).toBe(3);
+    expect(facts.turns[0]).toMatchObject({ inputTokens: 250, outputTokens: 25 });
     expect(facts.callsP95).toBe(6);
     expect(facts.callsMedian).toBe(4);
-    expect(facts.medianMs).toBe(1009);
+    expect(facts.incomplete).toEqual([]);
+    expect(facts.medianMs).toBe(1009.5);
     expect(facts.turns[1]?.cost).toBeCloseTo((300 * 3 + 30 * 15 + 3000 * 0.3 + 600 * 3.75) / 1_000_000 * 1, 6);
     expect(facts.totalCost).toBeGreaterThan(0);
     expect(facts.evidence).toBe(true);
@@ -40,5 +42,27 @@ describe('the facts of a run', () => {
     expect(facts.p95Verdict).toContain('at or under the call limit of 7');
     expect(facts.p95Verdict).toContain('cannot by itself show that 7 is enough');
     expect(factsOf([repeat([{ ms: 1, records: records(8) }])], { callLimit: 7 }).p95Verdict).toContain('over the call limit of 7');
+  });
+
+  it('takes the median of an even sample as the mean of the two middle values', () => {
+    const facts = factsOf([repeat([2, 3, 5, 8].map((calls, index) => ({ ms: 10 * (index + 1), records: records(calls) })))], { callLimit: 7, prices: PRICES });
+    expect(facts.callsMedian).toBe(4);
+    expect(facts.medianMs).toBe(25);
+  });
+
+  it('accepts no evidence from nothing, an unfinished or inconsistent repeat, repeats of other shapes, a limit that is not the one run with, events that do not cover the calls or prices that are not valid', () => {
+    expect(factsOf([], { callLimit: 7, prices: PRICES })).toMatchObject({ evidence: false, incomplete: expect.arrayContaining(['no repeat was given']) });
+    const base = repeat([{ ms: 1, records: records(3) }]);
+    const stopped = { ...base, file: { ...base.file, ended: 'failed' as const } };
+    expect(factsOf([stopped], { callLimit: 7, prices: PRICES }).incomplete).toContain('repeat 1 ended as failed, not complete');
+    expect(factsOf([{ ...base, inconsistent: true }], { callLimit: 7, prices: PRICES }).incomplete).toContain('repeat 1 ran with settings that differ from one turn to another');
+    expect(factsOf([base], { callLimit: 5, prices: PRICES }).incomplete[0]).toContain('is not the limit the repeats ran with (7)');
+    const other = repeat([{ ms: 1, records: records(3) }, { ms: 1, records: records(3) }]);
+    expect(factsOf([base, other], { prices: PRICES }).incomplete).toContain('the repeats hold different numbers of turns (1, 2)');
+    expect(factsOf([base], { prices: PRICES }).callLimit).toBe(7);
+    const partial = factsOf([repeat([{ ms: 1, records: records(3, { events: [event('assistant.route')] }) }])], { callLimit: 7, prices: PRICES });
+    expect(partial.incomplete).toContain('repeat 1 turn 1: the model events do not cover every call: no cache counts');
+    expect(partial.evidence).toBe(false);
+    for (const bad of [{ ...PRICES, input: -1 }, { ...PRICES, output: Number.NaN }, { ...PRICES, date: 'yesterday' }]) expect(factsOf([base], { callLimit: 7, prices: bad }).evidence).toBe(false);
   });
 });

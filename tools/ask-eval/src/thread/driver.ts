@@ -22,6 +22,7 @@ export interface RepeatOptions {
   readonly http: Http;
   readonly manifest: { readonly name: string; readonly sourceId: string; readonly anchor: { readonly entityType: string; readonly stableId: string }; readonly neighbourType: string; readonly neighbours: number; readonly messages: readonly string[] };
   readonly manifestSha256: string;
+  readonly repeat: number;
   readonly arm: string;
   readonly head: string;
   readonly settings: RepeatSettings;
@@ -49,6 +50,10 @@ type RepeatEnd = 'complete' | 'waiting' | 'failed' | 'budget';
 
 export interface RepeatFile {
   readonly manifest: { readonly name: string; readonly sha256: string };
+  readonly sourceId: string;
+  readonly repeat: number;
+  /** The messages the repeat was to send, in order: a repeat that stopped early still names every turn it was to have. */
+  readonly expectedMessages: readonly string[];
   readonly arm: string;
   readonly head: string;
   readonly settings: RepeatSettings;
@@ -133,6 +138,9 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
   let remaining = options.budget;
   const finish = (): RepeatFile => ({
     manifest: { name: manifest.name, sha256: options.manifestSha256 },
+    sourceId: manifest.sourceId,
+    repeat: options.repeat,
+    expectedMessages: manifest.messages,
     arm: options.arm,
     head: options.head,
     settings,

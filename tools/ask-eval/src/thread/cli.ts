@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { AI_DEFAULTS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
@@ -7,7 +7,7 @@ import { factsOf, type Prices } from './facts.js';
 import { checkBars, textDecision, unblind, type Bars } from './report.js';
 import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile, type Slot } from './scorer.js';
 import { blindSets, type ArmRepeat } from './blind.js';
-import { readTurnRecords } from './records.js';
+import { readTurnRecords, type Waiting } from './records.js';
 import { enrichRepeat, type EnrichedRepeat } from './enrich.js';
 import { connectDb } from './db.js';
 import type { Db } from './records.js';
@@ -16,7 +16,7 @@ import { parseManifest } from './manifest.js';
 import { readSettingsFile } from './settings-file.js';
 
 const THREAD_USAGE = `usage:
-  ask-eval thread records --file <run file> --database-env-file <env file> --out <file>
+  ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> --out <file>
   ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
   ask-eval thread score --ingest <scores file> --scorer-name <name> --slots <key file> --set <file> --out <file>
   ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--indicative-scorers <names>] [--text-arm <arm>] <scores file>...
@@ -33,6 +33,8 @@ export interface ThreadDeps {
   readonly database?: (envFile: string) => Promise<{ readonly db: Db; readonly close: () => Promise<void> }>;
   /** The scorer runners; absent, the real Codex and Opus runners. */
   readonly runners?: { readonly codex: Runner; readonly opus: Runner };
+  /** How long the records of a turn are waited for; absent, a bounded real wait. */
+  readonly waiting?: Waiting;
   readonly verifyFirstTurn?: (settings: RepeatSettings) => (turn: TurnRecord) => Promise<string | undefined>;
 }
 
@@ -42,7 +44,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'indicative-scorers', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'indicative-scorers', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'allowed-tools', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
@@ -177,7 +179,7 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
   let remaining = budget;
   let incomplete = false;
   for (let repeat = 1; repeat <= repeats; repeat += 1) {
-    const file: RepeatFile = await runRepeat({ http, manifest, manifestSha256: sha256, arm: values.get('arm') ?? '', head: values.get('head') ?? '', settings, budget: remaining, now, verifyFirstTurn: deps.verifyFirstTurn === undefined ? firstTurnVerifier(deps, resolve(databaseEnvFile ?? ''), settings) : deps.verifyFirstTurn(settings) });
+    const file: RepeatFile = await runRepeat({ http, manifest, manifestSha256: sha256, repeat, arm: values.get('arm') ?? '', head: values.get('head') ?? '', settings, budget: remaining, now, verifyFirstTurn: deps.verifyFirstTurn === undefined ? firstTurnVerifier(deps, resolve(databaseEnvFile ?? ''), settings) : deps.verifyFirstTurn(settings) });
     remaining -= file.turns.length * settings.callLimit;
     writeChecked(resolve(folder, `thread-${armName}-r${repeat}.json`), `${JSON.stringify(file, null, 2)}\n`, false);
     io.out(`repeat ${repeat}: ${file.turns.length} of ${manifest.messages.length} turns, ${file.ended}${file.stoppedBecause === undefined ? '' : ` (${file.stoppedBecause})`}`);
@@ -195,7 +197,8 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   const input = values.get('file');
   const envFile = values.get('database-env-file');
   const out = values.get('out');
-  if (input === undefined || envFile === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
+  const allowedTools = (values.get('allowed-tools') ?? '').split(',').filter((name) => name !== '');
+  if (input === undefined || envFile === undefined || out === undefined || allowedTools.length === 0) throw new UsageError(THREAD_USAGE);
   let file: RepeatFile;
   try {
     file = JSON.parse(readFileSync(resolve(input), 'utf8')) as RepeatFile;
@@ -204,9 +207,17 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   }
   const connection = await (deps.database ?? connectDb)(resolve(envFile));
   try {
-    const enriched = await enrichRepeat(file, connection.db);
+    const waiting = deps.waiting ?? { attempts: RECORD_WAITS, delayMs: RECORD_WAIT_MS, sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
+    const enriched = await enrichRepeat(file, connection.db, { allowedTools, waiting });
     writeChecked(resolve(out), `${JSON.stringify(enriched, null, 2)}\n`, false);
     const incomplete = enriched.records.flatMap((entry, index) => (entry === undefined ? [`turn ${index + 1}: no trace id`] : entry.problems.map((problem) => `turn ${index + 1}: ${problem}`)));
+    enriched.evidence.forEach((entry, index) => {
+      if (entry === undefined) return;
+      const gate = entry.gate;
+      for (const [piece, verdict] of [['reads through the gate', gate.gated.verdict], ['tools called', gate.called.verdict], ['tools offered', gate.offered.verdict]] as const) if (verdict !== 'passed') incomplete.push(`turn ${index + 1}: ${piece} ${verdict}`);
+      if (entry.citations.missing.length > 0) incomplete.push(`turn ${index + 1}: cited keys with no line: ${entry.citations.missing.join(', ')}`);
+      if (entry.citations.malformed > 0) incomplete.push(`turn ${index + 1}: ${entry.citations.malformed} malformed citations`);
+    });
     io.out(`turns read: ${enriched.records.filter((entry) => entry !== undefined).length} of ${file.turns.length}`);
     if (enriched.inconsistent) io.out('the settings of the runs of this repeat differ from one turn to another');
     for (const line of incomplete) io.out(line);
@@ -235,11 +246,11 @@ function runBlind(args: readonly string[], io: CliIo): number {
     } catch {
       throw new UsageError('a records file cannot be read');
     }
-    const repeat = Number(/-r(\d+)\./u.exec(path)?.[1] ?? NaN);
-    if (!Number.isInteger(repeat)) throw new UsageError('a records file name must end in -r<repeat>.records.json');
-    return { arm: enriched.file.arm, repeat, enriched };
+    return { arm: enriched.file.arm, repeat: enriched.file.repeat, enriched };
   });
-  const forbidden = [...new Set(inputs.flatMap((entry) => [entry.arm, entry.enriched.file.manifest.name, entry.enriched.file.settings.model, entry.enriched.file.head, ...entry.enriched.file.turns.flatMap((turn) => (turn.traceId === undefined ? [] : [turn.traceId]))]))];
+  const names = rest.flatMap((path) => [path, basename(path), basename(path).replace(/\.[^.]*$/u, '')]);
+  const runIds = inputs.flatMap((entry) => entry.enriched.records.flatMap((records) => (records?.run === undefined || records.run.id === '' ? [] : [records.run.id])));
+  const forbidden = [...new Set([...names, ...runIds, ...inputs.flatMap((entry) => [entry.arm, entry.enriched.file.manifest.name, entry.enriched.file.settings.model, entry.enriched.file.head, ...entry.enriched.file.turns.flatMap((turn) => (turn.traceId === undefined ? [] : [turn.traceId]))])])];
   const output = blindSets(inputs, { seed, manifestSha256: inputs[0]?.enriched.file.manifest.sha256 ?? '', forbidden });
   for (const [repeat, text] of output.sets) writeChecked(resolve(setsFolder, `set-${repeat}.md`), text, false);
   writeChecked(resolve(keyPath, 'key.json'), `${JSON.stringify({ key: output.key, slots: output.slots }, null, 2)}\n`, false);
@@ -390,6 +401,8 @@ function runFacts(args: readonly string[], io: CliIo): number {
   return facts.evidence ? 0 : 1;
 }
 
+const RECORD_WAITS = 12;
+const RECORD_WAIT_MS = 1000;
 const FIRST_TURN_WAITS = 10;
 const FIRST_TURN_WAIT_MS = 500;
 

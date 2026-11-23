@@ -3,14 +3,21 @@ import { gateEvidenceOf } from './gate-evidence.js';
 import { citedLinesOf, linesOfAnswer } from './lines.js';
 import type { TurnRecords } from './records.js';
 
-const call = (number: number, over: Record<string, unknown> = {}) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn: 1, tokensOut: 1, valuesText: '', replyText: null as string | null, toolsOffered: null as readonly string[] | null, ...over });
-const records = (over: Partial<TurnRecords> = {}): TurnRecords => ({ traceId: 'tr-1', run: { outcome: 'ok', calls: 3, settings: {} }, calls: [], events: [], summaryCalls: 0, reconciled: undefined, problems: [], ...over });
+const call = (number: number, over: Record<string, unknown> = {}) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn: 1, tokensOut: 1, instructionsSha256: 'sha-x', instructionsText: '', valuesText: '', replyText: null as string | null, toolsOffered: null as readonly string[] | null, ...over });
+const records = (over: Partial<TurnRecords> = {}): TurnRecords => ({ traceId: 'tr-1', run: { id: 'run-1', outcome: 'ok', finished: true, calls: 3, settings: {} }, calls: [], events: [], summaryCalls: 0, summaryUsage: [], reconciled: undefined, problems: [], ...over });
 
 const FIRST = 'human: Question:\nhow many?\nai: [{"type":"tool_use","id":"t1","name":"view","input":{}}] [{"name":"view","args":{}}]\ntool: Keys are renumbered after every read: cite only keys of the latest result.\nn1 | "account" | title: "Account W-1" | id: "W-1"\n';
 const SECOND = `${FIRST}ai: [{"type":"tool_use","id":"t2","name":"degree-preview","input":{}}] [{"name":"degree-preview","args":{}}]\ntool: Keys are renumbered after every read: cite only keys of the latest result.\nn1 | "account" | title: "Account W-1" | id: "W-1"\ns1: read of degree-preview: 6 shown · all types 184,533 (exact)`;
 const ANSWER_REPLY = '[{"type":"tool_use","id":"t3","name":"answer","input":{"sentences":[{"text":"x","cites":["n1","s1"]}]}}]';
 
 describe('the lines an answer cites', () => {
+  it('counts the cites that are not text keys or whose sentence has no list of cites, and invents no line for them', () => {
+    const cited = citedLinesOf({ sentences: [{ text: 'a', cites: ['n1', 7] }, { text: 'b' }, { text: 'c', cites: 'n1' }] }, undefined);
+    expect(cited.malformed).toBe(3);
+    expect(cited.missing).toEqual(['n1']);
+    expect(cited.mapped.size).toBe(0);
+  });
+
   it('marks a cited key for which no line was found, and invents none; no answer call gives no lines', () => {
     const lines = linesOfAnswer(records({ calls: [call(2, { valuesText: SECOND, replyText: ANSWER_REPLY })] }));
     const cited = citedLinesOf({ sentences: [{ text: 'x', cites: ['n1', 's9'] }] }, lines);
@@ -41,26 +48,49 @@ describe('the lines an answer cites', () => {
 
 describe('the evidence for the gate and the tools', () => {
   const ALLOWED = ['view', 'degree-preview', 'answer'];
-  const agent = (over: Record<string, unknown> = {}) => call(2, { replyText: '[{"type":"tool_use","id":"t","name":"view","input":{}}]', toolsOffered: ['answer', 'degree-preview', 'view'], ...over });
+  const agent = (over: Record<string, unknown> = {}) => call(2, { instructionsSha256: 'sha-agent', replyText: '[{"type":"tool_use","id":"t","name":"view","input":{}}] [{"name":"view","args":{}}]', toolsOffered: ['answer', 'degree-preview', 'view'], ...over });
+  const event = (action: string, over: Record<string, unknown> = {}) => ({ action, result: 'success', sourceId: 'demo', tokensIn: null, tokensOut: null, cacheReadTokens: null, cacheWriteTokens: null, modelCalls: null, ...over });
+  const router = call(1, { instructionsSha256: 'sha-router' });
+  const expected = (reads: number) => ({ reads, sourceId: 'demo' });
 
-  it('reports a piece that cannot be established as unverified, never as passed: no stored tool names, no run record', () => {
-    const noNames = gateEvidenceOf(records({ calls: [call(1), agent({ toolsOffered: null })] }), 1, ALLOWED);
+  it('reports a piece that cannot be established as unverified, never as passed: no stored tool names, no run record, a reply whose tool calls cannot be read', () => {
+    const noNames = gateEvidenceOf(records({ calls: [router, agent({ toolsOffered: null })] }), expected(1), ALLOWED);
     expect(noNames.offered.verdict).toBe('unverified');
     expect(noNames.offered.callsWithoutNames).toBe(1);
-    const noRun = gateEvidenceOf(records({ run: undefined, calls: [] }), 1, ALLOWED);
+    const noRun = gateEvidenceOf(records({ run: undefined, calls: [] }), expected(1), ALLOWED);
     expect([noRun.gated.verdict, noRun.called.verdict, noRun.offered.verdict]).toEqual(['unverified', 'unverified', 'unverified']);
+    const broken = gateEvidenceOf(records({ calls: [router, agent({ replyText: 'text [{"name":"view","args":' })] }), expected(0), ALLOWED);
+    expect(broken.called).toMatchObject({ verdict: 'unverified', unparsed: 1 });
+  });
+
+  it('identifies an agent call by its instructions, not by what its reply holds, so a call with no recognisable reply still has its offered names checked', () => {
+    const silent = gateEvidenceOf(records({ calls: [router, agent({ replyText: null, toolsOffered: ['answer', 'delete'] })] }), expected(0), ALLOWED);
+    expect(silent.offered).toMatchObject({ verdict: 'failed', outside: ['delete'] });
+  });
+
+  it('reads the tool calls as the audited model stores them, a list of name and args after the content', () => {
+    const outside = gateEvidenceOf(records({ calls: [router, agent({ replyText: 'thinking [{"name":"delete","args":{"id":"x"}}]', toolsOffered: ['answer'] })] }), expected(0), ALLOWED);
+    expect(outside.called).toMatchObject({ verdict: 'failed', outside: ['delete'], names: ['delete'] });
   });
 
   it('fails a tool outside the allowlist that was called or offered, and a read with no gate event', () => {
-    const outside = gateEvidenceOf(records({ calls: [agent({ replyText: '[{"type":"tool_use","id":"t","name":"delete","input":{}}]', toolsOffered: ['answer', 'delete'] })], events: [{ action: 'entity.load', result: 'success', tokensIn: null, tokensOut: null, cacheReadTokens: null, cacheWriteTokens: null, modelCalls: null }] }), 1, ALLOWED);
+    const outside = gateEvidenceOf(records({ calls: [router, agent({ replyText: '[{"type":"tool_use","id":"t","name":"delete","input":{}}]', toolsOffered: ['answer', 'delete'] })], events: [event('entity.load')] }), expected(1), ALLOWED);
     expect(outside.called).toMatchObject({ verdict: 'failed', outside: ['delete'] });
     expect(outside.offered).toMatchObject({ verdict: 'failed', outside: ['delete'] });
-    const ungated = gateEvidenceOf(records({ calls: [agent()], events: [] }), 2, ALLOWED);
+    const ungated = gateEvidenceOf(records({ calls: [router, agent()], events: [] }), expected(2), ALLOWED);
     expect(ungated.gated).toMatchObject({ verdict: 'failed', reads: 2, gateEvents: 0 });
   });
 
+  it('counts only events of a read of the turn\'s source that ended in success: a failed event, an event of another source and a model or turn event are not a gated read', () => {
+    const events = [event('entity.degree_preview', { result: 'failed' }), event('entity.load', { sourceId: 'other' }), event('assistant.agent'), event('ai.case-summary'), event('assistant.turn.closed')];
+    const evidence = gateEvidenceOf(records({ calls: [router, agent()], events }), expected(1), ALLOWED);
+    expect(evidence.gated).toMatchObject({ verdict: 'failed', gateEvents: 0, failedEvents: 1 });
+    const good = gateEvidenceOf(records({ calls: [router, agent()], events: [...events, event('entity.degree_preview', { result: 'partial' })] }), expected(1), ALLOWED);
+    expect(good.gated).toMatchObject({ verdict: 'passed', gateEvents: 1 });
+  });
+
   it('passes the three pieces only with gate events for the reads, called tools inside the list and stored offered names inside the list', () => {
-    const evidence = gateEvidenceOf(records({ calls: [call(1), agent()], events: [{ action: 'entity.degree_preview', result: 'success', tokensIn: null, tokensOut: null, cacheReadTokens: null, cacheWriteTokens: null, modelCalls: null }, { action: 'assistant.agent', result: 'success', tokensIn: 1, tokensOut: 1, cacheReadTokens: 0, cacheWriteTokens: 0, modelCalls: null }] }), 1, ALLOWED);
+    const evidence = gateEvidenceOf(records({ calls: [router, agent()], events: [event('entity.degree_preview'), event('assistant.agent', { tokensIn: 1, tokensOut: 1, cacheReadTokens: 0, cacheWriteTokens: 0 })] }), expected(1), ALLOWED);
     expect([evidence.gated.verdict, evidence.called.verdict, evidence.offered.verdict]).toEqual(['passed', 'passed', 'passed']);
     expect(evidence.offered.names).toEqual(['answer', 'degree-preview', 'view']);
   });
