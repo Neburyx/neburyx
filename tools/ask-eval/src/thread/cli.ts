@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { prepareOutFolder, writePrivateFile } from '../paths.js';
+import { AI_DEFAULTS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
+import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
 import { factsOf, type Prices } from './facts.js';
 import { checkBars, textDecision, unblind, type Bars } from './report.js';
 import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile, type Slot } from './scorer.js';
 import { blindSets, type ArmRepeat } from './blind.js';
+import { readTurnRecords } from './records.js';
 import { enrichRepeat, type EnrichedRepeat } from './enrich.js';
 import { connectDb } from './db.js';
 import type { Db } from './records.js';
@@ -21,7 +23,7 @@ const THREAD_USAGE = `usage:
   ask-eval thread facts --call-limit <n> [--prices <file>] <records file>...
   ask-eval thread calibrate --a <scores file> --b <scores file>
   ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
-  ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)`;
+  ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder> --database-env-file <env file>)`;
 
 /** What a thread run needs of the outside world: the product's HTTP surface (a stand-in in tests) and the clock. */
 export interface ThreadDeps {
@@ -68,6 +70,16 @@ function parse(args: readonly string[], positional = false): { readonly values: 
   return { values, dryRun, rest };
 }
 
+const ARM = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/u;
+const CREDENTIAL = [/sk-[A-Za-z0-9_-]{16,}/u, /\b(?:postgres(?:ql)?|bolt(?:\+s)?|neo4j(?:\+s)?|mongodb|redis):\/\/[^\s"']*:[^\s"'@]*@/u, /\bset-cookie\b|\bcookie:\s/iu, /-----BEGIN [A-Z ]*PRIVATE KEY-----/u, /\bAKIA[0-9A-Z]{16}\b/u, /\bBearer\s+[A-Za-z0-9._-]{20,}/u];
+
+/** A file's text is written only when it holds nothing that looks like a credential; the refusal names no content. */
+function writeChecked(path: string, text: string, replace: boolean): void {
+  if (CREDENTIAL.some((pattern) => pattern.test(text))) throw new UsageError('the content holds credential-like text: it is not written');
+  requireOutsideGitTree(path, 'an output file');
+  writePrivateFile(path, text, replace);
+}
+
 const wholeNumber = (text: string | undefined, name: string, min: number, max: number): number | undefined => {
   if (text === undefined) return undefined;
   const value = Number(text);
@@ -87,8 +99,11 @@ function loopbackBase(text: string): string {
   return url.origin;
 }
 
+const REQUEST_TIMEOUT_MS = 180_000;
+
+/** The real HTTP: a bounded time for every request, and a redirect is an error (the tool never leaves the loopback origin it checked). */
 const realHttp = (base: string): Http => async (method, path, body) => {
-  const response = await fetch(`${base}${path}`, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  const response = await fetch(`${base}${path}`, { method, redirect: 'error', signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   const text = await response.text();
   return {
     status: response.status,
@@ -103,25 +118,23 @@ const realHttp = (base: string): Http => async (method, path, body) => {
   };
 };
 
-/** The settings the product will use, taken from the env file it was started with; a flag that disagrees with the file is refused. */
-function settingsOf(values: Map<string, string>): RepeatSettings {
+/** The settings the product will use: the file's value, else the product's default; a flag that disagrees with that effective value is refused. The effort says where it came from. */
+function settingsOf(values: Map<string, string>, defaults: { readonly maxCalls: number } | undefined): RepeatSettings {
   const file = readSettingsFile(resolve(values.get('settings-file') ?? ''));
   const flagLimit = wholeNumber(values.get('call-limit'), 'call-limit', 1, 10);
   const fileLimit = wholeNumber(file['NEBURYX_ASSISTANT_MAX_CALLS'], 'the settings file value of NEBURYX_ASSISTANT_MAX_CALLS', 1, 10);
-  if (flagLimit !== undefined && fileLimit !== undefined && flagLimit !== fileLimit) throw new UsageError('--call-limit disagrees with the settings file');
-  const callLimit = fileLimit ?? flagLimit;
-  if (callLimit === undefined) throw new UsageError('the call limit is not set in the settings file: give --call-limit (the product default applies; the first turn is checked against it)');
+  const callLimit = fileLimit ?? defaults?.maxCalls;
+  if (callLimit === undefined) throw new UsageError('the call limit is not set in the settings file and the product default is not known to this build');
+  if (flagLimit !== undefined && flagLimit !== callLimit) throw new UsageError('--call-limit disagrees with the settings the product will use');
   const flagModel = values.get('model');
-  const fileModel = file['NEBURYX_ASSISTANT_MODEL'];
-  if (flagModel !== undefined && fileModel !== undefined && flagModel !== fileModel) throw new UsageError('--model disagrees with the settings file');
-  const model = fileModel ?? flagModel;
-  if (model === undefined) throw new UsageError('the model is not set in the settings file: give --model');
-  const effort = file['NEBURYX_ASK_EFFORT'];
-  return { model, callLimit, ...(effort === undefined ? {} : { effort }) };
+  const model = file['NEBURYX_ASSISTANT_MODEL'] ?? SUMMARY_DEFAULTS.model;
+  if (flagModel !== undefined && flagModel !== model) throw new UsageError('--model disagrees with the settings the product will use');
+  const fileEffort = file['NEBURYX_ASK_EFFORT'];
+  return { model, callLimit, effort: fileEffort ?? AI_DEFAULTS.effort, effortSource: fileEffort === undefined ? 'the product default' : 'the settings file', modelSource: file['NEBURYX_ASSISTANT_MODEL'] === undefined ? 'the product default' : 'the settings file' };
 }
 
 /** `ask-eval thread run`: one or more repeats of the thread against a running product, written as run files. Returns the exit code: 0 complete, 1 a repeat ended early, 2 usage. */
-export async function runThread(argv: readonly string[], io: CliIo, deps: ThreadDeps = {}): Promise<number> {
+export async function runThread(argv: readonly string[], io: CliIo, deps: ThreadDeps = {}, defaults?: { readonly maxCalls: number }): Promise<number> {
   if (argv[0] === 'records') return await runRecords(argv.slice(1), io, deps);
   if (argv[0] === 'blind') return runBlind(argv.slice(1), io);
   if (argv[0] === 'score') return await runScore(argv.slice(1), io, deps);
@@ -131,9 +144,11 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
   const { values, dryRun } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
+  const armName = values.get('arm') ?? '';
+  if (!ARM.test(armName)) throw new UsageError('--arm must be 2 to 40 letters, digits, dots, dashes or underscores, starting with a letter or digit');
   const base = loopbackBase(values.get('base') ?? '');
   const { manifest, sha256 } = parseManifest(readFileSync(resolve(values.get('manifest') ?? ''), 'utf8'));
-  const settings = settingsOf(values);
+  const settings = settingsOf(values, defaults);
   const repeats = wholeNumber(values.get('repeats'), 'repeats', 1, 10) ?? 3;
   const mostCalls = manifest.messages.length * repeats * settings.callLimit;
   io.out(`messages: ${manifest.messages.length}`);
@@ -145,19 +160,26 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
   if (dryRun) return 0;
   const budget = wholeNumber(values.get('budget'), 'budget', 1, 100000);
   const out = values.get('out');
-  if (budget === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
+  const databaseEnvFile = values.get('database-env-file');
+  if (budget === undefined || out === undefined || (databaseEnvFile === undefined && deps.verifyFirstTurn === undefined)) throw new UsageError(THREAD_USAGE);
   if (budget < manifest.messages.length * settings.callLimit) io.out('the budget covers less than one repeat: the run stops before a turn it cannot cover');
   if (budget < settings.callLimit) throw new UsageError('the budget is below the most calls of one turn');
   const folder = resolve(out);
   prepareOutFolder(folder);
+  // every file this run will write is checked before any request: a link, an existing file or a place inside a git tree stops it with no call made
+  for (let repeat = 1; repeat <= repeats; repeat += 1) {
+    const target = resolve(folder, `thread-${armName}-r${repeat}.json`);
+    checkPrivateTarget(target, false);
+    requireOutsideGitTree(target, 'an output file');
+  }
   const http = (deps.http ?? realHttp)(base);
   const now = deps.now ?? Date.now;
   let remaining = budget;
   let incomplete = false;
   for (let repeat = 1; repeat <= repeats; repeat += 1) {
-    const file: RepeatFile = await runRepeat({ http, manifest, manifestSha256: sha256, arm: values.get('arm') ?? '', head: values.get('head') ?? '', settings, budget: remaining, now, ...(deps.verifyFirstTurn === undefined ? {} : { verifyFirstTurn: deps.verifyFirstTurn(settings) }) });
+    const file: RepeatFile = await runRepeat({ http, manifest, manifestSha256: sha256, arm: values.get('arm') ?? '', head: values.get('head') ?? '', settings, budget: remaining, now, verifyFirstTurn: deps.verifyFirstTurn === undefined ? firstTurnVerifier(deps, resolve(databaseEnvFile ?? ''), settings) : deps.verifyFirstTurn(settings) });
     remaining -= file.turns.length * settings.callLimit;
-    writePrivateFile(resolve(folder, `thread-${values.get('arm') ?? 'arm'}-r${repeat}.json`), `${JSON.stringify(file, null, 2)}\n`, false);
+    writeChecked(resolve(folder, `thread-${armName}-r${repeat}.json`), `${JSON.stringify(file, null, 2)}\n`, false);
     io.out(`repeat ${repeat}: ${file.turns.length} of ${manifest.messages.length} turns, ${file.ended}${file.stoppedBecause === undefined ? '' : ` (${file.stoppedBecause})`}`);
     if (file.ended !== 'complete') {
       incomplete = true;
@@ -183,7 +205,7 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   const connection = await (deps.database ?? connectDb)(resolve(envFile));
   try {
     const enriched = await enrichRepeat(file, connection.db);
-    writePrivateFile(resolve(out), `${JSON.stringify(enriched, null, 2)}\n`, false);
+    writeChecked(resolve(out), `${JSON.stringify(enriched, null, 2)}\n`, false);
     const incomplete = enriched.records.flatMap((entry, index) => (entry === undefined ? [`turn ${index + 1}: no trace id`] : entry.problems.map((problem) => `turn ${index + 1}: ${problem}`)));
     io.out(`turns read: ${enriched.records.filter((entry) => entry !== undefined).length} of ${file.turns.length}`);
     if (enriched.inconsistent) io.out('the settings of the runs of this repeat differ from one turn to another');
@@ -219,8 +241,8 @@ function runBlind(args: readonly string[], io: CliIo): number {
   });
   const forbidden = [...new Set(inputs.flatMap((entry) => [entry.arm, entry.enriched.file.manifest.name, entry.enriched.file.settings.model, entry.enriched.file.head, ...entry.enriched.file.turns.flatMap((turn) => (turn.traceId === undefined ? [] : [turn.traceId]))]))];
   const output = blindSets(inputs, { seed, manifestSha256: inputs[0]?.enriched.file.manifest.sha256 ?? '', forbidden });
-  for (const [repeat, text] of output.sets) writePrivateFile(resolve(setsFolder, `set-${repeat}.md`), text, false);
-  writePrivateFile(resolve(keyPath, 'key.json'), `${JSON.stringify({ key: output.key, slots: output.slots }, null, 2)}\n`, false);
+  for (const [repeat, text] of output.sets) writeChecked(resolve(setsFolder, `set-${repeat}.md`), text, false);
+  writeChecked(resolve(keyPath, 'key.json'), `${JSON.stringify({ key: output.key, slots: output.slots }, null, 2)}\n`, false);
   io.out(`sets written: ${output.sets.size}`);
   io.out(`answers to score: ${output.slots.length}`);
   return 0;
@@ -308,7 +330,7 @@ async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): P
     for (const problem of problems.slice(0, 5)) io.err(problem);
     return 1;
   }
-  writePrivateFile(resolve(out), `${JSON.stringify(file, null, 2)}\n`, false);
+  writeChecked(resolve(out), `${JSON.stringify(file, null, 2)}\n`, false);
   io.out(`scores written: ${file.scores.length} by ${file.scorer} (${file.origin}${file.invocations === undefined ? '' : `, ${file.invocations} invocations`})`);
   return 0;
 }
@@ -366,4 +388,30 @@ function runFacts(args: readonly string[], io: CliIo): number {
   for (const line of facts.incomplete) io.out(`incomplete: ${line}`);
   io.out(facts.evidence ? 'accepted as evidence' : 'not accepted as evidence');
   return facts.evidence ? 0 : 1;
+}
+
+const FIRST_TURN_WAITS = 10;
+const FIRST_TURN_WAIT_MS = 500;
+
+/** After the first turn: its run record, read by trace id (the record is written without blocking the answer, so it is waited for a bounded time), must show the model and the call limit that were verified before the run. */
+function firstTurnVerifier(deps: ThreadDeps, envFile: string, settings: RepeatSettings): (turn: TurnRecord) => Promise<string | undefined> {
+  return async (turn) => {
+    if (turn.traceId === undefined) return 'the first turn has no trace id: its run record cannot be checked';
+    const connection = await (deps.database ?? connectDb)(envFile);
+    try {
+      for (let attempt = 1; attempt <= FIRST_TURN_WAITS; attempt += 1) {
+        const records = await readTurnRecords(connection.db, turn.traceId);
+        if (records.run !== undefined) {
+          const shown = records.run.settings;
+          if (shown['model'] !== settings.model) return 'the run record of the first turn shows another model than the settings file';
+          if (shown['maxCalls'] !== settings.callLimit) return 'the run record of the first turn shows another call limit than the settings file';
+          return undefined;
+        }
+        await new Promise((done) => setTimeout(done, FIRST_TURN_WAIT_MS));
+      }
+      return 'the run record of the first turn was not found in time';
+    } finally {
+      await connection.close();
+    }
+  };
 }

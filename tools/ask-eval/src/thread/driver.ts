@@ -1,3 +1,5 @@
+import { assistantTurnAnswerSchema, assistantTurnRequestSchema, expandRequestSchema, expandResponseSchema, openInvestigationRequestSchema, openInvestigationResponseSchema } from '@neburyx/contracts';
+
 interface HttpResponse {
   readonly status: number;
   readonly header: (name: string) => string | undefined;
@@ -11,6 +13,9 @@ export interface RepeatSettings {
   readonly model: string;
   readonly callLimit: number;
   readonly effort?: string;
+  /** Where the effort and the model come from: the settings file or the product's default. */
+  readonly effortSource?: string;
+  readonly modelSource?: string;
 }
 
 export interface RepeatOptions {
@@ -78,11 +83,12 @@ const keyOf = (ref: { readonly sourceId: string; readonly entityType: string; re
  */
 async function buildView(options: RepeatOptions): Promise<ViewBuild> {
   const { http, manifest } = options;
-  const response = await http('POST', '/v1/graph/expand', { sourceId: manifest.sourceId, ref: manifest.anchor, neighborTypes: [manifest.neighbourType], limit: manifest.neighbours });
-  const body = response.json();
-  if (response.status !== 200 || !isRecord(body) || !Array.isArray(body['nodes'])) throw new RepeatFailure('the expansion of the anchor failed');
-  const refs = body['nodes'].flatMap((node) => (isRecord(node) && isRecord(node['ref']) ? [node['ref']] : []));
-  const typed = refs.flatMap((ref) => (typeof ref['sourceId'] === 'string' && typeof ref['entityType'] === 'string' && typeof ref['stableId'] === 'string' ? [{ sourceId: ref['sourceId'], entityType: ref['entityType'], stableId: ref['stableId'] }] : []));
+  const request = expandRequestSchema.safeParse({ sourceId: manifest.sourceId, ref: manifest.anchor, neighborTypes: [manifest.neighbourType], limit: manifest.neighbours });
+  if (!request.success) throw new RepeatFailure('the expansion request does not fit the contract');
+  const response = await call(http, 'POST', '/v1/graph/expand', request.data, 'the expansion of the anchor');
+  const body = expandResponseSchema.safeParse(response.json());
+  if (response.status !== 200 || !body.success) throw new RepeatFailure('the expansion of the anchor failed or did not fit the contract');
+  const typed = body.data.nodes.map((node) => ({ sourceId: node.ref.sourceId, entityType: node.ref.entityType, stableId: node.ref.stableId }));
   const isAnchor = (ref: { readonly entityType: string; readonly stableId: string }): boolean => ref.entityType === manifest.anchor.entityType && ref.stableId === manifest.anchor.stableId;
   const anchors = typed.filter(isAnchor);
   const neighbours = typed.filter((ref) => !isAnchor(ref));
@@ -94,13 +100,23 @@ async function buildView(options: RepeatOptions): Promise<ViewBuild> {
   return { keys: entities.map(keyOf), entities: entities.length };
 }
 
-function statusOf(httpStatus: number, answer: unknown): TurnStatus {
-  if (httpStatus !== 200 || !isRecord(answer)) return 'failed';
-  const status = answer['status'];
-  if (status === 'answered') return answer['route'] === 'refuse' ? 'refused' : 'answered';
-  if (status === 'confirmation' || status === 'clarification') return 'waiting';
-  if (status === 'unavailable' || status === 'too-large' || status === 'too-long') return 'failed';
-  return 'other';
+/** One request, with a transport failure (no answer, a timeout, a redirect) turned into a named failure of the repeat, never an exception that loses the turns already recorded. */
+async function call(http: Http, method: 'GET' | 'POST', path: string, body: unknown, what: string): Promise<HttpResponse> {
+  try {
+    return await http(method, path, body);
+  } catch {
+    throw new RepeatFailure(`${what}: the request did not complete (no answer, a timeout or a redirect)`);
+  }
+}
+
+function statusOf(httpStatus: number, body: unknown): { readonly status: TurnStatus; readonly answer: unknown } {
+  const parsed = assistantTurnAnswerSchema.safeParse(body);
+  if (httpStatus !== 200 || !parsed.success) return { status: 'failed', answer: body };
+  const answer = parsed.data;
+  if (answer.status === 'answered') return { status: answer.route === 'refuse' ? 'refused' : 'answered', answer };
+  if (answer.status === 'confirmation' || answer.status === 'clarification') return { status: 'waiting', answer };
+  if (answer.status === 'unavailable' || answer.status === 'too-large' || answer.status === 'too-long' || answer.status === 'limit' || answer.status === 'cancelled') return { status: 'failed', answer };
+  return { status: 'other', answer };
 }
 
 /**
@@ -128,10 +144,13 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
     ...(stoppedBecause === undefined ? {} : { stoppedBecause }),
   });
   try {
-    const created = await http('POST', '/v1/investigations', { sourceId: manifest.sourceId, entity: { sourceId: manifest.sourceId, ...manifest.anchor } });
-    const createdBody = created.json();
-    const investigationId = isRecord(createdBody) && typeof createdBody['id'] === 'string' ? createdBody['id'] : undefined;
-    if (created.status >= 300 || investigationId === undefined) throw new RepeatFailure('the investigation could not be opened');
+    const openRequest = openInvestigationRequestSchema.safeParse({ sourceId: manifest.sourceId, entity: { sourceId: manifest.sourceId, ...manifest.anchor } });
+    if (!openRequest.success) throw new RepeatFailure('the investigation request does not fit the contract');
+    const created = await call(http, 'POST', '/v1/investigations', openRequest.data, 'the opening of the investigation');
+    const opened = openInvestigationResponseSchema.safeParse(created.json());
+    if (created.status >= 300 || !opened.success) throw new RepeatFailure('the investigation could not be opened');
+    if (opened.data.created !== true) throw new RepeatFailure('the investigation already existed: a fresh one is required');
+    const investigationId = opened.data.investigation.id;
     view = await buildView(options);
     for (const [index, message] of manifest.messages.entries()) {
       if (remaining !== undefined && remaining < settings.callLimit) {
@@ -140,10 +159,22 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
         break;
       }
       const started = options.now();
-      const response = await http('POST', '/v1/assistant/turns', { sourceId: manifest.sourceId, investigationId, message, viewElementKeys: view.keys });
-      const answer = response.json();
-      const status = statusOf(response.status, answer);
-      turns.push({ n: index + 1, message, traceId: response.header('x-trace-id'), ms: Math.max(0, Math.round(options.now() - started)), httpStatus: response.status, status, answer });
+      const turnRequest = assistantTurnRequestSchema.safeParse({ sourceId: manifest.sourceId, investigationId, message, viewElementKeys: view.keys });
+      if (!turnRequest.success) throw new RepeatFailure('the turn request does not fit the contract');
+      let response: HttpResponse;
+      try {
+        response = await http('POST', '/v1/assistant/turns', turnRequest.data);
+      } catch {
+        turns.push({ n: index + 1, message, traceId: undefined, ms: Math.max(0, Math.round(options.now() - started)), httpStatus: 0, status: 'failed', answer: undefined });
+        if (remaining !== undefined) remaining -= settings.callLimit;
+        ended = 'failed';
+        stoppedBecause = `turn ${index + 1}: the request did not complete (no answer, a timeout or a redirect)`;
+        break;
+      }
+      const decided = statusOf(response.status, response.json());
+      const traceId = response.header('x-trace-id');
+      const status: TurnStatus = decided.status !== 'failed' && traceId === undefined ? 'failed' : decided.status;
+      turns.push({ n: index + 1, message, traceId, ms: Math.max(0, Math.round(options.now() - started)), httpStatus: response.status, status, answer: decided.answer });
       if (remaining !== undefined) remaining -= settings.callLimit;
       if (index === 0 && options.verifyFirstTurn !== undefined && status !== 'failed') {
         const problem = await options.verifyFirstTurn(turns[0] as TurnRecord);
@@ -155,7 +186,7 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
       }
       if (status === 'failed') {
         ended = 'failed';
-        stoppedBecause = `turn ${index + 1} failed`;
+        stoppedBecause = traceId === undefined && decided.status !== 'failed' ? `turn ${index + 1} returned no trace id` : `turn ${index + 1} failed`;
         break;
       }
       if (status === 'waiting') {

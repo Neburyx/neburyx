@@ -23,22 +23,32 @@ const io = () => {
 };
 const args = (f: ReturnType<typeof files>, extra: string[] = []): string[] => ['thread', 'run', '--manifest', f.manifest, '--base', 'http://127.0.0.1:8000', '--settings-file', f.settings, '--head', 'abc1234', '--arm', 'refs', ...extra];
 
-/** A stand-in of the product's HTTP surface: it records every request and answers from a script. */
-function standIn(over: { neighbours?: number; extraType?: boolean; answers?: (n: number) => { status: number; body: unknown } } = {}): { http: () => Http; requests: { method: string; path: string; body: unknown }[] } {
+const NODE = (entityType: string, stableId: string) => ({ ref: { sourceId: 'demo-source', entityType, stableId }, display: { title: `${entityType} ${stableId}`, type: entityType }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+const INVESTIGATION = (n: number) => ({ id: `0192f000-0000-7000-8000-${String(n).padStart(12, '0')}`, sourceId: 'demo-source', title: 'Widget W-1', caseRef: null, status: 'open', startingEntity: { entityType: 'widget', stableId: 'W-1' }, sourceState: 'available', createdAt: '2026-11-05T10:00:00.000Z', lastEditedAt: '2026-11-05T10:00:00.000Z', version: 1 });
+const REFUSED = { status: 'answered', route: 'refuse', cause: 'unplaced', sentence: 'I can’t place this message. Rephrase it, or use the manual tools.' };
+const WAITING = { status: 'clarification', question: 'Which one?', candidates: [{ title: 'W-2', type: 'widget', choice: { intent: 'x', roles: ['r'], entities: { id: 'W-2' }, choiceToken: `1.${'a'.repeat(64)}` } }] };
+
+/** A stand-in of the product's HTTP surface with answers that fit the contract: it records every request and answers from a script. */
+function standIn(over: { neighbours?: number; extraType?: boolean; answers?: (n: number) => { status: number; body: unknown; trace?: string | null }; throwOn?: (path: string, n: number) => boolean } = {}): { http: () => Http; requests: { method: string; path: string; body: unknown }[] } {
   const requests: { method: string; path: string; body: unknown }[] = [];
   let turn = 0;
+  let opened = 0;
   const http: Http = (method, path, body) => {
     requests.push({ method, path, body });
+    if (over.throwOn?.(path, turn + 1) === true) return Promise.reject(new Error('connection lost http://127.0.0.1 with SECRET'));
     const reply = (status: number, json: unknown, trace?: string) => Promise.resolve({ status, header: (name: string) => (name === 'x-trace-id' ? trace : undefined), json: () => json });
-    if (path === '/v1/investigations') return reply(201, { id: `inv-${requests.length}` });
+    if (path === '/v1/investigations') {
+      opened += 1;
+      return reply(201, { investigation: INVESTIGATION(opened), created: true, entity: NODE('widget', 'W-1'), draft: { version: 1, notes: null, basedOnViewId: null } });
+    }
     if (path === '/v1/graph/expand') {
       const count = over.neighbours ?? 25;
-      const nodes = [{ ref: { sourceId: 'demo-source', entityType: 'widget', stableId: 'W-1' } }, ...Array.from({ length: count }, (_, index) => ({ ref: { sourceId: 'demo-source', entityType: over.extraType === true && index === 0 ? 'other' : 'gadget', stableId: `G-${index}` } }))];
-      return reply(200, { nodes, edges: [], pages: [] });
+      const nodes = [NODE('widget', 'W-1'), ...Array.from({ length: count }, (_, index) => NODE(over.extraType === true && index === 0 ? 'other' : 'gadget', `G-${index}`))];
+      return reply(200, { ref: { sourceId: 'demo-source', entityType: 'widget', stableId: 'W-1' }, pageSize: 25, nodes, edges: [], pages: [], warnings: [] });
     }
     turn += 1;
-    const scripted = over.answers?.(turn) ?? { status: 200, body: { status: 'answered', route: 'view', sentences: [], calls: 3 } };
-    return reply(scripted.status, scripted.body, `tr-${turn}`);
+    const scripted = over.answers?.(turn) ?? { status: 200, body: REFUSED };
+    return reply(scripted.status, scripted.body, scripted.trace === null ? undefined : (scripted.trace ?? `tr-${turn}`));
   };
   return { http: () => http, requests };
 }
@@ -77,7 +87,7 @@ describe('the dry run', () => {
     for (const extra of [['--call-limit', '5'], ['--model', 'model-b']]) {
       const r = io();
       expect(await runCli(args(f, [...extra, '--dry-run']), r.io, hooks, { http: s.http })).toBe(2);
-      expect(r.err.join('\n')).toContain('disagrees with the settings file');
+      expect(r.err.join('\n')).toContain('disagrees with the settings');
     }
     expect(s.requests).toEqual([]);
   });
@@ -88,7 +98,7 @@ describe('one repeat', () => {
     const f = files();
     const s = standIn();
     const r = io();
-    expect(await runCli(args(f, ['--repeats', '2', '--budget', '100', '--out', f.out]), r.io, hooks, { http: s.http })).toBe(0);
+    expect(await runCli(args(f, ['--repeats', '2', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(0);
     const investigations = s.requests.filter((request) => request.path === '/v1/investigations');
     expect(investigations).toHaveLength(2);
     const turns = s.requests.filter((request) => request.path === '/v1/assistant/turns');
@@ -108,7 +118,7 @@ describe('one repeat', () => {
       const f = files();
       const s = standIn(over);
       const r = io();
-      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out]), r.io, hooks, { http: s.http })).toBe(1);
+      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
       expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toEqual([]);
       const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; stoppedBecause: string };
       expect(file.ended).toBe('failed');
@@ -117,11 +127,11 @@ describe('one repeat', () => {
   });
 
   it('ends the repeat at a turn that waits for a confirmation, and at a failed turn, recording both', async () => {
-    for (const [answers, ended] of [[(n: number) => (n === 2 ? { status: 200, body: { status: 'confirmation', pendingId: 'p' } } : { status: 200, body: { status: 'answered', route: 'view' } }), 'waiting'], [(n: number) => (n === 2 ? { status: 503, body: { error: {} } } : { status: 200, body: { status: 'answered', route: 'view' } }), 'failed']] as const) {
+    for (const [answers, ended] of [[(n: number) => (n === 2 ? { status: 200, body: WAITING } : { status: 200, body: REFUSED }), 'waiting'], [(n: number) => (n === 2 ? { status: 503, body: { error: {} } } : { status: 200, body: REFUSED }), 'failed']] as const) {
       const f = files();
       const s = standIn({ answers });
       const r = io();
-      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out]), r.io, hooks, { http: s.http })).toBe(1);
+      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
       const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; turns: unknown[] };
       expect(file.ended).toBe(ended);
       expect(file.turns).toHaveLength(2);
@@ -132,9 +142,58 @@ describe('one repeat', () => {
   it('writes no key, connection string or cookie text into the run file', async () => {
     const f = files();
     const s = standIn();
-    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out]), io().io, hooks, { http: s.http });
+    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
     const text = readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8');
     expect(text).not.toMatch(/SECRET|key-path|postgres:\/\/|bolt:\/\/|set-cookie|authorization/iu);
+  });
+});
+
+describe('transport failures, trace ids and outputs', () => {
+  it('records a connection loss as a failed turn with the turns before it kept, and names no address or secret', async () => {
+    const f = files();
+    const s = standIn({ throwOn: (path, n) => path === '/v1/assistant/turns' && n === 2 });
+    const r = io();
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+    const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; turns: { status: string }[]; stoppedBecause: string };
+    expect(file.ended).toBe('failed');
+    expect(file.turns.map((turn) => turn.status)).toEqual(['refused', 'failed']);
+    expect(JSON.stringify([file, r])).not.toMatch(/SECRET|127\.0\.0\.1/u);
+  });
+
+  it('ends a repeat at a turn with no trace id, and at an answer that does not fit the contract', async () => {
+    for (const answers of [(n: number) => ({ status: 200, body: REFUSED, trace: n === 1 ? null : `tr-${n}` }), (n: number) => ({ status: 200, body: n === 1 ? { status: 'unknown-status' } : REFUSED })]) {
+      const f = files();
+      const s = standIn({ answers });
+      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+      const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; turns: unknown[] };
+      expect(file.ended).toBe('failed');
+      expect(file.turns).toHaveLength(1);
+    }
+  });
+
+  it('refuses an arm name that could change a path, an output file that exists and an output inside a git tree, with no request made', async () => {
+    const s = standIn();
+    const f = files();
+    for (const arm of ['../evil', 'a/b', 'x']) {
+      const argv = args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]).map((part) => (part === 'refs' ? arm : part));
+      expect(await runCli(argv, io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    }
+    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    const before = s.requests.length;
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    expect(s.requests).toHaveLength(before);
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', join(process.cwd(), 'inside-a-git-tree'), '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    expect(s.requests).toHaveLength(before);
+  });
+
+  it('does not write a file whose content looks like a credential, and does not echo it', async () => {
+    const f = files();
+    const leaky = standIn({ answers: () => ({ status: 200, body: { ...REFUSED, sentence: 'key sk-ABCDEFGHIJKLMNOPQRSTUVWX and postgres://user:hunter2@host/db' } }) });
+    const r = io();
+    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: leaky.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    expect(code).toBe(2);
+    expect(readdirSync(f.out)).toEqual([]);
+    expect(JSON.stringify(r)).not.toMatch(/hunter2|ABCDEFGHIJKLMNOPQRSTUVWX/u);
   });
 });
 
@@ -142,10 +201,10 @@ describe('the budget', () => {
   it('refuses a budget below one turn, and a budget that covers two turns stops before the third', async () => {
     const f = files();
     const r = io();
-    expect(await runCli(args(f, ['--repeats', '1', '--budget', '6', '--out', f.out]), r.io, hooks, { http: standIn().http })).toBe(2);
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '6', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: standIn().http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
     const g = files();
     const s = standIn();
-    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--out', g.out]), io().io, hooks, { http: s.http })).toBe(1);
+    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--out', g.out, '--database-env-file', g.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
     expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toHaveLength(2);
     const file = JSON.parse(readFileSync(join(g.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string };
     expect(file.ended).toBe('budget');

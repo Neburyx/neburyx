@@ -157,7 +157,7 @@ async function record(parsed: Parsed, io: CliIo, hooks: EvalHooks): Promise<numb
 /** Runs one command and returns its exit code: 0 for a pass, 1 for a miss, 2 for a usage error. A message never holds a wording, an entity value, a reply or a key. */
 export async function runCli(argv: readonly string[], io: CliIo, hooks: EvalHooks & Partial<AssistantHooks>, threadDeps?: ThreadDeps): Promise<number> {
   try {
-    if (argv[0] === 'thread') return await runThread(argv.slice(1), io, threadDeps);
+    if (argv[0] === 'thread') return await runThread(argv.slice(1), io, threadDeps, 'loopDefaults' in hooks ? hooks.loopDefaults?.() : undefined);
     const parsed = parse(argv);
     if (parsed.command === 'scan') return await scan(parsed, io, hooks);
     if (parsed.command === 'record') return await record(parsed, io, hooks);
