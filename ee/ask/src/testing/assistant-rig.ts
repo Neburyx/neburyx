@@ -75,6 +75,19 @@ export const expandResult = (hasMore = false): AskRunResult =>
       warnings: [],
     },
   });
+/** An expansion of A-1 that adds an element sorting before every element of the view (A-0), so that the keys of the elements shift when the read is kept. */
+export const expandEarlierResult = (): AskRunResult =>
+  askRunResultSchema.parse({
+    templateId: 'expand',
+    result: {
+      ref: node('A-1').ref,
+      pageSize: 25,
+      nodes: [node('A-0'), node('A-1'), node('A-2')],
+      edges: [],
+      pages: [{ neighborType: 'widget', returned: 1, hasMore: false, matchingTotal: { quality: 'exact', value: 1, scope: 'test' } }],
+      warnings: [],
+    },
+  });
 /** A derived rule run for A-1 with two rules: the first lists the anchor and two other ends, the second the anchor and one; the count of the second may be given. */
 export const derivedRuleResult = (second: { quality: string; value?: number } = { quality: 'exact', value: 1 }): AskRunResult =>
   askRunResultSchema.parse({

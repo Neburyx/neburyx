@@ -238,12 +238,14 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         if (step.status !== 'heavy') steps += 1;
         if ('rows' in step) rows += step.rows;
         const text = apply(tool, values, step);
-        notePropertyValuesSent(assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId)).assembled.carriesPropertyValues);
         if (estimateTokens(system, text) > settings.maxInputTokens) {
+          // the result does not go to the model, so the read is taken back as if it had not been made: the answer is judged against the lines the model holds
+          takeBack(snapshots.length - 1);
           limited ??= 'input';
           control.answerOnly = true;
           return LIMIT_TEXT;
         }
+        notePropertyValuesSent(assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId)).assembled.carriesPropertyValues);
         return text;
       },
     }));

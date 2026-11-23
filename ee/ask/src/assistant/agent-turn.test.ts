@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
 import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, VIEW_BODY, answerOf, degreeResult, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
+import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 
@@ -651,6 +651,47 @@ describe('the input limit of the agent turn', () => {
     expect(JSON.stringify(answer)).not.toContain('degree-preview');
     const none = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 3_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     expect(await answerOf(none.route.handler(none.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'input' });
+  });
+
+  describe('a read left out because the next request is too large', () => {
+    /** The answer of the first limit, from the top down, at which the read was left out and the turn still answered: the sizes depend on the texts of the turn, so the limit is found, not written. */
+    const firstTrimmed = async (scripted: () => ReturnType<typeof fakeModel>, over: { loopSteps?: number } = {}): Promise<Awaited<ReturnType<typeof answerOf>>> => {
+      for (let limit = 30_000; limit >= 3_000; limit -= 100) {
+        const r = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: limit }, ...(over.loopSteps === undefined ? {} : { loopSteps: over.loopSteps }), run: () => ({ status: 'ok', result: expandEarlierResult() }) });
+        const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+        if ('stoppedAt' in answer && answer.stoppedAt === 'input') return answer;
+      }
+      throw new Error('no limit left a read out');
+    };
+    const expand = { name: 'expand', args: { entityType: 'widget', stableId: 'A-1', neighborType: 'widget' } };
+
+    it('judges the answer against the keys the model holds: the read that would shift them is taken back, the cite n1 stays the first element of the view, and the reads and the coverage list the view only', async () => {
+      const answer = await firstTrimmed(() =>
+        fakeModel()
+          .respondWithTools([{ name: 'view', args: {} }])
+          .respondWithTools([expand])
+          .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+          .respond(new AIMessage('Done.')),
+      );
+      expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], citations: [{ key: 'n1', ref: { stableId: 'A-1' } }], reads: [{ tool: 'view' }], stoppedAt: 'input' });
+      expect(JSON.stringify(answer)).not.toContain('A-0');
+      const viewOnly = await rig({ reply: VIEW, agent: { model: fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }]).respond(new AIMessage('Done.')), maxCalls: 8 } });
+      const plain = await answerOf(viewOnly.route.handler(viewOnly.request(VIEW_BODY)));
+      expect('coverage' in answer && 'coverage' in plain && answer.coverage).toEqual('coverage' in plain && plain.coverage);
+    });
+
+    it('says the limit of the input, not that of the steps, when the read left out was the one a limit of steps had stopped', async () => {
+      const answer = await firstTrimmed(
+        () =>
+          fakeModel()
+            .respondWithTools([{ name: 'view', args: {} }])
+            .respondWithTools([expand])
+            .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+            .respond(new AIMessage('Done.')),
+        { loopSteps: 1 },
+      );
+      expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', reads: [{ tool: 'view' }] });
+    });
   });
 
   it('ends with the fixed sentence of the limit, and makes no model call, when the request the framework assembles does not fit though the turn\'s own text does', async () => {
