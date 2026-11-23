@@ -60,7 +60,12 @@ test.describe('the Patterns panel on each pack', () => {
       await row.getByRole('button', { name: 'Run Saved from the form' }).click();
       await panel.getByRole('button', { name: 'Run pattern' }).click();
       await expect(panel.locator('.patterns-result:visible')).toBeVisible();
-      expect(await panel.locator('.patterns-result:visible').innerText()).toBe(fromForm);
+      // The sentence carries the wall-clock time of each run, so the two texts are compared with that time left out, and each must still show one.
+      const fromSaved = await panel.locator('.patterns-result:visible').innerText();
+      const MEASURED = /\d+\.\d{2}\s+s/;
+      expect(fromForm).toMatch(MEASURED);
+      expect(fromSaved).toMatch(MEASURED);
+      expect(fromSaved.replace(MEASURED, 'TIME')).toBe(fromForm.replace(MEASURED, 'TIME'));
     });
   }
 });
