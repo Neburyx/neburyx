@@ -150,6 +150,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
     seen.set(id, key);
     keys.set(key, 'entityType' in element ? { kind: 'entity', ref: element, title } : { kind: 'relationship', ref: element, title });
     lines.set(key, 'entityType' in element ? `${key}: ${type}: ${title}` : `${key}: ${title}`);
+    if ('entityType' in element) sentValues.set(key, sentValuesOf([], title));
     return key;
   };
   reads.forEach((read, readIndex) => {

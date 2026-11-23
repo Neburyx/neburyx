@@ -55,6 +55,12 @@ describe('the answer after tool steps', () => {
     expect(assembled.carriesPropertyValues).toBe(false);
   });
 
+  it('keeps for each element a read listed the values sent for it, as pairs: the title of an element, the properties of one that came with its node, and those of a relationship that came with its edge', () => {
+    const { assembled } = assembleResults([{ tool: 'shared', result: okResult() }, { tool: 'sentBy', result: expandResult() }]);
+    expect(assembled.sentValues?.get('r1')).toEqual([{ key: '(title)', text: expect.any(String), masked: false }]);
+    for (const key of assembled.keys.keys()) expect(assembled.sentValues?.has(key), key).toBe(true);
+  });
+
   it('writes the read of an expansion in its own unit, 2 matches and not the 3 nodes with the anchor, and a relationship with its type once', () => {
     const { assembled } = assembleResults([{ tool: 'sentBy', result: expandResult() }]);
     expect(assembled.lines.get('s1')).toBe('s1: read of sentBy: 2 matches shown · exact');

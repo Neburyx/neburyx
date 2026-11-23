@@ -63,8 +63,19 @@ describe.each([
     expect(classifyItem('The holder is Zed Quux.', ['m1'], make({}, { m1: [value(secret, 'Zed Quux')] }))).toEqual({ form: 'frozen' });
   });
 
-  it('keeps the case of a name and its offsets, and refuses a fold that would move them', () => {
-    expect(classifyItem('JORDAN LEE is listed.', ['n1'], make())).toEqual({ form: 'bound', spans: [{ start: 0, end: 10, element: 'n1', property: secret }] });
+  it('binds a value only as it was sent (a match that differs in case may be an ordinary word), and refuses a fold that would move the offsets', () => {
+    expect(classifyItem('JORDAN LEE is listed.', ['n1'], make())).toEqual({ form: 'unbound' });
     expect(classifyItem('İ is listed.', ['n1'], make())).toEqual({ form: 'unbound' });
+  });
+
+  it('is unbound for a value written in another shape: no separators, other separators, no accent, full-width digits, or a short word of it', () => {
+    const shaped = make({}, { n3: [value(secret, 'AB-1234-5678')], n1: [value(secret, 'Jordan Lee')], n2: [value(secret, 'José Álvarez')] });
+    expect(classifyItem('The code is AB12345678.', ['n3'], shaped)).toEqual({ form: 'unbound' });
+    expect(classifyItem('The code is AB 1234 5678.', ['n3'], shaped)).toEqual({ form: 'unbound' });
+    expect(classifyItem('The holder is JordanLee.', ['n1'], shaped)).toEqual({ form: 'unbound' });
+    expect(classifyItem('The holder is Jose Alvarez.', ['n2'], shaped)).toEqual({ form: 'unbound' });
+    expect(classifyItem('The code is ＡＢ１２３４５６７８.', ['n3'], shaped)).toEqual({ form: 'unbound' });
+    expect(classifyItem('Mr. Wu is listed.', ['n1'], make({}, { n1: [value(secret, 'Al Wu')] }))).toEqual({ form: 'unbound' });
+    expect(classifyItem('The code is AB-1234-5678.', ['n3'], shaped)).toMatchObject({ form: 'bound' });
   });
 });

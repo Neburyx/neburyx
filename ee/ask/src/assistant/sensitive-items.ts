@@ -29,10 +29,25 @@ const UNBOUND: Classified = { form: 'unbound' };
 const LETTERS = /[\p{L}\p{N}]+/gu;
 const edge = (text: string): string => text.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&');
 
-/** The shortest word of a sensitive value that counts as a part of it: a shorter one (an initial, a particle) is in too much ordinary text to tell. */
-const WORD_MIN = 3;
+/** The shortest word of a sensitive value that counts as a part of it. An item the classifier cannot decide is `unbound`, and a false `unbound` only withholds text under the mask, so the threshold errs that way. */
+const WORD_MIN = 2;
 /** The fewest digits of a number that count as a value whatever the separators written between them. */
 const DIGITS_MIN = 4;
+
+/** A text as its letters and digits alone: no accent, no case, no separator, and the compatible forms of a character (full-width digits) folded to the plain ones. What a person could read as the same value however it is written. */
+const skeletonOf = (text: string): string => text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+/** The same fold with the separators kept, for whole words. */
+const plainOf = (text: string): string => text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+
+/** What the classifier reads of a turn's assembled text: the values sent, and every element key the lines name (the completeness of the provenance is judged from all of them, never from a list the caller chooses). */
+export const provenanceOf = (assembled: { readonly keys: ReadonlyMap<string, { readonly kind: string; readonly ref: unknown }>; readonly sentValues?: ReadonlyMap<string, readonly SentValue[]> | undefined }): Pick<ClassifyContext, 'sentValues' | 'sent' | 'typeOf'> => ({
+  sentValues: assembled.sentValues,
+  sent: [...assembled.keys.keys()],
+  typeOf: (key) => {
+    const held = assembled.keys.get(key);
+    return held?.kind === 'entity' ? (held.ref as { entityType: string }).entityType : undefined;
+  },
+});
 
 export function classifyItem(text: string, cited: readonly string[], context: ClassifyContext): Classified {
   const { sentValues, sensitiveKeys } = context;
@@ -43,13 +58,16 @@ export function classifyItem(text: string, cited: readonly string[], context: Cl
   // a case fold that moves the offsets would put a span in the wrong place: the item is not bound
   if (folded.length !== written.length) return UNBOUND;
   const owners = new Map<string, { element: string; property: string }[]>();
+  const originals = new Map<string, Set<string>>();
   for (const [element, values] of sentValues) {
     const type = context.typeOf(element);
     const keys = type === undefined ? undefined : sensitiveKeys.get(type);
     if (keys === undefined) continue;
     for (const value of values) {
-      const text = value.text.normalize('NFC').toLowerCase().trim();
+      const exact = value.text.normalize('NFC').trim();
+      const text = exact.toLowerCase();
       if (!keys.includes(value.key) || value.masked || text === '') continue;
+      originals.set(text, (originals.get(text) ?? new Set<string>()).add(exact));
       const held = owners.get(text) ?? [];
       if (!held.some((owner) => owner.element === element && owner.property === value.key)) held.push({ element, property: value.key });
       owners.set(text, held);
@@ -64,22 +82,25 @@ export function classifyItem(text: string, cited: readonly string[], context: Cl
   // what is left once the whole values are taken out must hold no word of a sensitive value and no number written another way
   let rest = folded;
   for (const span of spans) rest = rest.slice(0, span.start) + ' '.repeat(span.end - span.start) + rest.slice(span.end);
-  const joined = rest.replace(/(?<=\d)[\s,.\-/](?=\d)/gu, '');
+  // what is left must hold no word of a sensitive value, and the value in no other shape: its letters and digits alone, without accents, case or separators
+  const left = plainOf(rest);
+  const leftSkeleton = skeletonOf(rest);
   for (const value of owners.keys()) {
-    for (const word of value.match(LETTERS) ?? []) {
+    for (const word of plainOf(value).match(LETTERS) ?? []) {
       const digits = /^\d+$/u.test(word);
-      if ((digits ? word.length < DIGITS_MIN : word.length < WORD_MIN)) continue;
-      if (new RegExp(`(?<![\\p{L}\\p{N}_])${edge(word)}(?![\\p{L}\\p{N}_])`, 'u').test(rest)) return UNBOUND;
+      if (digits ? word.length < DIGITS_MIN : word.length < WORD_MIN) continue;
+      if (new RegExp(`(?<![\\p{L}\\p{N}_])${edge(word)}(?![\\p{L}\\p{N}_])`, 'u').test(left)) return UNBOUND;
     }
-    const digits = value.replace(/\D/gu, '');
-    if (digits.length >= DIGITS_MIN && /^[\d\s,.\-/+()]+$/u.test(value) && joined.includes(digits)) return UNBOUND;
+    const skeleton = skeletonOf(value);
+    if (skeleton.length >= DIGITS_MIN && leftSkeleton.includes(skeleton)) return UNBOUND;
   }
   if (spans.length === 0) return { form: 'frozen' };
   const bound: BoundSpan[] = [];
   for (const span of spans) {
     const holders = owners.get(span.value) ?? [];
     const [only] = holders;
-    if (only === undefined || holders.length !== 1 || !cited.includes(only.element)) return UNBOUND;
+    // a value is bound only where the text writes it exactly as it was sent: a match that differs in case alone may be an ordinary word
+    if (only === undefined || holders.length !== 1 || !cited.includes(only.element) || originals.get(span.value)?.has(written.slice(span.start, span.end)) !== true) return UNBOUND;
     bound.push({ start: span.start, end: span.end, element: only.element, property: only.property });
   }
   return { form: 'bound', spans: bound };
