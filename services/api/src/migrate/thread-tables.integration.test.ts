@@ -432,6 +432,19 @@ describe('the text of a turn (0013)', () => {
     expect(await rows(database.ownerUrl, 'SELECT 1 FROM assistant_turns')).toEqual([]);
   });
 
+  it('tells the id of each turn in the read, and knows an id that the thread of another person or another investigation holds, and not one of the same thread', async () => {
+    const database = await seeded();
+    const id = randomUUID();
+    await withStore(database, async (store) => {
+      expect(await store.append(turn({ id, question: 'Which accounts?', maskOn: false }), 0)).toBe('stored');
+      expect((await store.read(FIRST, OWNER, 10)).turns.map((entry) => entry.id)).toEqual([id]);
+      expect(await store.turnIdTaken(id, FIRST, OWNER)).toBe(false);
+      expect(await store.turnIdTaken(id, FIRST, randomUUID())).toBe(true);
+      expect(await store.turnIdTaken(id, SECOND, OWNER)).toBe(true);
+      expect(await store.turnIdTaken(randomUUID(), FIRST, OWNER)).toBe(false);
+    });
+  });
+
   it('leaves a turn written without the four columns (as before the file) with null in them, and the rollback note drops them without touching another table', async () => {
     const database = await seeded();
     const thread = randomUUID();

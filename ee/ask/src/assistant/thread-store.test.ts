@@ -187,7 +187,7 @@ describe('the text of a turn, stored through the strict schema', () => {
 });
 
 describe('the read of the Postgres store', () => {
-  const row = (seq: number) => ({ seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: 'widgetById', steps: 1, cited: 2 });
+  const row = (seq: number) => ({ id: `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: 'widgetById', steps: 1, cited: 2 });
 
   it('reads in one repeatable-read, read-only transaction, the newest turns first so the oldest are the ones left out, and answers them oldest first with how many are not shown', async () => {
     const { held, statements, released } = pool({ turns: [row(7), row(6)], total: 7 });
@@ -230,7 +230,7 @@ describe('the read of the context of the Postgres store', () => {
 });
 
 describe('the text of the turns a Postgres read hands on', () => {
-  const rowOf = (seq: number, over: Record<string, unknown>) => ({ seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: null, steps: 1, cited: 0, question_text: null, mask_on: null, answer: null, sensitivity_version: null, ...over });
+  const rowOf = (seq: number, over: Record<string, unknown>) => ({ id: `0192f000-0000-7000-8000-0000000000${String(seq).padStart(2, '0')}`, seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: null, steps: 1, cited: 0, question_text: null, mask_on: null, answer: null, sensitivity_version: null, ...over });
 
   it('hands each turn its own text in the order of the turns, drops an answer that is not the stored form or not JSON and keeps its question, and none for a row with the four columns null', async () => {
     const good = { blocks: [{ kind: 'sentences', items: [{ form: 'frozen', text: 'Fixed text.', cites: [] }] }] };
