@@ -231,7 +231,7 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_MODEL` | `claude-sonnet-5-5` | |
 | `NEBURYX_ASSISTANT_TIMEOUT_MS` (one model call) | 60000 | 600000, and not above the total |
 | `NEBURYX_ASSISTANT_TOTAL_TIMEOUT_MS` (a whole turn) | 180000 | 600000 |
-| `NEBURYX_ASSISTANT_MAX_CALLS` (model calls a turn) | 8 | 10 |
+| `NEBURYX_ASSISTANT_MAX_CALLS` (model calls a turn) | 7 | 10 |
 | `NEBURYX_ASSISTANT_MAX_STEPS` (reads a turn) | 4 | 8 |
 | `NEBURYX_ASSISTANT_MAX_ROWS` (rows read a turn) | the source's own page limit times the steps | an operator may only lower it |
 | `NEBURYX_ASSISTANT_CONTEXT_TURNS` (earlier turns the router, the answer from the view and the answer after tool steps see: references and titles only, read again through the gate, with the relationships those turns cited and the titles of their ends) | 3 | 6 |
@@ -278,7 +278,7 @@ The line of an element in the result of a tool carries the same properties as th
 
 An answer on the `ask` route that rests on a read of one of the folder's questions carries the same follow-ups as Ask's own answer to that read.
 
-The turn stops at a limit: model calls (`NEBURYX_ASSISTANT_MAX_CALLS`, 8 by default, at most 10), reads (`NEBURYX_ASSISTANT_MAX_STEPS`, 4 by default, and the rows setting), the time of the whole turn, and the size of what is sent. One call is kept for the answer: from the last call on, and once a limit is reached, only `answer` is offered and run, so the answer is drafted over what was read and carries the limit it stopped at (the panel shows the stop sentence under it). An answer given on the last call the turn may make, with no read refused, carries no limit but says so in a fixed sentence ("Written on the last model call this turn allows; ask again to read further."), whether the model was done or not; an answer given while reads were still allowed carries nothing. When the limit comes before anything was read, or the answer does not fit, the turn ends with the fixed sentence of the limit. The time is checked before each call and each read; the model call and the read in flight are stopped with the turn. Reads run in the order the model gave them, and none after a heavy stop or a cancel.
+The turn stops at a limit: model calls (`NEBURYX_ASSISTANT_MAX_CALLS`, 7 by default, at most 10), reads (`NEBURYX_ASSISTANT_MAX_STEPS`, 4 by default, and the rows setting), the time of the whole turn, and the size of what is sent. One call is kept for the answer: from the last call on, and once a limit is reached, only `answer` is offered and run, so the answer is drafted over what was read and carries the limit it stopped at (the panel shows the stop sentence under it). An answer the checks accept whole ends the turn at once: no further model call acknowledges it; when a sentence was removed, the model gets one more chance to answer. An answer given on the last call the turn may make, with no read refused, carries no limit but says so in a fixed sentence ("Written on the last model call this turn allows; ask again to read further."), whether the model was done or not; an answer given while reads were still allowed carries nothing. When the limit comes before anything was read, or the answer does not fit, the turn ends with the fixed sentence of the limit. The time is checked before each call and each read; the model call and the read in flight are stopped with the turn. Reads run in the order the model gave them, and none after a heavy stop or a cancel.
 
 ### The tools of your own data
 

@@ -22,7 +22,8 @@ describe('a view question on the agent', () => {
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] });
     expect(r.elementReads).toHaveLength(1);
-    expect(modelEvents(r)).toHaveLength(3);
+    // the read and the answer: no call acknowledges an answer the checks accepted whole
+    expect(modelEvents(r)).toHaveLength(2);
     const closed = r.events.filter((event) => event.action === 'assistant.turn.closed');
     expect((closed[0]?.detail as { turn: { modelCalls: number } }).turn.modelCalls).toBe(1 + modelEvents(r).length);
   });
@@ -177,6 +178,29 @@ describe('a view question on the agent', () => {
     expect(answer).toMatchObject({ status: 'answered' });
     expect(answer).not.toHaveProperty('lastCallNote');
     expect(answer).not.toHaveProperty('stoppedAt');
+  });
+
+  it('makes no call after an answer the checks accepted whole, and still gives the model its one chance to answer again when a sentence was removed', async () => {
+    const whole = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(() => {
+        throw new Error('a call after an accepted answer');
+      });
+    const r = await rig({ reply: VIEW, agent: { model: whole } });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(modelEvents(r).filter((event) => event.result === 'failed')).toHaveLength(0);
+    expect(modelEvents(r)).toHaveLength(2);
+    const removed = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }, { text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(() => {
+        throw new Error('a call after an accepted answer');
+      });
+    const again = await rig({ reply: VIEW, agent: { model: removed, maxCalls: 8 } });
+    expect(await answerOf(again.route.handler(again.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(modelEvents(again)).toHaveLength(3);
   });
 
   it('is not called for a verdict the router refuses', async () => {
@@ -548,7 +572,7 @@ describe('the records and the audit of an agent turn', () => {
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
     const [run] = store.runs;
     const agentEvents = modelEvents(r);
-    expect(agentEvents).toHaveLength(3);
+    expect(agentEvents).toHaveLength(2);
     for (const event of agentEvents) expect((event.detail as { ai: { runId?: string } }).ai.runId).toBe(run?.id);
     expect(run?.callStarts).toHaveLength(1 + agentEvents.length);
   });

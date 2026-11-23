@@ -64,8 +64,8 @@ describe('a turn that drafts the AI case summary', () => {
   it('counts every call the summarizer made in the turn\'s calls', async () => {
     const r = await turn(sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['a1'] }));
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY, { caseSummarizer: summarizer(draft({ calls: 2 })) })));
-    // the router, the agent's calls (the first read, the summary, the answer, the last) and the two calls of the summary
-    expect(answer).toMatchObject({ status: 'answered', calls: 7 });
+    // the router, the agent's calls (the first read, the summary, the answer) and the two calls of the summary
+    expect(answer).toMatchObject({ status: 'answered', calls: 6 });
   });
 
   it('uses the reading of the view the turn already has and makes no read of its own', async () => {

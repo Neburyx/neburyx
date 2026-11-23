@@ -10,7 +10,7 @@ const settingsOf = (env: Record<string, string | undefined> = {}) => {
 
 describe('the assistant settings by environment', () => {
   it('have the default of each setting when none is given', () => {
-    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 8, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
+    expect(settingsOf()).toEqual({ model: 'claude-sonnet-5-5', timeoutMs: 60_000, totalTimeoutMs: 180_000, maxCalls: 7, maxSteps: 4, contextTurns: 3, maxMessageWords: 1000, maxInputTokens: 25_000, maxOutputTokens: 4000, runRetentionDays: 30, threadRetention: 'close', threadReadTurns: 100 });
   });
 
   it('take a value of every setting, and treat an empty value as not given', () => {
@@ -29,7 +29,7 @@ describe('the assistant settings by environment', () => {
       [ASSISTANT_VARIABLES.threadReadTurns]: '20',
     });
     expect(settings).toEqual({ model: 'claude-haiku-5-5', timeoutMs: 30_000, totalTimeoutMs: 90_000, maxCalls: 3, maxSteps: 2, maxRows: 40, contextTurns: 5, maxMessageWords: 500, maxInputTokens: 10_000, maxOutputTokens: 2000, runRetentionDays: 7, threadRetention: 'close', threadReadTurns: 20 });
-    expect(settingsOf({ [ASSISTANT_VARIABLES.maxCalls]: '' }).maxCalls).toBe(8);
+    expect(settingsOf({ [ASSISTANT_VARIABLES.maxCalls]: '' }).maxCalls).toBe(7);
   });
 
   it.each([

@@ -253,6 +253,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
             standing = withPointer(tabled, tableSchema.shape.pointer.parse(args['pointer']));
             onLastCall = isLast;
           } else standing ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
+          // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown
+          if ((tabled.kind === 'sentences' || tabled.kind === 'table') && judgedRows.removed === 0 && !judgedRows.verdictFound) control.stop = true;
           return feedback({ kept: judgedRows.kept.length, removed: judgedRows.removed, verdictFound: judgedRows.verdictFound });
         }
         const parsed = answerSchema.parse(args);
@@ -267,6 +269,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           onLastCall = isLast;
         }
         else standing ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
+        // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it
+        if ((outcome.kind === 'sentences' || outcome.kind === 'table') && judged.removed === 0 && !judged.verdictFound) control.stop = true;
         return feedback({ kept: judged.kept.length, removed: judged.removed, verdictFound: judged.verdictFound });
       },
     });
