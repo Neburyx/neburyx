@@ -78,11 +78,13 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
 
 /** The shape the provider constrains the router's reply to, so that its first reply is a route object and never prose; the reply is still read strictly by `readAssistantRoute`. */
 const ROUTE_NAMES = ['view', 'meaning', 'ask', 'clarify', 'refuse'] as const satisfies readonly AssistantRouterReply['route'][];
+// a route the contract adds and this list lacks makes this type not `never`, and the build fails
+const ROUTES_COVERED: Exclude<AssistantRouterReply['route'], (typeof ROUTE_NAMES)[number]> extends never ? true : never = true;
 
 const ROUTE_REPLY_SCHEMA = {
   type: 'object',
   properties: {
-    route: { type: 'string', enum: ROUTE_NAMES },
+    route: { type: 'string', enum: ROUTES_COVERED ? ROUTE_NAMES : [] },
     intent: { type: 'string' },
     role: { type: 'string' },
     cause: { type: 'string', enum: [...ASSISTANT_REFUSAL_CAUSES] },
