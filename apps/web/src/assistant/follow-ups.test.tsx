@@ -101,3 +101,38 @@ describe('the Assistant panel: follow-ups under an answer', () => {
     expect(field.value).toBe('');
   });
 });
+
+const sentenceAnswer = (followUps: NonNullable<Extract<AssistantTurnAnswer, { status: 'answered'; route: 'ask' }>['followUps']> | undefined): AssistantTurnAnswer => ({
+  status: 'answered',
+  route: 'ask',
+  sentences: [{ text: 'acc-1 is listed.', cites: ['r1'] }],
+  citations: [{ key: 'r1', kind: 'entity', ref: ENTITY.ref, title: 'acc-1' }],
+  coverage: { retrieval: '1 shown', summary: 'The answer cites 1 of the 1 elements the reads returned.' },
+  model: 'configured-model',
+  calls: 3,
+  steps: 1,
+  reads: [{ tool: 'accounts-paid-by', kind: 'intent', read: true, rows: 1, quality: 'exact', partial: false }],
+  ...(followUps === undefined ? {} : { followUps }),
+});
+
+describe('the Assistant panel: follow-ups under an answer of the agent', () => {
+  it('shows the same row of follow-ups under a sentence answer, and sends one as a choice with no message', async () => {
+    const h = harness(async (request) => ok('choice' in request ? REFUSE : sentenceAnswer(CHIPS)));
+    render(h.tree());
+    await typeAndSend('who paid acc-1?');
+    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.followUps })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Paths between · acc-1, acc-2' }));
+    expect(await screen.findByText(ASSISTANT_COPY.notAnswered)).toBeTruthy();
+    expect(h.sent[1]).toMatchObject({ choice: CHIPS[1]?.choice });
+    expect('message' in (h.sent[1] ?? {})).toBe(false);
+  });
+
+  it('shows no row when a sentence answer carries no follow-ups', async () => {
+    const h = harness(async () => ok(sentenceAnswer(undefined)));
+    render(h.tree());
+    await typeAndSend('who paid acc-1?');
+    await act(async () => undefined);
+    expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.followUps })).toBeNull();
+  });
+});
+

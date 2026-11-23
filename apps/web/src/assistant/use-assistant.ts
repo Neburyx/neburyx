@@ -78,7 +78,7 @@ function outcomeOf(answer: AssistantTurnAnswer, retry: Retry, request: Assistant
         const overview: ViewAnswer | undefined = answer.overview === undefined ? undefined : { status: 'answered', route: 'view', ...answer.overview, calls: 1 };
         return { kind: 'refuse', cause: answer.cause, sentence: answer.sentence, ...(overview === undefined ? {} : { overview, entries: entriesOf(overview) }) };
       }
-      if ('sentences' in answer || 'table' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer) };
+      if ('sentences' in answer || 'table' in answer) return { kind: 'view-answer', answer, entries: entriesOf(answer), ...('followUps' in answer && answer.followUps !== undefined ? { followUps: answer.followUps } : {}) };
       if (!isAskAnswer(answer.answer)) return { kind: 'ask-refused', refused: answer.answer.refused, reads: answer.reads };
       return answer.answer.answered.continueToken === undefined ? { kind: 'answered', answer: answer.answer.answered, added: undefined, reads: answer.reads, stoppedAt: answer.stoppedAt, coverage: answer.coverage, followUps: answer.followUps ?? [] } : { kind: 'heavy', answer: answer.answer.answered, token: answer.answer.answered.continueToken };
     case 'not-answered':
@@ -324,7 +324,7 @@ export function useAssistant(): AssistantModel {
     canSend: limit !== undefined && sourceId !== null && investigationId !== null && !sourceChanged && keys.length <= ASSISTANT_VIEW_KEYS_MAX && !view.turns.some((turn) => turn.outcome.kind === 'pending') && words > 0 && !tooLong,
     canCancel: view.turns.some((turn) => turn.outcome.kind === 'pending'),
     busy: view.turns.some((turn) => turn.outcome.kind === 'pending'),
-    followUpsTurn: [...view.turns].reverse().find((turn) => turn.outcome.kind === 'answered')?.id,
+    followUpsTurn: [...view.turns].reverse().find((turn) => turn.outcome.kind === 'answered' || (turn.outcome.kind === 'view-answer' && turn.outcome.followUps !== undefined))?.id,
     canAdd: principalId !== undefined && !sourceChanged,
     focus,
     setInput: (text) => patch({ input: text, notice: view.notice?.kind === 'too-long' ? undefined : view.notice }),
@@ -396,7 +396,7 @@ export function useAssistant(): AssistantModel {
     },
     pressFollowUp: (turnId, index) => {
       const turn = turnOf(turnId);
-      const followUp = turn?.outcome.kind === 'answered' ? turn.outcome.followUps[index] : undefined;
+      const followUp = turn?.outcome.kind === 'answered' ? turn.outcome.followUps[index] : turn?.outcome.kind === 'view-answer' ? turn.outcome.followUps?.[index] : undefined;
       if (followUp !== undefined) pressFrom(undefined, followUp);
     },
     removeSummary: () => {

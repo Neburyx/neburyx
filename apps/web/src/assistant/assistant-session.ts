@@ -72,7 +72,7 @@ export type Outcome =
   | { readonly kind: 'meaning'; readonly described: readonly { readonly typeKind: 'entity' | 'relationship'; readonly type: string; readonly description: string }[]; readonly sentence: string | undefined }
   | { readonly kind: 'limit'; readonly limit: AssistantLimit; readonly sentence: string; readonly reads: readonly AssistantRead[] }
   | { readonly kind: 'answered'; readonly answer: Answered; readonly added: AddedOutcome | undefined; readonly reads: readonly AssistantRead[] | undefined; readonly stoppedAt: AssistantLimit | undefined; readonly coverage: string | undefined; readonly followUps: readonly FollowUp[] }
-  | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[] }
+  | { readonly kind: 'view-answer'; readonly answer: ViewAnswer; readonly entries: readonly CitationEntry[]; /** The follow-ups of an answer of the ask route that rests on a read of one of the folder's questions, as under Ask's own answer. */ readonly followUps?: readonly FollowUp[] }
   | { readonly kind: 'clarification'; readonly question: string; readonly candidates: readonly ClarificationCandidate[]; readonly failed?: { readonly failure: Failure; readonly index: number } }
   /** A refusal of Ask inside a turn; the reads the earlier steps of a tool loop made, when the refusal ended the loop. */
   | { readonly kind: 'ask-refused'; readonly refused: Refused; readonly reads?: readonly AssistantRead[] | undefined }

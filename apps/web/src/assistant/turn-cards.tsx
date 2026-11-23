@@ -229,6 +229,7 @@ function Outcome({ turn, actions }: { readonly turn: Turn; readonly actions: Tur
         <>
           <ViewAnswerCard answer={outcome.answer} entries={outcome.entries} />
           {'stoppedAt' in outcome.answer && outcome.answer.stoppedAt !== undefined ? <LimitCard limit={outcome.answer.stoppedAt} sentence={ASSISTANT_LIMIT_SENTENCES[outcome.answer.stoppedAt]} /> : null}
+          {outcome.followUps !== undefined && actions.followUpsTurn === turn.id ? <FollowUps followUps={outcome.followUps} disabled={actions.busy} onPress={(index) => actions.pressFollowUp(turn.id, index)} /> : null}
         </>
       );
     case 'clarification':

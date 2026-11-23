@@ -4,6 +4,7 @@ import { ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contract
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
+import { createMemoryAssistantRunStore } from './run-store.js';
 
 afterAll(removeAskFolders);
 
@@ -406,5 +407,33 @@ describe('the follow-ups of an agent answer on the ask route', () => {
       .respond(new AIMessage('Done.'));
     const v = await rig({ reply: VIEW, agent: { model: viewModel }, intents: INTENTS });
     expect(await answerOf(v.route.handler(v.request(VIEW_BODY)))).not.toHaveProperty('followUps');
+  });
+});
+
+describe('the records and the audit of an agent turn', () => {
+  it('writes one stored call for each agent model call, and every agent audit event names the run they belong to', async () => {
+    const store = createMemoryAssistantRunStore();
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const [run] = store.runs;
+    const agentEvents = modelEvents(r);
+    expect(agentEvents).toHaveLength(3);
+    for (const event of agentEvents) expect((event.detail as { ai: { runId?: string } }).ai.runId).toBe(run?.id);
+    expect(run?.callStarts).toHaveLength(1 + agentEvents.length);
+  });
+
+  it('ends the turn as AUDIT_UNAVAILABLE, with no call made to the model, when the audit event cannot be built', async () => {
+    let received = 0;
+    const model = fakeModel().respond(() => {
+      received += 1;
+      return new AIMessage('never asked');
+    });
+    const r = await rig({ reply: VIEW, agent: { model, promptId: 'not a valid prompt id !' } });
+    await expect(r.route.handler(r.request(VIEW_BODY))).rejects.toMatchObject({ code: 'AUDIT_UNAVAILABLE' });
+    expect(received).toBe(0);
   });
 });
