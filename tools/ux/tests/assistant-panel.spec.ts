@@ -77,9 +77,28 @@ test.describe('the Assistant panel', () => {
     await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'shared-devices', citedElements: 2, steps: 1 }, { seq: 2, at: '2026-11-18T10:05:00.000Z', route: 'refuse', outcome: 'refused', cause: 'verdict', citedElements: 0, steps: 0 }], earlierTurns: 0, previousThreadClearedAt: null });
     await open(page);
     await expect(page.getByLabel('Your message')).toHaveAccessibleDescription(/Your message goes to the model as typed\. .*Esc closes\..*The thread is cleared when the investigation closes\./);
-    await expect(panel(page).getByRole('heading', { name: 'Earlier in this thread' })).toBeVisible();
+    await expect(panel(page).getByText('Showing the earlier chat of this investigation. It is cleared when the investigation is closed.')).toBeVisible();
     await expect(panel(page).getByRole('listitem', { name: 'Read from the source, Answered' })).toContainText('shared-devices');
     await expect(panel(page).getByRole('listitem', { name: 'Refused, Refused' })).toContainText('Verdict');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  });
+
+  test('shows the earlier question and answer of a stored thread in the card of an answer, draws a bound value from a read by reference under the mask the person has, and lists the sources from a read when they are opened', async ({ page }) => {
+    const account = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+    const reads: { mask?: boolean }[] = [];
+    await page.route((url) => url.pathname === '/v1/graph/read-refs', (route) => {
+      reads.push(route.request().postDataJSON() as { mask?: boolean });
+      return route.fulfill({ json: { nodes: [{ ref: account, display: { title: 'Account AC-1', type: 'account' }, properties: [{ key: 'holder', value: 'Jordan Lee', dataClass: 'name', masked: false }], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }], edges: [], missing: { entities: [], edges: [] } } });
+    });
+    const answer = { blocks: [{ kind: 'sentences', items: [{ item: { state: 'segments', segments: [{ literal: 'The holder is ' }, { element: account, property: 'holder' }, { literal: '.' }] }, cites: [account] }, { item: { state: 'withheld' }, cites: [account] }] }] } as AssistantThreadResponse['turns'][number]['answer'];
+    await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'view', outcome: 'answered', citedElements: 1, steps: 0, question: 'Who holds this account?', answer }], earlierTurns: 0, previousThreadClearedAt: null });
+    await open(page);
+    await expect(panel(page).getByText('Who holds this account?')).toBeVisible();
+    await expect(panel(page).getByText('The holder is Jordan Lee.')).toBeVisible();
+    await expect(panel(page).getByText('Masking is on, so this text is not shown.')).toBeVisible();
+    expect(reads.length).toBe(1);
+    await panel(page).getByRole('button', { name: 'Sources · 1' }).click();
+    await expect(panel(page).getByRole('button', { name: /^Sources: 1, Account AC-1/ })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
