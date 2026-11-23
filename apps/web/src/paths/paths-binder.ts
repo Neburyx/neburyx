@@ -9,7 +9,7 @@ import { disposeHeldPathsRun } from './use-paths-run.js';
 import { PathsPanel } from './paths-panel.js';
 
 const PATHS_PANEL_ID = 'paths';
-const PATHS_PANEL_WIDTH = 336;
+const PATHS_PANEL_WIDTH = 320;
 
 /** Lives outside React, so leaving the page keeps the state and leaves no panel behind. */
 export function bindPathsPanel(state: ClientState, panels: PanelRegistry, evidence?: Evidence): () => void {
