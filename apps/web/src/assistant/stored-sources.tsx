@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { ElementRef, GraphEdge, GraphNode } from '@neburyx/contracts';
 import { useClientState, useVisibleGraph } from '../state/context.js';
 import { drawnKeys } from '../state/loaded-graph.js';
@@ -7,6 +7,7 @@ import { useStoreSelector } from '../state/store.js';
 import { SUMMARY_COPY } from '../summary/copy.js';
 import { pressOf, type CitationEntry } from '../summary/summary-model.js';
 import { ASSISTANT_COPY } from './copy.js';
+import type { SourcesControl } from './view-answer-card.js';
 import { SourcesList } from './sources-list.js';
 import { useRefReads, type RefReads } from './stored-reads.js';
 
@@ -34,12 +35,14 @@ function entryFromRead(entry: CitationEntry, ref: Ref, reads: RefReads): Citatio
  * The Sources control of a stored answer: a count of the elements the answer cites, which opens a list read by reference through the application's route under the session's current mask when it is opened. The labels are those of the current read, an element
  * the read did not return is listed as not available and cannot be selected, and a read that fails shows a failure with a way to try again and no partial list.
  */
-export function StoredSources({ entries, refs }: { readonly entries: readonly CitationEntry[]; readonly refs: readonly Ref[] }) {
+export function StoredSources({ entries, refs, open, onOpenChange, focusRequest, onFocusHandled }: { readonly entries: readonly CitationEntry[]; readonly refs: readonly Ref[]; readonly open: boolean; readonly onOpenChange: (open: boolean) => void; readonly focusRequest: SourcesControl['focusRequest']; readonly onFocusHandled: () => void }) {
   const listId = useId();
-  const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
-  const [focusRequest, setFocusRequest] = useState<{ readonly number: number; readonly tick: number } | undefined>(undefined);
   const reads = useRefReads(refs, open);
+  // a list that is closed forgets what it read, so that each opening reads anew and nothing read at an earlier opening is listed
+  useEffect(() => {
+    if (!open) reads.reset();
+  }, [open]);
   const graph = useVisibleGraph();
   const state = useClientState();
   const investigation = useStoreSelector(state.investigation, (held) => held);
@@ -68,10 +71,7 @@ export function StoredSources({ entries, refs }: { readonly entries: readonly Ci
   const showList = open && !reads.loading && !reads.failed;
   return (
     <div className="assistant-sources">
-      <button type="button" className="assistant-sources-toggle" aria-expanded={open} aria-controls={listId} onClick={() => {
-          if (!open) reads.reset();
-          setOpen(!open);
-        }}>
+      <button type="button" className="assistant-sources-toggle" aria-expanded={open} aria-controls={listId} onClick={() => onOpenChange(!open)}>
         <span aria-hidden="true" className="icon icon-layers" />
         <span>{`${ASSISTANT_COPY.sources} · ${entries.length}`}</span>
         <span aria-hidden="true" className="assistant-sources-caret">{open ? '▴' : '▾'}</span>
@@ -86,9 +86,9 @@ export function StoredSources({ entries, refs }: { readonly entries: readonly Ci
             </button>
           </p>
         ) : null}
-        {showList ? <SourcesList entries={listed} labelOf={(entry) => entry.label ?? ASSISTANT_COPY.sourceUnavailable} statusOf={status} isSelectable={(entry) => available(entry) && drawn.has(entry.graphKey)} onPress={press} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)} /> : null}
+        {showList ? <SourcesList entries={listed} labelOf={(entry) => entry.label ?? ASSISTANT_COPY.sourceUnavailable} statusOf={status} isSelectable={(entry) => available(entry) && drawn.has(entry.graphKey)} onPress={press} focusRequest={focusRequest} onFocusHandled={onFocusHandled} /> : null}
       </div>
-      <p className="summary-note" role="status">{note}</p>
+      <p className={note === '' ? 'summary-note visually-hidden' : 'summary-note'} role="status">{note}</p>
     </div>
   );
 }

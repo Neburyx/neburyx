@@ -85,6 +85,16 @@ describe('the answers of the stored turns, in the card of a live answer (frame A
     expect(within(table).getAllByRole('button', { name: new RegExp(`^${ASSISTANT_COPY.citationNumber}`) }).map((button) => button.textContent)).toEqual(['[1]', '[2]']);
   });
 
+  it('folds a run of consecutive markers into a range as a live answer does, and opens the sources list from it', async () => {
+    const refs = Array.from({ length: 8 }, (_, index) => ({ sourceId: 'demo', entityType: 'widget', stableId: `R-${index + 1}` }));
+    await panel(thread([turn(1, { citedElements: 8, answer: { blocks: [{ kind: 'sentences', items: [{ item: text('Eight are listed.'), cites: refs }] }] } })]));
+    const range = await screen.findByRole('button', { name: /^Citations 1/ });
+    expect(range.textContent).toBe('[1–8]');
+    await userEvent.click(range);
+    expect(await screen.findByRole('button', { name: `${ASSISTANT_COPY.sources} · 8` })).toBeTruthy();
+    expect(screen.getByRole('button', { name: `${ASSISTANT_COPY.sources} · 8` }).getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('shows a list block as the live card shows it, with its label, its items numbered by their citations, and the masking notice for an item or a label that was withheld', async () => {
     await panel(
       thread([

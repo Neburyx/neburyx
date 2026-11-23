@@ -12,6 +12,13 @@ import { SourcesList } from "./sources-list.js";
 import { TableBlock } from "./table-block.js";
 import type { ViewAnswer } from "./assistant-session.js";
 
+export interface SourcesControl {
+  readonly open: boolean;
+  readonly setOpen: (open: boolean) => void;
+  readonly focusRequest: { readonly number: number; readonly tick: number } | undefined;
+  readonly onFocusHandled: () => void;
+}
+
 type Block = ViewAnswer["blocks"][number];
 type ListBlock = Extract<Block, { kind: "list" }>;
 
@@ -26,7 +33,7 @@ export function ViewAnswerCard({
   heading,
   sources = true,
   stored = false,
-  sourcesNode,
+  renderSources,
 }: {
   readonly answer: ViewAnswer;
   readonly entries: readonly CitationEntry[];
@@ -34,8 +41,8 @@ export function ViewAnswerCard({
   readonly sources?: boolean;
   /** An earlier answer from the thread: its read steps are not kept and are not drawn, and its model and its coverage are drawn only when it was stored with them. */
   readonly stored?: boolean;
-  /** The control of the sources an earlier answer is given instead of the built-in one, drawn where that one stands. */
-  readonly sourcesNode?: ReactNode;
+  /** The control of the sources an earlier answer is given instead of the built-in one, drawn where that one stands, with the state a range marker opens it by. */
+  readonly renderSources?: (control: SourcesControl) => ReactNode;
 }) {
   const titleId = useId();
   const sourcesId = useId();
@@ -45,6 +52,7 @@ export function ViewAnswerCard({
   const [note, setNote] = useState("");
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const folds = (sources || renderSources !== undefined) && entries.length > 0;
   const [focusRequest, setFocusRequest] = useState<{ readonly number: number; readonly tick: number } | undefined>(undefined);
   const meanings = new Map(
     answer.citations.flatMap((citation) => (citation.kind === "description" ? [[citation.key, citation] as const] : [])),
@@ -110,7 +118,7 @@ export function ViewAnswerCard({
         <li key={index} className="summary-block">
           <p className="assistant-sentence">
             {sentence.text}
-            {markerGroups(sentence.cites.flatMap((key) => byKey.get(key) ?? []), sources && entries.length > 0).map((group) => (
+            {markerGroups(sentence.cites.flatMap((key) => byKey.get(key) ?? []), folds).map((group) => (
               <span key={group.kind === "run" ? `${group.first.key}-run` : group.entry.key}>
                 {" "}
                 {group.kind === "run" ? runMarkerOf(group.first, group.last) : markerOf(group.entry)}
@@ -182,7 +190,7 @@ export function ViewAnswerCard({
   };
   const entriesOf = (cites: readonly string[]): readonly CitationEntry[] => cites.flatMap((key) => byKey.get(key) ?? []);
   const markersOf = (cites: readonly string[]) =>
-    markerGroups(entriesOf(cites), sources && entries.length > 0).map((group) => (
+    markerGroups(entriesOf(cites), folds).map((group) => (
       <span key={group.kind === "run" ? `${group.first.key}-run` : group.entry.key}>
         {group.kind === "run" ? runMarkerOf(group.first, group.last) : markerOf(group.entry)}
       </span>
@@ -192,7 +200,7 @@ export function ViewAnswerCard({
     const cited = entriesOf(cites);
     const first = cited[0];
     const last = cited.at(-1);
-    if (first === undefined || last === undefined || cited.length < 2 || !(sources && entries.length > 0)) return markersOf(cites);
+    if (first === undefined || last === undefined || cited.length < 2 || !(folds)) return markersOf(cites);
     const run = cited.length >= MARKER_RUN_MIN && cited.every((entry, index) => entry.number === first.number + index);
     const name = rowCitationsLabel(cited.map((entry) => `${ASSISTANT_COPY.citationNumber} ${entry.number}, ${labelOf(entry)}, ${status(entry).toLowerCase()}`));
     return (
@@ -202,7 +210,7 @@ export function ViewAnswerCard({
     );
   };
   const markerTextOf = (cites: readonly string[]): string =>
-    markerGroups(entriesOf(cites), sources && entries.length > 0)
+    markerGroups(entriesOf(cites), folds)
       .map((group) => (group.kind === "run" ? `[${group.first.number}–${group.last.number}]` : `[${group.entry.number}]`))
       .join(" ");
   const selectEntries = (cited: readonly CitationEntry[]): void => {
@@ -237,7 +245,7 @@ export function ViewAnswerCard({
         markerTextOf={markerTextOf}
         firstEntryOf={(cites) => entriesOf(cites)[0]}
         onSelectRow={selectRow}
-        onShowSource={sources && entries.length > 0 ? showSourceOf : undefined}
+        onShowSource={folds ? showSourceOf : undefined}
       />
     );
   return (
@@ -268,7 +276,7 @@ export function ViewAnswerCard({
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {answer.pointer === undefined ? null : <p className="assistant-pointer">{answer.pointer}</p>}
       {answer.lastCallNote === undefined ? null : <p className="assistant-pointer">{answer.lastCallNote}</p>}
-      {sourcesNode ?? null}
+      {renderSources === undefined ? null : renderSources({ open: sourcesOpen, setOpen: setSourcesOpen, focusRequest, onFocusHandled: () => setFocusRequest(undefined) })}
       {entries.length === 0 || !sources ? null : (
         <div className="assistant-sources">
           <button
@@ -289,7 +297,7 @@ export function ViewAnswerCard({
           ) : null}
         </div>
       )}
-      <p className="summary-note" role="status">
+      <p className={note === "" ? "summary-note visually-hidden" : "summary-note"} role="status">
         {note}
       </p>
       {stored ? null : "reads" in answer ? <ReadSteps reads={answer.reads} /> : null}

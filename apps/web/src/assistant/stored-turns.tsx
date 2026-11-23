@@ -35,7 +35,7 @@ function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn[
           {refusal.overview === undefined ? null : <ViewAnswerCard answer={{ ...shown, blocks: refusal.overview }} entries={view.entries} heading={ASSISTANT_COPY.overviewHeading} sources={false} stored />}
         </div>
       ))}
-      {view.blocks.length === 0 ? <StoredSources entries={view.entries} refs={view.refs} /> : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored sourcesNode={<StoredSources entries={view.entries} refs={view.refs} />} />}
+      {view.blocks.length === 0 ? null : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored renderSources={(control) => <StoredSources entries={view.entries} refs={view.refs} open={control.open} onOpenChange={control.setOpen} focusRequest={control.focusRequest} onFocusHandled={control.onFocusHandled} />} />}
     </>
   );
 }
