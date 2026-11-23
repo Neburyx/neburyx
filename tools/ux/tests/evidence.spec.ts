@@ -145,7 +145,7 @@ test.describe('the relationship evidence panel', () => {
     expect(sideways).toBe(0);
   });
 
-  test('starts every right-hand panel 16 pixels under the header and keeps each inside the window, also after the window is made shorter', async ({ page }) => {
+  test('starts every right-hand panel 16 pixels under the header, or under the scope lines when it reaches under them, and keeps each inside the window, also after the window is made shorter', async ({ page }) => {
     await openSample(page, '?evidence=on');
     await page.keyboard.press('l');
     const legend = page.getByRole('complementary', { name: 'Legend' });
@@ -162,7 +162,10 @@ test.describe('the relationship evidence panel', () => {
       const limit = height ?? page.viewportSize()?.height ?? 0;
       for (const held of panels) {
         const box = await boxOf(held);
-        if (height === null) expect(Math.round(box.y - (header.y + header.height)), 'the top gap under the header').toBeLessThanOrEqual(17);
+        const scope = await boxOf(page.locator('.graph-scope'));
+        const reachesUnderScope = box.x < scope.x + scope.width && scope.x < box.x + box.width;
+        const wanted = reachesUnderScope ? Math.max(header.y + header.height, scope.y + scope.height) + 16 : header.y + header.height + 16;
+        if (height === null) expect(Math.round(box.y - wanted), 'the top gap under the header, or under the scope lines when the panel reaches under them').toBeLessThanOrEqual(1);
         expect(box.y >= header.y + header.height + 15, 'the top gap under the header').toBe(true);
         expect(box.y + box.height <= limit + 0.5, 'the panel stays inside the window').toBe(true);
       }
