@@ -34,6 +34,13 @@
   font: inherit;
 }
 
+.patterns-field .select-control {
+  padding-left: var(--space-10);
+  border-radius: var(--radius-panel);
+  color: var(--color-text-strong);
+  font: inherit;
+}
+
 .patterns-dates {
   display: flex;
   gap: var(--space-8);

@@ -103,7 +103,7 @@ button.link:is(:disabled, [aria-disabled='true']):not([aria-busy='true']) {
   text-decoration: none;
 }
 
-:where(select:not([class]):disabled, select[class='']:disabled) {
+:where(select:not([class]):disabled, select[class='']:disabled, .select-control:disabled) {
   border-color: var(--color-workspace-border);
   background-color: var(--color-surface-muted);
   color: var(--color-text-muted);

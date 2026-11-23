@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { openOneEntity } from './support/workspace.ts';
 import { setNumber } from './support/pattern-editor.ts';
 
@@ -193,6 +193,10 @@ test.describe('the Patterns panel on the canvas', () => {
     const resting = await first.evaluate((element) => getComputedStyle(element).backgroundColor);
     await first.hover();
     expect(await first.evaluate((element) => getComputedStyle(element).backgroundColor), 'the hover fill of a plain select').not.toBe(resting);
+    await panelOf(page).getByLabel('Observed lastSeen · UTC', { exact: true }).selectOption('custom');
+    const text = panelOf(page).getByLabel('Observed lastSeen · UTC: from');
+    const looks = (field: Locator) => field.evaluate((element) => ({ radius: getComputedStyle(element).borderRadius, size: getComputedStyle(element).fontSize, colour: getComputedStyle(element).color }));
+    expect(await looks(first), 'a select looks like the inputs beside it').toEqual(await looks(text));
     for (const select of await selects.all()) {
       await expect(select).toHaveCSS('appearance', 'none');
       expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/^url\(/);
