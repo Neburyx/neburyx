@@ -290,6 +290,202 @@ describe('the words of a domain come from the text and the instructions, not fro
   });
 });
 
+describe.each([
+  ['widget', 'widgets', 'gadget', 'gadgets', 'SENT', 'amountValue'],
+  ['claim', 'claims', 'policy', 'policies', 'FILED_BY', 'claimedAmount'],
+])('claims that need the line that backs them, with the words of %s and %s', (one, many, other, others, link, property) => {
+  const entity = (key: string, type: string, title: string): string => `${key} | "${type}" | title: "${title}" | id: "${key}x" | ${property}: 5`;
+  const lines = new Map<string, string>([
+    ['n1', entity('n1', one, 'Item A')],
+    ['n2', entity('n2', one, 'Item B')],
+    ['n3', entity('n3', one, 'Item C')],
+    ['n4', `n4 | "${other}" | title: "Holder D" | id: "n4x"`],
+    ['e1', `e1 | "${link}" | n1 -> n4`],
+    ['s1', 's1: read of lookup: 25 matches shown · exact · no relationship listed'],
+    ['c1', 'c1: view coverage: 4 entities shown · 0 relationships shown · ≥ 9 not yet retrieved (lower bound)'],
+    ['c2', 'c2: view coverage: 4 entities shown · 1 relationship shown · ≥ 9 not yet retrieved (lower bound)'],
+  ]);
+  const held: CheckedText = {
+    text: [...lines.values()].join('\n'),
+    keys: new Map(['n1', 'n2', 'n3', 'n4', 'e1', 's1', 'c1', 'c2'].map((key) => [key, true])),
+    lines,
+    inexactCounts: [],
+    unknownCountKeys: new Set(),
+    elementTypes: new Map([['n1', `entity ${one}`], ['n2', `entity ${one}`], ['n3', `entity ${one}`], ['n4', `entity ${other}`], ['e1', `relationship ${link}`]]),
+    propertyKeys: new Map([['n1', [property]], ['n2', [property]], ['n3', [property]], ['n4', ['otherProperty']], ['e1', []]]),
+    readKeys: new Set(['s1', 'c1', 'c2']),
+    readElements: new Map([['s1', ['n1', 'n2', 'n3']]]),
+  };
+  const judgedAs = (text: string, cites: string[]) => judgeSentences([{ text, cites }], held);
+  const kept = (text: string, cites: string[]): boolean => judgedAs(text, cites).kept.length === 1;
+
+  it.each([
+    ['No relationship lines are in view.', ['n1'], false],
+    ['No relationship lines are in view.', ['n1', 'c1'], true],
+    ['No relationship lines are in view.', ['c2'], false],
+    ['No relationship is listed.', ['s1'], true],
+    ['No link is shown.', ['c1'], true],
+  ])('accepts a sentence of absence only against a line that states it: %s %j', (text, cites, expected) => {
+    expect(kept(text, cites)).toBe(expected);
+  });
+
+  it('removes a sentence that says something is not shown when it cites only an element, with the reason citation, and keeps it against a line of the server', () => {
+    const text = `The elements do not show the receiving ${others}.`;
+    expect(judgedAs(text, ['n1']).rejected).toEqual([{ text, reason: 'citation' }]);
+    expect(kept(text, ['n1', 's1'])).toBe(true);
+    expect(kept(text, ['n1', 'c1'])).toBe(true);
+  });
+
+  it('leaves a sentence with no absence alone', () => {
+    expect(kept(`Item A is a ${one}.`, ['n1'])).toBe(true);
+    expect(kept(`Item A is not large.`, ['n1'])).toBe(true);
+  });
+
+  it.each([
+    [`All the ${many} are listed.`, ['n1', 'n2'], false],
+    [`All the ${many} are listed.`, ['n1', 'n2', 'n3'], true],
+    [`Each of the ${many} is listed.`, ['n1'], false],
+    [`The ${many} on screen share a value.`, ['n1', 'n2'], false],
+    [`The ${many} on screen share a value.`, ['n1', 'n2', 'n3'], true],
+    [`Every ${one} is listed.`, ['n1', 'n2'], false],
+    [`All the ${others} are listed.`, ['n4'], true],
+    [`All the ${others} are listed.`, ['n1'], false],
+  ])('says all of a set only when every element of it that was sent is cited: %s %j', (text, cites, expected) => {
+    expect(kept(text, cites)).toBe(expected);
+  });
+
+  it('does not take a sentence that says some of a set for one that says all of it', () => {
+    expect(kept(`Two of the ${many} are listed.`, ['n1', 'n2'])).toBe(true);
+    expect(kept(`Item A is one of the ${many}.`, ['n1'])).toBe(true);
+  });
+
+  describe('regressions of the review', () => {
+    const extra = new Map<string, string>([
+      ['n5', `n5 | "${one}" | title: "All ${many}" | id: "n5x"`],
+      ['n6', `n6 | "${one}" | title: "No relationships shown" | id: "n6x"`],
+    ]);
+    const extended: CheckedText = {
+      ...held,
+      lines: new Map([...held.lines, ...extra]),
+      text: [...held.lines.values(), ...extra.values()].join('\n'),
+      keys: new Map([...held.keys, ['n5', true], ['n6', true]]),
+      elementTypes: new Map([...(held.elementTypes ?? []), ['n5', `entity ${one}`], ['n6', `entity ${one}`]]),
+      propertyKeys: new Map([...(held.propertyKeys ?? []), ['n5', []], ['n6', []]]),
+    };
+    const keptIn = (over: CheckedText, text: string, cites: string[]): boolean => judgeSentences([{ text, cites }], over).kept.length === 1;
+
+    it('ties a negation to the presence it denies, and asks the line to state what is denied', () => {
+      expect(kept('The view does not show any relationships.', ['c2'])).toBe(false);
+      expect(kept('The view does not show any relationships.', ['c1'])).toBe(true);
+      expect(kept('Item A is not hidden; it is shown.', ['n1'])).toBe(true);
+    });
+
+    it('does not read a quoted title as a claim', () => {
+      expect(keptIn(extended, `The title is "All ${many}".`, ['n5'])).toBe(true);
+      expect(keptIn(extended, 'The title is "No relationships shown".', ['n6'])).toBe(true);
+    });
+
+    it('checks every quantified group, nested ones and groups joined by and', () => {
+      expect(kept(`Item A is shown as the sender of the ${many} on screen.`, ['n1'])).toBe(false);
+      expect(kept(`All the ${many} and every ${other} are listed.`, ['n1', 'n2', 'n3'])).toBe(false);
+      expect(kept(`All the ${many} and every ${other} are listed.`, ['n1', 'n2', 'n3', 'n4'])).toBe(true);
+    });
+
+    it('takes the set a claim speaks of: the elements a read listed, or those on screen', () => {
+      expect(keptIn(extended, `The read lists all the ${many}.`, ['n1', 'n2', 'n3', 's1'])).toBe(true);
+      const offScreen: CheckedText = { ...extended, keys: new Map([...extended.keys, ['r1', true]]), lines: new Map([...extended.lines, ['r1', `r1: ${one}: Item Z`]]), elementTypes: new Map([...(extended.elementTypes ?? []), ['r1', `entity ${one}`]]) };
+      expect(keptIn(offScreen, `The ${many} on screen share a value.`, ['n1', 'n2', 'n3', 'n5', 'n6'])).toBe(true);
+    });
+
+    it('asks the line of the read for a description of a read, and only the members of that read back it', () => {
+      expect(kept(`The read lists ${many}.`, ['n1'])).toBe(false);
+      expect(kept(`The read lists ${many} and ${others}.`, ['n1', 'n4', 's1'])).toBe(false);
+      expect(kept(`The read lists ${many}.`, ['s1'])).toBe(true);
+    });
+
+    it('refuses a kind the line of the read says it did not list, and a type or kind the read does not hold', () => {
+      expect(kept(`The read lists ${many} and relationships.`, ['s1'])).toBe(false);
+    });
+
+    it('reads a property key alike in the sentence and in the lines, whatever its written form', () => {
+      expect(kept('The read lists items with otherProperty values.', ['s1'])).toBe(false);
+      expect(kept('The read lists items with other property values.', ['s1'])).toBe(false);
+      expect(kept(`The read lists ${many} with ${property} values.`, ['n1', 's1'])).toBe(true);
+    });
+
+    it('ties a negation after a presence verb, a type that is in view and a negation that is not an absence', () => {
+      expect(kept('The view shows no relationships.', ['c2'])).toBe(false);
+      expect(kept('The view shows no relationships.', ['n1'])).toBe(false);
+      expect(kept('The view shows no relationships.', ['c1'])).toBe(true);
+      expect(kept(`No ${others} are shown.`, ['c1'])).toBe(false);
+      expect(kept('Item A is not hidden and is shown.', ['n1'])).toBe(true);
+    });
+
+    it('excludes only the negated assertion of a clause', () => {
+      expect(kept(`The read lists ${others} without ${link.toLowerCase().replace('_', ' ')} links.`, ['s1'])).toBe(false);
+      expect(kept(`The read lists ${many} without a title.`, ['n1', 's1'])).toBe(true);
+    });
+
+    it('quantifies the noun group the quantifier opens, not what follows the verb', () => {
+      expect(kept(`Each ${one} uses ${others}.`, ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(`Each ${one} is listed.`, ['n1'])).toBe(false);
+    });
+
+    it('finds the subject of an absence on either side of the negation', () => {
+      expect(kept('Relationships are not shown.', ['c2'])).toBe(false);
+      expect(kept('Relationships are not shown.', ['c1'])).toBe(true);
+    });
+
+    it('resumes the check where a new positive assertion begins after a negated one', () => {
+      expect(kept(`The read lists ${many} without titles and contains sent links.`, ['n1', 's1'])).toBe(false);
+      expect(kept(`The read lists ${many} without titles and also lists ${many}.`, ['n1', 's1'])).toBe(true);
+      expect(kept(`The read lists ${many} without titles and it contains sent links.`, ['n1', 's1'])).toBe(false);
+      expect(kept(`The read lists ${many} without titles and the read also lists ${many}.`, ['n1', 's1'])).toBe(true);
+      expect(kept(`The read lists ${many} without titles.`, ['n1', 's1'])).toBe(true);
+    });
+
+    it('carries a quantifier across the nouns it joins, and not across a verb', () => {
+      expect(kept(`All ${many} and ${others} are listed.`, ['n1', 'n2', 'n3'])).toBe(false);
+      expect(kept(`All ${many} and ${others} are listed.`, ['n1', 'n2', 'n3', 'n4'])).toBe(true);
+      expect(kept(`Each ${one} uses ${others}.`, ['n1', 'n2', 'n3'])).toBe(true);
+    });
+
+    it('gives an on-screen group the whole view, whatever read a neighbouring assertion describes', () => {
+      const readTwo: CheckedText = { ...held, readElements: new Map([['s1', ['n1', 'n2']]]) };
+      expect(judgeSentences([{ text: `The ${many} on screen are listed and the read lists ${many}.`, cites: ['n1', 'n2', 's1'] }], readTwo).kept).toEqual([]);
+      expect(judgeSentences([{ text: `The ${many} on screen are listed and the read lists ${many}.`, cites: ['n1', 'n2', 'n3', 's1'] }], readTwo).kept).toHaveLength(1);
+    });
+
+    it('takes the set of each quantified group by its own clause', () => {
+      const readTwo: CheckedText = { ...held, readElements: new Map([['s1', ['n1', 'n2']]]) };
+      expect(judgeSentences([{ text: `The ${many} on screen are listed; the read lists ${many}.`, cites: ['n1', 'n2', 's1'] }], readTwo).kept).toEqual([]);
+    });
+
+    it('does not throw for a type whose name holds the characters of a pattern, and keeps an ordinary sentence', () => {
+      const odd: CheckedText = { ...held, elementTypes: new Map([...(held.elementTypes ?? []), ['n4', 'entity thing(']]) };
+      expect(judgeSentences([{ text: 'Item A is listed.', cites: ['n1'] }], odd).kept).toHaveLength(1);
+      expect(judgeSentences([{ text: 'No relationships are shown.', cites: ['c1'] }], odd).kept).toHaveLength(1);
+      expect(judgeSentences([{ text: 'All thing( are listed.', cites: ['n4'] }], odd).rejected).toEqual([]);
+    });
+
+    it('reads a camel case type as words, and asks every member of it', () => {
+      const types: CheckedText = { ...held, elementTypes: new Map([['n1', 'entity widgetGroup'], ['n2', 'entity widgetGroup'], ['n3', 'entity widgetGroup'], ['n4', `entity ${other}`], ['e1', `relationship ${link}`]]) };
+      expect(judgeSentences([{ text: 'All widget groups are listed.', cites: ['n1'] }], types).kept).toEqual([]);
+      expect(judgeSentences([{ text: 'All widget groups are listed.', cites: ['n1', 'n2', 'n3'] }], types).kept).toHaveLength(1);
+    });
+
+    it('asks no positive evidence for what a read is said not to hold', () => {
+      expect(kept(`The read lists ${many} without ${link.toLowerCase().replace('_', ' ')} links.`, ['s1'])).toBe(true);
+    });
+  });
+
+  it('removes a description of a read that goes beyond the read, and keeps one that restates it', () => {
+    expect(kept(`The read lists ${many} with ${property.replace(/([a-z])([A-Z])/gu, '$1 $2').toLowerCase()} values.`, ['s1'])).toBe(true);
+    expect(kept(`The read lists ${many} and ${link.toLowerCase().replace('_', ' ')} links, but no sender is shown.`, ['n1', 's1'])).toBe(false);
+    expect(judgedAs(`The read lists ${many} and ${link.toLowerCase().replace('_', ' ')} links, but no sender is shown.`, ['n1', 's1']).rejected[0]?.reason).toBe('citation');
+  });
+});
+
 describe('a count of the cited elements', () => {
   const line = (key: string, type: string, title: string): string => `${key} | "${type}" | title: "${title}" | id: "${key}x"`;
   const counted: CheckedText = {

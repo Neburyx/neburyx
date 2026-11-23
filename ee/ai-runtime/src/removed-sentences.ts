@@ -3,7 +3,7 @@ import type { RejectedSentence, RemovalReason } from './reply-checks.js';
 const EXPLANATION: Readonly<Record<RemovalReason, string>> = {
   verdict: 'it states a conclusion about guilt, intent or an offence; describe only what the elements show',
   key: 'it writes an element key in the sentence; keys belong in the list of citations only',
-  citation: 'it cites nothing, or cites a key that was not sent',
+  citation: 'it cites nothing, or cites a key that was not sent, or says that something is absent or not shown, speaks of all of a set, or describes what a read returned, without citing the line or the elements that back it',
   number: 'a number in it is not on the lines it cites and is not the count of the cited elements of the type it names',
   count: 'it states a number for a count that is not known, or an estimated or lower-bound count without its label as written',
   comparison: 'it compares or ranks elements that the lines it cites do not all show',

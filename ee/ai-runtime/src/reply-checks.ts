@@ -324,7 +324,7 @@ const sameKeys = (left: readonly string[], right: readonly string[]): boolean =>
  * smallest and the like (a superlative), or cites a single element, while the text sent holds another element of that type that it does not cite, unless it also cites a line of a read that listed the element
  * (which states how many that read returned and did not show). A date does not make a line carry an amount: the properties are compared by their keys.
  */
-function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+function comparedElementsHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   const superlative = SUPERLATIVE.test(sentence.text);
   if (!superlative && !COMPARATIVE.test(sentence.text)) return true;
   const types = assembled.elementTypes;
@@ -352,6 +352,172 @@ function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boo
     if (others.length > 0 && !excused) return false;
   }
   return true;
+}
+
+/** The sentence without its quoted spans: a quoted title is a name the name check judges, and is no claim. */
+const withoutQuoted = (text: string): string => text.normalize('NFC').replace(QUOTED, (quoted) => ' '.repeat(quoted.length));
+
+/** A text as words, lower case: the capitals inside a key and the underscores are word breaks, so that `amountValue`, `amount_value` and `amount value` are one phrase. */
+const flatten = (text: string): string => text.replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2').replaceAll('_', ' ').toLowerCase().replace(/\s+/gu, ' ');
+
+/** The clause of a text that holds a position. */
+const clauseAt = (text: string, at: number): string => {
+  const start = Math.max(text.lastIndexOf(',', at), text.lastIndexOf(';', at), text.lastIndexOf('.', at), text.lastIndexOf(' but ', at), -1) + 1;
+  const ends = [',', ';', '.', ' but '].map((mark) => text.indexOf(mark, at)).filter((end) => end >= 0);
+  return text.slice(start, ends.length === 0 ? undefined : Math.min(...ends));
+};
+
+/** The clauses of a sentence: its punctuation and the words that turn it. */
+const clausesOf = (text: string): string[] => text.split(/[.;:!?,]+|(?<![\p{L}\p{N}_-])(?:but|and yet|although)(?![\p{L}\p{N}_-])/iu).filter((clause) => clause.trim() !== '');
+
+const NEGATION = /(?<![\p{L}\p{N}_-])(?:no|none|not|never|without|cannot|nothing)(?![\p{L}\p{N}_-])|n['\u2019]t(?![\p{L}])/iu;
+const PRESENCE_WORDS = '(?:in view|in the view|on screen|shown|show|shows|listed|lists?|appears?|named|visible|present|holds?|held|loaded|read|returned|returns?)';
+/** A negation followed within a few words by a word of presence: the sentence says something is absent or not shown. Words of the language, never of a domain. */
+const BETWEEN = '(?:\\s+(?!(?:and|or|but)(?![\\p{L}\\p{N}_-]))\\S+){0,4}?';
+const ABSENT_CLAUSE = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:no|none|not|never|without|cannot|nothing)(?![\\p{L}\\p{N}_-])${BETWEEN}\\s+${PRESENCE_WORDS}(?![\\p{L}\\p{N}_-])|n['\\u2019]t${BETWEEN}\\s+${PRESENCE_WORDS}(?![\\p{L}\\p{N}_-])|(?<![\\p{L}\\p{N}_-])(?:shows?|lists?|holds?|contains?|has|have|names?)\\s+(?:\\S+\\s+){0,2}?(?:no|none)(?![\\p{L}\\p{N}_-])`, 'iu');
+
+/** The kinds of element, which are words of the product and of no domain, with the forms a sentence uses. */
+const KIND_FORMS: readonly (readonly [string, RegExp])[] = [
+  ['relationship', /relationships?|links?/iu],
+  ['entity', /entit(?:y|ies)/iu],
+  ['element', /elements?/iu],
+];
+
+/** What a line of the server states about a kind: the number shown, from `<n> relationships shown`, and `no relationship listed`. */
+function statedOfKind(line: string, forms: RegExp, kind: string): number | undefined {
+  const shown = new RegExp(`(\\d+) (?:${forms.source}) shown`, 'iu').exec(line);
+  if (shown?.[1] !== undefined) return Number(shown[1]);
+  return kind === 'relationship' && /no relationship listed/iu.test(line) ? 0 : undefined;
+}
+
+const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+
+/** A pattern for a flattened word or phrase, in its singular or its plural: the plural is made of the word, then each part is escaped. */
+function termPattern(word: string): string {
+  const escape = (part: string): string => escapeRegex(part).replace(/ /gu, '\\s+');
+  return word.endsWith('y') ? `(?:${escape(word)}|${escape(word.slice(0, -1))}ies)` : `${escape(word)}(?:s|es)?`;
+}
+
+/** Whether a term (a type, a kind, or a property key as words) occurs in a text as a whole word or phrase, in its singular or its plural; both are flattened alike. */
+function termIn(term: string, text: string): boolean {
+  const word = flatten(term).trim();
+  if (word === '') return false;
+  return new RegExp(`(?<![\\p{L}\\p{N}_-])${termPattern(word)}(?![\\p{L}\\p{N}_-])`, 'iu').test(flatten(text));
+}
+
+/** The types of the elements sent, by their words, with their kind. */
+const typesSent = (assembled: CheckedText): { readonly type: string; readonly word: string }[] => [...new Set(assembled.elementTypes?.values() ?? [])].map((type) => ({ type, word: flatten(type.replace(/^(?:entity|relationship) /u, '')).trim() }));
+
+/** Whether a clause denies a type outright (`no gadgets are shown`, `gadgets are not in view`), as against denying what is related to it (`the receiving gadgets are not shown`). */
+function deniesOutright(word: string, clause: string): boolean {
+  const noun = termPattern(word);
+  return new RegExp(`(?<![\\p{L}\\p{N}_-])(?:no|none|without)\\s+(?:(?:any|other)\\s+)?${noun}(?![\\p{L}\\p{N}_-])|(?<![\\p{L}\\p{N}_-])${noun}\\s+(?:are|is)\\s+not\\s+(?:shown|in view|listed)`, 'iu').test(clause);
+}
+
+/**
+ * A sentence that says something is absent or not shown rests on a line of the server (a read, or the coverage of the view), because no element can hold an absence. What it says is absent is checked against that line: a kind
+ * (relationship, entity, element) needs a cited line that states none of it, and a line that states some refuses it; a type is refused by a cited read that listed an element of it.
+ */
+function absenceHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const absent = clausesOf(withoutQuoted(sentence.text)).filter((clause) => ABSENT_CLAUSE.test(clause));
+  if (absent.length === 0) return true;
+  const served = sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true);
+  if (served.length === 0) return false;
+  for (const clause of absent) {
+    const negation = Math.max(0, clause.search(NEGATION));
+    for (const [kind, forms] of KIND_FORMS) {
+      const named = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${forms.source})(?![\\p{L}\\p{N}_-])`, 'iu').test(clause.slice(negation));
+      // a kind that is the subject of the negation (`relationships are not shown`) is what is denied; one before a verb (`the elements do not show`) only looks
+      const subject = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${forms.source})\\s+(?:(?:are|is)\\s+)?$`, 'iu').test(clause.slice(0, negation));
+      if (!named && !subject) continue;
+      const stated = served.flatMap((cite) => statedOfKind(assembled.lines.get(cite) ?? '', forms, kind) ?? []);
+      if (stated.length === 0 || stated.some((count) => count > 0)) return false;
+    }
+    const aboutRead = READ_NOUN.test(flatten(clause));
+    for (const { type, word } of typesSent(assembled)) {
+      if (!deniesOutright(word, flatten(clause))) continue;
+      const scope = aboutRead ? served.flatMap((cite) => assembled.readElements?.get(cite) ?? []) : [...(assembled.elementTypes?.keys() ?? [])].filter((key) => assembled.readKeys?.has(key) !== true);
+      if (scope.some((key) => assembled.elementTypes?.get(key) === type)) return false;
+    }
+  }
+  return true;
+}
+
+/** The keys of the cited elements, those of the lines of a read or a meaning left out. */
+function citedElements(sentence: SummarySentence, assembled: CheckedText): string[] {
+  const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
+  return [...new Set(sentence.cites)].filter((key) => !lines.has(key) && assembled.elementTypes?.has(key) === true);
+}
+
+const QUANTIFIER_BEFORE = /(?<![\p{L}\p{N}_-])(?:all|every|each)(?:\s+of)?(?:\s+(?:the|these|those))?\s+(?:\S+\s+)?(?:(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+)(?:the\s+)?(?:\S+\s+)?)*$/iu;
+const DEFINITE_BEFORE = /(?<![\p{L}\p{N}_-])the\s+(?:\S+\s+)?$/iu;
+const PLACE_AFTER = /^\s+(?:\S+\s+){0,1}?(?:on screen|in view|on the screen|in the view)(?![\p{L}\p{N}_-])/iu;
+
+/**
+ * A sentence that says all, each or every of a type, or the elements of a type on screen, cites every element of that type that it speaks of, like a count: it speaks of a set, and a part of the set does not back it. Every quantified group
+ * of the sentence is checked, nested ones and groups joined by a conjunction too. The set is the elements the cited reads listed, for a sentence that describes a read, the elements of the view for one that says on screen, and every element
+ * sent otherwise.
+ */
+function universalHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const types = assembled.elementTypes;
+  if (types === undefined) return true;
+  const text = flatten(withoutQuoted(sentence.text));
+  const cited = new Set(citedElements(sentence, assembled));
+  const reads = sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true && assembled.readElements?.has(cite) === true);
+  const forms: { readonly word: string; readonly of: (type: string) => boolean }[] = [
+    ...typesSent(assembled).map(({ type, word }) => ({ word, of: (held: string) => held === type })),
+    ...KIND_FORMS.map(([kind]) => ({ word: kind, of: (held: string) => kind === 'element' || (kind === 'relationship') === held.startsWith('relationship ') })),
+  ];
+  for (const { word, of } of forms) {
+    for (const found of text.matchAll(new RegExp(`(?<![\\p{L}\\p{N}_-])${termPattern(word)}(?![\\p{L}\\p{N}_-])`, 'giu'))) {
+      const before = text.slice(0, found.index);
+      const onScreen = DEFINITE_BEFORE.test(before) && PLACE_AFTER.test(text.slice(found.index + found[0].length));
+      const inRead = !onScreen && READ_DESCRIPTION.test(clauseAt(text, found.index));
+      if (!QUANTIFIER_BEFORE.test(before) && !onScreen) continue;
+      const population = [...types].filter(([key, held]) => of(held) && assembled.readKeys?.has(key) !== true && assembled.descriptionKeys?.has(key) !== true && (!inRead || reads.length === 0 || reads.some((cite) => assembled.readElements?.get(cite)?.includes(key) === true)) && (!onScreen || /^[ne]\d+$/u.test(key)));
+      if (population.some(([key]) => !cited.has(key))) return false;
+    }
+  }
+  return true;
+}
+
+/** What a negation covers in a clause: up to the end of it, or up to a new assertion that a conjunction brings (`without titles and contains sent links`). */
+const NEGATED_SPAN = new RegExp(`(?:${NEGATION.source})[^]*?(?=(?<![\\p{L}\\p{N}_-])and\\s+(?:also\\s+)?(?:(?:it|they|(?:the|this|that)\\s+(?:read|reads|result|results))\\s+(?:also\\s+)?)?(?:lists?|contains?|holds?|shows?|returned|returns?|found|finds?|has|have|includes?|names?)(?![\\p{L}\\p{N}_-])|$)`, 'giu');
+const READ_NOUN = /(?<![\p{L}\p{N}_-])(?:read|reads|result|results)(?![\p{L}\p{N}_-])/iu;
+const READ_DESCRIPTION = /(?<![\p{L}\p{N}_-])(?:the|this|that)\s+(?:read|reads|result|results)(?:\s+\S+){0,2}?\s+(?:lists?|listed|returned|returns?|found|finds?|holds?|shows?|contains?)(?![\p{L}\p{N}_-])/iu;
+
+/**
+ * A sentence that describes what a read returned (it says the read lists, returned or found something) cites the line of that read, and names, in what it asserts, only what that read holds: the types of the elements the read listed, the
+ * keys of their properties and their kinds. A word of a type, a property or a kind that the read does not hold is described beyond its line. A clause that says the read lacks something is a negative claim and asks for no positive evidence;
+ * a kind that the read's line says it did not list is refused.
+ */
+function readDescribedHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const types = assembled.elementTypes;
+  const text = withoutQuoted(sentence.text);
+  if (types === undefined || !READ_DESCRIPTION.test(flatten(text))) return true;
+  const reads = sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true && /^s\d+$/u.test(cite));
+  if (reads.length === 0) return false;
+  const members = reads.flatMap((cite) => assembled.readElements?.get(cite) ?? []);
+  const backing = [
+    ...reads.map((cite) => assembled.lines.get(cite) ?? ''),
+    ...members.flatMap((key) => [types.get(key) ?? '', ...(assembled.propertyKeys?.get(key) ?? [])]),
+  ].join('\n');
+  const asserted = clausesOf(text).map((clause) => clause.replace(NEGATED_SPAN, ' ')).join(' . ');
+  const candidates = [...typesSent(assembled).map(({ word }) => word), ...[...(assembled.propertyKeys?.values() ?? [])].flat()];
+  if (candidates.some((term) => termIn(term, asserted) && !termIn(term, backing))) return false;
+  for (const [kind, forms] of KIND_FORMS) {
+    if (kind === 'element' || !new RegExp(`(?<![\\p{L}\\p{N}_-])(?:${forms.source})(?![\\p{L}\\p{N}_-])`, 'iu').test(asserted)) continue;
+    const listed = members.some((key) => (types.get(key)?.startsWith('relationship ') === true) === (kind === 'relationship'));
+    if (!listed || reads.some((cite) => statedOfKind(assembled.lines.get(cite) ?? '', forms, kind) === 0)) return false;
+  }
+  return true;
+}
+
+/** Whether the claims a sentence makes about absence, about all of a set and about what a read returned are backed by the lines it cites. */
+const claimsAreBacked = (sentence: SummarySentence, assembled: CheckedText): boolean => absenceHolds(sentence, assembled) && universalHolds(sentence, assembled) && readDescribedHolds(sentence, assembled);
+
+function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  return comparedElementsHold(sentence, assembled) && claimsAreBacked(sentence, assembled);
 }
 
 /** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
@@ -434,7 +600,8 @@ function breaksCountRule(sentence: SummarySentence, assembled: CheckedText): boo
 function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): RemovalReason {
   if (!citationsHold(sentence, assembled)) return 'citation';
   if (!numbersHold(sentence, assembled, countElements)) return breaksCountRule(sentence, assembled) ? 'count' : 'number';
-  if (!comparisonHolds(sentence, assembled)) return 'comparison';
+  if (!comparedElementsHold(sentence, assembled)) return 'comparison';
+  if (!claimsAreBacked(sentence, assembled)) return 'citation';
   return 'name';
 }
 

@@ -135,6 +135,17 @@ describe('the answer after tool steps', () => {
     expect(await survives('Three widgets are listed.')).toBe(false);
   });
 
+  it('says all of a type only when every element of it that a read listed is cited, and an absence only against a line of a read', async () => {
+    const survives = async (text: string, cites: string[]): Promise<boolean> => {
+      const r = await setup(sentences({ text, cites }));
+      return (await answerOf(r.route.handler(r.request()))).status === 'answered';
+    };
+    expect(await survives('All the widgets are listed.', ['r1', 'r2'])).toBe(true);
+    expect(await survives('All the widgets are listed.', ['r1'])).toBe(false);
+    expect(await survives('No relationship is listed.', ['s1'])).toBe(true);
+    expect(await survives('No relationship is listed.', ['r1'])).toBe(false);
+  });
+
   const second = (result: () => ReturnType<typeof okResult>) => {
     let next = 0;
     return { run: () => ({ status: 'ok' as const, result: next++ === 0 ? okResult() : result() }) };
