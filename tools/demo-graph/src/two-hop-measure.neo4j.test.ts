@@ -83,8 +83,8 @@ async function testObjects(server: RunningNeo4j): Promise<{ readonly databases: 
   }
 }
 
-/** The time a name carries (base 36, as `namesFor` writes it), so that what this run made can be told from another run's. */
-const stampOf = (name: string): number => parseInt(/^nbx[-_]test[-_]([0-9a-z]+)[-_]/.exec(name)?.[1] ?? '0', 36);
+/** The time a name carries (base 36, after the owner tag, as `namesFor` writes it), so that what this run made can be told from another run's. */
+const stampOf = (name: string): number => parseInt(/^nbx[-_]test[-_](?:tn[-_])?([0-9a-z]+)[-_]/.exec(name)?.[1] ?? '0', 36);
 
 const integerCandidate = (id: string): number | null => (/^-?\d+$/.test(id) && Number.isSafeInteger(Number(id)) ? Number(id) : null);
 

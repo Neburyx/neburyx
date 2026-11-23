@@ -159,6 +159,25 @@ describe('a run on the dev server', () => {
     expect(state.roles.has('nbx_test_role_of_someone') && state.roles.has(recent.role('reader'))).toBe(true);
   });
 
+  it('never sweeps a login, role or database that a person or another tool made with the prefix, however old, nor one in the shape this module used before the owner tag', async () => {
+    const stamp = OLD.toString(36);
+    const handMade = { users: ['nbx_test_ht2318_ro', 'nbx_test_ep23a4_ro', 'nbx_test_aml_ro', `nbx_test_${stamp}_c4acad_reader`], roles: ['nbx_test_ep23a4_reader', `nbx_test_${stamp}_c4acad_reader_role`], databases: [`nbx-test-${stamp}-c4acad`, 'nbx-test-ht2318'] };
+    for (const name of handMade.databases) state.databases.add(name);
+    for (const name of handMade.users) state.users.add(name);
+    for (const name of handMade.roles) state.roles.add(name);
+    const old = namesFor(OLD);
+    state.databases.add(old.database);
+    state.users.add(old.login('reader'));
+    state.roles.add(old.role('reader'));
+    const dropped = await sweepLeftovers({ session: ({ database }: { database: string }) => ({ run: async (cypher: string, parameters: Record<string, unknown> = {}) => runStatement(database, cypher, parameters), close: async () => undefined, beginTransaction: async () => ({ run: async () => { throw new ServerFailure(); }, commit: async () => undefined, rollback: async () => undefined, close: async () => undefined }) }) } as never, NOW);
+    expect(dropped.databases).toEqual([old.database]);
+    expect([...dropped.objects].sort()).toEqual([old.login('reader'), old.role('reader')].sort());
+    for (const name of handMade.databases) expect(state.databases.has(name), name).toBe(true);
+    for (const name of handMade.users) expect(state.users.has(name), name).toBe(true);
+    for (const name of handMade.roles) expect(state.roles.has(name), name).toBe(true);
+    expect(state.log.filter((statement) => /^DROP/.test(statement)).every((statement) => /nbx[-_]test[-_]tn[-_]/.test(statement))).toBe(true);
+  });
+
   it('does not drop a database it did not make when the name is taken before the run looks', async () => {
     const taken = namesFor();
     vi.resetModules();

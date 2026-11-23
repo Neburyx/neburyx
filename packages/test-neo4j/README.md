@@ -26,11 +26,11 @@ must be Neo4j Enterprise, of the 5.26 series or of the 2026 series (the global s
 
 ## What the tests create, and what they never touch
 
-Each test file makes its own database, `nbx-test-<time>-<random>` (a database name cannot have an underscore), and
-drops it when the file ends. A test that needs logins makes `nbx_test_<time>_<random>_reader` and `…_writer` logins, each
+Each test file makes its own database, `nbx-test-tn-<time>-<random>` (a database name cannot have an underscore), and
+drops it when the file ends. A test that needs logins makes `nbx_test_tn_<time>_<random>_reader` and `…_writer` logins, each
 with a role of its own that reaches that database only, and drops them with the file. A sweep at the start of each file
-drops the leftovers of a run that was killed: only databases, logins and roles named exactly so and made more than three
-hours ago. Before a start it lists the databases, logins and roles of the server to find them, and it checks that a name
+drops the leftovers of a run that was killed: only databases, logins and roles that carry this package's owner tag (`tn`, right after the prefix) in the exact shape above and were made more than three
+hours ago. A login or database made by hand or by another tool with the prefix (for example `nbx_test_<name>_ro`, or a name in the shape this package used before it had the tag) is never reached, however old it is; objects of that older shape that an earlier version left are not swept and are removed by hand. Before a start it lists the databases, logins and roles of the server to find them, and it checks that a name
 it is about to make is free; it reads nothing else, drops only what it made (an object counts as made once its CREATE has succeeded; one that
 failed, whose answer may have been lost, is left for the sweep and the error says so) or a leftover named so, and
 changes no setting of the server. A hook that starts more than one server, or a start that fails half way, leaves nothing behind
