@@ -269,7 +269,7 @@ describe('the Assistant panel: a table answer', () => {
     expect(screen.getByText('Sources · 2')).toBeTruthy();
   });
 
-  it('aligns a column of numbers right without wrapping and leaves a column of words alone', async () => {
+  it('keeps a column of numbers from wrapping and marks the first column of words as the title column', async () => {
     const base = tableAnswer();
     if (base.status !== 'answered' || !('blocks' in base)) throw new Error('not blocks');
     const answer: AssistantTurnAnswer = {
@@ -279,9 +279,27 @@ describe('the Assistant panel: a table answer', () => {
     await draw(answer);
     const table = screen.getByRole('table');
     const [words, numbers] = within(table).getAllByRole('columnheader');
-    expect(words?.className).toBe('');
+    expect(words?.className).toBe('assistant-table-title-cell');
     expect(numbers?.className).toBe('assistant-table-number');
     expect(within(table).getByText('$12,400.50').className).toBe('assistant-table-number');
-    expect(within(table).getByText('AC-1').className).toBe('');
+    expect(within(table).getByText('AC-1').className).toBe('assistant-table-title-cell');
+  });
+
+  it('shows instants as date and time with UTC in the header, groups the thousands of a decimal number and keeps the title cell short with its full text as the tooltip, and copies what was read', async () => {
+    const base = tableAnswer();
+    if (base.status !== 'answered' || !('blocks' in base)) throw new Error('not blocks');
+    const answer: AssistantTurnAnswer = {
+      ...base,
+      blocks: [{ kind: 'table', table: { title: 'figures · 2 rows', columns: ['Element', 'Size', 'Date'], rows: [{ cells: ['Element with a rather long title 1', '1664.72', '2022-09-09T22:33:00Z'], cites: ['n1'] }, { cells: ['Element 2', '203.6', '2022-09-10T01:02:03Z'], cites: ['n2'] }], note: 'Each row selects its elements on the graph.' } }],
+    };
+    await draw(answer);
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual(['Element', 'Size', 'Date (UTC)', ASSISTANT_COPY.citeColumn]);
+    expect(within(table).getByText('1,664.72')).toBeTruthy();
+    expect(within(table).getByText('203.6')).toBeTruthy();
+    expect(within(table).getByText('2022-09-09 22:33:00')).toBeTruthy();
+    const title = within(table).getByText('Element with a rather long title 1');
+    expect(title.getAttribute('title')).toBe('Element with a rather long title 1');
+    expect(title.className).toBe('assistant-table-title-cell');
   });
 });

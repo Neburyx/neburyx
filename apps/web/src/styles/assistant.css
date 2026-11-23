@@ -731,6 +731,7 @@
 
 /* a table answer: the table scrolls inside the card, the page never does */
 .assistant-table-scroll {
+  container-type: inline-size;
   overflow-x: auto;
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
@@ -783,6 +784,13 @@
 }
 
 .assistant-table th:last-child,
+.assistant-table .assistant-table-title-cell {
+  max-width: 40cqw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .assistant-table-cite {
   white-space: nowrap;
   overflow-wrap: normal;

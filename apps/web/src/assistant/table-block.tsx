@@ -1,19 +1,11 @@
 import { useState, type ReactNode } from "react";
 import type { AssistantTable } from "@neburyx/contracts";
 import type { CitationEntry } from "../summary/summary-model.js";
+import { cellOf, columnKinds, headerOf } from "./table-format.js";
 import { ASSISTANT_COPY, droppedRowsText, foldedRowsText, moreNotShownText, selectRowLabel, showSourceLabel } from "./copy.js";
 
 const TABLE_FOLD_ABOVE = 10;
 const TABLE_FOLD_HEAD = 3;
-
-const NUMBER = /^[-+(]?\p{Sc}?\s?\d[\d,. ]*\s?[%\p{Sc}A-Za-z]{0,3}\)?$/u;
-/** Whether every cell of a column is a number (with its sign, thousands separators, currency sign, percent or short unit): such a column is aligned right and its cells do not wrap. */
-const STAMP = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?\s?(Z|[+-]\d{2}:?\d{2}|UTC)?)?$/;
-/** Whether every cell of a column is a date or a time stamp: its cells do not wrap. */
-const stampColumn = (rows: readonly { readonly cells: readonly string[] }[], column: number): boolean =>
-  rows.length > 0 && rows.every((row) => STAMP.test((row.cells[column] ?? "").trim()));
-const numericColumn = (rows: readonly { readonly cells: readonly string[] }[], column: number): boolean =>
-  rows.length > 0 && rows.every((row) => NUMBER.test((row.cells[column] ?? "").trim()));
 
 type CopyState = "idle" | "copied" | "failed";
 
@@ -39,9 +31,12 @@ function tableText(columns: readonly string[], rows: readonly { readonly cells: 
 export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSelectRow, onShowSource }: TableBlockProps) {
   const [unfolded, setUnfolded] = useState(false);
   const [copy, setCopy] = useState<CopyState>("idle");
-  const numeric = table.columns.map((_, column) => numericColumn(table.rows, column));
-  const stamped = table.columns.map((_, column) => stampColumn(table.rows, column));
-  const classOf = (column: number): string | undefined => (numeric[column] ? "assistant-table-number" : stamped[column] ? "assistant-table-stamp" : undefined);
+  const kinds = columnKinds(table.columns, table.rows);
+  const titled = kinds[0] === "text";
+  const classOf = (column: number): string | undefined => {
+    const kind = kinds[column];
+    return kind === "number" ? "assistant-table-number" : kind === "stamp" ? "assistant-table-stamp" : column === 0 && titled ? "assistant-table-title-cell" : undefined;
+  };
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));
@@ -75,7 +70,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         }}
       >
         {entry.row.cells.map((cell, column) => (
-          <td key={column} className={classOf(column)}>{cell}</td>
+          <td key={column} className={classOf(column)} title={column === 0 && titled ? cell : undefined}>{cellOf(cell, kinds[column] ?? "text")}</td>
         ))}
         <td className="assistant-table-cite">
           <span className="summary-chips">{markersOf(entry.row.cites)}</span>
@@ -109,7 +104,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
           <thead>
             <tr>
               {table.columns.map((column, index) => (
-                <th key={index} scope="col" className={classOf(index)}>{column}</th>
+                <th key={index} scope="col" className={classOf(index)}>{headerOf(column, kinds[index] ?? "text", table.rows, index)}</th>
               ))}
               <th scope="col">{ASSISTANT_COPY.citeColumn}</th>
             </tr>
