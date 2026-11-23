@@ -12,7 +12,8 @@ import { replyOf, startRig } from './testing/rig.js';
 import { node, reading } from './view.js';
 
 const PROMPTS = resolve(import.meta.dirname, '../../../ee/ask/prompts');
-const typology = readFileSync(join(PROMPTS, 'aml-typologies.md'), 'utf8');
+const TYPOLOGY_FILE = resolve(import.meta.dirname, '../../../domain-packs/banking-fraud/typologies.md');
+const typology = readFileSync(TYPOLOGY_FILE, 'utf8');
 const prompt = readFileSync(join(PROMPTS, 'summary-prompt.md'), 'utf8');
 const directory = mkdtempSync(join(tmpdir(), 'nbx-typology-'));
 afterAll(() => {
@@ -44,7 +45,7 @@ describe('the shipped files', () => {
 
   it('has a prompt that expressly prohibits stating or implying guilt, fraud, intent or a conclusion, and instructions that hold both files', async () => {
     expect(prompt).toMatch(/never state or imply guilt, fraud, intent or a conclusion/iu);
-    const loaded = await loadSummaryInstructions();
+    const loaded = await loadSummaryInstructions({ env: { NEBURYX_SUMMARY_TYPOLOGY_FILE: TYPOLOGY_FILE } });
     expect(loaded.ok && loaded.instructions.text.includes(prompt.trim())).toBe(true);
     expect(loaded.ok && loaded.instructions.text.includes(typology.trim())).toBe(true);
   });

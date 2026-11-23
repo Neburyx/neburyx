@@ -67,12 +67,12 @@ describe('the shipped summary files', () => {
     expect(shipped('summary-prompt.md')).toContain(statement);
   });
 
-  it.each(['Fan-in', 'Fan-out', 'Cycle', 'Rapid pass-through', 'Shared device or address'])('describes the shape %s as a structure', (shape) => {
-    expect(shipped('aml-typologies.md')).toContain(`- ${shape}:`);
+  it.each(['Fan-in', 'Fan-out', 'Cycle', 'Rapid pass-through', 'Shared device or address'])('describes the shape %s of the banking pack as a structure', (shape) => {
+    expect(readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/typologies.md', import.meta.url)), 'utf8')).toContain(`- ${shape}:`);
   });
 
   it('says a shape may be described with its elements cited and never asserted', () => {
-    const text = shipped('aml-typologies.md');
+    const text = readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/typologies.md', import.meta.url)), 'utf8');
     expect(text).toContain('described as having the shape of one of them, citing the elements it rests on');
     expect(text).toContain('Never say that an arrangement is one of them');
   });

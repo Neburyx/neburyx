@@ -206,8 +206,8 @@ describe('the shape of a pack directory', () => {
 });
 
 describe.each(packs)('the %s pack: the mapping file', (pack) => {
-  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions, assistant questions and an Ask folder when the pack has them, and nothing else', () => {
-    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASSISTANT_QUESTIONS_FILE, ASK_FOLDER].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
+  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions, assistant questions, a typology text for the AI and an Ask folder when the pack has them, and nothing else', () => {
+    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASSISTANT_QUESTIONS_FILE, ASK_FOLDER, 'typologies.md'].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
     expect(shapeProblems(join(PACKS_ROOT, pack))).toEqual([]);
   });
 

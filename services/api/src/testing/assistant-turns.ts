@@ -147,6 +147,16 @@ function tokenKeyFile(): string {
 export type AssistantApp = Awaited<ReturnType<typeof startAssistantApp>>;
 
 /** The real application with the real enterprise extension and the assistant on (its tool loop from two steps), over a model service the test gives and the real gate over a scripted source. */
+let typologyPath: string | undefined;
+/** A typology file of neutral shapes, for the suites whose turns read the typology: the product ships none, so a suite names one. */
+export function typologyFile(): string {
+  if (typologyPath === undefined) {
+    typologyPath = join(mkdtempSync(join(tmpdir(), 'assistant-typology-')), 'typologies.md');
+    writeFileSync(typologyPath, '# Shapes of linking\n\nThese are structures, not findings.\n\n- Hub: many elements link to one element within a short time.\n- Chain: one element links to the next, and that one to the next.\n- Ring: links leave an element and return to it through others.\n- Shared value: several elements are linked to the same value.\n- Spread: one element links to many elements within a short time.\n', { mode: 0o600 });
+  }
+  return typologyPath;
+}
+
 export async function startAssistantApp(options: AssistantAppOptions) {
   const threadStore = createMemoryAssistantThreadStore();
   const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => threadStore, assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
@@ -158,6 +168,7 @@ export async function startAssistantApp(options: AssistantAppOptions) {
     NEBURYX_ASK_MAX_RETRIES: '0',
     NEBURYX_ASK_TIMEOUT_MS: '5000',
     NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 4),
+    NEBURYX_ASSISTANT_TYPOLOGY_FILE: typologyFile(),
     ...(options.maxCalls === undefined ? {} : { NEBURYX_ASSISTANT_MAX_CALLS: String(options.maxCalls) }),
     ...(options.summary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}),
     ...options.settings,

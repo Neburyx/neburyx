@@ -15,8 +15,8 @@ export interface SummaryInstructions {
   readonly sha256: string;
 }
 
-/** The prompt, then the typologies, then the reply format, which is last whatever the two texts say. */
+/** The prompt, then the typologies (a section only when there is a text), then the reply format, which is last whatever the two texts say. */
 export function buildSummaryInstructions(prompt: string, typology: string): SummaryInstructions {
-  const text = [prompt, typology, REPLY_FORMAT].join('\n\n');
+  const text = [prompt, ...(typology.trim() === '' ? [] : [typology]), REPLY_FORMAT].join('\n\n');
   return { text, sha256: createHash('sha256').update(text, 'utf8').digest('hex') };
 }

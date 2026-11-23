@@ -16,6 +16,7 @@ import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
 import { exportWebRoot, startExportRig, type ExportRigOptions } from '../testing/export-rig.js';
 import { plainNode, plainRelationship } from '../testing/normalize-fixtures.js';
 import { createAgentScript } from '../testing/agent-script.js';
+import { typologyFile } from '../testing/assistant-turns.js';
 
 type AssistantRunStore = ReturnType<typeof createMemoryAssistantRunStore>;
 type AssistantThreadStore = ReturnType<typeof createMemoryAssistantThreadStore>;
@@ -79,7 +80,7 @@ async function assistantRig(options: { maxSteps?: number; withSummary?: boolean;
   const stub = await modelStub(options.reply ?? '{"route":"refuse","cause":"verdict"}', options.hang === true);
   const extension = createEnterpriseExtension({ modelBaseUrl: stub.url, assistantRunStore: () => options.runStore ?? createMemoryAssistantRunStore(), assistantThreadStore: () => options.threadStore ?? createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
   const features = options.features ?? { ask: false, summary: options.withSummary === true, assistant: true };
-  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), ...(options.withSummary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}) }, { sourceIds: ['demo'], features });
+  const configured = await extension.configure?.({}, { ...ENV, NEBURYX_ASSISTANT_TYPOLOGY_FILE: typologyFile(), NEBURYX_ASSISTANT_MAX_STEPS: String(options.maxSteps ?? 1), NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), ...(options.withSummary === true ? { NEBURYX_SUMMARY_TOKEN_KEY_FILE: tokenKeyFile(), NEBURYX_SUMMARY_MAX_INPUT_TOKENS: '100000' } : {}) }, { sourceIds: ['demo'], features });
   expect(configured).toEqual({ ok: true });
   const events: AuditEvent[] = [];
   const armed = { open: false };

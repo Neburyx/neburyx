@@ -35,10 +35,10 @@ describe('replacing the prompt and typology files', () => {
     expect(loaded.ok && loaded.instructions.text).not.toContain('Fan-in');
   });
 
-  it('replaces one file and keeps the shipped other, and treats an empty variable as not set', async () => {
+  it('replaces the prompt and has no typology section, and treats an empty variable as not set', async () => {
     const loaded = await loadSummaryInstructions({ env: { NEBURYX_SUMMARY_PROMPT_FILE: file('only.md', 'OWN PROMPT'), NEBURYX_SUMMARY_TYPOLOGY_FILE: '' } });
     expect(loaded.ok && loaded.instructions.text).toContain('OWN PROMPT');
-    expect(loaded.ok && loaded.instructions.text).toContain('Fan-in');
+    expect(loaded.ok && loaded.instructions.text).not.toContain('Fan-in');
   });
 
   it('refuses an empty or blank prompt file naming the setting, and accepts an empty typology file', async () => {

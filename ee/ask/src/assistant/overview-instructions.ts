@@ -21,7 +21,7 @@ interface LoadOptions {
 /** Reads the prompt from the file the operator names or else the one shipped with the product. A problem names the setting or the shipped file with the setting that replaces it, never a path or any text. */
 export async function loadOverviewInstructions(options: LoadOptions = {}): Promise<OverviewInstructionsLoad> {
   const directory = options.shippedDirectory ?? SHIPPED_DIRECTORY;
-  const prompt = await textOf(options.env, PROMPT_SETTING, `${directory}${SHIPPED_PROMPT}`, `the shipped ${SHIPPED_PROMPT} (replace it with ${PROMPT_SETTING})`, true);
+  const prompt = await textOf(options.env, PROMPT_SETTING, { path: `${directory}${SHIPPED_PROMPT}`, label: `the shipped ${SHIPPED_PROMPT} (replace it with ${PROMPT_SETTING})` }, true);
   if (typeof prompt === 'string') return { ok: false, problems: [prompt] };
   return { ok: true, instructions: buildSummaryInstructions(prompt.text, '') };
 }

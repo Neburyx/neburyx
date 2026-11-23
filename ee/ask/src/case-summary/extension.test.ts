@@ -35,13 +35,12 @@ describe('a shipped summary file that cannot be read stops start-up', () => {
   it('is refused through the real configure, naming the file and the replacing setting and holding no path', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'case-summary-ext-'));
     try {
-      writeFileSync(join(directory, 'summary-prompt.md'), 'prompt');
       const extension = createEnterpriseExtension({ shippedSummaryDirectory: `${directory}/` });
       const outcome = await extension.configure?.({}, envFor(makeAskFolder(['s1'])), CONTEXT);
       expect(outcome?.ok).toBe(false);
       const message = outcome !== undefined && !outcome.ok ? outcome.problems.join('\n') : '';
-      expect(message).toContain('aml-typologies.md');
-      expect(message).toContain('NEBURYX_SUMMARY_TYPOLOGY_FILE');
+      expect(message).toContain('summary-prompt.md');
+      expect(message).toContain('NEBURYX_SUMMARY_PROMPT_FILE');
       expect(message).not.toContain(directory);
       expect(extension.summaryInstructions()).toBeUndefined();
     } finally {
@@ -109,7 +108,6 @@ describe('every bad summary file stops start-up through the real configure, with
       const prompt = join(directory, 'summary-prompt.md');
       writeFileSync(prompt, kind === 'oversized' ? `${SENTINEL}${'x'.repeat(70_000)}` : kind === 'unreadable' ? SENTINEL : Buffer.from([0xff, 0xfe]));
       if (kind === 'unreadable') chmodSync(prompt, 0o000);
-      writeFileSync(join(directory, 'aml-typologies.md'), 'typology');
       const outcome = await configured({}, `${directory}/`);
       chmodSync(prompt, 0o600);
       expect(outcome?.ok).toBe(false);

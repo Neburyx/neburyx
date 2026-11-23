@@ -244,11 +244,11 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_PROMPT_FILE` | the file shipped with the product | |
 | `NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` | `assistant-view.md`, shipped with the product | |
 | `NEBURYX_ASSISTANT_OVERVIEW_PROMPT_FILE` | `assistant-overview.md`, shipped with the product | |
-| `NEBURYX_ASSISTANT_TYPOLOGY_FILE` | `aml-typologies.md`, shipped with the product | |
+| `NEBURYX_ASSISTANT_TYPOLOGY_FILE` | none: with no file there is no typology section | |
 
 `NEBURYX_ASSISTANT_PROMPT_FILE` names an absolute path to a file that replaces the router's instructions (at most as large as a classification file of the Ask folder). The reply format is added by the product after the file's text and cannot be changed by it, and the hash of the instructions used is kept with them. No setting raises a limit or budget of a source.
 
-`NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` and `NEBURYX_ASSISTANT_TYPOLOGY_FILE` do the same for the instructions of the answer from the view: each names an absolute path to a file that replaces the shipped prompt or the shipped typology text, within the same size limit, and the reply format is added after both and is fixed. A relative path, a missing, unreadable or oversized file stops the start and names the setting, never the path or the text. The answer from the view needs no setting or file of the case summary.
+`NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` and `NEBURYX_ASSISTANT_TYPOLOGY_FILE` do the same for the instructions of the answer from the view: each names an absolute path to a file that replaces the shipped prompt or, for the typology, supplies the text (the product ships none: a domain pack may, as `domain-packs/banking-fraud/typologies.md` does, and with no file the instructions have no typology section and the typology is not offered as a tool), within the same size limit, and the reply format is added after both and is fixed. A relative path, a missing, unreadable or oversized file stops the start and names the setting, never the path or the text. The answer from the view needs no setting or file of the case summary.
 
 ### What a turn stores
 
