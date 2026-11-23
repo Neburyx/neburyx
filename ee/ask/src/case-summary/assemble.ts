@@ -41,14 +41,13 @@ export interface AssembledText {
 
 /**
  * What a ranking may rest on, by the data class the gate returned with each property and never by a name: a number as exact decimal text, a date, a local time or an instant as the key of the contract's moment, each only when it is shown, not masked and valid in its class.
- * A masked property, and a property of an orderable class without a usable value, is held with no value: it takes part in naming a property and removes a ranking, and no value of it is held.
+ * Every property is held by its key and class, so that all of them take part in naming a property; the value only when it can be ranked. A masked property, one that is not shown and one of a class that has no order are held with no value, and no value of them is held.
  */
 export function rankedOf(properties: readonly GraphProperty[]): RankedProperty[] {
-  return properties.flatMap((property): RankedProperty[] => {
-    const orderable = !property.masked && ORDERED.has(property.dataClass);
-    if (!orderable) return property.masked ? [{ key: property.key, dataClass: property.dataClass }] : [];
-    const value = property.value === undefined ? undefined : property.dataClass === 'number' ? decimalKey(property.value) : typeof property.value === 'string' ? temporalKey(property.dataClass, property.value) : undefined;
-    return [{ key: property.key, dataClass: property.dataClass, ...(value === undefined ? {} : { value }) }];
+  return properties.map((property): RankedProperty => {
+    const orderable = !property.masked && property.value !== undefined && ORDERED.has(property.dataClass);
+    const value = !orderable ? undefined : property.dataClass === 'number' ? decimalKey(property.value) : typeof property.value === 'string' ? temporalKey(property.dataClass, property.value) : undefined;
+    return { key: property.key, dataClass: property.dataClass, ...(value === undefined ? {} : { value }) };
   });
 }
 

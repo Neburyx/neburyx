@@ -1,6 +1,7 @@
 import type { EdgeRef, ElementRef, SummaryReading } from '@neburyx/contracts';
 import { canonicalText } from '../questions/canonical.js';
 import { assembleText } from './assemble.js';
+import { checkedTextOf } from './judge.js';
 import { judgeSentences } from './checks.js';
 import type { OpenedToken } from './token.js';
 
@@ -25,8 +26,9 @@ export function rejudge(payload: Payload, reading: SummaryReading): { readonly k
   const nodes = new Map(reading.nodes.map((node) => [canonicalText(node.ref), node]));
   const edges = new Map(reading.edges.map((edge) => [canonicalText(edge.ref), edge]));
   const inputs = new Map(payload.inputRefs.map((sent) => [sent.key, sent]));
-  const assembled = assembleText(reading);
-  const keyOfRef = new Map([...assembled.keys].map(([key, element]) => [`${element.kind}:${canonicalText(element.ref)}`, key]));
+  const text = assembleText(reading);
+  const assembled = checkedTextOf(text);
+  const keyOfRef = new Map([...text.keys].map(([key, element]) => [`${element.kind}:${canonicalText(element.ref)}`, key]));
   const draftedBeforeMasking = !payload.mask && [...reading.nodes, ...reading.edges].some((element) => element.properties.some((property) => property.masked));
   const kept: KeptSentence[] = [];
   if (!draftedBeforeMasking) {

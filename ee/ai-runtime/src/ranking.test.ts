@@ -183,6 +183,82 @@ describe.each([
     expect(verdict(`${a} has the earliest ${key}.`, all, held)).toBe('comparison');
   });
 
+  it('verifies one ranking claim in a sentence: a compound ranking, or a second property, is removed', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`${a} has the largest ${key}, 10, and the highest ${key}.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, 10, and the smallest ${key}.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, and ${b} has the smallest ${key}.`, all, held)).toBe('comparison');
+  });
+
+  it('reads the figure it claims whole: the first literal after the property, quoted or not, with an exponent, and refuses a malformed one', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`${a} has the largest ${key}, "2".`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, with the value reported here being 2.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, with the value reported here being 10.`, all, held)).toBe('kept');
+    expect(verdict(`${a} has the largest ${key}, 1.2.3.`, all, held)).toBe('number');
+  });
+
+  it('removes a ranking over the whole source, the database or the data, and keeps one of those shown', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`${a} has the largest ${key}, 10, in the entire database.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, 10, across the whole source.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, 10, anywhere.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key} of those shown, 10.`, all, held)).toBe('kept');
+  });
+
+  it('judges a statement that the elements do not show by its own clause: an unrelated property does not turn it into a ranking, a positive ranking beside it is still checked', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`The elements do not show which ${type} has the largest score.`, ['n1', 's1'], held)).toBe('kept');
+    expect(verdict(`The elements do not show which ${type} has the largest ${key}.`, ['n9', 's1'], held)).toBe('kept');
+    expect(verdict(`The elements do not show who sent it, and ${b} has the largest ${key}, 2.`, [...all, 's1'], held)).toBe('comparison');
+  });
+
+  it('writes at least with any white space, and refuses a negation only before the ranking word', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`${a} is listed with at  least one ${key}.`, all, held)).toBe('kept');
+    expect(verdict(`${a} has the largest ${key}, 10, which is not in doubt.`, all, held)).toBe('kept');
+    expect(verdict(`${a} is not the one with the largest ${key}.`, all, held)).toBe('comparison');
+  });
+
+  it('counts every property of the cited elements when it names one by a prefix, those with no value and those that cannot be ranked too', () => {
+    const wide = build(['10', '2', '7']);
+    const [firstWord = ''] = (key.match(/\p{Ll}+/gu) ?? []);
+    const ranked = new Map(wide.rankedValues);
+    for (const id of all) ranked.set(id, [...(ranked.get(id) ?? []), { key: `${key}Note`, dataClass: 'text' }]);
+    expect(verdict(`${a} has the largest ${firstWord}, 10.`, all, { ...wide, rankedValues: ranked })).toBe('comparison');
+    expect(verdict(`${a} has the largest ${key}, 10.`, all, { ...wide, rankedValues: ranked })).toBe('kept');
+  });
+
+  it('names a property by whole words in order whatever is between the words: digits, hyphens and keys of many words', () => {
+    const held = build(['10', '2', '7']);
+    const rename = (name: string): CheckedText => {
+      const lines = new Map([...held.lines].map(([id, line]) => [id, line.replace(`${key}:`, `${name}:`)]));
+      return { ...held, lines, text: [...lines.values()].join('\n'), rankedValues: new Map(all.map((id) => [id, [{ key: name, dataClass: 'number', value: held.rankedValues?.get(id)?.[0]?.value ?? '' }]])) };
+    };
+    expect(verdict(`${a} has the largest amount2, 10.`, all, rename('amount2'))).toBe('kept');
+    expect(verdict(`${a} has the largest amount 2, 10.`, all, rename('amount2'))).toBe('kept');
+    expect(verdict(`${a} has the largest total-paid-in-last-year amount, 10.`, all, rename('totalPaidInLastYearAmount'))).toBe('kept');
+    expect(verdict(`${a} has the largest total paid in last year amount, 10.`, all, rename('total_paid_in_last_year_amount'))).toBe('kept');
+    expect(verdict(`${a} has the largest paid total, 10.`, all, rename('totalPaid'))).toBe('comparison');
+  });
+
+  it('removes a ranking of a computed figure after any ranking word, also when the number it claims is on a cited line', () => {
+    const held = build(['10', '2', '7']);
+    for (const word of ['largest', 'biggest', 'greatest', 'highest', 'maximum', 'smallest', 'lowest', 'minimum', 'fewest', 'least']) {
+      expect(verdict(`${a} has the ${word} total of 10.`, all, held), word).toBe('comparison');
+      expect(verdict(`${a} has the ${word} number of ${other}s, 7.`, all, held), word).toBe('comparison');
+    }
+    expect(verdict(`${a} has the most ${other}s, 7.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} has the greatest share, 10 percent.`, all, held)).toBe('comparison');
+  });
+
+  it('puts a ranking that also holds a number no cited line holds under the reason number, and one that states an unknown count under count', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`${a} has the largest ${key}, 10, of 99 ${type}s.`, all, held)).toBe('number');
+    const unknown = { ...held, unknownCountKeys: new Set(['s1']) };
+    expect(verdict(`${a} has the largest ${key}, 10, of 3 ${type}s.`, [...all, 's1'], unknown)).toBe('count');
+  });
+
   describe('over times', () => {
     const times = (literals: readonly string[], dataClass: 'dateTime' | 'date' | 'localDateTime'): CheckedText => {
       const held = build(['1', '2', '3']);
@@ -205,6 +281,15 @@ describe.each([
       expect(verdict(`${b} has the earliest ${time}, 2021-02-31.`, all, days)).toBe('comparison');
       const local = times(['2022-09-10T10:00:00', '2022-09-10T09:59:59.9', '2022-09-11T00:00:00'], 'localDateTime');
       expect(verdict(`${b} has the earliest ${time}, 2022-09-10T09:59:59.9.`, all, local)).toBe('kept');
+    });
+
+    it('ranks the extreme of instants by value alone, and ties two spellings of one instant even when no element is named', () => {
+      const instants = times(['2022-09-10T12:00:00+02:00', '2022-09-10T09:00:00Z', '2022-09-10T10:00:00.000000001Z'], 'dateTime');
+      expect(verdict(`The earliest ${time} is 2022-09-10T09:00:00Z.`, all, instants)).toBe('kept');
+      expect(verdict(`The latest ${time} is 2022-09-10T10:00:00.000000001Z.`, all, instants)).toBe('kept');
+      const tied = times(['2022-09-10T12:00:00+02:00', '2022-09-10T10:00:00Z', '2022-09-10T10:00:00.000000001Z'], 'dateTime');
+      expect(verdict(`The earliest ${time} is 2022-09-10T10:00:00Z.`, all, tied)).toBe('comparison');
+      expect(verdict(`The earliest ${time} is 2022-09-10T10:00:00.`, all, instants)).toBe('comparison');
     });
 
     it('does not rank mixed classes', () => {

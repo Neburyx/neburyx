@@ -631,10 +631,10 @@ const WE = '(?![\\p{L}\\p{N}_-])';
 const RANKING_WORDS: readonly (readonly [RegExp, 'max' | 'min'])[] = [
   [new RegExp(`${WB}(?:largest|biggest|greatest|highest|maximum|latest)${WE}`, 'giu'), 'max'],
   [new RegExp(`${WB}(?:smallest|lowest|minimum|earliest|fewest)${WE}`, 'giu'), 'min'],
-  [new RegExp(`${WB}(?<!at\\s)least${WE}`, 'giu'), 'min'],
+  [new RegExp(`${WB}(?<!at\\s+)least${WE}`, 'giu'), 'min'],
   [new RegExp(`${WB}(?:the|has|have|had|holds?|with)\\s+(most)${WE}(?!\\s+of${WE})`, 'giu'), 'max'],
 ];
-const MORE_THAN_READ = /(?<![\p{L}\p{N}_-])(?:in total|overall|in the source|source-wide|across the source|not yet retrieved)(?![\p{L}\p{N}_-])/iu;
+const MORE_THAN_READ = /(?<![\p{L}\p{N}_-])(?:in total|overall|anywhere|source-wide|not yet retrieved|(?:in|across|of|from) (?:the )?(?:entire |whole |full |complete )?(?:source|database|dataset|data|graph)|(?:entire|whole|full|complete) (?:source|database|dataset|data|graph))(?![\p{L}\p{N}_-])/iu;
 const UNAVAILABLE = /(?<![\p{L}\p{N}_-])(?:do not show|does not show|is not shown|are not shown|cannot say|do not hold)(?![\p{L}\p{N}_-])/iu;
 
 /** The words of a key or of a sentence: at capital letters, digits and anything that is no letter. */
@@ -644,13 +644,13 @@ const subwordsOf = (text: string): string[] => (text.match(/\p{Lu}?\p{Ll}+|\p{Lu
 const rankingWordsIn = (text: string): { readonly direction: 'max' | 'min'; readonly index: number; readonly end: number; readonly word: string }[] =>
   RANKING_WORDS.flatMap(([pattern, direction]) => [...text.matchAll(pattern)].map((found) => ({ direction, index: found.index, end: found.index + found[0].length, word: (found[1] ?? found[0]).toLowerCase() }))).sort((first, second) => first.index - second.index);
 
-/** The raw words that follow a position, up to a mark of punctuation or a number, at most five, each with where it ends. */
+/** The words that follow a position, each with where it ends: letters and digits, joined only by white space, hyphens and underscores, so that a mark of punctuation ends them. */
 function wordsAfter(text: string, from: number): { readonly raw: string; readonly end: number }[] {
   const out: { raw: string; end: number }[] = [];
   let at = from;
-  while (out.length < 5) {
-    const found = /^\s+([\p{L}][\p{L}\p{N}_]*)/u.exec(text.slice(at));
-    if (found === null) break;
+  for (;;) {
+    const found = /^[\s_-]*([\p{L}\p{N}]+)/u.exec(text.slice(at));
+    if (found === null || (out.length === 0 && !/^\s/u.test(text.slice(at)))) break;
     at += found[0].length;
     out.push({ raw: found[1] ?? '', end: at });
   }
@@ -681,20 +681,23 @@ function propertyAfter(text: string, from: number, keys: readonly string[]): { r
   return { key: only.key, end: following[lastToken]?.end ?? first.end };
 }
 
-const NUMBER_LITERAL = /[-+]?\d(?:[\d,]*\d)?(?:\.\d+)?|[-+]?\.\d+/u;
+const NUMBER_LITERAL = /[-+]?(?:\d(?:[\d,]*\d)?(?:\.\d+)?|\.\d+)(?:[eE][-+]?\d+)?/u;
 const TEMPORAL_LITERAL: Readonly<Record<string, RegExp>> = {
   dateTime: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})(?:\[[^\]]*\])?/u,
   localDateTime: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?![\d.:]|Z|[+-]\d)/u,
   date: /\d{4}-\d{2}-\d{2}(?![\dT])/u,
 };
 
-/** The figure a sentence claims for the ranked property: the first literal of the class that follows the words of the property, within a few words and the same clause. `invalid` for a literal that is no valid value of the class. */
+/** The figure a sentence claims for the ranked property: the first literal of the class that follows the words of the property in the same clause, read whole. `invalid` for a literal that is no valid value of the class, or a time written in another shape than the class's. */
 function claimedValueOf(text: string, from: number, dataClass: string): { readonly value?: string; readonly invalid?: true } {
   const clause = text.slice(from).split(/[.;!?](?:\s|$)/u)[0] ?? '';
   const pattern = dataClass === 'number' ? NUMBER_LITERAL : TEMPORAL_LITERAL[dataClass];
   const found = pattern === undefined ? null : pattern.exec(clause);
+  if (dataClass !== 'number') {
+    const any = /\d{4}-\d{2}-\d{2}[T\d:.Z+-]*/u.exec(clause);
+    if (any !== null && (found === null || found.index !== any.index || found[0] !== any[0])) return { invalid: true };
+  }
   if (found === null) return {};
-  if ((clause.slice(0, found.index).match(/[\p{L}\p{N}_]+/gu) ?? []).length > 4) return {};
   const literal = found[0];
   const value = dataClass === 'number' ? decimalKey(/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/u.test(literal.replace(/^[-+]/u, '')) ? literal.replaceAll(',', '') : literal) : temporalKey(dataClass, literal);
   return value === undefined ? { invalid: true } : { value };
@@ -708,18 +711,23 @@ function claimedValueOf(text: string, from: number, dataClass: string): { readon
  */
 function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
   const names = namesOfElements(assembled);
-  let text = withoutQuoted(sentence.text);
+  // what names an element is no ranking word and no property: the names are taken out, and what is quoted otherwise stays, since a claimed value may be quoted
+  let text = sentence.text.normalize('NFC');
   for (const name of names) text = text.replace(new RegExp(`${WB}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${WE}`, 'giu'), (found) => ' '.repeat(found.length));
-  const claims = rankingWordsIn(text);
-  if (claims.length === 0) return true;
+  const all = rankingWordsIn(text);
+  if (all.length === 0) return true;
   const cited = citedElements(sentence, assembled);
   const carries = (key: string): readonly RankedProperty[] => assembled.rankedValues?.get(key) ?? [];
-  const unavailable = clausesOf(text).some((clause) => UNAVAILABLE.test(clause));
-  if (unavailable && !cited.some((key) => carries(key).length > 0)) return true;
-  if (new Set(claims.map((claim) => claim.direction)).size > 1) return false;
+  const shownKeys = [...new Set(cited.flatMap((key) => carries(key).filter((entry) => entry.value !== undefined).map((entry) => entry.key)))];
+  // a clause that says the elements do not show an answer, and ranks no property that the cited elements show a value of, is an honest statement judged as before
+  const exempt = (claim: { readonly index: number; readonly end: number }): boolean => UNAVAILABLE.test(clauseAt(text, claim.index)) && propertyAfter(text, claim.end, shownKeys) === undefined;
+  const claims = all.filter((claim) => !exempt(claim));
+  if (claims.length === 0) return true;
+  // one ranking claim in a sentence: a compound ranking is written as separate sentences
   const [claim] = claims;
-  if (claim === undefined || assembled.rankedValues === undefined) return false;
-  if (clausesOf(text).some((clause) => NEGATION.test(clause) && rankingWordsIn(clause).length > 0)) return false;
+  if (claim === undefined || claims.length > 1 || assembled.rankedValues === undefined) return false;
+  const clauseStart = Math.max(text.lastIndexOf(',', claim.index), text.lastIndexOf(';', claim.index), text.lastIndexOf('.', claim.index), text.lastIndexOf(' but ', claim.index), -1) + 1;
+  if (NEGATION.test(text.slice(clauseStart, claim.index))) return false;
   if (MORE_THAN_READ.test(text)) return false;
   const carriers = cited.filter((key) => carries(key).length > 0);
   const keys = [...new Set(carriers.flatMap((key) => carries(key).map((property) => property.key)))];
