@@ -28,7 +28,7 @@ describe('the agent run', () => {
     inner.bindTools = ((tools: Parameters<typeof original>[0]) => {
       bound.push(tools.map((entry) => ('name' in entry ? String(entry.name) : '')).sort());
       return original(tools);
-    }) as typeof inner.bindTools;
+    }) as typeof inner.bindTools; // the double only records the tools it is bound with and delegates to the original, so its type is unchanged
     await runAgent({ ...base(controlOf()), model: inner, tools: [reader(log), answerTool(log)] });
     expect(bound.length).toBeGreaterThan(0);
     for (const names of bound) {
