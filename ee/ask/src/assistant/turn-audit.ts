@@ -17,7 +17,9 @@ import {
 import type { ModelAnswer } from '@neburyx/ee-ai-runtime';
 import { createTurnRun, type CallRecord, type TurnRun, type TurnRunDeps } from './turn-run.js';
 import type { AssistantContextTurn } from './thread-store.js';
-import { storedAnswerOf } from './thread-answer.js';
+import { bindingsApproved, storedAnswerOf } from './thread-answer.js';
+import { classifyItem, provenanceOf, type ClassifyContext } from './sensitive-items.js';
+import type { AssembledText } from '../case-summary/assemble.js';
 import { openTurnThread, type TurnThread, type TurnThreadDeps } from './turn-thread.js';
 
 export const TURN_CLOSED_ACTION = 'assistant.turn.closed';
@@ -37,6 +39,8 @@ interface TurnNotes {
   /** The question as typed, for a turn that carries one, and whether the request asked for the mask: for the thread only. */
   question?: string;
   maskOn?: boolean;
+  /** What the classifier reads of the text the accepted answer was written from: the values sent for every element, every element key, the type of each. */
+  provenance?: Pick<ClassifyContext, 'sentValues' | 'sent' | 'typeOf'>;
   entities?: AssistantThreadTurnWrite['entities'];
   citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   started?: { readonly sourceId: string; readonly investigationId: string };
@@ -111,6 +115,9 @@ export function noteTurn(change: TurnNote): void {
 }
 
 /** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
+/** The text the answer being checked was written from: the last one noted is the one the accepted answer rests on. */
+export const noteProvenance = (assembled: Pick<AssembledText, 'keys' | 'sentValues'>): void => note((notes) => void (notes.provenance = provenanceOf(assembled)));
+
 export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string; readonly question?: string; readonly maskOn?: boolean }): Promise<void> => {
   const notes = scope.getStore();
   if (notes === undefined) return;
@@ -332,19 +339,41 @@ function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantT
 }
 
 /** The text a turn keeps in its thread: the question as typed and the answer in its stored form, for an answered or refused turn only; a waiting turn keeps none, and a turn whose answer has no stored form yet keeps its question alone. */
-function textOf(notes: TurnNotes, kept: 'answered' | 'refused' | 'waiting', outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): Partial<Pick<AssistantThreadTurnWrite, 'question' | 'maskOn' | 'answer'>> {
+function textOf(request: ExtensionRequest, notes: TurnNotes, kept: 'answered' | 'refused' | 'waiting', outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): Partial<Pick<AssistantThreadTurnWrite, 'question' | 'maskOn' | 'answer' | 'sensitivityVersion'>> | undefined {
   if (kept === 'waiting') return {};
-  const answer = 'answer' in outcome ? storedAnswerOf(outcome.answer, notes.maskOn === true) : undefined;
-  return { ...(notes.question === undefined ? {} : { question: notes.question }), maskOn: notes.maskOn === true, ...(answer === undefined ? {} : { answer }) };
+  const maskOn = notes.maskOn === true;
+  const sourceId = notes.started?.sourceId;
+  const keys = sourceId === undefined ? undefined : safely(() => request.sensitiveKeys?.(sourceId));
+  const version = sourceId === undefined ? undefined : safely(() => request.sensitivityVersion?.(sourceId));
+  const context: ClassifyContext = { sentValues: notes.provenance?.sentValues, sent: notes.provenance?.sent ?? [], typeOf: notes.provenance?.typeOf ?? (() => undefined), sensitiveKeys: keys };
+  const stored = 'answer' in outcome ? storedAnswerOf(outcome.answer, maskOn, (text, cited) => classifyItem(text, cited, context)) : undefined;
+  const answer = stored?.answer;
+  // a binding to anything the classifier could not have approved refuses the write as a whole: nothing of the turn is stored
+  if (stored !== undefined && !maskOn && !bindingsApproved(stored.answer, context, stored.keyOf)) return undefined;
+  return { ...(notes.question === undefined ? {} : { question: notes.question }), maskOn, ...(answer === undefined ? {} : { answer }), ...(version === undefined ? {} : { sensitivityVersion: version }) };
+}
+
+/** Runs a capability of the request: one that throws is as if it were absent. */
+function safely<T>(read: () => T): T | undefined {
+  try {
+    return read();
+  } catch {
+    return undefined;
+  }
 }
 
 /** A turn that ended answered or refused on a route is kept in the thread as references and metadata; a turn that failed, was cancelled or was not let through leaves nothing. */
-function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
+function storeThread(request: ExtensionRequest, notes: TurnNotes, ending: Ending, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
   const route = ending.route ?? notes.route;
   const kept = ending.outcome === 'confirmation' ? ('waiting' as const) : ending.outcome === 'answered' || ending.outcome === 'refused' ? ending.outcome : undefined;
   if (notes.thread === undefined || route === undefined || kept === undefined) return;
   // a summary that could not be used leaves nothing in the thread, even when the turn had been placed on a route
   if (ending.cause === 'summary-invalid') return;
+  const text = textOf(request, notes, kept, outcome);
+  if (text === undefined) {
+    notes.thread.refused('binding');
+    return;
+  }
   const known = notes.usage?.kind === 'known' ? notes.usage : undefined;
   const intent = ending.intent ?? notes.intent;
   notes.thread.write({
@@ -361,7 +390,7 @@ function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answe
     ...(notes.calls === 0 || notes.promptVersion === undefined ? {} : { promptVersion: notes.promptVersion }),
     ...(known === undefined || notes.calls === 0 ? {} : { tokensIn: known.inputTokens, tokensOut: known.outputTokens }),
     ...(notes.run === undefined ? {} : { runId: notes.run.id }),
-    ...textOf(notes, kept, outcome),
+    ...text,
   });
 }
 
@@ -376,7 +405,7 @@ function close(request: ExtensionRequest, logger: ExtensionLogger | undefined, n
   }
   // the run row ends with the turn's outcome before the closing event says it
   notes.run?.finish(ending?.outcome ?? 'failed', notes.calls + (notes.summaryCalls ?? 0));
-  if (ending !== undefined) storeThread(notes, ending, outcome);
+  if (ending !== undefined) storeThread(request, notes, ending, outcome);
   let event: AuditEvent;
   try {
     if (ending === undefined) throw new Error('the turn has no ending');

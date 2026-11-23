@@ -4,6 +4,7 @@ import { type AssembledText, edgeDetailOf, propertiesOf, rankedOf, sentValuesOf,
 import { retrievalLine, viewCoverageOf } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf } from '../case-summary/judge.js';
+import { noteProvenance } from './turn-audit.js';
 import { listedElements } from '../summary/index.js';
 import { countOf, coverageOf, degreeCountsOf, inexactCountOf } from './coverage.js';
 import { rowsPhrase, subjectPluralOf, subjectTypeOf } from './table.js';
@@ -249,6 +250,7 @@ export function answerBasisOf(input: Pick<ToolAnswerInput, 'reads' | 'view' | 's
   const names = typeNamesOf(input.scope.request, input.scope.sourceId);
   const viewCoverage = input.view === undefined ? undefined : viewCoverageOf(input.view.reading, names);
   const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names, viewCoverage);
+  noteProvenance(assembled);
   if (assembled.keys.size === 0 && readKeys.length === 0) return undefined;
   const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read, names)}`)].join('; ');
   const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes, input.scope.contextTypes);

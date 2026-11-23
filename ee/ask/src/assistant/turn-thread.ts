@@ -17,6 +17,8 @@ export interface TurnThread {
   readonly turnId: string;
   /** Builds the write through the strict schema and hands it to the queue of the records; it never waits and never throws. */
   write(input: TurnThreadInput): void;
+  /** A write that was refused before it was built (a binding the classifier could not have approved): nothing is stored, and the failure is counted as a failed record write. */
+  refused(step: string): void;
   /** The person's last `limit` turns of the thread as the router's context; a thread that cannot be read is counted as a failed record and gives none, so the turn goes on without it. */
   context(limit: number): Promise<readonly AssistantContextTurn[]>;
 }
@@ -52,6 +54,7 @@ export async function openTurnThread(deps: TurnThreadDeps, request: ExtensionReq
   }
   return {
     turnId,
+    refused: (step) => failed(step),
     async context(limit) {
       try {
         return await store.readContext(started.investigationId, request.principalId, limit);

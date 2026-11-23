@@ -15,7 +15,7 @@ import { selectedSectionOf } from './selected-section.js';
 import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
-import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-audit.js';
+import { noteModelAnswer, notePropertyValuesSent, noteProvenance, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
@@ -239,6 +239,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const allowed = settings.maxCalls - input.callsUsed;
     if (allowed < 1) return outcome({ status: 'stopped', because: 'calls' });
     notePropertyValuesSent(assembled.carriesPropertyValues);
+    noteProvenance(assembled);
     const typeLines = typeLinesOf(input.typeDescriptions, assembled, input.message, input.askedTypes, input.contextTypes);
     const checkedText = withTypeLines(checkedTextOf(assembled), typeLines);
     input.onAnswering?.();

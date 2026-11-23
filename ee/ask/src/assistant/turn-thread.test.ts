@@ -358,6 +358,48 @@ describe('the writes of a thread never change a turn and never outlive the inves
     expect(new Set(forms)).toEqual(new Set([form]));
   });
 
+  describe('an answer written with the mask off, classified by the sensitive values sent', () => {
+    const TITLES = { sensitiveKeys: () => new Map([['widget', ['(title)']]]), sensitivityVersion: () => 'sv1:abc' } as const;
+    const answerOf_ = async (over: Partial<ExtensionRequest>, body: Record<string, unknown>, reply: unknown) => {
+      const view = await turnRig({ reply: ok(JSON.stringify({ route: 'view', ...(typeof reply === 'object' && reply !== null && 'table' in reply ? { form: 'table' } : {}) })), view: ok(JSON.stringify(reply)) });
+      await run(view, { ...VIEW_BODY, investigationId: INVESTIGATION, ...body }, over);
+      return stored(view)[0];
+    };
+    const sentence = (text: string, cites: string[] = ['n1']) => ({ sentences: [{ text, cites }] });
+
+    it('stores a sentence that holds a sensitive value as the whole value of one cited element as segments, with no value in its bytes, and the version of the classification', async () => {
+      const kept = await answerOf_(TITLES, {}, sentence('Account A-1 is listed.'));
+      const item = kept?.answer?.blocks[0]?.kind === 'sentences' ? kept.answer.blocks[0].items[0] : undefined;
+      expect(item).toMatchObject({ form: 'bound', segments: [{ element: { stableId: 'A-1' }, property: '(title)' }, { literal: ' is listed.' }] });
+      expect(JSON.stringify(kept?.answer)).not.toContain('Account A-1');
+      expect(kept?.sensitivityVersion).toBe('sv1:abc');
+    });
+
+    it('stores the whole sentence as written, flagged, when one value cannot be bound (the title of an element it does not cite), with no partial binding', async () => {
+      const kept = await answerOf_(TITLES, {}, sentence('Account A-1 and Account A-2 are listed.'));
+      expect(kept?.answer?.blocks[0]).toMatchObject({ kind: 'sentences', items: [{ form: 'unbound', text: 'Account A-1 and Account A-2 are listed.' }] });
+    });
+
+    it('stores a sentence with no sensitive value frozen, a table cell by the same rule as a sentence, and every item frozen when the mask was on', async () => {
+      const plain = await answerOf_({ ...TITLES, sensitiveKeys: () => new Map() }, {}, sentence('Account A-1 is listed.'));
+      expect(plain?.answer?.blocks[0]).toMatchObject({ items: [{ form: 'frozen' }] });
+      const table = { table: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }] } };
+      const cell = await answerOf_(TITLES, {}, table);
+      expect(cell?.answer?.blocks[0]).toMatchObject({ kind: 'table', columns: [{ form: 'frozen', text: 'Element' }], rows: [{ cells: [{ form: 'bound', segments: [{ element: { stableId: 'A-1' }, property: '(title)' }] }] }] });
+      const masked = await answerOf_(TITLES, { mask: true }, sentence('Account A-1 is listed.'));
+      expect(masked?.answer?.blocks[0]).toMatchObject({ items: [{ form: 'frozen', text: 'Account A-1 is listed.' }] });
+      expect(masked?.sensitivityVersion).toBe('sv1:abc');
+    });
+
+    it('stores every item unbound, and no version, when the capability is absent or fails', async () => {
+      const absent = await answerOf_({}, {}, sentence('Account A-1 is listed.'));
+      expect(absent?.answer?.blocks[0]).toMatchObject({ items: [{ form: 'unbound', text: 'Account A-1 is listed.' }] });
+      expect(absent).not.toHaveProperty('sensitivityVersion');
+      const failing = await answerOf_({ sensitiveKeys: () => { throw new Error('down'); }, sensitivityVersion: () => { throw new Error('down'); } }, {}, sentence('Account A-1 is listed.'));
+      expect(failing?.answer?.blocks[0]).toMatchObject({ items: [{ form: 'unbound' }] });
+    });
+  });
+
   it('keeps the question as typed and the answer in the thread, and no entity value, instruction or reply, and no text in any event of the turn', async () => {
     const CANARY = 'CANARY-MESSAGE-7';
     const turn = await turnRig({ reply: SHARED, run: () => ({ status: 'ok', result: okResult() }) });

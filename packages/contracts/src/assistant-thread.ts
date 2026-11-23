@@ -27,17 +27,33 @@ export const THREAD_SENTENCE_MAX = 2000;
 /** The most blocks one stored answer holds. */
 export const THREAD_ANSWER_BLOCKS_MAX = 8;
 
-/**
- * The forms an item of a stored answer is kept in. `frozen`: the text as written, which holds no sensitive value of any element sent to the model (every item of a turn written with the mask on). `unbound`: the text as written, whole, because
- * it may hold a sensitive value; it is never returned while the mask is on. (The form that keeps a value as a binding to its element is added by a later change.)
- */
-export const THREAD_ITEM_FORMS = ['frozen', 'unbound'] as const;
+/** The most segments (pieces of literal text and bindings together) one stored item holds; an item that needs more is stored `unbound`. */
+export const THREAD_SEGMENTS_MAX = 40;
 
-/** An item of a stored answer: its text in one form. A table cell may be empty (a property with no value); a sentence and a label may not. */
-const storedItem = (max: number, min = 1) => z.strictObject({ form: z.enum(THREAD_ITEM_FORMS), text: z.string().min(min).max(max) });
+/**
+ * The forms an item of a stored answer is kept in. `frozen`: the text as written, which holds no sensitive value of any element sent to the model (every item of a turn written with the mask on). `unbound`: the text as written, whole, because it
+ * may hold a sensitive value; it is never returned while the mask is on. `bound`: segments, literal text and, in place of each sensitive value, the element and the property it is the whole value of; no value is stored.
+ */
+export const THREAD_ITEM_FORMS = ['frozen', 'unbound', 'bound'] as const;
+
+const textItem = (max: number, min = 1) => z.strictObject({ form: z.enum(['frozen', 'unbound']), text: z.string().min(min).max(max) });
+const segmentSchema = z.union([z.strictObject({ literal: z.string().min(1).max(THREAD_SENTENCE_MAX) }), z.strictObject({ element: threadCitationRefSchema, property: z.string().min(1).max(200) })]);
+const boundItem = z.strictObject({ form: z.literal('bound'), segments: z.array(segmentSchema).min(1).max(THREAD_SEGMENTS_MAX) });
 const storedCites = z.array(threadCitationRefSchema).max(Math.max(ASK_SUMMARY_MAX_CITATIONS, ASSISTANT_VIEW_KEYS_MAX));
-/** A sentence of a stored answer: its text in one form, and the references of the elements it cites. */
-const storedSentence = z.strictObject({ ...storedItem(THREAD_SENTENCE_MAX).shape, cites: storedCites });
+
+type Binding = { readonly element: unknown; readonly property: string };
+const bindingsOf = (item: { readonly form: string; readonly segments?: readonly unknown[] }): Binding[] => (item.form === 'bound' ? (item.segments ?? []).filter((segment): segment is Binding => typeof segment === 'object' && segment !== null && 'element' in segment) : []);
+/** Every binding of an item names an element the item cites, and a bound item holds at least one binding: a value is bound to the element it is cited with. */
+const bindsItsCites = (item: { readonly form: string; readonly segments?: readonly unknown[]; readonly cites: readonly unknown[] }): boolean => {
+  const cited = new Set(item.cites.map((cite) => JSON.stringify(cite)));
+  const bindings = bindingsOf(item);
+  return item.form !== 'bound' || (bindings.length > 0 && bindings.every((binding) => cited.has(JSON.stringify(binding.element))));
+};
+
+/** An item of a stored answer: its text in one form, or its segments. A table cell may be empty (a property with no value); a sentence and a label may not. */
+const storedCell = (max: number) => z.union([textItem(max, 0), boundItem]);
+/** A sentence of a stored answer: its text or its segments, and the references of the elements it cites; a binding is to an element it cites. */
+const storedSentence = z.union([textItem(THREAD_SENTENCE_MAX).extend({ cites: storedCites }), boundItem.extend({ cites: storedCites })]).refine(bindsItsCites, { message: 'a binding is to an element the sentence cites' });
 
 /**
  * The stored form of an answer: its ordered blocks. A block is sentences, a table (its title is the server's own fixed text and is not kept; the columns are labels, each cell is an item) or a refusal (its fixed sentence and the overview a verdict
@@ -51,11 +67,11 @@ export const storedAnswerSchema = z.strictObject({
         z
           .strictObject({
             kind: z.literal('table'),
-            columns: z.array(storedItem(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
-            rows: z.array(z.strictObject({ cells: z.array(storedItem(ASSISTANT_TABLE_CELL_MAX, 0)).max(ASSISTANT_TABLE_COLUMNS_MAX), cites: storedCites })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
+            columns: z.array(textItem(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
+            rows: z.array(z.strictObject({ cells: z.array(storedCell(ASSISTANT_TABLE_CELL_MAX)).max(ASSISTANT_TABLE_COLUMNS_MAX), cites: storedCites }).refine((row) => row.cells.every((cell) => bindsItsCites({ ...cell, cites: row.cites })), { message: 'a binding is to an element the row cites' })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
           })
           .refine((table) => table.rows.every((row) => row.cells.length === table.columns.length), { message: 'a row has a cell for each column', path: ['rows'] }),
-        z.strictObject({ kind: z.literal('refusal'), sentence: storedItem(THREAD_SENTENCE_MAX), overview: z.array(storedSentence).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX).optional() }),
+        z.strictObject({ kind: z.literal('refusal'), sentence: textItem(THREAD_SENTENCE_MAX), overview: z.array(storedSentence).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX).optional() }),
       ]),
     )
     .min(1)
