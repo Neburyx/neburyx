@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ASK_FOLDER_LIMITS, isParameterName } from './ask-folder.js';
 import { ASK_SUMMARY_MAX_CITATIONS, ASK_TEMPLATE_IDS, SAVED_PATTERN_TEMPLATE_ID } from './ask.js';
-import { ASSISTANT_VIEW_KEYS_MAX } from './assistant-turn.js';
+import { ASSISTANT_OVERVIEW_SENTENCES_MAX, ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, ASSISTANT_TABLE_ROWS_MAX, ASSISTANT_VIEW_KEYS_MAX } from './assistant-turn.js';
 import { edgeRefSchema, elementRefSchema } from './graph.js';
 
 const wholeCount = z.number().int().nonnegative();
@@ -17,6 +17,48 @@ export const threadEntitySchema = z.strictObject({ role: z.string().refine(isPar
 
 /** A thing a turn cited: an element or a relationship, as a summary cites it. */
 export const threadCitationRefSchema = z.union([elementRefSchema, edgeRefSchema]);
+
+/**
+ * The most characters of the question a thread keeps (the person's own typed text, as typed) and of one sentence of a stored answer. Decided with the stored form: the contract bounded neither, and a turn whose text is longer is not stored (the answer
+ * the person receives is unchanged). A cell and a label keep the bounds of the table.
+ */
+export const THREAD_QUESTION_MAX = 4000;
+export const THREAD_SENTENCE_MAX = 2000;
+/** The most blocks one stored answer holds. */
+export const THREAD_ANSWER_BLOCKS_MAX = 8;
+
+/**
+ * The forms an item of a stored answer is kept in. `frozen`: the text as written, which holds no sensitive value of any element sent to the model (every item of a turn written with the mask on). `unbound`: the text as written, whole, because
+ * it may hold a sensitive value; it is never returned while the mask is on. (The form that keeps a value as a binding to its element is added by a later change.)
+ */
+export const THREAD_ITEM_FORMS = ['frozen', 'unbound'] as const;
+
+const storedItem = (max: number) => z.strictObject({ form: z.enum(THREAD_ITEM_FORMS), text: z.string().min(1).max(max) });
+const storedCites = z.array(threadCitationRefSchema).max(Math.max(ASK_SUMMARY_MAX_CITATIONS, ASSISTANT_VIEW_KEYS_MAX));
+/** A sentence of a stored answer: its text in one form, and the references of the elements it cites. */
+const storedSentence = z.strictObject({ ...storedItem(THREAD_SENTENCE_MAX).shape, cites: storedCites });
+
+/**
+ * The stored form of an answer: its ordered blocks. A block is sentences, a table (its title is the server's own fixed text and is not kept; the columns are labels, each cell is an item) or a refusal (its fixed sentence and the overview a verdict
+ * refusal may carry). No citation title or snapshot, no follow-up token, no plan and no run id: nothing that is not text of the answer or a reference.
+ */
+export const storedAnswerSchema = z.strictObject({
+  blocks: z
+    .array(
+      z.discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('sentences'), items: z.array(storedSentence).min(1).max(12) }),
+        z.strictObject({
+          kind: z.literal('table'),
+          columns: z.array(z.string().min(1).max(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
+          rows: z.array(z.strictObject({ cells: z.array(storedItem(ASSISTANT_TABLE_CELL_MAX)), cites: storedCites })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
+        }),
+        z.strictObject({ kind: z.literal('refusal'), sentence: storedItem(THREAD_SENTENCE_MAX), overview: z.array(storedSentence).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX).optional() }),
+      ]),
+    )
+    .min(1)
+    .max(THREAD_ANSWER_BLOCKS_MAX),
+});
+export type StoredAnswer = z.infer<typeof storedAnswerSchema>;
 
 /**
  * What a turn leaves in its thread: references and metadata, written through this strict schema so that no text can ride in a permitted member. The bounds are the producers': an intent has at most `ASK_FOLDER_LIMITS.parameters`
@@ -42,7 +84,13 @@ export const assistantThreadTurnWriteSchema = z
     tokensIn: wholeCount.optional(),
     tokensOut: wholeCount.optional(),
     runId: z.uuid().optional(),
+    /** The question as typed, for a turn that carried one; the answer in its stored form; whether the request asked for the mask; and the version of the sensitivity of the mapping the items were classified under (unknown until the values are classified). Present only for an answered or refused turn. */
+    question: z.string().min(1).max(THREAD_QUESTION_MAX).optional(),
+    maskOn: z.boolean().optional(),
+    answer: storedAnswerSchema.optional(),
+    sensitivityVersion: label.optional(),
   })
+  .refine((turn) => (turn.answer === undefined && turn.question === undefined) || turn.outcome === 'answered' || turn.outcome === 'refused', { message: 'only an answered or a refused turn keeps its text', path: ['answer'] })
   .refine((turn) => turn.route === 'view' || turn.citationRefs.length <= ASK_SUMMARY_MAX_CITATIONS, { message: 'an Ask answer cites at most as many things as a summary holds', path: ['citationRefs'] });
 
 export type AssistantThreadTurnWrite = z.infer<typeof assistantThreadTurnWriteSchema>;

@@ -64,7 +64,7 @@ const UPSERT_THREAD =
   'INSERT INTO assistant_threads (id, investigation_id, user_id, created_at, last_turn_at) VALUES ($1, $2, $3, $4, $4) ON CONFLICT (investigation_id, user_id) DO UPDATE SET last_turn_at = GREATEST(assistant_threads.last_turn_at, EXCLUDED.last_turn_at) RETURNING id';
 const NEXT_SEQ = 'SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM assistant_turns WHERE thread_id = $1';
 const INSERT_TURN =
-  'INSERT INTO assistant_turns (id, thread_id, seq, at, route, outcome, cause, question_hash, intent, template_id, entities, citation_refs, steps, model_ref, prompt_version, tokens_in, tokens_out, run_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) ON CONFLICT (id) DO NOTHING';
+  'INSERT INTO assistant_turns (id, thread_id, seq, at, route, outcome, cause, question_hash, intent, template_id, entities, citation_refs, steps, model_ref, prompt_version, tokens_in, tokens_out, run_id, question_text, mask_on, answer, sensitivity_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) ON CONFLICT (id) DO NOTHING';
 const READ_TURNS =
   'SELECT t.seq, t.at, t.route, t.outcome, t.cause, t.intent, t.steps, jsonb_array_length(t.citation_refs) AS cited, h.id AS thread_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
 const READ_CONTEXT =
@@ -131,7 +131,7 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           const thread = (await client.query(UPSERT_THREAD, [randomUUID(), checked.investigationId, checked.userId, checked.at])).rows[0];
           const threadId = thread?.['id'];
           const seq = numberOf((await client.query(NEXT_SEQ, [threadId])).rows[0]?.['seq']);
-          const inserted = await client.query(INSERT_TURN, [checked.id, threadId, seq, checked.at, checked.route, checked.outcome, orNull(checked.cause), checked.questionHash, orNull(checked.intent), orNull(checked.templateId), JSON.stringify(checked.entities), JSON.stringify(checked.citationRefs), checked.steps, orNull(checked.modelRef), orNull(checked.promptVersion), orNull(checked.tokensIn), orNull(checked.tokensOut), orNull(checked.runId)]);
+          const inserted = await client.query(INSERT_TURN, [checked.id, threadId, seq, checked.at, checked.route, checked.outcome, orNull(checked.cause), checked.questionHash, orNull(checked.intent), orNull(checked.templateId), JSON.stringify(checked.entities), JSON.stringify(checked.citationRefs), checked.steps, orNull(checked.modelRef), orNull(checked.promptVersion), orNull(checked.tokensIn), orNull(checked.tokensOut), orNull(checked.runId), orNull(checked.question), orNull(checked.maskOn), checked.answer === undefined ? null : JSON.stringify(checked.answer), orNull(checked.sensitivityVersion)]);
           await client.query('COMMIT');
           return (inserted.rowCount ?? 0) === 0 ? ('duplicate' as const) : ('stored' as const);
         } catch (error) {

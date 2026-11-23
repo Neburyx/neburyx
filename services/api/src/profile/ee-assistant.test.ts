@@ -935,7 +935,7 @@ describe('the thread of an investigation in the running application', () => {
   /** The model calls of the answered first turn: the router's, the read, the answer and the agent's last reply. */
   const FIRST_TURN_CALLS = 3;
 
-  it('keeps an answered turn and a refused turn, answers them back to their person as kinds and counts, and holds no text of the message, the value or the reply', async () => {
+  it('keeps an answered turn and a refused turn, answers them back to their person as kinds and counts, and holds no text of the message, the value or the reply in the answer to the reader, nor in the row outside its question and answer', async () => {
     current = FIRST;
     const threads = createMemoryAssistantThreadStore();
     const records = recordsOver();
@@ -947,8 +947,11 @@ describe('the thread of an investigation in the running application', () => {
     expect(assistantThreadResponseSchema.parse(answer.json())).toMatchObject({ turns: [{ seq: 1, route: 'ask', outcome: 'answered', intent: 'widgetById', citedElements: expect.any(Number), steps: 1 }], previousThreadClearedAt: null });
     for (const canary of [CANARY, 'key-canary-9', 'Ana Silva', 'Choose the intent that answers the question']) expect(answer.body, canary).not.toContain(canary);
     expect(answer.body).not.toMatch(/questionHash|runId|tokens|stableId|W-1/);
-    const rows = JSON.stringify([...threads.threads.values()].flatMap((thread) => thread.turns));
-    for (const canary of [CANARY, 'key-canary-9', 'Choose the intent that answers the question']) expect(rows, canary).not.toContain(canary);
+    // the stored row holds the question as typed and the answer in its stored form, in those two members and nowhere else
+    const turns = [...threads.threads.values()].flatMap((thread) => thread.turns);
+    expect(turns[0]?.question).toContain(CANARY);
+    const rows = JSON.stringify(turns.map((turn) => ({ ...turn, question: undefined, answer: undefined })));
+    for (const canary of [CANARY, 'key-canary-9', 'Ana Silva', 'Choose the intent that answers the question']) expect(rows, canary).not.toContain(canary);
     const logs = JSON.stringify([records.logs, rig.events, rig.rig.events]);
     expect(logs).not.toContain(CANARY);
     await rig.stop();

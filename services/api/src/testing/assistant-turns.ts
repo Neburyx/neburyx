@@ -202,7 +202,10 @@ export async function startAssistantApp(options: AssistantAppOptions) {
       return { status: response.statusCode, body: response.json() as Record<string, unknown>, headers: response.headers };
     },
     /** What the person's thread holds, as stored: the rows a test scans for text that must not be kept. */
-    threadRows: (): string => JSON.stringify([...threadStore.threads.values()]),
+    /** The rows of the threads without their text: the question as typed and the answer are the thread's own text, read by the thread route alone; everything else in a row is references and metadata. */
+    threadRows: (): string => JSON.stringify([...threadStore.threads.values()].map((thread) => ({ ...thread, turns: thread.turns.map((turn) => ({ ...turn, question: undefined, answer: undefined })) }))),
+    /** The text of the rows of the threads: the question as typed and the answer in its stored form. */
+    threadText: (): string => JSON.stringify([...threadStore.threads.values()].flatMap((thread) => thread.turns.map((turn) => ({ question: turn.question, answer: turn.answer })))),
     /** The investigation the turns are made in. */
     investigationId: investigation.id,
     /** Opens another investigation of the same person on the same source. */

@@ -126,6 +126,47 @@ describe('the Postgres store of the threads', () => {
   });
 });
 
+const SENTENCE = (over: Record<string, unknown> = {}) => ({ form: 'unbound', text: 'Account A-1 is listed.', cites: [], ...over });
+const ANSWER = { blocks: [{ kind: 'sentences', items: [SENTENCE()] }] };
+
+describe('the text of a turn, stored through the strict schema', () => {
+  it('writes the question, the mask state, the answer and the version in four columns of the one insert, and null for a turn that has none', async () => {
+    const { held, statements } = pool();
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    await store.append(turn({ question: 'Which accounts?', maskOn: true, answer: ANSWER as never }), 0);
+    const insert = statements.find((text) => /INSERT INTO assistant_turns/.test(text)) ?? '';
+    expect(insert).toContain('question_text, mask_on, answer, sensitivity_version');
+    const bare = pool();
+    await createPgAssistantThreadStore(CONTEXT, { createPool: () => bare.held }).append(turn(), 0);
+    expect(bare.statements.some((text) => /INSERT INTO assistant_turns/.test(text))).toBe(true);
+  });
+
+  it.each([
+    ['a question one over the bound', { question: 'q'.repeat(4001) }],
+    ['a sentence one over the bound', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2001) })] }] } }],
+    ['a cell one over the bound', { answer: { blocks: [{ kind: 'table', columns: ['A'], rows: [{ cells: [{ form: 'unbound', text: 'c'.repeat(81) }], cites: [] }] }] } }],
+    ['a member the schema does not name', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ token: 'T' })] }] } }],
+    ['an extra key beside the blocks', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE()] }], runId: 'x' } }],
+    ['a form that is not one', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ form: 'bound' })] }] } }],
+    ['text on a waiting turn', { outcome: 'waiting', question: 'Which accounts?' }],
+  ])('refuses %s as a whole before any statement', async (_name, over) => {
+    const { held, statements } = pool();
+    const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
+    await expect(store.append(turn(over as never), 0)).rejects.toBeInstanceOf(Error);
+    expect(statements.filter((text) => /INSERT/.test(text))).toEqual([]);
+    const memory = createMemoryAssistantThreadStore();
+    await expect(memory.append(turn(over as never), 0)).rejects.toBeInstanceOf(Error);
+    expect(memory.threads.size).toBe(0);
+  });
+
+  it('keeps the text at its bounds, and the memory store keeps it in the stored form', async () => {
+    const memory = createMemoryAssistantThreadStore();
+    const edge = turn({ question: 'q'.repeat(4000), answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2000) })] }] } as never });
+    expect(await memory.append(edge, 0)).toBe('stored');
+    expect([...memory.threads.values()][0]?.turns[0]?.question).toHaveLength(4000);
+  });
+});
+
 describe('the read of the Postgres store', () => {
   const row = (seq: number) => ({ seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: 'widgetById', steps: 1, cited: 2 });
 

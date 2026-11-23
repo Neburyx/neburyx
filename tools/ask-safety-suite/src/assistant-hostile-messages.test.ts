@@ -39,6 +39,8 @@ describe('a message that asks for raw Cypher, another source or to just run it, 
     expect(stub.requests).toHaveLength(1);
     await rig.threadWritten(1);
     expectNoValue([rig.events(), rig.logs, answer.body, answer.headers, rig.threadRows()], ['SENTINEL-cypher', 'SENTINEL-other', 'SENTINEL-run', 'DETACH DELETE', 'dbms.listConfig']);
+    // the question as typed is kept in the thread, in its own member, and nowhere else
+    expect(rig.threadText()).toContain(message.slice(0, 20));
     await rig.close();
   });
 

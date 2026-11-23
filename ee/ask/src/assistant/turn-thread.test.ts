@@ -183,7 +183,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
   });
 
-  it('keeps an answered table turn with the references its rows cited and the count the audit event holds, and no cell', async () => {
+  it('keeps an answered table turn with the references its rows cited and the count the audit event holds, and its cells in the stored form', async () => {
     const view = await turnRig({ reply: ok('{"route":"view","form":"table"}'), view: ok(JSON.stringify({ table: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }, { cells: ['Account A-2'], cites: ['n2'] }] } })) });
     const result = await run(view, { ...VIEW_BODY, investigationId: INVESTIGATION });
     const answer = 'value' in result ? assistantTurnAnswerSchema.parse(result.value) : undefined;
@@ -192,7 +192,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
     expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
-    expect(JSON.stringify(kept)).not.toContain('Account A-1');
+    expect(kept?.answer).toEqual({ blocks: [{ kind: 'table', columns: ['Element'], rows: answer.table.rows.map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
     const closed = view.r.events.find((event) => event.action === TURN_CLOSED_ACTION);
     expect(closed?.detail).toMatchObject({ turn: { route: 'view', outcome: 'answered', citedElements: 2, form: 'table', tableRowsShown: 2 } });
     expect((closed?.detail as { turn: Record<string, unknown> }).turn).not.toHaveProperty('tableRowsDropped');
@@ -345,15 +345,26 @@ describe('the writes of a thread never change a turn and never outlive the inves
     expect(stored(turn)).toHaveLength(1);
   });
 
-  it('keeps no text of the message, the entity values, the instructions, the reply or the summary in the thread, nor in any event of the turn', async () => {
+  it.each([[true, 'frozen'], [false, 'unbound']] as const)('keeps every item of an answer written with the mask %s in the form %s, with the mask state of the request', async (mask, form) => {
+    const view = await turnRig({ reply: ok('{"route":"view","form":"table"}'), view: ok(JSON.stringify({ table: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }] } })) });
+    await run(view, { ...VIEW_BODY, investigationId: INVESTIGATION, mask });
+    const [kept] = stored(view);
+    expect(kept?.maskOn).toBe(mask);
+    const forms = (kept?.answer?.blocks ?? []).flatMap((block) => (block.kind === 'table' ? block.rows.flatMap((row) => row.cells.map((cell) => cell.form)) : []));
+    expect(forms.length).toBeGreaterThan(0);
+    expect(new Set(forms)).toEqual(new Set([form]));
+  });
+
+  it('keeps the question as typed and the answer in the thread, and no entity value, instruction or reply, and no text in any event of the turn', async () => {
     const CANARY = 'CANARY-MESSAGE-7';
     const turn = await turnRig({ reply: SHARED, run: () => ({ status: 'ok', result: okResult() }) });
     const outcome = await run(turn, { ...BASE, message: `Show ${CANARY} A-1`, viewElementKeys: ['key-canary-9'] });
-    const rows = JSON.stringify(stored(turn).map((held) => ({ ...held, at: undefined })));
+    const [kept] = stored(turn);
+    expect(kept?.question).toBe(`Show ${CANARY} A-1`);
+    expect(kept?.maskOn).toBe(false);
+    const rows = JSON.stringify(stored(turn).map((held) => ({ ...held, at: undefined, question: undefined, answer: undefined })));
     for (const canary of [CANARY, 'key-canary-9', 'Choose the intent that answers the question', 'You route messages', 'Show ']) expect(rows, canary).not.toContain(canary);
-    const sentences = 'value' in outcome ? (JSON.stringify(outcome.value).match(/"text":"([^"]+)"/g) ?? []).map((text) => text.slice(8, -1)) : [];
-    expect(sentences.length).toBeGreaterThan(0);
-    for (const sentence of sentences) expect(rows).not.toContain(sentence);
+    expect(outcome).toBeDefined();
     expect(turn.r.events.map((event) => auditDetailSchema.parse(event.detail)).length).toBeGreaterThan(0);
     expect(JSON.stringify(turn.r.events)).not.toContain(CANARY);
   });

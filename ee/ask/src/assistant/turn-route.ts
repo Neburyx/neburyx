@@ -489,21 +489,21 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
       await investigationReadable(body.investigationId, body.sourceId);
       const typeDescriptions = describe?.(body.sourceId);
       if ('choice' in body) {
-        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-choice', 1, body.choice.intent]) });
+        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-choice', 1, body.choice.intent]), maskOn: body.mask === true });
         return choiceTurn(request, body, readElements, AbortSignal.any([request.signal, deadline]), deadline);
       }
       if ('confirmation' in body) {
-        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-confirmation', 1, body.message]) });
+        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-confirmation', 1, body.message]), question: body.message, maskOn: body.mask === true });
         return confirmationTurn(request, body, AbortSignal.any([request.signal, deadline]));
       }
       if ('continue' in body) {
-        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-continue', 1, body.continue.intent]) });
+        await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-continue', 1, body.continue.intent]), maskOn: body.mask === true });
         return continueTurn(request, body, body.continue);
       }
       const { message } = body;
       const words = countWords(message);
       if (words === 0) throw new ExtensionRefusal({ code: 'INVALID_REQUEST', reason: 'empty-message' });
-      await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-question', 1, message]) });
+      await noteTurnStarted({ sourceId: body.sourceId, investigationId: body.investigationId, ...hashOf(request, ['assistant-question', 1, message]), question: message, maskOn: body.mask === true });
       await dropWaiting(request, body);
       const limit = options.maxMessageWords();
       if (limit === undefined) throw unsupported();

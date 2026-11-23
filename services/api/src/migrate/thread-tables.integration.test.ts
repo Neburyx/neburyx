@@ -415,3 +415,27 @@ describe('the writes of the store under retries, concurrency and the closing of 
     });
   });
 });
+
+describe('the text of a turn (0013)', () => {
+  it('keeps the question, the mask state, the answer and the version in their columns, bounds the question in the database, and clears them with the thread when the investigation is closed', async () => {
+    const database = await seeded();
+    const answer = { blocks: [{ kind: 'sentences', items: [{ form: 'unbound', text: 'Account A-1 is listed.', cites: [] }] }] };
+    await withStore(database, async (store) => {
+      expect(await store.append(turn({ question: 'Which accounts?', maskOn: false, answer: answer as never }), 0)).toBe('stored');
+    });
+    const [held] = await rows(database.ownerUrl, 'SELECT question_text, mask_on, answer, sensitivity_version FROM assistant_turns');
+    expect(held).toMatchObject({ question_text: 'Which accounts?', mask_on: false, answer, sensitivity_version: null });
+    await expect(rows(database.ownerUrl, `UPDATE assistant_turns SET question_text = '${'q'.repeat(4001)}'`)).rejects.toThrow();
+    await expect(rows(database.ownerUrl, `UPDATE assistant_turns SET answer = '[]'::jsonb`)).rejects.toThrow();
+    await rows(database.ownerUrl, `UPDATE investigations SET status = 'closed' WHERE id = '${FIRST}'`);
+    expect(await rows(database.ownerUrl, 'SELECT 1 FROM assistant_turns')).toEqual([]);
+  });
+
+  it('leaves a turn written before the file with null in the four columns', async () => {
+    const database = await seeded();
+    await withStore(database, async (store) => {
+      expect(await store.append(turn(), 0)).toBe('stored');
+    });
+    expect(await rows(database.ownerUrl, 'SELECT question_text, mask_on, answer, sensitivity_version FROM assistant_turns')).toEqual([{ question_text: null, mask_on: null, answer: null, sensitivity_version: null }]);
+  });
+});

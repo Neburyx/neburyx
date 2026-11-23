@@ -17,6 +17,7 @@ import {
 import type { ModelAnswer } from '@neburyx/ee-ai-runtime';
 import { createTurnRun, type CallRecord, type TurnRun, type TurnRunDeps } from './turn-run.js';
 import type { AssistantContextTurn } from './thread-store.js';
+import { storedAnswerOf } from './thread-answer.js';
 import { openTurnThread, type TurnThread, type TurnThreadDeps } from './turn-thread.js';
 
 export const TURN_CLOSED_ACTION = 'assistant.turn.closed';
@@ -33,6 +34,9 @@ interface TurnNotes {
   run?: TurnRun;
   thread?: TurnThread;
   questionHash?: string;
+  /** The question as typed, for a turn that carries one, and whether the request asked for the mask: for the thread only. */
+  question?: string;
+  maskOn?: boolean;
   entities?: AssistantThreadTurnWrite['entities'];
   citedRefs?: AssistantThreadTurnWrite['citationRefs'];
   started?: { readonly sourceId: string; readonly investigationId: string };
@@ -107,13 +111,15 @@ export function noteTurn(change: TurnNote): void {
 }
 
 /** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
-export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string }): Promise<void> => {
+export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string; readonly question?: string; readonly maskOn?: boolean }): Promise<void> => {
   const notes = scope.getStore();
   if (notes === undefined) return;
   notes.started = { sourceId: started.sourceId, investigationId: started.investigationId };
   notes.steps = 0;
   notes.run = notes.open(notes.started);
   if (started.questionHash !== undefined) notes.questionHash = started.questionHash;
+  if (started.question !== undefined) notes.question = started.question;
+  notes.maskOn = started.maskOn === true;
   notes.thread = await notes.openThread(notes.started);
 };
 
@@ -325,6 +331,13 @@ function citationRefsOf(notes: TurnNotes, outcome: { readonly answer: AssistantT
   return outcome.answer.answer.answered.summary?.citations.map((citation) => citation.element) ?? [];
 }
 
+/** The text a turn keeps in its thread: the question as typed and the answer in its stored form, for an answered or refused turn only; a waiting turn keeps none, and a turn whose answer has no stored form yet keeps its question alone. */
+function textOf(notes: TurnNotes, kept: 'answered' | 'refused' | 'waiting', outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): Partial<Pick<AssistantThreadTurnWrite, 'question' | 'maskOn' | 'answer'>> {
+  if (kept === 'waiting') return {};
+  const answer = 'answer' in outcome ? storedAnswerOf(outcome.answer, notes.maskOn === true) : undefined;
+  return { ...(notes.question === undefined ? {} : { question: notes.question }), maskOn: notes.maskOn === true, ...(answer === undefined ? {} : { answer }) };
+}
+
 /** A turn that ended answered or refused on a route is kept in the thread as references and metadata; a turn that failed, was cancelled or was not let through leaves nothing. */
 function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answer: AssistantTurnAnswer } | { readonly error: unknown }): void {
   const route = ending.route ?? notes.route;
@@ -348,6 +361,7 @@ function storeThread(notes: TurnNotes, ending: Ending, outcome: { readonly answe
     ...(notes.calls === 0 || notes.promptVersion === undefined ? {} : { promptVersion: notes.promptVersion }),
     ...(known === undefined || notes.calls === 0 ? {} : { tokensIn: known.inputTokens, tokensOut: known.outputTokens }),
     ...(notes.run === undefined ? {} : { runId: notes.run.id }),
+    ...textOf(notes, kept, outcome),
   });
 }
 

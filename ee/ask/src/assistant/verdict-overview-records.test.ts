@@ -75,8 +75,11 @@ describe('the records of a verdict refusal with an overview', () => {
     expect(kept).toMatchObject({ modelRef: 'fixture-model', promptVersion: String(OVERVIEW_PROMPT_VERSION) });
     expect(alone).toMatchObject({ promptVersion: String(ROUTER_PROMPT_VERSION) });
     expect(kept?.questionHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(JSON.stringify(kept)).not.toContain('SENTINEL');
-    expect(JSON.stringify(kept)).not.toContain('Account A-1');
+    // the question as typed and the answer in its stored form are the thread's text: the fixed sentence frozen, the overview as written
+    expect(kept?.question).toContain('SENTINEL');
+    expect(kept?.answer?.blocks[0]).toMatchObject({ kind: 'refusal', sentence: { form: 'frozen' }, overview: [{ form: 'unbound', text: expect.stringContaining('Account A-1') }] });
+    expect(JSON.stringify({ ...kept, question: undefined, answer: undefined })).not.toContain('SENTINEL');
+    expect(JSON.stringify(alone?.answer)).not.toContain('Account A-1');
   });
 
   it('leaves the context of the next turn as a plain verdict refusal leaves it', async () => {
