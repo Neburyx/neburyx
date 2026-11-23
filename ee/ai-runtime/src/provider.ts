@@ -6,8 +6,6 @@ export interface ModelRequest {
   readonly version: number;
   readonly instructions?: string;
   readonly values: string;
-  /** A JSON schema the reply must fit, for a provider that can constrain its output to one; a provider that cannot ignores it, and the reply is read strictly either way. */
-  readonly responseSchema?: Readonly<Record<string, unknown>>;
 }
 
 /** Which prompt a call used: its id and version, and the SHA-256 of its fixed instructions (of nothing when there are none), never of the values. */

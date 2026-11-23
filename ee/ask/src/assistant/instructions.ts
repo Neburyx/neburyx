@@ -13,6 +13,7 @@ const replyFormat = (multiRead: boolean): string => [
   multiRead ? SEVERAL_READS : ONE_READ,
   'You only choose the route: a later step writes the answer. Never reply with sentences, an answer, a question or a tool request.',
   'Your whole reply is that one object: its first character is { and its last is }. Think without writing it down: no reasoning, explanation or comment before or after the object, and no code fence.',
+  'A message that no listed intent fits and no other route places is answered with {"route":"refuse","cause":"unplaced"}, never with an explanation of why nothing fits.',
   'Add no other text.',
 ].join('\n');
 

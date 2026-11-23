@@ -182,7 +182,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Mode
         maxRetries,
       });
       const sent = client.messages
-        .create({ model: configuration.model, max_tokens: maxTokens, output_config: { effort, ...(request.responseSchema === undefined ? {} : { format: { type: 'json_schema' as const, schema: { ...request.responseSchema } } }) }, ...promptParts(request, configuration.cache) }, { signal: deadline.signal })
+        .create({ model: configuration.model, max_tokens: maxTokens, output_config: { effort }, ...promptParts(request, configuration.cache) }, { signal: deadline.signal })
         .then((body): ModelAnswer => answerOf(body, record, configuration.model));
       // The race keeps a late rejection from the abandoned call from surfacing.
       sent.catch(noop);

@@ -27,6 +27,12 @@ const loaded = async (env: Record<string, string> = {}) => {
 };
 
 describe('the assistant instructions', () => {
+  it('tells the router to refuse as unplaced a message nothing fits, and never to explain', () => {
+    const { text } = buildAssistantInstructions('PROMPT');
+    expect(text).toContain('{"route":"refuse","cause":"unplaced"}, never with an explanation');
+    expect(text.indexOf('never with an explanation')).toBeGreaterThan(text.indexOf('# Reply format'));
+  });
+
   it('are the shipped file with the reply format after it, and carry the hash of that text', async () => {
     const instructions = await loaded();
     expect(instructions.text.startsWith('SHIPPED PROMPT\n\n# Reply format')).toBe(true);
