@@ -25,7 +25,7 @@ const THREAD_USAGE = `usage:
   ask-eval thread facts [--call-limit <n>] [--prices <file>] <records file>...
   ask-eval thread calibrate --key-file <key file> --a <scores file> --b <scores file> --out <file>
   ask-eval thread blind --seed <text> --sets <folder> --key-folder <another folder> <records file>...
-  ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder> --database-env-file <env file>)`;
+  ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--short-budget] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder> --database-env-file <env file>)`;
 
 /** What a thread run needs of the outside world: the product's HTTP surface (a stand-in in tests) and the clock. */
 export interface ThreadDeps {
@@ -48,10 +48,11 @@ export interface CliIo {
 const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'calibrations', 'evidence', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'allowed-tools', 'non-gate-tools', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
-function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
+function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly shortBudget: boolean; readonly rest: readonly string[] } {
   const values = new Map<string, string>();
   const rest: string[] = [];
   let dryRun = false;
+  let shortBudget = false;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index] ?? '';
     if (!arg.startsWith('--')) {
@@ -65,12 +66,16 @@ function parse(args: readonly string[], positional = false): { readonly values: 
       dryRun = true;
       continue;
     }
+    if (name === 'short-budget') {
+      shortBudget = true;
+      continue;
+    }
     const value = args[index + 1];
     if (!VALUE_FLAGS.includes(name) || value === undefined || value.startsWith('--') || values.has(name)) throw new UsageError(THREAD_USAGE);
     values.set(name, value);
     index += 1;
   }
-  return { values, dryRun, rest };
+  return { values, dryRun, shortBudget, rest };
 }
 
 const ARM = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/u;
@@ -179,7 +184,7 @@ export async function runThread(argv: readonly string[], rawIo: CliIo, deps: Thr
   if (argv[0] === 'report') return runReport(argv.slice(1), io);
   if (argv[0] === 'facts') return runFacts(argv.slice(1), io);
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
-  const { values, dryRun } = parse(argv.slice(1));
+  const { values, dryRun, shortBudget } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
   const armName = values.get('arm') ?? '';
   if (!ARM.test(armName)) throw new UsageError('--arm must be 2 to 40 letters, digits, dots, dashes or underscores, starting with a letter or digit');
@@ -199,6 +204,8 @@ export async function runThread(argv: readonly string[], rawIo: CliIo, deps: Thr
   const out = values.get('out');
   const databaseEnvFile = values.get('database-env-file');
   if (budget === undefined || out === undefined || (databaseEnvFile === undefined && deps.verifyFirstTurn === undefined)) throw new UsageError(THREAD_USAGE);
+  // the tool counts the call limit for each turn against the budget, so a budget under the most calls of every repeat stops a repeat early: a truncated set is no figure, so it is refused unless it is asked for
+  if (budget < mostCalls && !shortBudget) throw new UsageError(`the budget ${budget} is below the ${mostCalls} calls that every repeat is counted at (the call limit for each turn): a run on it can stop inside a repeat; raise it, or add --short-budget to run what fits`);
   if (budget < manifest.messages.length * settings.callLimit) io.out('the budget covers less than one repeat: the run stops before a turn it cannot cover');
   if (budget < settings.callLimit) throw new UsageError('the budget is below the most calls of one turn');
   const folder = resolve(out);

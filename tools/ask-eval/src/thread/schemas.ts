@@ -83,7 +83,7 @@ const repeatFile = z.strictObject({
   settings,
   startedAt: z.string(),
   endedAt: z.string(),
-  view: z.strictObject({ entities: whole }),
+  view: z.strictObject({ entities: whole, relationships: whole.optional() }),
   turns: z.array(turn),
   ended: z.enum(['complete', 'waiting', 'failed', 'budget']),
   stoppedBecause: z.string().optional(),

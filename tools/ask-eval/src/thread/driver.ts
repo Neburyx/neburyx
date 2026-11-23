@@ -22,7 +22,7 @@ export interface RepeatSettings {
 
 export interface RepeatOptions {
   readonly http: Http;
-  readonly manifest: { readonly name: string; readonly sourceId: string; readonly anchor: { readonly entityType: string; readonly stableId: string }; readonly neighbourType: string; readonly neighbours: number; readonly messages: readonly string[] };
+  readonly manifest: { readonly name: string; readonly sourceId: string; readonly anchor: { readonly entityType: string; readonly stableId: string }; readonly neighbourType: string; readonly neighbours: number; readonly edgesView?: { readonly neighbourTypes: readonly string[]; readonly entities: number; readonly relationships: number }; readonly messages: readonly string[] };
   readonly manifestSha256: string;
   readonly repeat: number;
   readonly arm: string;
@@ -60,7 +60,7 @@ export interface RepeatFile {
   readonly settings: RepeatSettings;
   readonly startedAt: string;
   readonly endedAt: string;
-  readonly view: { readonly entities: number };
+  readonly view: { readonly entities: number; readonly relationships?: number };
   readonly turns: readonly TurnRecord[];
   readonly ended: RepeatEnd;
   /** Why the repeat ended before its last message: a cause, never a value. */
@@ -73,6 +73,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 interface ViewBuild {
   readonly keys: readonly string[];
   readonly entities: number;
+  /** The relationships of an edges view; absent for the plain view. */
+  readonly relationships?: number;
 }
 
 class RepeatFailure extends Error {
@@ -89,6 +91,7 @@ const keyOf = (ref: { readonly sourceId: string; readonly entityType: string; re
  */
 async function buildView(options: RepeatOptions): Promise<ViewBuild> {
   const { http, manifest } = options;
+  if (manifest.edgesView !== undefined) return buildEdgesView(options, manifest.edgesView);
   const request = expandRequestSchema.safeParse({ sourceId: manifest.sourceId, ref: manifest.anchor, neighborTypes: [manifest.neighbourType], limit: manifest.neighbours });
   if (!request.success) throw new RepeatFailure('the expansion request does not fit the contract');
   const response = await call(http, 'POST', '/v1/graph/expand', request.data, 'the expansion of the anchor');
@@ -104,6 +107,39 @@ async function buildView(options: RepeatOptions): Promise<ViewBuild> {
   const entities = [...anchors, ...neighbours];
   if (new Set(entities.map(keyOf)).size !== entities.length) throw new RepeatFailure('the view holds an element twice');
   return { keys: entities.map(keyOf), entities: entities.length };
+}
+
+const edgeKeyOf = (ref: { readonly sourceId: string; readonly type: string; readonly from: string; readonly to: string; readonly stableId: string }): string => JSON.stringify(['edge', ref.sourceId, 'stored', ref.type, ref.from, ref.to, ref.stableId]);
+
+/**
+ * The edges view: the anchor expanded to the types of neighbours the manifest names, by the bounded expansion the canvas uses, with the relationships between the elements the expansion returned. It holds exactly the entities and
+ * relationships the manifest says, every element of a named type, each once, and every relationship a stored one; a view that differs is refused, as the plain view is.
+ */
+async function buildEdgesView(options: RepeatOptions, shape: NonNullable<RepeatOptions['manifest']['edgesView']>): Promise<ViewBuild> {
+  const { http, manifest } = options;
+  const request = expandRequestSchema.safeParse({ sourceId: manifest.sourceId, ref: manifest.anchor, neighborTypes: [...shape.neighbourTypes], limit: manifest.neighbours });
+  if (!request.success) throw new RepeatFailure('the expansion request does not fit the contract');
+  const response = await call(http, 'POST', '/v1/graph/expand', request.data, 'the expansion of the anchor');
+  const body = expandResponseSchema.safeParse(response.json());
+  if (response.status !== 200 || !body.success) throw new RepeatFailure('the expansion of the anchor failed or did not fit the contract');
+  const entities = body.data.nodes.map((node) => ({ sourceId: node.ref.sourceId, entityType: node.ref.entityType, stableId: node.ref.stableId }));
+  const isAnchor = (ref: { readonly sourceId: string; readonly entityType: string; readonly stableId: string }): boolean => ref.sourceId === manifest.sourceId && ref.entityType === manifest.anchor.entityType && ref.stableId === manifest.anchor.stableId;
+  if (entities.some((ref) => ref.sourceId !== manifest.sourceId)) throw new RepeatFailure('the view holds an element of another source than the manifest names');
+  if (entities.filter(isAnchor).length !== 1) throw new RepeatFailure('the view does not hold the anchor exactly once');
+  if (entities.some((ref) => !isAnchor(ref) && !shape.neighbourTypes.includes(ref.entityType))) throw new RepeatFailure('the view holds an element of a type the manifest does not name');
+  if (new Set(entities.map(keyOf)).size !== entities.length) throw new RepeatFailure('the view holds an element twice');
+  if (entities.length !== shape.entities) throw new RepeatFailure(`the view holds ${entities.length} entities, not ${shape.entities}`);
+  const edges = body.data.edges.map((edge) => edge.ref);
+  const stored = edges.flatMap((ref) => ('stableId' in ref ? [ref] : []));
+  if (stored.length !== edges.length) throw new RepeatFailure('the view holds a relationship that is not a stored one');
+  if (stored.some((ref) => ref.sourceId !== manifest.sourceId)) throw new RepeatFailure('the view holds a relationship of another source than the manifest names');
+  // the reference that names a relationship in the key must be the relationship the expansion returned: its type and the entity types of its ends are those the relationship itself carries
+  if (body.data.edges.some((edge) => !('stableId' in edge.ref) || edge.ref.type !== edge.type || edge.ref.from !== edge.from.entityType || edge.ref.to !== edge.to.entityType)) throw new RepeatFailure('the view holds a relationship whose reference does not agree with the relationship');
+  const held = new Set(entities.map(keyOf));
+  if (body.data.edges.some((edge) => !held.has(keyOf(edge.from)) || !held.has(keyOf(edge.to)))) throw new RepeatFailure('the view holds a relationship with an end that is not an element of the view');
+  if (new Set(stored.map(edgeKeyOf)).size !== stored.length) throw new RepeatFailure('the view holds a relationship twice');
+  if (stored.length !== shape.relationships) throw new RepeatFailure(`the view holds ${stored.length} relationships, not ${shape.relationships}`);
+  return { keys: [...entities.map(keyOf), ...stored.map(edgeKeyOf)], entities: entities.length, relationships: stored.length };
 }
 
 /** One request, with a transport failure (no answer, a timeout, a redirect) turned into a named failure of the repeat, never an exception that loses the turns already recorded. */
@@ -149,7 +185,7 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
     settings,
     startedAt,
     endedAt: new Date(options.now()).toISOString(),
-    view: { entities: view.entities },
+    view: { entities: view.entities, ...(view.relationships === undefined ? {} : { relationships: view.relationships }) },
     turns,
     ended,
     ...(stoppedBecause === undefined ? {} : { stoppedBecause }),

@@ -12,9 +12,9 @@ import { parseManifest } from './manifest.js';
 const runFile = (path: string) => parseRepeatFile(JSON.parse(readFileSync(path, 'utf8')), 'the run file');
 const scratch = (): string => mkdtempSync(join(tmpdir(), 'thread-run-'));
 const MANIFEST = { name: 'example', sourceId: 'demo-source', anchor: { entityType: 'widget', stableId: 'W-1' }, neighbourType: 'gadget', neighbours: 25, messages: ['one', 'two', 'three'] };
-const files = (): { manifest: string; settings: string; out: string } => {
+const files = (manifest: object = MANIFEST): { manifest: string; settings: string; out: string } => {
   const dir = scratch();
-  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(MANIFEST));
+  writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));
   writeFileSync(join(dir, 'product.env'), 'NEBURYX_ASSISTANT_MODEL=model-a\nNEBURYX_ASSISTANT_MAX_CALLS=7\nNEBURYX_ASK_API_KEY_FILE=/secret/key-path\nSECRET_TOKEN=SECRET-VALUE-CANARY\nNEBURYX_ASK_EFFORT=medium\n');
   return { manifest: join(dir, 'manifest.json'), settings: join(dir, 'product.env'), out: join(dir, 'out') };
 };
@@ -31,7 +31,7 @@ const REFUSED = { status: 'answered', route: 'refuse', cause: 'unplaced', senten
 const WAITING = { status: 'clarification', question: 'Which one?', candidates: [{ title: 'W-2', type: 'widget', choice: { intent: 'x', roles: ['r'], entities: { id: 'W-2' }, choiceToken: `1.${'a'.repeat(64)}` } }] };
 
 /** A stand-in of the product's HTTP surface with answers that fit the contract: it records every request and answers from a script. */
-function standIn(over: { neighbours?: number; extraType?: boolean; answers?: (n: number) => { status: number; body: unknown; trace?: string | null }; throwOn?: (path: string, n: number) => boolean } = {}): { http: () => Http; requests: { method: string; path: string; body: unknown }[] } {
+function standIn(over: { expand?: unknown; neighbours?: number; extraType?: boolean; answers?: (n: number) => { status: number; body: unknown; trace?: string | null }; throwOn?: (path: string, n: number) => boolean } = {}): { http: () => Http; requests: { method: string; path: string; body: unknown }[] } {
   const requests: { method: string; path: string; body: unknown }[] = [];
   let turn = 0;
   let opened = 0;
@@ -44,6 +44,7 @@ function standIn(over: { neighbours?: number; extraType?: boolean; answers?: (n:
       return reply(201, { investigation: INVESTIGATION(opened), created: true, entity: NODE('widget', 'W-1'), draft: { version: 1, notes: null, basedOnViewId: null } });
     }
     if (path === '/v1/graph/expand') {
+      if (over.expand !== undefined) return reply(200, over.expand);
       const count = over.neighbours ?? 25;
       const nodes = [NODE('widget', 'W-1'), ...Array.from({ length: count }, (_, index) => NODE(over.extraType === true && index === 0 ? 'other' : 'gadget', `G-${index}`))];
       return reply(200, { ref: { sourceId: 'demo-source', entityType: 'widget', stableId: 'W-1' }, pageSize: 25, nodes, edges: [], pages: [], warnings: [] });
@@ -238,7 +239,12 @@ describe('the budget', () => {
     expect(await runCli(args(f, ['--repeats', '1', '--budget', '6', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: standIn().http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
     const g = files();
     const s = standIn();
-    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--out', g.out, '--database-env-file', g.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+        // a budget under what every repeat is counted at is refused unless a short one is asked for: the figure of a truncated set is no figure
+    const refused = io();
+    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--out', g.out, '--database-env-file', g.settings]), refused.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    expect(refused.err.join('\n')).toContain('--short-budget');
+    expect(s.requests).toEqual([]);
+    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--short-budget', '--out', g.out, '--database-env-file', g.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
     expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toHaveLength(2);
     const file = parseRepeatFile(JSON.parse(readFileSync(join(g.out, 'thread-refs-r1.json'), 'utf8')), 'the run file');
     expect(file.ended).toBe('budget');
@@ -349,5 +355,104 @@ describe('the manifest', () => {
   it('is written with neutral synthetic names in the public example', () => {
     const example = readFileSync(new URL('../../data/thread/manifest.example.json', import.meta.url), 'utf8');
     expect(parseManifest(example).manifest.sourceId).toBe('demo-source');
+  });
+});
+
+describe('the edges view', () => {
+  const EDGES = { neighbourTypes: ['gadget', 'tag'], entities: 4, relationships: 3 };
+  const REF = (entityType: string, stableId: string, sourceId = 'demo-source') => ({ sourceId, entityType, stableId });
+  const EDGE = (toType: string, to: string, n: number, over: { sourceId?: string; stored?: boolean; type?: string; fromType?: string; toType?: string } = {}) => ({
+    ref: over.stored === false ? { sourceId: over.sourceId ?? 'demo-source', aggregate: { type: 'HAS', from: REF('widget', 'W-1'), to: REF(toType, to) } } : { sourceId: over.sourceId ?? 'demo-source', type: over.type ?? 'HAS', from: over.fromType ?? 'widget', to: over.toType ?? toType, stableId: `e-${n}` },
+    from: REF('widget', 'W-1'),
+    to: REF(toType, to),
+    type: 'HAS',
+    direction: 'out',
+    semantics: 'stored',
+    ...(over.stored === false ? { memberCount: { quality: 'exact', value: 2, scope: 'test' } } : {}),
+    properties: [],
+    evidenceRefs: [],
+    qualityFlags: [],
+  });
+  const NODES = () => [NODE('widget', 'W-1'), NODE('gadget', 'g.1'), NODE('gadget', 'g.2'), NODE('tag', 't.1')];
+  const EDGE_LIST = () => [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3)];
+  const expand = (over: { nodes?: unknown[]; edges?: unknown[] } = {}) => ({ ref: REF('widget', 'W-1'), pageSize: 25, nodes: over.nodes ?? NODES(), edges: over.edges ?? EDGE_LIST(), pages: [], warnings: [] });
+  const run = async (manifest: object, over: object) => {
+    const f = files(manifest);
+    const s = standIn(over);
+    const r = io();
+    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    return { code, s, file: runFile(join(f.out, 'thread-refs-r1.json')) };
+  };
+
+  it('is read from the manifest, and refused when it is not a list of types with the two counts, or when the anchor holds another field', () => {
+    const base = { ...MANIFEST, edgesView: EDGES };
+    expect(parseManifest(JSON.stringify(base)).manifest.edgesView).toEqual(EDGES);
+    expect(parseManifest(JSON.stringify(MANIFEST)).manifest.edgesView).toBeUndefined();
+    for (const bad of [{ ...EDGES, neighbourTypes: [] }, { ...EDGES, entities: 0 }, { ...EDGES, relationships: 1.5 }, { ...EDGES, extra: 1 }, 'text']) expect(() => parseManifest(JSON.stringify({ ...MANIFEST, edgesView: bad }))).toThrow(/edgesView/);
+    const stranger = { ...MANIFEST, anchor: { ...MANIFEST.anchor, extra: 'SECRET-CANARY' } };
+    expect(() => parseManifest(JSON.stringify(stranger))).toThrow(/anchor holds a field it does not know/);
+    expect(() => parseManifest(JSON.stringify(stranger))).not.toThrow(/SECRET-CANARY/);
+  });
+
+  it('asks the expansion for the named types and sends, with every turn, the same keys of the entities and of the stored relationships, and records both counts', async () => {
+    const { code, s, file } = await run({ ...MANIFEST, edgesView: EDGES }, { expand: expand() });
+    expect(code).toBe(0);
+    expect(s.requests.find((request) => request.path === '/v1/graph/expand')?.body).toMatchObject({ neighborTypes: ['gadget', 'tag'], limit: 25 });
+    const expected = [
+      JSON.stringify(['node', 'demo-source', 'widget', 'W-1']),
+      JSON.stringify(['node', 'demo-source', 'gadget', 'g.1']),
+      JSON.stringify(['node', 'demo-source', 'gadget', 'g.2']),
+      JSON.stringify(['node', 'demo-source', 'tag', 't.1']),
+      JSON.stringify(['edge', 'demo-source', 'stored', 'HAS', 'widget', 'gadget', 'e-1']),
+      JSON.stringify(['edge', 'demo-source', 'stored', 'HAS', 'widget', 'gadget', 'e-2']),
+      JSON.stringify(['edge', 'demo-source', 'stored', 'HAS', 'widget', 'tag', 'e-3']),
+    ];
+    const turns = s.requests.filter((request) => request.path === '/v1/assistant/turns');
+    expect(turns).toHaveLength(3);
+    for (const turn of turns) expect((turn.body as { viewElementKeys: string[] }).viewElementKeys).toEqual(expected);
+    expect(file.view).toEqual({ entities: 4, relationships: 3 });
+  });
+
+  it.each([
+    ['too few relationships', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2)] }, /relationships/],
+    ['a relationship that is not a stored one', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { stored: false })] }, /not a stored one/],
+    ['a reference of another relationship type than the relationship', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), { ...EDGE('tag', 't.1', 3), type: 'OTHER' }] }, /does not agree/],
+    ['a reference with other end types than the relationship', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { toType: 'gadget' })] }, /does not agree/],
+    ['a relationship twice', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.1', 1), EDGE('tag', 't.1', 3)] }, /relationship twice/],
+    ['a relationship of another source', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 't.1', 3, { sourceId: 'other' })] }, /another source/],
+    ['a relationship with an end outside the view', { edges: [EDGE('gadget', 'g.1', 1), EDGE('gadget', 'g.2', 2), EDGE('tag', 'x.9', 3)] }, /end that is not an element of the view/],
+    ['an element of a type the manifest does not name', { nodes: [NODE('widget', 'W-1'), NODE('gadget', 'g.1'), NODE('gadget', 'g.2'), NODE('other', 'o.1')] }, /type the manifest does not name/],
+    ['an element twice', { nodes: [NODE('widget', 'W-1'), NODE('gadget', 'g.1'), NODE('gadget', 'g.1'), NODE('tag', 't.1')] }, /twice/],
+    ['the anchor twice', { nodes: [NODE('widget', 'W-1'), NODE('widget', 'W-1'), NODE('gadget', 'g.1'), NODE('tag', 't.1')] }, /anchor exactly once|twice/],
+    ['no anchor', { nodes: [NODE('gadget', 'g.0'), NODE('gadget', 'g.1'), NODE('gadget', 'g.2'), NODE('tag', 't.1')] }, /anchor/],
+    ['an anchor of another source', { nodes: [{ ...NODE('widget', 'W-1'), ref: REF('widget', 'W-1', 'other') }, NODE('gadget', 'g.1'), NODE('gadget', 'g.2'), NODE('tag', 't.1')] }, /another source|anchor/],
+    ['another number of entities', { nodes: [NODE('widget', 'W-1'), NODE('gadget', 'g.1'), NODE('tag', 't.1')] }, /entities/],
+  ])('refuses a view with %s, and sends no turn', async (_name, over, cause) => {
+    const { code, s, file } = await run({ ...MANIFEST, edgesView: EDGES }, { expand: expand(over) });
+    expect(code).toBe(1);
+    expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toEqual([]);
+    expect(file.stoppedBecause).toMatch(cause);
+  });
+});
+
+describe('the budget of a run', () => {
+  const runWith = async (repeats: number, budget: number, extra: string[] = []) => {
+    const f = files();
+    const s = standIn();
+    const r = io();
+    const code = await runCli(args(f, ['--repeats', String(repeats), '--budget', String(budget), ...extra, '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    return { code, s, err: r.err.join('\n') };
+  };
+
+  it('is refused one below the most calls that every repeat is counted at (3 messages x 7 calls per repeat), with the whole message and no request, and accepted at it', async () => {
+    for (const [repeats, most] of [[1, 21], [3, 63]] as const) {
+      const below = await runWith(repeats, most - 1);
+      expect(below.code).toBe(2);
+      expect(below.err).toBe(`the budget ${most - 1} is below the ${most} calls that every repeat is counted at (the call limit for each turn): a run on it can stop inside a repeat; raise it, or add --short-budget to run what fits`);
+      expect(below.s.requests).toEqual([]);
+      const at = await runWith(repeats, most);
+      expect(at.code).toBe(0);
+    }
+    expect((await runWith(1, 14, ['--short-budget'])).code).toBe(1);
   });
 });
