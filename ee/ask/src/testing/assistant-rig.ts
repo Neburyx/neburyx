@@ -10,7 +10,7 @@ import { buildAssistantInstructions } from '../assistant/instructions.js';
 import { ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION, createAssistantRouter } from '../assistant/router.js';
 import { createAssistantTurnRoute } from '../assistant/turn-route.js';
 import { AGENT_PROMPT_ID, AGENT_PROMPT_VERSION, createAgentTurn } from '../assistant/agent-turn.js';
-import { auditChatModel, type AgentChatModel } from '@neburyx/ee-assistant-agent';
+import { auditChatModel, type AgentChatModel, type AgentRun } from '@neburyx/ee-assistant-agent';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
 import type { AssistantRunStore } from '../assistant/run-store.js';
 import type { AssistantThreadStore } from '../assistant/thread-store.js';
@@ -204,7 +204,7 @@ export interface RigOptions {
   readonly answer?: FixtureReplies[string];
   readonly loopSteps?: number;
   /** The deepagents turn runs on this chat model; every call it makes writes its audit event to the rig's sink. */
-  readonly agent?: { readonly model: AgentChatModel; readonly maxCalls?: number; /** Only a test of the audit sets this, to an id an audit event cannot hold. */ readonly promptId?: string; /** The input limit of the agent alone, so that a test can pass the router and stop the agent. */ readonly maxInputTokens?: number; readonly removalFeedback?: NonNullable<Parameters<typeof createAgentTurn>[0]['removalFeedback']> };
+  readonly agent?: { readonly model: AgentChatModel; /** Called with the run of each agent turn after it ended. */ readonly onRun?: (run: AgentRun) => void; readonly maxCalls?: number; /** Only a test of the audit sets this, to an id an audit event cannot hold. */ readonly promptId?: string; /** The input limit of the agent alone, so that a test can pass the router and stop the agent. */ readonly maxInputTokens?: number; readonly removalFeedback?: NonNullable<Parameters<typeof createAgentTurn>[0]['removalFeedback']> };
   readonly loopRows?: number;
   /** The elements the source holds, as `type/id`, for the read of a source's elements that checks a written value; absent, every reference asked for is found. */
   readonly source?: readonly string[];
@@ -271,6 +271,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
           settings: () => ({ maxCalls: agentOptions?.maxCalls ?? options.maxCalls ?? 8, maxSteps: options.loopSteps ?? 4, maxInputTokens: agentOptions?.maxInputTokens ?? options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }), timeoutMs: 10_000 }),
           checks: options.checks ?? createCheckRunner(),
           ...(agentOptions.removalFeedback === undefined ? {} : { removalFeedback: agentOptions.removalFeedback }),
+          ...(agentOptions.onRun === undefined ? {} : { onRun: agentOptions.onRun }),
         });
   const route = createAssistantTurnRoute({ ...(agentTurn === undefined ? {} : { agentTurn: () => agentTurn }), ...(options.typology === undefined ? {} : { typology: () => options.typology }), ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }),  totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer, overview: () => overviewAnswer }), ...(options.pending === undefined ? {} : { pending: () => options.pending }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({

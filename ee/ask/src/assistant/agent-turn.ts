@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_POINTERS, type AskAnswer, type AssistantLimit, type AssistantPointer, type AssistantRead, type SummaryReading, type SummarySentence } from '@neburyx/contracts';
-import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentControl, type AgentTool, type AuditedModelHook } from '@neburyx/ee-assistant-agent';
+import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentRun, type AgentControl, type AgentTool, type AuditedModelHook } from '@neburyx/ee-assistant-agent';
 import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
@@ -49,6 +49,8 @@ export interface AgentTurnOptions {
   readonly settings: (sourceId: string) => AgentTurnSettings | undefined;
   readonly checks: CheckRunner;
   readonly removalFeedback?: RemovalFeedback;
+  /** Called with the run of each turn after it ended: a test reads what the framework assembled and what was offered. */
+  readonly onRun?: (run: AgentRun) => void;
 }
 
 export interface AgentTurnInput {
@@ -365,6 +367,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     const beforeCall = (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }): boolean => estimateTokens(request.system, `${request.messages.join('\n')}\n${request.tools}`) <= settings.maxInputTokens;
     try {
       const ran = await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall, onTrim: takeBack });
+      options.onRun?.(ran);
       if (ran.refused || ran.trimmed) limited ??= 'input';
       // an answer is marked with the call limit only when the limit cut the reading short; one given on the last call with no read wanted is not
       else if (ran.reserveRefused) limited ??= 'calls';

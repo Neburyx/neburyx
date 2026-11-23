@@ -63,6 +63,8 @@ export interface AgentRunOptions {
 export interface AgentRun {
   /** The tool names offered in each model request, in order. */
   readonly offered: readonly (readonly string[])[];
+  /** The tool names deepagents assembled for each model request, read by the first custom middleware before deepagents' own exclusion middleware and before the filter below: what the framework would offer with no guard of the product's. Middleware in the tail of deepagents runs inside it, so a tool added there is seen only in `offered` and in the tools the model is bound to. */
+  readonly assembled: readonly (readonly string[])[];
   readonly called: readonly { readonly name: string; readonly args: unknown }[];
   readonly modelCalls: number;
   /** Whether `beforeCall` ended the run by refusing a request. */
@@ -111,6 +113,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
   const allowed = new Set(options.tools.map((entry) => entry.name));
   const called: { name: string; args: unknown }[] = [];
   const offered: string[][] = [];
+  const assembled: string[][] = [];
   let reserveRefused = false;
   let failure: { readonly error: unknown } | undefined;
   let queue: Promise<void> = Promise.resolve();
@@ -151,6 +154,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     name: 'TurnLimits',
     wrapModelCall: async (request, handler) => {
       if (options.control.stop || modelCalls + options.control.extra >= options.maxCalls) return new AIMessage(END_TEXT);
+      assembled.push(request.tools.map(nameOf).sort());
       const lastCall = options.control.answerOnly || modelCalls + 1 + options.control.extra >= options.maxCalls;
       const tools = request.tools.filter((entry) => (lastCall ? nameOf(entry) === options.finalTool : allowed.has(nameOf(entry))));
       const textOf = (content: unknown): string => (typeof content === 'string' ? content : JSON.stringify(content));
@@ -220,5 +224,5 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     throw failure?.error ?? error;
   }
   if (failure !== undefined) throw failure.error;
-  return { offered, called, modelCalls, refused, trimmed, reserveRefused };
+  return { offered, assembled, called, modelCalls, refused, trimmed, reserveRefused };
 }
