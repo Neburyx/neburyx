@@ -434,6 +434,9 @@ describe('choosing a candidate', () => {
     expect(stored.map((turn) => turn.route)).toEqual(['ask', 'ask']);
     expect(stored[1]).toMatchObject({ outcome: 'answered', intent: 'shared', entities: [{ role: 'id', ref: widget('A-2') }] });
     expect(stored[1]?.questionHash).toMatch(/^[0-9a-f]{64}$/);
+    // the choice of an element carries no typed message: its row keeps no question
+    expect(stored[1]).not.toHaveProperty('question');
+
     await t.send('and now?');
     expect(routerValues(t.rig, 1)).toMatch(/2\. ask "shared"; ran for id = c\d+; cited/);
   });

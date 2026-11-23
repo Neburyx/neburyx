@@ -4,6 +4,8 @@ import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, VIEW_BODY, answerOf, heavyResult, nodeOf, offerOf, ok, okResult, rig, routeAsk, zeroResult, type Rig, type RigOptions } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
+import { createMemoryAssistantThreadStore } from './thread-store.js';
+import type { RecordJob, RecordQueue } from '@neburyx/contracts';
 import { CONFIRMATION_ACTION } from './confirmation.js';
 import { TURN_CLOSED_ACTION } from './turn-audit.js';
 
@@ -415,5 +417,43 @@ describe('a plan that waits for a decision and the selection on the canvas', () 
     if (first.status !== 'confirmation') throw new Error('not waiting');
     const decided = await decide(r, first, 'skip');
     expect(decided).not.toMatchObject({ status: 'confirmation-invalid' });
+  });
+});
+
+describe('the text a decision keeps in the thread', () => {
+  const INVESTIGATION = '0192f000-0000-7000-8000-0000000000a1';
+  const PERSON = '0192f000-0000-7000-8000-000000000001';
+  const BASE = { ...BODY, investigationId: INVESTIGATION };
+  const immediate: RecordQueue = { enqueue: (job: RecordJob) => void job.write().catch(() => undefined) };
+  const drain = async (): Promise<void> => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  };
+  const heldIn = (threads: ReturnType<typeof createMemoryAssistantThreadStore>) => [...threads.threads.values()].flatMap((thread) => thread.turns);
+  async function waitingIn(threads: ReturnType<typeof createMemoryAssistantThreadStore>) {
+    const r = await rig({ reply: SHARED, step: sequence(byId('A-2'), byId('A-9'), DONE), answer: GOOD, pending: createMemoryAssistantPendingStore(), run: runOf(), threadStore: threads, records: immediate });
+    const first = await answerOf(r.route.handler(r.request(BASE, { principalId: PERSON })));
+    if (first.status !== 'confirmation') throw new Error('not waiting');
+    await drain();
+    return { r, first };
+  }
+  const decideIn = (r: Rig, first: Extract<AssistantTurnAnswer, { status: 'confirmation' }>, decision: 'confirm' | 'cancel') => answerOf(r.route.handler(r.request({ ...BASE, confirmation: { pendingId: first.pendingId, plan: first.plan, decision } }, { principalId: PERSON })));
+
+  it('keeps no text for the waiting turn, the typed question and the answer for the resumed turn when it is kept, and nothing for a cancelled decision', async () => {
+    const threads = createMemoryAssistantThreadStore();
+    const { r, first } = await waitingIn(threads);
+    const [waitingTurn] = heldIn(threads);
+    expect(waitingTurn).toMatchObject({ outcome: 'waiting' });
+    expect(waitingTurn).not.toHaveProperty('question');
+    expect(waitingTurn).not.toHaveProperty('answer');
+    expect((await decideIn(r, first, 'confirm')).status).toBe('answered');
+    await drain();
+    const kept = heldIn(threads).at(-1);
+    expect(kept).toMatchObject({ outcome: 'answered', maskOn: false, question: BODY.message });
+    expect(kept?.answer?.blocks[0]).toMatchObject({ kind: 'sentences' });
+    const before = heldIn(threads).length;
+    const other = await waitingIn(threads);
+    await decideIn(other.r, other.first, 'cancel');
+    await drain();
+    expect(heldIn(threads).slice(before).filter((turn) => turn.question !== undefined || turn.answer !== undefined)).toEqual([]);
   });
 });
