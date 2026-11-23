@@ -1,13 +1,13 @@
 import type { TurnRecords } from './records.js';
 
-/** The lines the model was shown in the call that wrote an answer, by key: the element lines (`n1 | …`), the read lines (`s1: …`), the keys of reads (`r1: …`), the typology and the notes. */
+/** The lines the model was shown in the call that wrote an answer, by key: the element lines (`n1 | …`), the read lines (`s1: …`), the keys of reads (`r1: …`), the coverage of the view (`c1: …`), the typology and the notes. */
 export interface AnswerLines {
   /** The number of the call whose reply holds the `answer` tool call (the last one). */
   readonly callNumber: number;
   readonly lines: ReadonlyMap<string, string>;
 }
 
-const KEY_LINE = /^([nerastm]\d+)(?:\s*\|\s*|:\s+)(.*)$/u;
+const KEY_LINE = /^([cnerastm]\d+)(?:\s*\|\s*|:\s+)(.*)$/u;
 const MESSAGE_START = /^(human|ai|tool|system): /u;
 
 /** The key lines of one tool message, from its first line to the next message. */

@@ -17,6 +17,14 @@ describe('the lines an answer cites', () => {
     expect(lines?.lines.get('n1')).toContain('Account W-1');
   });
 
+  it('finds the coverage line of the view, which an absence sentence cites', () => {
+    const values = 'human: Question:\nanything?\nai: [{"name":"view","args":{}}]\ntool: Keys are renumbered after every read: cite only keys of the latest result.\nn1 | "widget" | title: "Widget W-1"\nc1: view coverage: 1 entities shown (1 widget) · 0 relationships shown · 0 not yet retrieved (exact)';
+    const lines = linesOfAnswer({ ...records(), calls: [call(1, { replyText: ANSWER_REPLY, valuesText: values })] });
+    const cited = citedLinesOf({ sentences: [{ text: 'No relationship is shown.', cites: ['c1'] }] }, lines);
+    expect(cited.mapped.get('c1')).toContain('0 relationships shown');
+    expect(cited.missing).toEqual([]);
+  });
+
   it('counts the cites that are not text keys or whose sentence has no list of cites, and invents no line for them', () => {
     const cited = citedLinesOf({ sentences: [{ text: 'a', cites: ['n1', 7] }, { text: 'b' }, { text: 'c', cites: 'n1' }] }, undefined);
     expect(cited.malformed).toBe(3);
