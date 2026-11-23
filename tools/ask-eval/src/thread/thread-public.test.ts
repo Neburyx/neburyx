@@ -42,7 +42,7 @@ describe('the public surface of the thread evaluation', () => {
   it('scans the whole changed public surface, this file included', () => {
     expect(files.length).toBeGreaterThan(30);
     expect(files).toContain(join(here, 'thread-public.test.ts'));
-    expect(files.some((file) => file.endsWith('0011-assistant-run-tools.sql'))).toBe(true);
+    expect(files.some((file) => file.endsWith('0012-assistant-run-tools.sql'))).toBe(true);
   });
 
   it('holds no roadmap, requirement or decision identifier', () => {
