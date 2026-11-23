@@ -111,6 +111,17 @@ describe('the answer after tool steps', () => {
     expect(answer).toMatchObject({ status: 'answered', route: 'ask', citations: [{ key: 's2', kind: 'read', label: expect.any(String), finding: expect.stringContaining('0 matches shown') }] });
   });
 
+  it('keeps the read citation of a sentence whose count of the cited elements stands beside a number its read line holds', async () => {
+    const r = await setup(sentences({ text: 'The read shows 1 match, and 2 widgets are listed.', cites: ['s1', 'r1', 'r2'] }));
+    const answer = await answerOf(r.route.handler(r.request()));
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'The read shows 1 match, and 2 widgets are listed.' }], citations: expect.arrayContaining([expect.objectContaining({ key: 's1', kind: 'read', finding: expect.stringContaining('1 match shown') })]) });
+  });
+
+  it('removes the sentence when the count of the cited elements is wrong though the number of its read line is right', async () => {
+    const r = await setup(sentences({ text: 'The read shows 1 match, and 3 widgets are listed.', cites: ['s1', 'r1', 'r2'] }));
+    expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ status: 'not-answered' });
+  });
+
   const second = (result: () => ReturnType<typeof okResult>) => {
     let next = 0;
     return { run: () => ({ status: 'ok' as const, result: next++ === 0 ? okResult() : result() }) };
