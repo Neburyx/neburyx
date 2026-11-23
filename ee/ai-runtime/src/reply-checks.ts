@@ -14,6 +14,8 @@ export interface CheckedText {
   readonly descriptionKeys?: ReadonlySet<string>;
   /** The type of each element key (an entity type, or a relationship type), so that the comparison check knows which elements are of one type without the references a worker thread would have to copy. */
   readonly elementTypes?: ReadonlyMap<string, string>;
+  /** The words of the instructions the model was given, lower case (a typology the operator wrote, for one): a capital word that is one of them names nothing that was not sent. */
+  readonly knownWords?: readonly string[];
   /** The titles and ids of each element, by key: what a count names apart from itself is found by, whatever shape the element's line is written in. */
   readonly elementNames?: ReadonlyMap<string, readonly string[]>;
   /** False for the rows of a table: a cardinal written in words is read as a number everywhere else. */
@@ -30,14 +32,11 @@ const IDENTIFIER_LIKE = /[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu;
 const QUOTED = /"([^"]+)"/g;
 const CAPITALISED = /\p{Lu}[\p{L}]*/gu;
 
-/** Shape words that look like identifiers and are allowed: they come from the typology file the model is told to use. */
-const SHAPE_WORDS: ReadonlySet<string> = new Set(['fan-in', 'fan-out', 'pass-through']);
-
-/** The ordinary words a sentence may start with or hold in a capital without naming anything: articles, determiners, small number words, prepositions, conjunctions and the five shapes. A fixed list of the code, never taken from a file. */
+/** The ordinary words a sentence may start with or hold in a capital without naming anything: articles, determiners, small number words, prepositions and conjunctions: language, never a word of a domain. The words of a domain (a shape of a typology, a type) come from the text sent and the instructions the model was given. */
 const STRUCTURAL_VOCABULARY: ReadonlySet<string> = new Set([
   'the', 'a', 'an', 'this', 'that', 'these', 'those', 'both', 'each', 'every', 'all', 'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'several', 'some', 'many', 'few',
   'another', 'other', 'it', 'they', 'there', 'here', 'at', 'in', 'on', 'of', 'by', 'for', 'from', 'with', 'to', 'and', 'or', 'but', 'as', 'is', 'are', 'was', 'were', 'also', 'between', 'within',
-  'fan', 'cycle', 'rapid', 'pass', 'through', 'shared', 'shape', 'shapes',
+  'through',
 ]);
 
 /**
@@ -373,6 +372,7 @@ function namesScopeOf(sentence: SummarySentence, assembled: CheckedText): Checke
 function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   const sent = assembled.text.normalize('NFC');
   const known = words(sent);
+  const toldWords = new Set(assembled.knownWords ?? []);
   const ordinary = ordinaryWords(assembled);
   const sentTokens = identifierTokens(sent);
   const text = sentence.text.normalize('NFC');
@@ -382,7 +382,7 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   for (const token of unquoted.match(IDENTIFIER_LIKE) ?? []) {
     // a word joined with underscores between letters or digits is one name (a relationship type): it is found whole in the text sent, never as a mix of the parts of others; Markdown emphasis around a word is not one
     if (!sentTokens.has(token) && token.split('-').some((part) => /[\p{L}\p{N}]_[\p{L}\p{N}]/u.test(part) && !known.has(part.replace(/^_+|_+$/gu, '').toLowerCase()))) return false;
-    if (SHAPE_WORDS.has(token.toLowerCase()) || !/\d/.test(token) || !/[\p{L}_-]/u.test(token)) continue;
+    if (!/\d/.test(token) || !/[\p{L}_-]/u.test(token)) continue;
     if (!sentTokens.has(token)) return false;
   }
   // a key of a property written with a capital inside (`paidValue`) is a name the text sent gave when it holds that word whole: its capital is not the start of a name
@@ -391,7 +391,7 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   const withoutCountWords = countedWords.reduce((blanked, counted) => blanked.slice(0, counted.index) + ' '.repeat(counted.length) + blanked.slice(counted.index + counted.length), withoutIdentifiers);
   for (const found of withoutCountWords.matchAll(CAPITALISED)) {
     const lower = found[0].toLowerCase();
-    if (STRUCTURAL_VOCABULARY.has(lower) || known.has(lower)) continue;
+    if (STRUCTURAL_VOCABULARY.has(lower) || known.has(lower) || toldWords.has(lower)) continue;
     const opensSentence = /(^\s*|[.!?]\s+)$/u.test(withoutCountWords.slice(0, found.index));
     if (opensSentence && ordinaryOpener(lower, ordinary)) continue;
     return false;

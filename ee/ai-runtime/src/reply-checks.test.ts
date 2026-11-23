@@ -271,6 +271,25 @@ describe('a key of a property written with a capital inside', () => {
   });
 });
 
+describe('the words of a domain come from the text and the instructions, not from the check', () => {
+  const text: CheckedText = { text: 'n1 | "widget" | title: "Item A" | id: "w1"', keys: new Map([['n1', true]]), lines: new Map([['n1', 'n1 | "widget" | title: "Item A" | id: "w1"']]), inexactCounts: [], unknownCountKeys: new Set() };
+  const said = (sentence: string, over: Partial<CheckedText> = {}): boolean => judgeSentences([{ text: sentence, cites: ['n1'] }], { ...text, ...over }).kept.length === 1;
+
+  it('removes a capital word that the text sent does not hold, whatever the domain', () => {
+    expect(said('Rapid movement shows on Item A.')).toBe(false);
+    expect(said('Cycle shape shows on Item A.')).toBe(false);
+  });
+
+  it('does not let the instructions make a relationship type that the text never gave known', () => {
+    expect(said('Item A is linked by SENT_TO.', { knownWords: ['sent_to', 'sent', 'to'] })).toBe(false);
+  });
+
+  it('keeps it when the instructions the model was given use the word', () => {
+    expect(said('Rapid movement shows on Item A.', { knownWords: ['rapid', 'movement'] })).toBe(true);
+    expect(said('Cycle shape shows on Item A.', { knownWords: ['cycle', 'shape'] })).toBe(true);
+  });
+});
+
 describe('a count of the cited elements', () => {
   const line = (key: string, type: string, title: string): string => `${key} | "${type}" | title: "${title}" | id: "${key}x"`;
   const counted: CheckedText = {

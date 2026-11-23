@@ -1,7 +1,7 @@
 import type { SummarySentence } from '@neburyx/contracts';
 import { z } from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { caseOf, loadCases } from './cases.js';
+import { caseOf, keyMapOf, loadCases, readingOf } from './cases.js';
 import { countRuleBroken, numbersUnsupported, SuiteCheckFailed } from './checks.js';
 import { mutatedChecks, type Mutation } from './mutants.js';
 import { replyOf, startRig } from './testing/rig.js';
@@ -84,6 +84,44 @@ describe('25 transactions over 25 cited transactions, in the case summary', () =
     const { kept, rig } = await summarize(undefined, { text: '26 transactions are listed.', cites }, evidence);
     expect(kept).toEqual([]);
     expect(closed(rig)).toMatchObject({ outcome: 'unsupported', sentencesKept: 0, sentencesRemoved: 1 });
+  });
+});
+
+describe('the count rule over every pack and every shape of the labelled set, with no code of a domain', () => {
+  const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+  const counted = set.cases.flatMap((view) =>
+    view.facts.flatMap((fact) => {
+      const parts = fact.says.split(' ');
+      const at = parts.findIndex((each) => WORDS.includes(each.toLowerCase()));
+      const next = (parts[at + 1] ?? '').replace(/,$/u, '').toLowerCase();
+      const names = view.entities.map((entity) => entity.type.toLowerCase());
+      const word = parts[at];
+      return word !== undefined && names.some((name) => next === name || next === `${name}s` || next === `${name}es`) ? [{ view, fact, word }] : [];
+    }),
+  );
+
+  it('covers both packs and the AML views', () => {
+    expect(new Set(counted.map((each) => each.view.pack))).toEqual(new Set(['banking-fraud', 'insurance-claims']));
+    expect(counted.some((each) => each.view.shape !== undefined)).toBe(true);
+    expect(counted.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each(counted.map((each) => [`${each.view.pack}/${each.view.id}/${each.fact.id}`, each] as const))('keeps the count of %s as stated with its cited elements, in words and in digits, and removes a wrong one', async (_name, { view, fact, word }) => {
+    const sentenceOf = (number: string): string => `${fact.says.replace(word, number)}.`;
+    const value = WORDS.indexOf(word.toLowerCase());
+    const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+    const run = async (text: string): Promise<boolean> => {
+      const probe = startRig({ replies: [replyOf()], settings: { maxCalls: 1 } });
+      await probe.summarize(readingOf(view));
+      const keys = keyMapOf(view, probe.requests[0]?.values ?? '');
+      const rig = startRig({ replies: [replyOf({ text, cites: fact.rests_on.map((key) => keys.get(key) ?? 'none') })], settings: { maxCalls: 1 } });
+      await rig.summarize(readingOf(view));
+      return (rig.store.runs[0]?.removals.length ?? 0) === 0;
+    };
+    expect(await run(sentenceOf(word.charAt(0) === word.charAt(0).toUpperCase() ? capital(WORDS[value] ?? '') : (WORDS[value] ?? '')))).toBe(true);
+    expect(await run(sentenceOf(String(value)))).toBe(true);
+    expect(await run(sentenceOf(capital(WORDS[value + 2] ?? 'twelve')))).toBe(false);
+    expect(await run(sentenceOf(String(value + 2)))).toBe(false);
   });
 });
 

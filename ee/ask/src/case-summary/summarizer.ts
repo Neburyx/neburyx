@@ -176,7 +176,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
         return outcome;
       };
       if (!prepared.ready) return record(prepared.refusal);
-      const checkedText = checkedTextOf(prepared.assembled);
+      const checkedText = checkedTextOf(prepared.assembled, instructions.text);
       let callsMade = 0;
       let lastChecked: Checked | undefined;
       try {
