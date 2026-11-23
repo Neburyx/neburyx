@@ -510,7 +510,7 @@ describe('the table form of the agent', () => {
 describe('the blocks of an agent answer', () => {
   const TABLE = ok('{"route":"view","form":"table"}');
   const sentence = (text: string) => ({ kind: 'sentences', sentences: [{ text, cites: ['n1'] }] });
-  const table = (rows: number, cell = 'Account A-1') => ({ kind: 'table', columns: ['Element'], rows: Array.from({ length: rows }, (_, index) => ({ cells: [cell], cites: ['n1'] })) });
+  const table = (rows: number, cell = `${V.title} A-1`) => ({ kind: 'table', columns: ['Element'], rows: Array.from({ length: rows }, (_, index) => ({ cells: [cell], cites: ['n1'] })) });
   const answerWith = async (reply: unknown, blocks: readonly unknown[]) => {
     const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks } }]).respond(new AIMessage('Done.'));
     const r = await rig({ reply: reply as never, agent: { model } });
@@ -518,9 +518,9 @@ describe('the blocks of an agent answer', () => {
   };
 
   it('keeps the order of the model: sentences then a table, and a table then sentences', async () => {
-    const first = await answerWith(TABLE, [sentence('Account A-1 is in view.'), table(1)]);
+    const first = await answerWith(TABLE, [sentence(`${V.title} A-1 is in view.`), table(1)]);
     expect(first).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }, { kind: 'table' }] });
-    const second = await answerWith(TABLE, [table(1), sentence('Account A-1 is in view.')]);
+    const second = await answerWith(TABLE, [table(1), sentence(`${V.title} A-1 is in view.`)]);
     expect(second).toMatchObject({ status: 'answered', blocks: [{ kind: 'table' }, { kind: 'sentences' }] });
   });
 
@@ -550,14 +550,14 @@ describe('the blocks of an agent answer', () => {
   });
 
   it('counts the rows of a table with no row left, beside the sentences that stand', async () => {
-    const dropped = { kind: 'table', columns: ['Element'], rows: [{ cells: ['Account Z-9'], cites: ['n9'] }, { cells: ['Account Z-8'], cites: ['n8'] }] };
-    const answer = await answerWith(TABLE, [sentence('Account A-1 is in view.'), table(1), dropped]);
+    const dropped = { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} Z-9`], cites: ['n9'] }, { cells: [`${V.title} Z-8`], cites: ['n8'] }] };
+    const answer = await answerWith(TABLE, [sentence(`${V.title} A-1 is in view.`), table(1), dropped]);
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }, { kind: 'table', table: { droppedRows: 2 } }] });
   });
 
   it('counts the rows of a table with no row left in the closing event when no table is shown', async () => {
-    const dropped = { kind: 'table', columns: ['Element'], rows: [{ cells: ['Account Z-9'], cites: ['n9'] }, { cells: ['Account Z-8'], cites: ['n8'] }] };
-    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks: [sentence('Account A-1 is in view.'), dropped] } }]).respond(new AIMessage('Done.'));
+    const dropped = { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} Z-9`], cites: ['n9'] }, { cells: [`${V.title} Z-8`], cites: ['n8'] }] };
+    const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { blocks: [sentence(`${V.title} A-1 is in view.`), dropped] } }]).respond(new AIMessage('Done.'));
     const r = await rig({ reply: TABLE, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }] });
@@ -566,7 +566,7 @@ describe('the blocks of an agent answer', () => {
   });
 
   it('moves the dropped rows of a table the totals leave out to the table before it', async () => {
-    const mixed = { kind: 'table', columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }, { cells: ['Account Z-9'], cites: ['n9'] }] };
+    const mixed = { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} Z-9`], cites: ['n9'] }] };
     const answer = await answerWith(TABLE, [table(25), mixed]);
     const tables = (answer as { blocks: { kind: string; table?: { droppedRows?: number; moreNotShown?: number } }[] }).blocks.filter((block) => block.kind === 'table');
     expect(tables).toHaveLength(1);
@@ -574,13 +574,13 @@ describe('the blocks of an agent answer', () => {
   });
 
   it('suppresses the whole answer when one row of a table holds verdict wording, even beside a clean sentences block', async () => {
-    const bad = { kind: 'table', columns: ['Element'], rows: [{ cells: ['Account A-1 is guilty of fraud'], cites: ['n1'] }] };
-    const answer = await answerWith(TABLE, [sentence('Account A-1 is in view.'), bad]);
+    const bad = { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-1 is guilty of fraud`], cites: ['n1'] }] };
+    const answer = await answerWith(TABLE, [sentence(`${V.title} A-1 is in view.`), bad]);
     expect(answer.status).toBe('not-answered');
   });
 
   it('cuts the sentences beyond 12 in all, from the end', async () => {
-    const many = (count: number) => ({ kind: 'sentences', sentences: Array.from({ length: count }, (_, index) => ({ text: 'Account A-1 is in view.', cites: ['n1'] })) });
+    const many = (count: number) => ({ kind: 'sentences', sentences: Array.from({ length: count }, (_, index) => ({ text: `${V.title} A-1 is in view.`, cites: ['n1'] })) });
     const answer = await answerWith(VIEW, [many(8), many(8)]);
     expect(sentencesOfBlocks((answer as { blocks: AssistantBlocks }).blocks)).toHaveLength(12);
   });
