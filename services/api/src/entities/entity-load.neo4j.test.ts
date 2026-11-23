@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AppError } from '../errors.js';
 import { normalizeModelOf } from '../gate/normalize/model.js';
-import { normalizeRows } from '../gate/normalize/index.js';
 import { envFor, NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
 import { assembleGate } from '../gate/assemble.js';
 import { createTemplateCatalog } from '../gate/catalog.js';
@@ -11,7 +10,7 @@ import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
 import { isKeyed } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor } from '../sources/executor.js';
-import { itemsOf, madeRecordCount, removeMadeRecords, startPackServers, withMadeRecords, type PackServer } from '../testing/normalization-capture.js';
+import { expectedNode, itemsOf, madeRecordCount, removeMadeRecords, startPackServers, withMadeRecords, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { communityAccess } from '../testing/source-access.js';
@@ -37,7 +36,7 @@ async function load(target: PackServer, entityType: string, stableId: string, ma
 }
 
 function expectedFrom(target: PackServer, row: Record<string, unknown>) {
-  const [node] = normalizeRows({ sourceId: target.source.id, hasMore: false, model: normalizeModelOf(target.source) }, [row]).nodes;
+  const node = expectedNode(target.source, row);
   if (node === undefined) throw new Error('the captured record is not a node of the mapping');
   return node;
 }

@@ -7,7 +7,7 @@ import { communitySeams } from '../seams/community-seams.js';
 import type { AuditEvent } from '../seams/seams.js';
 import { LOCAL_PRINCIPAL } from '../testing/gate.js';
 import { NEO4J_SERIES, runAdmin, runAll } from '../testing/neo4j-server.js';
-import { itemsOf, removeMadeRecords, startPackServers, type PackServer } from '../testing/normalization-capture.js';
+import { expectedNode, itemsOf, removeMadeRecords, startPackServers, type PackServer } from '../testing/normalization-capture.js';
 import { PACKS } from '../testing/pack-fixtures.js';
 import { communityAccess } from '../testing/source-access.js';
 import { storedHits } from '../testing/search-fixtures.js';
@@ -54,7 +54,7 @@ describe.each(PACKS)(`the search of the %s pack on ${NEO4J_SERIES}`, (pack) => {
   const hitsOf = async (text: string, mask = false): Promise<GraphNode[]> => (await search(text, mask)).exact;
 
   function expectedFrom(row: Record<string, unknown>): GraphNode {
-    const [node] = normalizeRows({ sourceId: current().target.source.id, hasMore: false, model: normalizeModelOf(current().target.source) }, [row]).nodes;
+    const node = expectedNode(current().target.source, row);
     if (node === undefined) throw new Error('the captured record is not a node of the mapping');
     return node;
   }

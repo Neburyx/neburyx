@@ -237,7 +237,8 @@
                 "filedAt": {
                   "$type": "dateTime",
                   "value": "2023-11-05T03:13:17Z"
-                }
+                },
+                "channel": "phone"
               }
             },
             "end": {
@@ -374,7 +375,8 @@
           "filedAt": {
             "$type": "dateTime",
             "value": "2023-11-05T03:13:17Z"
-          }
+          },
+          "channel": "phone"
         }
       },
       "b": {
@@ -424,7 +426,8 @@
                 "filedAt": {
                   "$type": "dateTime",
                   "value": "2023-11-05T03:13:17Z"
-                }
+                },
+                "channel": "phone"
               }
             },
             "end": {
@@ -490,7 +493,8 @@
           "filedAt": {
             "$type": "dateTime",
             "value": "2023-11-05T03:13:17Z"
-          }
+          },
+          "channel": "phone"
         }
       },
       "m": {

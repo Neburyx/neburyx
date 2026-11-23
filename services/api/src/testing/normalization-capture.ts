@@ -13,7 +13,10 @@ import { relatedContextTemplate } from '../gate/templates/related-context.js';
 import { schemaIndexesTemplate } from '../gate/templates/schema-indexes.js';
 import type { ExecuteCall, ExecuteOutcome, ReadExecutor } from '../gate/executor.js';
 import { EXPAND_NEIGHBORS_ID } from '../gate/templates/expand-neighbors.js';
-import type { Gate, GatePage, SystemRunner } from '../gate/types.js';
+import { normalizeRows } from '../gate/normalize/index.js';
+import { normalizeModelOf } from '../gate/normalize/model.js';
+import { styledItems } from '../gate/style-rules.js';
+import type { Gate, GateContext, GatePage, SystemRunner } from '../gate/types.js';
 import type { SourceModel } from '../mapping/model.js';
 import { communitySeams } from '../seams/community-seams.js';
 import { createNeo4jExecutor, type Neo4jExecutor } from '../sources/executor.js';
@@ -24,6 +27,18 @@ import { PACKS, packMappingText, packSource, repoRoot, type Pack } from './pack-
 // The demo graph tool is a developer tool that the product may not import, so the graphs are built the way a person builds them: by running its command line.
 const run = promisify(execFile);
 const TOOL = join(repoRoot, 'tools', 'demo-graph', 'dist', 'main.js');
+
+/**
+ * The first node the gate answers for a captured record: the normalize stage, then the style stage the gate runs after Redact (a pack's rules are part of what a node carries). Masking is off, so Redact changes nothing.
+ * The expectation of a test is built by this, never by stripping a field, so a rule a pack adds cannot make it differ.
+ */
+export function expectedNode(source: SourceModel, row: Record<string, unknown>) {
+  const model = normalizeModelOf(source);
+  const normalized = normalizeRows({ sourceId: source.id, hasMore: false, model }, [row]);
+  const [styled] = styledItems([{ ...normalized }], { model } as unknown as GateContext);
+  const [node] = (styled as unknown as typeof normalized).nodes;
+  return node;
+}
 
 /** A capture of one row (`LIMIT 1` or a single `RETURN`), or of a few rows, which is a page cut at the limit plus one like any read that returns a list. */
 const captureTemplate = (id: string, cypher: string, entityParams: string[], relationshipParams: string[], params: Record<string, z.ZodString>, kind: 'one' | 'list' = 'one'): TemplateDefinition => ({
