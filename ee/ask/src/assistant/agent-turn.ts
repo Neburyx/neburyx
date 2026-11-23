@@ -5,7 +5,7 @@ import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
 import { judgeTableRows, parseTable, rowSentenceOf } from './table.js';
-import { viewCoverageText } from '../case-summary/coverage.js';
+import { viewCoverageOf } from '../case-summary/coverage.js';
 import { assembleResults, answerBasisOf, failureOf, outcomeOfDraft, typeNamesOf, withElementsOfNotes, type ReadDone, type ToolAnswerOutcome } from './tool-answer.js';
 import { readNotRead, readOfAnswer, readOfNothing, readOfNotes, readOfSummary, readOfTypology, readOfView } from './reads.js';
 import { afterReads, toolRegistryOf, type LoopOutcome, type ResumeState } from './turn-outcome.js';
@@ -128,7 +128,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     let askAnswer: Extract<AskAnswer, { answered: unknown }>['answered'] | undefined;
     // the lines of notes and of a summary the application drafted are model-written context beside the elements, never a source of the checks
     const render = (): string => {
-      const { assembled, noteLines } = assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId), view === undefined ? undefined : viewCoverageText(view.reading));
+      const { assembled, noteLines } = assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId), view === undefined ? undefined : viewCoverageOf(view.reading, typeNamesOf(scope.request, scope.sourceId)));
       const meaning = answerBasisOf({ reads, ...(view === undefined ? {} : { view }), scope, message: input.message })?.typeLines.section ?? '';
       return `Keys are renumbered after every read: cite only keys of the latest result.\n${assembled.text}${noteLines.length === 0 ? '' : `\n${noteLines.join('\n')}`}${meaning}`;
     };
@@ -246,7 +246,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           control.answerOnly = true;
           return LIMIT_TEXT;
         }
-        notePropertyValuesSent(assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId), view === undefined ? undefined : viewCoverageText(view.reading)).assembled.carriesPropertyValues);
+        notePropertyValuesSent(assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId), view === undefined ? undefined : viewCoverageOf(view.reading, typeNamesOf(scope.request, scope.sourceId))).assembled.carriesPropertyValues);
         return text;
       },
     }));

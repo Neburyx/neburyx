@@ -1,6 +1,6 @@
 import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_READ_FINDING_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import { type AssembledText, edgeDetailOf, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
-import { retrievalLine, viewCoverageText } from '../case-summary/coverage.js';
+import { retrievalLine, viewCoverageOf } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf } from '../case-summary/judge.js';
 import { listedElements } from '../summary/index.js';
@@ -109,7 +109,7 @@ export interface AssembledResults {
 /** The key of the line that states what the view shows and what is not yet retrieved: no element, so a sentence about what the view does not show can cite it. */
 const VIEW_COVERAGE_KEY = 'c1';
 
-export function assembleResults(reads: readonly ReadDone[], view?: AssembledText, names?: ReadonlyMap<string, string>, viewCoverage?: string): AssembledResults {
+export function assembleResults(reads: readonly ReadDone[], view?: AssembledText, names?: ReadonlyMap<string, string>, viewCoverage?: ReturnType<typeof viewCoverageOf>): AssembledResults {
   const inexactCounts = [...(view?.inexactCounts ?? [])];
   const unknownCountKeys = new Set(view?.unknownCountKeys);
   const keys = new Map<string, ElementKey>(view?.keys);
@@ -196,7 +196,11 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
     }
   }
   const coverageKeys = viewCoverage === undefined ? [] : [VIEW_COVERAGE_KEY];
-  if (viewCoverage !== undefined) lines.set(VIEW_COVERAGE_KEY, `${VIEW_COVERAGE_KEY}: view coverage: ${viewCoverage}`);
+  if (viewCoverage !== undefined) {
+    lines.set(VIEW_COVERAGE_KEY, `${VIEW_COVERAGE_KEY}: view coverage: ${viewCoverage.text}`);
+    if (viewCoverage.inexact === 'unknown') unknownCountKeys.add(VIEW_COVERAGE_KEY);
+    else if (viewCoverage.inexact !== undefined) inexactCounts.push(viewCoverage.inexact);
+  }
   const readKeys = [...coverageKeys, ...reads.map((_, index) => `s${index + 1}`), ...typologyKeys];
   reads.forEach((read, index) => {
     lines.set(`s${index + 1}`, `${readLine(`s${index + 1}`, read, names)}${noRelationship.has(index) ? ' · no relationship listed' : ''}`);
@@ -217,6 +221,8 @@ export interface AnswerBasis {
   readonly noteLines: readonly string[];
   readonly noteElements: ReadonlyMap<string, readonly string[]>;
   readonly coverage: string;
+  /** The text of the line `c1`, when the turn has a view: what its citation shows. */
+  readonly viewCoverage?: string;
   readonly typeLines: ReturnType<typeof typeLinesOf>;
   readonly checkedText: ReturnType<typeof withTypeLines>;
 }
@@ -228,13 +234,14 @@ export const typeNamesOf = (request: { readonly typeDescriptions?: (sourceId: st
 
 export function answerBasisOf(input: Pick<ToolAnswerInput, 'reads' | 'view' | 'scope' | 'message'>): AnswerBasis | undefined {
   const names = typeNamesOf(input.scope.request, input.scope.sourceId);
-  const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names, input.view === undefined ? undefined : viewCoverageText(input.view.reading));
+  const viewCoverage = input.view === undefined ? undefined : viewCoverageOf(input.view.reading, names);
+  const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names, viewCoverage);
   if (assembled.keys.size === 0 && readKeys.length === 0) return undefined;
   const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read, names)}`)].join('; ');
   const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes, input.scope.contextTypes);
   const checkable = checkedTextOf(assembled);
   const checkedText = withTypeLines({ ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) }, typeLines);
-  return { assembled, readKeys, noteLines, noteElements, coverage, typeLines, checkedText };
+  return { assembled, readKeys, noteLines, noteElements, coverage, ...(viewCoverage === undefined ? {} : { viewCoverage: viewCoverage.text }), typeLines, checkedText };
 }
 
 interface DraftContext {
@@ -309,6 +316,7 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
       // a cite to a read line (`s1`) is no element: the server writes what that read found, as a marker of its own beside the sentence
       const names = typeNamesOf(input.scope.request, input.scope.sourceId);
       const readCitations = [...cited].flatMap((key) => {
+        if (key === VIEW_COVERAGE_KEY && basis.viewCoverage !== undefined) return [{ key, kind: 'read' as const, label: 'View coverage', finding: findingCitationOf(basis.viewCoverage) }];
         const index = /^s(\d+)$/.exec(key)?.[1];
         const read = index === undefined ? undefined : input.reads[Number(index) - 1];
         return read === undefined ? [] : [{ key, kind: 'read' as const, label: citationTitleOf(read.label ?? read.tool) ?? read.tool, finding: findingCitationOf(findingOf(read, names)) }];

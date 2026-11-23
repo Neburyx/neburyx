@@ -136,8 +136,10 @@ describe('a view question on the agent', () => {
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { cites: ['n1'] }] });
     const sent = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
-    expect(sent).toMatch(/c1: view coverage: 2 entities shown · 0 relationships shown · /u);
-    expect(JSON.stringify(answer)).not.toContain('"key":"c1"');
+    expect(sent).toMatch(/c1: view coverage: 2 entities shown \(2 [^)]+\) · 0 relationships shown · /u);
+    // the sentence that cites only the line gets a marker of its own, written by the server
+    expect(answer).toMatchObject({ citations: expect.arrayContaining([expect.objectContaining({ key: 'c1', kind: 'read', label: 'View coverage', finding: expect.stringContaining('0 relationships shown') })]) });
+    expect(sent).toMatch(new RegExp(`c1: view coverage: 2 entities shown \\(2 ${V.anchor}\\)`, 'u'));
   });
 
   it('keeps no sentence that cites a key of no line: c1 is not offered without a view', async () => {

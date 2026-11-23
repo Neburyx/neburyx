@@ -5,19 +5,32 @@ type Draft = Extract<SummaryResponse, { status: 'ok' }>;
 
 /** What the re-read left out, in the words the export header writes it: how many are shown, how much is not yet retrieved, how many references could not be read, and the note that access may hide items. */
 export function retrievalLine(reading: SummaryReading): string {
-  const parts = [`${reading.nodes.length.toLocaleString('en-US')} shown`, notRetrievedText(reading.notRetrieved, reading.uncounted)];
-  if (reading.unresolved > 0) parts.push(`${reading.unresolved.toLocaleString('en-US')} references could not be read`);
-  if (reading.omitted) parts.push(EXPORT_HIDDEN_NOTE);
-  return parts.join(' · ');
+  return [`${reading.nodes.length.toLocaleString('en-US')} shown`, ...unretrievedParts(reading)].join(' · ');
 }
 
-/** The coverage of the view as one citable line: how many entities and how many relationships it shows, and what is not yet retrieved, in the words of the export header and with no word of any domain. */
-export function viewCoverageText(reading: SummaryReading): string {
-  const shown = (count: number, kind: string): string => `${count.toLocaleString('en-US')} ${kind} shown`;
-  const parts = [shown(reading.nodes.length, 'entities'), shown(reading.edges.length, 'relationships'), notRetrievedText(reading.notRetrieved, reading.uncounted)];
-  if (reading.unresolved > 0) parts.push(`${reading.unresolved.toLocaleString('en-US')} references could not be read`);
-  if (reading.omitted) parts.push(EXPORT_HIDDEN_NOTE);
-  return parts.join(' · ');
+/** What is not yet retrieved of a view and what the line says besides: the references that could not be read and the note that access may hide items. */
+const unretrievedParts = (reading: SummaryReading): string[] => [
+  notRetrievedText(reading.notRetrieved, reading.uncounted),
+  ...(reading.unresolved > 0 ? [`${reading.unresolved.toLocaleString('en-US')} references could not be read`] : []),
+  ...(reading.omitted ? [EXPORT_HIDDEN_NOTE] : []),
+];
+
+const SIGNS = { estimated: '~ ', lowerBound: '≥ ' } as const;
+
+/**
+ * The coverage of the view as one citable line, in the words of the export header and with no word of any domain: how many entities it shows (and of which types, by the name the mapping gives each), how many relationships, and what is not yet retrieved.
+ * The not-yet-retrieved figure keeps its quality: a sentence that states it must copy it, so it is given with the phrase to copy, or as unknown.
+ */
+export function viewCoverageOf(reading: SummaryReading, names: ReadonlyMap<string, string> = new Map()): { readonly text: string; readonly inexact?: { readonly phrase: string; readonly value: string } | 'unknown' } {
+  const byType = new Map<string, number>();
+  for (const node of reading.nodes) byType.set(node.ref.entityType, (byType.get(node.ref.entityType) ?? 0) + 1);
+  const types = [...byType].map(([type, count]) => `${count.toLocaleString('en-US')} ${names.get(type) ?? type}`).sort();
+  const entities = `${reading.nodes.length.toLocaleString('en-US')} entities shown${types.length === 0 ? '' : ` (${types.join(', ')})`}`;
+  const text = [entities, `${reading.edges.length.toLocaleString('en-US')} relationships shown`, ...unretrievedParts(reading)].join(' · ');
+  const count = reading.notRetrieved;
+  if (count.quality === 'unknown' || count.value === undefined) return { text, inexact: 'unknown' };
+  if (count.quality === 'exact') return { text };
+  return { text, inexact: { phrase: `${SIGNS[count.quality]}${count.value.toLocaleString('en-US')}`, value: String(count.value) } };
 }
 
 /** How much of what is shown the kept sentences cite, counted from their cites. */
