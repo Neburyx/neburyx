@@ -36,14 +36,14 @@ describe('the legend toggle', () => {
     expect(region.lastElementChild).toBe(toggle());
   });
 
-  it('opens the legend when pressed and closes it when pressed again, with the panel registered on the right of the canvas, 64 px down, 320 px wide', () => {
+  it('opens the legend when pressed and closes it when pressed again, with the panel registered on the right of the canvas, 16 px down, 320 px wide', () => {
     const { state } = shown();
     expect(screen.queryByRole('complementary', { name: 'Legend' })).toBeNull();
     fireEvent.click(toggle());
     expect(state.presentation.view.getState().legendOpen).toBe(true);
     expect(toggle().getAttribute('aria-expanded')).toBe('true');
     const panel = screen.getByRole('complementary', { name: 'Legend' });
-    expect([panel.style.top, panel.style.right, panel.style.width]).toEqual(['64px', '16px', '320px']);
+    expect([panel.style.top, panel.style.right, panel.style.width]).toEqual(['16px', '16px', '320px']);
     fireEvent.click(toggle());
     expect(state.presentation.view.getState().legendOpen).toBe(false);
     expect(toggle().getAttribute('aria-expanded')).toBe('false');

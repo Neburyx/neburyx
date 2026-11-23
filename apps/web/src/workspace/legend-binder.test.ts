@@ -16,12 +16,12 @@ describe('the legend\'s panel', () => {
     expect(panels.view.getState()).toEqual([]);
   });
 
-  it('is registered when the legend opens, as a floating panel on the right, 64 px from the top, 320 px wide, and taken out when it closes', () => {
+  it('is registered when the legend opens, as a floating panel on the right, 16 px from the top, 320 px wide, and taken out when it closes', () => {
     const { state, panels } = bound();
     state.presentation.setLegendOpen(true);
     const [panel] = panels.view.getState();
     expect(panels.view.getState()).toHaveLength(1);
-    expect(panel).toMatchObject({ id: LEGEND_PANEL_ID, title: 'Legend', placement: { kind: 'floating', side: 'right', top: 64 }, initialWidth: 320 });
+    expect(panel).toMatchObject({ id: LEGEND_PANEL_ID, title: 'Legend', placement: { kind: 'floating', side: 'right', top: 16 }, initialWidth: 320 });
     state.presentation.setLegendOpen(false);
     expect(panels.view.getState()).toEqual([]);
   });

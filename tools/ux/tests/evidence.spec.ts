@@ -144,4 +144,28 @@ test.describe('the relationship evidence panel', () => {
     const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(sideways).toBe(0);
   });
+
+  test('starts every right-hand panel 16 pixels under the header and keeps each inside the window, also after the window is made shorter', async ({ page }) => {
+    await openSample(page, '?evidence=on');
+    await page.keyboard.press('l');
+    const legend = page.getByRole('complementary', { name: 'Legend' });
+    await expect(legend).toBeVisible();
+    const at = await screenOf(page, 'led-1');
+    await page.mouse.click(at.x, at.y);
+    await inspector(page).getByRole('tab', { name: 'Evidence' }).click();
+    await inspector(page).getByRole('button', { name: /^SENDS,/ }).click();
+    await expect(panel(page)).toBeVisible();
+    const header = await boxOf(page.getByRole('banner'));
+    const panels = [legend, inspector(page), panel(page).locator('.panel')];
+    for (const height of [null, 560]) {
+      if (height !== null) await page.setViewportSize({ width: page.viewportSize()?.width ?? 1440, height });
+      const limit = height ?? page.viewportSize()?.height ?? 0;
+      for (const held of panels) {
+        const box = await boxOf(held);
+        if (height === null) expect(Math.round(box.y - (header.y + header.height)), 'the top gap under the header').toBeLessThanOrEqual(17);
+        expect(box.y >= header.y + header.height + 15, 'the top gap under the header').toBe(true);
+        expect(box.y + box.height <= limit + 0.5, 'the panel stays inside the window').toBe(true);
+      }
+    }
+  });
 });

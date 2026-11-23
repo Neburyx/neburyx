@@ -13,6 +13,7 @@ import { drawnKeys } from '../state/loaded-graph.js';
 import { useStoreSelector } from '../state/store.js';
 import { useExpandStoreWhenProvided } from '../workspace/expand-context.js';
 import type { Answered } from '../ask/ask-session.js';
+import { useProfileWhenProvided } from '../canvas/profile-context.js';
 import { citationEntries, type CitationEntry } from '../summary/summary-model.js';
 import { isAskAnswer, useAssistantSession, type AssistantSessionState, type Failure, type FollowUp, type Outcome, type Retry, type ViewAnswer, type Waiting } from './assistant-session.js';
 import { followUpLabel } from './follow-up-label.js';
@@ -126,6 +127,7 @@ export function useAssistant(): AssistantModel {
   const sourceId = useStoreSelector(state.investigation, (investigation) => investigation.sourceId);
   const investigationId = useStoreSelector(state.investigation, (investigation) => investigation.id);
   const principalId = usePrincipalIdWhenProvided();
+  const profile = useProfileWhenProvided();
   const title = useStoreSelector(state.investigation, (investigation) => investigation.record?.title ?? '');
   const sourceChanged = useStoreSelector(state.investigation, (investigation) => isSourceChanged(investigation.record?.sourceState));
   const expansions = useExpandStoreWhenProvided();
@@ -191,7 +193,7 @@ export function useAssistant(): AssistantModel {
           setFocus(turnId);
           return;
         }
-        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: 'table' in answer ? answer.table.rows : answer.sentences, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation])) }, state.visibleGraph()));
+        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: 'table' in answer ? answer.table.rows : answer.sentences, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation])) }, state.visibleGraph(), (type) => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type));
         if ('tooLong' in outcome) {
           store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId), notice: { kind: 'too-long', ...outcome.tooLong } });
           if (retry.kind === 'message') restoreInput(retry.text);
@@ -206,7 +208,7 @@ export function useAssistant(): AssistantModel {
         setFocus(turnId);
       });
     },
-    [clear, client, open, patch, restoreInput, setFocus, setOutcome, sourceId, state, store],
+    [clear, client, open, patch, profile, restoreInput, setFocus, setOutcome, sourceId, state, store],
   );
 
   const base = useCallback((): Pick<AssistantTurnRequest, 'sourceId' | 'investigationId' | 'viewElementKeys' | 'mask'> | undefined => {

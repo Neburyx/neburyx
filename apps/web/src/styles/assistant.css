@@ -347,15 +347,107 @@
   color: var(--color-neutral-text);
 }
 
+.assistant-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  align-items: flex-start;
+}
+
+.assistant-sources-toggle {
+  display: inline-flex;
+  gap: var(--space-6);
+  align-items: center;
+  padding: var(--space-4) var(--space-8);
+  border: var(--border-width) solid var(--color-control-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+
+.assistant-sources-toggle .icon {
+  width: var(--sources-icon-size);
+  height: var(--sources-icon-size);
+  background: currentColor;
+}
+
+.assistant-sources-caret {
+  font-size: var(--font-size-caption);
+}
+
+.assistant-sources-toggle[aria-expanded='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-surface);
+  color: var(--color-accent);
+}
+
+.assistant-sources-list {
+  align-self: stretch;
+  padding: var(--space-10);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.assistant-sources-list[hidden] {
+  display: none;
+}
+
+.assistant-sources-title {
+  margin: 0 0 var(--space-6);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
 .assistant-sources ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-/* the dock does not bound the height of its panel, so a long thread would grow past the window: the panel scrolls inside the room under the header and the region's top gap */
+.assistant-source-row {
+  display: flex;
+  gap: var(--space-8);
+  align-items: flex-start;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-small);
+  text-align: left;
+  cursor: pointer;
+}
+
+.summary-chip.assistant-marker {
+  padding: 0;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--color-accent);
+  font-weight: 400;
+}
+
+.assistant-source-row .summary-chip.assistant-marker {
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-accent-surface);
+  border-radius: var(--radius);
+}
+
+.assistant-view-answer .summary-block {
+  padding: 0;
+  background: transparent;
+}
+
+/* the panel keeps a 16 px gap above and below it: a long thread scrolls inside the panel and never grows past the window */
 .assistant-panel {
-  max-height: calc(var(--full-height) - var(--header-height) - var(--region-top) - var(--space-16));
+  max-height: calc(var(--full-height) - var(--header-height) - 2 * var(--space-16));
 }
 
 .assistant-panel .assistant-body {
@@ -661,4 +753,44 @@
   margin: 0;
   font-size: var(--font-size-small);
   font-weight: 600;
+}
+
+.assistant-source-group,
+.assistant-source-member {
+  list-style: none;
+}
+
+.assistant-source-group > ul {
+  margin-top: var(--space-6);
+  padding-left: var(--space-20);
+}
+
+.assistant-group-line {
+  align-items: baseline;
+}
+
+.assistant-group-hide {
+  margin-left: auto;
+  color: var(--color-accent);
+}
+
+.assistant-source-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.assistant-group-more {
+  margin: var(--space-6) 0 0 var(--space-20);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+}
+
+.assistant-group-show-all {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-accent);
+  font: inherit;
+  cursor: pointer;
 }

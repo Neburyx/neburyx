@@ -115,6 +115,7 @@ describe('the confirmation card of a heavy step', () => {
     render(h.tree());
     await typeAndSend('who?');
     await screen.findByText('Eversiais Interiors Inc. is linked to GT-1.');
+    await userEvent.click(screen.getByRole('button', { name: /^Sources · 2/ }));
     expect(screen.getAllByText(/Eversiais Interiors Inc\./).length).toBeGreaterThan(1);
     expect(screen.queryByText(/Entity r1|Relationship r5/)).toBeNull();
   });

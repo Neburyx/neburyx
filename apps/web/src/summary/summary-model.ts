@@ -22,9 +22,34 @@ export interface CitationEntry {
   readonly graphKey: string;
   /** What the person saw of the element when the draft arrived; undefined when the graph did not hold it then. */
   readonly label: string | undefined;
+  /** What the graph held of a relationship when the draft arrived: its type and its two ends. Absent for an entity, or when the graph did not hold the relationship or either end. */
+  readonly shape?: CitationShape | undefined;
+}
+
+export interface CitationEnd {
+  readonly key: string;
+  /** The type as the source names it: what makes two ends the same shape. */
+  readonly type: string;
+  /** The type as the source profile names it for a person. */
+  readonly typeName: string;
+  readonly title: string;
+}
+
+interface CitationShape {
+  readonly relationshipType: string;
+  readonly from: CitationEnd;
+  readonly to: CitationEnd;
 }
 
 const titleOf = (node: GraphNode): string => (node.display.title === '' ? node.ref.stableId : node.display.title);
+
+function shapeOf(edge: GraphEdge, nodes: ReadonlyMap<string, GraphNode>, typeName: (type: string) => string): CitationShape | undefined {
+  const from = nodes.get(elementKey(edge.from));
+  const to = nodes.get(elementKey(edge.to));
+  if (from === undefined || to === undefined) return undefined;
+  const end = (node: GraphNode): CitationEnd => ({ key: elementKey(node.ref), type: node.display.type, typeName: typeName(node.display.type), title: titleOf(node) });
+  return { relationshipType: edge.type, from: end(from), to: end(to) };
+}
 
 function relationshipLabel(edge: GraphEdge, nodes: ReadonlyMap<string, GraphNode>): string {
   const end = (ref: ElementRef): string => nodes.get(elementKey(ref))?.display.title || ref.stableId;
@@ -32,7 +57,7 @@ function relationshipLabel(edge: GraphEdge, nodes: ReadonlyMap<string, GraphNode
 }
 
 /** The numbers 1, 2, 3 of the cited elements in the order of their first citation, then those of the response that no sentence cites; one number for one key. The labels are fixed here, from the graph the person holds, so a later change of the graph never rewrites a draft. */
-export function citationEntries(response: { readonly sentences: readonly { readonly cites: readonly string[] }[]; readonly citations: readonly (DraftResponse['citations'][number] & { readonly title?: string })[] }, graph: LoadedGraph): readonly CitationEntry[] {
+export function citationEntries(response: { readonly sentences: readonly { readonly cites: readonly string[] }[]; readonly citations: readonly (DraftResponse['citations'][number] & { readonly title?: string })[] }, graph: LoadedGraph, typeName: (type: string) => string = (type) => type): readonly CitationEntry[] {
   const nodes = new Map(graph.nodes.map((node) => [elementKey(node.ref), node]));
   const edges = new Map(graph.edges.map((edge) => [edgeKey(edge.ref), edge]));
   const known = new Map(response.citations.map((citation) => [citation.key, citation]));
@@ -48,7 +73,8 @@ export function citationEntries(response: { readonly sentences: readonly { reado
       return [{ key, number: index + 1, kind: citation.kind, graphKey: elementKey(ref), label: node === undefined ? citation.title : titleOf(node) }];
     }
     const edge = edges.get(edgeKey(ref));
-    return [{ key, number: index + 1, kind: citation.kind, graphKey: edgeKey(ref), label: edge === undefined ? citation.title : relationshipLabel(edge, nodes) }];
+    const shape = edge === undefined ? undefined : shapeOf(edge, nodes, typeName);
+    return [{ key, number: index + 1, kind: citation.kind, graphKey: edgeKey(ref), label: edge === undefined ? citation.title : relationshipLabel(edge, nodes), ...(shape === undefined ? {} : { shape }) }];
   });
 }
 

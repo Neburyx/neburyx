@@ -5,8 +5,10 @@ import { drawnKeys } from "../state/loaded-graph.js";
 import { elementKey, edgeKey } from "../state/keys.js";
 import { SUMMARY_COPY } from "../summary/copy.js";
 import { pressOf, type CitationEntry } from "../summary/summary-model.js";
-import { ASSISTANT_COPY, droppedRowsText, foldedRowsText, moreNotShownText } from "./copy.js";
+import { ASSISTANT_COPY, citationRangeLabel, droppedRowsText, foldedRowsText, moreNotShownText } from "./copy.js";
 import { ReadSteps } from "./read-steps.js";
+import { markerGroups } from "./marker-runs.js";
+import { SourcesList } from "./sources-list.js";
 import type { SentencesAnswer, TableAnswer, ViewAnswer } from "./assistant-session.js";
 
 const TABLE_FOLD_ABOVE = 10;
@@ -29,6 +31,7 @@ export function ViewAnswerCard({
   readonly sources?: boolean;
 }) {
   const titleId = useId();
+  const sourcesId = useId();
   const tableTitleId = useId();
   const graph = useVisibleGraph();
   const state = useClientState();
@@ -36,6 +39,8 @@ export function ViewAnswerCard({
   const [note, setNote] = useState("");
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const [unfolded, setUnfolded] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [focusRequest, setFocusRequest] = useState<{ readonly number: number; readonly tick: number } | undefined>(undefined);
   const meanings = new Map(
     answer.citations.flatMap((citation) => (citation.kind === "description" ? [[citation.key, citation] as const] : [])),
   );
@@ -65,16 +70,48 @@ export function ViewAnswerCard({
       : held.has(entry.graphKey)
         ? SUMMARY_COPY.outsideView
         : SUMMARY_COPY.gone;
+  const markerOf = (entry: CitationEntry) => (
+    <button
+      type="button"
+      className="summary-chip assistant-marker"
+      aria-label={`${ASSISTANT_COPY.citationNumber} ${entry.number}, ${labelOf(entry)}, ${status(entry).toLowerCase()}`}
+      onClick={() => press(entry)}
+    >
+      [{entry.number}]
+    </button>
+  );
+  const runMarkerOf = (first: CitationEntry, last: CitationEntry) => (
+    <button
+      type="button"
+      className="summary-chip assistant-marker"
+      aria-label={citationRangeLabel(first.number, last.number)}
+      onClick={() => {
+        setSourcesOpen(true);
+        setFocusRequest({ number: first.number, tick: (focusRequest?.tick ?? 0) + 1 });
+      }}
+    >
+      [{first.number}–{last.number}]
+    </button>
+  );
+  const descriptionKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => meanings.has(key));
   const sentencesOf = (shown: SentencesAnswer) => (
     <ol className="summary-sentences">
       {shown.sentences.map((sentence, index) => (
         <li key={index} className="summary-block">
-          <p className="assistant-sentence">{sentence.text}</p>
-          <span className="summary-chips">
-            {sentence.cites.map((key) => {
-              const meaning = meanings.get(key);
-              if (meaning !== undefined) {
-                return (
+          <p className="assistant-sentence">
+            {sentence.text}
+            {markerGroups(sentence.cites.flatMap((key) => byKey.get(key) ?? []), sources && entries.length > 0).map((group) => (
+              <span key={group.kind === "run" ? `${group.first.key}-run` : group.entry.key}>
+                {" "}
+                {group.kind === "run" ? runMarkerOf(group.first, group.last) : markerOf(group.entry)}
+              </span>
+            ))}
+          </p>
+          {descriptionKeys(sentence.cites).length === 0 ? null : (
+            <span className="summary-chips">
+              {descriptionKeys(sentence.cites).map((key) => {
+                const meaning = meanings.get(key);
+                return meaning === undefined ? null : (
                   <button
                     key={key}
                     type="button"
@@ -86,22 +123,9 @@ export function ViewAnswerCard({
                     {`${ASSISTANT_COPY.aboutType} ${meaning.type}`}
                   </button>
                 );
-              }
-              const entry = byKey.get(key);
-              return entry === undefined ? null : (
-                <button
-                  key={key}
-                  type="button"
-                  className="summary-chip"
-                  aria-label={`${ASSISTANT_COPY.citationNumber} ${entry.number}, ${labelOf(entry)}, ${status(entry).toLowerCase()}`}
-                  onClick={() => press(entry)}
-                >
-                  <span aria-hidden="true">[{entry.number}]</span>{" "}
-                  {labelOf(entry)}
-                </button>
-              );
-            })}
-          </span>
+              })}
+            </span>
+          )}
           {sentence.cites.flatMap((key) => {
             const meaning = meanings.get(key);
             return meaning === undefined || !opened.has(key) ? [] : [
@@ -115,20 +139,6 @@ export function ViewAnswerCard({
       ))}
     </ol>
   );
-  const chipOf = (key: string) => {
-    const entry = byKey.get(key);
-    return entry === undefined ? null : (
-      <button
-        key={key}
-        type="button"
-        className="summary-chip"
-        aria-label={`${ASSISTANT_COPY.citationNumber} ${entry.number}, ${labelOf(entry)}, ${status(entry).toLowerCase()}`}
-        onClick={() => press(entry)}
-      >
-        <span aria-hidden="true">[{entry.number}]</span>
-      </button>
-    );
-  };
   const tableOf = (shown: TableAnswer) => {
     const { table } = shown;
     const longTable = table.rows.length > TABLE_FOLD_ABOVE;
@@ -152,7 +162,10 @@ export function ViewAnswerCard({
             <td key={column}>{cell}</td>
           ))}
           <td className="assistant-table-cite">
-            <span className="summary-chips">{entry.row.cites.map((key) => chipOf(key))}</span>
+            <span className="summary-chips">{entry.row.cites.map((key) => {
+              const cited = byKey.get(key);
+              return cited === undefined ? null : <span key={key}>{markerOf(cited)}</span>;
+            })}</span>
           </td>
         </tr>
       );
@@ -211,25 +224,24 @@ export function ViewAnswerCard({
       {"table" in answer ? tableOf(answer) : sentencesOf(answer)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {entries.length === 0 || !sources ? null : (
-        <details className="assistant-sources" open>
-          <summary>{`${ASSISTANT_COPY.sources} · ${entries.length}`}</summary>
-          <ul>
-            {entries.map((entry) => (
-              <li key={entry.key}>
-                <button
-                  type="button"
-                  className="summary-chip"
-                  aria-label={`${ASSISTANT_COPY.sources}: ${labelOf(entry)}. ${status(entry)}`}
-                  onClick={() => press(entry)}
-                >
-                  <span aria-hidden="true">[{entry.number}]</span>{" "}
-                  {labelOf(entry)}{" "}
-                  <span className="summary-chip-note">{status(entry)}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </details>
+        <div className="assistant-sources">
+          <button
+            type="button"
+            className="assistant-sources-toggle"
+            aria-expanded={sourcesOpen}
+            aria-controls={sourcesId}
+            onClick={() => setSourcesOpen(!sourcesOpen)}
+          >
+            <span aria-hidden="true" className="icon icon-layers" />
+            <span>{`${ASSISTANT_COPY.sources} · ${entries.length}`}</span>
+            <span aria-hidden="true" className="assistant-sources-caret">{sourcesOpen ? "▴" : "▾"}</span>
+          </button>
+          {sourcesOpen ? (
+            <div id={sourcesId} className="assistant-sources-list">
+              <SourcesList entries={entries} labelOf={labelOf} statusOf={status} isSelectable={(entry) => drawn.has(entry.graphKey)} onPress={press} focusRequest={focusRequest} onFocusHandled={() => setFocusRequest(undefined)} />
+            </div>
+          ) : null}
+        </div>
       )}
       <p className="summary-note" role="status">
         {note}

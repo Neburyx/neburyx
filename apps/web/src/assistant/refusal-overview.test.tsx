@@ -60,6 +60,7 @@ describe('the refusal of a verdict with an overview', () => {
     for (let index = 1; index < order.length; index += 1) expect(before(need(order[index - 1]), need(order[index])), `${index}`).toBe(true);
     expect(screen.getAllByRole('button', { name: /^Citation \d+, ent-2,/ }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/^Sources · /)).toBeNull();
+    expect(Array.from(first.querySelectorAll('button')).map((button) => button.textContent)).toEqual(['[1]', '[2]', '[3]']);
   });
 
   it('selects a drawn element from a citation, and says why one that is hidden cannot be selected, as the view answer does', async () => {

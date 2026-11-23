@@ -898,6 +898,10 @@
   --icon: url('../assets/lucide/shapes.svg');
 }
 
+.icon-layers {
+  --icon: url('../assets/lucide/layers.svg');
+}
+
 .icon-paths {
   --icon: url('../assets/lucide/route.svg');
 }
@@ -912,7 +916,7 @@
   flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
-  padding: var(--region-top) var(--space-16) var(--space-16);
+  padding: var(--space-16);
   background: var(--color-canvas);
 }
 

@@ -375,6 +375,102 @@ test.describe('the Assistant panel', () => {
   });
 
   for (const width of [1440, 1280]) {
+    test(`starts the panel 16 pixels under the header at ${width} pixels, keeps the sources closed, and opens the list and selects a cited element from the keyboard`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspace(page);
+      const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+      await answerWith(page, {
+        status: 'answered',
+        route: 'view',
+        sentences: [{ text: 'Account AC-1 is in view.', cites: ['n1'] }],
+        citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+        coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 1 of the 1 shown elements.' },
+        model: 'claude-sonnet-5-5',
+        calls: 2,
+      });
+      await open(page);
+      const headerBox = await header(page).boundingBox();
+      const panelBox = await page.locator('aside.floating-panel').boundingBox();
+      expect(headerBox !== null && panelBox !== null && Math.round(panelBox.y - (headerBox.y + headerBox.height))).toBe(16);
+      await page.getByLabel('Your message').fill('what is in view?');
+      await page.keyboard.press('Enter');
+      await page.setViewportSize({ width, height: 560 });
+      await expect(page.getByLabel('Your message')).toBeInViewport();
+      const shorter = await page.locator('aside.floating-panel').boundingBox();
+      expect(shorter !== null && shorter.y + shorter.height <= 560).toBe(true);
+      await page.setViewportSize({ width, height: 900 });
+      const control = panel(page).getByRole('button', { name: 'Sources · 1' });
+      await expect(control).toHaveAttribute('aria-expanded', 'false');
+      await expect(panel(page).getByRole('button', { name: /^Sources: / })).toHaveCount(0);
+      await control.focus();
+      await page.keyboard.press('Space');
+      await expect(control).toHaveAttribute('aria-expanded', 'true');
+      await page.keyboard.press('Tab');
+      await expect(panel(page).getByRole('button', { name: /^Sources: / })).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
+    });
+  }
+
+  test('groups seven relationships of one shape in the open list, expands the group and shows the rest, and selects a member from the keyboard', async ({ page }) => {
+    const neighbors = Array.from({ length: 7 }, (_, index) => `N-${index + 1}`);
+    const total = { value: 7, quality: 'exact', scope: 'relationships' };
+    await page.route((url) => url.pathname === '/v1/graph/preview-expansion', (route) => {
+      const body = route.request().postDataJSON() as { sourceId: string; ref: { entityType: string; stableId: string } };
+      return route.fulfill({ json: { ref: { sourceId: body.sourceId, ...body.ref }, total, byType: [], byNeighborType: [{ entityType: 'account', count: total }], warnings: [], pageSize: 25, heavyOpThreshold: 500 } });
+    });
+    await page.route((url) => url.pathname === '/v1/graph/expand', (route) => {
+      const body = route.request().postDataJSON() as { sourceId: string; ref: { entityType: string; stableId: string }; neighborTypes: string[] };
+      const anchor = { sourceId: body.sourceId, ...body.ref };
+      const nodes = neighbors.map((stableId) => ({ ref: { sourceId: body.sourceId, entityType: 'account', stableId }, display: { title: `account ${stableId}`, type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }));
+      const edges = nodes.map((held) => ({ ref: { sourceId: body.sourceId, type: 'LINK', from: 'account', to: 'account', stableId: `R-${held.ref.stableId}` }, from: anchor, to: held.ref, type: 'LINK', direction: 'out', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }));
+      return route.fulfill({ json: { ref: anchor, pageSize: 25, nodes, edges, pages: body.neighborTypes.map((neighborType) => (neighborType === 'account' ? { neighborType, returned: 7, hasMore: false, matchingTotal: total } : { neighborType, returned: 0, hasMore: false, matchingTotal: { value: 0, quality: 'exact', scope: 'relationships' } })), warnings: [] } });
+    });
+    await page.route((url) => url.pathname === '/v1/graph/coverage', (route) => route.fulfill({ json: { notRetrieved: { value: 0, quality: 'exact', scope: 'not yet retrieved' }, uncounted: 0 } }));
+    await openWorkspace(page);
+    await canvasOf(page).focus();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space');
+    await page.keyboard.press('ContextMenu');
+    await page.getByRole('menu').first().getByRole('menuitem', { name: 'Expand by type', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('complementary', { name: 'Expand relationships' }).getByRole('button', { name: /^Load .* per type$/ }).click();
+    await expect(canvasOf(page)).toHaveAttribute('data-drawn-entities', '8');
+    const refs = neighbors.map((stableId) => ({ sourceId: 'banking-demo', type: 'LINK', from: 'account', to: 'account', stableId: `R-${stableId}` }));
+    await answerWith(page, {
+      status: 'answered',
+      route: 'view',
+      sentences: [{ text: 'Seven relationships join AC-1 to other accounts.', cites: refs.map((_, index) => `r${index + 1}`) }],
+      citations: refs.map((ref, index) => ({ key: `r${index + 1}`, kind: 'relationship' as const, ref })),
+      coverage: { retrieval: '8 shown · 0 not yet retrieved (exact)', summary: 'The draft cites 7 of the 7 shown relationships.' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    });
+    await open(page);
+    await page.getByLabel('Your message').fill('what joins AC-1?');
+    await page.keyboard.press('Enter');
+    const control = panel(page).getByRole('button', { name: 'Sources · 7' });
+    await control.focus();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByText('7 sources, grouped by shape')).toBeVisible();
+    const group = panel(page).getByRole('button', { name: /^7 .*LINK, \[1–7\]$/ });
+    await expect(group).toHaveAttribute('aria-expanded', 'false');
+    await group.focus();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('button', { name: /^Sources: / })).toHaveCount(5);
+    await expect(panel(page).getByText('2 more in this group')).toBeVisible();
+    await panel(page).getByRole('button', { name: 'Show all' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(panel(page).getByRole('button', { name: /^Sources: / })).toHaveCount(7);
+    await expect(panel(page).getByRole('button', { name: /^Sources: 6, / })).toBeFocused();
+    const described = () => canvasOf(page).evaluate((element) => document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent ?? '');
+    const before = await described();
+    await page.keyboard.press('Enter');
+    expect(before).toContain('14 selected');
+    await expect.poll(described).toContain('; 1 selected');
+  });
+
+  for (const width of [1440, 1280]) {
     test(`shows an answer from the view at ${width} pixels with its tags, markers, sources and the two lines of coverage, and selects the cited element`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await openWorkspace(page);
@@ -697,6 +793,7 @@ test.describe('the Assistant panel', () => {
     const box = await panel(page).boundingBox();
     expect(box !== null && box.y >= 0 && box.y + box.height <= 900).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= document.documentElement.clientHeight)).toBe(true);
+    await panel(page).getByRole('button', { name: 'Sources · 10' }).click();
     await expectHeaderStays(page);
   });
 
@@ -718,6 +815,7 @@ test.describe('the Assistant panel', () => {
     await page.getByLabel('Your message').fill('what is in view?');
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText('Sources · 10')).toBeVisible();
+    await panel(page).getByRole('button', { name: 'Sources · 10' }).click();
     await page.getByLabel('Your message').fill('is this fraud?');
     await page.keyboard.press('Enter');
     await expect(panel(page).getByText(ASSISTANT_REFUSAL_SENTENCES.verdict)).toBeInViewport({ ratio: 1 });

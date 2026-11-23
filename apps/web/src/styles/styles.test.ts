@@ -67,14 +67,16 @@ describe('the stylesheets', () => {
     expect(base).toMatch(/\.page-heading \{[^}]*overflow-wrap: anywhere;/s);
   });
 
-  it('place the canvas regions by the frame offsets, from tokens: 16 px from the edges, 64 px from the top for the tool strip and the dock column', () => {
+  it('place the canvas regions by the frame offsets, from tokens: 16 px from the edges, 64 px from the top for the tool strip, and 16 px for the dock column and the height of the Assistant panel', () => {
     const tokens = readFileSync(join(DIRECTORY, 'tokens.css'), 'utf8');
     expect(tokens).toMatch(/--region-top:\s*64px;/);
     const workspace = readFileSync(join(DIRECTORY, 'workspace.css'), 'utf8');
     expect(workspace).toMatch(/\.region-tool-strip \{[^}]*top: var\(--region-top\);[^}]*left: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.region-toggles \{[^}]*bottom: var\(--space-16\);[^}]*left: var\(--space-16\);/s);
     expect(workspace).toMatch(/\.region-zoom-controls \{[^}]*right: var\(--space-16\);[^}]*bottom: var\(--space-16\);/s);
-    expect(workspace).toMatch(/\.panel-dock \{[^}]*padding: var\(--region-top\) var\(--space-16\) var\(--space-16\);/s);
+    expect(workspace).toMatch(/\.panel-dock \{[^}]*padding: var\(--space-16\);/s);
+    const assistant = readFileSync(join(DIRECTORY, 'assistant.css'), 'utf8');
+    expect(assistant).toMatch(/\.assistant-panel \{[^}]*max-height: calc\(var\(--full-height\) - var\(--header-height\) - 2 \* var\(--space-16\)\);/s);
   });
 
   it('draw the panel handle as an 8 px strip with the column-resize cursor and the collapse button 24 px, from tokens, with the handle on the other edge for a left-anchored panel', () => {
