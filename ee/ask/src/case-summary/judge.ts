@@ -30,6 +30,7 @@ export const checkedTextOf = (assembled: AssembledText, instructions?: string): 
   ...(instructions === undefined ? {} : { knownWords: wordsOf(instructions) }),
   // a name is the title and the id the line sent, read from the line as it was written: a read's line holds a title and no id
   elementNames: new Map([...assembled.keys].map(([key, held]) => [key, namesSentOf(held, assembled.lines.get(key) ?? '')] as const)),
+  elementEnds: new Map([...assembled.keys].map(([key, held]) => [key, held.kind === 'entity' ? [[held.ref.entityType, held.ref.stableId] as const] : assembled.relationshipEnds?.get(key) ?? []] as const)),
   ...(assembled.rankedValues === undefined ? {} : { rankedValues: assembled.rankedValues }),
   ...(assembled.propertyKeys === undefined ? {} : { propertyKeys: assembled.propertyKeys }),
   ...(assembled.readElements === undefined ? {} : { readElements: assembled.readElements }), lines: assembled.lines, inexactCounts: assembled.inexactCounts, unknownCountKeys: assembled.unknownCountKeys });

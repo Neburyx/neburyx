@@ -5,6 +5,8 @@ import { removeAskFolders } from '../testing/ask-folder.js';
 import { answerOf, derivedRuleResult, expandResult, fileQueryResult, lowerBoundResult, nodeOf, ok, okResult, rig, routeAsk, unknownCountResult, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { assistantTurnAnswerSchema } from '@neburyx/contracts';
 import { assembleText } from '../case-summary/assemble.js';
+import { checkedTextOf } from '../case-summary/judge.js';
+import { judgeSentences } from '@neburyx/ee-ai-runtime';
 import { listedElements } from '../summary/index.js';
 import { anchorItem } from '../summary/shared.js';
 import { assembleResults, citationTitleOf } from './tool-answer.js';
@@ -58,6 +60,17 @@ describe('the answer after tool steps', () => {
     expect(assembled.lines.get('s1')).toBe('s1: read of sentBy: 2 matches shown · exact');
     const relationship = [...assembled.lines.values()].find((line) => line.includes('SENT'));
     expect(relationship).toBe('r4: SENT: Account A-1 → Account A-2 | stored');
+  });
+
+  it('holds the two ends of each relationship a read listed, so that a count of the entities cited through relationships is checked against them', () => {
+    const { assembled } = assembleResults([{ tool: 'sentBy', result: expandResult() }]);
+    const [relationshipKey] = [...assembled.keys].filter(([, held]) => held.kind === 'relationship').map(([key]) => key);
+    expect(assembled.relationshipEnds?.get(relationshipKey ?? '')).toEqual([['widget', 'A-1'], ['widget', 'A-2']]);
+    const checked = checkedTextOf(assembled);
+    const judge = (text: string) => judgeSentences([{ text, cites: [relationshipKey ?? ''] }], checked).kept.length;
+    expect(judge('Two widgets are joined by the relationship.')).toBe(1);
+    expect(judge('Three widgets are joined by the relationship.')).toBe(0);
+    expect(judge('One widget is joined by the relationship.')).toBe(0);
   });
 
   it('writes a read that found nothing as its own line, and a read with an exact zero with the zero', () => {

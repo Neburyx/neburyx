@@ -24,6 +24,8 @@ export interface CheckedText {
   readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
   /** The keys of the elements each read listed, by the key of the read's own line: only a line of a read that listed an element speaks for it. */
   readonly readElements?: ReadonlyMap<string, readonly string[]>;
+  /** The entities each element stands for or joins, as pairs of an entity type and a stable id, by the element's key: an entity is itself, a relationship is its two ends. A count of the entities of a type that the sentence cites through the relationships that end at them is verified from these. */
+  readonly elementEnds?: ReadonlyMap<string, readonly (readonly [string, string])[]>;
   /** The properties of each element a ranking may rest on, by the element's key (see `RankedProperty`): plain text and data, so that it crosses to a worker thread. */
   readonly rankedValues?: ReadonlyMap<string, readonly RankedProperty[]>;
 }
@@ -162,7 +164,8 @@ const writtenValuesOfLine = (line: string): string[] => [...line.matchAll(NUMBER
  */
 function writtenNumbersIn(text: string, assembled: CheckedText): { readonly index: number; readonly length: number; readonly value: string; readonly after: string; readonly counting: boolean }[] {
   if (assembled.readWordNumbers === false) return [];
-  const types = assembled.elementTypes === undefined ? [] : [...new Set([...assembled.elementTypes.values()].map(elementTypeName)), 'entity', 'relationship', 'element'];
+  const ended = [...(assembled.elementEnds?.values() ?? [])].flatMap((ends) => ends.map(([type]) => elementTypeName(`entity ${type}`)));
+  const types = assembled.elementTypes === undefined ? [] : [...new Set([...assembled.elementTypes.values()].map(elementTypeName)), ...new Set(ended), 'entity', 'relationship', 'element'];
   const outside = text.replace(QUOTED, (quoted) => ' '.repeat(quoted.length));
   return [...outside.matchAll(NUMBER_WORD)].flatMap((found) => {
     const value = numberWordValue(found[0]);
@@ -288,7 +291,12 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
     return wanted > 0 && (matching.length === wanted || matching.filter((key) => !apart(key)).length === wanted);
   };
   const citedTypes = new Set([...new Set(sentence.cites)].flatMap((key) => (lines.has(key) || types.get(key) === undefined ? [] : [types.get(key) ?? ''])));
+  // the entities of one type that the cited elements are or join (a relationship that ends at an entity of the type counts that entity once): a count of them is exact when it equals how many distinct there are
+  const endsOfType = (entityType: string): number => new Set(sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => (assembled.elementEnds?.get(key) ?? []).filter(([type]) => type === entityType).map(([, id]) => id))).size;
+  const entityTypes = new Set(sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => (assembled.elementEnds?.get(key) ?? []).map(([type]) => type)));
+  const countedEnds = (entityType: string): boolean => typeWordLength(tail, elementTypeName(`entity ${entityType}`)) !== undefined && wanted > 0 && endsOfType(entityType) === wanted;
   return (
+    [...entityTypes].some(countedEnds) ||
     [...citedTypes].some((type) => counted(elementTypeName(type), (held) => held === type)) ||
     counted('entity', (held) => !held.startsWith('relationship ')) ||
     counted('relationship', (held) => held.startsWith('relationship ')) ||

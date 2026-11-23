@@ -35,6 +35,8 @@ export interface AssembledText {
   readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
   /** The keys of the elements each read listed, by the key of the read's own line (`s1`, …): a line of a read that listed an element states how many that read returned and did not show. */
   readonly readElements?: ReadonlyMap<string, readonly string[]>;
+  /** The ends of each relationship a read listed, as pairs of an entity type and a stable id, by the relationship's key. */
+  readonly relationshipEnds?: ReadonlyMap<string, readonly (readonly [string, string])[]>;
   /** The properties each element's ranking may rest on, by the element's key. */
   readonly rankedValues?: ReadonlyMap<string, readonly RankedProperty[]>;
 }
@@ -125,6 +127,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
   let carriesPropertyValues = false;
   const propertyKeys = new Map<string, readonly string[]>();
   const rankedValues = new Map<string, readonly RankedProperty[]>();
+  const relationshipEnds = new Map<string, readonly (readonly [string, string])[]>();
   const nodes = [...reading.nodes].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const edges = [...reading.edges].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const nodeKeys = new Map<string, string>();
@@ -147,6 +150,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
   edges.forEach((edge, index) => {
     const key = `e${index + 1}`;
     keys.set(key, { kind: 'relationship', ref: edge.ref });
+    relationshipEnds.set(key, [[edge.from.entityType, edge.from.stableId], [edge.to.entityType, edge.to.stableId]]);
     const detail = edgeDetailOf(edge);
     carriesPropertyValues ||= detail.carriesValue;
     propertyKeys.set(key, valueKeysOf(edge.properties));
@@ -159,5 +163,5 @@ export function assembleText(reading: SummaryReading): AssembledText {
   });
   if (edges.length === 0) out.push('(none)');
   if (reading.unresolved > 0) out.push(`${reading.unresolved} references could not be read.`);
-  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, rankedValues };
+  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, relationshipEnds, rankedValues };
 }
