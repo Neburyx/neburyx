@@ -41,7 +41,7 @@ interface ViewPrompt {
 export interface ViewAnswerOptions {
   readonly model: AuditedModelCall;
   readonly prompt?: ViewPrompt;
-  readonly instructions: () => ViewInstructions | undefined;
+  readonly instructions: (sourceId: string) => ViewInstructions | undefined;
   readonly checks: CheckRunner;
   readonly settings: () => ViewAnswerSettings | undefined;
   readonly now?: () => number;
@@ -186,7 +186,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     const { progress } = input;
     let counts: { readonly kept: number; readonly dropped: number } | undefined;
     const outcome = (rest: ViewResult): ViewOutcome => ({ ...rest, calls: progress.calls, read: progress.read, readStarted: progress.readStarted, ...(counts === undefined ? {} : { summary: counts }) });
-    const instructions = options.instructions();
+    const instructions = options.instructions(input.sourceId);
     const settings = options.settings();
     const promptId = options.prompt?.id ?? VIEW_PROMPT_ID;
     const auditAction = options.prompt?.action ?? VIEW_AUDIT_ACTION;

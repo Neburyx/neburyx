@@ -65,6 +65,7 @@ function isLoopbackBolt(address: string): boolean {
 }
 
 const ASK_FILES = ['classification.md', 'intents.json'];
+const OPTIONAL_ASK_FILES = ['typologies.md'];
 /** A file that marks an `ask/` folder as one this command wrote (the loader ignores names that start with a dot), so an operator's own folder is never replaced or removed. */
 const WRITTEN_MARK = '.written-by-combine';
 
@@ -72,13 +73,13 @@ function checkOwnFolder(target: string): void {
   if (existsSync(target) && !existsSync(join(target, WRITTEN_MARK))) throw new CombineError(`${target} exists and was not written by this command; it is left as it was`);
 }
 
-/** The pack's Ask folder, which holds exactly its two files as plain files; any other entry is refused, since the product's start-up would stop on it. */
+/** The pack's Ask folder, which holds its two files and the optional typology text, all plain files; any other entry is refused, since the product's start-up would stop on it. */
 function askFolderOf(pack: string, folder: string): string {
   const path = join(folder, pack, 'ask');
   if (!existsSync(path)) throw new CombineError(`pack ${pack} has no ask folder`);
   const entries = readdirSync(path, { withFileTypes: true });
   const names = entries.map((entry) => entry.name).sort();
-  if (entries.some((entry) => !entry.isFile()) || names.join() !== [...ASK_FILES].sort().join()) throw new CombineError(`the ask folder of pack ${pack} must hold exactly ${ASK_FILES.join(' and ')}, as plain files`);
+  if (entries.some((entry) => !entry.isFile()) || !ASK_FILES.every((name) => names.includes(name)) || names.some((name) => ![...ASK_FILES, ...OPTIONAL_ASK_FILES].includes(name))) throw new CombineError(`the ask folder of pack ${pack} must hold ${ASK_FILES.join(' and ')} and may hold ${OPTIONAL_ASK_FILES.join(' and ')}, as plain files`);
   return path;
 }
 

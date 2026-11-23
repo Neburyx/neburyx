@@ -25,7 +25,7 @@ const load = (env: Record<string, string> = {}) => loadViewInstructions({ env, s
 describe('the instructions of the view answer', () => {
   it('are the shipped prompt and the fixed reply format with no typology section, with the hash of that text', async () => {
     const result = await load();
-    expect(result).toEqual({ ok: true, instructions: buildSummaryInstructions('SHIPPED VIEW PROMPT', ''), typology: [] });
+    expect(result).toMatchObject({ ok: true, instructions: buildSummaryInstructions('SHIPPED VIEW PROMPT', ''), typology: [] });
   });
 
   it('are replaced file by file, the reply format stays last, and a replaced file cannot change it', async () => {
@@ -63,7 +63,7 @@ describe('the instructions of the view answer', () => {
   });
 
   it('keeps the items of the typology list apart, five for the banking pack\'s file and none of its heading or paragraph', async () => {
-    const pack = fileURLToPath(new URL('../../../../domain-packs/banking-fraud/typologies.md', import.meta.url));
+    const pack = fileURLToPath(new URL('../../../../domain-packs/banking-fraud/ask/typologies.md', import.meta.url));
     const named = await load({ NEBURYX_ASSISTANT_TYPOLOGY_FILE: pack });
     expect(named.ok && named.typology).toHaveLength(5);
     expect(named.ok && named.typology.every((line) => !line.startsWith('#') && !line.startsWith('- '))).toBe(true);

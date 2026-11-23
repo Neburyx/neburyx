@@ -7,7 +7,7 @@ import type { StepScope } from './tool-step.js';
 
 const TEMPLATES: readonly string[] = ASK_TEMPLATE_IDS;
 
-const typologyOf = (scope: Pick<StepScope, 'options'>): readonly string[] | undefined => scope.options.typology?.();
+const typologyOf = (scope: Pick<StepScope, 'options' | 'sourceId'>): readonly string[] | undefined => scope.options.typology?.(scope.sourceId);
 
 /** The tools a turn may ask for in this scope: the source's intents, the catalog templates, the person's patterns and, when it can be read again, the view. */
 export const toolRegistryOf = (scope: Pick<StepScope, 'options' | 'sourceId' | 'patterns' | 'request' | 'viewElementKeys'>, viewReadable: boolean) =>

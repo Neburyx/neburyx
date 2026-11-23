@@ -12,7 +12,7 @@ import { replyOf, startRig } from './testing/rig.js';
 import { node, reading } from './view.js';
 
 const PROMPTS = resolve(import.meta.dirname, '../../../ee/ask/prompts');
-const TYPOLOGY_FILE = resolve(import.meta.dirname, '../../../domain-packs/banking-fraud/typologies.md');
+const TYPOLOGY_FILE = resolve(import.meta.dirname, '../../../domain-packs/banking-fraud/ask/typologies.md');
 const typology = readFileSync(TYPOLOGY_FILE, 'utf8');
 const prompt = readFileSync(join(PROMPTS, 'summary-prompt.md'), 'utf8');
 const directory = mkdtempSync(join(tmpdir(), 'nbx-typology-'));

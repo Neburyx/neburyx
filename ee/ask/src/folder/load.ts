@@ -6,6 +6,7 @@ import { ASK_FOLDER_LIMITS, parseIntentsFile, type AskFolder, type AskIntent, ty
 
 const CLASSIFICATION_FILE = 'classification.md';
 const INTENTS_FILE = 'intents.json';
+const TYPOLOGY_FILE = 'typologies.md';
 const SETTING = 'NEBURYX_ASK_MAPPING_FOLDER';
 
 export type FolderLoad = { readonly ok: true; readonly folder: AskFolder } | { readonly ok: false; readonly problems: readonly string[] };
@@ -86,8 +87,8 @@ async function loadSource(folder: string, sourceId: string, problems: string[], 
     if (entry.kind === 'link') {
       problems.push(`${SETTING}/${sourceId}/${printable(entry.name)}: a link is not allowed`);
       usable = false;
-    } else if (entry.name !== CLASSIFICATION_FILE && entry.name !== INTENTS_FILE) {
-      problems.push(`${SETTING}/${sourceId}/${printable(entry.name)}: not a file of an Ask folder (${CLASSIFICATION_FILE} and ${INTENTS_FILE})`);
+    } else if (entry.name !== CLASSIFICATION_FILE && entry.name !== INTENTS_FILE && entry.name !== TYPOLOGY_FILE) {
+      problems.push(`${SETTING}/${sourceId}/${printable(entry.name)}: not a file of an Ask folder (${CLASSIFICATION_FILE}, ${INTENTS_FILE} and the optional ${TYPOLOGY_FILE})`);
       usable = false;
     } else if (entry.kind !== 'file') {
       problems.push(`${SETTING}/${sourceId}/${printable(entry.name)}: must be a regular file`);
@@ -103,9 +104,11 @@ async function loadSource(folder: string, sourceId: string, problems: string[], 
   if (!usable) return undefined;
   const classification = await readText(join(where, CLASSIFICATION_FILE), `${SETTING}/${sourceId}/${CLASSIFICATION_FILE}`, ASK_FOLDER_LIMITS.classificationBytes);
   const intentsText = await readText(join(where, INTENTS_FILE), `${SETTING}/${sourceId}/${INTENTS_FILE}`, ASK_FOLDER_LIMITS.intentsBytes);
+  const typology = entries.some((entry) => entry.name === TYPOLOGY_FILE) ? await readText(join(where, TYPOLOGY_FILE), `${SETTING}/${sourceId}/${TYPOLOGY_FILE}`, ASK_FOLDER_LIMITS.classificationBytes) : undefined;
   if (typeof classification === 'string') problems.push(classification);
   if (typeof intentsText === 'string') problems.push(intentsText);
-  if (typeof classification === 'string' || typeof intentsText === 'string') return undefined;
+  if (typeof typology === 'string') problems.push(typology);
+  if (typeof classification === 'string' || typeof intentsText === 'string' || typeof typology === 'string') return undefined;
   const parsed = parseIntentsFile(intentsText.text);
   if (!parsed.ok) {
     problems.push(...parsed.problems.map((problem) => `${SETTING}/${sourceId}/${INTENTS_FILE}: ${problem}`));
@@ -119,7 +122,7 @@ async function loadSource(folder: string, sourceId: string, problems: string[], 
     }
   }
   const intents: AskIntent[] = parsed.intents.map((intent) => (intent.kind === 'query' ? { name: intent.name, ...(intent.label === undefined ? {} : { label: intent.label }), parameters: intent.parameters, kind: 'query', query: Object.freeze({ text: intent.query, sha256: sha256Of(Buffer.from(intent.query, 'utf8')) }) } : intent));
-  return Object.freeze({ classification: Object.freeze({ text: classification.text, sha256: classification.sha256 }), intents: Object.freeze(intents.map((intent) => Object.freeze(intent))) });
+  return Object.freeze({ classification: Object.freeze({ text: classification.text, sha256: classification.sha256 }), ...(typology === undefined ? {} : { typology: Object.freeze({ text: typology.text, sha256: typology.sha256 }) }), intents: Object.freeze(intents.map((intent) => Object.freeze(intent))) });
 }
 
 /**

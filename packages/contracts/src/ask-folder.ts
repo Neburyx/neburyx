@@ -31,9 +31,10 @@ export type AskIntent =
   | { readonly name: string; readonly label?: string; readonly parameters: readonly string[]; readonly kind: 'query'; readonly query: { readonly text: string; readonly sha256: string } }
   | { readonly name: string; readonly label?: string; readonly parameters: readonly string[]; readonly kind: 'template'; readonly template: string; readonly settings: Readonly<Record<string, unknown>> };
 
-/** What the folder holds for one source: the classification text (with the SHA-256 of the file's bytes) and the intents in file order. */
+/** What the folder holds for one source: the classification text (with the SHA-256 of the file's bytes), the intents in file order, and the typology text when the source's folder has the optional file. */
 export interface AskSourceFolder {
   readonly classification: { readonly text: string; readonly sha256: string };
+  readonly typology?: { readonly text: string; readonly sha256: string };
   readonly intents: readonly AskIntent[];
 }
 

@@ -96,8 +96,8 @@ Limits of the method: phrases are matched as lower-case text, so a paraphrase is
 | The closing event holds neither count when no reply was checked | `src/coverage-and-events.test.ts` | holds neither count when no reply was checked |
 | The closing event keeps the counts when the time limit ends a later call (existing) | `../../ee/ask/src/case-summary/summarizer.test.ts` | keeps the counts of the last checked reply when the time limit ends a later call |
 | The scanner for offence words finds each word | `src/typology.test.ts` | canary: finds |
-| The shipped typology words each shape without an offence and forbids asserting one | `src/typology.test.ts` | has a typology that names each shape |
-| The shipped prompt prohibits verdicts and the instructions hold both files | `src/typology.test.ts` | has a prompt that expressly prohibits stating or implying guilt |
+| The banking pack's typology words each shape without an offence and forbids asserting one | `src/typology.test.ts` | has a typology that names each shape |
+| The shipped prompt prohibits verdicts and the instructions hold the prompt and the typology of the source | `src/typology.test.ts` | has a prompt that expressly prohibits stating or implying guilt |
 | A shape is cited, never asserted | `src/typology.test.ts` | is kept when the sentence says the arrangement has the shape of a fan-in |
 | A verdict about a shape is regenerated, then removed | `src/typology.test.ts` | earns a further call and, when the last call still holds it, is removed |
 | A replacement typology file reaches the instructions and hash that the real extension's own summarizer sends to a scripted provider, and changes neither the format nor the checks | `src/typology.test.ts` | carries the file into the instructions and their hash that the summarizer of the extension sends |

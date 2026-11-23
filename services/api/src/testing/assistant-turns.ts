@@ -1,6 +1,6 @@
 import { createAgentScript } from './agent-script.js';
 import { randomUUID } from 'node:crypto';
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createServer, type Server } from 'node:http';
@@ -151,7 +151,9 @@ let typologyPath: string | undefined;
 /** A typology file of neutral shapes, for the suites whose turns read the typology: the product ships none, so a suite names one. */
 export function typologyFile(): string {
   if (typologyPath === undefined) {
-    typologyPath = join(mkdtempSync(join(tmpdir(), 'assistant-typology-')), 'typologies.md');
+    const folder = mkdtempSync(join(tmpdir(), 'assistant-typology-'));
+    process.once('exit', () => rmSync(folder, { recursive: true, force: true }));
+    typologyPath = join(folder, 'typologies.md');
     writeFileSync(typologyPath, '# Shapes of linking\n\nThese are structures, not findings.\n\n- Hub: many elements link to one element within a short time.\n- Chain: one element links to the next, and that one to the next.\n- Ring: links leave an element and return to it through others.\n- Shared value: several elements are linked to the same value.\n- Spread: one element links to many elements within a short time.\n', { mode: 0o600 });
   }
   return typologyPath;

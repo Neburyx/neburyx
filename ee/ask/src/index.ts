@@ -89,7 +89,7 @@ export interface EnterpriseExtension extends ProfileExtension {
   /** The Ask folder read at start-up; undefined before `configure` accepted it. */
   readonly askFolder: () => AskFolder | undefined;
   /** The instructions of a summary call, built at start-up; undefined before `configure` accepted them. */
-  readonly summaryInstructions: () => SummaryInstructions | undefined;
+  readonly summaryInstructions: (sourceId?: string) => SummaryInstructions | undefined;
   /** The assistant's settings read at start-up; undefined before `configure` accepted them and while the assistant is off. */
   readonly assistantSettings: () => AssistantSettings | undefined;
   /** The assistant's instructions, with their hash; undefined before `configure` accepted them and while the assistant is off. */
@@ -143,14 +143,15 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   const auditOf = (): AuditSink | undefined => queuedAudit ?? mounted?.sink;
   let logger: ExtensionLogger | undefined;
   let folder: AskFolder | undefined;
-  let instructions: SummaryInstructions | undefined;
+  /** The instructions of a summary for a source: the prompt and the typology of the operator's file or else of the source's own Ask folder. */
+  let instructions: ((sourceId: string) => SummaryInstructions) | undefined;
   let summarySettings: SummarySettings | undefined;
   let assistantSettings: AssistantSettings | undefined;
   let sourceBudgets: ConfigureContext['budgets'];
   let assistantInstructions: AssistantInstructions | undefined;
-  let viewInstructions: ViewInstructions | undefined;
+  let viewInstructions: ((sourceId: string) => ViewInstructions) | undefined;
   let overviewInstructions: OverviewInstructions | undefined;
-  let typologyLines: readonly string[] = [];
+  let typologyLines: (sourceId: string) => readonly string[] = () => [];
   let tokenKeys: TokenKeys | undefined;
   let summaryRuns: SummaryRunStore | undefined;
   let assistantRuns: AssistantRunStore | undefined;
@@ -180,7 +181,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
   const assistantViewAnswer = (): ReturnType<typeof createViewAnswer> | undefined => {
     const model = assistantModelOf();
     const settings = assistantSettings;
-    return !features.assistant || model === undefined || settings === undefined || viewInstructions === undefined ? undefined : createViewAnswer({ model, instructions: () => viewInstructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
+    return !features.assistant || model === undefined || settings === undefined || viewInstructions === undefined ? undefined : createViewAnswer({ model, instructions: (sourceId) => viewInstructions?.(sourceId), checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }), ...(options.now === undefined ? {} : { now: options.now }) });
   };
   /** The view's own path under the overview's prompt, for what a refusal of a verdict shows beside its fixed sentence. */
   const assistantOverview = (): ReturnType<typeof createViewAnswer> | undefined => {
@@ -202,7 +203,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     return createAgentTurn({
       model: (context, trace) => createAnthropicChatModel({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }), hook: { recorder, context, promptId: AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, modelRef: own.model, ...(trace === undefined ? {} : { trace }) } }),
       modelRef: () => own.model,
-      instructions: () => viewInstructions,
+      instructions: (sourceId) => viewInstructions?.(sourceId),
       settings: (sourceId) => {
         const maxPage = sourceBudgets?.[sourceId]?.maxPage;
         const rows = maxPage === undefined ? settings.maxRows : rowsAllowed(settings, maxPage);
@@ -212,7 +213,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, agentTurn: assistantAgentTurn, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: () => typologyLines, notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, agentTurn: assistantAgentTurn, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: (sourceId) => typologyLines(sourceId), notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },
@@ -227,7 +228,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     },
     configuration: () => configuration,
     askFolder: () => folder,
-    summaryInstructions: () => instructions,
+    summaryInstructions: (sourceId = '') => instructions?.(sourceId),
     summarySettings: () => summarySettings,
     assistantSettings: () => assistantSettings,
     assistantInstructions: () => assistantInstructions,
@@ -243,7 +244,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       assistantInstructions = undefined;
       viewInstructions = undefined;
       overviewInstructions = undefined;
-      typologyLines = [];
+      typologyLines = () => [];
       const assistant = features.assistant ? readAssistantSettings(env) : undefined;
       const assistantPrompt = features.assistant ? await loadAssistantInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
       const viewPrompt = features.assistant ? await loadViewInstructions({ env, ...(options.shippedAssistantDirectory === undefined ? {} : { shippedDirectory: options.shippedAssistantDirectory }) }) : undefined;
@@ -274,7 +275,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
       if (features.assistant) warnings.push(...withheldDescriptionWarnings(context.typeDescriptions));
       let readSettings: SummarySettings | undefined;
       let readKeys: TokenKeys | undefined;
-      let readInstructions: SummaryInstructions | undefined;
+      let readInstructions: ((sourceId: string) => SummaryInstructions) | undefined;
       if (features.summary) {
         const settings = readSummarySettings(env);
         if (!settings.ok) return refuse(settings.problems);
@@ -284,13 +285,13 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
         if (!summary.ok) return refuse(summary.problems);
         readSettings = settings.settings;
         readKeys = keys.keys;
-        readInstructions = summary.instructions;
+        readInstructions = (sourceId) => summary.instructionsFor(loadedFolder?.source(sourceId)?.typology?.text ?? '');
       }
       assistantSettings = assistant?.ok === true ? assistant.settings : undefined;
       assistantInstructions = assistantPrompt?.ok === true ? assistantPrompt.instructions : undefined;
-      viewInstructions = viewPrompt?.ok === true ? viewPrompt.instructions : undefined;
+      viewInstructions = viewPrompt?.ok === true ? (sourceId) => viewPrompt.instructionsFor(loadedFolder?.source(sourceId)?.typology?.text ?? '') : undefined;
       overviewInstructions = overviewPrompt?.ok === true ? overviewPrompt.instructions : undefined;
-      typologyLines = viewPrompt?.ok === true ? viewPrompt.typology : [];
+      typologyLines = viewPrompt?.ok === true ? (sourceId) => viewPrompt.typologyFor(loadedFolder?.source(sourceId)?.typology?.text ?? '') : () => [];
       folder = loadedFolder;
       instructions = readInstructions;
       summarySettings = readSettings;

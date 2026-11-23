@@ -35,7 +35,8 @@ export interface ReplyObservation {
 
 interface SummarizerOptions {
   readonly settings: SummarySettings;
-  readonly instructions: SummaryInstructions;
+  /** The instructions of a summary: one for every source, or for each source its own (the typology text belongs to the source's pack). */
+  readonly instructions: SummaryInstructions | ((sourceId: string) => SummaryInstructions);
   readonly model: () => AuditedModelCall | undefined;
   readonly audit: () => AuditSink | undefined;
   readonly tokenKeys: () => TokenKeys | undefined;
@@ -78,7 +79,8 @@ const resultOf = (outcome: CaseSummaryOutcome): AuditResult => (outcome.status =
 
 /** Drafts the summary of a read view: measures the text against the size guard, then calls the model within the operator's limits. */
 export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer {
-  const { settings, instructions } = options;
+  const { settings } = options;
+  const instructionsOf = (sourceId: string): SummaryInstructions => (typeof options.instructions === 'function' ? options.instructions(sourceId) : options.instructions);
   const checks = options.checks ?? createCheckRunner();
   const observeReply = (written: readonly SummarySentence[], judged: Judged): void => {
     if (options.observe === undefined) return;
@@ -92,6 +94,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
   type Who = { readonly actorId: string; readonly actorRole: CaseSummaryInput['actorRole']; readonly traceId: string; readonly request: CaseSummaryInput['request'] };
   /** Queues the run row of a click, with an id made here before any call, and answers what ends it: the run row first, then the closing event. The records are written after the click has gone on, and a failure to write one never fails the click. */
   async function openRun(input: Who) {
+    const instructions = instructionsOf(input.request.sourceId);
     const runs = options.runs();
     if (runs === undefined) throw new AuditUnavailableError();
     // the application queues the writes and counts and logs a failure of one; a store used without a queue that fails does not fail the click
@@ -162,6 +165,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
     async summarize(input: CaseSummaryInput, signal: AbortSignal): Promise<CaseSummaryOutcome> {
       const call = options.model();
       if (call === undefined || options.tokenKeys() === undefined) throw new Error('the case summarizer was asked while it is not available');
+      const instructions = instructionsOf(input.request.sourceId);
       const run = await openRun(input);
       const { runId, runs, stored, finalize, publish, write } = run;
       const prepared = prepareSummary(input.reading, instructions.text, settings.maxInputTokens);

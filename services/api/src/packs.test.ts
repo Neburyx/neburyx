@@ -149,7 +149,7 @@ describe('finding the packs', () => {
 });
 
 /**
- * What is wrong with the shape of a pack directory: only plain text (`.yaml`, `.md`), no folder but `ask/`, in `ask/` exactly `classification.md` and `intents.json` (the only `.json` of a pack), no link anywhere.
+ * What is wrong with the shape of a pack directory: only plain text (`.yaml`, `.md`), no folder but `ask/`, in `ask/` `classification.md` and `intents.json` (the only `.json` of a pack) and the optional `typologies.md`, no link anywhere.
  */
 function shapeProblems(dir: string): readonly string[] {
   const problems: string[] = [];
@@ -161,7 +161,7 @@ function shapeProblems(dir: string): readonly string[] {
         continue;
       }
       const inside = readdirSync(join(dir, entry.name), { withFileTypes: true });
-      for (const file of inside) if (!file.isFile() || !ASK_FILES.includes(file.name)) problems.push(`${ASK_FOLDER}/${file.name}: not one of the two files of an Ask folder`);
+      for (const file of inside) if (!file.isFile() || ![...ASK_FILES, 'typologies.md'].includes(file.name)) problems.push(`${ASK_FOLDER}/${file.name}: not a file of an Ask folder`);
       for (const name of ASK_FILES) if (!inside.some((file) => file.name === name)) problems.push(`${ASK_FOLDER}/${name}: missing`);
     } else if (!entry.isFile() || !['.yaml', '.md'].includes(extname(entry.name))) problems.push(`${entry.name}: not a plain text file of a pack`);
   }
@@ -194,9 +194,9 @@ describe('the shape of a pack directory', () => {
   });
 
   it('refuses an ask folder with a third file, a missing file, a folder inside, and a link', () => {
-    expect(shapeProblems(pack((dir) => askWith(dir, [...ASK_FILES, 'questions.yaml'])))).toEqual(['ask/questions.yaml: not one of the two files of an Ask folder']);
+    expect(shapeProblems(pack((dir) => askWith(dir, [...ASK_FILES, 'questions.yaml'])))).toEqual(['ask/questions.yaml: not a file of an Ask folder']);
     expect(shapeProblems(pack((dir) => askWith(dir, ['intents.json'])))).toEqual(['ask/classification.md: missing']);
-    expect(shapeProblems(pack((dir) => (askWith(dir, ASK_FILES), mkdirSync(join(dir, ASK_FOLDER, 'more')))))).toEqual(['ask/more: not one of the two files of an Ask folder']);
+    expect(shapeProblems(pack((dir) => (askWith(dir, ASK_FILES), mkdirSync(join(dir, ASK_FOLDER, 'more')))))).toEqual(['ask/more: not a file of an Ask folder']);
     expect(shapeProblems(pack((dir) => (askWith(dir, ASK_FILES), symlinkSync(join(dir, 'README.md'), join(dir, 'link.md')))))).toEqual(['link.md: a link']);
   });
 
@@ -206,8 +206,8 @@ describe('the shape of a pack directory', () => {
 });
 
 describe.each(packs)('the %s pack: the mapping file', (pack) => {
-  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions, assistant questions, a typology text for the AI and an Ask folder when the pack has them, and nothing else', () => {
-    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASSISTANT_QUESTIONS_FILE, ASK_FOLDER, 'typologies.md'].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
+  it('holds the mapping file and a README, and a demo definition, demo cases, demo questions, assistant questions and an Ask folder when the pack has them, and nothing else', () => {
+    expect(readdirSync(join(PACKS_ROOT, pack)).filter((name) => ![DEMO_FILE, CASES_FILE, QUESTIONS_FILE, ASSISTANT_QUESTIONS_FILE, ASK_FOLDER].includes(name)).sort()).toEqual(['README.md', MAPPING_FILE]);
     expect(shapeProblems(join(PACKS_ROOT, pack))).toEqual([]);
   });
 

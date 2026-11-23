@@ -16,7 +16,7 @@ type Answered = Extract<AskAnswer, { answered: unknown }>['answered'];
 type Refused = Extract<AskAnswer, { refused: unknown }>['refused'];
 
 /** What one step of the loop is run against: the request, the gate's capabilities and the options of Ask's routes, and the view the person had on screen. */
-export type StepScope = Omit<Pick<Execution, 'request' | 'capabilities' | 'options' | 'sourceId' | 'mask' | 'investigationId' | 'patterns' | 'action'>, 'options'> & { readonly options: Execution['options'] & { readonly typology?: () => readonly string[] | undefined; readonly notesMaxRefs?: () => number | undefined }; readonly viewElementKeys: readonly string[]; readonly form?: 'table'; readonly askedTypes?: readonly string[]; readonly contextTypes?: readonly string[] };
+export type StepScope = Omit<Pick<Execution, 'request' | 'capabilities' | 'options' | 'sourceId' | 'mask' | 'investigationId' | 'patterns' | 'action'>, 'options'> & { readonly options: Execution['options'] & { readonly typology?: (sourceId: string) => readonly string[] | undefined; readonly notesMaxRefs?: () => number | undefined }; readonly viewElementKeys: readonly string[]; readonly form?: 'table'; readonly askedTypes?: readonly string[]; readonly contextTypes?: readonly string[] };
 
 export type StepResult =
   | { readonly status: 'answered'; readonly answer: Answered; readonly rows: number }
@@ -174,7 +174,7 @@ export async function runToolStep(requested: ToolRequest, scope: StepScope, opti
   if (tool.kind === 'typology') {
     steps.reading(tool.name, undefined, undefined, tool.kind);
     noteStep();
-    return { status: 'typology', lines: scope.options.typology?.() ?? [] };
+    return { status: 'typology', lines: scope.options.typology?.(scope.sourceId) ?? [] };
   }
   steps.reading(tool.name, tool.kind === 'intent' ? tool.label : undefined, values, tool.kind);
   const common = { request: scope.request, capabilities: scope.capabilities, options: scope.options, sourceId: scope.sourceId, mask: scope.mask, continuing: options.continuing === true, action: scope.action, ...(scope.investigationId === undefined ? {} : { investigationId: scope.investigationId }) };

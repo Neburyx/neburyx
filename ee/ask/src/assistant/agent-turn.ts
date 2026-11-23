@@ -44,7 +44,7 @@ export interface AgentTurnOptions {
   /** The chat model of one turn, with the audit under it; undefined when the provider is not usable. */
   readonly model: (context: () => AuditedCallContext, trace: AuditedModelHook['trace']) => Promise<AgentChatModel | undefined>;
   readonly modelRef: () => string | undefined;
-  readonly instructions: () => ViewInstructions | undefined;
+  readonly instructions: (sourceId: string) => ViewInstructions | undefined;
   readonly settings: (sourceId: string) => AgentTurnSettings | undefined;
   readonly checks: CheckRunner;
   readonly removalFeedback?: RemovalFeedback;
@@ -88,7 +88,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
   const feedback = options.removalFeedback ?? plainFeedback;
   return async (input) => {
     const { scope } = input;
-    const instructions = options.instructions();
+    const instructions = options.instructions(scope.sourceId);
     const modelRef = options.modelRef();
     const settings = options.settings(scope.sourceId);
     if (instructions === undefined || modelRef === undefined || settings === undefined) return undefined;

@@ -19,7 +19,7 @@ function shippedFolder(name: string, files: Record<string, Buffer | string | nul
 }
 
 const GOOD = { 'summary-prompt.md': 'prompt text' };
-const PACK_TYPOLOGY = fileURLToPath(new URL('../../../../domain-packs/banking-fraud/typologies.md', import.meta.url));
+const PACK_TYPOLOGY = fileURLToPath(new URL('../../../../domain-packs/banking-fraud/ask/typologies.md', import.meta.url));
 
 describe('loading the shipped summary files', () => {
   it('builds the instructions from the files shipped in the product', async () => {

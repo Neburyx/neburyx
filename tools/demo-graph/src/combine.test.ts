@@ -282,7 +282,7 @@ describe('the option that carries the Ask folders', () => {
     withAsk(folder, 'one', 'a', files);
     const result = await run(['combine', '--packs', 'one', '--ask', '--out', join(folder, 'out', 'combined.yaml')], folder);
     expect(result.code).toBe(1);
-    expect(result.err.join('')).toContain('the ask folder of pack one must hold exactly');
+    expect(result.err.join('')).toContain('the ask folder of pack one must hold');
   });
 
   it('refuses a folder inside the ask folder, a link and a file that is not plain', async () => {

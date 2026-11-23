@@ -90,7 +90,7 @@ export interface TurnRouteOptions {
   /** How many of the person's last turns of the thread the router is shown; absent, it is shown none. */
   readonly contextTurns?: () => number | undefined;
   /** The lines of the typology the loop may offer as a tool; none, and it is not offered. */
-  readonly typology?: () => readonly string[] | undefined;
+  readonly typology?: (sourceId: string) => readonly string[] | undefined;
   /** The most references an entry of the person's AI notes may hold for the notes tool to read it. */
   readonly notesMaxRefs?: () => number | undefined;
   /** The keys the summary's tokens are sealed under; absent, no summary token opens. */

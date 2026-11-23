@@ -65,9 +65,11 @@ The folder named by `NEBURYX_ASK_MAPPING_FOLDER` holds what Ask knows about each
   <sourceId>/
     classification.md
     intents.json
+    typologies.md   (optional)
 ```
 
 - `classification.md` is text for the model, at most 64 KiB.
+- `typologies.md` is optional, at most 64 KiB: the shapes of this source's domain that the AI case summary and the assistant's answer from the view may describe, as structures and never as findings, one list item (`- `) for each. The instructions of a source hold it as their typology section, and the assistant may read its items as the `typology` tool. A source with no file has no typology section and no tool. The folder of a shipped pack that has one (`domain-packs/banking-fraud/ask/`) carries it; `NEBURYX_SUMMARY_TYPOLOGY_FILE` and `NEBURYX_ASSISTANT_TYPOLOGY_FILE` name a file of the operator's own that replaces it for every source.
 - `intents.json` is at most 1 MiB and holds at most 200 intents. Each intent is a name and either a parameterised read-only query or a built-in template:
 
 ```json
@@ -244,11 +246,11 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_PROMPT_FILE` | the file shipped with the product | |
 | `NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` | `assistant-view.md`, shipped with the product | |
 | `NEBURYX_ASSISTANT_OVERVIEW_PROMPT_FILE` | `assistant-overview.md`, shipped with the product | |
-| `NEBURYX_ASSISTANT_TYPOLOGY_FILE` | none: with no file there is no typology section | |
+| `NEBURYX_ASSISTANT_TYPOLOGY_FILE` | none: the source's `typologies.md` is used, and with none there is no typology section | |
 
 `NEBURYX_ASSISTANT_PROMPT_FILE` names an absolute path to a file that replaces the router's instructions (at most as large as a classification file of the Ask folder). The reply format is added by the product after the file's text and cannot be changed by it, and the hash of the instructions used is kept with them. No setting raises a limit or budget of a source.
 
-`NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` and `NEBURYX_ASSISTANT_TYPOLOGY_FILE` do the same for the instructions of the answer from the view: each names an absolute path to a file that replaces the shipped prompt or, for the typology, supplies the text (the product ships none: a domain pack may, as `domain-packs/banking-fraud/typologies.md` does, and with no file the instructions have no typology section and the typology is not offered as a tool), within the same size limit, and the reply format is added after both and is fixed. A relative path, a missing, unreadable or oversized file stops the start and names the setting, never the path or the text. The answer from the view needs no setting or file of the case summary.
+`NEBURYX_ASSISTANT_VIEW_PROMPT_FILE` and `NEBURYX_ASSISTANT_TYPOLOGY_FILE` do the same for the instructions of the answer from the view: each names an absolute path to a file that replaces the shipped prompt or, for the typology, supplies the text (the product ships none: the source's own `typologies.md` in its Ask folder is used when this is not set, and with neither the instructions have no typology section and the typology is not offered as a tool), within the same size limit, and the reply format is added after both and is fixed. A relative path, a missing, unreadable or oversized file stops the start and names the setting, never the path or the text. The answer from the view needs no setting or file of the case summary.
 
 ### What a turn stores
 
@@ -284,7 +286,7 @@ The turn stops at a limit: model calls (`NEBURYX_ASSISTANT_MAX_CALLS`, 7 by defa
 
 Three more tools are offered when they can run; none of them reads anything outside what the person already has, and none writes.
 
-- `typology`: the lines of your typology file (the list of shapes of money movement in the view instructions), as `t1`, `t2`, …. No read of the source. It is offered when the file has lines.
+- `typology`: the lines of your typology file (the list of shapes in the typology of the source), as `t1`, `t2`, …. No read of the source. It is offered when the file has lines.
 - `ai-notes`: the AI notes of **your own** draft of this investigation, rebuilt for you through the gate and under your masking, a line for each sentence (`a1`, `a2`, …). Another person's notes are never read: an investigation that is not yours is refused before any step, and when the application finds no notes of yours for it, the step is listed as not read and the turn goes on. Entries that cannot be rebuilt are counted as not read.
 - `ai-summary`: an AI case summary of the elements in view, drafted in the turn by the summarizer (the same checks, run record and audit events as the summary), and given back as its checked sentences. It is offered only when something is in view and the summary is on. Its model calls are counted in the turn's calls limit (the summary is given no more calls than the turn has left, one kept for the answer) and the turn's event holds them in its model call count; the turn's token and model fields hold only the calls the turn's own recording made. A summary that was not drafted is a step that read nothing.
 

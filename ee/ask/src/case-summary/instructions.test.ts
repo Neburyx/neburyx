@@ -68,11 +68,11 @@ describe('the shipped summary files', () => {
   });
 
   it.each(['Fan-in', 'Fan-out', 'Cycle', 'Rapid pass-through', 'Shared device or address'])('describes the shape %s of the banking pack as a structure', (shape) => {
-    expect(readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/typologies.md', import.meta.url)), 'utf8')).toContain(`- ${shape}:`);
+    expect(readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/ask/typologies.md', import.meta.url)), 'utf8')).toContain(`- ${shape}:`);
   });
 
   it('says a shape may be described with its elements cited and never asserted', () => {
-    const text = readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/typologies.md', import.meta.url)), 'utf8');
+    const text = readFileSync(fileURLToPath(new URL('../../../../domain-packs/banking-fraud/ask/typologies.md', import.meta.url)), 'utf8');
     expect(text).toContain('described as having the shape of one of them, citing the elements it rests on');
     expect(text).toContain('Never say that an arrangement is one of them');
   });
