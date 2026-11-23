@@ -86,7 +86,7 @@ describe('the loop-cost command', () => {
     }
   });
 
-  it('runs every view and ask message with the loop off and on, counts the extra call of an ask turn and writes a record of ids, counts and times with no wording', async () => {
+  it('runs every view and ask message with the loop off and on, counts no extra call of an ask turn, the agent being measured elsewhere, and writes a record of ids, counts and times with no wording', async () => {
     const reply = await scriptedModel();
     const live = hooksWith(reply);
     const out = scratch();
@@ -96,7 +96,7 @@ describe('the loop-cost command', () => {
     const text = run2.out.join('\n');
     expect(text).toContain('messages run: 49 of 49');
     expect(text).toMatch(/route answered ask: 32 messages/);
-    expect(text).toMatch(/extra calls per routed message: mean 1, median 1, max 1/);
+    expect(text).toMatch(/extra calls per routed message: mean 0, median 0, max 0/);
     const recordPath = join(out, 'run', 'loop-cost-record.json');
     expect(statSync(recordPath).mode & 0o777).toBe(0o600);
     const record = readFileSync(recordPath, 'utf8');

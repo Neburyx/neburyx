@@ -24,11 +24,11 @@ afterAll(async () => {
 const start = (): Promise<AssistantRig> => startAssistantRig({ stub, maxSteps: 4, maxCalls: 8, respond: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: widgetNode }] } : undefined) });
 const isAnswer = (line: Record<string, unknown>): boolean => line['event'] === 'answer' || line['event'] === 'error';
 
-/** The replies of a looped turn: the router's reply with text around the route and the step reply with text around the request, each asked for again, then a checked answer. */
-const REPLIES = [`${MODEL_TEXT} ${ROUTE}`, ROUTE, `${MODEL_TEXT} ${tool('widgetById', { id: 'W-1' })}`, tool('widgetById', { id: 'W-1' }), DONE, JSON.stringify({ sentences: [{ text: 'The widget W-1 was read.', cites: ['r1'] }] })];
+/** The replies of an agent turn: the router's reply with text around the route, asked for again, then a read, the checked answer, and text the model writes after its answer. */
+const REPLIES = [`${MODEL_TEXT} ${ROUTE}`, ROUTE, tool('widgetById', { id: 'W-1' }), DONE, JSON.stringify({ sentences: [{ text: 'The widget W-1 was read.', cites: ['r1'] }] }), `${MODEL_TEXT} and everything here is certain`];
 
 describe('a streamed turn through the real application carries no model text before its answer', () => {
-  it('writes no line with the text the model wrote in its router reply, its step reply or its answer before the answer line, and the answer line is the JSON route’s answer for the same replies', async () => {
+  it('writes no line with the text the model wrote in its router reply or after its answer before the answer line, and the answer line is the JSON route’s answer for the same replies', async () => {
     const streamed = await (async () => {
       const rig = await start();
       const result = await rig.stream('Show W-1 and look further', REPLIES);
@@ -71,12 +71,12 @@ describe('a streamed turn through the real application carries no model text bef
     await rig.close();
   });
 
-  it('ends a refused turn with the refusal as its last line, and no model text in any line', async () => {
+  it('ends a turn whose router replies place nothing with the answer line of the agent that read nothing, and no model text in any line', async () => {
     const rig = await start();
     const result = await rig.stream('Show W-1', [`${MODEL_TEXT} is no route`, `${MODEL_TEXT} is no route either`]);
     expect(result.status).toBe(200);
     expect(result.text).not.toContain(MODEL_TEXT);
-    expect(result.lines.at(-1)).toMatchObject({ event: 'answer', answer: { status: 'answered', route: 'refuse', cause: 'unplaced' } });
+    expect(result.lines.at(-1)).toMatchObject({ event: 'answer', answer: { status: 'not-answered' } });
     await rig.close();
   });
 });

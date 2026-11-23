@@ -5,6 +5,7 @@ import { createEnterpriseExtension, createSummaryRoute, guardAiRouteGroup } from
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
+import { createAgentScript } from '../testing/agent-script.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { buildApp, registeredRoutesOf } from '../app.js';
 import type { ExecuteCall, ExecuteOutcome } from '../gate/executor.js';
@@ -332,11 +333,15 @@ describe('the source test and the graph coverage routes', () => {
 });
 
 async function routerStub(reply: string): Promise<Server> {
+  const script = createAgentScript();
+  let replies = 0;
   const server = createServer((request, response) => {
-    request.resume();
+    let body = '';
+    request.on('data', (chunk: Buffer) => (body += chunk.toString('utf8')));
     request.on('end', () => {
+      const content = script.content(body, () => reply);
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text: reply }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 } }));
+      response.end(JSON.stringify({ id: `msg_${++replies}`, type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content, stop_reason: content.some((block) => block['type'] === 'tool_use') ? 'tool_use' : 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 5 } }));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

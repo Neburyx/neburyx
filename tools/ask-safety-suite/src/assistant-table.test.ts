@@ -11,7 +11,10 @@ vi.mock('@neburyx/ee-audit', async () => (await import('./mock-audit.js')).audit
 
 const WIDGET_KEY = JSON.stringify(['node', 'demo', 'widget', 'W-1']);
 const FORM = JSON.stringify({ route: 'view', form: 'table' });
-const table = (columns: string[], rows: { cells: readonly string[]; cites: readonly string[] }[]): string => JSON.stringify({ table: { columns, rows } });
+/** The input of the `answer` tool for a table: its columns and rows. */
+const table = (columns: string[], rows: { cells: readonly string[]; cites: readonly string[] }[]): string => JSON.stringify({ columns, rows });
+const READ_VIEW = JSON.stringify({ tool: 'view', values: {} });
+const DONE = '{"done":true}';
 
 let stub: ModelStub;
 beforeAll(async () => {
@@ -31,7 +34,7 @@ function expectDropped(body: Record<string, unknown>, sentinel: string): void {
 }
 
 const rigOf = (): Promise<AssistantRig> => startAssistantRig({ stub, respond: (call) => (call.templateId === 'file-query' ? entityRows(widget(2)) : undefined) });
-const turnOf = (rig: AssistantRig, reply: string) => rig.turn('Show the elements as a table.', [FORM, reply, reply], { viewElementKeys: [WIDGET_KEY] });
+const turnOf = (rig: AssistantRig, reply: string) => rig.turn('Show the elements as a table.', [FORM, READ_VIEW, DONE, reply], { viewElementKeys: [WIDGET_KEY] });
 
 describe('a table answer', () => {
   it('accepts a row of cells copied from the element it cites, and no cell, label or title reaches an event or a log line', async () => {
@@ -62,7 +65,7 @@ describe('a table answer', () => {
     await rig.close();
   });
 
-  it('refuses a table with a cell that states a verdict, after the repeat, with the fixed sentence', async () => {
+  it('refuses a table with a cell that states a verdict, with the fixed sentence', async () => {
     const rig = await rigOf();
     const answer = await turnOf(rig, table(['Element', 'Type'], [{ cells: ['W-1', 'guilty of fraud'], cites: ['n1'] }]));
     expect(JSON.stringify(answer.body)).not.toContain('guilty');

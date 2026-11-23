@@ -3,7 +3,8 @@ import { removeAskFolders } from '../../../services/api/src/testing/ask-folder.j
 import { widget } from '../../../services/api/src/testing/search-app.js';
 import { entityRows } from '../../../services/api/src/testing/entity-fixtures.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
-import { HOLD, startAssistantApp, startTurnModel, type AssistantApp, type TurnModel } from '../../../services/api/src/testing/assistant-turns.js';
+import { startAssistantApp, type AssistantApp } from '../../../services/api/src/testing/assistant-turns.js';
+import { HOLD, startModelStub, type ModelStub } from '../../ask-safety-suite/src/stub.js';
 import { expectNothingStartedSince, type Started } from './assistant-checks.js';
 import { until } from './rig.js';
 
@@ -12,7 +13,7 @@ const NEXT = JSON.stringify({ tool: 'widgetById', values: { id: 'W-2' } });
 const DONE = '{"done":true}';
 const QUIET_MS = 300;
 
-let model: TurnModel;
+let model: ModelStub;
 let app: AssistantApp;
 /** The reads of W-2 that are pending at the source: the tool step's read, held until the turn is cancelled. */
 let held: ExecuteCall[];
@@ -25,7 +26,7 @@ const respond = (call: ExecuteCall): Promise<ExecuteOutcome> | undefined => {
 
 beforeEach(async () => {
   held = [];
-  model = await startTurnModel();
+  model = await startModelStub();
   app = await startAssistantApp({ model, respond });
 });
 afterEach(async () => {
@@ -52,7 +53,7 @@ describe('cancelling an assistant turn during a tool step', () => {
     await until(() => held.every((call) => call.signal?.aborted === true), 'the read to be aborted');
     await pause();
     expectNothingStartedSince(atCancel, started());
-    expect(model.requests).toHaveLength(2);
+    expect(model.requests).toHaveLength(3);
     expect(closing()).toMatchObject([{ result: 'failed', detail: { turn: { outcome: 'cancelled' } } }]);
     expect(saved()).toBe(before);
   });
@@ -75,17 +76,17 @@ describe('cancelling an assistant turn during a tool step', () => {
     expect(saved()).toBe(before);
   });
 
-  it('makes no further call when the person cancels while the answer after the steps is pending', async () => {
+  it('makes no further call when the person cancels while the call after the last step is pending', async () => {
     const before = saved();
-    model.replies.push(ROUTE, JSON.stringify({ tool: 'byId', values: { id: 'W-1' } }), DONE, HOLD);
+    model.replies.push(ROUTE, JSON.stringify({ tool: 'byId', values: { id: 'W-1' } }), HOLD);
     const controller = new AbortController();
     const sent = app.sendTurn('Show W-1 twice', controller.signal);
-    await until(() => model.held() > 0, 'the answer call to be pending');
+    await until(() => model.held() > 0, 'the call after the step to be pending');
     const atCancel = started();
     controller.abort();
     await sent;
     await until(() => model.held() === 0, 'the held call to be given up by the application');
-    model.release('{"sentences":[]}');
+    model.release(DONE);
     await pause();
     expectNothingStartedSince(atCancel, started());
     expect(model.requests).toHaveLength(4);
@@ -100,7 +101,7 @@ describe('cancelling the decision on a heavy step of the loop', () => {
   let pausing = false;
   let replayed: ExecuteCall[];
   let local: AssistantApp;
-  let localModel: TurnModel;
+  let localModel: ModelStub;
 
   const sourceOf = (call: ExecuteCall): Promise<ExecuteOutcome> | ExecuteOutcome | undefined => {
     if (call.templateId === 'shared-attribute-count') return { status: 'rows', rows: [{ matches: 1_000_000, anchorBounded: false, skipped: false }] };
@@ -114,7 +115,7 @@ describe('cancelling the decision on a heavy step of the loop', () => {
   beforeEach(async () => {
     pausing = false;
     replayed = [];
-    localModel = await startTurnModel();
+    localModel = await startModelStub();
     local = await startAssistantApp({ model: localModel, respond: sourceOf, stores: true });
   });
   afterEach(async () => {

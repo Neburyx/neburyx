@@ -36,7 +36,7 @@ const withoutTokens = (answer: Record<string, unknown>): Record<string, unknown>
 
 async function assistantAnswer(synthetic: boolean | undefined, previewOn = true): Promise<{ readonly status: number; readonly body: Record<string, unknown> }> {
   const rig = await startAssistantRig({ stub, ...(synthetic === undefined ? {} : { synthetic }), previewOn, maxSteps: 1, respond: (call) => (call.templateId === 'entity-load' ? { status: 'rows', rows: [{ n: { $type: 'node', elementId: '4:s:W-1', labels: ['Widget'], properties: { widgetId: 'W-1' } } }] } : undefined) });
-  const answer = await rig.turn('Show W-1', [JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: 'W-1' } })]);
+  const answer = await rig.turn('Show W-1', [JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: 'W-1' } }), '{"done":true}', JSON.stringify({ sentences: [{ text: 'Widget W-1 was read.', cites: ['r1'] }] })]);
   await rig.close();
   return { status: answer.status, body: withoutTokens(answer.body) };
 }
@@ -56,7 +56,9 @@ describe('the preview runs on any source, whatever the source says of being synt
   });
 
   it('answers a turn of the assistant the same under each setting of the flag, answered and not refused', async () => {
-    expectTheSameAnswered(await Promise.all(FLAGS.map(([, flag]) => assistantAnswer(flag))));
+    const answers = [];
+    for (const [, flag] of FLAGS) answers.push(await assistantAnswer(flag));
+    expectTheSameAnswered(answers);
   });
 
   it('canary: a preview that is off for the source that sets synthetic to false answers differently, and the comparison of the test fails on it', async () => {

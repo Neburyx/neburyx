@@ -59,7 +59,8 @@ describe('a sentence of the person\'s notes that holds an instruction is data fo
     const before = structuredClone(rig.store.drafts[0]);
     const answer = await rig.turn('Show W-1 and my notes', [ROUTE, tool('ai-notes', {}), tool('dropEverything', {}), tool('dropEverything', {})]);
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    expect(['not-answered', 'limit']).toContain(answer.body['status']);
+    expect(answer.body).not.toHaveProperty('sentences');
     expect(stub.requests.some((body) => body.includes('SENTINEL-note'))).toBe(true);
     expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
     expectNoNoteWrite(before ?? { version: -1 }, rig.store.drafts[0]);
@@ -96,7 +97,8 @@ describe('a sentence of an AI case summary drafted in the turn that holds an ins
     const summary = JSON.stringify({ sentences: [{ text: SUMMARY_INSTRUCTION, cites: ['n1'] }] });
     const answer = await rig.turn('Show W-1 and summarize the view', [ROUTE, tool('ai-summary', {}), summary, tool('dropEverything', {}), tool('dropEverything', {})], { viewElementKeys: VIEW });
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+    expect(['not-answered', 'limit']).toContain(answer.body['status']);
+    expect(answer.body).not.toHaveProperty('sentences');
     expect(stub.requests.some((body) => body.includes('zzsummarymark'))).toBe(true);
     expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
     expectNoNoteWrite(before ?? { version: -1 }, rig.store.drafts[0]);

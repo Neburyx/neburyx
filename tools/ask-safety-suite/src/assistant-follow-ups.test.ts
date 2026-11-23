@@ -17,6 +17,9 @@ const ASK = JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id:
 const naming = (element: string): string => JSON.stringify({ route: 'ask', intent: 'widgetById', entities: {}, elements: { id: element } });
 const ASK_SHARED = JSON.stringify({ route: 'ask', intent: 'sharedGadget', entities: { id: 'W-1' } });
 const MILLISECONDS_A_MINUTE = 60_000;
+/** The reply the model gives to the tool that ends a turn: one sentence that cites the element the read returned. */
+const tool = (name: string, values: Record<string, unknown>): string => JSON.stringify({ tool: name, values });
+const ANSWER = JSON.stringify({ sentences: [{ text: 'Widget W-1 is owned by Ana Silva.', cites: ['r1'] }] });
 
 let stub: ModelStub;
 beforeAll(async () => {
@@ -62,12 +65,13 @@ async function start(over: { maxSteps?: number } = {}): Promise<Setup> {
 
 /** A first turn that ran the intent for W-1, so the thread holds an element by the key c1. */
 async function earlierTurn(setup: Setup): Promise<void> {
-  const first = await setup.rig.turn('Show W-1', [ASK, '{"done":true}'], { viewElementKeys: VIEW });
+  const first = await setup.rig.turn('Show W-1', [ASK, '{"done":true}', ANSWER], { viewElementKeys: VIEW });
   expect(first.body).toMatchObject({ status: 'answered', route: 'ask' });
   await setup.rig.threadWritten(1);
 }
 
-const asksOrRefuses = (body: Record<string, unknown>): boolean => body['status'] === 'clarification' || (body['status'] === 'answered' && body['route'] === 'refuse');
+/** What a rejected key of the router leads to now: a clarification, the refusal, or the agent's turn that read nothing and gave no answer. */
+const asksOrRefuses = (body: Record<string, unknown>): boolean => body['status'] === 'clarification' || body['status'] === 'not-answered' || (body['status'] === 'answered' && body['route'] === 'refuse');
 const closing = (rig: AssistantRig) => rig.events().filter((event) => event.action === 'assistant.turn.closed');
 
 describe('a hostile key in the reply of the router, through the real application', () => {
@@ -79,7 +83,7 @@ describe('a hostile key in the reply of the router, through the real application
     ['a key of a relationship under a role', 'e1'],
   ] as const;
 
-  it.each(HOSTILE)('runs nothing for %s: no read of the intent, at most the router’s call and its one repeat, and the value reaches no log, event, header, body or row of the thread', async (_name, forged) => {
+  it.each(HOSTILE)('runs nothing for %s: no read of the intent, at most the router’s call, its one repeat and the agent’s one call, and the value reaches no log, event, header, body or row of the thread', async (_name, forged) => {
     const setup = await start();
     await earlierTurn(setup);
     const before = setup.rig.reads().length;
@@ -88,7 +92,7 @@ describe('a hostile key in the reply of the router, through the real application
     expect(answer.status).toBe(200);
     expect(asksOrRefuses(answer.body), JSON.stringify(answer.body).slice(0, 200)).toBe(true);
     expectNoIntentRead(setup.rig.reads().slice(before));
-    expect(stub.requests.length - calls).toBeLessThanOrEqual(2);
+    expect(stub.requests.length - calls).toBeLessThanOrEqual(3);
     expectNoValue([setup.rig.events(), setup.rig.logs, answer.body, answer.headers, setup.rig.threadRows()], ['DETACH DELETE']);
     await setup.rig.close();
   });
@@ -97,7 +101,7 @@ describe('a hostile key in the reply of the router, through the real application
     const setup = await start();
     await earlierTurn(setup);
     const before = setup.rig.reads().length;
-    const answer = await setup.rig.turn('and what else about it?', [naming('c1'), '{"done":true}'], { viewElementKeys: VIEW });
+    const answer = await setup.rig.turn('and what else about it?', [naming('c1'), tool('widgetById', { id: 'W-1' }), '{"done":true}', ANSWER], { viewElementKeys: VIEW });
     expect(answer.body).toMatchObject({ status: 'answered', route: 'ask' });
     expect(() => expectNoIntentRead(setup.rig.reads().slice(before))).toThrow(/the intent ran/);
     expectIntentRan(setup.rig.reads().slice(before));
@@ -182,10 +186,13 @@ describe('a changed choice, chip or token, through the real application', () => 
 
   it('refuses a Continue token offered as a choice as an invalid choice, and a choice token offered as a continue as an invalid continue, reading nothing', async () => {
     const setup = await start();
-    const heavy = await setup.rig.turn('Show the widgets that share a gadget with W-1', [ASK_SHARED], { viewElementKeys: VIEW });
+    const choice = await clarification(setup);
+    stub.replies.length = 0;
+    const asked = await setup.rig.turn('Which widgets share a gadget with it?', [JSON.stringify({ route: 'ask', intent: 'sharedGadget', entities: {}, elements: { id: 'c9' } }), JSON.stringify({ route: 'ask', intent: 'sharedGadget', entities: {}, elements: { id: 'c9' } })], { viewElementKeys: VIEW });
+    const heavyChoice = ((asked.body['candidates'] as { choice: Record<string, unknown> }[] | undefined) ?? [])[0]?.choice;
+    const heavy = await setup.rig.post({ sourceId: 'demo', investigationId: setup.rig.investigationId, viewElementKeys: VIEW, choice: heavyChoice });
     const continueToken = ((heavy.body['answer'] as { answered?: { continueToken?: string } } | undefined)?.answered?.continueToken) ?? '';
     expect(continueToken).not.toBe('');
-    const choice = await clarification(setup);
     const before = setup.rig.reads().length;
     const asChoice = await choiceRequest(setup, { ...choice, choiceToken: continueToken });
     expect(asChoice.body).toMatchObject({ status: 'choice-invalid' });
@@ -197,13 +204,16 @@ describe('a changed choice, chip or token, through the real application', () => 
 });
 
 describe('a changed follow-up chip, through the real application', () => {
-  /** A rig with no tool loop, whose first answer carries follow-up chips, and the choice of the first chip. */
+  /** An answer of the first-round Ask path that carries follow-up chips (an agent answer carries none): the pick of a clarification runs the intent through the gate with no model call, and the choice of the first chip. */
   async function chip() {
     const setup = await start({ maxSteps: 1 });
-    const first = await setup.rig.turn('Show W-1', [ASK], { viewElementKeys: VIEW });
-    const choice = ((first.body['followUps'] as { choice: Record<string, unknown> }[] | undefined) ?? [])[0]?.choice;
-    if (choice === undefined) throw new Error(`no follow-up chip: ${JSON.stringify(first.body).slice(0, 200)}`);
-    await setup.rig.threadWritten(1);
+    await earlierTurn(setup);
+    const asked = await setup.rig.turn('and what else about it?', [naming('c9'), naming('c9')], { viewElementKeys: VIEW });
+    const candidates = (asked.body['candidates'] as { choice: Record<string, unknown> }[] | undefined) ?? [];
+    const picked = await setup.rig.post({ sourceId: 'demo', investigationId: setup.rig.investigationId, viewElementKeys: VIEW, choice: candidates[0]?.choice });
+    const choice = ((picked.body['followUps'] as { choice: Record<string, unknown> }[] | undefined) ?? [])[0]?.choice;
+    if (choice === undefined) throw new Error(`no follow-up chip: ${JSON.stringify(picked.body).slice(0, 200)}`);
+    await setup.rig.threadWritten(2);
     return { setup, choice };
   }
   const pressed = (setup: Setup, choice: unknown, over: Record<string, unknown> = {}) => setup.rig.post({ sourceId: 'demo', investigationId: setup.rig.investigationId, viewElementKeys: VIEW, choice, ...over });

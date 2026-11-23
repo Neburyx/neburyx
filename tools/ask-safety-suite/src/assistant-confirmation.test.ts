@@ -9,6 +9,7 @@ const ROUTE = JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { i
 const HEAVY_STEP = JSON.stringify({ tool: 'sharedGadget', values: { id: 'W-1' } });
 const DONE = '{"done":true}';
 const ANSWER = JSON.stringify({ sentences: [{ text: 'The second read found matches.', cites: ['s2'] }] });
+const SKIPPED_ANSWER = JSON.stringify({ sentences: [{ text: 'The read of widgetById was made.', cites: ['s1'] }] });
 const MESSAGE = 'Show W-1 and the widgets that share a gadget with it';
 
 vi.mock('@neburyx/ee-audit', async () => (await import('./mock-audit.js')).auditMock);
@@ -67,7 +68,7 @@ describe('a heavy step of the loop runs only after the analyst confirms', () => 
   it('reads nothing of the step after Skip, and the plan cannot then be confirmed', async () => {
     const rig = await startAssistantRig({ stub, respond: source, stores: true });
     const waiting = await waitingTurn(rig);
-    expect((await decide(rig, waiting, 'skip', [DONE, ANSWER])).body).toMatchObject({ status: 'answered', route: 'ask' });
+    expect((await decide(rig, waiting, 'skip', [DONE, SKIPPED_ANSWER])).body).toMatchObject({ status: 'answered', route: 'ask' });
     expect(pagesOf(rig)).toBe(0);
     expect((await decide(rig, waiting, 'confirm', [])).body).toMatchObject({ status: 'confirmation-invalid' });
     expect(pagesOf(rig)).toBe(0);

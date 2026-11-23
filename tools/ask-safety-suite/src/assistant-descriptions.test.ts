@@ -49,10 +49,15 @@ describe('the meaning of a type, written by the server from the operator’s tex
 describe('an m line sent to the model for a view question', () => {
   it('holds the operator’s text as a quoted string and no value of the graph, and an m key the model invents is dropped with the sentence', async () => {
     const rig = await rigOf();
-    const answer = await rig.turn('What is a widget here?', [JSON.stringify({ route: 'view' }), sentences('A widget is a thing.', ['m9'])], { viewElementKeys: [WIDGET_KEY] });
+    const answer = await rig.turn('What is a widget here?', [JSON.stringify({ route: 'view' }), JSON.stringify({ tool: 'view', values: {} }), '{"done":true}', sentences('A widget is a thing.', ['m9'])], { viewElementKeys: [WIDGET_KEY] });
+    const blockText = (block: unknown): string => {
+      if (typeof block !== 'object' || block === null) return '';
+      if ('text' in block) return String(block.text);
+      return 'content' in block ? (typeof block.content === 'string' ? block.content : Array.isArray(block.content) ? block.content.map(blockText).join('') : '') : '';
+    };
     const textOf = (body: string): string => {
-      const content = (JSON.parse(body) as { messages?: { content?: unknown }[] }).messages?.[0]?.content;
-      return typeof content === 'string' ? content : Array.isArray(content) ? content.map((block) => (typeof block === 'object' && block !== null && 'text' in block ? String(block.text) : '')).join('') : '';
+      const messages = (JSON.parse(body) as { messages?: { content?: unknown }[] }).messages ?? [];
+      return messages.map((message) => (typeof message.content === 'string' ? message.content : Array.isArray(message.content) ? message.content.map(blockText).join('') : '')).join('\n');
     };
     const sent = stub.requests.map(textOf).find((text) => text.includes('What the types mean')) ?? '';
     expect(sent).toContain(`m1: entity type Widget: ${JSON.stringify(OPERATOR_TEXT)}`);

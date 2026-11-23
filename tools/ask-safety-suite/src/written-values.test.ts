@@ -65,8 +65,8 @@ describe('a value the person writes for a role that needs a type, through the re
   it('canary: the same request for a value that is a widget of the source runs the intent, so the check that the intent ran no read fails on it', async () => {
     const rig = await start({ held: ['widget/W-1'] });
     const before = rig.reads().length;
-    const answer = await rig.turn('Show that widget', [ROUTE('W-1'), '{"done":true}']);
-    expect(answer.body).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { intent: 'widgetById' } } });
+    const answer = await rig.turn('Show that widget', [ROUTE('W-1'), '{"done":true}', JSON.stringify({ sentences: [{ text: 'Widget W-1 was read.', cites: ['r1'] }] })]);
+    expect(answer.body).toMatchObject({ status: 'answered', route: 'ask', reads: [{ tool: 'widgetById', subject: 'W-1' }] });
     expect(rig.reads().slice(before).some((read) => INTENT_TEMPLATES.includes(read.templateId))).toBe(true);
     await rig.close();
   });

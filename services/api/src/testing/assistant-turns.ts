@@ -1,3 +1,4 @@
+import { createAgentScript } from './agent-script.js';
 import { randomUUID } from 'node:crypto';
 import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,11 +15,11 @@ import { gadget as gadgetNode, startExportRig, widget as widgetNode } from './ex
 import { lookupAnswer } from './held-elements.js';
 
 /** A reply the stand-in does not answer until the test says so (or never): the call stays pending at the model. */
-export const HOLD = { hold: true } as const;
+const HOLD = { hold: true } as const;
 type Reply = string | typeof HOLD;
 
 /** A stand-in for the model service on the loopback address: the next reply for each request, `HOLD` for a call that stays pending, and the body of every request it received. */
-export interface TurnModel {
+interface TurnModel {
   readonly baseUrl: string;
   readonly requests: string[];
   readonly replies: Reply[];
@@ -33,24 +34,26 @@ export interface TurnModel {
 const NO_REPLY = '{"route":"refuse","cause":"unplaced"}';
 
 /** `reply` answers every request from its body instead of the queue: a load of many turns that make their calls in any order. */
-export async function startTurnModel(reply?: (body: string) => string): Promise<TurnModel> {
+async function startTurnModel(reply?: (body: string) => string): Promise<TurnModel> {
   const requests: string[] = [];
   const replies: Reply[] = [];
   const pending: Array<(reply: string) => void> = [];
   let open = true;
-  const answer = (response: import('node:http').ServerResponse, text: string): void => {
+  const script = createAgentScript();
+  const answer = (response: import('node:http').ServerResponse, content: Record<string, unknown>[]): void => {
     if (response.destroyed) return;
     response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [{ type: 'text', text }], stop_reason: 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
+    response.end(JSON.stringify({ id: `msg_${randomUUID()}`, type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content, stop_reason: content.some((block) => block['type'] === 'tool_use') ? 'tool_use' : 'end_turn', usage: { input_tokens: 3, output_tokens: 4 } }));
   };
   const server: Server = createServer((request, response) => {
     const chunks: Buffer[] = [];
     request.on('data', (chunk: Buffer) => chunks.push(chunk));
     request.on('end', () => {
       requests.push(Buffer.concat(chunks).toString('utf8'));
-      const next = reply === undefined ? (replies.shift() ?? NO_REPLY) : reply(requests[requests.length - 1] ?? '');
+      const body = requests[requests.length - 1] ?? '';
+      const next = reply === undefined ? (replies.shift() ?? NO_REPLY) : reply(body);
       if (next === HOLD && open) {
-        const entry = (text: string): void => answer(response, text);
+        const entry = (text: string): void => answer(response, [{ type: 'text', text }]);
         pending.push(entry);
         response.on('close', () => {
           const at = pending.indexOf(entry);
@@ -58,7 +61,17 @@ export async function startTurnModel(reply?: (body: string) => string): Promise<
         });
         return;
       }
-      answer(response, typeof next === 'string' ? next : NO_REPLY);
+      let first: string | undefined = typeof next === 'string' ? next : NO_REPLY;
+      const take = (): string => {
+        if (first !== undefined) {
+          const given = first;
+          first = undefined;
+          return given;
+        }
+        const later = reply === undefined ? (replies.shift() ?? NO_REPLY) : reply(body);
+        return typeof later === 'string' ? later : NO_REPLY;
+      };
+      answer(response, script.content(body, take));
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

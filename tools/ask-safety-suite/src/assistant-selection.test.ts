@@ -28,9 +28,9 @@ const routerRequest = (): string => (JSON.parse(stub.requests[0] ?? '{}') as { m
 describe('the elements selected on the canvas, in the real application over the model stand-in', () => {
   it('marks the selected element in what the router is sent, and runs the intent for the one selected element the router names, reading only through the gate', async () => {
     const rig = await start();
-    const answer = await rig.turn('Show this widget', [naming('c2'), '{"done":true}'], { viewElementKeys: VIEW, selectionKeys: [key('widget', 'W-2')] });
+    const answer = await rig.turn('Show this widget', [naming('c2'), JSON.stringify({ tool: 'widgetById', values: { id: 'W-2' } }), '{"done":true}', JSON.stringify({ sentences: [{ text: 'The widget is owned by Ana Silva.', cites: ['r1'] }] })], { viewElementKeys: VIEW, selectionKeys: [key('widget', 'W-2')] });
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ route: 'ask', answer: { answered: { intent: 'widgetById' } } });
+    expect(answer.body).toMatchObject({ status: 'answered', route: 'ask', reads: [{ tool: 'widgetById', subject: 'W-2' }] });
     expect(routerRequest()).toContain('"W-2" (selected)');
     expect(routerRequest()).not.toContain('"W-1" (selected)');
     expect(rig.reads().some((read) => Object.values(read.parameters).includes('W-2'))).toBe(true);

@@ -6,7 +6,7 @@ import { createEnterpriseExtension, createMemoryAssistantRunStore, createMemoryA
 import { afterAll, describe, expect, it } from 'vitest';
 import { DEFAULT_AI_SLOT_SHARE } from '../../../services/api/src/seams/ai-share.js';
 import { makeAskFolder, removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
-import { startTurnModel, type TurnModel } from '../../../services/api/src/testing/assistant-turns.js';
+import { startModelStub, type ModelStub } from '../../ask-safety-suite/src/stub.js';
 import { timeManualExpand } from './ai-load.js';
 import { RECORD_PATH, percentile, readRecord, statisticsOf, type AiRuntimeRecord, type Statistics } from './ai-load.record.js';
 import type { RigOptions } from './rig.js';
@@ -45,15 +45,23 @@ async function aiLoadOptions(): Promise<RigOptions> {
   return { extension, caseSummarizer: SUMMARIZER, askClassifier: { availability: () => ({ available: true }), classify: async () => ({ ok: true, intent: 'nodeById', entities: { id: 'H-1' } }) } };
 }
 
-/** The model of the assistant as a load sees it: the router sends every turn to the intent, the step asks for a second read once and is then done, and the answer cites the first read. */
+/** The model of the assistant as a load sees it: the router sends every turn to the intent, the agent asks for a second read once and is then done, and its answer cites the first read. */
+let lastBody = '';
 function assistantModelReply(body: string): string {
-  if (body.includes('What the reads returned')) return JSON.stringify({ sentences: [{ text: 'A node is listed.', cites: ['r1'] }] });
-  if (body.includes('Masked results so far')) return body.split('nodeById:').length - 1 < 2 ? JSON.stringify({ tool: 'nodeById', values: { id: 'H-2' } }) : '{"done":true}';
-  return JSON.stringify({ route: 'ask', intent: 'nodeById', entities: { id: 'H-1' } });
+  const offered = ((JSON.parse(body) as { tools?: { name: string }[] }).tools ?? []).map((entry) => entry.name);
+  if (offered.length === 0) return JSON.stringify({ route: 'ask', intent: 'nodeById', entities: { id: 'H-1' } });
+  const answer = JSON.stringify({ sentences: [{ text: 'A node is listed.', cites: ['r1'] }] });
+  if (offered.length === 1 && offered[0] === 'answer') return answer;
+  const reads = body.split('"tool_result"').length - 1;
+  if (reads < 2) return JSON.stringify({ tool: 'nodeById', values: { id: 'H-2' } });
+  // the stand-in asks for this reply twice in a request that ends the reading: first the end of it, then the answer
+  const asked = lastBody === body;
+  lastBody = asked ? '' : body;
+  return asked ? answer : '{"done":true}';
 }
 
 /** The same extension with the assistant on, its model a stand-in on the loopback address: a turn makes its two reads through the gate as AI reads, beside the Ask and summary reads. */
-async function assistantLoadOptions(model: TurnModel): Promise<RigOptions> {
+async function assistantLoadOptions(model: ModelStub): Promise<RigOptions> {
   const extension = createEnterpriseExtension({ modelBaseUrl: model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => createMemoryAssistantThreadStore(), assistantPendingStore: () => createMemoryAssistantPendingStore() });
   const configured = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS), NEBURYX_ASSISTANT_MAX_STEPS: '4' }, { sourceIds: ['demo'], features: { ask: true, summary: true, assistant: true } });
   if (configured?.ok !== true) throw new Error('the extension of the assistant load could not be configured');
@@ -161,7 +169,7 @@ describe.skipIf(CALIBRATING)('a manual expand beside real assistant turns', () =
 
   async function measured(aiShare: number | undefined): Promise<{ record: AiRuntimeRecord; alone: Statistics; withAi: Statistics; steps: number }> {
     const record = readRecord();
-    const model = await startTurnModel(assistantModelReply);
+    const model = await startModelStub(assistantModelReply);
     try {
       const options = await assistantLoadOptions(model);
       const alone: number[] = [];
@@ -170,7 +178,7 @@ describe.skipIf(CALIBRATING)('a manual expand beside real assistant turns', () =
         alone.push((await timeManualExpand(options, { aiRequests: 0, readMs })).expandMs);
         withAi.push((await timeManualExpand(options, { aiRequests: record.workload.aiRequests, readMs, kinds: KINDS, ...(aiShare === undefined ? {} : { aiShare }) })).expandMs);
       }
-      return { record, alone: statisticsOf(alone), withAi: statisticsOf(withAi), steps: model.requests.filter((body) => body.includes('Masked results so far')).length };
+      return { record, alone: statisticsOf(alone), withAi: statisticsOf(withAi), steps: model.requests.filter((body) => body.includes('"tool_result"')).length };
     } finally {
       await model.close();
     }

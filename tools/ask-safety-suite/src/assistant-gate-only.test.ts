@@ -16,7 +16,9 @@ const HEAVY_STEP = JSON.stringify({ tool: 'sharedGadget', values: { id: 'W-1' } 
 const NOTES_STEP = JSON.stringify({ tool: 'ai-notes', values: {} });
 const DONE = '{"done":true}';
 const ANSWER = JSON.stringify({ sentences: [{ text: 'The second read found matches.', cites: ['s2'] }] });
-const VIEW_TABLE = JSON.stringify({ table: { columns: ['Element', 'Type'], rows: [{ cells: ['W-1', 'widget'], cites: ['n1'] }] } });
+const VIEW_TABLE = JSON.stringify({ columns: ['Element', 'Type'], rows: [{ cells: ['W-1', 'widget'], cites: ['n1'] }] });
+const READ_VIEW = JSON.stringify({ tool: 'view', values: {} });
+const WIDGET_READ = JSON.stringify({ sentences: [{ text: 'The widget W-1 was read.', cites: ['r1'] }] });
 const MESSAGE = 'Show W-1 and the widgets that share a gadget with it';
 const REGISTERED = ['entity-load', 'entity-load-many', 'shared-attribute', 'shared-attribute-count'];
 
@@ -49,12 +51,12 @@ function expectGateOnly(rig: AssistantRig): void {
 describe('every route of a turn reads only through the gate, through the real application', () => {
   it('is so for the view route, the ask route, the tool loop, the notes, summary and typology tools, a confirmation and a continue', async () => {
     const view = await start();
-    expect((await view.turn('What is in view?', [JSON.stringify({ route: 'view', form: 'table' }), VIEW_TABLE], { viewElementKeys: VIEW })).body).toMatchObject({ status: 'answered', route: 'view' });
+    expect((await view.turn('What is in view?', [JSON.stringify({ route: 'view', form: 'table' }), READ_VIEW, DONE, VIEW_TABLE], { viewElementKeys: VIEW })).body).toMatchObject({ status: 'answered', route: 'view' });
     expectGateOnly(view);
     await view.close();
 
     const ask = await start();
-    expect((await ask.turn('Show W-1', [ROUTE, DONE])).body).toMatchObject({ status: 'answered', route: 'ask' });
+    expect((await ask.turn('Show W-1', [ROUTE, DONE, WIDGET_READ])).body).toMatchObject({ status: 'answered', route: 'ask' });
     expectGateOnly(ask);
     await ask.close();
 
@@ -93,7 +95,7 @@ describe('every route of a turn reads only through the gate, through the real ap
     expectGateOnly(confirm);
     await confirm.close();
 
-    const heavy = await start();
+    const heavy = await startAssistantRig({ stub, respond: source, maxSteps: 4 });
     const stopped = await heavy.turn('Show the widgets that share a gadget with W-1', [SHARED]);
     const token = ((stopped.body['answer'] as { answered?: { continueToken?: string } } | undefined)?.answered?.continueToken) ?? '';
     expect(token).not.toBe('');

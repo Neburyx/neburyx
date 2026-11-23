@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
 import { plainNode, plainRelationship } from '../../../services/api/src/testing/normalize-fixtures.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
-import { startAssistantApp, startTurnModel, type AssistantApp, type TurnModel } from '../../../services/api/src/testing/assistant-turns.js';
+import { startAssistantApp, type AssistantApp } from '../../../services/api/src/testing/assistant-turns.js';
+import { startModelStub, type ModelStub } from '../../ask-safety-suite/src/stub.js';
 
 const MESSAGE = 'Show W-1 and the widgets that share a gadget with it';
 const ROUTE = JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: 'W-1' } });
@@ -19,10 +20,10 @@ const source = (call: ExecuteCall): ExecuteOutcome | undefined => {
   return { status: 'rows', rows: [row('W-2')] };
 };
 
-let model: TurnModel;
+let model: ModelStub;
 let app: AssistantApp;
 beforeEach(async () => {
-  model = await startTurnModel();
+  model = await startModelStub();
   app = await startAssistantApp({ model, respond: source, stores: true });
 });
 afterEach(async () => {

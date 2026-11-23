@@ -3,17 +3,19 @@ import { removeAskFolders } from '../../../services/api/src/testing/ask-folder.j
 import { widget } from '../../../services/api/src/testing/search-app.js';
 import { entityRows } from '../../../services/api/src/testing/entity-fixtures.js';
 import type { ExecuteCall, ExecuteOutcome } from '../../../services/api/src/gate/executor.js';
-import { HOLD, startAssistantApp, startTurnModel, type AssistantApp, type TurnModel } from '../../../services/api/src/testing/assistant-turns.js';
+import { startAssistantApp, type AssistantApp } from '../../../services/api/src/testing/assistant-turns.js';
+import { HOLD, startModelStub, type ModelStub } from '../../ask-safety-suite/src/stub.js';
 import { expectNothingStartedSince, type Started } from './assistant-checks.js';
 import { until } from './rig.js';
 
 const ROUTE = JSON.stringify({ route: 'ask', intent: 'widgetById', entities: { id: 'W-1' } });
 const NEXT = JSON.stringify({ tool: 'widgetById', values: { id: 'W-2' } });
 const DONE = '{"done":true}';
+const ANSWER = JSON.stringify({ sentences: [{ text: 'The widget W-001 was read.', cites: ['r1'] }] });
 const QUIET_MS = 300;
 const NDJSON = { accept: 'application/x-ndjson' };
 
-let model: TurnModel;
+let model: ModelStub;
 let app: AssistantApp;
 /** The reads of W-2 that are pending at the source: the tool step's read, held until the turn is cancelled. */
 let held: ExecuteCall[];
@@ -26,7 +28,7 @@ const respond = (call: ExecuteCall): Promise<ExecuteOutcome> | undefined => {
 
 beforeEach(async () => {
   held = [];
-  model = await startTurnModel();
+  model = await startModelStub();
   app = await startAssistantApp({ model, respond });
 });
 afterEach(async () => {
@@ -74,7 +76,7 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     await until(() => held.every((call) => call.signal?.aborted === true), 'the read to be aborted');
     await pause();
     expectNothingStartedSince(atCancel, started());
-    expect(model.requests).toHaveLength(2);
+    expect(model.requests).toHaveLength(3);
     expect(closing()).toMatchObject([{ result: 'failed', detail: { turn: { outcome: 'cancelled' } } }]);
     expect(app.logs.join('\n')).not.toContain('extension.handler_failed');
     expect(saved()).toBe(before);
@@ -85,7 +87,6 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     model.replies.push(ROUTE, HOLD);
     const controller = new AbortController();
     const response = await app.sendTurn('Show W-1 and W-2', controller.signal, {}, NDJSON);
-    await readUntil(response, (seen) => steps(seen).includes('reading'));
     await until(() => model.held() > 0, 'the step call to be pending');
     const atCancel = started();
     controller.abort();
@@ -98,17 +99,16 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
     expect(saved()).toBe(before);
   });
 
-  it('makes no further call when the stream is closed while the answer after the steps is pending', async () => {
+  it('makes no further call when the stream is closed while the call after the last step is pending', async () => {
     const before = saved();
-    model.replies.push(ROUTE, JSON.stringify({ tool: 'byId', values: { id: 'W-1' } }), DONE, HOLD);
+    model.replies.push(ROUTE, JSON.stringify({ tool: 'byId', values: { id: 'W-1' } }), HOLD);
     const controller = new AbortController();
     const response = await app.sendTurn('Show W-1 twice', controller.signal, {}, NDJSON);
-    await readUntil(response, (seen) => steps(seen).includes('answering'));
-    await until(() => model.held() > 0, 'the answer call to be pending');
+    await until(() => model.held() > 0, 'the call after the step to be pending');
     const atCancel = started();
     controller.abort();
     await until(() => model.held() === 0, 'the held call to be given up by the application');
-    model.release('{"sentences":[]}');
+    model.release(DONE);
     await pause();
     expectNothingStartedSince(atCancel, started());
     expect(model.requests).toHaveLength(4);
@@ -152,7 +152,7 @@ describe('closing the stream of an assistant turn is the cancel of the turn', ()
   });
 
   it('leaves the turn as answered when the stream is closed after its last line', async () => {
-    model.replies.push(ROUTE, DONE);
+    model.replies.push(ROUTE, DONE, ANSWER);
     const controller = new AbortController();
     const response = await app.sendTurn('Show W-1', controller.signal, {}, NDJSON);
     const lines = await readUntil(response, (seen) => seen.some((line) => line['event'] === 'answer'));

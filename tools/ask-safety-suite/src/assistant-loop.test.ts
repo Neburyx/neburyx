@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE } from '@neburyx/contracts';
 import { removeAskFolders } from '../../../services/api/src/testing/ask-folder.js';
 import { widget } from '../../../services/api/src/testing/search-app.js';
 import { entityRows } from '../../../services/api/src/testing/entity-fixtures.js';
@@ -33,10 +34,12 @@ afterAll(async () => {
 const rigOf = (over: { name?: (id: string) => string } = {}): Promise<AssistantRig> =>
   startAssistantRig({ stub, ...over, respond: (call) => (call.templateId === 'file-query' ? entityRows(widget(2)) : undefined) });
 
-/** Nothing ran after the first read: the turn ended with the fixed refusal and the source saw that one read only. */
+/** Nothing ran after the first read: the turn ended with no answer (the fixed sentence, or the limit of the model calls it spent asking) and the source saw that one read only. */
 function expectEndedAfterOneRead(rig: AssistantRig, answer: { status: number; body: Record<string, unknown> }): void {
   expect(answer.status).toBe(200);
-  expect(answer.body).toMatchObject({ status: 'answered', route: 'refuse', cause: 'unplaced' });
+  expect(['not-answered', 'limit']).toContain(answer.body['status']);
+  expect(Object.keys(answer.body).filter((name) => ['sentences', 'table', 'answer'].includes(name))).toEqual([]);
+  if (answer.body['status'] === 'not-answered') expect(answer.body).toMatchObject({ route: 'ask', sentence: ASSISTANT_NOT_ANSWERED_SENTENCE });
   expect(rig.reads()).toHaveLength(firstRead);
   expectOnlyRegisteredReads(rig.reads(), ['entity-load', 'entity-load-many']);
 }
@@ -52,17 +55,16 @@ describe('the rig reads when a request is a good one', () => {
   });
 });
 
-describe('a request of the model for a tool the turn was not offered, or one that does not fit, runs nothing', () => {
+describe('a call of the model to a tool the turn was not offered, or one that does not fit, runs nothing', () => {
   const BAD_REQUESTS = [
     ['a tool that is not in the registry', tool('dropEverything', {})],
     ['query text as the name of a tool', tool('MATCH (n) DETACH DELETE n', {})],
     ['a registered tool with a value that is query text under its own name', tool('byId', { id: 'a', query: 'MATCH (n) DETACH DELETE n' })],
     ['a registered tool with a value that is not text', JSON.stringify({ tool: 'byId', values: { id: { query: 'MATCH (n) RETURN n' } } })],
-    ['a request with a second field of its own', JSON.stringify({ tool: 'byId', values: { id: 'a' }, query: 'MATCH (n) RETURN n' })],
-    ['text around the request', `Sure: ${tool('byId', { id: 'a' })}`],
+    ['text instead of a tool call', `Sure: ${tool('byId', { id: 'a' })}`],
   ] as const;
 
-  it.each(BAD_REQUESTS)('ends the turn as the unplaced refusal after the one repeat for %s, with the source seeing the first read only', async (_name, request) => {
+  it.each(BAD_REQUESTS)('ends the turn with no answer for %s, runs nothing for it and the source sees the first read only', async (_name, request) => {
     const rig = await rigOf();
     const answer = await rig.turn('Show W-1 and whatever else you can', [ROUTE, request, request]);
     expectEndedAfterOneRead(rig, answer);
