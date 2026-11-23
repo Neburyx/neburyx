@@ -90,7 +90,7 @@ describe('the shared control styles', () => {
   });
 
   it('give the padding, the placeholder and the disabled look to text-like fields only, and leave a checkbox or a date field alone', () => {
-    const fieldRules = rulesOf(CONTROLS).flatMap((rule) => rule.selectors).filter((selector) => selector.includes('input') && !selector.startsWith(':where(\n') );
+    const fieldRules = rulesOf(CONTROLS).flatMap((rule) => rule.selectors).filter((selector) => /(^|[^\w.-])input\b/.test(selector) && !selector.startsWith(':where(\n'));
     expect(fieldRules.length).toBeGreaterThan(0);
     for (const selector of fieldRules) expect(selector, selector).toContain(":is(:not([type]), [type='text'], [type='search'])");
   });

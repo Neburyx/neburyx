@@ -184,6 +184,18 @@ test.describe('the Patterns panel on the canvas', () => {
     await expect(panelOf(page).getByText(/read-only$/)).toHaveCount(0);
   });
 
+  test('draws the form selects as the product draws a select: no native arrow, a thin chevron and the height of a button', async ({ page }) => {
+    await openForm(page);
+    const selects = panelOf(page).getByRole('combobox');
+    expect(await selects.count()).toBeGreaterThan(1);
+    const button = await runOf(page).boundingBox();
+    for (const select of await selects.all()) {
+      await expect(select).toHaveCSS('appearance', 'none');
+      expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toContain('chevron-down');
+      expect(Math.abs(((await select.boundingBox())?.height ?? 0) - (button?.height ?? 99))).toBeLessThan(4);
+    }
+  });
+
   test('keeps every control and the result inside the window, the panel scrolling inside itself', async ({ page }) => {
     await openForm(page);
     await chooseStart(page);

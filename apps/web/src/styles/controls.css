@@ -29,7 +29,7 @@ button.link {
   cursor: pointer;
 }
 
-:where(select:not([class]), select[class='']) {
+:where(select:not([class]), select[class=''], select.patterns-input) {
   padding-right: calc(var(--space-12) + var(--tool-icon-size));
   appearance: none;
   background: var(--color-surface) url('../assets/select-chevron.svg') no-repeat right var(--space-10) center / var(--tool-icon-size);
