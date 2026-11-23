@@ -14,6 +14,8 @@ export interface CheckedText {
   readonly descriptionKeys?: ReadonlySet<string>;
   /** The type of each element key (an entity type, or a relationship type), so that the comparison check knows which elements are of one type without the references a worker thread would have to copy. */
   readonly elementTypes?: ReadonlyMap<string, string>;
+  /** The titles and ids of each element, by key: what a count names apart from itself is found by, whatever shape the element's line is written in. */
+  readonly elementNames?: ReadonlyMap<string, readonly string[]>;
   /** False for the rows of a table: a cardinal written in words is read as a number everywhere else. */
   readonly readWordNumbers?: boolean;
   /** The keys of the properties each element's line holds a value for, by the element's key. */
@@ -149,13 +151,13 @@ function numberWordValue(word: string): string {
   return String(tens >= 0 ? (tens + 2) * 10 + (unit === undefined ? 0 : NUMBER_UNITS.indexOf(unit)) : NUMBER_UNITS.indexOf(head));
 }
 
-/** The values of the cardinals written in words from eleven to ninety-nine in a line of the text sent, quoted values included: a reply that restates `twenty-five` finds it where the line holds it. */
+/** The values of the cardinals written in words from eleven up in a line of the text sent, quoted values included: a reply that restates `twenty-five` finds it where the line holds it. */
 const writtenValuesOfLine = (line: string): string[] => [...line.matchAll(NUMBER_WORD)].map((found) => numberWordValue(found[0])).filter((value) => Number(value) > 10);
 
 /**
- * The cardinals written in words from eleven to ninety-nine, outside quoted text (a quoted title is a name the name check judges), as the digits would give them. One is `counting` when a word that names a type of an
- * element the text sent holds, or a kind (entity, relationship, element), follows at once: the count rule may then verify it against the cited elements. The words up to ten are ordinary words of a sentence (`one of`,
- * `no one`, `two payments`) that the name check lets pass and no number check reads.
+ * The cardinals written in words, outside quoted text (a quoted title is a name the name check judges), as the digits would give them. One is `counting` when a word that names a type of an element the text sent holds,
+ * or a kind (entity, relationship, element), follows at once: the count rule may then verify it against the cited elements. From eleven up every cardinal is a number to verify; the words up to ten are ordinary words of
+ * a sentence (`one of`, `no one`, `two payments`) that no number check reads unless they count.
  */
 function writtenNumbersIn(text: string, assembled: CheckedText): { readonly index: number; readonly length: number; readonly value: string; readonly after: string; readonly counting: boolean }[] {
   if (assembled.readWordNumbers === false) return [];
@@ -163,9 +165,9 @@ function writtenNumbersIn(text: string, assembled: CheckedText): { readonly inde
   const outside = text.replace(QUOTED, (quoted) => ' '.repeat(quoted.length));
   return [...outside.matchAll(NUMBER_WORD)].flatMap((found) => {
     const value = numberWordValue(found[0]);
-    if (Number(value) <= 10) return [];
     const after = text.slice(found.index + found[0].length);
-    return [{ index: found.index, length: found[0].length, value, after, counting: /^\s+\S/u.test(after) && types.some((name) => namesType(after.trimStart(), name)) }];
+    const counting = /^\s+\S/u.test(after) && types.some((name) => namesType(after.trimStart(), name));
+    return Number(value) <= 10 && !counting ? [] : [{ index: found.index, length: found[0].length, value, after, counting }];
   });
 }
 
@@ -219,13 +221,17 @@ function citationsHold(sentence: SummarySentence, assembled: CheckedText): boole
 /** The words a type's name is written with, lower case: `RECEIVED_BY` gives `received by`. */
 const elementTypeName = (elementType: string): string => elementType.replace(/^(?:entity|relationship) /u, '').toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim();
 
-/** Whether the text after a number opens with the name of the type, whole, as the singular or the plural. */
-function namesType(after: string, name: string): boolean {
-  if (name === '') return false;
-  const lead = after.toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trimStart();
-  const forms = [name, `${name}s`, `${name}es`, ...(name.endsWith('y') ? [`${name.slice(0, -1)}ies`] : [])];
-  return forms.some((form) => lead.startsWith(form) && !/^[\p{L}\p{N}_-]/u.test(lead.slice(form.length)));
+/** The length of the name of the type, as the singular or the plural, that the text after a number opens with, whole, across any white space or underscore between its words; nothing when it opens with none. */
+function typeWordLength(after: string, name: string): number | undefined {
+  if (name === '') return undefined;
+  const parts = name.split(' ').map((word) => word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'));
+  const last = parts.pop() ?? '';
+  const forms = [last, `${last}s`, `${last}es`, ...(last.endsWith('y') ? [`${last.slice(0, -1)}ies`] : [])];
+  const opening = new RegExp(`^\\s*${[...parts, `(?:${forms.join('|')})`].join('[\\s_]+')}(?![\\p{L}\\p{N}_-])`, 'iu').exec(after);
+  return opening?.[0].length;
 }
+
+const namesType = (after: string, name: string): boolean => typeWordLength(after, name) !== undefined;
 
 /**
  * Words that say a number is about a population other than the elements the sentence cites: the whole source, what was not retrieved, shown or counted here, or a bound or an approximation. A fixed list of the code. A sentence with one of them
@@ -233,20 +239,58 @@ function namesType(after: string, name: string): boolean {
  */
 const OTHER_POPULATION = /(?<![\p{L}\p{N}_-])(?:in total|total|totals|overall|altogether|in all|source-wide|the (?:whole |entire )?(?:source|database)|not (?:yet )?(?:retrieved|loaded|shown|read|listed|counted)|unretrieved|hidden|remaining|further|additional|beyond|more|fewer|less|over|under|exceeds?|exceeding|at least|at most|up to|about|approximately|around|roughly|nearly|almost)(?![\p{L}\p{N}_-])/iu;
 
-/** Whether a number is the count of the elements the sentence cites that are of the type, or of the kind (entities, relationships, elements), the text after it names: the check counts the cited elements itself and invents no number. */
+/** The titles and ids an element is named by: those the checked text carries for its key, or the ones its line writes. */
+const namesOfKey = (key: string, assembled: CheckedText): string[] => (assembled.elementNames?.get(key) ?? titleAndIdOf((assembled.lines.get(key) ?? '').normalize('NFC'))).map((name) => name.normalize('NFC'));
+
+/** The titles and ids of the elements sent, the longest first. */
+const namesOfElements = (assembled: CheckedText): string[] => [...new Set([...assembled.lines.keys()].flatMap((key) => namesOfKey(key, assembled)))].filter((name) => name !== '').sort((first, second) => second.length - first.length);
+
+const ESCAPED = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+const BETWEEN_NAMES = '(?:[\\s,;&()]|(?<![\\p{L}\\p{N}_-])(?:and|to|through)(?![\\p{L}\\p{N}_-]))+';
+
+/**
+ * The text of a sentence outside the lists of names that belong to a count: the list that follows it (`Five accounts, AC-1 to AC-5, …`, `Five accounts (AC-1 to AC-5) …`) and the one that precedes it (`AC-1 to AC-5, five
+ * accounts, …`). A list has names joined by a comma, `and`, `to` or `through`; it opens right after the type word, or after a comma or a bracket, and ends before the count with a comma or a bracket, so that a name joined to the
+ * count by `to` or `and` alone (`from five accounts to AC-9`) is a subject or a target apart from it.
+ */
+function outsideTheList(before: string, rest: string, names: readonly string[]): string {
+  if (names.length === 0) return `${before} ${rest}`;
+  const name = `(?<![\\p{L}\\p{N}_-])(?:${names.map(ESCAPED).join('|')})(?![\\p{L}\\p{N}_-])`;
+  const list = `${name}(?:${BETWEEN_NAMES}${name})*`;
+  const following = new RegExp(`^[\\s,;:(]*${list}`, 'iu').exec(rest)?.[0].length ?? 0;
+  const preceding = new RegExp(`${list}[\\s,;:)]*$`, 'iu').exec(before)?.[0].length ?? 0;
+  return `${before.slice(0, before.length - preceding)} ${rest.slice(following)}`;
+}
+
+/**
+ * Whether a number is the count of the elements the sentence cites that are of the type, or of the kind (entities, relationships, elements), the text after it names, less the elements of that type the sentence names
+ * apart from the count, by title or id, as a subject or a target (`Five accounts, AC-1 to AC-5, paid the account AC-9` counts five of six cited accounts): the check counts the cited elements itself and invents no number.
+ */
 function countsCitedElements(number: string, after: string, sentence: SummarySentence, assembled: CheckedText): boolean {
   const types = assembled.elementTypes;
   if (types === undefined || !/^\d+$/u.test(number) || OTHER_POPULATION.test(sentence.text.replace(/\s+/gu, ' '))) return false;
   const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
-  const perType = new Map<string, number>();
-  const perKind = new Map<string, number>([['element', 0], ['entity', 0], ['relationship', 0]]);
-  for (const key of new Set(sentence.cites)) {
-    const type = lines.has(key) ? undefined : types.get(key);
-    if (type === undefined) continue;
-    perType.set(type, (perType.get(type) ?? 0) + 1);
-    for (const kind of ['element', type.startsWith('relationship ') ? 'relationship' : 'entity']) perKind.set(kind, (perKind.get(kind) ?? 0) + 1);
-  }
-  return [...perType].some(([type, count]) => count === Number(number) && namesType(after, elementTypeName(type))) || [...perKind].some(([kind, count]) => count > 0 && count === Number(number) && namesType(after, kind));
+  const wanted = Number(number);
+  const text = sentence.text.normalize('NFC');
+  const tail = after.normalize('NFC');
+  const counted = (named: string, ofType: (type: string) => boolean): boolean => {
+    const end = typeWordLength(tail, named);
+    if (end === undefined) return false;
+    const outside = outsideTheList(text.slice(0, text.length - tail.length).replace(/\S+$/u, ''), tail.slice(end), namesOfElements(assembled));
+    const apart = (key: string): boolean => namesOfKey(key, assembled).some((name) => occursWhole(name, outside));
+    const matching = [...new Set(sentence.cites)].filter((key) => {
+      const type = lines.has(key) ? undefined : types.get(key);
+      return type !== undefined && ofType(type);
+    });
+    return matching.filter((key) => !apart(key)).length === wanted && wanted > 0;
+  };
+  const citedTypes = new Set([...new Set(sentence.cites)].flatMap((key) => (lines.has(key) || types.get(key) === undefined ? [] : [types.get(key) ?? ''])));
+  return (
+    [...citedTypes].some((type) => counted(elementTypeName(type), (held) => held === type)) ||
+    counted('entity', (held) => !held.startsWith('relationship ')) ||
+    counted('relationship', (held) => held.startsWith('relationship ')) ||
+    counted('element', () => true)
+  );
 }
 
 function numbersHold(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): boolean {

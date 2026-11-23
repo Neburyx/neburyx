@@ -130,7 +130,7 @@ function numbersIn(text: string): string[] {
 /** The numbers of a sent line, after its key, and the cardinals it writes in words from eleven up, quoted ones included. */
 function numbersOfLine(line: string): string[] {
   const after = line.slice(line.indexOf('|') + 1);
-  return [...numbersIn(after), ...wordMentionsIn(after, true).map((found) => found.value)];
+  return [...numbersIn(after), ...wordMentionsIn(after, true).filter((found) => Number(found.value) > 10).map((found) => found.value)];
 }
 
 /** Words that make a number about something other than the cited elements: the whole source, what was not retrieved or shown, a bound or an approximation. */
@@ -142,24 +142,64 @@ const typeOfLine = (key: string, line: string | undefined): string | undefined =
   return type === undefined ? undefined : `${key.startsWith('n') ? 'entity' : 'relationship'} ${type}`;
 };
 
-const formsOf = (name: string): string[] => [name, `${name}s`, `${name}es`, ...(name.endsWith('y') ? [`${name.slice(0, -1)}ies`] : [])];
+const escapeText = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 
-/** Whether a number is how many of the cited elements are of the type, or of the kind (entities, relationships, elements), the words after it name, said of those elements alone. */
+/** The name a type is written with in a sentence: lower case, the underscores and the repeated white space gone. */
+const nameOfType = (type: string): string => type.slice(type.indexOf(' ') + 1).toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim();
+
+/** The pattern of a type's name at the start of a text, whole, as the singular or the plural, across any white space or underscore between its words. */
+function typeWordPattern(name: string): RegExp {
+  const parts = name.split(' ').map(escapeText);
+  const last = parts.pop() ?? '';
+  const forms = [last, `${last}s`, `${last}es`, ...(last.endsWith('y') ? [`${last.slice(0, -1)}ies`] : [])];
+  return new RegExp(`^\\s*${[...parts, `(?:${forms.join('|')})`].join('[\\s_]+')}(?![\\p{L}\\p{N}_-])`, 'iu');
+}
+
+/** The titles and ids an element's line writes. */
+const namesOfLine = (line: string | undefined): string[] =>
+  [...(line ?? '').matchAll(/\b(?:title|id): ("(?:[^"\\]|\\.)*")/gu)].flatMap((found) => {
+    const value: unknown = JSON.parse(found[1] ?? '""');
+    return typeof value === 'string' && value !== '' ? [value] : [];
+  });
+
+const wholeIn = (name: string, text: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}_-])${escapeText(name)}(?![\\p{L}\\p{N}_-])`, 'u').test(text);
+
+/** Whether a number is how many of the cited elements are of the type, or of the kind (entities, relationships, elements), the words after it name, less those the sentence names apart from the count, by title or id (the list of names that follows the count is part of it). */
 function countsCitedOfType(found: { readonly value: string; readonly after: string }, sentence: SummarySentence, lines: Map<string, string>): boolean {
   if (!/^\d+$/u.test(found.value) || NOT_ABOUT_THE_CITED.test(sentence.text.replace(/\s+/gu, ' '))) return false;
-  const named = found.after.toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trimStart();
-  const types = new Map<string, number>();
-  const kinds = new Map<string, number>();
-  for (const key of new Set(sentence.cites)) {
+  const cited = [...new Set(sentence.cites)].flatMap((key) => {
     const type = typeOfLine(key, lines.get(key));
-    if (type === undefined) continue;
-    types.set(type, (types.get(type) ?? 0) + 1);
-    for (const kind of ['element', type.slice(0, type.indexOf(' '))]) kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
-  }
-  const namedAs = (name: string): boolean => formsOf(name).some((form) => named.startsWith(form) && !/^[\p{L}\p{N}_-]/u.test(named.slice(form.length)));
-  const wanted = Number(found.value);
-  return [...types].some(([type, count]) => count === wanted && namedAs(type.slice(type.indexOf(' ') + 1).toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim())) || [...kinds].some(([kind, count]) => count === wanted && namedAs(kind));
+    return type === undefined ? [] : [{ key, type }];
+  });
+  const everyName = [...new Set([...lines.values()].flatMap(namesOfLine).map((name) => name.normalize('NFC')))].sort((first, second) => second.length - first.length);
+  const alternatives = everyName.map(escapeText).join('|');
+  const nameOf = `(?<![\\p{L}\\p{N}_-])(?:${alternatives})(?![\\p{L}\\p{N}_-])`;
+  const between = '(?:[\\s,;&()]|(?<![\\p{L}\\p{N}_-])(?:and|to|through)(?![\\p{L}\\p{N}_-]))+';
+  const run = `${nameOf}(?:${between}${nameOf})*`;
+  const followingList = everyName.length === 0 ? undefined : new RegExp(`^[\\s,;:(]*${run}`, 'iu');
+  const precedingList = everyName.length === 0 ? undefined : new RegExp(`${run}[\\s,;:)]*$`, 'iu');
+  const text = sentence.text.normalize('NFC');
+  const tail = found.after.normalize('NFC');
+  const before = text.slice(0, text.length - tail.length).replace(/\S+$/u, '');
+  const candidates = [
+    ...[...new Set(cited.map((item) => item.type))].map((type) => ({ name: nameOfType(type), accepts: (held: string) => held === type })),
+    { name: 'entity', accepts: (held: string) => held.startsWith('entity ') },
+    { name: 'relationship', accepts: (held: string) => held.startsWith('relationship ') },
+    { name: 'element', accepts: () => true },
+  ];
+  return candidates.some((candidate) => {
+    const head = typeWordPattern(candidate.name).exec(tail);
+    if (head === null) return false;
+    const rest = tail.slice(head[0].length);
+    const outside = `${before.slice(0, before.length - (precedingList?.exec(before)?.[0].length ?? 0))} ${rest.slice(followingList?.exec(rest)?.[0].length ?? 0)}`;
+    const counted = cited.filter((item) => candidate.accepts(item.type) && !namesOfLine(lines.get(item.key)).some((name) => wholeIn(name.normalize('NFC'), outside)));
+    return counted.length === Number(found.value) && counted.length > 0;
+  });
 }
+
+/** Whether a text opens with the name of a type of the lines sent, or of a kind: a count. */
+const opensCount = (after: string, lines: Map<string, string>): boolean =>
+  [...new Set([...lines].flatMap(([key, line]) => typeOfLine(key, line) ?? []).map(nameOfType)), 'entity', 'relationship', 'element'].some((name) => typeWordPattern(name).test(after));
 
 /** The numbers of a sentence with the text after each, the words and identifiers blanked to their own length. */
 function mentionsIn(text: string): { readonly value: string; readonly after: string }[] {
@@ -179,19 +219,20 @@ function wordValue(word: string): number | undefined {
   return TEN_WORDS.includes(head) && added >= 1 && added <= 9 ? (TEN_WORDS.indexOf(head) + 2) * 10 + added : undefined;
 }
 
-/** The cardinals written in words from eleven up in a text, outside quotes, with the text after each; the words up to ten are ordinary words of a sentence. */
+/** The cardinals written in words in a text, outside quotes unless asked, with the text after each. */
 function wordMentionsIn(text: string, quotedToo = false): { readonly value: string; readonly after: string }[] {
   const outside = quotedToo ? text : text.replace(/"[^"]+"/gu, (quoted) => ' '.repeat(quoted.length));
   return [...outside.matchAll(/(?<![\p{L}\p{N}_-])[a-z]+(?:-[a-z]+)?(?![\p{L}\p{N}_-])/giu)].flatMap((found) => {
     const value = wordValue(found[0]);
-    return value === undefined || value <= 10 ? [] : [{ value: String(value), after: text.slice(found.index + found[0].length) }];
+    return value === undefined ? [] : [{ value: String(value), after: text.slice(found.index + found[0].length) }];
   });
 }
 
 export function numbersUnsupported(sentence: SummarySentence, sent: string): string[] {
   const lines = linesOfKeys(sent);
   const supported = new Set(sentence.cites.flatMap((key) => numbersOfLine(lines.get(key) ?? '')));
-  return [...mentionsIn(sentence.text), ...wordMentionsIn(sentence.text)].filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
+  const written = wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || opensCount(found.after, lines));
+  return [...mentionsIn(sentence.text), ...written].filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
 }
 
 export function expectNumbersCited(sentences: readonly SummarySentence[], sent: string): void {
@@ -204,7 +245,7 @@ export function expectNumbersCited(sentences: readonly SummarySentence[], sent: 
 /** A sentence that states a number beside a count the text gives as not known, or the number of an inexact count without the phrase that labels it; an exact count needs no label. */
 export function countRuleBroken(sentence: SummarySentence, sent: string): boolean {
   const lines = linesOfKeys(sent);
-  const stated = [...numbersIn(sentence.text), ...wordMentionsIn(sentence.text).map((found) => found.value)];
+  const stated = [...numbersIn(sentence.text), ...wordMentionsIn(sentence.text).filter((found) => Number(found.value) > 10 || opensCount(found.after, lines)).map((found) => found.value)];
   return sentence.cites.some((key) => {
     const members = /\| members: ([^|]+)/u.exec(lines.get(key) ?? '')?.[1]?.trim();
     if (members === undefined) return false;

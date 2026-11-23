@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 const NO_POPULATION_TEST: Mutation = { name: 'the population of a count', from: " || OTHER_POPULATION.test(sentence.text.replace(/\\s+/gu, ' '))", to: '' };
-const NO_ARITHMETIC_TEST: Mutation = { name: 'the arithmetic of a count', from: 'count === Number(number) &&', to: '' };
+const NO_ARITHMETIC_TEST: Mutation = { name: 'the arithmetic of a count', from: 'matching.filter((key) => !apart(key)).length === wanted &&', to: 'matching.length > 0 &&' };
 
 async function summarize(mutation: Mutation | undefined, sentence: SummarySentence, evidence: { readonly view: Evidence['view']; readonly sent?: string }) {
   vi.resetModules();
@@ -124,8 +124,80 @@ describe('the suite\'s own rule for a count written in words', () => {
     expect(countRuleBroken({ text: 'The payments are listed.', cites: ['n1'] }, lines)).toBe(false);
   });
 
-  it('does not read the words up to ten as a count: a known gap, as before', () => {
-    expect(numbersUnsupported({ text: 'Three widgets are listed.', cites: twelve }, sent)).toEqual([]);
+  it('reads the words up to ten as a count too, and does not read one that opens no count', () => {
+    expect(numbersUnsupported({ text: 'Three widgets are listed.', cites: twelve }, sent)).toEqual(['3']);
+    expect(numbersUnsupported({ text: 'Twelve widgets are listed.', cites: twelve }, sent)).toEqual([]);
+    expect(numbersUnsupported({ text: 'One of the widgets is listed.', cites: twelve }, sent)).toEqual([]);
+  });
+
+});
+
+describe('the suite\'s own rule for a count that leaves out the elements named apart from it', () => {
+  const titles = ['AC-5001', 'AC-5002', 'AC-5003', 'AC-5004', 'AC-5005', 'AC-5100'];
+  const keys = titles.map((_, index) => `n${index + 1}`);
+  const sent = titles.map((title, index) => `n${index + 1} | "account" | title: "${title}" | id: "${title}"`).join('\n');
+  const unsupported = (text: string, cites: string[] = keys): string[] => numbersUnsupported({ text, cites }, sent);
+
+  it.each([
+    '5 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.',
+    'Five accounts, AC-5001 to AC-5005, transferred to the account AC-5100.',
+    'The account AC-5100 received from five accounts, AC-5001 to AC-5005.',
+    'Six accounts, AC-5001, AC-5002, AC-5003, AC-5004, AC-5005 and AC-5100, are listed.',
+  ])('supports the count that leaves out the one named apart: %s', (text) => {
+    expect(unsupported(text)).toEqual([]);
+  });
+
+  it.each([
+    ['6 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '6'],
+    ['Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '4'],
+    ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '6'],
+  ])('does not support a wrong count, digits or words: %s', (text, value) => {
+    expect(unsupported(text)).toEqual([value]);
+  });
+
+  it.each([
+    ['AC-5001 to AC-5005, five accounts, transferred to the account AC-5100.', []],
+    ['AC-5001 to AC-5005, three accounts, transferred to the account AC-5100.', ['3']],
+    ['Five accounts (AC-5001 to AC-5005) transferred to the account AC-5100.', []],
+    ['Three accounts (AC-5001 to AC-5005) transferred to the account AC-5100.', ['3']],
+    ['4 accounts (AC-5001, AC-5002, AC-5003, AC-5004 and AC-5005) transferred to the account AC-5100.', ['4']],
+  ])('reads a list of names before the count or in parentheses as the count’s own: %s', (text, expected) => {
+    expect(unsupported(text)).toEqual(expected);
+  });
+
+  it.each([
+    ['Funds moved from five accounts to AC-5100.', []],
+    ['Funds moved from six accounts to AC-5100.', ['6']],
+    ['Payments from AC-5100 to five accounts.', []],
+    ['Payments from AC-5100 to six accounts.', ['6']],
+    ['Five accounts and AC-5100 are listed.', []],
+    ['Six accounts and AC-5100 are listed.', ['6']],
+  ])('does not take a name joined to the count by to or and alone for part of it: %s', (text, expected) => {
+    expect(unsupported(text)).toEqual(expected);
+  });
+
+  it('does not let a number word in a title back a number of the sentence', () => {
+    const held = 'n1 | "company" | title: "Five Rivers Ltd" | id: "CO-1"';
+    expect(numbersUnsupported({ text: 'Five Rivers Ltd received 5 transfers.', cites: ['n1'] }, held)).toEqual(['5']);
+  });
+
+  it('compares names composed or decomposed as the same text', () => {
+    const accented = sent.replaceAll('AC-5100', 'Caf\u00e9');
+    const said = (text: string): string[] => numbersUnsupported({ text, cites: keys }, accented);
+    expect(said('Five accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toEqual([]);
+    expect(said('Six accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toEqual(['6']);
+  });
+
+  it('reads a type name of any length and across any white space', () => {
+    const type = 'registered commercial banking institution with extended supervision and reporting duties';
+    const lines = ['n1', 'n2', 'n3'].map((key, index) => `${key} | "${type.replaceAll(' ', '_')}" | title: "Bank ${index + 1}" | id: "b${index + 1}"`).join('\n');
+    expect(numbersUnsupported({ text: `Three  ${type.replaceAll(' ', '  ')}s are listed.`, cites: ['n1', 'n2', 'n3'] }, lines)).toEqual([]);
+    expect(numbersUnsupported({ text: `Four ${type}s are listed.`, cites: ['n1', 'n2', 'n3'] }, lines)).toEqual(['4']);
+  });
+
+  it('supports a count when none is named apart, and does not when it counts the one named apart as well', () => {
+    expect(unsupported('Five accounts are listed.', keys.slice(0, 5))).toEqual([]);
+    expect(unsupported('Six accounts are listed.', keys.slice(0, 5))).toEqual(['6']);
   });
 });
 

@@ -320,9 +320,16 @@ describe('a count of the cited elements', () => {
       expect(keptWide('Twenty transactions are in view.')).toBe(false);
     });
 
-    it('does not read the words up to ten as a count: a known gap, pinned, as before', () => {
-      expect(keptWide('Four transactions are listed.', ['n1', 'n2', 'n3'])).toBe(true);
-      expect(keptWide('Two accounts are in view.', ['n26'])).toBe(true);
+    it('reads the words up to ten as a count, and removes a wrong one, as it does the digits', () => {
+      expect(keptWide('Three transactions are listed.', ['n1', 'n2', 'n3'])).toBe(true);
+      expect(keptWide('Four transactions are listed.', ['n1', 'n2', 'n3'])).toBe(false);
+      expect(keptWide('Five transactions are in view.', ['n1', 'n2', 'n3'])).toBe(false);
+      expect(keptWide('One account is in view.', ['n26'])).toBe(true);
+      expect(keptWide('Two accounts are in view.', ['n26'])).toBe(false);
+    });
+
+    it('does not read a small number word that opens no count', () => {
+      expect(keptWide('One of the transactions is TX-001.', ['n1'])).toBe(true);
     });
 
     it('removes a count in words said of another population, as it removes the digits', () => {
@@ -355,6 +362,11 @@ describe('a count of the cited elements', () => {
       expect(judged('"Twenty-six widgets" is listed.', ['n27'], titled).kept).toEqual([]);
     });
 
+    it('does not let a number word in the title of a cited element back a number of the sentence', () => {
+      const titled: CheckedText = { ...wide, text: `${wide.text}\nn27 | "Company" | title: "Five Rivers Ltd" | id: "CO-1"`, keys: new Map([...wide.keys, ['n27', true]]), lines: new Map([...wide.lines, ['n27', 'n27 | "Company" | title: "Five Rivers Ltd" | id: "CO-1"']]), elementTypes: new Map([...(wide.elementTypes ?? []), ['n27', 'entity Company']]) };
+      expect(judged('Five Rivers Ltd received 5 transfers.', ['n27'], titled).kept).toEqual([]);
+    });
+
     it('keeps a number in words that a cited line holds, in a property value or in the meaning of a type, as it kept it before', () => {
       const labelled: CheckedText = { ...wide, text: `${wide.text}\nn27 | "Widget" | title: "W" | id: "WID-1" | label: "twenty-five"\nm1: a widget is held for twenty-five days`, keys: new Map([...wide.keys, ['n27', true], ['m1', true]]), lines: new Map([...wide.lines, ['n27', 'n27 | "Widget" | title: "W" | id: "WID-1" | label: "twenty-five"'], ['m1', 'm1: a widget is held for twenty-five days']]), elementTypes: new Map([...(wide.elementTypes ?? []), ['n27', 'entity Widget']]), descriptionKeys: new Set(['m1']) };
       expect(judged('The label is twenty-five.', ['n27'], labelled).kept).toHaveLength(1);
@@ -370,6 +382,104 @@ describe('a count of the cited elements', () => {
     it('counts a number in words of a kind', () => {
       expect(keptWide('Twenty-five relationships are in view.', cites.filter((key) => key.startsWith('e')))).toBe(true);
       expect(keptWide('Twenty-six relationships are in view.', cites.filter((key) => key.startsWith('e')))).toBe(false);
+    });
+  });
+
+  describe('a count that leaves out the elements of the type named apart from it', () => {
+    const keys = ['a1', 'a2', 'a3', 'a4', 'a5', 'a6'];
+    const titles = ['AC-5001', 'AC-5002', 'AC-5003', 'AC-5004', 'AC-5005', 'AC-5100'];
+    const accountLines = keys.map((key, index) => `${key} | "account" | title: "${titles[index]}" | id: "${titles[index]}"`);
+    const apart: CheckedText = {
+      text: accountLines.join('\n'),
+      keys: new Map(keys.map((key) => [key, true])),
+      lines: new Map(keys.map((key, index) => [key, accountLines[index] ?? ''])),
+      inexactCounts: [],
+      unknownCountKeys: new Set(),
+      elementTypes: new Map(keys.map((key) => [key, 'entity account'])),
+    };
+    const verdict = (text: string, cited = keys): boolean => judgeSentences([{ text, cites: cited }], apart).kept.length === 1;
+
+    it.each([
+      ['5 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+      ['Five accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+      ['The account AC-5100 received from five accounts, AC-5001 to AC-5005.'],
+      ['Six accounts, AC-5001, AC-5002, AC-5003, AC-5004, AC-5005 and AC-5100, are listed.'],
+    ])('keeps the count when the one named apart is left out: %s', (text) => {
+      expect(verdict(text)).toBe(true);
+    });
+
+    it.each([
+      ['6 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+      ['Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+      ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+      ['4 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+    ])('removes a wrong count, the same for digits and words: %s', (text) => {
+      expect(verdict(text)).toBe(false);
+    });
+
+    it.each([
+      ['AC-5001 to AC-5005, five accounts, transferred to the account AC-5100.', true],
+      ['AC-5001 to AC-5005, 5 accounts, transferred to the account AC-5100.', true],
+      ['AC-5001 to AC-5005, three accounts, transferred to the account AC-5100.', false],
+      ['Five accounts (AC-5001 to AC-5005) transferred to the account AC-5100.', true],
+      ['Three accounts (AC-5001 to AC-5005) transferred to the account AC-5100.', false],
+      ['5 accounts (AC-5001, AC-5002, AC-5003, AC-5004 and AC-5005) transferred to the account AC-5100.', true],
+      ['4 accounts (AC-5001, AC-5002, AC-5003, AC-5004 and AC-5005) transferred to the account AC-5100.', false],
+    ])('reads a list of names before the count or in parentheses as the count’s own: %s', (text, expected) => {
+      expect(verdict(text)).toBe(expected);
+    });
+
+    it.each([
+      ['There were transfers from five accounts to AC-5100.', true],
+      ['There were transfers from six accounts to AC-5100.', false],
+      ['There were payments from AC-5100 to five accounts.', true],
+      ['There were payments from AC-5100 to six accounts.', false],
+      ['Five accounts and AC-5100 are listed.', true],
+      ['Six accounts and AC-5100 are listed.', false],
+    ])('does not take a name joined to the count by to or and alone for part of it: %s', (text, expected) => {
+      expect(verdict(text)).toBe(expected);
+    });
+
+    it('compares names as the same text whether they are written composed or decomposed', () => {
+      const cafe = apart.lines.get('a6')?.replace('AC-5100', 'Caf\u00e9').replace('AC-5100', 'Caf\u00e9') ?? '';
+      const accented: CheckedText = { ...apart, text: [...apart.lines.values()].slice(0, 5).concat(cafe).join('\n'), lines: new Map([...apart.lines, ['a6', cafe]]) };
+      const said = (text: string): boolean => judgeSentences([{ text, cites: keys }], accented).kept.length === 1;
+      expect(said('Five accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toBe(true);
+      expect(said('Six accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toBe(false);
+      expect(said('Five accounts, AC-5001 to AC-5005, transferred to the account Caf\u00e9.')).toBe(true);
+    });
+
+    it('keeps a count of the cited elements when none is named apart, and removes one that counts the one named apart too', () => {
+      expect(verdict('Five accounts are listed.', keys.slice(0, 5))).toBe(true);
+      expect(verdict('Six accounts are listed.', keys.slice(0, 5))).toBe(false);
+    });
+  });
+
+  describe('the name of a type, whatever its length or its white space', () => {
+    const longType = 'registered_commercial_banking_institution_with_extended_supervision_and_reporting_duties';
+    const longLines = ['n1', 'n2', 'n3'].map((key, index) => `${key} | "${longType}" | title: "Bank ${index + 1}" | id: "b${index + 1}"`);
+    const long: CheckedText = {
+      text: longLines.join('\n'),
+      keys: new Map(['n1', 'n2', 'n3'].map((key) => [key, true])),
+      lines: new Map(['n1', 'n2', 'n3'].map((key, index) => [key, longLines[index] ?? ''])),
+      inexactCounts: [],
+      unknownCountKeys: new Set(),
+      elementTypes: new Map(['n1', 'n2', 'n3'].map((key) => [key, `entity ${longType}`])),
+    };
+    const name = longType.replaceAll('_', ' ');
+    const said = (text: string): boolean => judgeSentences([{ text, cites: ['n1', 'n2', 'n3'] }], long).kept.length === 1;
+
+    it('reads a type name of any length, in digits and in words, and removes a wrong count', () => {
+      expect(name.length).toBeGreaterThan(80);
+      expect(said(`3 ${name}s are listed.`)).toBe(true);
+      expect(said(`Three ${name}s are listed.`)).toBe(true);
+      expect(said(`Four ${name}s are listed.`)).toBe(false);
+      expect(said(`4 ${name}s are listed.`)).toBe(false);
+    });
+
+    it('reads the name across more white space than one space', () => {
+      expect(said(`Three   ${name.replaceAll(' ', '  ')}s are listed.`)).toBe(true);
+      expect(said(`Four   ${name.replaceAll(' ', '  ')}s are listed.`)).toBe(false);
     });
   });
 

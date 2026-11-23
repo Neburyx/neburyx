@@ -122,6 +122,18 @@ describe('the answer after tool steps', () => {
     expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ status: 'not-answered' });
   });
 
+  it('counts the cited elements of a read less the one the sentence names apart, in digits and in words, and removes the wrong counts', async () => {
+    const survives = async (text: string): Promise<boolean> => {
+      const r = await setup(sentences({ text, cites: ['r1', 'r2'] }));
+      return (await answerOf(r.route.handler(r.request()))).status === 'answered';
+    };
+    expect(await survives('One widget, Account A-1, is listed beside the widget Account A-2.')).toBe(true);
+    expect(await survives('1 widget, Account A-1, is listed beside the widget Account A-2.')).toBe(true);
+    expect(await survives('Two widgets, Account A-1, are listed beside the widget Account A-2.')).toBe(false);
+    expect(await survives('2 widgets are listed.')).toBe(true);
+    expect(await survives('Three widgets are listed.')).toBe(false);
+  });
+
   const second = (result: () => ReturnType<typeof okResult>) => {
     let next = 0;
     return { run: () => ({ status: 'ok' as const, result: next++ === 0 ? okResult() : result() }) };

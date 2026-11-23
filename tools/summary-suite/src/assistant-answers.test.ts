@@ -204,6 +204,27 @@ describe.each(PATHS)('%s: the entities and the relationships of a view, counted 
   });
 });
 
+describe.each(PATHS)('%s: a count that leaves out the element named apart from it, with the product’s own checks', (_name, path) => {
+  const accounts = ['AC-5001', 'AC-5002', 'AC-5003', 'AC-5004', 'AC-5005', 'AC-5100'].map((title) => node('account', title, title));
+  const evidence: Counted = { view: reading(accounts) };
+  const cites = accounts.map((_, index) => `n${index + 1}`);
+  const said = (text: string): Promise<string[]> => path(undefined, sentencesOf({ text, cites }), evidence);
+
+  it('keeps five accounts, in words and in digits, over six cited with one named as the target, and removes the wrong counts', async () => {
+    for (const kept of ['Five accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '5 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.']) expect(await said(kept)).toEqual([kept]);
+    for (const removed of ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', 'Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.']) expect(await said(removed)).toEqual([]);
+  });
+
+  it('removes five transactions over three cited, as it removes 5', async () => {
+    const three = Array.from({ length: 3 }, (_, index) => node('transaction', `TX-${index + 1}`, `Transfer ${index + 1}`));
+    const held: Counted = { view: reading(three) };
+    const threeCites = three.map((_, index) => `n${index + 1}`);
+    expect(await path(undefined, sentencesOf({ text: 'Five transactions are listed.', cites: threeCites }), held)).toEqual([]);
+    expect(await path(undefined, sentencesOf({ text: '5 transactions are listed.', cites: threeCites }), held)).toEqual([]);
+    expect(await path(undefined, sentencesOf({ text: 'Three transactions are listed.', cites: threeCites }), held)).toEqual(['Three transactions are listed.']);
+  });
+});
+
 const tableOf = (columns: string[], ...rows: { cells: string[]; cites: string[] }[]): Script => JSON.stringify({ table: { columns, rows } });
 
 const tableViewPath = async (mutation: Mutation | undefined, reply: Script, evidence: Counted): Promise<string[][]> => {
