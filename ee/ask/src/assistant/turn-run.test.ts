@@ -71,7 +71,7 @@ describe('the run and call records of an answered turn', () => {
     await run(turn, { ...BODY, investigationId: INVESTIGATION });
     const [recorded] = turn.store.runs;
     expect(turn.store.runs).toHaveLength(1);
-    expect(recorded?.start).toMatchObject({ id: expect.stringMatching(UUID), actorId: 'p-1', investigationId: INVESTIGATION, sourceId: 'demo', traceId: 'tr-1', settings: { model: 'claude-sonnet-5-5', maxCalls: 5 } });
+    expect(recorded?.start).toMatchObject({ id: expect.stringMatching(UUID), actorId: 'p-1', investigationId: INVESTIGATION, sourceId: 'demo', traceId: 'tr-1', settings: { model: 'claude-sonnet-5-5', maxCalls: 8 } });
     expect(recorded).toMatchObject({ outcome: 'answered', calls: 1 });
     const [sent] = turn.r.fixture.calls;
     expect(recorded?.callStarts).toEqual([expect.objectContaining({ number: 1, instructionsText: sent?.instructions, valuesText: sent?.values, instructionsSha256: promptRecordOf(sent ?? { promptId: '', version: 0, values: '' }).sha256 })]);
