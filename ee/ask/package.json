@@ -22,7 +22,9 @@
   "dependencies": {
     "@neburyx/contracts": "workspace:*",
     "@neburyx/ee-ai-runtime": "workspace:*",
+    "@neburyx/ee-assistant-agent": "workspace:*",
     "@neburyx/ee-audit": "workspace:*",
+    "zod": "4.6.7",
     "pg": "8.23.1"
   },
   "devDependencies": {

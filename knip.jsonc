@@ -6,6 +6,10 @@
       "project": ["tools/ci/*.mjs", "deploy/**/*.mjs"]
     },
     "ee/ai-runtime": {},
+    "ee/assistant-agent": {
+      // The test entry the Ask package imports as `@neburyx/ee-assistant-agent/testing`.
+      "entry": ["src/index.ts", "src/testing.ts"]
+    },
     "ee/audit": {},
     "services/api": {},
     "packages/test-containers": {},

@@ -46,12 +46,6 @@ export interface AuditedModelCall {
   readonly asProvider: (context: AuditedCallContext) => ModelProvider;
 }
 
-interface Outcome {
-  readonly result: AuditResult;
-  readonly modelRef: string;
-  readonly usage: TokenUsage;
-}
-
 /** What the audit event accepts as a prompt id: the rule of the contract's `label`. */
 const AUDIT_LABEL = /^[A-Za-z0-9._:/-]{1,200}$/;
 
@@ -66,10 +60,21 @@ function sameRecord(left: PromptRecord, right: PromptRecord): boolean {
   return left.id === right.id && left.version === right.version && left.sha256 === right.sha256;
 }
 
-export function createAuditedModelCall(options: AuditedModelOptions): AuditedModelCall {
-  const { provider, configuration, sink } = options;
+export interface CallRecorder {
+  /** Hands the event of one finished call to the sink; an event that cannot be built rejects with `AuditUnavailableError`. */
+  readonly record: (context: AuditedCallContext, prompt: PromptRecord, outcome: CallOutcome) => Promise<void>;
+}
 
-  function eventOf(context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): AuditEvent {
+export interface CallOutcome {
+  readonly result: AuditResult;
+  readonly modelRef: string;
+  readonly usage: TokenUsage;
+}
+
+export function createCallRecorder(options: Pick<AuditedModelOptions, 'sink'>): CallRecorder {
+  const { sink } = options;
+
+  function eventOf(context: AuditedCallContext, prompt: PromptRecord, outcome: CallOutcome): AuditEvent {
     const counts =
       outcome.usage.kind === 'known'
         ? {
@@ -101,7 +106,7 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
   }
 
   /** Hands the event to the sink, which queues it: the answer of the provider does not wait for the store and is not discarded when the event cannot be written. An event that cannot be built is the only failure that withholds the answer. */
-  async function record(context: AuditedCallContext, prompt: PromptRecord, outcome: Outcome): Promise<void> {
+  async function record(context: AuditedCallContext, prompt: PromptRecord, outcome: CallOutcome): Promise<void> {
     let event: AuditEvent;
     try {
       event = eventOf(context, prompt, outcome);
@@ -113,11 +118,19 @@ export function createAuditedModelCall(options: AuditedModelOptions): AuditedMod
     await sink.record(event).catch(() => undefined);
   }
 
+  return { record };
+}
+
+export function createAuditedModelCall(options: AuditedModelOptions): AuditedModelCall {
+  const { provider, configuration, sink } = options;
+
+  const { record } = createCallRecorder({ sink });
+
   async function call(request: ModelRequest, context: AuditedCallContext, signal: AbortSignal): Promise<ModelAnswer> {
     // an id the audit event cannot hold is refused before anything is sent, so no call goes out without its event
     if (!AUDIT_LABEL.test(request.promptId) || !Number.isInteger(request.version) || request.version < 0) throw new RangeError('the prompt id or version cannot be recorded in the audit');
     const sent = promptRecordOf(request);
-    const failed: Outcome = { result: 'failed', modelRef: configuration.model, usage: UNKNOWN_USAGE };
+    const failed: CallOutcome = { result: 'failed', modelRef: configuration.model, usage: UNKNOWN_USAGE };
     let answer: ModelAnswer;
     try {
       answer = await provider.complete(request, signal);

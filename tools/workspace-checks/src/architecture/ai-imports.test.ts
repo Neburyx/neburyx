@@ -28,6 +28,20 @@ describe('the imports of the AI packages', () => {
     expect(ask).toEqual([]);
   });
 
+  it('allows deepagents and the LangChain packages in the assistant agent package only', () => {
+    const imports = "import { createDeepAgent } from 'deepagents';\nimport { tool } from 'langchain';\nimport { ChatAnthropic } from '@langchain/anthropic';";
+    expect(checkAiImports([{ path: 'ee/assistant-agent/src/a.ts', text: imports }])).toEqual([]);
+    for (const owner of ['ee/ask/src/a.ts', 'ee/ai-runtime/src/a.ts']) {
+      expect(checkAiImports([{ path: owner, text: imports }]).map((violation) => violation.specifier)).toEqual(['deepagents', 'langchain', '@langchain/anthropic']);
+    }
+  });
+
+  it('lets the Ask package import the assistant agent package and refuses it anywhere else', () => {
+    const text = "import { runAgent } from '@neburyx/ee-assistant-agent';";
+    expect(checkAiImports([{ path: 'ee/ask/src/a.ts', text }])).toEqual([]);
+    expect(checkAiImports([{ path: 'ee/ai-runtime/src/a.ts', text }]).map((violation) => violation.specifier)).toEqual(['@neburyx/ee-assistant-agent']);
+  });
+
   it('passes on the real tree', () => {
     const real = loadTree(repoRoot, { include: AI_IMPORT_SCAN_ROOTS });
     expect(real.map((file) => file.path)).toContain('ee/ai-runtime/src/index.ts');

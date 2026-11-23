@@ -33,7 +33,7 @@ const noop = (): void => undefined;
 const SILENT_LOGGER = { error: noop, warn: noop, info: noop, debug: noop };
 
 /** The key, read from its reference now, or undefined when it cannot be read; the reason is never kept, since it could name a path. */
-async function readKey(configuration: AnthropicProviderOptions['configuration'], env: Readonly<Record<string, string | undefined>>): Promise<string | undefined> {
+export async function readProviderKey(configuration: AnthropicProviderOptions['configuration'], env: Readonly<Record<string, string | undefined>>): Promise<string | undefined> {
   const reference = configuration.key;
   let text: string | undefined;
   if (reference.kind === 'env') {
@@ -157,7 +157,7 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): Mode
   async function attempt(request: ModelRequest, signal: AbortSignal, note: (failure: ProviderFailure) => void): Promise<ModelAnswer> {
     const record = promptRecordOf(request);
     const failed = (code: FailureCode): ModelAnswer => ({ status: 'failed', code, usage: UNKNOWN_USAGE, prompt: record });
-    const key = await readKey(configuration, options.env ?? process.env);
+    const key = await readProviderKey(configuration, options.env ?? process.env);
     if (key === undefined) return failed('rejected');
 
     // One deadline over the whole call: the client's own timeout is per attempt and ends when the headers arrive.

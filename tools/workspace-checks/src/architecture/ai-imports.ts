@@ -11,7 +11,8 @@ interface AiPackage {
 /** The AI packages reach the core only through the gate client, so what they may import is a short list: their own files, Node built-ins and these packages. */
 const AI_PACKAGES: readonly AiPackage[] = [
   { folder: 'ee/ai-runtime', allowed: ['@neburyx/contracts', '@neburyx/ee-audit', '@anthropic-ai/sdk'] },
-  { folder: 'ee/ask', allowed: ['@neburyx/contracts', '@neburyx/ee-ai-runtime', '@neburyx/ee-audit', 'pg'] },
+  { folder: 'ee/ask', allowed: ['@neburyx/contracts', '@neburyx/ee-ai-runtime', '@neburyx/ee-assistant-agent', '@neburyx/ee-audit', 'pg', 'zod'] },
+  { folder: 'ee/assistant-agent', allowed: ['@neburyx/contracts', '@neburyx/ee-ai-runtime', 'deepagents', 'langchain', '@langchain/anthropic', '@langchain/core', '@langchain/openai', 'zod'] },
 ];
 
 export const AI_IMPORT_SCAN_ROOTS: readonly string[] = ['ee'];

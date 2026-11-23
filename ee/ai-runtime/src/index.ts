@@ -1,6 +1,6 @@
-export { createAnthropicProvider, type ProviderFailure } from './anthropic.js';
+export { createAnthropicProvider, readProviderKey, type ProviderFailure } from './anthropic.js';
 export { LocalProviderSettingError, createLocalProvider, type LocalProviderOptions } from './local.js';
-export { AuditUnavailableError, createAuditedModelCall, type AuditedCallContext, type AuditedModelCall } from './audited.js';
+export { AuditUnavailableError, createAuditedModelCall, createCallRecorder, type AuditedCallContext, type AuditedModelCall, type CallOutcome, type CallRecorder } from './audited.js';
 export { createFailureReporter } from './failure-line.js';
 export { DEFAULT_ASK_MODEL, configureProvider, given, integerChoice, type Env, type ProviderConfiguration } from './provider-configuration.js';
 export { FAILURE_CODES, promptRecordOf, type FailureCode, type ModelAnswer, type ModelProvider, type ModelRequest, type PromptRecord, type TokenUsage } from './provider.js';
