@@ -70,7 +70,7 @@ const turn = z.strictObject({
   traceId: z.string().optional(),
   ms: z.number().min(0),
   httpStatus: whole,
-  status: z.enum(['answered', 'refused', 'waiting', 'failed', 'other']),
+  status: z.enum(['answered', 'refused', 'waiting', 'stopped', 'failed', 'other']),
   answer: z.unknown().optional(),
 });
 const repeatFile = z.strictObject({

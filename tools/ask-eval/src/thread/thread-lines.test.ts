@@ -11,6 +11,12 @@ const SECOND = `${FIRST}ai: [{"type":"tool_use","id":"t2","name":"degree-preview
 const ANSWER_REPLY = '[{"type":"tool_use","id":"t3","name":"answer","input":{"sentences":[{"text":"x","cites":["n1","s1"]}]}}]';
 
 describe('the lines an answer cites', () => {
+  it('takes the lines of the latest read when the answer check replied after it, so a reply that holds no line does not hide them', () => {
+    const values = `${FIRST}ai: [{"name":"answer","args":{}}]\ntool: Checked: 1 sentences kept, 1 removed. Call answer again with sentences that cite elements, or reply "Done.".\nRemoved: "x"`;
+    const lines = linesOfAnswer({ ...records(), calls: [call(1, { replyText: ANSWER_REPLY, valuesText: values })] });
+    expect(lines?.lines.get('n1')).toContain('Account W-1');
+  });
+
   it('counts the cites that are not text keys or whose sentence has no list of cites, and invents no line for them', () => {
     const cited = citedLinesOf({ sentences: [{ text: 'a', cites: ['n1', 7] }, { text: 'b' }, { text: 'c', cites: 'n1' }] }, undefined);
     expect(cited.malformed).toBe(3);

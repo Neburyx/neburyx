@@ -10,13 +10,9 @@ export interface AnswerLines {
 const KEY_LINE = /^([nerastm]\d+)(?:\s*\|\s*|:\s+)(.*)$/u;
 const MESSAGE_START = /^(human|ai|tool|system): /u;
 
-/** The lines of the last tool message of a call's values: the keys are renumbered after every read, so only the latest result's keys are the ones the answer may cite. */
-function lastToolLines(valuesText: string): ReadonlyMap<string, string> {
-  const lines = valuesText.split('\n');
-  let start = -1;
-  for (let index = 0; index < lines.length; index += 1) if ((lines[index] ?? '').startsWith('tool: ')) start = index;
+/** The key lines of one tool message, from its first line to the next message. */
+function linesOfToolMessage(lines: readonly string[], start: number): Map<string, string> {
   const found = new Map<string, string>();
-  if (start < 0) return found;
   for (let index = start; index < lines.length; index += 1) {
     const raw = index === start ? (lines[index] ?? '').slice('tool: '.length) : (lines[index] ?? '');
     if (index > start && MESSAGE_START.test(raw)) break;
@@ -25,6 +21,18 @@ function lastToolLines(valuesText: string): ReadonlyMap<string, string> {
     if (key !== undefined && match?.[2] !== undefined) found.set(key, raw);
   }
   return found;
+}
+
+/** The lines of the latest tool message of a call's values that holds any: the keys are renumbered after every read, so only the latest read's keys are the ones the answer may cite, and the reply of the answer check, which holds none, does not hide them. */
+function lastToolLines(valuesText: string): ReadonlyMap<string, string> {
+  const lines = valuesText.split('\n');
+  let latest = new Map<string, string>();
+  lines.forEach((line, index) => {
+    if (!line.startsWith('tool: ')) return;
+    const found = linesOfToolMessage(lines, index);
+    if (found.size > 0) latest = found;
+  });
+  return latest;
 }
 
 const ANSWER_CALL = /"name"\s*:\s*"answer"/u;

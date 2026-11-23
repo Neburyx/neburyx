@@ -151,6 +151,20 @@ describe('one repeat', () => {
     }
   });
 
+  it('goes on after a turn the product stopped with its own limit sentence, recording it as stopped, and ends the repeat at an unavailable turn', async () => {
+    const LIMIT = { status: 'limit', limit: 'input', sentence: 'This turn grew past what it may send, so it stopped. What was read is shown above.', reads: [] };
+    const f = files();
+    const s = standIn({ answers: (n) => ({ status: 200, body: n === 2 ? LIMIT : REFUSED }) });
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(0);
+    const file = runFile(join(f.out, 'thread-refs-r1.json'));
+    expect(file.turns.map((turn) => turn.status)).toEqual(['refused', 'stopped', 'refused']);
+    expect(file.ended).toBe('complete');
+    const g = files();
+    const down = standIn({ answers: (n) => ({ status: 200, body: n === 2 ? { status: 'unavailable', kind: 'service', readStarted: false } : REFUSED }) });
+    expect(await runCli(args(g, ['--repeats', '1', '--budget', '100', '--out', g.out, '--database-env-file', g.settings]), io().io, noHooks, { http: down.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+    expect(runFile(join(g.out, 'thread-refs-r1.json')).turns.map((turn) => turn.status)).toEqual(['refused', 'failed']);
+  });
+
   it('writes no key, connection string or cookie text into the run file', async () => {
     const f = files();
     const s = standIn();

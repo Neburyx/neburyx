@@ -35,7 +35,7 @@ export interface RepeatOptions {
   readonly verifyFirstTurn?: (turn: TurnRecord) => Promise<string | undefined>;
 }
 
-type TurnStatus = 'answered' | 'refused' | 'waiting' | 'failed' | 'other';
+type TurnStatus = 'answered' | 'refused' | 'waiting' | 'stopped' | 'failed' | 'other';
 
 export interface TurnRecord {
   readonly n: number;
@@ -121,13 +121,14 @@ function statusOf(httpStatus: number, body: unknown): { readonly status: TurnSta
   const answer = parsed.data;
   if (answer.status === 'answered') return { status: answer.route === 'refuse' ? 'refused' : 'answered', answer };
   if (answer.status === 'confirmation' || answer.status === 'clarification') return { status: 'waiting', answer };
-  if (answer.status === 'unavailable' || answer.status === 'too-large' || answer.status === 'too-long' || answer.status === 'limit' || answer.status === 'cancelled') return { status: 'failed', answer };
+  if (answer.status === 'too-large' || answer.status === 'too-long' || answer.status === 'limit') return { status: 'stopped', answer };
+  if (answer.status === 'unavailable' || answer.status === 'cancelled') return { status: 'failed', answer };
   return { status: 'other', answer };
 }
 
 /**
  * One repeat of the thread: a fresh investigation on the anchor, the plain view, and the messages sent in order as typed messages of one thread. A turn that waits for a choice or a confirmation ends the repeat with
- * that status; a failed turn stops it; the tool answers nothing on the person's behalf. The file it returns holds no key or connection string: it holds what the product returned.
+ * that status; a turn the product stopped with its own limit sentence (limit, too-large, too-long) is an answer and the thread goes on; a failed turn stops it; the tool answers nothing on the person's behalf. The file it returns holds no key or connection string: it holds what the product returned.
  */
 export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
   const { http, manifest, settings } = options;
