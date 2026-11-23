@@ -31,14 +31,14 @@ const VIEW = JSON.stringify({ route: 'view' });
 const VIEW_KEY = JSON.stringify(['node', 'src1', 'widget', 'W-1']);
 
 describe('the cost of the tool loop on the real assistant turn', () => {
-  it('makes one model call more for an ask turn with the loop on than with the steps at 1, the router\'s call counted apart from the loop\'s', async () => {
+  it('makes the router\'s one model call for an ask turn whatever the steps setting says, since the agent turn is measured apart', async () => {
     const source = await sourceOf();
     const off = scripted({ 'assistant.route': ASK, 'assistant.step': '{"done":true}' });
     const on = scripted({ 'assistant.route': ASK, 'assistant.step': '{"done":true}' });
     const one = await loopCostRun(source, off, 'scripted', { message: 'Show it.', viewElementKeys: [] }, 1);
     const four = await loopCostRun(source, on, 'scripted', { message: 'Show it.', viewElementKeys: [] }, 4);
     expect(one).toMatchObject({ route: 'answered ask', total: 1, calls: { 'assistant.route': 1 }, inputTokens: 100, outputTokens: 10 });
-    expect(four).toMatchObject({ route: 'answered ask', total: 2, calls: { 'assistant.route': 1, 'assistant.step': 1 }, inputTokens: 200, outputTokens: 20 });
+    expect(four).toMatchObject({ route: 'answered ask', total: 1, calls: { 'assistant.route': 1 }, inputTokens: 100, outputTokens: 10 });
     expect(four.ms).toBeGreaterThanOrEqual(0);
   });
 

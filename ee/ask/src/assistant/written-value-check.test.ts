@@ -107,7 +107,7 @@ describe('a written value in a step of the tool loop', () => {
     expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { refused: { cause: 'value-not-fit', valueNotFit: { kind: 'other-type', needed: 'widget', found: 'gadget' } } }, reads: [{ tool: 'shared', read: true }] });
     expect(answer).not.toHaveProperty('stoppedAt');
     expect(r.runs.map((run) => JSON.stringify(run.asked)).filter((asked) => asked.includes('K-1'))).toHaveLength(0);
-    expect(r.fixture.calls.map((call) => call.promptId)).toEqual(['assistant.route', 'assistant.step']);
+    expect(r.fixture.calls.map((call) => call.promptId)).toEqual(['assistant.route']);
   });
 
   it.each([

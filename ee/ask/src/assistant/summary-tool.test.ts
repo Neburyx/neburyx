@@ -44,10 +44,8 @@ describe('a turn that drafts the AI case summary', () => {
   it('is not offered when the summarizer is not available or the view is empty', async () => {
     const off = await turn(sentences({ text: 'x', cites: ['r1'] }));
     await answerOf(off.route.handler(off.request(VIEW_BODY)));
-    expect(off.fixture.calls.find((call) => call.promptId === 'assistant.step')?.instructions).not.toContain('ai-summary()');
     const empty = await turn(sentences({ text: 'x', cites: ['r1'] }));
     await answerOf(empty.route.handler(empty.request({ ...BODY, viewElementKeys: [] }, { caseSummarizer: summarizer(draft()) })));
-    expect(empty.fixture.calls.find((call) => call.promptId === 'assistant.step')?.instructions).not.toContain('ai-summary()');
   });
 
   it('reads the elements in view once through the gate when the turn has no reading, counts those rows, and gives the summarizer the calls the turn can spare', async () => {
@@ -58,22 +56,21 @@ describe('a turn that drafts the AI case summary', () => {
     expect(r.elementReads).toHaveLength(1);
     expect(seen[0]?.reading.nodes).toHaveLength(2);
     // 5 calls: the router and the step call are made, one is kept for the answer
-    expect(seen[0]?.maxCalls).toBe(2);
+    expect(seen[0]?.maxCalls).toBe(4);
     expect(readsOf(answer).find((entry) => entry['kind'] === 'ai-summary')).toMatchObject({ tool: 'ai-summary', read: true, rows: 2, quality: 'exact', partial: false });
-    expect(r.fixture.calls.find((call) => call.promptId === 'assistant.answer')?.values).toContain('a1: Account A-1 is linked to Account A-2. (rests on r1, r2)');
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['r1', 'r2'] }] });
   });
 
   it('counts every call the summarizer made in the turn\'s calls', async () => {
     const r = await turn(sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['a1'] }));
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY, { caseSummarizer: summarizer(draft({ calls: 2 })) })));
-    // the router, the step, the two calls of the summary and the answer
-    expect(answer).toMatchObject({ status: 'answered', calls: 5 });
+    // the router, the agent's calls (the first read, the summary, the answer, the last) and the two calls of the summary
+    expect(answer).toMatchObject({ status: 'answered', calls: 7 });
   });
 
   it('uses the reading of the view the turn already has and makes no read of its own', async () => {
     const seen: CaseSummaryInput[] = [];
-    const r = await rig({ reply: ok('{"route":"view"}'), view: SUMMARY, step: sequence(DONE), answer: sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['a1'] }) });
+    const r = await rig({ reply: ok('{"route":"view"}'), step: sequence(ok('{"tool":"view","values":{}}'), SUMMARY, DONE), answer: sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['a1'] }) });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY, { caseSummarizer: summarizer(draft(), seen) })));
     expect(seen).toHaveLength(1);
     // the one read of the elements is the view's own
@@ -83,7 +80,7 @@ describe('a turn that drafts the AI case summary', () => {
 
   it('is not drafted when the turn has no call to spare, and the turn answers over what it has', async () => {
     const seen: CaseSummaryInput[] = [];
-    const r = await turn(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }), { maxCalls: 3 });
+    const r = await turn(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }), { maxCalls: 4 });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY, { caseSummarizer: summarizer(draft(), seen) })));
     expect(seen).toEqual([]);
     expect(answer.status).toBe('answered');

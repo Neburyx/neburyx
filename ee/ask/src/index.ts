@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { SUMMARY_DEFAULTS, THREAD_READ_TURNS_DEFAULT, type AskClassifier, type ConfigureContext, type ConfigureOutcome, type ConfigureWarning, type AskFolder, type CaseSummarizer, type AuditSink, type AuditSinkContext, type ExtensionLogger, type MountedAuditSink, type ProfileExtension, type RecordQueue } from '@neburyx/contracts';
-import { createAnthropicProvider, createAuditedModelCall, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
+import { createAnthropicProvider, createAuditedModelCall, createCallRecorder, createCheckRunner, createFailureReporter, configureProvider, featureSwitches, type AiFeatureSwitches, type AuditedModelCall, type ProviderConfiguration } from '@neburyx/ee-ai-runtime';
 import { createAuditSink } from '@neburyx/ee-audit';
 import { configureAsk, optionalFolderChoice, type AskConfiguration } from './configure.js';
 import { createAskClassifier } from './classify/classifier.js';
@@ -33,8 +33,8 @@ import { guardAiRouteGroup } from './route-guard.js';
 import { assistantProviderConfiguration } from './assistant/provider-configuration.js';
 import { createAssistantRouter } from './assistant/router.js';
 import { createViewAnswer } from './assistant/view-answer.js';
-import { createToolLoop } from './assistant/tool-loop.js';
-import { createToolAnswer } from './assistant/tool-answer.js';
+import { AGENT_PROMPT_ID, AGENT_PROMPT_VERSION, createAgentTurn } from './assistant/agent-turn.js';
+import { createAnthropicChatModel } from '@neburyx/ee-assistant-agent';
 import { loadViewInstructions, type ViewInstructions } from './assistant/view-instructions.js';
 import { loadOverviewInstructions, type OverviewInstructions } from './assistant/overview-instructions.js';
 import { OVERVIEW_AUDIT_ACTION, OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION } from './assistant/verdict-overview.js';
@@ -193,17 +193,26 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     const settings = assistantSettings;
     return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createAssistantRouter({ model, folder: () => folder, instructions: () => assistantInstructions, multiRead: () => settings.maxSteps >= 2, maxInputTokens: () => settings.maxInputTokens, maxCalls: () => settings.maxCalls });
   };
-  const assistantToolLoop = (): ReturnType<typeof createToolLoop> | undefined => {
-    const model = assistantModelOf();
+  const assistantAgentTurn = (): ReturnType<typeof createAgentTurn> | undefined => {
     const settings = assistantSettings;
-    return !features.assistant || model === undefined || settings === undefined || assistantInstructions === undefined ? undefined : createToolLoop({ model, prompt: () => assistantInstructions?.prompt, settings: (sourceId) => {
+    const sink = auditOf();
+    if (!features.assistant || provider === undefined || sink === undefined || settings === undefined || viewInstructions === undefined) return undefined;
+    const own = assistantProviderConfiguration(provider, settings);
+    const recorder = createCallRecorder({ sink });
+    return createAgentTurn({
+      model: (context, trace) => createAnthropicChatModel({ configuration: own, env: environment, ...(options.modelBaseUrl === undefined ? {} : { baseUrl: options.modelBaseUrl }), hook: { recorder, context, promptId: AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, modelRef: own.model, ...(trace === undefined ? {} : { trace }) } }),
+      modelRef: () => own.model,
+      instructions: () => viewInstructions,
+      settings: (sourceId) => {
         const maxPage = sourceBudgets?.[sourceId]?.maxPage;
         const rows = maxPage === undefined ? settings.maxRows : rowsAllowed(settings, maxPage);
-        return { maxCalls: settings.maxCalls, maxSteps: settings.maxSteps, maxInputTokens: settings.maxInputTokens, ...(rows === undefined ? {} : { rowsAllowed: rows }) };
-      }, answer: createToolAnswer({ model, instructions: () => viewInstructions, checks, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs, ...(options.now === undefined ? {} : { now: options.now }) }) });
+        return { maxCalls: settings.maxCalls, maxSteps: settings.maxSteps, maxInputTokens: settings.maxInputTokens, timeoutMs: settings.timeoutMs, ...(rows === undefined ? {} : { rowsAllowed: rows }) };
+      },
+      checks,
+    });
   };
   const guarded = [
-    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, toolLoop: assistantToolLoop, viewTools: () => (assistantSettings?.maxSteps ?? 1) >= 2, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: () => typologyLines, notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
+    guardAiRouteGroup({ routes: [createAssistantThreadRoute({ threads: () => assistantThreads, limit: () => assistantSettings?.threadReadTurns ?? THREAD_READ_TURNS_DEFAULT, logger: () => logger }), createAssistantTurnRoute({ router: assistantRouter, agentTurn: assistantAgentTurn, totalTimeoutMs: () => assistantSettings?.totalTimeoutMs, contextTurns: () => assistantSettings?.contextTurns, typology: () => typologyLines, notesMaxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements, summaryKeys: () => (features.summary ? tokenKeys : undefined), viewAnswer: assistantViewAnswer, overview: assistantOverview, runs: () => assistantRuns, runSettings: () => assistantSettings, threads: () => assistantThreads, pending: () => assistantPending, records: () => recordQueue, maxMessageWords: () => assistantSettings?.maxMessageWords, folder: () => folder, logger: () => logger, ...(options.now === undefined ? {} : { now: options.now }) })] }, () => features.assistant),
     guardAiRouteGroup({ routes: [createAskQuestionRoute({ folder: () => folder, runs: () => runs, logger: () => logger }), createAskContinueRoute({ folder: () => folder, runs: () => runs, logger: () => logger })] }, () => features.ask),
     guardAiRouteGroup(
       { routes: [createSummaryRoute(), createCopyToNotesRoute({ tokenKeys: () => tokenKeys }), createReadAiNotesRoute({ maxRefs: () => summarySettings?.maxElements ?? SUMMARY_DEFAULTS.maxElements })] },

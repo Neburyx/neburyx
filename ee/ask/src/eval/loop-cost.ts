@@ -2,8 +2,6 @@ import { askRunResultSchema, assistantTurnAnswerSchema, type AuditSink, type Ext
 import { createAuditedModelCall, createCheckRunner, type ModelProvider } from '@neburyx/ee-ai-runtime';
 import { createAssistantRouter } from '../assistant/router.js';
 import { createAssistantTurnRoute } from '../assistant/turn-route.js';
-import { createToolAnswer } from '../assistant/tool-answer.js';
-import { createToolLoop } from '../assistant/tool-loop.js';
 import { createViewAnswer } from '../assistant/view-answer.js';
 import { loadAssistantInstructions } from '../assistant/load-instructions.js';
 import { loadViewInstructions } from '../assistant/view-instructions.js';
@@ -59,7 +57,7 @@ function viewNodes(refs: { readonly entities: readonly { readonly sourceId: stri
 
 /**
  * Runs one message through the real assistant turn route built as the product builds it, over a stand-in for the capabilities (a fixed result for each intent of the folder and for the view read) and the given provider, with the
- * tool loop's steps at the given number (1 restores the turn that has no loop). The registry the turn offers is the folder's intents, the built-in templates and the view read, each answered with the fixed result; patterns are not offered. Reads nothing from a source.
+ * steps setting at the given number (the router's and the view call's model calls only: the agent turn is measured by the evaluation of the agent, not here). The registry the turn offers is the folder's intents, the built-in templates and the view read, each answered with the fixed result; patterns are not offered. Reads nothing from a source.
  */
 export async function loopCostRun(source: LoadedSource, provider: ModelProvider, model: string, input: LoopCostInput, steps: number): Promise<LoopCostRun> {
   const read = readAssistantSettings({ NEBURYX_ASSISTANT_MAX_STEPS: String(steps) });
@@ -83,13 +81,7 @@ export async function loopCostRun(source: LoadedSource, provider: ModelProvider,
   const checks = createCheckRunner();
   const router = createAssistantRouter({ model: call, folder: () => source.folder, instructions: () => prompt.instructions, multiRead: () => settings.maxSteps >= 2, maxInputTokens: () => settings.maxInputTokens, maxCalls: () => settings.maxCalls });
   const viewAnswer = createViewAnswer({ model: call, instructions: () => view.instructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }) });
-  const toolLoop = createToolLoop({
-    model: call,
-    prompt: () => prompt.instructions.prompt,
-    settings: () => ({ maxCalls: settings.maxCalls, maxSteps: settings.maxSteps, maxInputTokens: settings.maxInputTokens }),
-    answer: createToolAnswer({ model: call, instructions: () => view.instructions, checks, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }),
-  });
-  const route = createAssistantTurnRoute({ router: () => router, toolLoop: () => toolLoop, viewTools: () => settings.maxSteps >= 2, totalTimeoutMs: () => settings.totalTimeoutMs, contextTurns: () => settings.contextTurns, viewAnswer: () => viewAnswer, maxMessageWords: () => settings.maxMessageWords, folder: () => source.folder, logger: () => undefined });
+  const route = createAssistantTurnRoute({ router: () => router, totalTimeoutMs: () => settings.totalTimeoutMs, contextTurns: () => settings.contextTurns, viewAnswer: () => viewAnswer, maxMessageWords: () => settings.maxMessageWords, folder: () => source.folder, logger: () => undefined });
   const body = { sourceId: source.sourceId, investigationId: INVESTIGATION, message: input.message, viewElementKeys: [...input.viewElementKeys] };
   const request: ExtensionRequest = {
     principalId: ACTOR,

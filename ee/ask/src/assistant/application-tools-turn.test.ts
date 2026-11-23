@@ -56,6 +56,7 @@ function capabilities(counts: { notes: number; summaries: CaseSummaryInput[] }, 
 }
 
 const runOf = (continuing: boolean, asked: unknown) => (JSON.stringify(asked).includes('A-9') && !continuing ? { status: 'ok' as const, result: heavyResult() } : { status: 'ok' as const, result: okResult() });
+const agentCalls = (r: Rig): number => r.events.filter((event) => event.action === 'assistant.agent').length;
 const closings = (r: Rig) => r.events.filter((event) => event.action === TURN_CLOSED_ACTION).map((event) => (event.detail as { turn: Record<string, unknown> }).turn);
 const readsOf = (answer: unknown): readonly Record<string, unknown>[] => (answer as { reads?: readonly Record<string, unknown>[] }).reads ?? [];
 
@@ -76,7 +77,7 @@ describe('the application tools across a confirmation', () => {
     const reads = readsOf(answer);
     expect(reads.filter((entry) => entry['kind'] === 'typology')).toHaveLength(1);
     expect(reads.find((entry) => entry['kind'] === 'ai-summary')).toMatchObject({ read: false });
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.step').length).toBeGreaterThan(0);
+    expect(agentCalls(r)).toBeGreaterThan(0);
   });
 });
 
@@ -87,12 +88,11 @@ describe('the audit of a turn that used the application tools', () => {
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY, capabilities(counts))));
     expect(answer.status).toBe('answered');
     const [turn] = closings(r);
-    const own = r.fixture.calls.length;
-    // the calls of the turn's own recording and the two calls of the summary
-    expect(turn).toMatchObject({ modelCalls: own + 2, steps: 4 });
+    // the router's call, the agent's calls and the two calls of the summary
+    expect(turn).toMatchObject({ modelCalls: r.fixture.calls.length + agentCalls(r) + 2 });
     const text = JSON.stringify(r.events);
     for (const secret of ['is linked to', 'Fan-in', 'many sources', 'Account A-1 is listed']) expect(text, secret).not.toContain(secret);
-    expect(turn?.['promptId']).toBe('assistant.answer');
+    expect(turn?.['promptId']).toBe('assistant.agent');
   });
 });
 
@@ -114,7 +114,7 @@ describe('a summary that ends with the turn', () => {
     expect(received?.aborted).toBe(true);
     expect(answer).toMatchObject({ status: 'limit', limit: 'time' });
     const [turn] = closings(r);
-    expect(turn).toMatchObject({ modelCalls: r.fixture.calls.length + 1 });
+    expect(turn).toMatchObject({ modelCalls: r.fixture.calls.length + agentCalls(r) + 1 });
   });
 
   it('ends the turn at its time limit when the summary throws after the deadline, and counts the calls it made', async () => {
@@ -134,7 +134,7 @@ describe('a summary that ends with the turn', () => {
     expect(received?.aborted).toBe(true);
     expect(answer).toMatchObject({ status: 'limit', limit: 'time' });
     const [turn] = closings(r);
-    expect(turn).toMatchObject({ modelCalls: r.fixture.calls.length + 1 });
+    expect(turn).toMatchObject({ modelCalls: r.fixture.calls.length + agentCalls(r) + 1 });
   });
 });
 
@@ -158,7 +158,6 @@ describe('the steps limit and the application tools', () => {
     const answer: AssistantTurnAnswer = await answerOf(r.route.handler(r.request(BODY, capabilities(counts))));
     expect(answer.status).toBe('answered');
     expect(counts.notes).toBe(0);
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.step')).toHaveLength(1);
   });
 });
 
@@ -170,10 +169,5 @@ describe('the closing event does not say property values were sent for a text th
     expect(closings(r)[0]).toMatchObject({ propertyValuesSent: false });
   });
 
-  it('says false when the view answer was stopped by the input limit before its call', async () => {
-    const r = await rig({ reply: ok('{"route":"view"}'), viewMaxInputTokens: 1, view: DONE, step: sequence(DONE), answer: GOOD });
-    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'too-large' });
-    expect(closings(r)[0]).toMatchObject({ propertyValuesSent: false });
-  });
 });
 

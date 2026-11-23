@@ -14,6 +14,11 @@ export interface StepEmitter {
 
 const emitters = new WeakMap<ExtensionRequest, StepEmitter>();
 
+/** A copy of a request (with another signal) tells its steps to the same stream, with the same numbering. */
+export function shareSteps(from: ExtensionRequest, to: ExtensionRequest): void {
+  emitters.set(to, stepsOf(from));
+}
+
 function create(request: ExtensionRequest): StepEmitter {
   let n = 0;
   const send = (phase: 'routing' | 'reading-view' | 'reading' | 'read-done' | 'answering', rest: Record<string, unknown> = {}): void => {

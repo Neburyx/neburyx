@@ -13,17 +13,12 @@ import { canonicalText } from '../questions/canonical.js';
 import { selectedSectionOf } from './selected-section.js';
 import type { SummaryAttachment } from './summary-attachment.js';
 import { auditInvestigationOf } from '../case-summary/summarizer.js';
-import { buildViewToolInstructions } from './step-instructions.js';
-import type { ToolRegistry } from './tool-registry.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
-import { readToolRequest, type ToolRequest } from './tool-request.js';
 import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-audit.js';
 import type { ViewInstructions } from './view-instructions.js';
 
 export const VIEW_PROMPT_ID = 'assistant.view';
 export const VIEW_PROMPT_VERSION = 8;
-/** The version of the view prompt that carries the tools and the tool request as a third reply form. */
-export const VIEW_TOOLS_PROMPT_VERSION = 9;
 const VIEW_AUDIT_ACTION = 'assistant.view';
 
 interface ViewAnswerSettings {
@@ -77,7 +72,6 @@ export interface ViewInput {
   readonly startedAt: number;
   readonly progress: ViewProgress;
   /** The reads the model may ask for instead of answering; absent, the view call has the two reply forms it always had. */
-  readonly tools?: ToolRegistry;
   /** A summary attached to the turn: its sentences that still hold are given to the model beside the elements. */
   readonly summary?: SummaryAttachment;
   /** What the router was given of the person's earlier turns of the thread (references and titles only, read again through the gate): so that a follow-up such as "what does it mean" can be placed. Never a source of the checks. */
@@ -107,7 +101,6 @@ type ViewResult =
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote from the names of the profile. */
   | { readonly status: 'no-description'; readonly sentence: string; readonly names: readonly string[] }
   /** The model asked for a read instead of answering: the loop goes on from this reading, with the request as its first step. */
-  | { readonly status: 'tool'; readonly request: ToolRequest; readonly reading: SummaryReading; readonly assembled: AssembledText }
   | { readonly status: 'invalid-keys' }
   | { readonly status: 'summary-invalid' }
   | { readonly status: 'failed'; readonly kind: AssistantFailureKind }
@@ -239,9 +232,8 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     if (input.summary !== undefined && kept.length === 0) return outcome({ status: 'summary-invalid' });
     const section = summarySectionOf(kept) + contextSectionOf(input.context);
     const inView = new Set([...keys.refs.entities, ...keys.refs.edges, ...keys.refs.aggregates, ...keys.refs.derived].map((ref) => canonicalText(ref)));
-    const { tools } = input;
-    const sent = tools === undefined ? instructions : buildViewToolInstructions(instructions, tools);
-    const promptVersion = options.prompt?.version ?? (tools === undefined ? VIEW_PROMPT_VERSION : VIEW_TOOLS_PROMPT_VERSION);
+    const sent = instructions;
+    const promptVersion = options.prompt?.version ?? VIEW_PROMPT_VERSION;
     const prepared = prepareSummary(reading, sent.text + section, settings.maxInputTokens);
     if (!prepared.ready) return outcome({ status: 'stopped', because: 'input' });
     const { assembled } = prepared;
@@ -264,7 +256,7 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
         instructions: sent.text,
         values: valuesOf(input.message, assembled.text + typeLines.section + selectedSectionOf(input.selection, input.sourceId, assembled), section + (input.form === 'table' ? TABLE_NOTE : '')),
         prompt: { id: promptId, version: promptVersion },
-        alternative: (text: string) => (tools !== undefined && readToolRequest(text, tools).ok) || noDescriptionReplyOf(text, typeLines) !== undefined,
+        alternative: (text: string) => noDescriptionReplyOf(text, typeLines) !== undefined,
         noDescription: (names: readonly string[]) => {
           const found = undescribedNamesOf(names, typeLines);
           lastNames = found;
@@ -351,8 +343,6 @@ export function createViewAnswer(options: ViewAnswerOptions): (input: ViewInput)
     }
     switch (drafted.status) {
       case 'alternative': {
-        const read = tools === undefined ? undefined : readToolRequest(drafted.text, tools);
-        if (read?.ok === true) return outcome({ status: 'tool', request: read.request, reading, assembled });
         const asked = noDescriptionReplyOf(drafted.text, typeLines);
         if (asked === undefined) return outcome({ status: 'unsupported' });
         const alone = undescribedOf(asked, typeLines);

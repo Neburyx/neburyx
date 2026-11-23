@@ -59,8 +59,6 @@ describe('a turn that reads the person\'s own AI notes', () => {
     const r = await turn(sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['a1'] }));
     const answer = await answerOf(r.route.handler(r.request(undefined, { aiNotes: capability([stored('tok-1')], seen) })));
     expect(seen).toEqual(['inv-1']);
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain('a1: Account A-1 is linked to Account A-2. (rests on r1, r2)');
     expect(readsOf(answer).find((entry) => entry['kind'] === 'ai-notes')).toMatchObject({ tool: 'ai-notes', read: true, rows: 2, quality: 'exact', partial: false });
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['r1', 'r2'] }] });
   });
@@ -77,18 +75,9 @@ describe('a turn that reads the person\'s own AI notes', () => {
     expect((answer as { sentences: { text: string }[] }).sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is linked to Account A-2.']);
   });
 
-  it('does not offer the tool, and treats a request for it as malformed, when the turn has no notes capability', async () => {
-    const r = await turn(sentences({ text: 'x', cites: ['r1'] }));
-    await answerOf(r.route.handler(r.request()));
-    expect(r.fixture.calls.find((call) => call.promptId === 'assistant.step')?.instructions).not.toContain('ai-notes()');
-  });
-
   it('does not return an entry over the bounds of an entry, says how many were not read without any wording, and lists the read as partial', async () => {
     const r = await turn(sentences({ text: 'Account A-1 is linked to Account A-2.', cites: ['a1'] }));
     const answer = await answerOf(r.route.handler(r.request(undefined, { aiNotes: capability([stored('tok-1'), stored('tok-2', AI_NOTES_MAX_SENTENCES + 1), { tokenId: 'tok-3', nonsense: true }]) })));
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain('read of ai-notes: 1 sentence, 2 entries not read');
-    expect(call?.values).not.toContain('tok-2');
     expect(readsOf(answer).find((entry) => entry['kind'] === 'ai-notes')).toMatchObject({ partial: true });
   });
 

@@ -1,9 +1,7 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { BODY, answerOf, ok, rig, routeAsk, type Rig } from '../testing/assistant-rig.js';
-import { buildStepInstructions, STEP_PROMPT_VERSION, toolsText } from './step-instructions.js';
 import { buildToolRegistry, TYPOLOGY_TOOL } from './tool-registry.js';
-import { readToolRequest } from './tool-request.js';
 import { assembleResults } from './tool-answer.js';
 import { typologyLinesOf } from './view-instructions.js';
 import { ANSWER_PROMPT_VERSION } from './tool-answer.js';
@@ -36,18 +34,6 @@ describe('the typology in the registry', () => {
     expect(registryWith(LINES, [{ name: 'typology' }]).find('typology')?.kind).toBe('intent');
   });
 
-  it('is said to the model with what it returns, and the step prompt has its new version', () => {
-    expect(toolsText(registryWith(LINES))).toContain('typology(): returns the lines of this product');
-    expect(buildStepInstructions('prompt', registryWith(LINES)).text).toContain('typology()');
-    expect(STEP_PROMPT_VERSION).toBe(2);
-    expect(ANSWER_PROMPT_VERSION).toBe(7);
-  });
-
-  it('is a malformed request when it is given a value or is not offered', () => {
-    expect(readToolRequest('{"tool":"typology","values":{"x":"y"}}', registryWith(LINES))).toEqual({ ok: false, reason: 'malformed' });
-    expect(readToolRequest('{"tool":"typology","values":{}}', registryWith([]))).toEqual({ ok: false, reason: 'malformed' });
-    expect(readToolRequest('{"tool":"typology","values":{}}', registryWith(LINES)).ok).toBe(true);
-  });
 });
 
 describe('the lines of the typology file', () => {
@@ -86,9 +72,6 @@ describe('a turn that reads the typology', () => {
   it('shows the model each line with its key, and drops a sentence that cites a typology line it was not given or any key the turn does not hold', async () => {
     const r = await turn(sentences({ text: 'A fan-in is when many sources send money to one receiver.', cites: ['t1'] }, { text: 'A cycle is shown.', cites: ['t9'] }, { text: 'Something else.', cites: ['n1'] }));
     const answer = await answerOf(r.route.handler(r.request()));
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain(`t1: ${LINES[0]}`);
-    expect(call?.values).toContain('s2: read of typology: 2 lines');
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['t1'] }] });
     expect((answer as { sentences: unknown[] }).sentences).toHaveLength(1);
   });
@@ -99,10 +82,4 @@ describe('a turn that reads the typology', () => {
     expect(answer).toMatchObject({ status: 'answered', citations: [] });
   });
 
-  it('does not offer the tool, and treats a request for it as malformed, when the turn has no typology', async () => {
-    const r = await rig({ reply: SHARED, step: sequence(TYPOLOGY, TYPOLOGY), answer: sentences({ text: 'x', cites: ['t1'] }) });
-    const answer = await answerOf(r.route.handler(r.request(BODY)));
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.step')[0]?.instructions).not.toContain('typology()');
-    expect(answer.status).toBe('answered');
-  });
 });

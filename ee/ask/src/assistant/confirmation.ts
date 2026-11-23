@@ -1,6 +1,6 @@
 import { ASSISTANT_CONFIRMATION_INVALID_SENTENCE, type AssistantTurnAnswer, type AssistantTurnRequest, type ExtensionRequest } from '@neburyx/contracts';
 import { ASK_CONTINUE_LIFETIME_MS } from '@neburyx/contracts';
-import type { LoopOutcome, ResumeState } from './tool-loop.js';
+import type { LoopOutcome, ResumeState } from './turn-outcome.js';
 import { newPendingId, type AssistantPendingStore, type ClaimResult } from './pending-store.js';
 import { hashKeys, hashText, issuePlan, readPlan, type Plan, type PlanBinding } from './plan-token.js';
 import { heavyOf, subjectOf } from './reads.js';

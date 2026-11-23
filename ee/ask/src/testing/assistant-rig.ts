@@ -2,21 +2,22 @@ import { createHmac } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, type AskPatternOffer, type ElementRefs, type AskRun, type AskRunResult, type AuditEvent, type AuditSink, type ExtensionRequest, type ExtensionRoute, type RecordQueue } from '@neburyx/contracts';
-import { createAuditedModelCall, createCheckRunner, type CheckRunner, type ModelProvider } from '@neburyx/ee-ai-runtime';
+import { createAuditedModelCall, createCallRecorder, createCheckRunner, type CheckRunner, type ModelProvider } from '@neburyx/ee-ai-runtime';
 import { createFixtureProvider, replyKey, type FixtureReply, type FixtureReplies } from '../../../ai-runtime/src/testing/fixture.js';
 import { loadAskFolder } from '../folder/load.js';
 import { buildAssistantInstructions } from '../assistant/instructions.js';
 import { ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION, createAssistantRouter } from '../assistant/router.js';
 import { createAssistantTurnRoute } from '../assistant/turn-route.js';
-import { createToolLoop } from '../assistant/tool-loop.js';
-import { createToolAnswer, ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION } from '../assistant/tool-answer.js';
-import { STEP_PROMPT_ID, STEP_PROMPT_VERSION } from '../assistant/step-instructions.js';
+import { ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION } from '../assistant/tool-answer.js';
+import { AGENT_PROMPT_ID, AGENT_PROMPT_VERSION, createAgentTurn } from '../assistant/agent-turn.js';
+import { auditChatModel, type AgentChatModel } from '@neburyx/ee-assistant-agent';
+import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
 import type { AssistantRunStore } from '../assistant/run-store.js';
 import type { AssistantThreadStore } from '../assistant/thread-store.js';
 import type { AssistantPendingStore } from '../assistant/pending-store.js';
 import { readAssistantSettings } from '../assistant/settings.js';
 import { OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION, OVERVIEW_AUDIT_ACTION } from '../assistant/verdict-overview.js';
-import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, VIEW_TOOLS_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
+import { VIEW_PROMPT_ID, VIEW_PROMPT_VERSION, createViewAnswer } from '../assistant/view-answer.js';
 import { buildSummaryInstructions } from '../case-summary/instructions.js';
 import type { TokenKeys } from '../case-summary/token-keys.js';
 import { makeAskFolder } from './ask-folder.js';
@@ -138,6 +139,8 @@ export interface RigOptions {
   /** The replies of the model to the answer call after tool steps. */
   readonly answer?: FixtureReplies[string];
   readonly loopSteps?: number;
+  /** The deepagents turn runs on this chat model; every call it makes writes its audit event to the rig's sink. */
+  readonly agent?: { readonly model: AgentChatModel; readonly maxCalls?: number; readonly removalFeedback?: NonNullable<Parameters<typeof createAgentTurn>[0]['removalFeedback']> };
   readonly loopRows?: number;
   /** The elements the source holds, as `type/id`, for the read of a source's elements that checks a written value; absent, every reference asked for is found. */
   readonly source?: readonly string[];
@@ -181,7 +184,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const sourceReads: Rig['sourceReads'] = [];
   const clock = { now: NOW };
   const sink: AuditSink = { record: (event) => (options.sink === 'fails' ? Promise.reject(new Error('down')) : (events.push(event), Promise.resolve())) };
-  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view, [replyKey(VIEW_PROMPT_ID, VIEW_TOOLS_PROMPT_VERSION)]: options.view }), ...(options.overview === undefined ? {} : { [replyKey(OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION)]: options.overview }), ...(options.step === undefined ? {} : { [replyKey(STEP_PROMPT_ID, STEP_PROMPT_VERSION)]: options.step }), ...(options.answer === undefined ? {} : { [replyKey(ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION)]: options.answer }) } });
+  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view }), ...(options.overview === undefined ? {} : { [replyKey(OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION)]: options.overview }), ...(options.answer === undefined ? {} : { [replyKey(ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION)]: options.answer }) } });
   const provider: ModelProvider = options.viewProvider === undefined ? fixture : { complete: (request, signal) => (request.promptId === VIEW_PROMPT_ID && options.viewProvider !== undefined ? options.viewProvider(request, signal) : fixture.complete(request, signal)) };
   const model = createAuditedModelCall({ provider, configuration: { model: 'configured-model' }, sink });
   const expiry = new AbortController();
@@ -192,8 +195,20 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const overviewInstructions = buildSummaryInstructions('You describe the view. SENTINEL-OVERVIEW-PROMPT', '');
   const overviewAnswer = options.overview === undefined ? undefined : createViewAnswer({ model, prompt: { id: OVERVIEW_PROMPT_ID, version: OVERVIEW_PROMPT_VERSION, action: OVERVIEW_AUDIT_ACTION, connectionsOnly: true }, instructions: () => overviewInstructions, checks: options.checks ?? createCheckRunner(), settings: () => ({ model: 'configured-model', maxInputTokens: options.viewMaxInputTokens ?? options.maxInputTokens ?? 25_000, maxCalls: options.maxCalls ?? 5, timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000 }), now: () => clock.now });
   const settings = readAssistantSettings(options.settingsEnv ?? {});
-  const toolLoop = options.step === undefined ? undefined : createToolLoop({ model, prompt: () => PROMPT, settings: () => ({ maxCalls: options.maxCalls ?? 5, maxSteps: options.loopSteps ?? 4, maxInputTokens: options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }) }), answer: createToolAnswer({ model, instructions: () => buildSummaryInstructions('You answer from what the reads returned. SENTINEL-ANSWER-PROMPT', 'SENTINEL-TYPOLOGY'), checks: options.checks ?? createCheckRunner(), timeoutMs: 10_000, totalTimeoutMs: options.totalTimeoutMs ?? 180_000, now: () => clock.now }) });
-  const route = createAssistantTurnRoute({ ...(options.typology === undefined ? {} : { typology: () => options.typology }), ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }), ...(toolLoop === undefined ? {} : { toolLoop: () => toolLoop, viewTools: () => (options.loopSteps ?? 4) >= 2 }), totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer, overview: () => overviewAnswer }), ...(options.pending === undefined ? {} : { pending: () => options.pending }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
+  const scripted = options.agent === undefined && options.step !== undefined ? { model: scriptedAgentModel(options) } : undefined;
+  const agentOptions: RigOptions['agent'] = options.agent ?? scripted;
+  const agentTurn =
+    agentOptions === undefined
+      ? undefined
+      : createAgentTurn({
+          model: (context, trace) => Promise.resolve(agentOptions === undefined ? undefined : auditChatModel(agentOptions.model, { recorder: createCallRecorder({ sink }), context, promptId: AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, modelRef: 'configured-model', ...(trace === undefined ? {} : { trace }) })),
+          modelRef: () => 'configured-model',
+          instructions: () => buildSummaryInstructions('You answer from what was read. SENTINEL-AGENT-PROMPT', ''),
+          settings: () => ({ maxCalls: agentOptions?.maxCalls ?? options.maxCalls ?? 8, maxSteps: options.loopSteps ?? 4, maxInputTokens: options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }), timeoutMs: 10_000 }),
+          checks: options.checks ?? createCheckRunner(),
+          ...(agentOptions.removalFeedback === undefined ? {} : { removalFeedback: agentOptions.removalFeedback }),
+        });
+  const route = createAssistantTurnRoute({ ...(agentTurn === undefined ? {} : { agentTurn: () => agentTurn }), ...(options.typology === undefined ? {} : { typology: () => options.typology }), ...(options.summaryKeys === undefined ? {} : { summaryKeys: () => options.summaryKeys }),  totalTimeoutMs: () => options.totalTimeoutMs ?? 180_000, turnDeadline: () => expiry.signal, ...(viewAnswer === undefined ? {} : { viewAnswer: () => viewAnswer, overview: () => overviewAnswer }), ...(options.pending === undefined ? {} : { pending: () => options.pending }), ...(options.runStore === undefined ? {} : { runs: () => options.runStore, runSettings: () => (settings.ok ? settings.settings : undefined) }), ...(options.threadStore === undefined ? {} : { threads: () => options.threadStore, contextTurns: () => (settings.ok ? settings.settings.contextTurns : undefined) }), ...(options.records === undefined ? {} : { records: () => options.records }), router: () => router, maxMessageWords: () => options.maxMessageWords ?? 1000, folder: () => folder, logger: () => (options.logs === undefined ? undefined : { warn: (fields, message) => void options.logs?.push({ fields, message }) }), now: () => clock.now });
   const request = (body: unknown = BODY, over: Partial<ExtensionRequest> = {}): ExtensionRequest => ({
     principalId: 'p-1',
     principalRole: 'investigator',
@@ -242,6 +257,53 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
     ...over,
   });
   return { route, expire: () => expiry.abort(), view: viewAnswer, events, reads, elementReads, sourceReads, runs, fixture, instructions, clock, request };
+}
+
+/** The text of a scripted reply: the reply itself or what a function of the request gives. */
+const replyTextOf = (reply: FixtureReplies[string] | undefined, promptId: string): string | undefined => {
+  const settled = typeof reply === 'function' ? reply({ promptId, version: 1, values: '' }) : reply;
+  return settled?.kind === 'ok' ? settled.text : undefined;
+};
+
+const jsonOf = (text: string | undefined): Record<string, unknown> | undefined => {
+  try {
+    const data: unknown = JSON.parse(text ?? '');
+    return typeof data === 'object' && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The agent a test script stands for: the router's `ask` reply is the first read, each reply of the step script a tool call (`{"done":true}` is the call of `answer` that the answer script gives, or the end of the turn
+ * when there is none), and a reply that is neither ends the turn. The calls come from the old scripts, so a test written for the step call runs unchanged on the agent.
+ */
+function scriptedAgentModel(options: RigOptions): AgentChatModel {
+  const model = fakeModel();
+  let started = false;
+  const next = (messages: readonly { readonly type: string; readonly name?: string }[]): AIMessage => {
+    if (messages.some((message) => message.type === 'tool' && message.name === 'answer')) return new AIMessage('Done.');
+    if (!started) {
+      started = true;
+      const routed = jsonOf(replyTextOf(options.reply, 'assistant.route'));
+      if (routed?.['route'] === 'ask' && typeof routed['intent'] === 'string') {
+        const entities = (routed['entities'] ?? {}) as Record<string, unknown>;
+        const { pattern, ...rest } = entities;
+        const saved = routed['intent'] === 'saved-pattern' && typeof pattern === 'string';
+        return new AIMessage({ content: '', tool_calls: [{ name: saved ? pattern : routed['intent'], args: saved ? rest : entities, id: 'first', type: 'tool_call' }] });
+      }
+    }
+    const text = replyTextOf(options.step, 'assistant.step');
+    const step = jsonOf(text);
+    if (step?.['done'] === true) {
+      const answered = jsonOf(replyTextOf(options.answer, 'assistant.answer'));
+      return answered === undefined ? new AIMessage('Done.') : new AIMessage({ content: '', tool_calls: [{ name: 'answer', args: answered, id: 'answer', type: 'tool_call' }] });
+    }
+    if (step !== undefined && typeof step['tool'] === 'string') return new AIMessage({ content: '', tool_calls: [{ name: step['tool'], args: (step['values'] ?? {}) as Record<string, unknown>, id: `step-${step['tool']}`, type: 'tool_call' }] });
+    return new AIMessage(text ?? 'Done.');
+  };
+  for (let call = 0; call < 40; call += 1) model.respond((messages) => next(messages));
+  return model;
 }
 
 export const nodeOf = node;

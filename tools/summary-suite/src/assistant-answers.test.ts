@@ -64,26 +64,32 @@ async function viewAnswer(mutation: Mutation | undefined, reply: Script, evidenc
   return outcome;
 }
 
-/** The answer after tool steps, over the same labelled view as what the loop entered from. */
+/** The answer the agent's `answer` tool gives, over the same labelled view as what the turn read: the same basis, the same checks and the same outcome as the tool builds. */
 async function toolAnswer(mutation: Mutation | undefined, reply: Script, evidence: Evidence, form?: 'table') {
-  const { createCheckRunner, model, instructions } = await parts(mutation, reply);
-  const { createToolAnswer } = await import('../../../ee/ask/src/assistant/tool-answer.js');
+  const { createCheckRunner } = await parts(mutation, reply);
+  const { answerBasisOf, outcomeOfDraft, withElementsOfNotes } = await import('../../../ee/ask/src/assistant/tool-answer.js');
+  const { judgeCheck } = await import('../../../ee/ask/src/case-summary/judge.js');
+  const { judgeTableRows, parseTable, rowSentenceOf } = await import('../../../ee/ask/src/assistant/table.js');
   const { assembleText } = await import('../../../ee/ask/src/case-summary/assemble.js');
-  const answer = createToolAnswer({ model, instructions, checks: createCheckRunner(), timeoutMs: 10_000, totalTimeoutMs: 180_000 });
   const reading = evidence.view;
-  return answer({
-    scope: { request: { principalId: 'analyst-1', principalRole: 'investigator', traceId: 'trace-1', signal: new AbortController().signal }, sourceId: 'demo', investigationId: 'inv-1', ...(form === undefined ? {} : { form }) } as never,
-    message: 'What is in view?',
-    reads: [],
-    view: { assembled: assembleText(reading), reading },
-    steps: 1,
-    callsUsed: 1,
-    maxCalls: 5,
-    maxInputTokens: 25_000,
-    startedAt: Date.now(),
-    signal: new AbortController().signal,
-    deadline: new AbortController().signal,
-  });
+  const scope = { request: { principalId: 'analyst-1', principalRole: 'investigator', traceId: 'trace-1', signal: new AbortController().signal }, sourceId: 'demo', investigationId: 'inv-1', ...(form === undefined ? {} : { form }) } as never;
+  const basis = answerBasisOf({ reads: [], view: { assembled: assembleText(reading), reading }, scope, message: 'What is in view?' });
+  if (basis === undefined) return { kind: 'unsupported' as const, calls: 0 };
+  const checks = createCheckRunner();
+  const signal = new AbortController().signal;
+  const data = JSON.parse(reply) as { sentences?: SummarySentence[]; table?: unknown };
+  const done = { reads: [], scope };
+  if (form === 'table') {
+    const draft = parseTable(data.table);
+    if (draft === undefined) return { kind: 'unsupported' as const, calls: 0 };
+    const rows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: 10_000, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
+    if ('refused' in rows) return { kind: 'unsupported' as const, calls: 0 };
+    if (rows.verdictFound || rows.kept.length === 0) return { kind: 'unsupported' as const, calls: 0 };
+    return outcomeOfDraft({ drafted: { status: 'drafted', table: draft, sentences: rows.kept, removed: rows.removed, calls: 0, verdictFound: rows.verdictFound, model: 'claude-sonnet-5-5' }, basis, input: done, modelRef: 'claude-sonnet-5-5', keptRows: rows.positions, lastNames: undefined });
+  }
+  const checked = await checks.run(judgeCheck, { sentences: withElementsOfNotes(data.sentences ?? [], basis.noteElements), text: basis.checkedText }, { timeoutMs: 10_000, signal });
+  if (checked.status === 'refused') return { kind: 'unsupported' as const, calls: 0 };
+  return outcomeOfDraft({ drafted: { status: 'drafted', sentences: checked.value.kept, removed: checked.value.removed, calls: 0, verdictFound: checked.value.verdictFound, model: 'claude-sonnet-5-5' }, basis, input: done, modelRef: 'claude-sonnet-5-5', keptRows: [], lastNames: undefined });
 }
 
 type Path = (mutation: Mutation | undefined, reply: Script, evidence: Evidence) => Promise<string[]>;

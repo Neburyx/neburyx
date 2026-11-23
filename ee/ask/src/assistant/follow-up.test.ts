@@ -661,31 +661,13 @@ describe('a follow-up on the view route, placed by the thread', () => {
     expect(await cited.send('what is it?', undefined, VIEW_KEYS)).toMatchObject({ status: 'not-answered' });
   });
 
-  it('gives the answer step after a view tool request the same earlier turns, and a key of them is not citable', async () => {
+  it('does not let a key of the earlier turns be cited by an agent turn', async () => {
     const steps = [ok('{"tool":"shared","values":{"id":"A-2"}}'), ok('{"done":true}')];
     let next = 0;
     const t = await follow(() => ok('{"route":"view"}'), { view: ok('{"tool":"shared","values":{"id":"A-2"}}'), step: () => steps[Math.min(next++, 1)] ?? ok('{"done":true}'), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['c1'] }] })), run: () => ({ status: 'ok', result: okResult() }) });
     await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
     const answer = await t.send('what is it?', undefined, VIEW_KEYS);
-    const values = t.rig.fixture.calls.find((call) => call.promptId === 'assistant.answer')?.values ?? '';
-    expect(values).toContain('Earlier turns of this conversation');
-    expect(values).toMatch(/^c1 \| "Account A-1" \| "widget"$/m);
     expect(JSON.stringify(answer)).not.toContain('"key":"c1"');
-  });
-
-  it('gives the step and answer calls of a loop that the view entered neither the selected section nor a mark', async () => {
-    const steps = [ok('{"tool":"shared","values":{"id":"A-2"}}'), ok('{"done":true}')];
-    let next = 0;
-    const t = await follow(() => ok('{"route":"view"}'), { view: ok('{"tool":"shared","values":{"id":"A-2"}}'), step: () => steps[Math.min(next++, 1)] ?? ok('{"done":true}'), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['c1'] }] })), run: () => ({ status: 'ok', result: okResult() }) });
-    await seed(t.threads, asked('shared', { entities: [{ role: 'id', ref: widget('A-1') }] }));
-    await t.send('what is it?', undefined, VIEW_KEYS, undefined, [VIEW_KEYS[0] ?? '']);
-    const later = t.rig.fixture.calls.filter((call) => call.promptId === 'assistant.step' || call.promptId === 'assistant.answer');
-    expect(later.length).toBeGreaterThan(0);
-    for (const call of later) {
-      expect(call.values, call.promptId).not.toContain('selected these elements');
-      expect(call.values, call.promptId).not.toContain('(selected)');
-    }
-    expect(t.rig.fixture.calls.find((call) => call.promptId === 'assistant.view')?.values).toContain('selected these elements in view, by key: n1');
   });
 
   it('counts the context in the input guard of the view call: a limit that fits the call without it is over with it, and nothing is sent', async () => {

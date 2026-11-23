@@ -87,43 +87,33 @@ describe('the steps a streamed turn reports', () => {
     expect(JSON.stringify(events)).not.toContain('Account A-1');
   });
 
-  it('puts nothing a model wrote in any event: a canary in the router reply, the step reply and the answer, each sent by the model and none in an event', async () => {
+  it('puts nothing a model wrote in any event: a canary in the router reply, in the text the agent writes around its calls and in the answer, none in an event', async () => {
     const CANARY = 'zzcanaryzz';
-    const given: string[] = [];
-    const say = (text: string): FixtureReply => {
-      if (text.includes(CANARY)) given.push(text);
-      return ok(text);
-    };
     const bareView = JSON.stringify({ route: 'view' });
-    // the router: a reply with the canary around the route is asked for again; the answer carries the canary too
+    // the router: a reply with the canary around the route is asked for again; the answer carries the canary, since the person is shown it
     let routed = 0;
-    const viewed = await streamed({ routerMaxCalls: 3, maxCalls: 6, reply: () => say(routed++ === 0 ? `${CANARY} ${bareView}` : bareView), view: sentences({ text: `Account A-1 is in view ${CANARY}.`, cites: ['n1'] }) });
-    expect(given.length).toBeGreaterThanOrEqual(1);
+    const viewed = await streamed({ routerMaxCalls: 3, maxCalls: 6, reply: () => ok(routed++ === 0 ? `${CANARY} ${bareView}` : bareView), step: sequence(ok(JSON.stringify({ tool: 'view', values: {} })), DONE), answer: sentences({ text: `Account A-1 is in view ${CANARY}.`, cites: ['n1'] }) });
     expect(JSON.stringify(viewed.answer)).toContain(CANARY);
     expect(viewed.events.length).toBeGreaterThan(0);
     expect(JSON.stringify(viewed.events)).not.toContain(CANARY);
-    // the step reply: a reply with the canary around the request is asked for again; the answer carries the canary
-    given.length = 0;
-    let stepped = 0;
-    const step = () => say(stepped++ === 0 ? `${CANARY} ${JSON.stringify({ tool: 'byId', values: { id: 'A-2' } })}` : stepped === 2 ? JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }) : '{"done":true}');
-    const looped = await streamed(loopOptions({ step, answer: sentences({ text: `Account A-1 is listed ${CANARY}.`, cites: ['r1'] }) }), { message: 'Show A-1 and A-2' });
-    expect(given.length).toBeGreaterThanOrEqual(1);
-    expect(JSON.stringify(looped.answer)).toContain(CANARY);
-    expect(looped.events.length).toBeGreaterThan(0);
+    // the agent: text it writes around a call is never shown, and so never told
+    const step = sequence(ok(`${CANARY} not a tool request`));
+    const looped = await streamed(loopOptions({ step, answer: sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }) }), { message: 'Show A-1 and A-2' });
+    expect(JSON.stringify(looped.answer)).not.toContain(CANARY);
     expect(JSON.stringify(looped.events)).not.toContain(CANARY);
   });
 
-  it('says that a view call that asks for a read has already said answering: the order is pinned, routing, the view, answering, the view read, the read, its read, answering', async () => {
+  it('tells the view read and the next read of a view turn in order: routing, the view, its read, the read, its read, answering', async () => {
     const asksRead = ok(JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }));
-    const { events } = await streamed(loopOptions({ reply: ok(JSON.stringify({ route: 'view' })), view: asksRead, step: sequence(DONE), intents: LABELLED }), { message: 'What is in view, and read A-2' });
-    expect(phases(events)).toEqual(['routing', 'reading-view', 'answering', 'read-done', 'reading', 'read-done', 'answering']);
+    const { events } = await streamed(loopOptions({ reply: ok(JSON.stringify({ route: 'view' })), step: sequence(ok(JSON.stringify({ tool: 'view', values: {} })), asksRead, DONE), intents: LABELLED }), { message: 'What is in view, and read A-2' });
+    expect(phases(events)).toEqual(['routing', 'reading-view', 'read-done', 'reading', 'read-done', 'answering']);
   });
 
   it('tells the first read of an Ask turn once when the loop is on and the model has nothing more to read, and what it tells is what the answer lists', async () => {
     const { events, answer } = await streamed(loopOptions({ step: sequence(DONE) }), { message: 'Show A-1' });
-    expect(phases(events)).toEqual(['routing', 'reading', 'read-done']);
+    expect(phases(events)).toEqual(['routing', 'reading', 'read-done', 'answering']);
     if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an answer of the ask route with reads');
-    expect(events.at(-1)?.members['read']).toEqual(answer.reads[0]);
+    expect(events.find((event) => event.members['phase'] === 'read-done')?.members['read']).toEqual(answer.reads[0]);
   });
 
   it('tells the read of a saved pattern under the pattern name the answer lists, whether the loop goes on from it or not', async () => {
@@ -152,7 +142,7 @@ describe('the steps a streamed turn reports', () => {
     const many = sequence(...Array.from({ length: 12 }, (_unused, index) => ok(JSON.stringify({ tool: 'byId', values: { id: `A-${index + 2}` } }))));
     const { events } = await streamed(loopOptions({ step: many, loopSteps: 4 }), { message: 'Show A-1 and everything' });
     expect(events.length).toBeLessThanOrEqual(2 * 4 + 4);
-    expect(phases(events).at(-1)).toBe('answering');
+    expect(phases(events).at(-1)).toBe('read-done');
   });
 
   it('ends a turn whose model call failed with the unavailable answer after its steps, and writes the closing event once', async () => {

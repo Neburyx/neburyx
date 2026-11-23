@@ -83,49 +83,6 @@ describe('the answer after tool steps', () => {
     expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ status: 'not-answered' });
   });
 
-  it('keeps a supported answer with the citations it names, its coverage written by the server, the model and the steps', async () => {
-    const r = await setup(sentences({ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }));
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2, calls: 4, model: 'configured-model', citations: [{ key: 'r1', kind: 'entity' }, { key: 'r2', kind: 'entity' }], coverage: { summary: 'The answer cites 2 of the 2 elements the reads returned.' } });
-    expect(turn(r)).toMatchObject({ outcome: 'answered', citedElements: 2, steps: 2 });
-  });
-
-  it('asks again for an answer that fails the checks, within the calls limit, and never beyond it', async () => {
-    const bad = sentences({ text: 'Account A-1 is listed.', cites: [] });
-    const good = sentences({ text: 'Account A-1 is listed.', cites: ['r1'] });
-    const again = await setup(sequence(bad, good));
-    expect(await answerOf(again.route.handler(again.request()))).toMatchObject({ status: 'answered', calls: 5 });
-    const capped = await setup(sequence(bad, good), { maxCalls: 4 });
-    expect(await answerOf(capped.route.handler(capped.request()))).toMatchObject({ status: 'not-answered' });
-    expect(capped.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(1);
-  });
-
-  it('puts only the masked titles of the reads and the question in the answer call', async () => {
-    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }));
-    await answerOf(r.route.handler(r.request({ sourceId: 'demo', investigationId: 'inv-1', message: 'who is on the account?', viewElementKeys: [], mask: true })));
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain('r1: widget: Account A-1');
-    expect(r.runs.every((run) => run.mask)).toBe(true);
-  });
-
-  it('lets a sentence state that a read found nothing by citing the line of that read, checks its number against that line, and keeps the line out of the citations', async () => {
-    const reads = [okResult(), zeroResult()];
-    let next = 0;
-    const r = await setup(
-      sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }, { text: 'The read of the second tool found 0 matches.', cites: ['s2'] }, { text: 'The read of the second tool found 3 matches.', cites: ['s2'] }),
-      { run: () => ({ status: 'ok', result: reads[Math.min(next++, 1)] ?? zeroResult() }) },
-    );
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', steps: 2 });
-    if (answer.status !== 'answered' || !('sentences' in answer)) throw new Error('not a sentences answer');
-    expect(answer.sentences.map((sentence) => sentence.text)).toEqual(['Account A-1 is listed.', 'The read of the second tool found 0 matches.']);
-    expect(answer.citations.map((citation) => citation.key)).toEqual(['r1']);
-    expect(answer.coverage.retrieval).toMatch(/read 1, shared: .*; read 2, byId: .*0 matches/);
-    expect(answer.coverage.summary).toBe('The answer cites 1 of the 2 elements the reads returned.');
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain('s2: read of byId: ');
-  });
-
   it('keeps a sentence that cites only the line of a read, though it cites no element', async () => {
     const r = await setup(sentences({ text: 'The read of the second tool found 0 matches.', cites: ['s2'] }), { run: () => ({ status: 'ok', result: zeroResult() }) });
     const answer = await answerOf(r.route.handler(r.request()));
@@ -210,64 +167,6 @@ describe('the properties in the lines of a tool result', () => {
     const without = await setup(sentences({ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }));
     await answerOf(without.route.handler(without.request()));
     expect(turn(without)).toMatchObject({ propertyValuesSent: false });
-  });
-
-  it('counts the lines it writes in the input guard: a result whose properties pass maxInputTokens ends the turn at the limit input, with no answer call', async () => {
-    const heavy = (): AskRunResult => {
-      const base = withProperties();
-      if (base.templateId !== 'expand') throw new Error('an expansion');
-      return { ...base, result: { ...base.result, nodes: base.result.nodes.map((node) => ({ ...node, properties: [{ key: 'narrative', value: 'x'.repeat(20_000), dataClass: 'text', masked: false }] })) } } as AskRunResult;
-    };
-    const light = await setup(sentences({ text: 'Account A-2 has an amount of 4200.', cites: ['r2'] }), { maxInputTokens: 6000, run: () => ({ status: 'ok', result: withProperties() }) });
-    expect(await answerOf(light.route.handler(light.request()))).toMatchObject({ status: 'answered' });
-    const over = await setup(sentences({ text: 'Account A-2 is listed.', cites: ['r2'] }), { maxInputTokens: 6000, run: () => ({ status: 'ok', result: heavy() }) });
-    expect(await answerOf(over.route.handler(over.request()))).toMatchObject({ status: 'limit', limit: 'input' });
-    expect(over.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(0);
-  });
-
-  it('makes the answer call for a plain Ask turn whose first read carries property values, and answers with the amount cited to the line', async () => {
-    const r = await rig({ reply: SHARED, step: sequence(DONE), answer: sentences({ text: 'Account A-2 has an amount of 4200.', cites: ['r2'] }), run: () => ({ status: 'ok', result: withProperties() }) });
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'Account A-2 has an amount of 4200.', cites: ['r2'] }] });
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(1);
-    expect(turn(r)).toMatchObject({ modelCalls: 3, propertyValuesSent: true });
-  });
-
-  it('keeps the fixed Ask sentence, with no answer call, when the first read carries no property value', async () => {
-    const r = await rig({ reply: SHARED, step: sequence(DONE), answer: sentences({ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }), run: () => ({ status: 'ok', result: okResult() }) });
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { result: { templateId: 'shared-attribute' } } } });
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(0);
-    expect(turn(r)).toMatchObject({ modelCalls: 2, propertyValuesSent: false });
-  });
-
-  it('keeps the fixed Ask sentence when the only property values of the read are the id and the title of its elements', async () => {
-    const base = expandResult();
-    if (base.templateId !== 'expand') throw new Error('an expansion');
-    const named = { ...base, result: { ...base.result, nodes: base.result.nodes.map((node) => ({ ...node, properties: [{ key: 'code', value: node.ref.stableId, dataClass: 'text', masked: false }, { key: 'label', value: node.display.title, dataClass: 'text', masked: false }] })) } } as AskRunResult;
-    const r = await rig({ reply: SHARED, step: sequence(DONE), answer: sentences({ text: 'Account A-2 is listed.', cites: ['r2'] }), run: () => ({ status: 'ok', result: named }) });
-    expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { result: { templateId: 'expand' } } } });
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(0);
-  });
-
-  it('leaves the Ask answer as it was when the answer over the property values keeps no sentence', async () => {
-    const r = await rig({ reply: SHARED, step: sequence(DONE), answer: sentences({ text: 'Account A-2 has an amount of 4300.', cites: ['r2'] }), run: () => ({ status: 'ok', result: withProperties() }) });
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { result: { templateId: 'expand' } } } });
-    expect(JSON.stringify(answer)).not.toContain('4300');
-  });
-
-  it('answers with the card that the mapping has no description for a type the question asks about, when the answer over the property values says so', async () => {
-    const mapping = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget' }], relationshipTypes: [] }) };
-    const r = await rig({ reply: SHARED, step: sequence(DONE), answer: ok('{"noDescription":["widget"]}'), run: () => ({ status: 'ok', result: withProperties() }) });
-    expect(await answerOf(r.route.handler(r.request(undefined, mapping)))).toMatchObject({ status: 'no-description', route: 'ask', names: ['Widget'] });
-  });
-
-  it('keeps the fixed Ask sentence when no model call is left for the answer', async () => {
-    const r = await rig({ reply: SHARED, step: sequence(DONE), maxCalls: 2, answer: sentences({ text: 'Account A-2 has an amount of 4200.', cites: ['r2'] }), run: () => ({ status: 'ok', result: withProperties() }) });
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', answer: { answered: { result: { templateId: 'expand' } } } });
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(0);
   });
 
   it('lists an anchor held by reference only without a node, so that no property is invented for it', () => {
@@ -361,68 +260,5 @@ describe('the lines of the relationships of a tool result', () => {
     expect(assembled.lines.get('s2')).not.toContain('no relationship listed');
   });
 
-  it('lets a sentence state that the direction is not known by citing the line of a read that lists no relationship', async () => {
-    const r = await setup(sentences({ text: 'The read listed no relationship, so the direction is not known.', cites: ['s1'] }), { run: () => ({ status: 'ok', result: okResult() }) });
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['s1'] }] });
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain('no relationship listed');
-  });
-});
-
-describe('the meaning lines of the answer after tool steps', () => {
-  const WIDGET = 'A widget is a small unit that holds up to 12 parts.';
-  const described = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'widget', description: WIDGET }], relationshipTypes: [] }) };
-
-  it('sends the description of a type the reads returned and keeps a sentence that cites it, with a description citation', async () => {
-    const r = await setup(sentences({ text: 'A widget is a small unit that holds up to 12 parts.', cites: ['m1'] }, { text: 'Account A-1 is listed.', cites: ['r1'] }));
-    const answer = await answerOf(r.route.handler(r.request(undefined, described)));
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain(`m1: entity type widget: ${JSON.stringify(WIDGET)}`);
-    if (answer.status !== 'answered' || !('sentences' in answer)) throw new Error('not answered');
-    expect(answer.sentences).toHaveLength(2);
-    expect(answer.citations.map((citation) => citation.kind)).toEqual(['entity', 'description']);
-  });
-
-  it('sends nothing more when the mapping has no description', async () => {
-    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }));
-    await answerOf(r.route.handler(r.request()));
-    expect(r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer')?.values).not.toContain('What the types mean');
-  });
-
-  it('takes a reply that names an undescribed type in play through its own hook, alone and beside sentences', async () => {
-    const mapping = { typeDescriptions: () => ({ entityTypes: [{ type: 'widget', label: 'Widget', displayName: 'Widget' }], relationshipTypes: [] }) };
-    const alone = await setup(ok('{"noDescription":["widget"]}'));
-    expect(await answerOf(alone.route.handler(alone.request(undefined, mapping)))).toEqual({ status: 'no-description', route: 'ask', sentence: 'The mapping has no description for Widget, so I cannot say what it means.', names: ['Widget'] });
-    const beside = await setup(ok(JSON.stringify({ sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }], noDescription: ['Widget'] })));
-    expect(await answerOf(beside.route.handler(beside.request(undefined, mapping)))).toMatchObject({ status: 'answered', noDescription: 'The mapping has no description for Widget, so I cannot say what it means.' });
-  });
-});
-
-describe('the label of an intent in a turn', () => {
-  const intents = {
-    byId: { label: 'Account by id', parameters: ['id'], query: 'MATCH (n) WHERE n.id = $id RETURN n LIMIT 5' },
-    shared: { label: 'Accounts at the same bank', parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } },
-  };
-
-  it('is written as `read of <label>` in the lines the model reads, carried on each read of the answer, and the request still names the id', async () => {
-    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }), { intents });
-    const answer = await answerOf(r.route.handler(r.request()));
-    const call = r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer');
-    expect(call?.values).toContain('s1: read of Accounts at the same bank:');
-    expect(call?.values).toContain('s2: read of Account by id:');
-    const stepCall = r.fixture.calls.find((entry) => entry.promptId === 'assistant.step');
-    expect(stepCall?.instructions).toContain('byId(id) - Account by id');
-    if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an Ask answer');
-    expect(answer.reads.map((read) => [read.tool, read.label])).toEqual([['shared', 'Accounts at the same bank'], ['byId', 'Account by id']]);
-  });
-
-  it('leaves a folder without labels as it was: no label on a read and the id in the lines', async () => {
-    const r = await setup(sentences({ text: 'Account A-1 is listed.', cites: ['r1'] }));
-    const answer = await answerOf(r.route.handler(r.request()));
-    expect(r.fixture.calls.find((entry) => entry.promptId === 'assistant.answer')?.values).toContain('s1: read of shared:');
-    if (answer.status !== 'answered' || answer.route !== 'ask' || answer.reads === undefined) throw new Error('not an Ask answer');
-    expect(answer.reads.some((read) => 'label' in read)).toBe(false);
-  });
 });
 

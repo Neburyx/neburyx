@@ -36,6 +36,7 @@ async function waiting(over: Partial<RigOptions> = {}) {
 const decide = (r: Rig, first: Extract<AssistantTurnAnswer, { status: 'confirmation' }>, decision: 'confirm' | 'skip' | 'cancel', over: Record<string, unknown> = {}) =>
   answerOf(r.route.handler(r.request({ ...BODY, ...over, confirmation: { pendingId: first.pendingId, plan: first.plan, decision } })));
 
+const agentCalls = (r: Rig): number => r.events.filter((event) => event.action === 'assistant.agent').length;
 const events = (r: Rig) => r.events.filter((event) => event.action === CONFIRMATION_ACTION).map((event) => (event.detail as { turn: { cause: string; intent?: string } }).turn);
 const closings = (r: Rig) => r.events.filter((event) => event.action === TURN_CLOSED_ACTION).map((event) => (event.detail as { turn: Record<string, unknown> }).turn);
 
@@ -47,20 +48,19 @@ describe('a heavy step of the loop waits for the analyst', () => {
     // the first read, the second read and the read of the heavy step, which stopped at its count and read no page
     expect(r.runs).toHaveLength(3);
     expect(r.runs.filter((run) => (run.options as { continue?: boolean } | undefined)?.continue === true)).toHaveLength(0);
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.step')).toHaveLength(2);
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.answer')).toHaveLength(0);
+    expect(agentCalls(r)).toBe(3);
     expect(JSON.stringify(first)).not.toMatch(/continueToken|"result"/);
     expect([...pending.rows.values()]).toMatchObject([{ status: 'waiting', investigationId: BODY.investigationId, sourceId: BODY.sourceId }]);
     expect(closings(r)).toMatchObject([{ outcome: 'confirmation', route: 'ask' }]);
     expect(events(r)).toEqual([expect.objectContaining({ cause: 'shown', intent: 'byId' })]);
   });
 
-  it('keeps Ask’s heavy stop with Continue for a first read that is heavy, as before', async () => {
+  it('waits for the analyst for a first read that is heavy, with the step it would read and nothing read', async () => {
     const pending = createMemoryAssistantPendingStore();
     const r = await rig({ reply: routeAsk('shared', { id: 'A-9' }), step: sequence(DONE), answer: GOOD, pending, run: runOf() });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
-    expect(pending.rows.size).toBe(0);
+    expect(answer).toMatchObject({ status: 'confirmation', step: { tool: 'shared' } });
+    expect(pending.rows.size).toBe(1);
   });
 
   it('stops the turn as unavailable, with nothing read and nothing waiting, when the store cannot be reached', async () => {
@@ -131,7 +131,7 @@ describe('Confirm runs the step', () => {
     const [, payload = ''] = first.plan.split('.');
     const text = Buffer.from(payload, 'base64url').toString('utf8');
     expect(text).not.toMatch(/Account|display|properties|continueToken|SENTINEL/);
-    expect(JSON.parse(text)).toMatchObject({ steps: [{ tool: 'shared' }, { tool: 'byId', values: { id: 'A-2' } }], wait: { tool: 'byId', values: { id: 'A-9' } }, counters: { steps: 2, calls: 3 } });
+    expect(JSON.parse(text)).toMatchObject({ steps: [{ tool: 'shared' }, { tool: 'byId', values: { id: 'A-2' } }], wait: { tool: 'byId', values: { id: 'A-9' } }, counters: { steps: 2, calls: 4 } });
   });
 
   it('never runs a plan twice: the second use is refused and audited as invalid', async () => {
@@ -175,8 +175,6 @@ describe('Skip, Cancel and a confirmation that is no longer valid', () => {
     const answer = await decide(r, first, 'skip');
     expect(answer).toMatchObject({ status: 'answered', route: 'ask' });
     expect(r.runs.slice(readsBefore).every((run) => (run.options as { continue?: boolean } | undefined)?.continue !== true)).toBe(true);
-    const stepCalls = r.fixture.calls.filter((call) => call.promptId === 'assistant.step');
-    expect(stepCalls.at(-1)?.values).toContain('byId: skipped by the analyst');
     expect(events(r).map((event) => event.cause)).toEqual(['shown', 'skip']);
   });
 
@@ -262,7 +260,6 @@ describe('a decision reads the earlier steps again, and meets what changed', () 
     const answer = await decide(r, first, 'confirm');
     const reads = readsOf(answer);
     expect(reads[0]).toMatchObject({ tool: 'shared', rows: 0, quality: 'exact' });
-    expect(r.fixture.calls.filter((call) => call.promptId === 'assistant.step').at(-1)?.values).not.toContain('1 match shown');
   });
 
   it('does not read the heavy step when the replayed reads reach the rows of the turn, and answers over what was read with the limit named', async () => {
@@ -320,7 +317,7 @@ describe('a decision reads the earlier steps again, and meets what changed', () 
 
   it('reads the view again from the keys that were sent when the turn began from the view, and goes on from it', async () => {
     const pending = createMemoryAssistantPendingStore();
-    const r = await rig({ reply: ok('{"route":"view"}'), view: ok(JSON.stringify({ tool: 'byId', values: { id: 'A-9' } })), step: sequence(DONE), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['n1', 'n2'] }] })), pending, run: runOf() });
+    const r = await rig({ reply: ok('{"route":"view"}'), step: sequence(ok('{"tool":"view","values":{}}'), byId('A-9'), DONE), answer: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['n1', 'n2'] }] })), pending, run: runOf() });
     const first = await answerOf(r.route.handler(r.request(VIEW_BODY)));
     if (first.status !== 'confirmation') throw new Error(`not waiting: ${JSON.stringify(first).slice(0, 160)}`);
     expect(first.reads).toMatchObject([{ tool: 'view', kind: 'view' }]);

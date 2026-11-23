@@ -6,7 +6,6 @@ import { capabilitiesOf } from '../questions/question-routes.js';
 import { makeAskFolder, removeAskFolders } from '../testing/ask-folder.js';
 import { VIEW_KEYS, fileQueryResult, heavyResult, offerOf, okResult, rig, type Rig } from '../testing/assistant-rig.js';
 import { buildToolRegistry } from './tool-registry.js';
-import { readToolRequest } from './tool-request.js';
 import { runToolStep, type StepScope } from './tool-step.js';
 
 afterAll(removeAskFolders);
@@ -26,9 +25,10 @@ async function setup(options: Parameters<typeof rig>[0] = {}) {
   const built = buildPatternCatalog({ offers: [PATTERN], cut: false });
   const registry = buildToolRegistry({ source: folder.source(SOURCE), patterns: built, viewReadable: true, templateRunnable: () => true });
   const ask = (text: string) => {
-    const read = readToolRequest(text, registry);
-    if (!read.ok) throw new Error('the test request is malformed');
-    return read.request;
+    const data = JSON.parse(text) as { tool: string; values: Record<string, string> };
+    const tool = registry.find(data.tool);
+    if (tool === undefined) throw new Error('the test request names no tool');
+    return { tool, values: data.values };
   };
   const scope = (request = t.request(), mask = false): StepScope => ({
     request,
@@ -143,20 +143,5 @@ describe('a tool step through the gate', () => {
       expect(await runToolStep(ask('{"tool":"entity","values":{"entityType":"Nope","stableId":"A-1"}}'), scope())).toMatchObject({ status: 'refused', refused: { cause: 'invalid-inputs' } });
     });
 
-    it('is malformed, and nothing runs, with a value missing, one more than the template takes, or a value that is not text', async () => {
-      const { t } = await setup();
-      const registry = buildToolRegistry({ source: (await folderOf()).source(SOURCE), patterns: undefined, viewReadable: false, templateRunnable: () => true });
-      for (const text of ['{"tool":"entity","values":{"entityType":"widget"}}', '{"tool":"entity","values":{"entityType":"widget","stableId":"A-1","limit":"5"}}', '{"tool":"entity","values":{"entityType":"widget","stableId":["A-1"]}}']) {
-        expect(readToolRequest(text, registry)).toEqual({ ok: false, reason: 'malformed' });
-      }
-      expect(calls(t)).toBe(0);
-    });
-
-    it('is unavailable without its manual capability, and nothing runs', async () => {
-      const { t } = await setup();
-      const registry = buildToolRegistry({ source: (await folderOf()).source(SOURCE), patterns: undefined, viewReadable: false, templateRunnable: (template) => template !== 'shortest-paths' });
-      expect(readToolRequest('{"tool":"shortest-paths","values":{"fromType":"A","fromId":"1","toType":"B","toId":"2","relType":"R"}}', registry)).toEqual({ ok: false, reason: 'unavailable' });
-      expect(calls(t)).toBe(0);
-    });
   });
 });

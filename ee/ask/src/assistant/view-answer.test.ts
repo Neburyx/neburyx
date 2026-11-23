@@ -558,42 +558,10 @@ describe('a tool request in the view reply', () => {
   const closedOf = (t: Awaited<ReturnType<typeof rig>>) => (t.events.find((event) => event.action === 'assistant.turn.closed')?.detail as { turn: Record<string, unknown> }).turn;
   const sentences = ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view, and another account was read.', cites: ['n1', 'n2'] }] }));
 
-  it('treats a tool request as a reply that does not fit when the loop is off, and gives the fixed sentence after the repeat', async () => {
-    const t = await rig({ view: TOOL, loopSteps: 1, step: sequence(DONE) });
-    expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered', route: 'view' });
-    const views = t.fixture.calls.filter((call) => call.promptId === 'assistant.view');
-    expect(views).toHaveLength(2);
-    expect(new Set(views.map((call) => call.version))).toEqual(new Set([8]));
-    expect(views[0]?.instructions).not.toContain('# Tools you may ask for');
-  });
-
   it('does not take a request for a tool that is not offered, and reads nothing for it', async () => {
     const t = await rig({ view: ok('{"tool":"dropEverything","values":{}}'), step: sequence(DONE) });
     expect(await answerOf(t.route.handler(t.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered', route: 'view' });
     expect(t.runs).toHaveLength(0);
-  });
-
-  it('offers the tools and the third reply form in version 9 of the view prompt, audited with that version', async () => {
-    const t = await rig({ view: sentences, step: sequence(DONE) });
-    await answerOf(t.route.handler(t.request(VIEW_BODY)));
-    const view = t.fixture.calls.find((call) => call.promptId === 'assistant.view');
-    expect(view?.version).toBe(9);
-    expect(view?.instructions).toContain('# Tools you may ask for');
-    expect(view?.instructions).toContain('byId(id)');
-    expect(view?.instructions).not.toContain('view()');
-    expect(JSON.stringify(t.events.find((event) => event.action === 'assistant.view'))).toContain('"promptVersion":"9"');
-  });
-
-  it('runs the request as the second step from the view’s reading, and answers over the view and what the tool returned, checked', async () => {
-    const t = await rig({ view: sequence(TOOL, sentences), step: sequence(DONE), answer: sentences, run: () => ({ status: 'ok', result: fileQueryResult() }) });
-    const answer = await answerOf(t.route.handler(t.request(VIEW_BODY)));
-    expect(t.elementReads).toHaveLength(1);
-    expect(t.runs.map((run) => JSON.stringify(run.asked))).toEqual([expect.stringContaining('"fileQuery"')]);
-    expect(answer).toMatchObject({ status: 'answered', route: 'view', steps: 2, calls: 4 });
-    if (answer.status !== 'answered' || !('sentences' in answer)) throw new Error('not a sentences answer');
-    expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
-    expect(closedOf(t)).toMatchObject({ route: 'view', modelCalls: 4, steps: 2, outcome: 'answered' });
-    expect(t.fixture.calls.filter((call) => call.promptId === 'assistant.step')).toHaveLength(1);
   });
 
   it('answers not-answered on the view route, and closes the turn on it, when no sentence after the steps survives the checks', async () => {
@@ -797,67 +765,3 @@ describe('a table answer judged by a check that runs in a worker thread', () => 
   });
 });
 
-
-describe('a table answer after tool steps', () => {
-  const FORM = ok('{"route":"view","form":"table"}');
-  const TOOL = ok(JSON.stringify({ tool: 'byId', values: { id: 'A-2' } }));
-  const DONE = ok('{"done":true}');
-  const sequence = (...replies: FixtureReply[]) => {
-    let next = 0;
-    return () => replies[Math.min(next++, replies.length - 1)] ?? DONE;
-  };
-  const tableOf = (rows: readonly { cells: readonly string[]; cites: readonly string[] }[]) => ok(JSON.stringify({ table: { columns: ['Element', 'Type'], rows } }));
-  const go = async (answer: ReturnType<typeof tableOf>, over: Parameters<typeof rig>[0] = {}) => {
-    const t = await rig({ reply: FORM, view: sequence(TOOL), step: sequence(DONE), answer, run: () => ({ status: 'ok', result: fileQueryResult() }), ...over });
-    return { t, answer: await answerOf(t.route.handler(t.request(VIEW_BODY))) };
-  };
-
-  it('answers the table over the view and what the steps returned: rows citing elements, the coverage naming what the reads returned, the steps and calls', async () => {
-    const { answer } = await go(tableOf([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['n2'] }]));
-    expect(answer).toMatchObject({ status: 'answered', route: 'view', steps: 2, calls: 4 });
-    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
-    expect(answer.table.rows).toHaveLength(2);
-    expect(answer.table.title).toMatch(/ · 2 rows$/);
-    expect(answer.coverage.summary).toMatch(/^2 of \d+ .* read shown · /);
-    expect(answer.citations.map((citation) => citation.key)).toEqual(['n1', 'n2']);
-  });
-
-  it('drops a row that cites only a line of a read, and keeps the rows that cite an element', async () => {
-    const { answer } = await go(tableOf([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', 'widget'], cites: ['s1'] }]));
-    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
-    expect(answer.table.rows).toEqual([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }]);
-    expect(answer.table.droppedRows).toBe(1);
-  });
-
-  it('keeps the sentences form when the router chose no form', async () => {
-    const { answer } = await go(ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })), { reply: ok('{"route":"view"}') });
-    expect(answer).toMatchObject({ status: 'answered', route: 'view' });
-    expect('table' in answer).toBe(false);
-  });
-
-  it('titles the table with the anchor of one expansion when every row was listed by it, and without an anchor when two reads were made', async () => {
-    const { answer } = await go(tableOf([{ cells: ['Account A-2', 'widget'], cites: ['n2'] }]), { run: () => ({ status: 'ok', result: expandResult() }) });
-    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
-    expect(answer.table.title).toBe('widgets of Account A-1 · 1 row');
-    const two = await go(tableOf([{ cells: ['Account A-2', 'widget'], cites: ['n2'] }]), { step: sequence(TOOL, TOOL, DONE), run: () => ({ status: 'ok', result: expandResult() }) });
-    if (two.answer.status !== 'answered' || !('table' in two.answer)) throw new Error('not a table answer');
-    expect(two.answer.table.title).toBe('widgets · 1 row');
-  });
-
-  it('drops a row that cites a line of a read beside an element, so that no cell rests on text the card does not show', async () => {
-    const { answer } = await go(tableOf([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }, { cells: ['Account A-2', '2 matches'], cites: ['n2', 's1'] }]));
-    if (answer.status !== 'answered' || !('table' in answer)) throw new Error('not a table answer');
-    expect(answer.table.rows).toEqual([{ cells: ['Account A-1', 'widget'], cites: ['n1'] }]);
-    expect(answer.table.droppedRows).toBe(1);
-  });
-
-  it('counts the rows of the type of the table when the read lists more than that type, and titles a table about relationships Elements', async () => {
-    const mixed = await go(tableOf([{ cells: ['Account A-2', 'widget'], cites: ['n2'] }]), { run: () => ({ status: 'ok', result: expandResult() }) });
-    if (mixed.answer.status !== 'answered' || !('table' in mixed.answer)) throw new Error('not a table answer');
-    expect(mixed.answer.coverage.summary).toBe('1 of 3 widgets read shown · exact');
-    const link = await go(tableOf([{ cells: ['SENT', 'x'], cites: ['r2'] }]), { run: () => ({ status: 'ok', result: expandResult() }) });
-    if (link.answer.status !== 'answered' || !('table' in link.answer)) throw new Error('not a table answer');
-    expect(link.answer.table.title).toMatch(/^Elements( of .*)? · 1 row$/);
-    expect(link.answer.coverage.summary).toMatch(/^1 of 1 elements read shown · exact$/);
-  });
-});
