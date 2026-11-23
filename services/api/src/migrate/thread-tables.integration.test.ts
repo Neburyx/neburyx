@@ -442,6 +442,7 @@ describe('the text of a turn (0013)', () => {
       expect(await store.turnIdTaken(id, FIRST, randomUUID())).toBe(true);
       expect(await store.turnIdTaken(id, SECOND, OWNER)).toBe(true);
       expect(await store.turnIdTaken(randomUUID(), FIRST, OWNER)).toBe(false);
+      expect(await store.turnIdTaken(id.toUpperCase(), FIRST.toUpperCase(), OWNER.toUpperCase())).toBe(false);
     });
   });
 

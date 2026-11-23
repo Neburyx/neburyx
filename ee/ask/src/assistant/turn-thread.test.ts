@@ -467,6 +467,13 @@ describe('the id of a turn that the panel gave', () => {
     expect(stored(turn)).toHaveLength(1);
   });
 
+  it('reads an id and an investigation written in capitals as the same ones, so a retry of the turn with the spelling changed is no refusal', async () => {
+    const turn = await view();
+    await run(turn, body());
+    const again = await run(turn, body({ turnId: TURN_ID.toUpperCase(), investigationId: INVESTIGATION.toUpperCase() }));
+    expect('error' in again ? (again.error as { code?: string }).code : 'none').toBe('none');
+  });
+
   it('answers a turn as before when the store cannot say whether the id is taken', async () => {
     const threads = createMemoryAssistantThreadStore({ failOn: 'epoch' });
     const turn = await turnRig({ view: ok(JSON.stringify({ sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] })) }, threads);

@@ -144,7 +144,7 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
     turnIdTaken: (turnId, investigationId, userId) =>
       withClient(async (client) => {
         const owner = (await client.query(TURN_OWNER, [turnId])).rows[0];
-        return owner !== undefined && (String(owner['investigation_id']) !== investigationId || String(owner['user_id']) !== userId);
+        return owner !== undefined && (String(owner['investigation_id']).toLowerCase() !== investigationId.toLowerCase() || String(owner['user_id']).toLowerCase() !== userId.toLowerCase());
       }),
     epoch: (investigationId) =>
       withClient(async (client) => {
@@ -279,7 +279,8 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
     },
     async turnIdTaken(turnId, investigationId, userId) {
       fail('epoch');
-      for (const [name, thread] of threads) if (thread.turns.some((held) => held.id === turnId)) return name !== key(investigationId, userId);
+      const own = key(investigationId, userId).toLowerCase();
+      for (const [name, thread] of threads) if (thread.turns.some((held) => held.id.toLowerCase() === turnId.toLowerCase())) return name.toLowerCase() !== own;
       return false;
     },
     async epoch(investigationId) {
