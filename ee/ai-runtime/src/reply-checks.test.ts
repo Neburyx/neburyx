@@ -440,6 +440,13 @@ describe('a count of the cited elements', () => {
       expect(verdict(text)).toBe(expected);
     });
 
+    it('does not take a name that two cited elements share for a target apart: it names the group', () => {
+      const shared: CheckedText = { ...apart, lines: new Map(keys.slice(0, 2).map((key) => [key, `${key} | "account" | title: "Ana Silva" | id: "${key}x"`])), keys: new Map(keys.slice(0, 2).map((key) => [key, true])), text: keys.slice(0, 2).map((key) => `${key} | "account" | title: "Ana Silva" | id: "${key}x"`).join('\n'), elementTypes: new Map(keys.slice(0, 2).map((key) => [key, 'entity account'])) };
+      const said = (text: string): boolean => judgeSentences([{ text, cites: keys.slice(0, 2) }], shared).kept.length === 1;
+      expect(said('Ana Silva appears on two accounts.')).toBe(true);
+      expect(said('Ana Silva appears on three accounts.')).toBe(false);
+    });
+
     it('compares names as the same text whether they are written composed or decomposed', () => {
       const cafe = apart.lines.get('a6')?.replace('AC-5100', 'Caf\u00e9').replace('AC-5100', 'Caf\u00e9') ?? '';
       const accented: CheckedText = { ...apart, text: [...apart.lines.values()].slice(0, 5).concat(cafe).join('\n'), lines: new Map([...apart.lines, ['a6', cafe]]) };

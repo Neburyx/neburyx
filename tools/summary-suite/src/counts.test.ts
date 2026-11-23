@@ -181,6 +181,12 @@ describe('the suite\'s own rule for a count that leaves out the elements named a
     expect(numbersUnsupported({ text: 'Five Rivers Ltd received 5 transfers.', cites: ['n1'] }, held)).toEqual(['5']);
   });
 
+  it('does not take a name that two cited elements share for a target apart', () => {
+    const shared = 'n1 | "account" | title: "Ana Silva" | id: "x1"\nn2 | "account" | title: "Ana Silva" | id: "x2"';
+    expect(numbersUnsupported({ text: 'Ana Silva appears on two accounts.', cites: ['n1', 'n2'] }, shared)).toEqual([]);
+    expect(numbersUnsupported({ text: 'Ana Silva appears on three accounts.', cites: ['n1', 'n2'] }, shared)).toEqual(['3']);
+  });
+
   it('compares names composed or decomposed as the same text', () => {
     const accented = sent.replaceAll('AC-5100', 'Caf\u00e9');
     const said = (text: string): string[] => numbersUnsupported({ text, cites: keys }, accented);

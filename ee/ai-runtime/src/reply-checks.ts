@@ -277,11 +277,12 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
     const end = typeWordLength(tail, named);
     if (end === undefined) return false;
     const outside = outsideTheList(text.slice(0, text.length - tail.length).replace(/\S+$/u, ''), tail.slice(end), namesOfElements(assembled));
-    const apart = (key: string): boolean => namesOfKey(key, assembled).some((name) => occursWhole(name, outside));
     const matching = [...new Set(sentence.cites)].filter((key) => {
       const type = lines.has(key) ? undefined : types.get(key);
       return type !== undefined && ofType(type);
     });
+    // a name that two of the cited elements share names none of them apart: it is the one name of the group the sentence counts
+    const apart = (key: string): boolean => namesOfKey(key, assembled).some((name) => occursWhole(name, outside) && !matching.some((other) => other !== key && namesOfKey(other, assembled).includes(name)));
     return matching.filter((key) => !apart(key)).length === wanted && wanted > 0;
   };
   const citedTypes = new Set([...new Set(sentence.cites)].flatMap((key) => (lines.has(key) || types.get(key) === undefined ? [] : [types.get(key) ?? ''])));
