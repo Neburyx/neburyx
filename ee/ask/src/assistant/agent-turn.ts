@@ -25,7 +25,6 @@ const FINAL_TEXT = 'Done.';
 const NOT_ANSWERED = 'Nothing has been read yet. Read first, then call answer.';
 const LIMIT_TEXT = 'Not read: this turn has reached its limit. Call answer now with what you have.';
 
-
 /** What the model is told when `answer` removes sentences. A caller may replace it; the default says only how many were removed. */
 type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean }) => string;
 
