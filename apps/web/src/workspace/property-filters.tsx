@@ -31,10 +31,20 @@ interface BlockProps {
   readonly disabled: boolean;
   /** The property is personal data: its filter lasts for this session only and is never saved. */
   readonly personal: boolean;
+  /** The label and unit the mapping gives the property. */
+  readonly shown: { readonly label?: string | undefined; readonly unit?: string | undefined } | undefined;
+}
+
+/** The label of a block, as the design writes it: the type, the property by its label when the mapping gives one, then the unit after a dot for a range and "property filter" for a choice. */
+function labelOf({ typeName, property, shown, personal }: Pick<BlockProps, 'typeName' | 'property' | 'shown' | 'personal'>, ranged: boolean): string {
+  const name = `${typeName} ${shown?.label ?? property}`;
+  if (personal) return `${name} · ${PROPERTY_FILTER_COPY.personalSuffix}`;
+  if (!ranged) return `${name} · ${PROPERTY_FILTER_COPY.suffix}`;
+  return shown?.unit === undefined ? name : `${name} · ${shown.unit}`;
 }
 
 /** The choice of values of one property of one entity type: a button that shows what is chosen and opens the list of the loaded values. */
-function ChoiceBlock({ on, items, typeName, type, property, declared, condition, disabled, personal }: BlockProps) {
+function ChoiceBlock({ on, items, typeName, type, property, declared, condition, disabled, personal, shown: display }: BlockProps) {
   const id = useId();
   const state = useClientState();
   const [open, setOpen] = useState(false);
@@ -44,7 +54,7 @@ function ChoiceBlock({ on, items, typeName, type, property, declared, condition,
   const declaredKind = declared === 'text' || declared === 'boolean' ? declared : undefined;
   const choices = useMemo(() => choicesOf(items, property, declaredKind), [items, property, declaredKind]);
   const kind = choiceKindOf(declared, choices.observed);
-  const label = PROPERTY_FILTER_COPY.label(typeName, property, personal ? PROPERTY_FILTER_COPY.personalSuffix : PROPERTY_FILTER_COPY.suffix);
+  const label = labelOf({ typeName, property, shown: display, personal }, false);
   const chosen = condition?.op === 'in' ? condition.values : [];
   const offered = kind === undefined || choices.masked || choices.values.length === 0 ? [] : choices.values;
   const listed = [...offered, ...chosen.filter((value) => !offered.includes(value))];
@@ -81,7 +91,7 @@ function ChoiceBlock({ on, items, typeName, type, property, declared, condition,
       <span className="supernode-label" id={`${id}-label`}>
         {label}
       </span>
-      <button type="button" ref={opener} className="property-filter-button" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
+      <button type="button" ref={opener} className="filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
         <span id={`${id}-closed`}>{chosen.length === 0 ? PROPERTY_FILTER_COPY.any : chosen.join(', ')}</span>
       </button>
       {open ? (
@@ -111,7 +121,7 @@ function ChoiceBlock({ on, items, typeName, type, property, declared, condition,
 }
 
 /** The range of one ordered property of one entity type: a button that shows the bounds and opens two fields. */
-function RangeBlock({ on, items, typeName, type, property, declared, condition, disabled, personal }: BlockProps) {
+function RangeBlock({ on, items, typeName, type, property, declared, condition, disabled, personal, shown: display }: BlockProps) {
   const id = useId();
   const state = useClientState();
   const kind = declared as RangeKind;
@@ -131,7 +141,7 @@ function RangeBlock({ on, items, typeName, type, property, declared, condition, 
   const choices = useMemo(() => choicesOf(items, property), [items, property]);
   const opener = useRef<HTMLButtonElement>(null);
   const loaded = useMemo(() => loadedRange(items, property, kind), [items, property, kind]);
-  const label = PROPERTY_FILTER_COPY.label(typeName, property, personal ? PROPERTY_FILTER_COPY.personalSuffix : PROPERTY_FILTER_COPY.suffix);
+  const label = labelOf({ typeName, property, shown: display, personal }, true);
   const identity = { on, type, property } as const;
   const apply = (next: { readonly from: string; readonly to: string }): void => {
     setText(next);
@@ -175,7 +185,7 @@ function RangeBlock({ on, items, typeName, type, property, declared, condition, 
       <span className="supernode-label" id={`${id}-label`}>
         {label}
       </span>
-      <button type="button" ref={opener} className="property-filter-button" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
+      <button type="button" ref={opener} className="filter-select" aria-labelledby={`${id}-label ${id}-closed`} aria-expanded={open} aria-controls={`${id}-list`} disabled={disabled} onClick={() => setOpen(!open)}>
         <span id={`${id}-closed`}>{rangeText(kind, held?.from, held?.to)}</span>
       </button>
       {open ? (
@@ -214,6 +224,7 @@ interface Block {
   readonly declared: Declared;
   readonly items: readonly Filterable[];
   readonly personal: boolean;
+  readonly shown: BlockProps['shown'];
 }
 
 /**
@@ -234,13 +245,13 @@ export function usePropertyBlocks(): readonly Block[] {
       if (items.length === 0) continue;
       for (const property of type.filterable) {
         const personal = type.pii.includes(property);
-        if (!personal || !masking) blocks.push({ on: 'entity', type: type.type, typeName: type.displayName, property, declared: (type.filterKinds?.[property] ?? 'unknown') as Declared, items, personal });
+        if (!personal || !masking) blocks.push({ on: 'entity', type: type.type, typeName: type.displayName, property, declared: (type.filterKinds?.[property] ?? 'unknown') as Declared, items, personal, shown: type.propertyDisplay?.[property] });
       }
     }
     for (const [type, held] of Object.entries(mapped.relationship)) {
       const items = graph.edges.filter((edge) => edge.type === type && edge.semantics !== 'derived' && !('aggregate' in edge.ref));
       if (items.length === 0) continue;
-      for (const property of held.filterable) blocks.push({ on: 'relationship', type, typeName: type, property, declared: (held.kinds[property] ?? 'unknown') as Declared, items, personal: false });
+      for (const property of held.filterable) blocks.push({ on: 'relationship', type, typeName: type, property, declared: (held.kinds[property] ?? 'unknown') as Declared, items, personal: false, shown: profile.relationshipTypes.find((row) => row.type === type && !row.aggregate && row.propertyDisplay?.[property] !== undefined)?.propertyDisplay?.[property] });
     }
     return blocks.filter((block) => controlOf(block.declared) === 'choice' || isRangeKind(block.declared));
   }, [profile, mapped, graph, masking]);
@@ -254,10 +265,10 @@ export function PropertyBlocks({ blocks }: { readonly blocks: readonly Block[] }
   const unjudged = filteredRelationshipsOf(graph, filter).unjudged;
   return (
     <>
-      {blocks.map(({ on, type, typeName, property, declared, items, personal }) => {
+      {blocks.map(({ on, type, typeName, property, declared, items, personal, shown }) => {
         const Block = controlOf(declared) === 'range' ? RangeBlock : ChoiceBlock;
         const off = on === 'entity' ? filter.offEntityTypes.has(type) : filter.offRelationshipTypes.has(type);
-        return <Block key={`${on}\u0000${type}\u0000${property}`} on={on} items={items} typeName={typeName} type={type} property={property} declared={declared} condition={filter.properties.find((held) => held.on === on && held.type === type && held.property === property)} disabled={off} personal={personal} />;
+        return <Block key={`${on}\u0000${type}\u0000${property}`} on={on} items={items} typeName={typeName} type={type} property={property} declared={declared} condition={filter.properties.find((held) => held.on === on && held.type === type && held.property === property)} disabled={off} personal={personal} shown={shown} />;
       })}
       {unjudged === 0 ? null : <p className="neighbor-types-note">{PROPERTY_FILTER_COPY.unjudged(unjudged)}</p>}
     </>

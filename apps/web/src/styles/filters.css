@@ -24,21 +24,28 @@
 }
 
 .filter-chip {
-  padding: var(--space-4) var(--space-8);
-  border: var(--border-width) solid var(--color-control-border);
-  border-radius: var(--radius-tag);
-  background: var(--color-surface);
+  padding: var(--space-4) var(--space-10);
+  border: 0;
+  border-radius: var(--radius-panel);
+  background: var(--color-key-chip);
   color: var(--color-text-strong);
   font: inherit;
-  font-size: var(--font-size-small);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-caption);
   cursor: pointer;
 }
 
+.filter-chip[aria-pressed='true'] {
+  background: var(--color-accent-surface);
+  color: var(--color-accent);
+}
+
+.filter-chip[aria-pressed='true']::before {
+  content: '✓ ';
+}
+
 .filter-chip[aria-pressed='false'] {
-  border-color: var(--color-border);
-  background: none;
   color: var(--color-text-muted);
-  text-decoration: line-through;
 }
 
 .filters-close {
@@ -47,22 +54,71 @@
   right: var(--space-12);
 }
 
-.property-filter-button {
+.filter-select {
   display: block;
   width: 100%;
-  padding: var(--space-8);
+  height: var(--header-button-height);
+  padding: 0 calc(var(--space-12) + var(--tool-icon-size)) 0 var(--space-12);
   border: var(--border-width) solid var(--color-control-border);
-  border-radius: var(--radius);
-  background: var(--color-surface);
-  color: var(--color-text-strong);
+  border-radius: var(--radius-panel);
+  background: var(--color-surface) url('../assets/select-chevron.svg') no-repeat right var(--space-10) center / var(--tool-icon-size);
+  color: var(--color-text);
   font: inherit;
+  font-size: var(--font-size-body);
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   cursor: pointer;
 }
 
-.property-filter-button:disabled {
+.filter-select:hover:not(:disabled) {
+  background-color: var(--color-surface-muted);
+}
+
+.filter-select:disabled {
+  border-color: var(--color-workspace-border);
+  background-color: var(--color-surface-muted);
   color: var(--color-text-muted);
   cursor: default;
+}
+
+/* the time window select is as tall and as round as the other selects of the panel */
+.filters-panel select {
+  height: var(--header-button-height);
+  border-radius: var(--radius-panel);
+  font-size: var(--font-size-body);
+}
+
+/* a label of the panel reads as in the design: regular weight, muted, like the others above a control */
+.filters-panel .supernode-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-small);
+  font-weight: inherit;
+}
+
+.filters-types {
+  position: relative;
+}
+
+/* at the right of the heading row, though it follows the chips in the reading and tab order */
+.filters-types .filters-reset {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.filters-panel .filters-heading {
+  color: var(--color-text-strong);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+}
+
+.filters-result {
+  margin: 0;
+  color: var(--color-text-strong);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
 }
 
 .property-filter-list {
@@ -82,4 +138,9 @@
   border: var(--border-width) solid var(--color-control-border);
   border-radius: var(--radius);
   font: inherit;
+}
+
+/* the notes line up with the labels, as in the design */
+.filters-panel .neighbor-types-note {
+  padding: 0;
 }

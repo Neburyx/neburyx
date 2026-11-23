@@ -174,6 +174,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `pii` | no | Critical fields: maskable on demand. A bare name, or `{ property, class }`; see [keyed identifiers](../domain-packs/README.md#an-entity-type-whose-identifier-is-personal-data) |
 | `filterable` | no | Properties the client may filter loaded items by |
 | `kinds` | no | The kind of a filterable property, by name: one of `text`, `number`, `boolean`, `date`, `dateTime`, `localDateTime`, `time`, `localTime`. Screens show it beside the property; a property without one is shown as `unknown`. A kind decides how the Filters panel offers the property (a choice of values for `text` and `boolean`, a range for `number` and the date and time kinds) and what a saved property filter means: a saved filter keeps the kind it was made with, and when the mapping later declares another kind the filter is dropped (listed as "the kind of value changed"). A kind never changes what a pattern does. Declaring `kinds` changes the source's configuration hash, so the source is checked again and open investigations on it show that the mapping changed; an older image refuses the key, so remove `kinds` before rolling back |
+| `property_display` | no | How screens name a property and the unit it is measured in, by property name: `{ amount: { label: amount, unit: USD } }`. `label` (at most 80 characters) replaces the property name in the Filters panel, `unit` (at most 20) is written after it ("Transaction amount · USD"); each is optional, one at least is given, and a name must be a property the type names. Values are never relabelled: they show as the source holds them. Declaring it changes the source's configuration hash; an older image refuses the key, so remove it before rolling back |
 | `sortable` | no | Properties a page may be ranked by |
 | `link` | no | An `https` template that opens the record in your own system; see [links](../domain-packs/README.md#links-to-a-source-record) |
 | `link_carries_value` | no | `true` allows a link on a keyed type to carry the value itself |
@@ -216,6 +217,7 @@ Everything else about Ask (the provider, the model, the key, the limits, prompt 
 | `evidence` | no | Properties that refer to source records. Each needs an index |
 | `filterable` | no | Properties the client may filter loaded relationships by |
 | `kinds` | no | As for an entity type; a key is a filterable property, or the row's `observed_at` |
+| `property_display` | no | As for an entity type; a key is a property the row names (stable ID, `observed_at`, evidence or filterable) |
 | `sortable` | no | Properties a page may be ranked by |
 | `evidence_link` | no | An `https` template for opening an evidence record in your own system; see [links](../domain-packs/README.md#links-to-a-source-record) |
 

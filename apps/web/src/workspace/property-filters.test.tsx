@@ -26,7 +26,7 @@ const scopeText = (): string => within(screen.getByRole('group', { name: 'Graph 
 const list = (): HTMLElement => screen.getByRole('group', { name: /score · property filter/ });
 const boxes = (): HTMLElement[] => within(list()).getAllByRole('checkbox');
 const box = (name: string): HTMLElement => within(list()).getByRole('checkbox', { name });
-const opener = (): HTMLElement => screen.getByRole('button', { name: /KIND-A score · property filter/i });
+const opener = (): HTMLElement => screen.getByRole('button', { name: /KIND-A score/i });
 
 describe('the choice of values of a property', () => {
   it('lists every distinct loaded value after the type blocks and narrows the entities of that type only', async () => {
@@ -165,14 +165,14 @@ describe('the choice of values of a property', () => {
 });
 
 describe('the panel layout and keyboard path', () => {
-  it('puts the property blocks after the time window and the relationship types, and the result line and the footnote last', async () => {
+  it('puts the relationship types before the time window, the property blocks after them, and the result line and the footnote last', async () => {
     await filtersWorkspace(three, ['kind-a', 'kind-b', 'kind-c'], [], false, withScore());
     openFilters();
     const panel = document.querySelector('.filters-panel') as HTMLElement;
     const text = panel.textContent ?? '';
     const at = (needle: string): number => text.indexOf(needle);
-    expect(at('Time window')).toBeLessThan(at('Relationship types'));
-    expect(at('Relationship types')).toBeLessThan(at('KIND-A score · property filter'));
+    expect(at('Relationship types')).toBeLessThan(at('Time window'));
+    expect(at('Time window')).toBeLessThan(at('KIND-A score · property filter'));
     expect(at('KIND-A score · property filter')).toBeLessThan(at('4 of 4 match'));
     expect(at('4 of 4 match')).toBeLessThan(at('Property filters apply to loaded items only.'));
   });
@@ -369,6 +369,7 @@ describe('the property block of a relationship type', () => {
   it('is disabled while its relationship type is switched off, and offers no block when the stored rows declare different kinds', async () => {
     await filtersWorkspace(kinds, ['kind-a', 'kind-b', 'kind-c'], edges, false, weighted());
     openFilters();
+    await userEvent.click(screen.getByRole('button', { name: /relationship types$/ }));
     await userEvent.click(screen.getByRole('checkbox', { name: 'link-a' }));
     expect((relOpener() as HTMLButtonElement).disabled).toBe(true);
     cleanup();
@@ -529,5 +530,55 @@ describe('what the lookout found in the controls', () => {
     await userEvent.click(opener());
     await userEvent.type(screen.getByRole('textbox', { name: /^From$/ }), '1');
     expect(screen.getByText('1 has no value for score')).toBeTruthy();
+  });
+});
+
+describe('the labels as the design writes them', () => {
+  const displayed = (display: Record<string, { label?: string; unit?: string }>, kind: 'number' | 'text'): ((profile: SourceProfile) => SourceProfile) => (profile) => ({
+    ...profile,
+    entityTypes: profile.entityTypes.map((type) => (type.type === 'kind-a' ? { ...type, filterable: ['score'], pii: [], filterKinds: { score: kind }, propertyDisplay: display } : type)),
+  });
+  const amounts = [held('n1', 'kind-a', prop('score', '500', 'number'))];
+
+  it('writes a range as the type, the label the mapping gives and the unit after a dot, with no "property filter"', async () => {
+    await filtersWorkspace(amounts, ['kind-a', 'kind-b', 'kind-c'], [], false, displayed({ score: { label: 'size', unit: 'USD' } }, 'number'));
+    openFilters();
+    expect(screen.getByText('KIND-A size · USD')).toBeTruthy();
+    expect(screen.queryByText(/size · property filter/)).toBeNull();
+  });
+
+  it('writes a range with no unit as the type and the property, and a choice always with "property filter", by its label when it has one', async () => {
+    await filtersWorkspace(amounts, ['kind-a', 'kind-b', 'kind-c'], [], false, displayed({}, 'number'));
+    openFilters();
+    expect(screen.getByText('KIND-A score')).toBeTruthy();
+    cleanup();
+    document.body.replaceChildren();
+    await filtersWorkspace([held('n1', 'kind-a', prop('score', 'live'))], ['kind-a', 'kind-b', 'kind-c'], [], false, displayed({ score: { label: 'state' } }, 'text'));
+    openFilters();
+    expect(screen.getByText('KIND-A state · property filter')).toBeTruthy();
+  });
+
+  it('puts Reset at the right of the Entity types heading while it follows the chips in the tab order, and the relationship types in a select that shows how many are on', async () => {
+    await filtersWorkspace();
+    openFilters();
+    await userEvent.click(screen.getByRole('button', { name: 'KIND-B' }));
+    const group = screen.getByRole('group', { name: 'Entity types' });
+    const reset = within(group).getByRole('button', { name: 'Reset' });
+    expect(reset.className).toContain('filters-reset');
+    const order = [...group.querySelectorAll('button')];
+    expect(order.at(-1)).toBe(reset);
+    expect(screen.getByRole('button', { name: /All 2 relationship types/ }).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('closes the relationship select on Escape before the panel and gives the focus back to it', async () => {
+    await filtersWorkspace();
+    openFilters();
+    const select = screen.getByRole('button', { name: /All 2 relationship types/ });
+    await userEvent.click(select);
+    expect(select.getAttribute('aria-expanded')).toBe('true');
+    await userEvent.keyboard('{Escape}');
+    expect(select.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(select);
+    expect(document.querySelector('.filters-panel')).not.toBeNull();
   });
 });

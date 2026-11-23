@@ -79,7 +79,7 @@ describe('the tool strip with the Filters and Search panels', () => {
     expect(filters.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('tabs through the first chip, the other chips, Reset while a type is off, then the relationship checkboxes, and closes on Escape with the focus back on its button', async () => {
+  it('tabs through the first chip, the other chips, Reset while a type is off, then the relationship types select, and closes on Escape with the focus back on its button', async () => {
     await withSearch();
     openFilters();
     const user = userEvent.setup();
@@ -90,7 +90,7 @@ describe('the tool strip with the Filters and Search panels', () => {
       seen.push(document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '');
       await user.tab();
     }
-    expect(seen.slice(0, 6)).toEqual(['KIND-A', 'KIND-B', 'KIND-C', 'Reset', 'link-a', 'link-b']);
+    expect(seen.slice(0, 5)).toEqual(['KIND-A', 'KIND-B', 'KIND-C', 'Reset', 'All 2 relationship types']);
     fireEvent.keyDown(screen.getByRole('button', { name: 'KIND-A' }), { key: 'Escape' });
     expect(document.activeElement).toBe(button('Filters'));
   });

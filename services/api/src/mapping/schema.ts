@@ -16,6 +16,9 @@ const propertyList = z.array(property);
 /** A plain-text meaning of a type: one to 300 characters, well-formed, no control characters. */
 const description = z.string().min(1).max(300).refine((text) => isWellFormed(text) && !/[\u0000-\u001f\u007f-\u009f]/.test(text), { message: 'must be plain text of 1 to 300 characters with no control characters' });
 
+/** How a screen names a property and the unit it is measured in: both are optional, at least one is given (checked when the source is built). */
+const propertyDisplaySchema = z.record(property, z.strictObject({ label: z.string().trim().min(1).max(80).optional(), unit: z.string().trim().min(1).max(20).optional() }));
+
 /** The kind a mapping declares for filterable properties, by property name; a hint for screens, never read by a statement. */
 const kindsSchema = z.record(property, z.enum(FILTER_KINDS));
 
@@ -129,6 +132,7 @@ const entitySchema = z.strictObject({
   pii: z.array(piiEntry).optional(),
   filterable: propertyList.optional(),
   kinds: kindsSchema.optional(),
+  property_display: propertyDisplaySchema.optional(),
   sortable: propertyList.optional(),
   link: z.string().optional(),
   link_carries_value: z.boolean().optional(),
@@ -146,6 +150,7 @@ const relationshipSchema = z.strictObject({
   evidence: propertyList.optional(),
   filterable: propertyList.optional(),
   kinds: kindsSchema.optional(),
+  property_display: propertyDisplaySchema.optional(),
   sortable: propertyList.optional(),
   evidence_link: z.string().optional(),
 });

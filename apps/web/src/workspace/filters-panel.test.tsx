@@ -86,10 +86,13 @@ describe('the Filters panel before and without a mapping', () => {
 
 describe('the relationship types of the Filters panel', () => {
   const types = (): HTMLElement => screen.getByRole('group', { name: 'Relationship types' });
+  const openTypes = async (): Promise<void> => void (await userEvent.click(within(types()).getByRole('button', { name: /relationship types?( selected)?$/ })));
 
   it('lists one checkbox for each relationship type name, all on, under the count of those selected', async () => {
     await filtersWorkspace();
     openFilters();
+    expect(within(types()).queryAllByRole('checkbox')).toHaveLength(0);
+    await openTypes();
     expect(within(types()).getAllByRole('checkbox').map((entry) => [entry.textContent, entry.getAttribute('aria-checked')])).toEqual([['link-a', 'true'], ['link-b', 'true']]);
     expect(within(types()).getByText('All 2 relationship types')).toBeDefined();
   });
@@ -97,6 +100,7 @@ describe('the relationship types of the Filters panel', () => {
   it('uses the singular for one relationship type', async () => {
     await filtersWorkspace();
     openFilters();
+    await openTypes();
     await userEvent.click(within(types()).getByRole('checkbox', { name: 'link-a' }));
     expect(within(types()).getByText('1 relationship type selected')).toBeDefined();
   });
@@ -104,6 +108,7 @@ describe('the relationship types of the Filters panel', () => {
   it('switches a type off, says how many are selected, and is cleared by Reset together with the entity types', async () => {
     const { state } = await filtersWorkspace();
     openFilters();
+    await openTypes();
     await userEvent.click(within(types()).getByRole('checkbox', { name: 'link-a' }));
     expect(within(types()).getByText('1 relationship type selected')).toBeDefined();
     expect(state.presentation.view.getState().typeFilter.offRelationshipTypes.has('link-a')).toBe(true);

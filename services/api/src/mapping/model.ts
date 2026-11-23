@@ -43,6 +43,11 @@ export interface StyleRuleModel {
   readonly effect: StyleEffectModel;
 }
 
+export interface PropertyDisplayModel {
+  readonly label?: string;
+  readonly unit?: string;
+}
+
 export interface EntityModel {
   readonly type: string;
   readonly label: string;
@@ -60,6 +65,8 @@ export interface EntityModel {
   readonly filterable: readonly string[];
   /** The kind the mapping declares for a filterable property; present only when it declares some, so a mapping without them keeps its configuration hash. */
   readonly kinds?: Readonly<Record<string, FilterKind>>;
+  /** The label and the unit the mapping gives a property, for screens; present only when it gives some, so a mapping without them keeps its configuration hash. */
+  readonly propertyDisplay?: Readonly<Record<string, PropertyDisplayModel>>;
   /** The properties an expansion may rank its pages by; present only when the mapping declares some, so a mapping without them keeps its configuration hash. */
   readonly sortable?: readonly string[];
   /** Present only when the mapping declares degree properties, so a mapping without them keeps its configuration hash. */
@@ -97,6 +104,7 @@ export interface RelationshipModel {
   readonly filterable: readonly string[];
   /** As for an entity type: present only when declared. */
   readonly kinds?: Readonly<Record<string, FilterKind>>;
+  readonly propertyDisplay?: Readonly<Record<string, PropertyDisplayModel>>;
   /** As for an entity type: present only when declared. */
   readonly sortable?: readonly string[];
   readonly evidenceLink?: LinkTemplate;

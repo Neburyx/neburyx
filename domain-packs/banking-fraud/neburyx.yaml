@@ -48,6 +48,7 @@ sources:
         search: [transactionId]
         reference: [paymentRef]
         filterable: [status, channel, amount]
+        property_display: { amount: { label: amount, unit: USD } }
         kinds: { amount: number }
         display: { icon: document, key_properties: [amount, channel, status], state_property: status }
       - type: merchant

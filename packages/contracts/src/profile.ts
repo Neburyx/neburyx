@@ -7,6 +7,8 @@ const nameList = z.array(name);
 
 /** A property's kind as a client may show it: one of the filter kinds the mapping declares, or `unknown` (never guessed from values or names). */
 const FILTER_KINDS_OR_UNKNOWN = [...FILTER_KINDS, 'unknown'] as const;
+/** How a screen names a property and the unit it is measured in. */
+const propertyDisplayProfileSchema = z.record(name, z.strictObject({ label: z.string().min(1).optional(), unit: z.string().min(1).optional() }));
 const filterKindsSchema = z.record(name, z.enum(FILTER_KINDS_OR_UNKNOWN));
 
 export const BIND_KEYS = ['anchor', 'attribute', 'target', 'via'] as const;
@@ -28,6 +30,8 @@ export const entityTypeProfileSchema = z.strictObject({
   filterable: nameList,
   /** The kind the mapping declares for each filterable property, or `unknown`; a hint for screens, never read by a statement. Absent from an older answer; a property named `__proto__` is never listed. */
   filterKinds: filterKindsSchema.optional(),
+  /** The label and the unit the mapping gives a property, for the properties it gives some; absent when it gives none. */
+  propertyDisplay: propertyDisplayProfileSchema.optional(),
   /** Properties an expansion may rank by. */
   sortable: nameList.default([]),
   pii: nameList,
@@ -50,6 +54,7 @@ export const relationshipTypeProfileSchema = z.strictObject({
   filterable: nameList,
   /** As for an entity type; the row's time property appears when the mapping declares its kind. */
   filterKinds: filterKindsSchema.optional(),
+  propertyDisplay: propertyDisplayProfileSchema.optional(),
   /** Properties an expansion may rank by; the row's `observedAt` is sortable and filterable without being listed. */
   sortable: nameList.default([]),
   evidence: nameList,

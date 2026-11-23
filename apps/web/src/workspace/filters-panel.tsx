@@ -8,6 +8,7 @@ import { useUtcDay } from '../state/utc-day.js';
 import { filteredRelationshipsOf } from '../state/filtered-relationships.js';
 import { FILTERS_PANEL_COPY, selectedRelationshipTypesText } from './filters-copy.js';
 import { focusFiltersTool } from './filters-tool.js';
+import { RelationshipTypesSelect } from './relationship-types-select.js';
 import { PropertyBlocks, usePropertyBlocks } from './property-filters.js';
 import { PROPERTY_FILTER_COPY } from './filters-copy.js';
 import { TimeWindowControl } from './time-window-control.js';
@@ -54,8 +55,10 @@ export function FiltersPanel() {
   return (
     <div className="filters-panel" ref={root} onKeyDown={onKeyDown}>
       <h2 className="search-panel-heading">{FILTERS_PANEL_COPY.title}</h2>
-      <div role="group" aria-label={FILTERS_PANEL_COPY.entityTypes} className="filters-section">
-        <span className="supernode-label">{FILTERS_PANEL_COPY.entityTypes}</span>
+      <div role="group" aria-label={FILTERS_PANEL_COPY.entityTypes} className="filters-section filters-types">
+        <div className="filters-head">
+          <span className="filters-heading">{FILTERS_PANEL_COPY.entityTypes}</span>
+        </div>
         {profile === undefined ? (
           <p className="neighbor-types-note" role="status">
             {FILTERS_PANEL_COPY.loadingTypes}
@@ -76,7 +79,7 @@ export function FiltersPanel() {
         {anyOff ? (
           <button
             type="button"
-            className="neighbor-types-link"
+            className="neighbor-types-link filters-reset"
             onClick={() => {
               state.presentation.resetTypeFilter();
               root.current?.querySelector<HTMLElement>('.filter-chip')?.focus();
@@ -86,32 +89,11 @@ export function FiltersPanel() {
           </button>
         ) : null}
       </div>
+      {profile === undefined ? null : <RelationshipTypesSelect types={relationshipTypes} off={offRelationships} onToggle={(type, hide) => state.setRelationshipTypeOff(type, hide)} />}
       <TimeWindowControl />
-      {profile === undefined ? null : (
-        <div role="group" aria-label={FILTERS_PANEL_COPY.relationshipTypes} className="filters-section">
-          <span className="supernode-label">{FILTERS_PANEL_COPY.relationshipTypes}</span>
-          {relationshipTypes.length === 0 ? (
-            <p className="neighbor-types-note">{FILTERS_PANEL_COPY.noRelationshipTypes}</p>
-          ) : (
-            <>
-              <p className="neighbor-types-note">{selectedRelationshipTypesText(relationshipTypes.filter((type) => !offRelationships.has(type)).length, relationshipTypes.length)}</p>
-              <ul className="neighbor-types-list" aria-label={FILTERS_PANEL_COPY.relationshipTypes}>
-                {relationshipTypes.map((type) => (
-                  <li key={type} className="neighbor-types-item">
-                    <button type="button" role="checkbox" aria-checked={!offRelationships.has(type)} className="neighbor-types-row" onClick={() => state.setRelationshipTypeOff(type, !offRelationships.has(type))}>
-                      <span className="neighbor-types-check" aria-hidden="true" />
-                      <span className="menu-label">{type}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
-      )}
       <PropertyBlocks blocks={propertyBlocks} />
       <div className="filters-section" role="status">
-        <p className="neighbor-types-note">{result ?? FILTERS_PANEL_COPY.nothingLoaded}</p>
+        <p className="filters-result">{result ?? FILTERS_PANEL_COPY.nothingLoaded}</p>
         {relationshipResult === undefined ? null : <p className="neighbor-types-note">{relationshipResult}</p>}
       </div>
       {personalNote === undefined ? null : (
