@@ -731,8 +731,13 @@
 
 /* a table answer: the table scrolls inside the card, the page never does */
 .assistant-table-scroll {
-  container-type: inline-size;
   overflow-x: auto;
+  /* edge fades that show only where the table scrolls on: a cut-off value never looks finished */
+  background:
+    linear-gradient(to right, var(--color-surface), var(--color-surface)) left center / var(--space-16) 100% no-repeat local,
+    linear-gradient(to left, var(--color-surface), var(--color-surface)) right center / var(--space-16) 100% no-repeat local,
+    linear-gradient(to right, var(--color-border), transparent) left center / var(--space-12) 100% no-repeat scroll,
+    linear-gradient(to left, var(--color-border), transparent) right center / var(--space-12) 100% no-repeat scroll;
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
 }
@@ -772,22 +777,55 @@
   overflow-wrap: break-word;
 }
 
-.assistant-table th:not(:last-child),
-.assistant-table td:not(.assistant-table-cite) {
-  min-width: 9ch;
-}
-
 .assistant-table .assistant-table-number,
 .assistant-table .assistant-table-stamp {
   white-space: nowrap;
   overflow-wrap: normal;
 }
 
-.assistant-table .assistant-table-title-cell {
-  max-width: 40cqw;
+.assistant-table td.assistant-table-title-cell,
+.assistant-table th.assistant-table-title-cell {
+  width: 100%;
+  min-width: 8ch;
+  max-width: 0;
+}
+
+.assistant-table th.assistant-table-title-cell,
+.assistant-table-title-clip {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.assistant-table th.assistant-table-title-cell {
+  display: table-cell;
+}
+
+.assistant-table td.assistant-table-title-cell {
+  position: relative;
+}
+
+/* the full title is drawn over its cell while the row is pointed at or has focus: nothing in the table changes size */
+.assistant-table td.assistant-table-title-cell::after {
+  content: attr(data-full) / "";
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  padding: var(--space-8) var(--space-4) var(--space-8) var(--space-8);
+  max-width: var(--assistant-table-room, 20ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--color-badge-surface);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.assistant-table-row:hover td.assistant-table-title-cell::after,
+.assistant-table-row:focus-within td.assistant-table-title-cell::after {
+  display: block;
 }
 
 .assistant-table th:last-child,
@@ -796,19 +834,40 @@
   overflow-wrap: normal;
 }
 
-.assistant-table-row:hover .assistant-table-title-cell,
-.assistant-table-row:focus-within .assistant-table-title-cell {
-  max-width: none;
-  overflow: visible;
-  white-space: normal;
-}
-
 .assistant-table th:last-child,
 .assistant-table td.assistant-table-cite {
   position: sticky;
   right: 0;
+  z-index: 2;
   background: var(--color-surface);
   box-shadow: calc(-1 * var(--border-width)) 0 0 var(--color-border);
+}
+
+.assistant-table-scrolls th:last-child,
+.assistant-table-scrolls td.assistant-table-cite {
+  box-shadow: calc(-1 * var(--space-6)) 0 var(--space-10) calc(-1 * var(--space-2)) color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+
+/* a fade on the sticky column's left edge: a value that runs under it fades out, so it never looks finished */
+.assistant-table-scrolls th:last-child::before,
+.assistant-table-scrolls td.assistant-table-cite::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: var(--space-24);
+  border-right: var(--border-width) solid var(--color-border);
+  background: linear-gradient(to right, transparent, var(--color-surface));
+  pointer-events: none;
+}
+
+.assistant-table-scrolls th:last-child::before {
+  background: linear-gradient(to right, transparent, var(--color-surface-muted));
+}
+
+.assistant-table th:last-child {
+  background: var(--color-surface-muted);
 }
 
 .assistant-table-cite .assistant-marker {

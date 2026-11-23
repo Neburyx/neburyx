@@ -539,6 +539,131 @@ test.describe('the Assistant panel', () => {
     });
   }
 
+  test('keeps every value of a table whole in the 380 pixel panel: the title column gives way with its ellipsis, and an instant is read in full beside the Source column', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page);
+    const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+    const rows = Array.from({ length: 3 }, (_, index) => ({ cells: [`Transaction TX-00483384${index + 1}`, `${1664 + index}.72`, `2022-09-09T22:3${index}:00Z`], cites: ['n1'] }));
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [{ kind: 'table', table: { title: 'Transactions · 3 rows', columns: ['Transaction', 'Amount', 'Date'], rows, note: 'Each row selects its elements on the graph.' } }],
+      citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+      coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '3 of 3 transactions in view shown · exact' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, answer);
+    await open(page);
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    const table = panel(page).getByRole('table', { name: 'Transactions · 3 rows' });
+    await expect(table).toBeVisible();
+    expect(Math.round((await panel(page).boundingBox())?.width ?? 0)).toBeLessThanOrEqual(380);
+    const measured = await table.evaluate((element) => {
+      const scroller = element.closest('.assistant-table-scroll') as HTMLElement;
+      const scrollerBox = scroller.getBoundingClientRect();
+      const source = element.querySelector('th:last-child') as HTMLElement;
+      const rowsOf = [...element.querySelectorAll('tbody tr')] as HTMLElement[];
+      return {
+        scrolls: scroller.scrollWidth > scroller.clientWidth,
+        instants: rowsOf.map((row) => {
+          const cell = row.children[2] as HTMLElement;
+          const box = cell.getBoundingClientRect();
+          return { text: cell.textContent, clipped: cell.scrollWidth > cell.clientWidth, insideLeft: box.left >= scrollerBox.left - 1, clearOfSource: box.right <= source.getBoundingClientRect().left + 1 };
+        }),
+        titles: rowsOf.map((row) => { const cell = row.children[0] as HTMLElement; const clip = cell.querySelector('.assistant-table-title-clip') as HTMLElement; return { text: clip.textContent, cut: clip.scrollWidth > clip.clientWidth, tooltip: cell.getAttribute('title') }; }),
+      };
+    });
+    expect(measured.scrolls).toBe(false);
+    for (const [index, instant] of measured.instants.entries()) expect(instant).toEqual({ text: `2022-09-09 22:3${index}:00`, clipped: false, insideLeft: true, clearOfSource: true });
+    for (const title of measured.titles) expect(title.tooltip).toBe(title.text);
+    expect(measured.titles.some((title) => title.cut)).toBe(true);
+  });
+
+  test('scrolls a table with more values than the panel holds, keeps each value whole, keeps the title column at its floor, and does not move the table when a row is pointed at', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page);
+    const cited = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
+    const rows = Array.from({ length: 3 }, (_, index) => ({ cells: [index === 0 ? `Transaction TX-004833841 ${'with a very long title '.repeat(3)}`.slice(0, 80) : `Transaction TX-00483384${index + 1}`, `${1664 + index}.72`, `2022-09-09T22:3${index}:00Z`, `${2000 + index}.50`, `2022-10-09T22:3${index}:00Z`, `${3000 + index}.25`], cites: ['n1'] }));
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [{ kind: 'table', table: { title: 'Transactions · 3 rows', columns: ['Transaction', 'Amount', 'Opened', 'Fee', 'Closed', 'Balance'], rows, note: 'Each row selects its elements on the graph.' } }],
+      citations: [{ key: 'n1', kind: 'entity', ref: cited }],
+      coverage: { retrieval: '1 shown · 0 not yet retrieved (exact)', summary: '3 of 3 transactions in view shown · exact' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, answer);
+    await open(page);
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    const table = panel(page).getByRole('table', { name: 'Transactions · 3 rows' });
+    await expect(table).toBeVisible();
+    const scroller = panel(page).locator('.assistant-table-scroll');
+    await expect(scroller).toHaveClass(/assistant-table-scrolls/);
+    const layout = () => table.evaluate((element) => {
+      const scrollerElement = element.closest('.assistant-table-scroll') as HTMLElement;
+      return { scrollWidth: scrollerElement.scrollWidth, widths: [...element.querySelectorAll('thead th')].map((cell) => Math.round(cell.getBoundingClientRect().width)), tops: [...element.querySelectorAll('tbody tr')].map((row) => Math.round(row.getBoundingClientRect().top)) };
+    });
+    const before = await layout();
+    await table.locator('tbody tr').first().hover();
+    expect(await layout()).toEqual(before);
+    const overlay = await table.evaluate((element) => {
+      const cell = element.querySelector('tbody tr td.assistant-table-title-cell') as HTMLElement;
+      const after = getComputedStyle(cell, '::after');
+      const source = element.querySelector('th:last-child') as HTMLElement;
+      return { shown: after.display !== 'none', right: cell.getBoundingClientRect().left + parseFloat(after.width), sourceLeft: source.getBoundingClientRect().left };
+    });
+    expect(overlay.shown).toBe(true);
+    expect(overlay.right).toBeLessThanOrEqual(overlay.sourceLeft + 1);
+    const floor = await table.evaluate((element) => {
+      const title = element.querySelector('thead th.assistant-table-title-cell') as HTMLElement;
+      return { width: title.getBoundingClientRect().width, least: parseFloat(getComputedStyle(title).minWidth) };
+    });
+    expect(floor.width).toBeGreaterThanOrEqual(floor.least - 1);
+    await scroller.evaluate((element) => { element.scrollLeft = element.scrollWidth; });
+    await expect(scroller).not.toHaveClass(/assistant-table-scrolls/);
+    const whole = await table.evaluate((element) => {
+      const source = element.querySelector('th:last-child') as HTMLElement;
+      return [...element.querySelectorAll('tbody tr')].flatMap((row) => [2, 3, 4, 5].map((column) => {
+        const cell = row.children[column] as HTMLElement;
+        return { clipped: cell.scrollWidth > cell.clientWidth, clear: cell.getBoundingClientRect().right <= source.getBoundingClientRect().left + 1 };
+      }));
+    });
+    for (const value of whole) expect(value).toEqual({ clipped: false, clear: true });
+  });
+
+  test('fits a title, an amount, a time stamp and the Source column in the 380 pixel panel without scrolling when a row cites three elements, with one marker whose name and tooltip list all three', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openWorkspace(page);
+    const ref = (stableId: string) => ({ sourceId: 'banking-demo', entityType: 'account', stableId });
+    const rows = Array.from({ length: 3 }, (_, index) => ({ cells: [`Transaction TX-00483384${index + 1}`, `${1664 + index}.72`, `2022-09-09T22:3${index}:00Z`], cites: ['n1', 'n2', 'n3'] }));
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [{ kind: 'table', table: { title: 'Transactions · 3 rows', columns: ['Transaction', 'Amount', 'Timestamp'], rows, note: 'Each row selects its elements on the graph.' } }],
+      citations: [{ key: 'n1', kind: 'entity', ref: ref('AC-1') }, { key: 'n2', kind: 'entity', ref: ref('AC-2') }, { key: 'n3', kind: 'entity', ref: ref('AC-3') }],
+      coverage: { retrieval: '3 shown · 0 not yet retrieved (exact)', summary: '3 of 3 transactions in view shown · exact' },
+      model: 'claude-sonnet-5-5',
+      calls: 2,
+    };
+    await answerWith(page, answer);
+    await open(page);
+    await page.getByLabel('Your message').fill('show them as a table');
+    await page.keyboard.press('Enter');
+    const table = panel(page).getByRole('table', { name: 'Transactions · 3 rows' });
+    await expect(table).toBeVisible();
+    await expect(panel(page).locator('.assistant-table-scroll')).not.toHaveClass(/assistant-table-scrolls/);
+    const markers = table.getByRole('button', { name: /^Citations: Citation 1, .*; Citation 2, .*; Citation 3, / });
+    await expect(markers).toHaveCount(3);
+    await expect(markers.first()).toHaveText('[1–3]');
+    expect(await markers.first().getAttribute('title')).toBe(await markers.first().getAttribute('aria-label'));
+    const cut = await table.evaluate((element) => [...element.querySelectorAll('tbody tr')].map((row) => [2].map((column) => (row.children[column] as HTMLElement).scrollWidth > (row.children[column] as HTMLElement).clientWidth)).flat());
+    expect(cut).toEqual([false, false, false]);
+  });
+
   for (const width of [1440, 1280]) {
     test(`shows the refusal of a verdict with what the investigation connects at ${width} pixels, and selects the cited element`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });

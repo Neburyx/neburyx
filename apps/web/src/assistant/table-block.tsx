@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssistantTable } from "@neburyx/contracts";
 import type { CitationEntry } from "../summary/summary-model.js";
 import { cellOf, columnKinds, headerOf } from "./table-format.js";
@@ -32,11 +32,33 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   const [unfolded, setUnfolded] = useState(false);
   const [copy, setCopy] = useState<CopyState>("idle");
   const kinds = columnKinds(table.columns, table.rows);
-  const titled = kinds[0] === "text";
+  /** The first column of text gives way when the table is too wide; with no column of text the table scrolls. */
+  const titleColumn = kinds.indexOf("text");
   const classOf = (column: number): string | undefined => {
     const kind = kinds[column];
-    return kind === "number" ? "assistant-table-number" : kind === "stamp" ? "assistant-table-stamp" : column === 0 && titled ? "assistant-table-title-cell" : undefined;
+    return kind === "number" ? "assistant-table-number" : kind === "stamp" ? "assistant-table-stamp" : column === titleColumn ? "assistant-table-title-cell" : undefined;
   };
+  const scroller = useRef<HTMLDivElement>(null);
+  const [scrollsOn, setScrollsOn] = useState(false);
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null) return undefined;
+    const measure = (): void => {
+      setScrollsOn(element.scrollLeft + element.clientWidth < element.scrollWidth - 1);
+      // the full title of a row is drawn over its cell up to the Source column: how far that is from the cell
+      const title = element.querySelector<HTMLElement>("th.assistant-table-title-cell");
+      const source = element.querySelector<HTMLElement>("th:last-child");
+      if (title !== null && source !== null) element.style.setProperty("--assistant-table-room", `${Math.max(0, element.clientWidth - source.offsetWidth - (title.offsetLeft - element.scrollLeft))}px`);
+    };
+    measure();
+    element.addEventListener("scroll", measure);
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    observer?.observe(element);
+    return () => {
+      element.removeEventListener("scroll", measure);
+      observer?.disconnect();
+    };
+  }, [table.rows.length, unfolded]);
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));
@@ -70,7 +92,13 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         }}
       >
         {entry.row.cells.map((cell, column) => (
-          <td key={column} className={classOf(column)} title={column === 0 && titled ? cell : undefined}>{cellOf(cell, kinds[column] ?? "text", table.rows, column)}</td>
+          column === titleColumn ? (
+            <td key={column} className={classOf(column)} title={cell} data-full={cell}>
+              <span className="assistant-table-title-clip">{cell}</span>
+            </td>
+          ) : (
+            <td key={column} className={classOf(column)}>{cellOf(cell, kinds[column] ?? "text", table.rows, column)}</td>
+          )
         ))}
         <td className="assistant-table-cite">
           <span className="summary-chips">{markersOf(entry.row.cites)}</span>
@@ -98,7 +126,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         <span className="visually-hidden" role="status">{copy === "copied" ? ASSISTANT_COPY.tableCopied : copy === "failed" ? ASSISTANT_COPY.tableCopyFailed : ""}</span>
       </div>
       {copy === "failed" ? <p className="assistant-table-notice" role="note">{ASSISTANT_COPY.tableCopyFailed}</p> : null}
-      <div className="assistant-table-scroll">
+      <div ref={scroller} className={scrollsOn ? "assistant-table-scroll assistant-table-scrolls" : "assistant-table-scroll"}>
         <table className="assistant-table">
           <caption className="visually-hidden">{table.title}</caption>
           <thead>

@@ -5,7 +5,7 @@ import { drawnKeys } from "../state/loaded-graph.js";
 import { elementKey, edgeKey } from "../state/keys.js";
 import { SUMMARY_COPY } from "../summary/copy.js";
 import { pressOf, type CitationEntry } from "../summary/summary-model.js";
-import { ASSISTANT_COPY, citationRangeLabel } from "./copy.js";
+import { ASSISTANT_COPY, MARKER_RUN_MIN, citationRangeLabel, rowCitationsLabel } from "./copy.js";
 import { ReadSteps } from "./read-steps.js";
 import { markerGroups } from "./marker-runs.js";
 import { SourcesList } from "./sources-list.js";
@@ -177,6 +177,20 @@ export function ViewAnswerCard({
         {group.kind === "run" ? runMarkerOf(group.first, group.last) : markerOf(group.entry)}
       </span>
     ));
+  /** One marker for a row: its own element's number, then how many more it cites ("[4] +2"), or the range when its elements form a run; it selects every drawn element the row cites, as a sentence marker does, and its name and tooltip give each element's number, label and status. A row of one element has the marker of that element. */
+  const rowMarkersOf = (cites: readonly string[]) => {
+    const cited = entriesOf(cites);
+    const first = cited[0];
+    const last = cited.at(-1);
+    if (first === undefined || last === undefined || cited.length < 2 || !(sources && entries.length > 0)) return markersOf(cites);
+    const run = cited.length >= MARKER_RUN_MIN && cited.every((entry, index) => entry.number === first.number + index);
+    const name = rowCitationsLabel(cited.map((entry) => `${ASSISTANT_COPY.citationNumber} ${entry.number}, ${labelOf(entry)}, ${status(entry).toLowerCase()}`));
+    return (
+      <button type="button" className="summary-chip assistant-marker" aria-label={name} title={name} onClick={() => selectRow(cites)}>
+        {run ? `[${first.number}–${last.number}]` : `[${first.number}] +${cited.length - 1}`}
+      </button>
+    );
+  };
   const markerTextOf = (cites: readonly string[]): string =>
     markerGroups(entriesOf(cites), sources && entries.length > 0)
       .map((group) => (group.kind === "run" ? `[${group.first.number}–${group.last.number}]` : `[${group.entry.number}]`))
@@ -197,7 +211,7 @@ export function ViewAnswerCard({
       <TableBlock
         key={index}
         table={block.table}
-        markersOf={markersOf}
+        markersOf={rowMarkersOf}
         markerTextOf={markerTextOf}
         firstEntryOf={(cites) => entriesOf(cites)[0]}
         onSelectRow={selectRow}

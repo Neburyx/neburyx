@@ -68,16 +68,42 @@ describe('the Assistant panel: a table answer', () => {
     expect([...h.state.presentation.view.getState().selection]).toEqual([elementKey(A)]);
   });
 
-  it('puts one chip for each element a row cites, in the order of its cites', async () => {
+  it('puts one marker on a row that cites several elements, named with every one of them, and selects every element it cites', async () => {
     const answer = tableAnswer();
     if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not blocks');
     const block = answer.blocks[0];
     if (block?.kind !== 'table') throw new Error('not a table');
     const two: AssistantTurnAnswer = { ...answer, blocks: [{ kind: 'table', table: { ...block.table, rows: [{ cells: ['item-1', 'code-1'], cites: ['n2', 'n1'] }] } }] };
-    await draw(two);
-    const chips = within(screen.getByRole('table')).getAllByRole('button', { name: /^Citation/ });
-    expect(chips.map((chip) => chip.getAttribute('aria-label'))).toEqual([expect.stringContaining('Citation 1'), expect.stringContaining('Citation 2')]);
-    expect(chips[0]?.getAttribute('aria-label')).toContain('ent-2');
+    const h = await draw(two);
+    const table = within(screen.getByRole('table'));
+    const markers = table.getAllByRole('button', { name: /^Citations:/ });
+    expect(markers).toHaveLength(1);
+    expect(markers[0]?.textContent).toBe('[1] +1');
+    const name = 'Citations: Citation 1, ent-2, select on graph; Citation 2, ent-1, select on graph';
+    expect(markers[0]?.getAttribute('aria-label')).toBe(name);
+    expect(markers[0]?.getAttribute('title')).toBe(name);
+    await userEvent.click(need(markers[0]));
+    expect([...h.state.presentation.view.getState().selection].sort()).toEqual([elementKey(A), elementKey(B)].sort());
+    // Copy table keeps every marker of the row
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => void written.push(text) } });
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect(written[0]?.split('\n')[1]).toBe('item-1\tcode-1\t[1] [2]');
+  });
+
+  it('writes the marker of a row whose elements form a run as a range', async () => {
+    const answer = tableAnswer();
+    if (answer.status !== 'answered' || !('blocks' in answer)) throw new Error('not blocks');
+    const block = answer.blocks[0];
+    if (block?.kind !== 'table') throw new Error('not a table');
+    const three: AssistantTurnAnswer = {
+      ...answer,
+      blocks: [{ kind: 'table', table: { ...block.table, rows: [{ cells: ['item-1', 'code-1'], cites: ['n1', 'n2', 'n3'] }] } }],
+      citations: [...answer.citations, { key: 'n3', kind: 'entity', ref: ref('a', 'type-a', 'ent-3') }],
+    };
+    await draw(three);
+    const marker = within(screen.getByRole('table')).getByRole('button', { name: /^Citations: Citation 1,/ });
+    expect(marker.textContent).toBe('[1–3]');
   });
 
   it('shows all the rows of a table of 10 rows or fewer, with no fold line', async () => {
@@ -282,7 +308,7 @@ describe('the Assistant panel: a table answer', () => {
     expect(words?.className).toBe('assistant-table-title-cell');
     expect(numbers?.className).toBe('assistant-table-number');
     expect(within(table).getByText('$12,400.50').className).toBe('assistant-table-number');
-    expect(within(table).getByText('AC-1').className).toBe('assistant-table-title-cell');
+    expect(within(table).getByText('AC-1').closest('td')?.className).toBe('assistant-table-title-cell');
   });
 
   it('shows instants as date and time with UTC in the header, groups the thousands of a decimal number and keeps the title cell short with its full text as the tooltip, and copies what was read', async () => {
@@ -298,9 +324,10 @@ describe('the Assistant panel: a table answer', () => {
     expect(within(table).getByText('1,664.72')).toBeTruthy();
     expect(within(table).getByText('203.6')).toBeTruthy();
     expect(within(table).getByText('2022-09-09 22:33:00')).toBeTruthy();
-    const title = within(table).getByText('Element with a rather long title 1');
-    expect(title.getAttribute('title')).toBe('Element with a rather long title 1');
-    expect(title.className).toBe('assistant-table-title-cell');
+    const title = within(table).getByText('Element with a rather long title 1').closest('td');
+    expect(title?.getAttribute('title')).toBe('Element with a rather long title 1');
+    expect(title?.getAttribute('data-full')).toBe('Element with a rather long title 1');
+    expect(title?.className).toBe('assistant-table-title-cell');
   });
 
   it('copies the cells as read when the table draws them grouped and formatted', async () => {
@@ -317,5 +344,21 @@ describe('the Assistant panel: a table answer', () => {
     expect(screen.getByText('2022-09-09 22:33:00')).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
     expect(written[0]?.split('\n')[1]).toBe(`Element 1\t1664.72\t2022-09-09T22:33:00Z\t[1]`);
+  });
+
+  it('lets the first column of text give way when a column of numbers comes first, and none when there is no text', async () => {
+    const base = tableAnswer();
+    if (base.status !== 'answered' || !('blocks' in base)) throw new Error('not blocks');
+    const withColumns = (columns: string[], cells: string[][]): AssistantTurnAnswer => ({
+      ...base,
+      blocks: [{ kind: 'table', table: { title: 'figures · 2 rows', columns, rows: cells.map((row, index) => ({ cells: row, cites: [index === 0 ? 'n1' : 'n2'] })), note: 'Each row selects its elements on the graph.' } }],
+    });
+    await draw(withColumns(['Size', 'Counterparty'], [['1664.72', 'A rather long name'], ['203.6', 'Another name']]));
+    const table = screen.getByRole('table');
+    const headers = within(table).getAllByRole('columnheader').map((header) => header.className);
+    expect(headers.slice(0, 2)).toEqual(['assistant-table-number', 'assistant-table-title-cell']);
+    cleanup();
+    await draw(withColumns(['Size', 'Weight'], [['1664.72', '12.5'], ['203.6', '9.25']]));
+    expect(within(screen.getByRole('table')).getAllByRole('columnheader').map((header) => header.className).slice(0, 2)).toEqual(['assistant-table-number', 'assistant-table-number']);
   });
 });

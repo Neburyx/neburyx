@@ -157,6 +157,8 @@ export function unavailableSentence(kind: AssistantFailureKind, readStarted: boo
   return 'The read did not finish. It may have started.';
 }
 
+/** The name of the one marker of a row that cites several elements: each element as a single marker names it (number, label, status), in the order of the row's cites. */
+export const rowCitationsLabel = (parts: readonly string[]): string => `Citations: ${parts.join("; ")}`;
 export const citationRangeLabel = (first: number, last: number): string => `Citations ${first} to ${last}: show in Sources`;
 export const MARKER_RUN_MIN = 3;
 export const sourcesGroupedText = (count: number): string => `${count.toLocaleString('en-US')} sources, grouped by shape`;
