@@ -195,7 +195,7 @@ function countsCitedOfType(found: { readonly value: string; readonly after: stri
     const group = cited.filter((item) => candidate.accepts(item.type));
     const namesOf = (key: string): string[] => namesOfLine(lines.get(key)).map((name) => name.normalize('NFC'));
     const counted = group.filter((item) => !namesOf(item.key).some((name) => wholeIn(name, outside) && !group.some((other) => other.key !== item.key && namesOf(other.key).includes(name))));
-    return counted.length === Number(found.value) && counted.length > 0;
+    return Number(found.value) > 0 && (group.length === Number(found.value) || counted.length === Number(found.value));
   });
 }
 

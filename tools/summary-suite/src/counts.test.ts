@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 const NO_POPULATION_TEST: Mutation = { name: 'the population of a count', from: " || OTHER_POPULATION.test(sentence.text.replace(/\\s+/gu, ' '))", to: '' };
-const NO_ARITHMETIC_TEST: Mutation = { name: 'the arithmetic of a count', from: 'matching.filter((key) => !apart(key)).length === wanted &&', to: 'matching.length > 0 &&' };
+const NO_ARITHMETIC_TEST: Mutation = { name: 'the arithmetic of a count', from: '(matching.length === wanted || matching.filter((key) => !apart(key)).length === wanted)', to: 'matching.length > 0' };
 
 async function summarize(mutation: Mutation | undefined, sentence: SummarySentence, evidence: { readonly view: Evidence['view']; readonly sent?: string }) {
   vi.resetModules();
@@ -148,10 +148,10 @@ describe('the suite\'s own rule for a count that leaves out the elements named a
   });
 
   it.each([
-    ['6 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '6'],
     ['Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '4'],
-    ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '6'],
-  ])('does not support a wrong count, digits or words: %s', (text, value) => {
+    ['4 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '4'],
+    ['Seven accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '7'],
+  ])('does not support a count that is neither the cited elements nor the cited elements less those named apart, digits or words: %s', (text, value) => {
     expect(unsupported(text)).toEqual([value]);
   });
 
@@ -167,11 +167,11 @@ describe('the suite\'s own rule for a count that leaves out the elements named a
 
   it.each([
     ['Funds moved from five accounts to AC-5100.', []],
-    ['Funds moved from six accounts to AC-5100.', ['6']],
+    ['Funds moved from four accounts to AC-5100.', ['4']],
     ['Payments from AC-5100 to five accounts.', []],
-    ['Payments from AC-5100 to six accounts.', ['6']],
+    ['Payments from AC-5100 to four accounts.', ['4']],
     ['Five accounts and AC-5100 are listed.', []],
-    ['Six accounts and AC-5100 are listed.', ['6']],
+    ['Four accounts and AC-5100 are listed.', ['4']],
   ])('does not take a name joined to the count by to or and alone for part of it: %s', (text, expected) => {
     expect(unsupported(text)).toEqual(expected);
   });
@@ -191,7 +191,7 @@ describe('the suite\'s own rule for a count that leaves out the elements named a
     const accented = sent.replaceAll('AC-5100', 'Caf\u00e9');
     const said = (text: string): string[] => numbersUnsupported({ text, cites: keys }, accented);
     expect(said('Five accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toEqual([]);
-    expect(said('Six accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toEqual(['6']);
+    expect(said('Four accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toEqual(['4']);
   });
 
   it('reads a type name of any length and across any white space', () => {
@@ -201,7 +201,20 @@ describe('the suite\'s own rule for a count that leaves out the elements named a
     expect(numbersUnsupported({ text: `Four ${type}s are listed.`, cites: ['n1', 'n2', 'n3'] }, lines)).toEqual(['4']);
   });
 
-  it('supports a count when none is named apart, and does not when it counts the one named apart as well', () => {
+  it.each([
+    '6 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.',
+    'Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.',
+  ])('supports a count that equals all the cited elements, since its number is what the sentence cites: %s', (text) => {
+    expect(unsupported(text)).toEqual([]);
+  });
+
+  it('supports four accounts of a cycle that names one of them at both ends', () => {
+    const four = keys.slice(0, 4);
+    expect(unsupported('Four accounts transfer in a closed cycle from AC-5001 back to AC-5001.', four)).toEqual([]);
+    expect(unsupported('Five accounts transfer in a closed cycle from AC-5001 back to AC-5001.', four)).toEqual(['5']);
+  });
+
+  it('supports a count when none is named apart, and does not when it counts more than is cited', () => {
     expect(unsupported('Five accounts are listed.', keys.slice(0, 5))).toEqual([]);
     expect(unsupported('Six accounts are listed.', keys.slice(0, 5))).toEqual(['6']);
   });

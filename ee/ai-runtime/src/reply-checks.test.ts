@@ -409,11 +409,10 @@ describe('a count of the cited elements', () => {
     });
 
     it.each([
-      ['6 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
       ['Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
-      ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
       ['4 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
-    ])('removes a wrong count, the same for digits and words: %s', (text) => {
+      ['Seven accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+    ])('removes a count that is neither the cited elements nor the cited elements less those named apart, the same for digits and words: %s', (text) => {
       expect(verdict(text)).toBe(false);
     });
 
@@ -431,11 +430,11 @@ describe('a count of the cited elements', () => {
 
     it.each([
       ['There were transfers from five accounts to AC-5100.', true],
-      ['There were transfers from six accounts to AC-5100.', false],
+      ['There were transfers from four accounts to AC-5100.', false],
       ['There were payments from AC-5100 to five accounts.', true],
-      ['There were payments from AC-5100 to six accounts.', false],
+      ['There were payments from AC-5100 to four accounts.', false],
       ['Five accounts and AC-5100 are listed.', true],
-      ['Six accounts and AC-5100 are listed.', false],
+      ['Four accounts and AC-5100 are listed.', false],
     ])('does not take a name joined to the count by to or and alone for part of it: %s', (text, expected) => {
       expect(verdict(text)).toBe(expected);
     });
@@ -452,8 +451,24 @@ describe('a count of the cited elements', () => {
       const accented: CheckedText = { ...apart, text: [...apart.lines.values()].slice(0, 5).concat(cafe).join('\n'), lines: new Map([...apart.lines, ['a6', cafe]]) };
       const said = (text: string): boolean => judgeSentences([{ text, cites: keys }], accented).kept.length === 1;
       expect(said('Five accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toBe(true);
-      expect(said('Six accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toBe(false);
+      expect(said('Four accounts, AC-5001 to AC-5005, transferred to the account Cafe\u0301.')).toBe(false);
       expect(said('Five accounts, AC-5001 to AC-5005, transferred to the account Caf\u00e9.')).toBe(true);
+    });
+
+    it.each([
+      ['6 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+      ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.'],
+    ])('keeps a count that equals all the cited elements of the type, since its number is what the sentence cites: %s', (text) => {
+      expect(verdict(text)).toBe(true);
+    });
+
+    it('keeps four accounts of a cycle that names one of them at both ends, as the number equals the four cited', () => {
+      const four = keys.slice(0, 4);
+      const cycle: CheckedText = { ...apart, text: accountLines.slice(0, 4).join('\n'), keys: new Map(four.map((key) => [key, true])), lines: new Map(four.map((key, index) => [key, accountLines[index] ?? ''])), elementTypes: new Map(four.map((key) => [key, 'entity account'])) };
+      const said = (text: string): boolean => judgeSentences([{ text, cites: four }], cycle).kept.length === 1;
+      expect(said('Four accounts transfer in a closed cycle from AC-5001 back to AC-5001.')).toBe(true);
+      expect(said('Five accounts transfer in a closed cycle from AC-5001 back to AC-5001.')).toBe(false);
+      expect(said('Two accounts transfer in a closed cycle from AC-5001 back to AC-5001.')).toBe(false);
     });
 
     it('keeps a count of the cited elements when none is named apart, and removes one that counts the one named apart too', () => {

@@ -210,9 +210,10 @@ describe.each(PATHS)('%s: a count that leaves out the element named apart from i
   const cites = accounts.map((_, index) => `n${index + 1}`);
   const said = (text: string): Promise<string[]> => path(undefined, sentencesOf({ text, cites }), evidence);
 
-  it('keeps five accounts, in words and in digits, over six cited with one named as the target, and removes the wrong counts', async () => {
+  it('keeps five accounts, in words and in digits, over six cited with one named as the target, keeps six (all the cited), and removes the counts that are neither', async () => {
     for (const kept of ['Five accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', '5 accounts, AC-5001 to AC-5005, transferred to the account AC-5100.']) expect(await said(kept)).toEqual([kept]);
-    for (const removed of ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', 'Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.']) expect(await said(removed)).toEqual([]);
+    for (const alsoKept of ['Six accounts, AC-5001 to AC-5005, transferred to the account AC-5100.']) expect(await said(alsoKept)).toEqual([alsoKept]);
+    for (const removed of ['Four accounts, AC-5001 to AC-5005, transferred to the account AC-5100.', 'Seven accounts, AC-5001 to AC-5005, transferred to the account AC-5100.']) expect(await said(removed)).toEqual([]);
   });
 
   it('removes five transactions over three cited, as it removes 5', async () => {

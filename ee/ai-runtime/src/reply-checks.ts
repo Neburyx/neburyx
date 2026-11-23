@@ -264,7 +264,8 @@ function outsideTheList(before: string, rest: string, names: readonly string[]):
 
 /**
  * Whether a number is the count of the elements the sentence cites that are of the type, or of the kind (entities, relationships, elements), the text after it names, less the elements of that type the sentence names
- * apart from the count, by title or id, as a subject or a target (`Five accounts, AC-1 to AC-5, paid the account AC-9` counts five of six cited accounts): the check counts the cited elements itself and invents no number.
+ * apart from the count, by title or id, as a subject or a target (`Five accounts, AC-1 to AC-5, paid the account AC-9` counts five of six cited accounts): the check counts the cited elements itself and invents no number. A count
+ * that equals all the cited elements of the type stands too, since the number then equals what the sentence cites (`Four accounts form a cycle from AC-1 back to AC-1`: the named account is one of the four).
  */
 function countsCitedElements(number: string, after: string, sentence: SummarySentence, assembled: CheckedText): boolean {
   const types = assembled.elementTypes;
@@ -283,7 +284,7 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
     });
     // a name that two of the cited elements share names none of them apart: it is the one name of the group the sentence counts
     const apart = (key: string): boolean => namesOfKey(key, assembled).some((name) => occursWhole(name, outside) && !matching.some((other) => other !== key && namesOfKey(other, assembled).includes(name)));
-    return matching.filter((key) => !apart(key)).length === wanted && wanted > 0;
+    return wanted > 0 && (matching.length === wanted || matching.filter((key) => !apart(key)).length === wanted);
   };
   const citedTypes = new Set([...new Set(sentence.cites)].flatMap((key) => (lines.has(key) || types.get(key) === undefined ? [] : [types.get(key) ?? ''])));
   return (
