@@ -31,7 +31,6 @@ button.link {
 }
 
 :where(select:not([class]), select[class=''], .select-control) {
-  height: var(--header-button-height);
   padding-right: calc(var(--space-12) + var(--tool-icon-size));
   appearance: none;
   background: var(--color-surface) url('../assets/select-chevron.svg') no-repeat right var(--space-10) center / var(--tool-icon-size);

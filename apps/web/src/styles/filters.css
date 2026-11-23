@@ -70,7 +70,12 @@
   text-overflow: ellipsis;
 }
 
-/* the time window select is as tall and as round as the other selects of the panel */
+/* the design draws the controls of the panel 32 px tall */
+.filters-panel :is(select, .select-control, input) {
+  height: var(--header-button-height);
+}
+
+/* the time window select is as round as the other selects of the panel */
 .filters-panel select {
   border-radius: var(--radius-panel);
   font-size: var(--font-size-body);

@@ -34,6 +34,12 @@
   font: inherit;
 }
 
+/* the designs draw the controls of the Patterns, Paths and builder panels 32 px tall */
+.patterns-panel :is(select, .select-control, .patterns-input) {
+  height: var(--header-button-height);
+  min-height: 0;
+}
+
 .patterns-field .select-control {
   padding-left: var(--space-10);
   border-radius: var(--radius-panel);
