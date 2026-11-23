@@ -79,3 +79,25 @@ A question file with its own Ask folder can be run from outside the repository: 
 ## Where the code lives
 
 The scoring, loading, reporting, baseline and scan are here. The classifier, the replay provider and the recording wrapper are `ee/` code (`ee/ask/src/eval`), which a tool may reach only through its entry script, `entry/ask-eval-entry.mjs` (see [architecture checks](../../docs/architecture-checks.md)).
+
+## The thread evaluation
+
+`ask-eval thread` measures the Assistant as it ships: it drives a **running product** over its HTTP API through a thread of messages on a fixed view, reads back the records of each turn, and prepares, scores and reports the answers blind. Nothing here changes the product's behaviour, reads the source or writes to it. It makes HTTP requests to a loopback address only, and the only request that starts model calls is a typed message.
+
+```bash
+pnpm ask-eval thread run --manifest <file> --base http://127.0.0.1:<port> --settings-file <env file the product was started with> --head <commit> --arm <name> --dry-run
+pnpm ask-eval thread run --manifest <file> --base http://127.0.0.1:<port> --settings-file <env file> --head <commit> --arm <name> --budget <model calls> --out <folder outside every git tree>
+pnpm ask-eval thread records --file <run file> --database-env-file <env file> --out <file>
+pnpm ask-eval thread blind --seed <text> --sets <folder> --key-folder <another folder> <records file>...
+pnpm ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
+pnpm ask-eval thread calibrate --a <scores file> --b <scores file>
+pnpm ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--text-arm <arm>] <scores file>...
+pnpm ask-eval thread facts --call-limit <n> [--prices <file>] <records file>...
+```
+
+- **The manifest** is an external file (`tools/ask-eval/data/thread/manifest.example.json` is a neutral example): the source, the anchor, the type and number of the neighbours put in the view, and the messages. The view is exactly the anchor and that many neighbours as entities, nothing selected; a view of another count or type ends the repeat.
+- **Settings.** `--settings-file` names the env file the product was started with; only the assistant's settings and the effort are read from it (a key or a path of a secret never is), and `--call-limit` or `--model` that disagrees with it is refused before any request. The budget (`--budget`, in model calls) is checked before every turn against the most calls a turn can make, and after the first turn the run record's settings are checked against the file.
+- **Records.** Each turn is read back by its `x-trace-id`: the run, its calls (tokens, durations, errors, the names of the tools the model was bound to), the cache token counts of the model events, the calls of a case summary drafted in the turn, and the settings; a turn with a missing or unfinished record is named and no figure is made from it. The reader uses a read-only connection to the run's own test database.
+- **Blind sets.** The answers of the arms are shuffled per turn from a seed under neutral labels, with the message, the answer, the lines it cites, the coverage and the answer's own earlier turns; a failed or unrun turn is a slot with no answer, which scores nothing. The key is written to another folder and no set refers to it; a set that holds an arm name, a trace id or a model name is refused.
+- **Scoring.** The scorer gets the set and the rubric and returns C1 to C4 for every answer in a fixed shape; a bad reply is asked for once more; scores that do not cover the answers exactly are rejected. Codex is invoked only with an approval file (the confirmation and the number of invocations); otherwise the scorer is an Opus agent run by the tool with a counted limit. A scorer change needs a calibration set; below 90 percent agreement the other scorer's repeats are marked indicative and never counted toward a bar.
+- **Report and facts.** The report gives per arm and repeat the sum of C1 to C4, the median, the bars (a miss is an open finding with its kind and place, never a wording) and the text-arm decision. The facts report gives calls per turn (mean, median, p95), the median time, tokens and, with dated prices, the cost; figures that are incomplete are named and not accepted as evidence.
