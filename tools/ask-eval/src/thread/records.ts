@@ -16,6 +16,8 @@ interface CallRecord {
   /** What the model was sent after the system text: the messages with the lines of the reads. Real text over the run's own data; kept in the run file for the scorer's lines only. */
   readonly valuesText: string;
   readonly replyText: string | null;
+  /** The names of the tools the model was bound to for this call (names only), where the call record holds them. */
+  readonly toolsOffered: readonly string[] | null;
 }
 
 interface EventRecord {
@@ -48,7 +50,7 @@ const tokens = (value: unknown): number | 'unknown' | null => (value === 'unknow
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const RUN = 'SELECT id, outcome, calls, settings FROM assistant_runs WHERE trace_id = $1 ORDER BY started_at';
-const CALLS = 'SELECT run_id, call_number, started_at, duration_ms, status, failure_kind, error_class, error_code, tokens_in, tokens_out, values_text, reply_text FROM assistant_run_calls WHERE run_id = ANY($1::uuid[]) ORDER BY started_at, call_number';
+const CALLS = 'SELECT run_id, call_number, started_at, duration_ms, status, failure_kind, error_class, error_code, tokens_in, tokens_out, values_text, reply_text, tools_offered FROM assistant_run_calls WHERE run_id = ANY($1::uuid[]) ORDER BY started_at, call_number';
 const EVENTS = 'SELECT action, result, detail FROM audit_events WHERE trace_id = $1 ORDER BY at';
 
 /**
@@ -78,6 +80,7 @@ export async function readTurnRecords(db: Db, traceId: string): Promise<TurnReco
     tokensOut: count(row['tokens_out']),
     valuesText: text(row['values_text']) ?? '',
     replyText: text(row['reply_text']),
+    toolsOffered: text(row['tools_offered']) === null ? null : (text(row['tools_offered']) ?? '').split(',').filter((name) => name !== ''),
   }));
   for (const call of calls) if (call.status === null) problems.push(`call ${call.number} was started and has no end in the record`);
   const summaryCalls = events.filter((event) => event.action === 'ai.case-summary').length;

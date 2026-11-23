@@ -33,6 +33,8 @@ interface AssistantCallStart {
   readonly instructionsSha256: string;
   readonly instructionsText: string;
   readonly valuesText: string;
+  /** The names of the tools the model was bound to for the call, comma-joined and sorted; absent for a call with none. */
+  readonly toolsOffered?: string;
 }
 
 type AssistantCallStatus = 'answered' | 'refused' | 'failed' | 'cancelled';
@@ -79,7 +81,7 @@ const defaultDeps: Deps = { createPool: (config) => new pg.Pool(config) };
 
 const INSERT_RUN = 'INSERT INTO assistant_runs (id, actor_id, investigation_id, source_id, trace_id, started_at, settings) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (id) DO NOTHING';
 const INSERT_CALL =
-  'INSERT INTO assistant_run_calls (run_id, call_number, started_at, instructions_sha256, instructions_text, values_text) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (run_id, call_number) DO NOTHING';
+  'INSERT INTO assistant_run_calls (run_id, call_number, started_at, instructions_sha256, instructions_text, values_text, tools_offered) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (run_id, call_number) DO NOTHING';
 const UPDATE_CALL =
   'UPDATE assistant_run_calls SET status = $3, failure_kind = $4, reply_text = $5, tokens_in = $6, tokens_out = $7, duration_ms = $8, error_class = $9, error_code = $10, error_type = $11 WHERE run_id = $1 AND call_number = $2';
 const UPDATE_RUN = 'UPDATE assistant_runs SET outcome = $2, calls = $3, finished_at = $4 WHERE id = $1';
@@ -117,7 +119,7 @@ export function createPgAssistantRunStore(context: AuditSinkContext, deps: Deps 
       await write(INSERT_RUN, [run.id, run.actorId, run.investigationId ?? null, run.sourceId, run.traceId, run.startedAt, JSON.stringify(run.settings)]);
     },
     async beginCall(call) {
-      await write(INSERT_CALL, [call.runId, call.number, call.startedAt, call.instructionsSha256, call.instructionsText, call.valuesText]);
+      await write(INSERT_CALL, [call.runId, call.number, call.startedAt, call.instructionsSha256, call.instructionsText, call.valuesText, call.toolsOffered ?? null]);
     },
     async endCall(call) {
       await write(UPDATE_CALL, [call.runId, call.number, call.status, call.failureKind ?? null, call.replyText ?? null, call.tokensIn ?? null, call.tokensOut ?? null, call.durationMs, call.errorClass ?? null, call.errorCode ?? null, call.errorType ?? null], 1);

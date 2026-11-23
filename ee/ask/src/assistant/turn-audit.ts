@@ -137,7 +137,7 @@ export interface ModelCallNote {
 }
 
 /** A model call is about to be made: its prompt and the configured model, which stay if the call throws or is aborted, and its record, written before the call and ended after it. */
-export function startModelCall(call: { readonly modelRef: string; readonly promptId: string; readonly promptVersion: number; readonly instructionsSha256: string; readonly instructions: string; readonly values: string }): ModelCallNote {
+export function startModelCall(call: { readonly modelRef: string; readonly promptId: string; readonly promptVersion: number; readonly instructionsSha256: string; readonly instructions: string; readonly values: string; readonly tools?: readonly string[] }): ModelCallNote {
   const notes = scope.getStore();
   if (notes === undefined) return { received: NO_CALL_RECORD.received, end: NO_CALL_RECORD.end };
   notes.calls += 1;
@@ -146,7 +146,7 @@ export function startModelCall(call: { readonly modelRef: string; readonly promp
   notes.promptVersion = String(call.promptVersion);
   notes.instructionsSha256 = call.instructionsSha256;
   delete notes.usage;
-  const record = notes.run?.startCall({ instructionsSha256: call.instructionsSha256, instructions: call.instructions, values: call.values }) ?? NO_CALL_RECORD;
+  const record = notes.run?.startCall({ instructionsSha256: call.instructionsSha256, instructions: call.instructions, values: call.values, ...(call.tools === undefined ? {} : { tools: call.tools }) }) ?? NO_CALL_RECORD;
   return { ...(notes.run === undefined ? {} : { runId: notes.run.id }), received: record.received, end: record.end };
 }
 

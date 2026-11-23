@@ -21,7 +21,7 @@ export interface AuditedModelHook {
   /** The configured model, the reference a failed or cancelled call is recorded under. */
   readonly modelRef: string;
   /** Starts the record of one call, with the system text, the SHA-256 of it and the rest of the messages as text. */
-  readonly trace?: (call: { readonly instructions: string; readonly instructionsSha256: string; readonly values: string }) => CallTrace;
+  readonly trace?: (call: { readonly instructions: string; readonly instructionsSha256: string; readonly values: string; readonly tools: readonly string[] }) => CallTrace;
   /** Anthropic prompt caching: the system text and the last message of each call carry a cache breakpoint with this time to live. Absent, no marker is sent. */
   readonly cache?: { readonly ttl: '5m' | '1h' };
 }
@@ -122,6 +122,17 @@ function withContent(message: BaseMessage, content: BaseMessage['content']): Bas
   return Object.assign(copy, message, { content });
 }
 
+/** The names of the tools a model is bound to: names only, never a schema, a description or a value. */
+const toolNamesOf = (tools: readonly BindToolsInput[]): readonly string[] =>
+  tools
+    .flatMap((entry) => {
+      if (!isRecord(entry)) return [];
+      if (typeof entry['name'] === 'string') return [entry['name']];
+      const fn = entry['function'];
+      return isRecord(fn) && typeof fn['name'] === 'string' ? [fn['name']] : [];
+    })
+    .sort();
+
 const THINKING_BLOCKS: ReadonlySet<string> = new Set(['thinking', 'redacted_thinking']);
 const isThinking = (block: unknown): boolean => isRecord(block) && typeof block['type'] === 'string' && THINKING_BLOCKS.has(block['type']);
 
@@ -161,6 +172,8 @@ class AuditedChatModel extends BaseChatModel {
   constructor(
     private readonly inner: Inner,
     private readonly hook: AuditedModelHook,
+    /** The names of the tools this model is bound to (names only), for the record of each call. */
+    private readonly boundTools: readonly string[] = [],
   ) {
     super({});
   }
@@ -174,7 +187,7 @@ class AuditedChatModel extends BaseChatModel {
     const bindable = this.inner as { bindTools?: (tools: BindToolsInput[], kwargs?: Partial<BaseChatModelCallOptions>) => Inner };
     if (bindable.bindTools === undefined) throw new Error('the model cannot call tools');
     // the bound copy is an audited model too; the base class types the return as a runnable of the call options
-    return new AuditedChatModel(bindable.bindTools(tools, kwargs), this.hook) as unknown as Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>;
+    return new AuditedChatModel(bindable.bindTools(tools, kwargs), this.hook, toolNamesOf(tools)) as unknown as Runnable<BaseLanguageModelInput, AIMessageChunk, BaseChatModelCallOptions>;
   }
 
   async _generate(messages: BaseMessage[], options: this['ParsedCallOptions']): Promise<ChatResult> {
@@ -183,7 +196,7 @@ class AuditedChatModel extends BaseChatModel {
     const prompt = promptOf(hook, messages);
     // the record holds what is sent: the history without the thinking blocks of the earlier replies
     const sent = withoutEarlierThinking(messages);
-    const trace = hook.trace?.({ instructions: systemTextOf(messages), instructionsSha256: prompt.sha256, values: valuesOf(sent) });
+    const trace = hook.trace?.({ instructions: systemTextOf(messages), instructionsSha256: prompt.sha256, values: valuesOf(sent), tools: this.boundTools });
     let message: AIMessageChunk;
     try {
       message = await this.inner.invoke(hook.cache === undefined ? sent : withCacheMarkers(sent, hook.cache.ttl), options.signal === undefined ? {} : { signal: options.signal });

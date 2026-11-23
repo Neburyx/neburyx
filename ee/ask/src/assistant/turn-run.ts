@@ -17,6 +17,8 @@ interface CallStart {
   readonly instructionsSha256: string;
   readonly instructions: string;
   readonly values: string;
+  /** The names of the tools the model was bound to for this call (names only). */
+  readonly tools?: readonly string[];
 }
 
 /** Why a call failed: the product's code and the class and the code of the error the provider's client threw. */
@@ -103,7 +105,7 @@ export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, star
       calls += 1;
       const number = calls;
       const startedAt = deps.now();
-      if (store !== undefined) quietly(deps, { runId: id, step: 'beginCall' }, () => store.beginCall({ runId: id, number, startedAt: new Date(startedAt), instructionsSha256: call.instructionsSha256, instructionsText: call.instructions, valuesText: call.values }));
+      if (store !== undefined) quietly(deps, { runId: id, step: 'beginCall' }, () => store.beginCall({ runId: id, number, startedAt: new Date(startedAt), instructionsSha256: call.instructionsSha256, instructionsText: call.instructions, valuesText: call.values, ...(call.tools === undefined || call.tools.length === 0 ? {} : { toolsOffered: call.tools.join(',') }) }));
       let answer: ModelAnswer | undefined;
       let ended = false;
       return {

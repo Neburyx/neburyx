@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const FOLDERS = ['ee', 'services', 'packages', 'apps', 'tools'];
-const ALLOWED = new Set(['ee/ask/src/assistant/run-store.ts', 'ee/migrations/0007-assistant-runs.sql', 'ee/migrations/0010-assistant-run-errors.sql', 'tools/ask-eval/src/thread/records.ts']);
+const ALLOWED = new Set(['ee/ask/src/assistant/run-store.ts', 'ee/migrations/0007-assistant-runs.sql', 'ee/migrations/0010-assistant-run-errors.sql', 'ee/migrations/0011-assistant-run-tools.sql', 'tools/ask-eval/src/thread/records.ts']);
 // the one named exception beyond the store and the migration: the evaluation reader of tools/ask-eval, which only reads the records of a run it made, by trace id, with a read-only login; no route, query or export of the product reads them
 const SKIPPED = new Set(['node_modules', 'dist', 'coverage', '.turbo']);
 

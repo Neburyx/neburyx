@@ -109,6 +109,25 @@ describe('the audited chat model', () => {
     expect(third).toBe(human);
   });
 
+  it('tells the trace of each call the names of the tools the model is bound to, names only, and none for a model bound to none', async () => {
+    const seen: { tools: readonly string[]; values: string }[] = [];
+    class Bindable extends FakeListChatModel {
+      override bindTools(): ReturnType<FakeListChatModel['bindTools']> {
+        return this as unknown as ReturnType<FakeListChatModel['bindTools']>;
+      }
+    }
+    const trace = (call: { tools: readonly string[]; values: string }) => {
+      seen.push({ tools: call.tools, values: call.values });
+      return { received: () => undefined, end: () => undefined };
+    };
+    const model = auditChatModel(new Bindable({ responses: ['x'] }), { ...hookOf([]), trace });
+    await model.invoke([new HumanMessage('q')]);
+    const bound = (model as unknown as { bindTools(tools: unknown[]): { invoke(messages: BaseMessage[]): Promise<unknown> } }).bindTools([{ name: 'view', description: 'SECRET-DESCRIPTION', schema: {} }, { type: 'function', function: { name: 'answer', description: 'SECRET-DESCRIPTION' } }]);
+    await bound.invoke([new HumanMessage('q')]);
+    expect(seen.map((entry) => entry.tools)).toEqual([[], ['answer', 'view']]);
+    expect(JSON.stringify(seen)).not.toContain('SECRET-DESCRIPTION');
+  });
+
   it('records a cancelled call as one failed event', async () => {
     const events: AuditEvent[] = [];
     const controller = new AbortController();

@@ -97,7 +97,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     if (instructions === undefined || modelRef === undefined || settings === undefined) return undefined;
     let runId: string | undefined;
     const trace: AuditedModelHook['trace'] = (call) => {
-      const record = startModelCall({ modelRef, promptId: AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, instructionsSha256: call.instructionsSha256, instructions: call.instructions, values: call.values });
+      const record = startModelCall({ modelRef, promptId: AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, instructionsSha256: call.instructionsSha256, instructions: call.instructions, values: call.values, tools: call.tools });
       runId = record.runId;
       return {
         received: (answer) => {
