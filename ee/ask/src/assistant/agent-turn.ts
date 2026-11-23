@@ -192,7 +192,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
 
     const rules = instructions.text.split(REPLY_FORMAT_HEADING)[0] ?? '';
     const source = scope.options.folder()?.source(scope.sourceId);
-    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
+    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and say that the canvas's own Expand action puts it on screen. For a message that asks how many there are, answer with the count a read returned and what it says about the count (exact, estimated or a lower bound), never a total no read returned; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
 
     const tools: AgentTool[] = readable.map((tool) => ({
       name: tool.name,
