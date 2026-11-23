@@ -113,7 +113,7 @@ test.describe('the Assistant panel', () => {
     await expect(panel(page).getByText('AC-1', { exact: true }).first()).toBeVisible();
     await expect(panel(page).getByText('Exact', { exact: true })).toBeVisible();
     await expect(panel(page).getByText('J••• L••• → SENT → A•••')).toBeVisible();
-    await expect(panel(page).getByRole('listitem').filter({ hasText: 'Account AC-1' })).toBeVisible();
+    await expect(panel(page).getByText('Account AC-1', { exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
   });
 
