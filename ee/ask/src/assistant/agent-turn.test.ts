@@ -120,6 +120,9 @@ describe('a view question on the agent', () => {
     expect(instructions).toContain('State a count as a number with its quality');
     expect(instructions).toContain('a part is never left out');
     expect(instructions).toContain('not yet retrieved');
+    expect(instructions).toContain('cites the elements or the read line it speaks of, and only those; never cite a key only to keep a sentence');
+    expect(instructions).toContain('that those lines do not answer is answered by reading that element\'s neighbours with expand or linked-entities before you say it is not shown');
+    expect(instructions).toContain('When a sentence says how many, it cites every element it counts in that same sentence.');
   });
 
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
