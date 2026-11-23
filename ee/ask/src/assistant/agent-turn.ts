@@ -238,7 +238,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
       run: async (args) => {
         stepsOf(scope.request).answering();
         // an answer written on the last call the turn allows, where no read was offered: said so in a fixed sentence, whether the model was done or not
-        if (control.calls + control.extra + input.callsUsed >= settings.maxCalls) onLastCall = true;
+        const isLast = control.calls + control.extra + input.callsUsed >= settings.maxCalls;
         const basis = answerBasisOf({ reads, ...(view === undefined ? {} : { view }), scope, message: input.message });
         if (basis === undefined) return NOT_ANSWERED;
         if (scope.form === 'table') {
@@ -249,8 +249,10 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
           if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
           const tabled = outcomeOfDraft({ drafted: { status: 'drafted', table: draft, sentences: judgedRows.kept, removed: judgedRows.removed, calls: 0, verdictFound: judgedRows.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: judgedRows.positions, lastNames: named });
-          if (tabled.kind === 'sentences' || tabled.kind === 'table') standing = withPointer(tabled, tableSchema.shape.pointer.parse(args['pointer']));
-          else standing ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
+          if (tabled.kind === 'sentences' || tabled.kind === 'table') {
+            standing = withPointer(tabled, tableSchema.shape.pointer.parse(args['pointer']));
+            onLastCall = isLast;
+          } else standing ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
           return feedback({ kept: judgedRows.kept.length, removed: judgedRows.removed, verdictFound: judgedRows.verdictFound });
         }
         const parsed = answerSchema.parse(args);
@@ -260,7 +262,10 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         if (checked.status === 'refused') return 'The answer could not be checked. Reply "Done."';
         const judged = checked.value;
         const outcome = outcomeOfDraft({ drafted: { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls: 0, verdictFound: judged.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: [], lastNames: named });
-        if (outcome.kind === 'sentences' || outcome.kind === 'table') standing = withPointer(outcome, parsed.pointer);
+        if (outcome.kind === 'sentences' || outcome.kind === 'table') {
+          standing = withPointer(outcome, parsed.pointer);
+          onLastCall = isLast;
+        }
         else standing ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
         return feedback({ kept: judged.kept.length, removed: judged.removed, verdictFound: judged.verdictFound });
       },

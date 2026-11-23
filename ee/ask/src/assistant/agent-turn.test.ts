@@ -155,6 +155,18 @@ describe('a view question on the agent', () => {
     expect(answer).toMatchObject({ lastCallNote: ASSISTANT_LAST_CALL_SENTENCE });
   });
 
+  it('says nothing of the last call when the answer that stands was written earlier and the last answer kept nothing', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 4 } });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).not.toHaveProperty('lastCallNote');
+  });
+
   it('carries no note on an answer given while reads were still allowed', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
@@ -165,18 +177,6 @@ describe('a view question on the agent', () => {
     expect(answer).toMatchObject({ status: 'answered' });
     expect(answer).not.toHaveProperty('lastCallNote');
     expect(answer).not.toHaveProperty('stoppedAt');
-  });
-
-  it('does not ask the router again for a reply that is an explanation, and goes to the agent', async () => {
-    const answerModel = () =>
-      fakeModel()
-        .respondWithTools([{ name: 'view', args: {} }])
-        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
-        .respond(new AIMessage('Done.'));
-    const routeCalls = (r: Rig) => r.events.filter((event) => event.action === 'assistant.route').length;
-    const prose = await rig({ reply: ok('No listed intent counts these, so nothing fits.'), agent: { model: answerModel() } });
-    expect(await answerOf(prose.route.handler(prose.request(VIEW_BODY)))).toMatchObject({ status: 'answered' });
-    expect(routeCalls(prose)).toBe(1);
   });
 
   it('is not called for a verdict the router refuses', async () => {

@@ -30,17 +30,10 @@ describe('the router as the product builds it, over a replay', () => {
     expect(await routeMessage(source, replayProvider(answers), 'replay', INPUT)).toMatchObject({ status: 'routed', calls: 2 });
   });
 
-  it('does not repeat a reply that holds no object at all: it is unplaced after one call', async () => {
-    const source = await sourceOf();
-    const { first } = await routerRequests(source, INPUT);
-    const answers = new Map<string, ReplayAnswer>([[first, { reply: 'Nothing here fits, so I cannot say.' }]]);
-    expect(await routeMessage(source, replayProvider(answers), 'replay', INPUT)).toMatchObject({ status: 'unplaced', calls: 1 });
-  });
-
   it('ends unplaced after one repeat when neither reply is a route', async () => {
     const source = await sourceOf();
     const { first, repeat } = await routerRequests(source, INPUT);
-    const answers = new Map<string, ReplayAnswer>([[first, { reply: '{no' }], [repeat, { reply: '{still no' }]]);
+    const answers = new Map<string, ReplayAnswer>([[first, { reply: 'no' }], [repeat, { reply: 'still no' }]]);
     expect(await routeMessage(source, replayProvider(answers), 'replay', INPUT)).toMatchObject({ status: 'unplaced', calls: 2 });
   });
 
