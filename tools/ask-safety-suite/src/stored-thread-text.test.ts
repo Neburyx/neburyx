@@ -31,7 +31,7 @@ describe('the text a thread keeps, through the real application of the assistant
     const rig = await startAssistantRig({ stub, threads: true, respond: (call) => (['entity-load', 'entity-load-many', 'file-query'].includes(call.templateId) ? { status: 'rows', rows: [{ n: plainNode(['Widget'], { widgetId: 'W-1', ownerName: 'Ana Silva' }, '4:s:W-1') }] } : undefined) });
     const answer = await rig.turn(QUESTION, [FORM, READ_VIEW, DONE, JSON.stringify({ columns: ['Element'], rows: [{ cells: [ANSWER_CELL], cites: ['n1'] }] })], { viewElementKeys: [WIDGET_KEY] });
     expect(answer.status).toBe(200);
-    expect(answer.body).toMatchObject({ status: 'answered', table: { rows: [{ cells: [ANSWER_CELL] }] } });
+    expect(answer.body).toMatchObject({ status: 'answered', blocks: [{ kind: 'table', table: { rows: [{ cells: [ANSWER_CELL] }] } }] });
     await rig.threadWritten(1);
     // both texts are the thread's own, kept in its question and answer
     expect(rig.threadText()).toContain('SENTINEL-QUESTION-31');
