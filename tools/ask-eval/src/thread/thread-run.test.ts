@@ -165,6 +165,14 @@ describe('one repeat', () => {
     expect(runFile(join(g.out, 'thread-refs-r1.json')).turns.map((turn) => turn.status)).toEqual(['refused', 'failed']);
   });
 
+  it('records a meaning answer as an answered turn, not as a stop', async () => {
+    const MEANING = { status: 'meaning', described: [], noDescription: { sentence: 'The mapping has no description for RECEIVED_BY, so I cannot say what it means.', names: ['RECEIVED_BY'] } };
+    const f = files();
+    const s = standIn({ answers: (n) => ({ status: 200, body: n === 2 ? MEANING : REFUSED }) });
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(0);
+    expect(runFile(join(f.out, 'thread-refs-r1.json')).turns.map((turn) => turn.status)).toEqual(['refused', 'answered', 'refused']);
+  });
+
   it('writes no key, connection string or cookie text into the run file', async () => {
     const f = files();
     const s = standIn();

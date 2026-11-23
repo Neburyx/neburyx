@@ -125,7 +125,7 @@ describe('the scorer and its approval', () => {
     await expect(opusRunner(spawn, { PATH: '/bin', NEBURYX_ASK_API_KEY_FILE: join(tmpdir(), 'no-such-key-file') })('p')).rejects.toBeInstanceOf(ScorerUnavailable);
     expect(launched).toBe(0);
     const keyFolder = mkdtempSync(join(tmpdir(), 'thread-opus-key-'));
-    writeFileSync(join(keyFolder, 'key'), 'file-key-value\n');
+    writeFileSync(join(keyFolder, 'key'), 'ANTHROPIC_API_KEY="file-key-value"\n');
     await opusRunner(spawn, { PATH: '/bin', HOME: '/home/x', NEBURYX_ASK_API_KEY_FILE: join(keyFolder, 'key') })('p');
     expect(seen[0]?.args).toContain('--bare');
     expect(seen[0]?.env).toMatchObject({ ANTHROPIC_API_KEY: 'file-key-value' });

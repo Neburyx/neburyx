@@ -102,6 +102,17 @@ describe('the blind sets', () => {
     expect(shown(undefined, 'ask')).toContain('Coverage: (none)');
   });
 
+  it('shows a meaning answer, and the fixed sentence of a type with no description, as answers: they are scored, not recorded as no answer', () => {
+    const meaning = { status: 'meaning', described: [{ typeKind: 'relationship', type: 'SENT', description: 'a transfer from the first account to the second' }], noDescription: { sentence: 'The mapping has no description for RECEIVED_BY, so I cannot say what it means.', names: ['RECEIVED_BY'] } };
+    const output = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: meaning }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options());
+    expect(output.key.noAnswer).toEqual([]);
+    expect(output.sets.get(1)).toContain('- SENT: a transfer from the first account to the second');
+    expect(output.sets.get(1)).toContain('(server note) The mapping has no description for RECEIVED_BY, so I cannot say what it means.');
+    const none = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { status: 'no-description', route: 'view', sentence: 'The mapping has no description for X.', names: ['X'] } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options());
+    expect(none.key.noAnswer).toEqual([]);
+    expect(none.sets.get(1)).toContain('(server note) The mapping has no description for X.');
+  });
+
   it('scores a response that is not an answer as no answer: nothing to score, no point, and the slot is recorded in the key', () => {
     const output = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { status: 'not-answered', sentence: 'x' } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options());
     expect(output.key.noAnswer).toHaveLength(1);

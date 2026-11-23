@@ -51,7 +51,8 @@ const LABELS = ['A', 'B', 'C', 'D'];
 const NO_ANSWER = '(no answer: this turn did not run or did not give an answer)';
 
 /** Whether the product answered: a response that is not an answer (not-answered, a question back, a failure) has nothing to score and earns no point. */
-const isAnswered = (answer: unknown): boolean => isRecord(answer) && answer['status'] === 'answered';
+const ANSWER_STATUSES = ['answered', 'meaning', 'no-description'];
+const isAnswered = (answer: unknown): boolean => isRecord(answer) && typeof answer['status'] === 'string' && ANSWER_STATUSES.includes(answer['status']);
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** The answer as the scorer reads it: its sentences or table rows with their cites, and the notes the server wrote; never an id, a model name or an arm. */
@@ -65,7 +66,10 @@ function answerText(answer: unknown): string {
     if (Array.isArray(table['columns'])) parts.push(`| ${table['columns'].join(' | ')} | cites |`);
     for (const row of table['rows']) if (isRecord(row) && Array.isArray(row['cells'])) parts.push(`| ${row['cells'].join(' | ')} | ${Array.isArray(row['cites']) ? row['cites'].join(', ') : ''} |`);
   }
-  for (const name of ['sentence', 'pointer', 'lastCallNote', 'noDescription']) if (typeof answer[name] === 'string') parts.push(`(server note) ${answer[name]}`);
+  if (Array.isArray(answer['described'])) for (const entry of answer['described']) if (isRecord(entry) && typeof entry['type'] === 'string' && typeof entry['description'] === 'string') parts.push(`- ${entry['type']}: ${entry['description']}`);
+  const none = answer['noDescription'];
+  if (isRecord(none) && typeof none['sentence'] === 'string') parts.push(`(server note) ${none['sentence']}`);
+  for (const name of ['sentence', 'pointer', 'lastCallNote']) if (typeof answer[name] === 'string') parts.push(`(server note) ${answer[name]}`);
   return parts.length === 0 ? NO_ANSWER : parts.join('\n');
 }
 

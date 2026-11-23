@@ -151,11 +151,24 @@ function opusKey(env: NodeJS.ProcessEnv): string | undefined {
   const path = env['NEBURYX_ASK_API_KEY_FILE'];
   if (path === undefined || path === '') return undefined;
   try {
-    const text = readFileSync(path, 'utf8').trim();
-    return text === '' ? undefined : text;
+    return keyOfText(readFileSync(path, 'utf8'));
   } catch {
     return undefined;
   }
+}
+
+const ASSIGNMENT = /^(?:export\s+)?[A-Z_][A-Z0-9_]*\s*=(.*)$/u;
+
+/** The key in a key file as the product reads it: one bare key, or one `NAME=value` line, with the quotes of the value taken off. */
+function keyOfText(text: string): string | undefined {
+  const lines = text.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== '' && !line.startsWith('#'));
+  if (lines.length !== 1) return undefined;
+  const line = lines[0] ?? '';
+  const match = ASSIGNMENT.exec(line);
+  const value = (match === null ? line : (match[1] ?? '')).trim();
+  const quote = value.charAt(0);
+  const bare = value.length >= 2 && (quote === '"' || quote === "'") && value.endsWith(quote) ? value.slice(1, -1).trim() : value;
+  return bare === '' ? undefined : bare;
 }
 
 /**

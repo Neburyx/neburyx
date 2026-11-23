@@ -119,6 +119,7 @@ function statusOf(httpStatus: number, body: unknown): { readonly status: TurnSta
   const parsed = assistantTurnAnswerSchema.safeParse(body);
   if (httpStatus !== 200 || !parsed.success) return { status: 'failed', answer: body };
   const answer = parsed.data;
+  if (answer.status === 'meaning' || answer.status === 'no-description') return { status: 'answered', answer };
   if (answer.status === 'answered') return { status: answer.route === 'refuse' ? 'refused' : 'answered', answer };
   if (answer.status === 'confirmation' || answer.status === 'clarification') return { status: 'waiting', answer };
   if (answer.status === 'too-large' || answer.status === 'too-long' || answer.status === 'limit') return { status: 'stopped', answer };
