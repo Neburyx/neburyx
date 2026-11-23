@@ -20,7 +20,7 @@ interface CallStart {
 }
 
 /** Why a call failed: the product's code and the class and the code of the error the provider's client threw. */
-export interface CallFailure {
+interface CallFailure {
   readonly code: string;
   readonly errorClass: string;
   readonly errorCode?: string;
