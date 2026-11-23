@@ -2,12 +2,14 @@ import { mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { noHooks } from './test-support.js';
+import { parseRepeatFile } from './schemas.js';
 import { runCli } from '../cli.js';
-import type { EvalHooks } from '../hooks.js';
 import type { Http } from './driver.js';
 import { parseManifest } from './manifest.js';
 
-const hooks = {} as unknown as EvalHooks;
+/** A run file the command wrote, read back through its schema. */
+const runFile = (path: string) => parseRepeatFile(JSON.parse(readFileSync(path, 'utf8')), 'the run file');
 const scratch = (): string => mkdtempSync(join(tmpdir(), 'thread-run-'));
 const MANIFEST = { name: 'example', sourceId: 'demo-source', anchor: { entityType: 'widget', stableId: 'W-1' }, neighbourType: 'gadget', neighbours: 25, messages: ['one', 'two', 'three'] };
 const files = (): { manifest: string; settings: string; out: string } => {
@@ -60,11 +62,11 @@ describe('the thread run command: refusals before any request', () => {
     for (const extra of [['--api-key', 'sk-SECRET'], ['--base', 'http://192.168.1.5:8000']]) {
       const r = io();
       const argv = extra[0] === '--base' ? args(f).map((part) => (part === 'http://127.0.0.1:8000' ? 'http://192.168.1.5:8000' : part)) : [...args(f), ...extra];
-      expect(await runCli(argv, r.io, hooks, { http: s.http })).toBe(2);
+      expect(await runCli(argv, r.io, noHooks, { http: s.http })).toBe(2);
       expect(r.err.join('\n')).not.toContain('sk-SECRET');
     }
     const missing = io();
-    expect(await runCli(['thread', 'run', '--base', 'http://127.0.0.1:8000'], missing.io, hooks, { http: s.http })).toBe(2);
+    expect(await runCli(['thread', 'run', '--base', 'http://127.0.0.1:8000'], missing.io, noHooks, { http: s.http })).toBe(2);
     expect(s.requests).toEqual([]);
   });
 });
@@ -72,7 +74,7 @@ describe('the thread run command: refusals before any request', () => {
 describe('the help', () => {
   it('names the key folder under the name the parser accepts, and lists the options the commands need', async () => {
     const r = io();
-    expect(await runCli(['thread', 'nonsense'], r.io, hooks)).toBe(2);
+    expect(await runCli(['thread', 'nonsense'], r.io, noHooks)).toBe(2);
     const usage = r.err.join('\n');
     expect(usage).toContain('--key-folder <another folder>');
     expect(usage).not.toMatch(/--key </u);
@@ -86,7 +88,7 @@ describe('the dry run', () => {
     const f = files();
     const s = standIn();
     const r = io();
-    expect(await runCli(args(f, ['--dry-run']), r.io, hooks, { http: s.http })).toBe(0);
+    expect(await runCli(args(f, ['--dry-run']), r.io, noHooks, { http: s.http })).toBe(0);
     expect(r.out).toEqual(['messages: 3', 'repeats: 3', 'arm: refs', 'model: model-a', 'call limit: 7', 'most model calls: 63']);
     expect(JSON.stringify(r)).not.toContain('SECRET-VALUE-CANARY');
     expect(JSON.stringify(r)).not.toContain('key-path');
@@ -98,7 +100,7 @@ describe('the dry run', () => {
     const s = standIn();
     for (const extra of [['--call-limit', '5'], ['--model', 'model-b']]) {
       const r = io();
-      expect(await runCli(args(f, [...extra, '--dry-run']), r.io, hooks, { http: s.http })).toBe(2);
+      expect(await runCli(args(f, [...extra, '--dry-run']), r.io, noHooks, { http: s.http })).toBe(2);
       expect(r.err.join('\n')).toContain('disagrees with the settings');
     }
     expect(s.requests).toEqual([]);
@@ -110,16 +112,14 @@ describe('one repeat', () => {
     const f = files();
     const s = standIn();
     const r = io();
-    expect(await runCli(args(f, ['--repeats', '2', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(0);
+    expect(await runCli(args(f, ['--repeats', '2', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(0);
     const investigations = s.requests.filter((request) => request.path === '/v1/investigations');
     expect(investigations).toHaveLength(2);
     const turns = s.requests.filter((request) => request.path === '/v1/assistant/turns');
-    expect(turns.map((turn) => (turn.body as { message: string }).message)).toEqual(['one', 'two', 'three', 'one', 'two', 'three']);
-    expect((turns[0]?.body as { viewElementKeys: string[] }).viewElementKeys).toHaveLength(26);
-    expect(Object.keys(turns[0]?.body as object).sort()).toEqual(['investigationId', 'message', 'sourceId', 'viewElementKeys']);
+    expect(turns.map((turn) => turn.body)).toEqual(['one', 'two', 'three', 'one', 'two', 'three'].map((message) => ({ message, investigationId: expect.any(String), sourceId: 'demo-source', viewElementKeys: expect.any(Array) })));
     const names = readdirSync(f.out).sort();
     expect(names).toEqual(['thread-refs-r1.json', 'thread-refs-r2.json']);
-    const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { turns: { traceId: string; message: string; answer: unknown }[]; ended: string; head: string; settings: { model: string; callLimit: number }; view: { entities: number } };
+    const file = runFile(join(f.out, 'thread-refs-r1.json'));
     expect(file.turns.map((turn) => turn.traceId)).toEqual(['tr-1', 'tr-2', 'tr-3']);
     expect(file).toMatchObject({ ended: 'complete', head: 'abc1234', settings: { model: 'model-a', callLimit: 7 }, view: { entities: 26 } });
     expect(statSync(join(f.out, 'thread-refs-r1.json')).mode & 0o777).toBe(0o600);
@@ -130,9 +130,9 @@ describe('one repeat', () => {
       const f = files();
       const s = standIn(over);
       const r = io();
-      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
       expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toEqual([]);
-      const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; stoppedBecause: string };
+      const file = runFile(join(f.out, 'thread-refs-r1.json'));
       expect(file.ended).toBe('failed');
       expect(file.stoppedBecause).toMatch(/view/);
     }
@@ -143,8 +143,8 @@ describe('one repeat', () => {
       const f = files();
       const s = standIn({ answers });
       const r = io();
-      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
-      const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; turns: unknown[] };
+      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+      const file = runFile(join(f.out, 'thread-refs-r1.json'));
       expect(file.ended).toBe(ended);
       expect(file.turns).toHaveLength(2);
       expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toHaveLength(2);
@@ -154,7 +154,7 @@ describe('one repeat', () => {
   it('writes no key, connection string or cookie text into the run file', async () => {
     const f = files();
     const s = standIn();
-    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
     const text = readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8');
     expect(text).not.toMatch(/SECRET|key-path|postgres:\/\/|bolt:\/\/|set-cookie|authorization/iu);
   });
@@ -165,8 +165,8 @@ describe('transport failures, trace ids and outputs', () => {
     const f = files();
     const s = standIn({ throwOn: (path, n) => path === '/v1/assistant/turns' && n === 2 });
     const r = io();
-    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
-    const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; turns: { status: string }[]; stoppedBecause: string };
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+    const file = runFile(join(f.out, 'thread-refs-r1.json'));
     expect(file.ended).toBe('failed');
     expect(file.turns.map((turn) => turn.status)).toEqual(['refused', 'failed']);
     expect(JSON.stringify([file, r])).not.toMatch(/SECRET|127\.0\.0\.1/u);
@@ -176,8 +176,8 @@ describe('transport failures, trace ids and outputs', () => {
     for (const answers of [(n: number) => ({ status: 200, body: REFUSED, trace: n === 1 ? null : `tr-${n}` }), (n: number) => ({ status: 200, body: n === 1 ? { status: 'unknown-status' } : REFUSED })]) {
       const f = files();
       const s = standIn({ answers });
-      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
-      const file = JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; turns: unknown[] };
+      expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+      const file = runFile(join(f.out, 'thread-refs-r1.json'));
       expect(file.ended).toBe('failed');
       expect(file.turns).toHaveLength(1);
     }
@@ -188,13 +188,13 @@ describe('transport failures, trace ids and outputs', () => {
     const f = files();
     for (const arm of ['../evil', 'a/b', 'x']) {
       const argv = args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]).map((part) => (part === 'refs' ? arm : part));
-      expect(await runCli(argv, io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+      expect(await runCli(argv, io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
     }
-    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
     const before = s.requests.length;
-    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
     expect(s.requests).toHaveLength(before);
-    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', join(process.cwd(), 'inside-a-git-tree'), '--database-env-file', f.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', join(process.cwd(), 'inside-a-git-tree'), '--database-env-file', f.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
     expect(s.requests).toHaveLength(before);
   });
 
@@ -202,7 +202,7 @@ describe('transport failures, trace ids and outputs', () => {
     const f = files();
     const leaky = standIn({ answers: () => ({ status: 200, body: { ...REFUSED, sentence: 'key sk-ABCDEFGHIJKLMNOPQRSTUVWX and postgres://user:hunter2@host/db' } }) });
     const r = io();
-    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: leaky.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
+    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: leaky.http, verifyFirstTurn: () => () => Promise.resolve(undefined) });
     expect(code).toBe(2);
     expect(readdirSync(f.out)).toEqual([]);
     expect(JSON.stringify(r)).not.toMatch(/hunter2|ABCDEFGHIJKLMNOPQRSTUVWX/u);
@@ -213,12 +213,12 @@ describe('the budget', () => {
   it('refuses a budget below one turn, and a budget that covers two turns stops before the third', async () => {
     const f = files();
     const r = io();
-    expect(await runCli(args(f, ['--repeats', '1', '--budget', '6', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: standIn().http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
+    expect(await runCli(args(f, ['--repeats', '1', '--budget', '6', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: standIn().http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(2);
     const g = files();
     const s = standIn();
-    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--out', g.out, '--database-env-file', g.settings]), io().io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
+    expect(await runCli(args(g, ['--repeats', '1', '--budget', '14', '--out', g.out, '--database-env-file', g.settings]), io().io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve(undefined) })).toBe(1);
     expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toHaveLength(2);
-    const file = JSON.parse(readFileSync(join(g.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string };
+    const file = parseRepeatFile(JSON.parse(readFileSync(join(g.out, 'thread-refs-r1.json'), 'utf8')), 'the run file');
     expect(file.ended).toBe('budget');
   });
 });
@@ -228,7 +228,7 @@ describe('the settings seen in the first turn', () => {
     const f = files();
     const s = standIn();
     const r = io();
-    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve('the run record shows another call limit than the settings file') });
+    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out]), r.io, noHooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve('the run record shows another call limit than the settings file') });
     expect(code).toBe(1);
     expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toHaveLength(1);
   });
@@ -246,8 +246,8 @@ describe('the production check of the first turn', () => {
   const go = async (f: ReturnType<typeof files>, deps: Record<string, unknown>) => {
     const s = standIn();
     const r = io();
-    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, ...deps });
-    const written = readdirSync(f.out).length === 0 ? undefined : (JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; stoppedBecause?: string; turns: unknown[] });
+    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, noHooks, { http: s.http, ...deps });
+    const written = readdirSync(f.out).length === 0 ? undefined : (runFile(join(f.out, 'thread-refs-r1.json')));
     return { code, r, s, written };
   };
 
@@ -281,7 +281,7 @@ describe('what the tool prints and sends', () => {
     const f = files();
     writeFileSync(f.settings, 'NEBURYX_ASSISTANT_MODEL=sk-ABCDEFGHIJKLMNOPQRSTUVWX\nNEBURYX_ASSISTANT_MAX_CALLS=7\n');
     const r = io();
-    expect(await runCli(args(f, ['--dry-run']), r.io, hooks, { http: standIn().http })).toBe(0);
+    expect(await runCli(args(f, ['--dry-run']), r.io, noHooks, { http: standIn().http })).toBe(0);
     expect(r.out).toContain('[a line that looked like a credential was withheld]');
     expect(JSON.stringify(r)).not.toContain('ABCDEFGHIJKLMNOPQRSTUVWX');
   });
@@ -293,7 +293,7 @@ describe('what the tool prints and sends', () => {
     writeFileSync(join(dir, 'run.json'), JSON.stringify(run));
     let opened = 0;
     const database = () => ((opened += 1), Promise.reject(new Error('not reached')));
-    const records = (out: string) => runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', f.settings, '--allowed-tools', 'answer', '--out', out], io().io, hooks, { database });
+    const records = (out: string) => runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', f.settings, '--allowed-tools', 'answer', '--out', out], io().io, noHooks, { database });
     expect(await records(join(dir, 'missing', 'records.json'))).toBe(2);
     symlinkSync(join(dir, 'run.json'), join(dir, 'link.json'));
     expect(await records(join(dir, 'link.json'))).toBe(2);
@@ -312,7 +312,7 @@ describe('the documented command', () => {
     expect(argv.some((token) => token.startsWith('<'))).toBe(false);
     const db = { query: () => Promise.resolve({ rows: [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings: { model: 'model-a', maxCalls: 7 } }] }) };
     const s = standIn();
-    expect(await runCli(argv, io().io, hooks, { http: s.http, database: () => Promise.resolve({ db, close: () => Promise.resolve() }) })).toBe(0);
+    expect(await runCli(argv, io().io, noHooks, { http: s.http, database: () => Promise.resolve({ db, close: () => Promise.resolve() }) })).toBe(0);
   });
 });
 

@@ -93,7 +93,7 @@ export function countedRunner(runner: Runner, maxCalls: number, reserve?: () => 
   };
 }
 
-type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => { readonly stdin: { end(text: string): void } | null; readonly stdout: NodeJS.ReadableStream | null; readonly stderr: NodeJS.ReadableStream | null; on(event: 'close', listener: (code: number | null) => void): unknown; on(event: 'error', listener: () => void): unknown };
+export type Spawn = (command: string, args: readonly string[], options: SpawnOptions) => { readonly stdin: { end(text: string): void } | null; readonly stdout: NodeJS.ReadableStream | null; readonly stderr: NodeJS.ReadableStream | null; on(event: 'close', listener: (code: number | null) => void): unknown; on(event: 'error', listener: () => void): unknown };
 
 /** The real `spawn` as the runners use it; the wrapper is the one place the library's wider child type is narrowed to what the runners read of it. */
 const realSpawn: Spawn = (command, args, options) => nodeSpawn(command, [...args], options);
@@ -146,18 +146,20 @@ export function codexRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = p
 
 /**
  * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, an empty working folder of its own and an environment of its own. With an API key of its own
- * it also gets an empty configuration folder (no hooks or customizations of the user); signed in through the user's account it keeps that account's folder, because the sign-in lives there, and has no tool to read a file with. With no tool a
+ * it runs in bare mode with an empty configuration folder (no hooks, memory or settings of the user); signed in through the user's account it keeps that account's folder, because the sign-in lives there, so the user's own
+ * settings and memory can reach it (a limit the report of a run names) and it has no tool to read a file with. With no tool a
  * run is one model call; the CLI states the turns it made, and that figure is the count of calls, so a run that made more than one is counted in full and refused by the cap.
  */
 export function opusRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     try {
-      const args = ['-p', '--model', 'opus', '--tools', '', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json'];
+      const keyed = env['ANTHROPIC_API_KEY'] !== undefined;
+      const args = ['-p', '--model', 'opus', '--tools', '', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json', ...(keyed ? ['--bare'] : [])];
       const home = join(dir, 'home');
       mkdirSync(home);
       const own = scorerEnv(env, ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR']);
-      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: env['ANTHROPIC_API_KEY'] === undefined ? own : { ...own, HOME: home, CLAUDE_CONFIG_DIR: home } });
+      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: keyed ? { ...own, HOME: home, CLAUDE_CONFIG_DIR: home } : own });
       if (QUOTA.test(`${result.out}\n${result.err}`) && result.code !== 0) throw new ScorerUnavailable('out of quota');
       if (result.code !== 0) throw new ScorerUnavailable('the command failed');
       let parsed: unknown;

@@ -2,9 +2,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { nth, noHooks } from './test-support.js';
 import { runCli } from '../cli.js';
-import type { EvalHooks } from '../hooks.js';
-import { c5Of, checkBars, textDecision, unblind, validateKey, type ArmFigures, type C5 } from './report.js';
+import { bindEvidence, c5Of, checkBars, textDecision, unblind, validateKey, type ArmFigures, type C5 } from './report.js';
 import type { Bars, Calibration, KeyFile, Score, ScoreFile } from './schemas.js';
 
 type Bits = [0 | 1, 0 | 1, 0 | 1, 0 | 1];
@@ -53,7 +53,7 @@ describe('the unblinded figures', () => {
     expect(() => unblind([good(1), scoresFor(2, 'codex', {}, 2, { setSha256: 'f'.repeat(64) })], key, [], 'codex')).toThrow(/not for the set the key was made with/u);
     const partial = scoresFor(2, 'codex', { A: [1, 1, 1, 1] });
     expect(() => unblind([good(1), { ...partial, scores: partial.scores.slice(0, 2) }], key, [], 'codex')).toThrow(/do not cover the set exactly: missing score/u);
-    expect(() => unblind([good(1), { ...partial, scores: [...partial.scores, partial.scores[0] as Score] }], key, [], 'codex')).toThrow(/duplicate score/u);
+    expect(() => unblind([good(1), { ...partial, scores: [...partial.scores, nth(partial.scores, 0)] }], key, [], 'codex')).toThrow(/duplicate score/u);
     expect(() => unblind([good(1)], key, [], 'codex')).toThrow(/no scores for repeat 2/u);
     const tenOfThirtySix = keyOf(3, 12);
     expect(() => unblind([scoresFor(1, 'codex', { A: [1, 1, 1, 1] }, 5)], tenOfThirtySix, [], 'codex')).toThrow(/do not cover the set exactly/u);
@@ -98,11 +98,11 @@ describe('the bars', () => {
 
   it('requires the Ask and summary regression sets, says plainly when no baseline exists and does not claim a check, and opens a finding for a baseline with no provenance', () => {
     expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [] }, C5_OK)).toThrow(/no regression set ask/u);
-    expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [BARS.regressions[0] as Bars['regressions'][number]] }, C5_OK)).toThrow(/no regression set summary/u);
-    const none = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: null, baselineModel: null, baselineCommit: null, baselineRun: null }, BARS.regressions[1] as Bars['regressions'][number]] }, C5_OK);
+    expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [nth(BARS.regressions, 0)] }, C5_OK)).toThrow(/no regression set summary/u);
+    const none = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: null, baselineModel: null, baselineCommit: null, baselineRun: null }, nth(BARS.regressions, 1)] }, C5_OK);
     expect(none.lines.join('\n')).toContain('regression ask: no baseline exists: the regression is not checked');
     expect(none.status).toBe('met');
-    const bare = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: 30, baselineModel: null, baselineCommit: 'c', baselineRun: 'r' }, BARS.regressions[1] as Bars['regressions'][number]] }, C5_OK);
+    const bare = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: 30, baselineModel: null, baselineCommit: 'c', baselineRun: 'r' }, nth(BARS.regressions, 1)] }, C5_OK);
     expect(bare.findings).toEqual([{ bar: 'regression ask', figure: '30', kind: 'baseline provenance missing or wrong', where: 'set ask' }]);
   });
 
@@ -116,7 +116,7 @@ describe('the bars', () => {
 
   it('rejects a baseline of another model, and for run 2 a baseline that is not run 1\'s', () => {
     const arms = armsOf(6);
-    const regressions = (over: Partial<Bars['regressions'][number]>) => [{ ...(BARS.regressions[0] as Bars['regressions'][number]), ...over }, BARS.regressions[1] as Bars['regressions'][number]];
+    const regressions = (over: Partial<Bars['regressions'][number]>) => [{ ...(nth(BARS.regressions, 0)), ...over }, nth(BARS.regressions, 1)];
     expect(checkBars(arms, 'arm-refs', { ...BARS, regressions: regressions({ baselineModel: 'another' }) }, C5_OK).findings.map((finding) => finding.kind)).toEqual(['baseline provenance missing or wrong']);
     expect(checkBars(arms, 'arm-refs', { ...BARS, run: 2, regressions: regressions({ baselineRun: 'run-9' }) }, C5_OK).findings).toHaveLength(1);
     expect(checkBars(arms, 'arm-refs', { ...BARS, run: 2, regressions: BARS.regressions.map((entry) => ({ ...entry, baselineRun: 'run-1' })) }, C5_OK).status).toBe('met');
@@ -141,6 +141,36 @@ describe('the bars', () => {
   });
 });
 
+const armsFor = (): ArmFigures[] => unblind([scoresFor(1, 'codex', { A: [1, 1, 1, 1], B: [0, 0, 0, 0] })], keyOf(1, 2), [], 'codex');
+
+describe('the evidence bound to the run', () => {
+  const gate = { gated: { verdict: 'passed' as const, reads: 0, gateEvents: 0, failedEvents: 0 }, called: { verdict: 'passed' as const, names: [], outside: [], unparsed: 0 }, offered: { verdict: 'passed' as const, names: [], outside: [], callsWithoutNames: 0 } };
+  const good = { citations: { callNumber: 2, mapped: [], missing: [], malformed: 0 }, gate };
+  const turn = (n: number) => ({ n, message: 'q', traceId: `t${n}`, ms: 1, httpStatus: 200, status: 'answered' as const, answer: {} });
+  const repeatOf = (repeat: number, over: { arm?: string; sha?: string; turns?: number; problems?: string[] } = {}) => ({
+    file: { manifest: { name: 'm', sha256: over.sha ?? 'm' }, sourceId: 'demo', repeat, expectedMessages: ['q', 'q'], arm: over.arm ?? 'arm-refs', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: Array.from({ length: over.turns ?? 2 }, (_, index) => turn(index + 1)), ended: 'complete' as const },
+    records: Array.from({ length: over.turns ?? 2 }, () => ({ traceId: 't', run: undefined, calls: [], events: [], summaryCalls: 0, summaryUsage: [], reconciled: undefined, problems: over.problems ?? [] })),
+    evidence: Array.from({ length: over.turns ?? 2 }, () => good),
+    inconsistent: false,
+    disagreeing: [],
+  });
+  const key = keyOf(2, 2);
+
+  it('requires one evidence file for each repeat of the key, of the product arm and of the key\'s manifest', () => {
+    expect(() => bindEvidence([repeatOf(1), repeatOf(2)], key, 'arm-refs')).not.toThrow();
+    expect(() => bindEvidence([repeatOf(1)], key, 'arm-refs')).toThrow(/covers repeats 1 and the key has repeats 1, 2/u);
+    expect(() => bindEvidence([repeatOf(1), repeatOf(1)], key, 'arm-refs')).toThrow(/given twice/u);
+    expect(() => bindEvidence([repeatOf(1), repeatOf(2, { arm: 'arm-text' })], key, 'arm-refs')).toThrow(/is of arm arm-text/u);
+    expect(() => bindEvidence([repeatOf(1), repeatOf(2, { sha: 'other' })], key, 'arm-refs')).toThrow(/another manifest/u);
+  });
+
+  it('shows a turn that never ran, and a turn whose records have problems, as unverified, however its stored verdicts read', () => {
+    const c5 = c5Of([repeatOf(1, { turns: 1 }), repeatOf(2, { problems: ['count differs'] })]);
+    expect(c5.pieces.filter((piece) => piece.verdict !== 'passed').map((piece) => [piece.repeat, piece.turn, piece.piece, piece.verdict])).toEqual([[1, 2, 'records', 'unverified'], [2, 1, 'records', 'unverified'], [2, 2, 'records', 'unverified']]);
+    expect(checkBars(armsFor(), 'arm-refs', BARS, c5).status).toBe('open');
+  });
+});
+
 describe('the key', () => {
   const experiment = { repeats: 3, turns: 2 };
   it('accepts a key that is exactly the experiment', () => {
@@ -151,9 +181,9 @@ describe('the key', () => {
     expect(() => validateKey(keyOf(1, 2), experiment)).toThrow(/holds 1 repeats and the experiment has 3/u);
     expect(() => validateKey(keyOf(3, 1), experiment)).toThrow(/holds 1 turns and the experiment has 2/u);
     const key = keyOf(3, 2);
-    expect(() => validateKey({ ...key, key: { ...key.key, entries: [...key.key.entries, key.key.entries[0] as KeyFile['key']['entries'][number]] } }, experiment)).toThrow(/twice/u);
+    expect(() => validateKey({ ...key, key: { ...key.key, entries: [...key.key.entries, nth(key.key.entries, 0)] } }, experiment)).toThrow(/twice/u);
     expect(() => validateKey({ ...key, slots: key.slots.slice(1) }, experiment)).toThrow(/slots are not exactly/u);
-    expect(() => validateKey({ ...key, slots: [...key.slots.slice(1), key.slots[1] as KeyFile['slots'][number]] }, experiment)).toThrow(/slots are not exactly/u);
+    expect(() => validateKey({ ...key, slots: [...key.slots.slice(1), nth(key.slots, 1)] }, experiment)).toThrow(/slots are not exactly/u);
     expect(() => validateKey({ ...key, key: { ...key.key, sets: { ...key.key.sets, '9': shaOf(9) } } }, experiment)).toThrow(/sets for other repeats/u);
     expect(() => validateKey({ ...key, key: { ...key.key, noAnswer: ['7/7/A'] } }, experiment)).toThrow(/no-answer slot/u);
     const swapped = { ...key, key: { ...key.key, entries: key.key.entries.map((entry, index) => (index === 0 ? { ...entry, labels: { A: 'arm-refs', B: 'arm-other' } } : entry)) } };
@@ -194,7 +224,7 @@ describe('the report command', () => {
     const gate = { gated: { verdict: 'passed', reads: 0, gateEvents: 0, failedEvents: 0 }, called: { verdict: 'passed', names: [], outside: [], unparsed: 0 }, offered: { verdict: 'passed', names: [], outside: [], callsWithoutNames: 0 } };
     const evidence = { citations: { callNumber: 2, mapped: [], missing: [], malformed: 0 }, gate };
     const turn = (n: number) => ({ n, message: 'q', traceId: `t${n}`, ms: 1, httpStatus: 200, status: 'answered', answer: {} });
-    const file = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q', 'q'], arm: 'arm-refs', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [turn(1), turn(2)], ended: 'complete' };
+    const file = { manifest: { name: 'm', sha256: 'm' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q', 'q'], arm: 'arm-refs', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [turn(1), turn(2)], ended: 'complete' };
     writeFileSync(join(dir, 'evidence.json'), JSON.stringify({ file, records: [null, null], evidence: [evidence, evidence], inconsistent: false, disagreeing: [] }));
     return dir;
   };
@@ -202,7 +232,7 @@ describe('the report command', () => {
     writeFileSync(join(dir, 'bars.json'), JSON.stringify(bars));
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(['thread', 'report', '--key-file', join(dir, 'key.json'), '--bars', join(dir, 'bars.json'), '--primary', primary, '--product', 'arm-refs', '--evidence', join(dir, 'evidence.json'), ...extra, join(dir, 'scores.json')], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, {} as unknown as EvalHooks);
+    const code = await runCli(['thread', 'report', '--key-file', join(dir, 'key.json'), '--bars', join(dir, 'bars.json'), '--primary', primary, '--product', 'arm-refs', '--evidence', join(dir, 'evidence.json'), ...extra, join(dir, 'scores.json')], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, noHooks);
     return { code, out, err };
   };
   const bars = { ...BARS, repeats: 1, turns: 2 };

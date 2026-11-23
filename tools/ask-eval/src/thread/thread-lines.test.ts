@@ -82,6 +82,14 @@ describe('the evidence for the gate and the tools', () => {
     expect(ungated.gated).toMatchObject({ verdict: 'failed', reads: 2, gateEvents: 0 });
   });
 
+  it('passes a turn that made no agent call, as a view answer, the overview of a refusal and an answer from Ask do not, when its records are complete, and leaves it unverified when they are not', () => {
+    const view = call(2, { instructionsSha256: 'sha-view', replyText: '{"sentences":[{"text":"x","cites":["n1"]}]}', toolsOffered: null });
+    const none = gateEvidenceOf(records({ calls: [router, view], events: [] }), expected(0), ALLOWED, WITHOUT_GATE);
+    expect([none.gated.verdict, none.called.verdict, none.offered.verdict]).toEqual(['passed', 'passed', 'passed']);
+    const unfinished = gateEvidenceOf(records({ calls: [router, view], problems: ['no closing event for this turn in the audit events'] }), expected(0), ALLOWED, WITHOUT_GATE);
+    expect([unfinished.gated.verdict, unfinished.called.verdict, unfinished.offered.verdict]).toEqual(['unverified', 'unverified', 'unverified']);
+  });
+
   it('counts only events of a read of the turn\'s source that ended in success: a failed event, an event of another source and a model or turn event are not a gated read', () => {
     const events = [event('entity.degree_preview', { result: 'failed' }), event('entity.load', { sourceId: 'other' }), event('assistant.agent'), event('ai.case-summary'), event('assistant.turn.closed')];
     const evidence = gateEvidenceOf(records({ calls: [router, agent()], events }), expected(1), ALLOWED, WITHOUT_GATE);

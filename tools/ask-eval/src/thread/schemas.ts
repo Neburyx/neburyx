@@ -71,7 +71,7 @@ const turn = z.strictObject({
   ms: z.number().min(0),
   httpStatus: whole,
   status: z.enum(['answered', 'refused', 'waiting', 'failed', 'other']),
-  answer: z.unknown(),
+  answer: z.unknown().optional(),
 });
 const repeatFile = z.strictObject({
   manifest: z.strictObject({ name: z.string(), sha256: z.string() }),

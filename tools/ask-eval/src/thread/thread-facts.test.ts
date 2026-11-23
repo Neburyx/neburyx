@@ -78,4 +78,13 @@ describe('the facts of a run', () => {
     for (const date of ['2026-02-31', '2026-13-01', '2026-1-1']) expect(factsOf([base], { callLimit: 7, prices: { ...PRICES, date } }).evidence).toBe(false);
     expect(factsOf([base], { callLimit: 7, prices: { ...PRICES, date: '2026-02-28' } }).evidence).toBe(true);
   });
+
+  it('refuses the same run twice, runs of several arms and runs of different manifests, so that two copies of one repeat never look like a whole run', () => {
+    const base = repeat([{ ms: 1, records: records(3) }]);
+    expect(factsOf([base, base], { callLimit: 7, prices: PRICES }).incomplete).toContain('the run a/1 was given twice');
+    const other = { ...base, file: { ...base.file, repeat: 2, arm: 'arm-b' } };
+    expect(factsOf([base, other], { callLimit: 7, prices: PRICES }).incomplete).toContain('the runs are of several arms (a, arm-b)');
+    const elsewhere = { ...base, file: { ...base.file, repeat: 2, manifest: { name: 'm', sha256: 'y' } } };
+    expect(factsOf([base, elsewhere], { callLimit: 7, prices: PRICES }).incomplete).toContain('the runs were made from different manifests');
+  });
 });

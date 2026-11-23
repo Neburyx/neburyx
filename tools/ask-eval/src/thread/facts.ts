@@ -1,4 +1,5 @@
 import type { EnrichedRepeat } from './enrich.js';
+import { MODEL_ACTIONS } from './records.js';
 import type { Prices } from './schemas.js';
 
 interface TurnFacts {
@@ -66,6 +67,12 @@ export function factsOf(repeats: readonly EnrichedRepeat[], options: { readonly 
   if (limits.length > 1) runProblems.push(`the repeats ran with different call limits (${limits.join(', ')})`);
   const callLimit = limits[0] ?? options.callLimit ?? 0;
   if (options.callLimit !== undefined && limits.length > 0 && !limits.every((limit) => limit === options.callLimit)) runProblems.push(`the call limit given (${options.callLimit}) is not the limit the repeats ran with (${limits.join(', ')})`);
+  const identities = repeats.map((entry) => `${entry.file.arm}/${entry.file.repeat}`);
+  for (const identity of new Set(identities.filter((value, index) => identities.indexOf(value) !== index))) runProblems.push(`the run ${identity} was given twice`);
+  const arms = [...new Set(repeats.map((entry) => entry.file.arm))];
+  if (arms.length > 1) runProblems.push(`the runs are of several arms (${arms.join(', ')})`);
+  const manifests = [...new Set(repeats.map((entry) => entry.file.manifest.sha256))];
+  if (manifests.length > 1) runProblems.push('the runs were made from different manifests');
   const turnCounts = [...new Set(repeats.map((entry) => entry.file.turns.length))];
   if (turnCounts.length > 1) runProblems.push(`the repeats hold different numbers of turns (${turnCounts.join(', ')})`);
   repeats.forEach((entry) => {
@@ -89,7 +96,7 @@ export function factsOf(repeats: readonly EnrichedRepeat[], options: { readonly 
       const inputTokens = records === undefined ? undefined : callTokens((call) => call.tokensIn);
       const outputTokens = records === undefined ? undefined : callTokens((call) => call.tokensOut);
       if (records !== undefined && records.run !== undefined && (inputTokens === undefined || outputTokens === undefined)) incomplete.push('unknown token usage');
-      const modelEvents = records?.events.filter((event) => event.action === 'assistant.route' || event.action === 'assistant.agent' || event.action === 'ai.case-summary') ?? [];
+      const modelEvents = records?.events.filter((event) => MODEL_ACTIONS.includes(event.action) || event.action === 'ai.case-summary') ?? [];
       const coverage = records !== undefined && records.run !== undefined && modelEvents.length !== records.calls.length + records.summaryCalls;
       if (coverage) incomplete.push('the model events do not cover every call: no cache counts');
       const cacheOf = (pick: (event: (typeof modelEvents)[number]) => number | 'unknown' | null): number | undefined => {

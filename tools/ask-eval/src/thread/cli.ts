@@ -5,7 +5,7 @@ import { AI_DEFAULTS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
 import { factsOf } from './facts.js';
-import { c5Of, checkBars, textDecision, unblind, validateKey } from './report.js';
+import { bindEvidence, c5Of, checkBars, textDecision, unblind, validateKey } from './report.js';
 import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner } from './scorer.js';
 import { parseBars, parseCalibration, parseEnriched, parseIngested, parseKeyFile, parseLedger, parsePrices, parseRepeatFile, parseScoreFile, type Calibration, type Score, type ScoreFile } from './schemas.js';
 import { blindSets, type ArmRepeat } from './blind.js';
@@ -468,7 +468,9 @@ function runReport(args: readonly string[], io: CliIo): number {
     io.out(`arm ${arm.arm}: ${arm.repeats.map((entry) => `repeat ${entry.repeat} ${entry.total}${entry.indicative ? ' (indicative)' : ''}${entry.counted ? '' : ' (not counted)'}`).join(', ')}; median ${arm.median ?? 'none'}; counts C1 ${arm.criteria.c1} C2 ${arm.criteria.c2} C3 ${arm.criteria.c3} C4 ${arm.criteria.c4}`);
   }
   const evidencePaths = (values.get('evidence') ?? '').split(',').filter((path) => path !== '');
-  const c5 = evidencePaths.length === 0 ? undefined : c5Of(evidencePaths.map((path) => parseEnriched(readJson(path, 'an evidence file'), 'an evidence file')));
+  const evidence = evidencePaths.map((path) => parseEnriched(readJson(path, 'an evidence file'), 'an evidence file'));
+  if (evidencePaths.length > 0) bindEvidence(evidence, key, product);
+  const c5 = evidencePaths.length === 0 ? undefined : c5Of(evidence);
   const report = checkBars(arms, product, bars, c5);
   for (const line of report.lines) io.out(line);
   for (const finding of report.findings) io.out(`finding: ${finding.bar}: ${finding.figure}: ${finding.kind}: ${finding.where}`);

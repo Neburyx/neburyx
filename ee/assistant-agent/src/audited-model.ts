@@ -122,14 +122,17 @@ function withContent(message: BaseMessage, content: BaseMessage['content']): Bas
   return Object.assign(copy, message, { content });
 }
 
+/** A tool whose name cannot be read is recorded under this name, so that it is seen as offered and is outside every allowlist rather than missing from the record. */
+const UNNAMED_TOOL = '(unnamed)';
+
 /** The names of the tools a model is bound to: names only, never a schema, a description or a value. */
 const toolNamesOf = (tools: readonly BindToolsInput[]): readonly string[] =>
   tools
     .flatMap((entry) => {
-      if (!isRecord(entry)) return [];
+      if (!isRecord(entry)) return [UNNAMED_TOOL];
       if (typeof entry['name'] === 'string') return [entry['name']];
       const fn = entry['function'];
-      return isRecord(fn) && typeof fn['name'] === 'string' ? [fn['name']] : [];
+      return isRecord(fn) && typeof fn['name'] === 'string' ? [fn['name']] : [UNNAMED_TOOL];
     })
     .sort();
 

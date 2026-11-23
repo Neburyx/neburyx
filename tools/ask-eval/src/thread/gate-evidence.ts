@@ -39,28 +39,29 @@ function parsedNames(list: string): readonly string[] | undefined {
 
 /**
  * The three pieces of evidence for the criterion that no read bypasses the gate and no tool outside the allowed ones was offered or called: gate events of the turn against the reads of the answer, tool names called, and the
- * tool names stored with each agent call. The agent calls are those whose instructions differ from the router's (the first call's); a piece that cannot be established is `unverified`, never `passed`.
+ * tool names stored with each agent call. An agent call is one that was bound to tools (names stored) or whose reply calls tools, so the router, a view answer and the overview of a refusal are not; a turn that made no agent call
+ * and has complete records passes with none called or offered. A piece that cannot be established, or whose records are incomplete, is `unverified`, never `passed`.
  */
 export function gateEvidenceOf(records: TurnRecords, expected: { readonly reads: number; readonly sourceId: string }, allowed: readonly string[], withoutGate: readonly string[]): GateEvidence {
   const allowedSet = new Set(allowed);
   const read = records.events.filter((event) => !MODEL_OR_TURN.test(event.action) && event.sourceId === expected.sourceId);
   const gateEvents = read.filter((event) => event.result === 'success' || event.result === 'partial').length;
   const failedEvents = read.length - gateEvents;
-  const routerSha = records.calls[0]?.instructionsSha256;
-  const agentCalls = records.calls.filter((call) => routerSha !== undefined && call.instructionsSha256 !== routerSha);
+  const agentCalls = records.calls.filter((call) => call.toolsOffered !== null || (call.replyText !== null && (calledIn(call.replyText)?.length ?? 1) > 0));
+  const incomplete = records.run === undefined || records.problems.length > 0;
   const parsed = agentCalls.map((call) => (call.replyText === null ? [] : calledIn(call.replyText)));
   const readsMade = parsed.flatMap((names) => names ?? []).filter((name) => !withoutGate.includes(name)).length;
   const reads = Math.max(expected.reads, readsMade);
-  const gatedVerdict: PieceVerdict = records.run === undefined ? 'unverified' : reads === 0 || gateEvents >= reads ? 'passed' : 'failed';
+  const gatedVerdict: PieceVerdict = incomplete ? 'unverified' : reads === 0 || gateEvents >= reads ? 'passed' : 'failed';
   const unparsed = parsed.filter((names) => names === undefined).length;
   const gated = { verdict: gatedVerdict, reads, gateEvents, failedEvents };
   const calledNames = [...new Set(parsed.flatMap((names) => names ?? []))].sort();
   const calledOutside = calledNames.filter((name) => !allowedSet.has(name));
-  const calledVerdict: PieceVerdict = calledOutside.length > 0 ? 'failed' : records.run === undefined || unparsed > 0 || agentCalls.length === 0 ? 'unverified' : 'passed';
+  const calledVerdict: PieceVerdict = calledOutside.length > 0 ? 'failed' : incomplete || unparsed > 0 ? 'unverified' : 'passed';
   const called = { verdict: calledVerdict, names: calledNames, outside: calledOutside, unparsed };
   const withoutNames = agentCalls.filter((call) => call.toolsOffered === null).length;
   const offeredNames = [...new Set(agentCalls.flatMap((call) => call.toolsOffered ?? []))].sort();
   const offeredOutside = offeredNames.filter((name) => !allowedSet.has(name));
-  const offeredVerdict: PieceVerdict = offeredOutside.length > 0 ? 'failed' : records.run === undefined || agentCalls.length === 0 || withoutNames > 0 ? 'unverified' : 'passed';
+  const offeredVerdict: PieceVerdict = offeredOutside.length > 0 ? 'failed' : incomplete || withoutNames > 0 ? 'unverified' : 'passed';
   return { gated, called, offered: { verdict: offeredVerdict, names: offeredNames, outside: offeredOutside, callsWithoutNames: withoutNames } };
 }

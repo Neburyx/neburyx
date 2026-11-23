@@ -44,7 +44,7 @@ export interface TurnRecord {
   readonly ms: number;
   readonly httpStatus: number;
   readonly status: TurnStatus;
-  readonly answer: unknown;
+  readonly answer?: unknown;
 }
 
 type RepeatEnd = 'complete' | 'waiting' | 'failed' | 'budget';

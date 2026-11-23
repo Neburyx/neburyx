@@ -137,13 +137,28 @@ export interface C5 {
   readonly pieces: readonly { readonly repeat: number; readonly turn: number; readonly piece: string; readonly verdict: Verdict }[];
 }
 
+/** The evidence given for C5 must be the product arm's runs of this experiment: one file for each repeat of the key, of the arm, made from the manifest the key was made with. */
+export function bindEvidence(repeats: readonly EnrichedRepeat[], key: KeyFile, product: string): void {
+  const seen = new Set<number>();
+  for (const entry of repeats) {
+    if (entry.file.arm !== product) throw new UsageError(`the evidence of repeat ${entry.file.repeat} is of arm ${entry.file.arm}, not ${product}`);
+    if (entry.file.manifest.sha256 !== key.key.manifestSha256) throw new UsageError(`the evidence of repeat ${entry.file.repeat} was made from another manifest than the key`);
+    if (seen.has(entry.file.repeat)) throw new UsageError(`the evidence of repeat ${entry.file.repeat} was given twice`);
+    seen.add(entry.file.repeat);
+  }
+  const wanted = Object.keys(key.key.sets).map(Number).sort((a, b) => a - b).join(',');
+  if ([...seen].sort((a, b) => a - b).join(',') !== wanted) throw new UsageError(`the evidence covers repeats ${[...seen].sort((a, b) => a - b).join(', ')} and the key has repeats ${wanted.split(',').join(', ')}`);
+}
+
+/** C5 of every expected turn of the product arm: the pieces of evidence kept with its records and its citations; a turn that never ran, or whose records have problems, is unverified, not passed. */
 export function c5Of(repeats: readonly EnrichedRepeat[]): C5 {
   return {
     pieces: repeats.flatMap((entry) =>
-      entry.file.turns.flatMap((turn, index) => {
+      entry.file.expectedMessages.flatMap((_, index) => {
+        const where = { repeat: entry.file.repeat, turn: index + 1 };
         const evidence = entry.evidence[index];
-        const where = { repeat: entry.file.repeat, turn: turn.n };
-        if (evidence === undefined) return [{ ...where, piece: 'records', verdict: 'unverified' as const }];
+        const problems = entry.records[index]?.problems ?? [];
+        if (entry.file.turns[index] === undefined || evidence === undefined || problems.length > 0) return [{ ...where, piece: 'records', verdict: 'unverified' as const }];
         const citations: Verdict = evidence.citations.missing.length > 0 || evidence.citations.malformed > 0 ? 'failed' : 'passed';
         return [{ ...where, piece: 'gate', verdict: evidence.gate.gated.verdict }, { ...where, piece: 'tools called', verdict: evidence.gate.called.verdict }, { ...where, piece: 'tools offered', verdict: evidence.gate.offered.verdict }, { ...where, piece: 'citations', verdict: citations }];
       }),

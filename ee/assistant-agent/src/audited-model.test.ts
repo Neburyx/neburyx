@@ -122,9 +122,9 @@ describe('the audited chat model', () => {
     };
     const model = auditChatModel(new Bindable({ responses: ['x'] }), { ...hookOf([]), trace });
     await model.invoke([new HumanMessage('q')]);
-    const bound = (model as unknown as { bindTools(tools: unknown[]): { invoke(messages: BaseMessage[]): Promise<unknown> } }).bindTools([{ name: 'view', description: 'SECRET-DESCRIPTION', schema: {} }, { type: 'function', function: { name: 'answer', description: 'SECRET-DESCRIPTION' } }]);
+    const bound = (model as unknown as { bindTools(tools: unknown[]): { invoke(messages: BaseMessage[]): Promise<unknown> } }).bindTools([{ name: 'view', description: 'SECRET-DESCRIPTION', schema: {} }, { type: 'function', function: { name: 'answer', description: 'SECRET-DESCRIPTION' } }, { description: 'a tool with no name' }]);
     await bound.invoke([new HumanMessage('q')]);
-    expect(seen.map((entry) => entry.tools)).toEqual([[], ['answer', 'view']]);
+    expect(seen.map((entry) => entry.tools)).toEqual([[], ['(unnamed)', 'answer', 'view']]);
     expect(JSON.stringify(seen)).not.toContain('SECRET-DESCRIPTION');
   });
 

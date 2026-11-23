@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { nth, noHooks } from './test-support.js';
 import { blindSets, leakIn, permutationOf, type ArmRepeat } from './blind.js';
 import { runCli } from '../cli.js';
-import type { EvalHooks } from '../hooks.js';
 import type { RepeatFile } from './driver.js';
 import type { EnrichedRepeat } from './enrich.js';
 import type { TurnRecords } from './records.js';
@@ -128,14 +128,14 @@ describe('the blind command', () => {
       return path;
     });
     const out: string[] = [];
-    const code = await runCli(['thread', 'blind', '--seed', 's', '--sets', join(dir, 'sets'), '--key-folder', join(dir, 'key'), ...files], { out: (line) => out.push(line), err: () => undefined, env: {} }, {} as unknown as EvalHooks);
+    const code = await runCli(['thread', 'blind', '--seed', 's', '--sets', join(dir, 'sets'), '--key-folder', join(dir, 'key'), ...files], { out: (line) => out.push(line), err: () => undefined, env: {} }, noHooks);
     expect(code).toBe(0);
     expect(readdirSync(join(dir, 'sets'))).toEqual(['set-1.md']);
     expect(readdirSync(join(dir, 'key'))).toEqual(['key.json']);
     expect(statSync(join(dir, 'key', 'key.json')).mode & 0o777).toBe(0o600);
     const set = readFileSync(join(dir, 'sets', 'set-1.md'), 'utf8');
     expect(set).not.toMatch(/key\.json|seed|"labels"/u);
-    const same = await runCli(['thread', 'blind', '--seed', 's', '--sets', join(dir, 'sets'), '--key-folder', join(dir, 'sets'), ...files], { out: () => undefined, err: () => undefined, env: {} }, {} as unknown as EvalHooks);
+    const same = await runCli(['thread', 'blind', '--seed', 's', '--sets', join(dir, 'sets'), '--key-folder', join(dir, 'sets'), ...files], { out: () => undefined, err: () => undefined, env: {} }, noHooks);
     expect(same).toBe(2);
   });
 });

@@ -3,10 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { noHooks, nth, stubSpawn } from './test-support.js';
 import { runCli } from '../cli.js';
-import type { EvalHooks } from '../hooks.js';
 import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, parseScores, promptOf, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Slot } from './scorer.js';
-import type { Score } from './schemas.js';
+import { parseScoreFile, type Score } from './schemas.js';
 
 const SLOTS: Slot[] = [{ repeat: 1, turn: 1, label: 'A' }, { repeat: 1, turn: 1, label: 'B' }];
 const scoreOf = (slot: Slot, bits: [0 | 1, 0 | 1, 0 | 1, 0 | 1] = [1, 1, 1, 1]): Score => ({ ...slot, c1: bits[0], c2: bits[1], c3: bits[2], c4: bits[3] });
@@ -31,8 +31,8 @@ describe('scoring a set', () => {
   });
 
   it('rejects scores with a missing, duplicate, extra or out-of-range entry, naming the slot', () => {
-    expect(scoreProblems(SLOTS, [scoreOf(SLOTS[0] as Slot)])).toEqual(['missing score for 1/1/B']);
-    expect(scoreProblems(SLOTS, [...SLOTS.map((slot) => scoreOf(slot)), scoreOf(SLOTS[0] as Slot)])).toEqual(['duplicate score for 1/1/A']);
+    expect(scoreProblems(SLOTS, [scoreOf(nth(SLOTS, 0))])).toEqual(['missing score for 1/1/B']);
+    expect(scoreProblems(SLOTS, [...SLOTS.map((slot) => scoreOf(slot)), scoreOf(nth(SLOTS, 0))])).toEqual(['duplicate score for 1/1/A']);
     expect(scoreProblems(SLOTS, [...SLOTS.map((slot) => scoreOf(slot)), scoreOf({ repeat: 1, turn: 2, label: 'A' })])).toEqual(['extra score for 1/2/A']);
     expect(parseScores('[{"repeat":1,"turn":1,"label":"A","c1":2,"c2":1,"c3":1,"c4":1}]')).toBeUndefined();
     expect(scoreProblems(SLOTS, SLOTS.map((slot) => scoreOf(slot)))).toEqual([]);
@@ -52,18 +52,7 @@ describe('scoring a set', () => {
 
 describe('the scorer and its approval', () => {
   it('stops with the fixed message when Codex is out of quota, and never switches scorer by itself', async () => {
-    const spawn = ((_: string, __: readonly string[]) => {
-      const handlers: Record<string, (value?: number) => void> = {};
-      return {
-        stdin: { end: () => undefined },
-        stdout: { on: () => undefined },
-        stderr: { on: (_event: string, listener: (chunk: Buffer) => void) => setTimeout(() => listener(Buffer.from("ERROR: You've hit your usage limit")), 0) },
-        on: (event: string, listener: (value?: number) => void) => {
-          handlers[event] = listener;
-          if (event === 'close') setTimeout(() => listener(1), 5);
-        },
-      };
-    }) as never;
+    const spawn = stubSpawn(() => ({ err: "ERROR: You've hit your usage limit", code: 1 }));
     await expect(codexRunner(spawn, {})('prompt')).rejects.toThrow('scorer unavailable: out of quota');
     await expect(codexRunner(spawn, {})('prompt')).rejects.toBeInstanceOf(ScorerUnavailable);
   });
@@ -81,32 +70,31 @@ describe('the scorer and its approval', () => {
 
   it('gives the scorers an environment of their own: none of the product\'s settings, database or key reaches the program, and each runs in an empty folder of its own', async () => {
     const seen: { command: string; args: readonly string[]; cwd: string | undefined; env: NodeJS.ProcessEnv | undefined }[] = [];
-    const spawn = ((command: string, args: readonly string[], options: { cwd?: string; env?: NodeJS.ProcessEnv }) => {
-      seen.push({ command, args, cwd: options.cwd, env: options.env });
+    const spawn = stubSpawn((command, args, options) => {
+      seen.push({ command, args, cwd: options.cwd?.toString(), env: options.env });
       const reply = args.includes('-o') ? args[args.indexOf('-o') + 1] : undefined;
       if (reply !== undefined) writeFileSync(reply, '[]');
-      return {
-        stdin: { end: () => undefined },
-        stdout: { on: (_event: string, listener: (chunk: Buffer) => void) => setTimeout(() => listener(Buffer.from('{"result":"[]","num_turns":1}')), 0) },
-        stderr: { on: () => undefined },
-        on: (event: string, listener: (value?: number) => void) => {
-          if (event === 'close') setTimeout(() => listener(0), 5);
-        },
-      };
-    }) as never;
+      return { out: '{"result":"[]","num_turns":1}', code: 0 };
+    });
     const env = { PATH: '/bin', HOME: '/home/x', DATABASE_URL: 'postgres://u:CANARY@h/db', NEBURYX_ASSISTANT_MODEL: 'canary-model', ANTHROPIC_API_KEY: 'scorer-own-key', OPENAI_API_KEY: 'codex-own-key', NEBURYX_PROVIDER_KEY_FILE: '/secret/path' };
     await codexRunner(spawn, env)('p');
     await opusRunner(spawn, env)('p');
+    const { ANTHROPIC_API_KEY: _own, ...signedIn } = env;
+    await opusRunner(spawn, signedIn)('p');
     for (const run of seen) {
       expect(Object.keys(run.env ?? {}).sort()).not.toContain('DATABASE_URL');
       expect(JSON.stringify(run.env)).not.toMatch(/CANARY|canary-model|secret\/path/u);
       expect(run.cwd).toBeDefined();
       expect(run.cwd).toContain('thread-scorer-');
     }
+    expect(seen[2]?.args).not.toContain('--bare');
+    expect(seen[2]?.env?.['HOME']).toBe('/home/x');
     expect(seen[0]?.env).toMatchObject({ OPENAI_API_KEY: 'codex-own-key' });
     expect(seen[0]?.env).not.toHaveProperty('ANTHROPIC_API_KEY');
     expect(seen[0]?.args).toContain('shell_environment_policy.inherit="none"');
     expect(seen[1]?.env).toMatchObject({ ANTHROPIC_API_KEY: 'scorer-own-key' });
+    expect(seen[1]?.args).toContain('--bare');
+    expect(seen[1]?.env?.['HOME']).not.toBe('/home/x');
     expect(seen[1]?.env).not.toHaveProperty('OPENAI_API_KEY');
     expect(seen[1]?.args.slice(seen[1].args.indexOf('--tools'), seen[1].args.indexOf('--tools') + 2)).toEqual(['--tools', '']);
   });
@@ -116,12 +104,12 @@ describe('the scorer and its approval', () => {
     writeFileSync(join(real, 'auth.json'), '{"token":"scorer-own"}');
     writeFileSync(join(real, 'config.toml'), 'model = "user-setting"');
     let seen: { home: string | undefined; files: string[]; auth: string } | undefined;
-    const spawn = ((_: string, args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
+    const spawn = stubSpawn((_command, args, options) => {
       const home = options.env?.['CODEX_HOME'];
       seen = { home, files: home === undefined ? [] : readdirSync(home).sort(), auth: home === undefined ? '' : readFileSync(join(home, 'auth.json'), 'utf8') };
       writeFileSync(args[args.indexOf('-o') + 1] ?? '', '[]');
-      return { stdin: { end: () => undefined }, stdout: { on: () => undefined }, stderr: { on: () => undefined }, on: (event: string, listener: (value?: number) => void) => { if (event === 'close') setTimeout(() => listener(0), 5); } };
-    }) as never;
+      return { code: 0 };
+    });
     await codexRunner(spawn, { CODEX_HOME: real, HOME: '/home/user', PATH: '/bin' })('p');
     expect(seen?.home).not.toBe(real);
     expect(seen?.files).toEqual(['auth.json']);
@@ -130,15 +118,7 @@ describe('the scorer and its approval', () => {
   });
 
   it('counts the model calls an Opus run states and refuses a reply that does not state them', async () => {
-    const spawnOf = (out: string) =>
-      ((_: string, __: readonly string[]) => ({
-        stdin: { end: () => undefined },
-        stdout: { on: (_event: string, listener: (chunk: Buffer) => void) => setTimeout(() => listener(Buffer.from(out)), 0) },
-        stderr: { on: () => undefined },
-        on: (event: string, listener: (value?: number) => void) => {
-          if (event === 'close') setTimeout(() => listener(0), 5);
-        },
-      })) as never;
+    const spawnOf = (out: string) => stubSpawn(() => ({ out, code: 0 }));
     expect(await opusRunner(spawnOf('{"result":"[]","num_turns":4}'), {})('p')).toEqual({ text: '[]', calls: 4 });
     await expect(opusRunner(spawnOf('{"result":"[]"}'), {})('p')).rejects.toThrow('does not state the calls');
     await expect(opusRunner(spawnOf('not json'), {})('p')).rejects.toThrow('not the JSON');
@@ -169,7 +149,7 @@ describe('the score command', () => {
   const run = async (argv: string[], runners?: { codex: Runner; opus: Runner }) => {
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(['thread', 'score', ...argv], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, {} as unknown as EvalHooks, runners === undefined ? {} : { runners });
+    const code = await runCli(['thread', 'score', ...argv], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, noHooks, runners === undefined ? {} : { runners });
     return { code, out, err };
   };
   const common = (dir: string) => ['--set', join(dir, 'set-1.md'), '--slots', join(dir, 'key.json'), '--rubric', join(dir, 'rubric.md')];
@@ -185,7 +165,7 @@ describe('the score command', () => {
     const approved = await run([...base, '--approval', join(dir, 'approval.json')], { codex, opus: codex });
     expect(approved.code).toBe(0);
     expect(calls).toBeLessThanOrEqual(2);
-    const file = JSON.parse(readFileSync(join(dir, 'scores.json'), 'utf8')) as { scorer: string; origin: string; repeat: number; setSha256: string; scores: Score[] };
+    const file = parseScoreFile(JSON.parse(readFileSync(join(dir, 'scores.json'), 'utf8')), 'the scores');
     expect(file).toMatchObject({ scorer: 'codex', origin: 'harness', repeat: 1, setSha256: SHA });
     expect(file.scores.find((score) => score.label === 'B')).toMatchObject({ c1: 0, c4: 0 });
   });
@@ -273,11 +253,11 @@ describe('the score command', () => {
       writeFileSync(join(dir, `${name}.json`), JSON.stringify(body));
       return run(['--ingest', join(dir, `${name}.json`), '--scorer-name', 'x', '--set', join(dir, 'set-1.md'), '--slots', join(dir, 'key.json'), '--out', join(dir, `${name}.out.json`)]);
     };
-    const hundred = await ingest('hundred', { scores: [{ ...scoreOf(SLOTS[0] as Slot), c1: 100 }, scoreOf(SLOTS[1] as Slot)] });
+    const hundred = await ingest('hundred', { scores: [{ ...scoreOf(nth(SLOTS, 0)), c1: 100 }, scoreOf(nth(SLOTS, 1))] });
     expect(hundred.code).toBe(2);
     expect(existsSync(join(dir, 'hundred.out.json'))).toBe(false);
     expect((await ingest('extra', { scores: SLOTS.map((slot) => ({ ...scoreOf(slot), note: 'x' })) })).code).toBe(2);
-    expect((await ingest('short', { scores: [scoreOf(SLOTS[0] as Slot)] })).code).toBe(1);
+    expect((await ingest('short', { scores: [scoreOf(nth(SLOTS, 0))] })).code).toBe(1);
     writeFileSync(join(dir, 'edited.md'), `${SET}edited\n`);
     const edited = await run(['--ingest', join(dir, 'short.json'), '--scorer-name', 'x', '--set', join(dir, 'edited.md'), '--slots', join(dir, 'key.json'), '--out', join(dir, 'e.json')]);
     expect(edited.code).toBe(2);
@@ -287,9 +267,9 @@ describe('the score command', () => {
 
 describe('the calibration', () => {
   it('reports the agreement per criterion and overall, and says indicative below 90 percent', () => {
-    const a = [scoreOf(SLOTS[0] as Slot), scoreOf(SLOTS[1] as Slot)];
+    const a = [scoreOf(nth(SLOTS, 0)), scoreOf(nth(SLOTS, 1))];
     expect(agreement(a, a)).toMatchObject({ overall: 100, indicative: false, slots: 2 });
-    const b = [scoreOf(SLOTS[0] as Slot, [0, 1, 1, 1]), scoreOf(SLOTS[1] as Slot, [0, 0, 1, 1])];
+    const b = [scoreOf(nth(SLOTS, 0), [0, 1, 1, 1]), scoreOf(nth(SLOTS, 1), [0, 0, 1, 1])];
     const result = agreement(a, b);
     expect(result).toMatchObject({ c1: 0, c2: 50, c3: 100, c4: 100, overall: 62.5, indicative: true });
   });
@@ -301,13 +281,13 @@ describe('the calibration', () => {
     const write = (name: string, body: unknown) => writeFileSync(join(dir, name), JSON.stringify(body));
     const all = SLOTS.map((slot) => scoreOf(slot));
     write('a.json', file('codex', all));
-    write('b.json', file('opus', [scoreOf(SLOTS[0] as Slot), scoreOf(SLOTS[1] as Slot, [0, 0, 0, 0])]));
-    write('partial.json', file('opus', [scoreOf(SLOTS[0] as Slot)]));
+    write('b.json', file('opus', [scoreOf(nth(SLOTS, 0)), scoreOf(nth(SLOTS, 1), [0, 0, 0, 0])]));
+    write('partial.json', file('opus', [scoreOf(nth(SLOTS, 0))]));
     write('other-set.json', file('opus', all, { setSha256: 'f'.repeat(64) }));
     write('same.json', file('codex', all));
     const calibrate = async (b: string, out: string) => {
       const err: string[] = [];
-      const code = await runCli(['thread', 'calibrate', '--key-file', join(dir, 'key.json'), '--a', join(dir, 'a.json'), '--b', join(dir, b), '--out', join(dir, out)], { out: () => undefined, err: (line) => err.push(line), env: {} }, {} as unknown as EvalHooks);
+      const code = await runCli(['thread', 'calibrate', '--key-file', join(dir, 'key.json'), '--a', join(dir, 'a.json'), '--b', join(dir, b), '--out', join(dir, out)], { out: () => undefined, err: (line) => err.push(line), env: {} }, noHooks);
       return { code, err };
     };
     expect((await calibrate('b.json', 'cal.json')).code).toBe(0);

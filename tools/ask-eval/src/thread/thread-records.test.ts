@@ -2,8 +2,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { noHooks } from './test-support.js';
+import { parseEnriched } from './schemas.js';
 import { runCli } from '../cli.js';
-import type { EvalHooks } from '../hooks.js';
 import type { RepeatFile } from './driver.js';
 import { readTurnRecords, settingsDisagreements, type Db } from './records.js';
 
@@ -16,6 +17,8 @@ interface World {
   summaryCalls?: Record<string, Row[]>;
   fail?: boolean;
 }
+const idsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []);
+
 /** A stand-in database that answers the queries of the reader (the run, its calls, the summary's runs and calls, the audit events) from a small world, and notes the text of every query. */
 function dbOf(world: World, queries: string[] = []): Db {
   return {
@@ -24,8 +27,8 @@ function dbOf(world: World, queries: string[] = []): Db {
       if (world.fail === true) return Promise.reject(new Error('connection refused postgres://user:SECRET@host/db'));
       if (text.includes('FROM assistant_runs')) return Promise.resolve({ rows: world.runs[String(values[0])] ?? [] });
       if (text.includes('FROM summary_runs')) return Promise.resolve({ rows: world.summaryRuns?.[String(values[0])] ?? [] });
-      if (text.includes('FROM summary_run_calls')) return Promise.resolve({ rows: ((values[0] as string[]) ?? []).flatMap((id) => world.summaryCalls?.[id] ?? []) });
-      if (text.includes('FROM assistant_run_calls')) return Promise.resolve({ rows: ((values[0] as string[]) ?? []).flatMap((id) => world.calls[id] ?? []) });
+      if (text.includes('FROM summary_run_calls')) return Promise.resolve({ rows: idsOf(values[0]).flatMap((id) => world.summaryCalls?.[id] ?? []) });
+      if (text.includes('FROM assistant_run_calls')) return Promise.resolve({ rows: idsOf(values[0]).flatMap((id) => world.calls[id] ?? []) });
       return Promise.resolve({ rows: world.events[String(values[0])] ?? [] });
     },
   };
@@ -54,7 +57,7 @@ describe('the records of a turn', () => {
     writeFileSync(join(dir, 'db.env'), 'NEBURYX_DEV_DATABASE_URL=postgres://u:SECRET@127.0.0.1/db\n');
     const out: string[] = [];
     const err: string[] = [];
-    const code = await runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', join(dir, 'db.env'), '--allowed-tools', 'answer,view', '--out', join(dir, 'out.json')], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, {} as unknown as EvalHooks, { database: () => Promise.reject(new Error('the database cannot be reached')) });
+    const code = await runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', join(dir, 'db.env'), '--allowed-tools', 'answer,view', '--out', join(dir, 'out.json')], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, noHooks, { database: () => Promise.reject(new Error('the database cannot be reached')) });
     expect(code).toBe(1);
     expect(JSON.stringify([out, err])).not.toContain('SECRET');
   });
@@ -111,7 +114,17 @@ describe('the records of a turn', () => {
     expect(fewer.problems.join(' ')).toContain('the call numbers of the record are not 1 to n');
     const open = await readTurnRecords(dbOf(world({ events: { 'tr-1': [] } })), 'tr-1');
     expect(open.problems).toContain('no closing event for this turn in the audit events');
-    expect(open.problems.join(' ')).toContain('the audit events name 0 router and agent calls and the record holds 3');
+    expect(open.problems.join(' ')).toContain('the audit events name 0 model calls of the turn and the record holds 3');
+  });
+
+  it('counts the calls of a view answer and of the overview of a refusal with the turn\'s calls, which store no tool names and are not agent calls', async () => {
+    const event = (action: string) => ({ id: action, action, result: 'success', source_id: 'demo', detail: { ai: {} } });
+    const viewed = world({
+      runs: { 'tr-1': [{ id: 'run-1', outcome: 'ok', finished_at: new Date('2026-01-01T00:00:05Z'), calls: 3, settings: {} }] },
+      calls: { 'run-1': [call(1), call(2, { instructions_sha256: 'sha-view', tools_offered: null }), call(3, { instructions_sha256: 'sha-overview', tools_offered: null })] },
+      events: { 'tr-1': [event('assistant.route'), event('assistant.view'), event('assistant.overview'), { id: 'c', action: 'assistant.turn.closed', result: 'success', detail: { turn: { modelCalls: 3 } } }] },
+    });
+    expect((await readTurnRecords(dbOf(viewed), 'tr-1')).problems).toEqual([]);
   });
 
   it('waits a bounded number of reads for records that are written after the answer, and stops waiting when they are complete', async () => {
@@ -133,10 +146,10 @@ describe('the records of a turn', () => {
     const run: RepeatFile = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'refs', head: 'h', settings: { model: 'model-a', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [{ n: 1, message: 'one', traceId: 'tr-1', ms: 1, httpStatus: 200, status: 'answered', answer: {} }], ended: 'complete' };
     writeFileSync(join(dir, 'run.json'), JSON.stringify(run));
     const out: string[] = [];
-    const code = await runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', join(dir, 'unused.env'), '--allowed-tools', 'answer,view', '--out', join(dir, 'records.json')], { out: (line) => out.push(line), err: () => undefined, env: {} }, {} as unknown as EvalHooks, { database: () => Promise.resolve({ db: dbOf(world()), close: () => Promise.resolve() }) });
+    const code = await runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', join(dir, 'unused.env'), '--allowed-tools', 'answer,view', '--out', join(dir, 'records.json')], { out: (line) => out.push(line), err: () => undefined, env: {} }, noHooks, { database: () => Promise.resolve({ db: dbOf(world()), close: () => Promise.resolve() }) });
     expect(code).toBe(0);
     expect(out).toEqual(['turns read: 1 of 1']);
-    const written = JSON.parse(readFileSync(join(dir, 'records.json'), 'utf8')) as { records: { calls: unknown[] }[]; evidence: { citations: { missing: string[] }; gate: { gated: { verdict: string }; offered: { verdict: string } } }[] };
+    const written = parseEnriched(JSON.parse(readFileSync(join(dir, 'records.json'), 'utf8')), 'the records');
     expect(written.records[0]?.calls).toHaveLength(3);
     expect(written.evidence[0]).toMatchObject({ citations: { missing: [] }, gate: { gated: { verdict: 'passed' }, offered: { verdict: 'passed' } } });
   });

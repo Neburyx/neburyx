@@ -73,6 +73,9 @@ export interface Waiting {
   readonly sleep: (ms: number) => Promise<void>;
 }
 
+/** The audit actions of the calls a turn makes to the model through its own recording: the router, the agent, a view answer and the overview of a verdict refusal. */
+export const MODEL_ACTIONS = ['assistant.route', 'assistant.agent', 'assistant.view', 'assistant.overview'];
+
 const NO_WAITING: Waiting = { attempts: 1, delayMs: 0, sleep: () => Promise.resolve() };
 
 /** The causes that may still be written: a record that does not exist yet, a run or call not ended, an event not written. */
@@ -144,8 +147,8 @@ async function readOnce(db: Db, traceId: string): Promise<TurnRecords> {
   const reconciled = closing === undefined || closing.modelCalls === null ? undefined : { counted, stated: closing.modelCalls, agree: counted === closing.modelCalls };
   if (reconciled === undefined) problems.push('no closing event for this turn in the audit events');
   else if (!reconciled.agree) problems.push(`the records count ${counted} model calls and the closing event states ${reconciled.stated}: count differs`);
-  const modelEvents = events.filter((event) => event.action === 'assistant.route' || event.action === 'assistant.agent').length;
-  if (modelEvents !== calls.length) problems.push(`the audit events name ${modelEvents} router and agent calls and the record holds ${calls.length}: count differs`);
+  const modelEvents = events.filter((event) => MODEL_ACTIONS.includes(event.action)).length;
+  if (modelEvents !== calls.length) problems.push(`the audit events name ${modelEvents} model calls of the turn and the record holds ${calls.length}: count differs`);
   return { traceId, run, calls, events, summaryCalls, summaryUsage, reconciled, problems };
 }
 
