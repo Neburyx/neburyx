@@ -416,6 +416,41 @@ describe('the assistant_runs and assistant_run_calls tables of the preview', () 
   });
 });
 
+describe('the tool names stored with an assistant call', () => {
+  const contextOf = (database: TestDatabase) => ({ databaseUrl: database.appUrl, poolSize: 2, connectionTimeoutMs: 5000, statementTimeoutMs: 5000, queryTimeoutMs: 5000, newId: () => randomUUID(), onConnectionError: () => undefined });
+  const callOf = (runId: string, number: number, over: Record<string, unknown> = {}) => ({ runId, number, startedAt: new Date(), instructionsSha256: 'a'.repeat(64), instructionsText: 'INSTRUCTIONS', valuesText: 'VALUES', ...over });
+
+  it('is stored by the real store with the call and read back as written, the column is nullable and a call written without names holds null', async () => {
+    const database = await migratedWithPreview();
+    expect(await rows(database.ownerUrl, `SELECT is_nullable FROM information_schema.columns WHERE table_name = 'assistant_run_calls' AND column_name = 'tools_offered'`)).toEqual([{ is_nullable: 'YES' }]);
+    const store = createPgAssistantRunStore(contextOf(database));
+    try {
+      const id = randomUUID();
+      await store.begin({ id, actorId: randomUUID(), sourceId: 'demo', traceId: 'tr-tools', settings: { model: 'm' }, startedAt: new Date() });
+      await store.beginCall(callOf(id, 1));
+      await store.beginCall(callOf(id, 2, { toolsOffered: 'answer,view' }));
+      expect(await rows(database.ownerUrl, 'SELECT call_number, tools_offered FROM assistant_run_calls WHERE run_id = $1 ORDER BY call_number', [id])).toEqual([{ call_number: 1, tools_offered: null }, { call_number: 2, tools_offered: 'answer,view' }]);
+    } finally {
+      await store.close();
+    }
+  });
+
+  it('is added to a database migrated to 0010 that holds call rows: every row stays, with no names', async () => {
+    const UNTIL_0010 = ['0001-audit-events.sql', '0002-ask-runs.sql', '0003-ask-plans.sql', '0004-drop-ask-plans.sql', '0005-ask-runs-intent.sql', '0006-summary-runs.sql', '0007-assistant-runs.sql', '0008-assistant-threads.sql', '0009-assistant-pending-confirmations.sql', '0010-assistant-run-errors.sql'];
+    const until0010: ExtensionLoader = {
+      load: () => Promise.resolve({ name: 'preview', routeGroups: [], migrationsDirectory: fixtureFolder(Object.fromEntries(UNTIL_0010.map((name) => [name, readFileSync(join(PREVIEW_MIGRATIONS, name), 'utf8')]))) }),
+    };
+    const database = await postgres.newDatabase();
+    expect((await runInProcess(previewOn(database), SHIPPED, { extensionLoader: until0010 })).code).toBe(0);
+    const run = randomUUID();
+    await rows(database.ownerUrl, `INSERT INTO assistant_runs (id, actor_id, source_id, trace_id, started_at, settings) VALUES ($1, $2, 'demo', 'tr-old', now(), '{}')`, [run, randomUUID()]);
+    for (const number of [1, 2]) await rows(database.ownerUrl, `INSERT INTO assistant_run_calls (run_id, call_number, started_at, instructions_sha256, instructions_text, values_text) VALUES ($1, $2, now(), 'sha', 'i', 'v')`, [run, number]);
+    const migrated = await runInProcess(previewOn(database), SHIPPED, { extensionLoader: loader });
+    expect([migrated.code, migrated.stderr]).toEqual([0, '']);
+    expect(await rows(database.ownerUrl, 'SELECT call_number, tools_offered FROM assistant_run_calls WHERE run_id = $1 ORDER BY call_number', [run])).toEqual([{ call_number: 1, tools_offered: null }, { call_number: 2, tools_offered: null }]);
+  });
+});
+
 describe('a start of the Community product', () => {
   it('creates neither table, and loads no preview migration', async () => {
     const database = await postgres.newDatabase();
