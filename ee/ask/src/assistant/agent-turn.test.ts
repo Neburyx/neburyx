@@ -120,9 +120,51 @@ describe('a view question on the agent', () => {
     expect(instructions).toContain('State a count as a number with its quality');
     expect(instructions).toContain('a part is never left out');
     expect(instructions).toContain('not yet retrieved');
-    expect(instructions).toContain('cites the elements or the read line it speaks of, and only those; never cite a key only to keep a sentence');
+    expect(instructions).toContain('cites the elements or the read line it speaks of, and only those.');
+    expect(instructions).toContain('Never cite a key only to keep a sentence');
     expect(instructions).toContain('that those lines do not answer is answered by reading that element\'s neighbours with expand or linked-entities before you say it is not shown');
     expect(instructions).toContain('When a sentence says how many, it cites every element it counts in that same sentence.');
+  });
+
+  it('gives the model the coverage of the view as a line it can cite, and keeps a sentence that says what the view does not hold when it cites that line', async () => {
+    const store = createMemoryAssistantRunStore();
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }, { cites: ['n1'] }] });
+    const sent = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(sent).toMatch(/c1: view coverage: 2 entities shown · 0 relationships shown · /u);
+    expect(JSON.stringify(answer)).not.toContain('"key":"c1"');
+  });
+
+  it('keeps no sentence that cites a key of no line: c1 is not offered without a view', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    const answer = await answerOf(r.route.handler(r.request({ ...BODY, viewElementKeys: [] })));
+    expect(JSON.stringify(answer)).not.toContain('No relationship is shown in the view.');
+  });
+
+  it('tells the model the rules the recorded misses broke: absence cites the coverage line, all and each and the latest cite every element, no link is implied, and a half answer takes the second step', async () => {
+    const store = createMemoryAssistantRunStore();
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const instructions = store.runs[0]?.callStarts[1]?.instructionsText ?? '';
+    expect(instructions).toContain('cites the line c1, the coverage of the view');
+    expect(instructions).toContain('a sentence about what a read did not return cites that read\'s own line, and states only what that line says');
+    expect(instructions).toContain('take the second step: read the neighbours of that element before you say the rest is not shown, within the steps allowed');
+    expect(instructions).toContain('or that compares (the latest, the largest, the most), cites every element it speaks of in that same sentence, as a count does');
+    expect(instructions).toContain('Name a link between two elements only when a relationship line you cite holds it');
   });
 
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
@@ -645,7 +687,7 @@ describe('the input limit of the agent turn', () => {
         .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
         .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
         .respond(new AIMessage('Done.'));
-    const fits = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 6_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    const fits = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 7_400 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(fits.route.handler(fits.request(VIEW_BODY)));
     expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }], reads: [{ tool: 'view' }] });
     expect(JSON.stringify(answer)).not.toContain('degree-preview');

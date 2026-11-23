@@ -1,6 +1,6 @@
 import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_READ_FINDING_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import { type AssembledText, edgeDetailOf, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
-import { retrievalLine } from '../case-summary/coverage.js';
+import { retrievalLine, viewCoverageText } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf } from '../case-summary/judge.js';
 import { listedElements } from '../summary/index.js';
@@ -106,7 +106,10 @@ export interface AssembledResults {
   readonly noteElements: ReadonlyMap<string, readonly string[]>;
 }
 
-export function assembleResults(reads: readonly ReadDone[], view?: AssembledText, names?: ReadonlyMap<string, string>): AssembledResults {
+/** The key of the line that states what the view shows and what is not yet retrieved: no element, so a sentence about what the view does not show can cite it. */
+const VIEW_COVERAGE_KEY = 'c1';
+
+export function assembleResults(reads: readonly ReadDone[], view?: AssembledText, names?: ReadonlyMap<string, string>, viewCoverage?: string): AssembledResults {
   const inexactCounts = [...(view?.inexactCounts ?? [])];
   const unknownCountKeys = new Set(view?.unknownCountKeys);
   const keys = new Map<string, ElementKey>(view?.keys);
@@ -192,7 +195,9 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
       noteLines.push(`${key}: ${sentence.text}${rests.length === 0 ? '' : ` (rests on ${rests.join(', ')})`}`);
     }
   }
-  const readKeys = [...reads.map((_, index) => `s${index + 1}`), ...typologyKeys];
+  const coverageKeys = viewCoverage === undefined ? [] : [VIEW_COVERAGE_KEY];
+  if (viewCoverage !== undefined) lines.set(VIEW_COVERAGE_KEY, `${VIEW_COVERAGE_KEY}: view coverage: ${viewCoverage}`);
+  const readKeys = [...coverageKeys, ...reads.map((_, index) => `s${index + 1}`), ...typologyKeys];
   reads.forEach((read, index) => {
     lines.set(`s${index + 1}`, `${readLine(`s${index + 1}`, read, names)}${noRelationship.has(index) ? ' · no relationship listed' : ''}`);
     const inexact = read.result === undefined ? undefined : inexactCountOf(read.result);
@@ -223,7 +228,7 @@ export const typeNamesOf = (request: { readonly typeDescriptions?: (sourceId: st
 
 export function answerBasisOf(input: Pick<ToolAnswerInput, 'reads' | 'view' | 'scope' | 'message'>): AnswerBasis | undefined {
   const names = typeNamesOf(input.scope.request, input.scope.sourceId);
-  const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names);
+  const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names, input.view === undefined ? undefined : viewCoverageText(input.view.reading));
   if (assembled.keys.size === 0 && readKeys.length === 0) return undefined;
   const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read, names)}`)].join('; ');
   const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes, input.scope.contextTypes);

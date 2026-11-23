@@ -11,6 +11,15 @@ export function retrievalLine(reading: SummaryReading): string {
   return parts.join(' · ');
 }
 
+/** The coverage of the view as one citable line: how many entities and how many relationships it shows, and what is not yet retrieved, in the words of the export header and with no word of any domain. */
+export function viewCoverageText(reading: SummaryReading): string {
+  const shown = (count: number, kind: string): string => `${count.toLocaleString('en-US')} ${kind} shown`;
+  const parts = [shown(reading.nodes.length, 'entities'), shown(reading.edges.length, 'relationships'), notRetrievedText(reading.notRetrieved, reading.uncounted)];
+  if (reading.unresolved > 0) parts.push(`${reading.unresolved.toLocaleString('en-US')} references could not be read`);
+  if (reading.omitted) parts.push(EXPORT_HIDDEN_NOTE);
+  return parts.join(' · ');
+}
+
 /** How much of what is shown the kept sentences cite, counted from their cites. */
 export function summaryLine(kept: readonly SummarySentence[], reading: SummaryReading): string {
   if (kept.length === 0) return 'No sentence was kept.';
