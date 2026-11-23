@@ -807,6 +807,7 @@ describe('a question about what a type means that names no type the mapping has'
 });
 
 describe('counts and what the model is told of a removal, through the answer tool', () => {
+  const W = V.anchor.endsWith('y') ? `${V.anchor.slice(0, -1)}ies` : `${V.anchor}s`;
   const listed = (count: number): AskRunResult => askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: count, scope: 'test' }, matchIds: [], nodes: Array.from({ length: count }, (_, index) => nodeOf(`A-${index + 1}`)), edges: [], notices: [], warnings: [] } });
   const keys = (count: number): string[] => Array.from({ length: count }, (_, index) => `r${index + 1}`);
   const answering = (...answers: { text: string; cites: string[] }[][]) => {
@@ -821,19 +822,19 @@ describe('counts and what the model is told of a removal, through the answer too
   };
 
   it('shows 25 widgets over the 25 elements a read listed and cited, and removes 26', async () => {
-    expect(await turn(answering([{ text: '25 widgets are listed.', cites: keys(25) }]), listed(25))).toMatchObject({ status: 'answered', sentences: [{ text: '25 widgets are listed.' }] });
-    expect(await turn(answering([{ text: '26 widgets are listed.', cites: keys(25) }]), listed(25))).toMatchObject({ status: 'not-answered' });
+    expect(await turn(answering([{ text: `25 ${W} are listed.`, cites: keys(25) }]), listed(25))).toMatchObject({ status: 'answered', sentences: [{ text: `25 ${W} are listed.` }] });
+    expect(await turn(answering([{ text: `26 ${W} are listed.`, cites: keys(25) }]), listed(25))).toMatchObject({ status: 'not-answered' });
   });
 
   it('keeps "Of those five widgets" when the sentence cites the five, and removes it, with the reason told to the model, when it cites only the one it speaks of', async () => {
-    const text = 'Of those five widgets, the first is the latest listed.';
+    const text = `Of those five ${W}, the first is the latest listed.`;
     expect(await turn(answering([{ text, cites: keys(5) }]), listed(5))).toMatchObject({ status: 'answered', sentences: [{ text }] });
-    const model = answering([{ text, cites: ['r1'] }], [{ text: 'The first widget is the latest listed.', cites: ['r1'] }]);
-    expect(await turn(model, listed(5))).toMatchObject({ status: 'answered', sentences: [{ text: 'The first widget is the latest listed.' }] });
+    const model = answering([{ text, cites: ['r1'] }], [{ text: `The first ${V.anchor} is the latest listed.`, cites: ['r1'] }]);
+    expect(await turn(model, listed(5))).toMatchObject({ status: 'answered', sentences: [{ text: `The first ${V.anchor} is the latest listed.` }] });
     expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text, reason: 'number' }]));
   });
 
-  it.each(['In total there are 2 widgets.', 'At least 2 widgets are listed.', '2 widgets are not yet retrieved.'])('removes a count of the cited elements that is said of another population: %s', async (text) => {
+  it.each([`In total there are 2 ${W}.`, `At least 2 ${W} are listed.`, `2 ${W} are not yet retrieved.`])('removes a count of the cited elements that is said of another population: %s', async (text) => {
     expect(await turn(answering([{ text, cites: keys(2) }]), listed(2))).toMatchObject({ status: 'not-answered' });
   });
 
@@ -844,8 +845,8 @@ describe('counts and what the model is told of a removal, through the answer too
   });
 
   it('names each removed sentence and its reason to the model, and nothing when none is removed', async () => {
-    const kept = { text: 'Account A-1 is listed.', cites: ['r1'] };
-    const removed = { text: 'Account A-2 has 7311 rows.', cites: ['r2'] };
+    const kept = { text: `${V.title} A-1 is listed.`, cites: ['r1'] };
+    const removed = { text: `${V.title} A-2 has 7311 rows.`, cites: ['r2'] };
     const model = answering([kept, removed]);
     const answer = await turn(model, listed(2));
     expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: kept.text }] });
@@ -859,7 +860,7 @@ describe('counts and what the model is told of a removal, through the answer too
   });
 
   it('echoes only the model\'s own sentence and fixed words for a sentence that names what no read returned', async () => {
-    const invented = { text: 'Account Zed-9 is listed.', cites: ['r1'] };
+    const invented = { text: `${V.title} Zed-9 is listed.`, cites: ['r1'] };
     const model = answering([invented]);
     await turn(model, listed(2));
     const [, told] = feedbackOf(model);
@@ -868,15 +869,15 @@ describe('counts and what the model is told of a removal, through the answer too
   });
 
   it('judges a sentence said again corrected like any other', async () => {
-    const model = answering([{ text: '3 widgets are listed.', cites: keys(2) }], [{ text: '2 widgets are listed.', cites: keys(2) }]);
-    expect(await turn(model, listed(2))).toMatchObject({ status: 'answered', sentences: [{ text: '2 widgets are listed.' }] });
+    const model = answering([{ text: `3 ${W} are listed.`, cites: keys(2) }], [{ text: `2 ${W} are listed.`, cites: keys(2) }]);
+    expect(await turn(model, listed(2))).toMatchObject({ status: 'answered', sentences: [{ text: `2 ${W} are listed.` }] });
   });
 
   it('refuses a reply that holds verdict wording whole on the last call it may make, though one sentence is valid', async () => {
-    const model = answering([{ text: 'Account A-1 is listed.', cites: ['r1'] }, { text: 'Account A-2 is guilty of fraud.', cites: ['r2'] }]);
+    const model = answering([{ text: `${V.title} A-1 is listed.`, cites: ['r1'] }, { text: `${V.title} A-2 is guilty of fraud.`, cites: ['r2'] }]);
     const answer = await turn(model, listed(2), ASK, 3);
     expect(answer).toMatchObject({ status: 'not-answered' });
-    expect(JSON.stringify(answer)).not.toContain('Account A-1 is listed');
+    expect(JSON.stringify(answer)).not.toContain(`${V.title} A-1 is listed`);
     expect(JSON.stringify(answer)).not.toContain('Removed:');
     expect(JSON.stringify(answer)).not.toContain('guilty');
   });
@@ -884,11 +885,11 @@ describe('counts and what the model is told of a removal, through the answer too
   it('names the reason of a table row that is removed, in the words of a table', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: ['2 widgets'], cites: ['n1', 'n2'] }, { cells: ['Account A-1'], cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: [`2 ${W}`], cites: ['n1', 'n2'] }, { cells: [`${V.title} A-1`], cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model } });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text: '2 widgets', reason: 'cell' }]));
+    expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text: `2 ${W}`, reason: 'cell' }]));
   });
 
   describe('with the rule that verifies a count taken out, or the check taken out', () => {
@@ -905,13 +906,13 @@ describe('counts and what the model is told of a removal, through the answer too
     };
 
     it('shows no count when the elements are no longer typed, so the test that shows 25 depends on the rule', async () => {
-      const answer = await answerWithChecks((real) => ({ judgeSentences: (...args: Parameters<typeof real.judgeSentences>) => real.judgeSentences(args[0], { ...args[1], elementTypes: undefined }, args[2]) }), '25 widgets are listed.');
+      const answer = await answerWithChecks((real) => ({ judgeSentences: (...args: Parameters<typeof real.judgeSentences>) => real.judgeSentences(args[0], { ...args[1], elementTypes: undefined }, args[2]) }), `25 ${W} are listed.`);
       expect(answer).toMatchObject({ status: 'not-answered' });
     });
 
     const keepsEverySentence = () => ({ judgeSentences: (sentences: readonly { text: string; cites: string[] }[]) => ({ kept: sentences, removed: 0, rejected: [], verdictFound: false, keysStripped: 0, keysRemoved: 0 }) });
 
-    it.each(['26 widgets are listed.', 'In total there are 25 widgets.', 'At least 25 widgets are listed.', '25 widgets are not yet retrieved.'])('shows %s when the check keeps every sentence, so the test that removes it depends on the check', async (text) => {
+    it.each([`26 ${W} are listed.`, `In total there are 25 ${W}.`, `At least 25 ${W} are listed.`, `25 ${W} are not yet retrieved.`])('shows %s when the check keeps every sentence, so the test that removes it depends on the check', async (text) => {
       expect(await answerWithChecks(keepsEverySentence, text)).toMatchObject({ status: 'answered' });
     });
 
