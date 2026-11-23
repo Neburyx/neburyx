@@ -22,7 +22,6 @@ The table is checked against the code (`pnpm test` runs the check in `tools/work
 | `assistant.overview` | any | queued | `ee/ask/src/assistant/verdict-overview.ts` | The audit of the model call that drafts the overview beside a refusal of a verdict: queued, so the answer is never withheld for it. |
 | `assistant.agent` | any | queued | `ee/ask/src/assistant/agent-turn.ts` | The audit of a model call of the deepagents turn (one event for each call): queued, so the answer is never withheld for it. |
 | `assistant.confirmation` | any | queued | `ee/ask/src/assistant/confirmation.ts` | What happened to a confirmation of a heavy step that waits for the analyst: queued, so the answer is never withheld for it. |
-| `assistant.answer` | any | queued | `ee/ask/src/assistant/tool-answer.ts` | The audit of the model call that answers after the tool steps: queued, so the answer is never withheld for it. |
 | `ask.classify` | any | queued | `ee/ask/src/classify/classifier.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.continue` | any | queued | `ee/ask/src/questions/question-routes.ts` | An Ask, summary or assistant event: queued, so the answer is never withheld for it. |
 | `ask.file_query` | any | queued | `services/api/src/gate/templates/file-query.ts` | A read or a system read: the response does not depend on its event, which is queued. |

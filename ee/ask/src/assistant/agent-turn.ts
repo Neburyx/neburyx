@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AssistantLimit, AssistantRead, SummaryReading, SummarySentence } from '@neburyx/contracts';
+import type { AskAnswer, AssistantLimit, AssistantRead, SummaryReading, SummarySentence } from '@neburyx/contracts';
 import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentControl, type AgentTool, type AuditedModelHook } from '@neburyx/ee-assistant-agent';
 import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
@@ -123,6 +123,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     let steps = 0;
     let rows = 0;
     let limited: AssistantLimit | undefined;
+    let askAnswer: Extract<AskAnswer, { answered: unknown }>['answered'] | undefined;
     // the lines of notes and of a summary the application drafted are model-written context beside the elements, never a source of the checks
     const render = (): string => {
       const { assembled, noteLines } = assembleResults(reads, view?.assembled);
@@ -151,6 +152,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         case 'answered':
           put(readOfAnswer(tool.kind === 'pattern' ? 'pattern' : 'intent', step.answer.patternName ?? tool.name, step.answer));
           reads.push({ tool: tool.name, result: step.answer.result, ...(tool.label === undefined ? {} : { label: tool.label }) });
+          if (tool.kind === 'intent') askAnswer = step.answer;
           return render();
         case 'refused':
           if (step.refused.cause === 'value-not-fit') {
@@ -348,7 +350,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     if (ended !== undefined) return ended;
     const found = standing;
     const stoppedAt = limited === undefined ? {} : { stoppedAt: limited };
-    if (found?.kind === 'sentences') return { kind: 'sentences', answer: found, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt };
+    if (found?.kind === 'sentences') return { kind: 'sentences', answer: found, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt, ...(askAnswer === undefined ? {} : { askAnswer }) };
     if (found?.kind === 'table') return { kind: 'table', answer: found, steps: Math.max(1, steps), calls: input.callsUsed + modelCalls, reads: entries, ...stoppedAt };
     if (found?.kind === 'noDescription') return { kind: 'no-description', sentence: found.sentence, names: found.names, calls: input.callsUsed + modelCalls };
     if (found?.kind === 'unsupported') return { kind: 'unsupported' };

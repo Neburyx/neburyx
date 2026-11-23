@@ -4,7 +4,6 @@ import { BODY, answerOf, ok, rig, routeAsk, type Rig } from '../testing/assistan
 import { buildToolRegistry, TYPOLOGY_TOOL } from './tool-registry.js';
 import { assembleResults } from './tool-answer.js';
 import { typologyLinesOf } from './view-instructions.js';
-import { ANSWER_PROMPT_VERSION } from './tool-answer.js';
 import { TURN_CLOSED_ACTION } from './turn-audit.js';
 import type { FixtureReply } from '../../../ai-runtime/src/testing/fixture.js';
 

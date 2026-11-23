@@ -19,7 +19,7 @@ export interface RouterOptions {
   readonly maxInputTokens: () => number;
   /** The calls of a whole turn; the router repeats a reply that is not a route only when it leaves room for the answer too. */
   readonly maxCalls?: () => number;
-  /** Whether a message that needs several reads is placed on its first read (the tool loop is on); otherwise such a message is not placed. */
+  /** Whether a message that needs several reads is placed on its first read (the agent may read more than once); otherwise such a message is not placed. */
   readonly multiRead?: () => boolean;
 }
 

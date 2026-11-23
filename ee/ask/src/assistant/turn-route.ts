@@ -405,7 +405,13 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
     try {
       const looped = await agent({ scope, route: run.route, message: body.message, deadline: run.deadline, startedAt: run.startedAt, callsUsed: run.callsUsed, ...(run.context === undefined ? {} : { context: contextForAgent(run.context) }) });
       if (looped === undefined) return undefined;
-      return (await loopAnswer(looped, run.route, waitingOf(request, body, body.message, run.startedAt, run.form))) ?? undefined;
+      const turn = await loopAnswer(looped, run.route, waitingOf(request, body, body.message, run.startedAt, run.form));
+      // an answer of the ask route that rests on a read of one of the folder's questions carries the follow-ups of Ask's own answer to that read
+      if (turn?.status === 'answered' && 'sentences' in turn && run.route === 'ask' && looped.kind === 'sentences' && looped.askAnswer !== undefined) {
+        const chips = followUpsFor(request, body)({ answered: looped.askAnswer });
+        if (chips.length > 0) return { ...turn, followUps: chips.map((chip) => ({ titles: [...chip.titles], choice: chip.choice })) };
+      }
+      return turn ?? undefined;
     } catch (error) {
       if (error instanceof AuditUnavailableError) throw new ExtensionRefusal({ code: 'AUDIT_UNAVAILABLE' });
       if (request.signal.aborted) throw new Error('the request was cancelled');

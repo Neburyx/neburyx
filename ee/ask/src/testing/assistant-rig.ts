@@ -8,7 +8,6 @@ import { loadAskFolder } from '../folder/load.js';
 import { buildAssistantInstructions } from '../assistant/instructions.js';
 import { ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION, createAssistantRouter } from '../assistant/router.js';
 import { createAssistantTurnRoute } from '../assistant/turn-route.js';
-import { ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION } from '../assistant/tool-answer.js';
 import { AGENT_PROMPT_ID, AGENT_PROMPT_VERSION, createAgentTurn } from '../assistant/agent-turn.js';
 import { auditChatModel, type AgentChatModel } from '@neburyx/ee-assistant-agent';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
@@ -184,7 +183,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
   const sourceReads: Rig['sourceReads'] = [];
   const clock = { now: NOW };
   const sink: AuditSink = { record: (event) => (options.sink === 'fails' ? Promise.reject(new Error('down')) : (events.push(event), Promise.resolve())) };
-  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view }), ...(options.overview === undefined ? {} : { [replyKey(OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION)]: options.overview }), ...(options.answer === undefined ? {} : { [replyKey(ANSWER_PROMPT_ID, ANSWER_PROMPT_VERSION)]: options.answer }) } });
+  const fixture = createFixtureProvider({ replies: { [replyKey(ROUTER_PROMPT_ID, ROUTER_PROMPT_VERSION)]: options.reply ?? ok('{"route":"view"}'), ...(options.view === undefined ? {} : { [replyKey(VIEW_PROMPT_ID, VIEW_PROMPT_VERSION)]: options.view }), ...(options.overview === undefined ? {} : { [replyKey(OVERVIEW_PROMPT_ID, OVERVIEW_PROMPT_VERSION)]: options.overview }) } });
   const provider: ModelProvider = options.viewProvider === undefined ? fixture : { complete: (request, signal) => (request.promptId === VIEW_PROMPT_ID && options.viewProvider !== undefined ? options.viewProvider(request, signal) : fixture.complete(request, signal)) };
   const model = createAuditedModelCall({ provider, configuration: { model: 'configured-model' }, sink });
   const expiry = new AbortController();

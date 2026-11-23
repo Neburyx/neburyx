@@ -94,7 +94,8 @@ describe('a turn that would run past a limit is stopped, through the real applic
   it('stops at the calls setting: no more calls to the provider than calls', async () => {
     const turn = await turnWith({ maxCalls: 3 });
     expectAtMost('calls', turn.calls, 3);
-    expect(turn.body).toMatchObject({ status: 'answered' });
+    expect(turn.body).toMatchObject({ status: 'answered', stoppedAt: 'calls' });
+    expect(closingCause(turn)).toBe('limit-calls');
   });
 
   it('stops at the rows setting: once the reads hold the rows allowed, no further read is made', async () => {

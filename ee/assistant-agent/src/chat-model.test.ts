@@ -42,12 +42,32 @@ describe('the chat models', () => {
     await on?.invoke([new SystemMessage('rules'), new HumanMessage('q')]);
     const off = await createAnthropicChatModel({ configuration: configuration(false), env: { THE_KEY: 'k-1' }, baseUrl, hook: hookOf(events) });
     await off?.invoke([new SystemMessage('rules'), new HumanMessage('q')]);
-    expect(seen[0]?.body).toMatchObject({ model: 'model-a', max_tokens: 321 });
+    expect(seen[0]?.body).toMatchObject({ model: 'model-a', max_tokens: 321, output_config: { effort: 'low' } });
     expect(JSON.stringify(seen[0]?.body)).toContain('"ttl":"1h"');
     expect(JSON.stringify(seen[1]?.body)).not.toContain('cache_control');
     expect(JSON.stringify(seen[0]?.headers)).toContain('k-1');
     expect(events).toHaveLength(2);
     expect(events[0]?.detail).toMatchObject({ ai: { tokensIn: 30, tokensOut: 4, cacheReadTokens: 20, cacheWriteTokens: 5 } });
+  });
+
+  it('makes no retry: a service that answers 529 is called exactly once and the call is recorded as failed', async () => {
+    let hits = 0;
+    const busy = createServer((request, response) => {
+      hits += 1;
+      request.resume();
+      response.writeHead(529, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'busy' } }));
+    });
+    await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
+    const events: AuditEvent[] = [];
+    try {
+      const model = await createAnthropicChatModel({ configuration: configuration(false), env: { THE_KEY: 'k-1' }, baseUrl: `http://127.0.0.1:${(busy.address() as AddressInfo).port}`, hook: hookOf(events) });
+      await expect(model?.invoke([new HumanMessage('q')])).rejects.toMatchObject({ code: 'provider-error' });
+      expect(hits).toBe(1);
+      expect(events.map((event) => event.result)).toEqual(['failed']);
+    } finally {
+      await new Promise<void>((resolve) => busy.close(() => resolve()));
+    }
   });
 
   it('is unavailable when the key cannot be read, and never names the key', async () => {

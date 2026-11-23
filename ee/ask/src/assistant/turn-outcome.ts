@@ -36,7 +36,7 @@ export type LoopOutcome =
   | { readonly kind: 'waiting'; readonly wait: { readonly request: ToolRequest; readonly answer: Answered }; readonly steps: readonly PlanStep[]; readonly counters: { readonly steps: number; readonly rows: number; readonly calls: number }; readonly reads: readonly AssistantRead[]; readonly fromView: boolean }
   /** The checked answer after tool steps: sentences that cite the elements the steps returned. */
   | { readonly kind: 'table'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'table' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
-  | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit }
+  | { readonly kind: 'sentences'; readonly answer: Extract<ToolAnswerOutcome, { kind: 'sentences' }>; readonly steps: number; readonly calls: number; readonly reads: readonly AssistantRead[]; readonly stoppedAt?: AssistantLimit; /** The answer of the last read of one of the folder's questions, which the follow-ups of an Ask answer are built from. */ readonly askAnswer?: Answered }
   | { readonly kind: 'no-description'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported' }
   | { readonly kind: 'failed'; readonly why: AssistantFailureKind }

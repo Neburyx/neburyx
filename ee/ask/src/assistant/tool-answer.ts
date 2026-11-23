@@ -1,22 +1,14 @@
 import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
-import { AuditUnavailableError, type AuditedModelCall, type CheckRunner } from '@neburyx/ee-ai-runtime';
-import { type AssembledText, edgeDetailOf, estimateTokens, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
+import { type AssembledText, edgeDetailOf, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
 import { retrievalLine } from '../case-summary/coverage.js';
-import { draftSummary, type DraftedOrAlternative } from '../case-summary/draft.js';
-import { checkedTextOf, judgeCheck } from '../case-summary/judge.js';
-import { auditInvestigationOf } from '../case-summary/summarizer.js';
+import type { DraftedOrAlternative } from '../case-summary/draft.js';
+import { checkedTextOf } from '../case-summary/judge.js';
 import { listedElements } from '../summary/index.js';
 import { countOf, coverageOf, inexactCountOf } from './coverage.js';
-import { judgeTableRows, rowsPhrase, subjectPluralOf, subjectTypeOf, TABLE_NOTE } from './table.js';
-import { noteModelAnswer, notePropertyValuesSent, startModelCall } from './turn-audit.js';
+import { rowsPhrase, subjectPluralOf, subjectTypeOf } from './table.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
 import { refId } from '../summary/title.js';
-import type { ViewInstructions } from './view-instructions.js';
-
-export const ANSWER_PROMPT_ID = 'assistant.answer';
-export const ANSWER_PROMPT_VERSION = 7;
-const ANSWER_AUDIT_ACTION = 'assistant.answer';
 
 export interface ReadDone {
   readonly tool: string;
@@ -34,17 +26,8 @@ export interface ToolAnswerInput {
   readonly message: string;
   /** The reads of the turn in order: the tool and what it returned, or nothing for a read that found nothing. */
   readonly reads: readonly ReadDone[];
-  /** What the view showed, when the loop was entered from the view: its elements keep the keys the view call gave them. */
+  /** What the view showed, when the turn read it: its elements keep the keys the view read gave them. */
   readonly view?: { readonly assembled: AssembledText; readonly reading: SummaryReading };
-  /** What the router was given of the person's earlier turns: context for the question, never an element that may be cited. */
-  readonly context?: string;
-  readonly steps: number;
-  readonly callsUsed: number;
-  readonly maxCalls: number;
-  readonly maxInputTokens: number;
-  readonly startedAt: number;
-  readonly signal: AbortSignal;
-  readonly deadline: AbortSignal;
 }
 
 export type ToolAnswerOutcome =

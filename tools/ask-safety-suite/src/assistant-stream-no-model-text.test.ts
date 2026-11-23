@@ -51,7 +51,9 @@ describe('a streamed turn through the real application carries no model text bef
     })();
     expect(json).toMatchObject({ status: 'answered', route: 'ask' });
     expect(stub.requests.filter((body) => body.includes(MODEL_TEXT))).toHaveLength(0);
-    expect(streamed.lines.at(-1)).toMatchObject({ event: 'answer', answer: json });
+    // each choice carries the time it was made, so two answers to one question differ in those tokens and in nothing else
+    const sameButTokens = (value: unknown): unknown => JSON.parse(JSON.stringify(value, (key, member: unknown) => (key === 'choiceToken' ? 'token' : member)));
+    expect(sameButTokens(streamed.lines.at(-1))).toMatchObject({ event: 'answer', answer: sameButTokens(json) });
   });
 
   it('writes no step line with model text for a hostile message with masking on, and no log line with it', async () => {

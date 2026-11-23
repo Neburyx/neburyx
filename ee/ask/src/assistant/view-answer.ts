@@ -71,7 +71,6 @@ export interface ViewInput {
   readonly callsUsed: number;
   readonly startedAt: number;
   readonly progress: ViewProgress;
-  /** The reads the model may ask for instead of answering; absent, the view call has the two reply forms it always had. */
   /** A summary attached to the turn: its sentences that still hold are given to the model beside the elements. */
   readonly summary?: SummaryAttachment;
   /** What the router was given of the person's earlier turns of the thread (references and titles only, read again through the gate): so that a follow-up such as "what does it mean" can be placed. Never a source of the checks. */
@@ -100,7 +99,6 @@ type ViewResult =
   | { readonly status: 'unsupported' }
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote from the names of the profile. */
   | { readonly status: 'no-description'; readonly sentence: string; readonly names: readonly string[] }
-  /** The model asked for a read instead of answering: the loop goes on from this reading, with the request as its first step. */
   | { readonly status: 'invalid-keys' }
   | { readonly status: 'summary-invalid' }
   | { readonly status: 'failed'; readonly kind: AssistantFailureKind }

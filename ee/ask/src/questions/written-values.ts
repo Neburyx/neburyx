@@ -88,7 +88,7 @@ const plainName = (name: string): string => (/^[A-Z][a-z]/.test(name) ? `${name.
 
 /** The title the sentence names the element by: cut at a code point so that the whole sentence fits what a refusal's sentence may hold, whatever the title the gate gave. */
 function titleOf(title: string, needed: string, found: string): string {
-  // room is left for the longer ending, the one of a step of a tool loop, so that the same title serves both
+  // room is left for the longer ending, the one of a step that came after other reads, so that the same title serves both
   const room = ASK_SUMMARY_MAX_SENTENCE_LENGTH - valueNotFitSentence({ kind: 'other-type', needed, found, title: '', laterStep: true }).length - 1;
   const points = [...title];
   return points.length <= room ? title : `${points.slice(0, Math.max(0, room - 1)).join('')}…`;

@@ -316,6 +316,8 @@ export const assistantTurnAnswerSchema = z.union([
     reads: z.array(assistantReadSchema).min(1).max(20),
     /** The limit that ended the reading of the turn, when it did. */
     stoppedAt: z.enum(ASSISTANT_LIMITS).optional(),
+    /** For the `ask` route, when the answer rests on a read of one of the folder's questions: the same follow-ups as Ask's own answer to that read. */
+    followUps: z.array(z.strictObject({ titles: z.array(text).min(1).max(20), choice: assistantChoiceSchema })).max(ASSISTANT_FOLLOW_UPS_MAX).optional(),
   }),
   /** The view route, asked for as a table: the rows that the checks kept, each citing the elements it reads, the citations they name, the coverage the server writes, the model and the calls. */
   z.strictObject({

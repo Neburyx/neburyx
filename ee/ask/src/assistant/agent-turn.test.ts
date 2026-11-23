@@ -385,3 +385,26 @@ describe('a first read that waits for the analyst, with one step allowed', () =>
     expect(r.runs.filter((run) => (run.options as { continue?: boolean } | undefined)?.continue === true)).toHaveLength(1);
   });
 });
+
+describe('the follow-ups of an agent answer on the ask route', () => {
+  const INTENTS = {
+    shared: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } },
+    widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } },
+  };
+
+  it('carries the follow-ups Ask\'s own answer to the read has, and none for a view question', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'shared', args: { id: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), agent: { model }, intents: INTENTS });
+    const answer = await answerOf(r.route.handler(r.request()));
+    expect(answer).toMatchObject({ status: 'answered', sentences: expect.anything(), followUps: expect.arrayContaining([expect.objectContaining({ choice: expect.objectContaining({ intent: 'widgetById' }) })]) });
+    const viewModel = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const v = await rig({ reply: VIEW, agent: { model: viewModel }, intents: INTENTS });
+    expect(await answerOf(v.route.handler(v.request(VIEW_BODY)))).not.toHaveProperty('followUps');
+  });
+});

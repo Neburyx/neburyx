@@ -8692,6 +8692,70 @@
                   "time",
                   "input"
                 ]
+              },
+              "followUps": {
+                "maxItems": 3,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "titles": {
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "choice": {
+                      "type": "object",
+                      "properties": {
+                        "intent": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
+                        },
+                        "roles": {
+                          "minItems": 1,
+                          "maxItems": 20,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64
+                          }
+                        },
+                        "entities": {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "choiceToken": {
+                          "type": "string",
+                          "pattern": "^[0-9]{1,16}\\.[0-9a-f]{64}$"
+                        }
+                      },
+                      "required": [
+                        "intent",
+                        "roles",
+                        "entities",
+                        "choiceToken"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "titles",
+                    "choice"
+                  ],
+                  "additionalProperties": false
+                }
               }
             },
             "required": [
