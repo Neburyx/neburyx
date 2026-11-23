@@ -110,7 +110,7 @@ describe('a replaced file in the extension and in the audited call', () => {
     const extension = createEnterpriseExtension();
     const outcome = await extension.configure?.({}, { NEBURYX_ASK_API_KEY: 'SENTINEL-KEY-VALUE', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['s1']), ...env }, CONTEXT);
     expect(outcome).toEqual({ ok: true });
-    const instructions = extension.summaryInstructions();
+    const instructions = extension.summaryInstructions('s1');
     let received: ModelRequest | undefined;
     const provider: ModelProvider = {
       complete: async (request): Promise<ModelAnswer> => {
@@ -140,6 +140,6 @@ describe('a replaced file in the extension and in the audited call', () => {
     const outcome = await extension.configure?.({}, { NEBURYX_ASK_API_KEY: 'k', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['s1']), NEBURYX_SUMMARY_TYPOLOGY_FILE: join(root, 'nope.md') }, CONTEXT);
     expect(outcome?.ok).toBe(false);
     if (outcome !== undefined && !outcome.ok) expect(outcome.problems).toEqual(['NEBURYX_SUMMARY_TYPOLOGY_FILE: the file cannot be read']);
-    expect(extension.summaryInstructions()).toBeUndefined();
+    expect(extension.summaryInstructions('s1')).toBeUndefined();
   });
 });

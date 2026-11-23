@@ -78,7 +78,7 @@ export async function loopCostRun(source: LoadedSource, provider: ModelProvider,
   const call = createAuditedModelCall({ provider: counting, configuration: { model }, sink: NOTHING });
   const checks = createCheckRunner();
   const router = createAssistantRouter({ model: call, folder: () => source.folder, instructions: () => prompt.instructions, multiRead: () => settings.maxSteps >= 2, maxInputTokens: () => settings.maxInputTokens, maxCalls: () => settings.maxCalls });
-  const viewAnswer = createViewAnswer({ model: call, instructions: () => view.instructions, checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }) });
+  const viewAnswer = createViewAnswer({ model: call, instructions: () => view.instructionsFor(source.folder.source(source.sourceId)?.typology?.text ?? ''), checks, settings: () => ({ model: settings.model, maxInputTokens: settings.maxInputTokens, maxCalls: settings.maxCalls, timeoutMs: settings.timeoutMs, totalTimeoutMs: settings.totalTimeoutMs }) });
   const route = createAssistantTurnRoute({ router: () => router, totalTimeoutMs: () => settings.totalTimeoutMs, contextTurns: () => settings.contextTurns, viewAnswer: () => viewAnswer, maxMessageWords: () => settings.maxMessageWords, folder: () => source.folder, logger: () => undefined });
   const body = { sourceId: source.sourceId, investigationId: INVESTIGATION, message: input.message, viewElementKeys: [...input.viewElementKeys] };
   const request: ExtensionRequest = {

@@ -104,10 +104,10 @@ export interface EvalSummarizer {
 }
 
 /** @public The product's summarizer built for a run of the evaluation command, over a provider the command holds, with the observer the command passes. Its record is kept in memory and its audit events go nowhere. */
-export async function evalSummarizer(options: { readonly provider: ModelProvider; readonly settings: SummarySettings; readonly env: Env; readonly observe: (observation: ReplyObservation) => void; readonly shippedDirectory?: string }): Promise<{ readonly ok: true; readonly summarizer: EvalSummarizer } | { readonly ok: false; readonly problems: readonly string[] }> {
+export async function evalSummarizer(options: { readonly provider: ModelProvider; readonly settings: SummarySettings; readonly env: Env; readonly observe: (observation: ReplyObservation) => void; /** The typology text of the source the views are of (the text of its Ask folder's `typologies.md`), as the product holds it for that source; the operator's file named in the environment replaces it. */ readonly typology?: string; readonly shippedDirectory?: string }): Promise<{ readonly ok: true; readonly summarizer: EvalSummarizer } | { readonly ok: false; readonly problems: readonly string[] }> {
   const loaded = await loadSummaryInstructions({ env: options.env, ...(options.shippedDirectory === undefined ? {} : { shippedDirectory: options.shippedDirectory }) });
   if (!loaded.ok) return { ok: false, problems: loaded.problems };
-  const { instructions } = loaded;
+  const instructions = loaded.instructionsFor(options.typology ?? '');
   const model = createAuditedModelCall({ provider: options.provider, configuration: { model: options.settings.model }, sink: { record: async () => undefined } });
   const keys = { current: { kid: 'eval0000', bytes: Buffer.alloc(32, 1) } };
   const store = createMemorySummaryRunStore();

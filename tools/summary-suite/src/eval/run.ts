@@ -1,4 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { keyMapOf, loadCases, readingOf, type LabelledCase } from '../cases.js';
 import { sentencesOf } from '../checks.js';
 import { scoreLabelled, scoreSummary } from '../score.js';
@@ -148,17 +150,44 @@ async function largestRequestTokens<Provider>(hooks: EvalHooks<Provider>, settin
   const budgeted = hooks.budgeted(scripted, Number.MAX_SAFE_INTEGER, (values) => {
     if (sent === '') sent = values;
   });
-  const built = await hooks.summarizer({ provider: budgeted.provider, settings: { ...settings, maxCalls: 1 }, env, observe: () => undefined });
-  if (!built.ok) throw new UsageError(built.problems.join('; '));
+  const made = await summarizersOf(hooks, { provider: budgeted.provider, settings: { ...settings, maxCalls: 1 }, env, observe: () => undefined }, views);
   let largest = 0;
   for (const labelled of views) {
     current = labelled;
     sent = '';
-    await built.summarizer.summarize(readingOf(labelled), new AbortController().signal);
-    if (sent !== '') largest = Math.max(largest, utf8Bytes(built.summarizer.instructions, sent));
+    const summarizer = summarizerOfView(made, labelled);
+    await summarizer.summarize(readingOf(labelled), new AbortController().signal);
+    if (sent !== '') largest = Math.max(largest, utf8Bytes(summarizer.instructions, sent));
   }
   return estimatedTokensOf(largest);
 }
+
+const PACKS_ROOT = fileURLToPath(new URL('../../../../domain-packs/', import.meta.url));
+
+/** The typology text of a pack, from the optional file of its Ask folder as the product reads it for a source of that pack; none, for a pack that has no such file. */
+function typologyOf(pack: string): string {
+  const path = join(PACKS_ROOT, pack, 'ask', 'typologies.md');
+  return existsSync(path) ? readFileSync(path, 'utf8') : '';
+}
+
+type Built = { readonly ok: true; readonly summarizer: EvalSummarizer } | { readonly ok: false; readonly problems: readonly string[] };
+
+/** One summarizer for each pack of the views, each with the typology of its pack, so that a view is measured with the instructions the product sends for a source of that pack. */
+async function summarizersOf<Provider>(hooks: EvalHooks<Provider>, base: { readonly provider: Provider; readonly settings: RunSettings; readonly env: Env; readonly observe: (observation: ReplyObservation) => void }, views: readonly LabelledCase[]): Promise<ReadonlyMap<string, EvalSummarizer>> {
+  const made = new Map<string, EvalSummarizer>();
+  for (const pack of [...new Set(views.map((each) => each.pack))].sort()) {
+    const built: Built = await hooks.summarizer({ ...base, typology: typologyOf(pack) });
+    if (!built.ok) throw new UsageError(built.problems.join('; '));
+    made.set(pack, built.summarizer);
+  }
+  return made;
+}
+
+const summarizerOfView = (made: ReadonlyMap<string, EvalSummarizer>, labelled: LabelledCase): EvalSummarizer => {
+  const found = made.get(labelled.pack);
+  if (found === undefined) throw new UsageError(`no summarizer was built for the pack ${labelled.pack}`);
+  return found;
+};
 
 function guardLive(options: RunOptions): void {
   if (options.out === undefined) throw new UsageError('a live run needs --out, a folder outside every git working tree');
@@ -206,30 +235,37 @@ export async function runEvaluation<Provider>(options: RunOptions, hooks: EvalHo
   const budgeted = hooks.budgeted(inner, budget, (values) => {
     if (state.sent === '') state.sent = values;
   });
-  const built = await hooks.summarizer({ provider: budgeted.provider, settings, env, observe: (observation) => void state.observations.push(observation) });
-  if (!built.ok) throw new UsageError(built.problems.join('; '));
+  const made = await summarizersOf(hooks, { provider: budgeted.provider, settings, env, observe: (observation) => void state.observations.push(observation) }, views);
   const reports: ViewReport[] = [];
-  if (options.measure !== 'only') for (const labelled of views) reports.push(await scoreView(state, built.summarizer, labelled));
+  if (options.measure !== 'only') for (const labelled of views) reports.push(await scoreView(state, summarizerOfView(made, labelled), labelled));
   const measurements: Measurement[] = [];
   if (options.measure !== 'none') {
-    const measuring = await hooks.summarizer({ provider: budgeted.provider, settings: { ...settings, maxCalls: 1 }, env, observe: () => undefined });
-    if (!measuring.ok) throw new UsageError(measuring.problems.join('; '));
+    // the samples belong to no pack: they are measured with the longest instructions of the packs, so that a size is never understated
+    const measuringMade = await summarizersOf(hooks, { provider: budgeted.provider, settings: { ...settings, maxCalls: 1 }, env, observe: () => undefined }, views);
+    const longest = [...measuringMade.values()].sort((a, b) => b.instructions.length - a.instructions.length)[0];
+    if (longest === undefined) throw new UsageError('no view was selected');
     const targets = [
       ...views.map((labelled) => ({ id: labelled.id, kind: 'view' as const, reading: readingOf(labelled), labelled })),
       ...sampleSizes(settings).map((size) => ({ id: `sample-${size}`, kind: 'sample' as const, properties: 'none' as const, reading: scaledReading(sampleBase(), size) })),
       ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-realistic`, kind: 'sample' as const, properties: 'realistic' as const, reading: realisticReading(scaledReading(sampleBase(), size)) })),
       ...richSampleSizes(settings).map((size) => ({ id: `sample-${size}-heavy`, kind: 'sample' as const, properties: 'heavy' as const, reading: heavyReading(scaledReading(sampleBase(), size)) })),
     ];
-    for (const target of targets) measurements.push(await measureOne(state, measuring.summarizer, target, options.stub));
+    for (const target of targets) measurements.push(await measureOne(state, target.kind === 'view' && target.labelled !== undefined ? summarizerOfView(measuringMade, target.labelled) : longest, target, options.stub));
   }
   const proposal = options.measure === 'none' ? undefined : proposalOf(measurements, new Set(views.filter((each) => each.shape !== undefined).map((each) => each.id)), settings.maxElements);
   const usage = budgeted.usage();
   const spent = state.stopped || usage.refused > 0;
-  const report: Report = { mode, model: settings.model, instructionsSha256: built.summarizer.instructionsSha256, budget, usage, ...(live?.label?.kind === 'local' ? { provider: live.label } : {}), budgetSpent: spent, views: reports, ...(options.measure === 'none' ? {} : { measurements, ...(proposal === undefined ? {} : { proposal }) }) };
+  const report: Report = { mode, model: settings.model, instructionsSha256: instructionsHashOf(made), ...instructionsByPackOf(made), budget, usage, ...(live?.label?.kind === 'local' ? { provider: live.label } : {}), budgetSpent: spent, views: reports, ...(options.measure === 'none' ? {} : { measurements, ...(proposal === undefined ? {} : { proposal }) }) };
   if (!options.stub && options.out !== undefined) writePrivateFile(join(options.out, RECORD_FILE), `${recordOf(report)}\n`, options.force);
   const failed = reports.some((view) => view.status === 'failed' || view.status === 'timeLimit' || view.status === 'cancelled');
   return { code: spent || failed ? 1 : 0, lines: options.json ? [jsonOf(report)] : textOf(report), report };
 }
+
+const instructionsHashOf = (made: ReadonlyMap<string, EvalSummarizer>): string => [...made.values()][0]?.instructionsSha256 ?? '';
+
+/** The hash of the instructions of each pack, when they are not all one text. */
+const instructionsByPackOf = (made: ReadonlyMap<string, EvalSummarizer>): { readonly instructionsByPack?: Readonly<Record<string, string>> } =>
+  new Set([...made.values()].map((each) => each.instructionsSha256)).size <= 1 ? {} : { instructionsByPack: Object.fromEntries([...made].map(([pack, each]) => [pack, each.instructionsSha256])) };
 
 const scriptedReplyFor = (labelled: LabelledCase | undefined, values: string): string => (labelled === undefined ? EMPTY_REPLY : scriptedReply(labelled, values));
 

@@ -91,7 +91,7 @@ describe('a replacement typology file, through the real extension, its own summa
       { actorId: 'analyst-1', actorRole: 'investigator', traceId: 'trace-1', policyVersion: 'p1', request: { investigationId: '0192f000-0000-7000-8000-000000000042', sourceId: 'demo', entities: [], edges: [], aggregates: [], derived: [] }, reading: view },
       new AbortController().signal,
     );
-    const instructions = defined(extension.summaryInstructions(), 'the instructions of the extension');
+    const instructions = defined(extension.summaryInstructions('demo'), 'the instructions of the extension');
     return { outcome, instructions, body: z.object({ system: z.array(z.object({ text: z.string() })), messages: z.array(z.object({ content: z.string() })) }).parse(JSON.parse(defined(stub.requests[0], 'the request'))) };
   }
 

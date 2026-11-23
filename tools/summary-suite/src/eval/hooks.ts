@@ -57,5 +57,5 @@ export interface EvalHooks<Provider = unknown> {
   readonly scriptedProvider: (replyFor: (values: string) => string) => Provider;
   readonly liveProvider: (env: Readonly<Record<string, string | undefined>>, folder: string, settings: RunSettings) => Promise<{ readonly provider: Provider; readonly model: string; readonly label?: ProviderLabel }>;
   readonly budgeted: (inner: Provider, budget: number, onRequest: (values: string) => void) => { readonly provider: Provider; readonly usage: () => BudgetUsage };
-  readonly summarizer: (options: { readonly provider: Provider; readonly settings: RunSettings; readonly env: Readonly<Record<string, string | undefined>>; readonly observe: (observation: ReplyObservation) => void }) => Promise<{ readonly ok: true; readonly summarizer: EvalSummarizer } | { readonly ok: false; readonly problems: readonly string[] }>;
+  readonly summarizer: (options: { readonly provider: Provider; readonly settings: RunSettings; readonly env: Readonly<Record<string, string | undefined>>; readonly observe: (observation: ReplyObservation) => void; readonly typology?: string }) => Promise<{ readonly ok: true; readonly summarizer: EvalSummarizer } | { readonly ok: false; readonly problems: readonly string[] }>;
 }

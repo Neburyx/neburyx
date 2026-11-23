@@ -12,22 +12,22 @@ const envFor = (folder: string) => ({ NEBURYX_ASK_API_KEY: 'SENTINEL-KEY-VALUE',
 
 describe('the summary instructions in the extension', () => {
   it('holds no instructions before it is configured', () => {
-    expect(createEnterpriseExtension().summaryInstructions()).toBeUndefined();
+    expect(createEnterpriseExtension().summaryInstructions('s1')).toBeUndefined();
   });
 
   it('builds the instructions from the shipped files when it is configured', async () => {
     const extension = createEnterpriseExtension();
     const outcome = await extension.configure?.({}, envFor(makeAskFolder(['s1'])), CONTEXT);
     expect(outcome).toEqual({ ok: true });
-    expect(extension.summaryInstructions()?.text).toContain('# Reply format');
-    expect(extension.summaryInstructions()?.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(extension.summaryInstructions('s1')?.text).toContain('# Reply format');
+    expect(extension.summaryInstructions('s1')?.sha256).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('holds none when Ask itself is refused', async () => {
     const extension = createEnterpriseExtension();
     const outcome = await extension.configure?.({}, { NEBURYX_ASK_API_KEY: 'k' }, CONTEXT);
     expect(outcome?.ok).toBe(false);
-    expect(extension.summaryInstructions()).toBeUndefined();
+    expect(extension.summaryInstructions('s1')).toBeUndefined();
   });
 });
 
@@ -42,7 +42,7 @@ describe('a shipped summary file that cannot be read stops start-up', () => {
       expect(message).toContain('summary-prompt.md');
       expect(message).toContain('NEBURYX_SUMMARY_PROMPT_FILE');
       expect(message).not.toContain(directory);
-      expect(extension.summaryInstructions()).toBeUndefined();
+      expect(extension.summaryInstructions('s1')).toBeUndefined();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

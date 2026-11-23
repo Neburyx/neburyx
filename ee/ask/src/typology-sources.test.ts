@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { createEnterpriseExtension } from './index.js';
 import { loadAskFolder } from './folder/load.js';
 import { loadViewInstructions } from './assistant/view-instructions.js';
+import { toolRegistryOf } from './assistant/turn-outcome.js';
 import { makeAskFolder, removeAskFolders } from './testing/ask-folder.js';
 
 const PACKS = fileURLToPath(new URL('../../../domain-packs/', import.meta.url));
@@ -82,5 +83,17 @@ describe('the typology of the shipped packs', () => {
     expect(loaded.ok && loaded.typologyFor(text)).toHaveLength(5);
     expect(loaded.ok && loaded.instructionsFor(text).text).toContain('Fan-in');
     expect(loaded.ok && loaded.instructionsFor('').text).not.toContain('Fan-in');
+  });
+});
+
+describe('the typology tool for each source', () => {
+  it('is offered for the source whose folder has a typology and for no other, from the lines of that source', async () => {
+    const loaded = await loadAskFolder({ folder: withTypology(['a', 'b'], { a: TEXT }), sourceIds: ['a', 'b'] });
+    const view = await loadViewInstructions({ env: {} });
+    if (!loaded.ok || !view.ok) throw new Error('the folder or the instructions could not be loaded');
+    const scopeOf = (sourceId: string) => ({ options: { folder: () => loaded.folder, typology: (id: string) => view.typologyFor(loaded.folder.source(id)?.typology?.text ?? '') }, sourceId, patterns: undefined, request: {}, viewElementKeys: [] }) as never;
+    const names = (sourceId: string): string[] => toolRegistryOf(scopeOf(sourceId), false).tools.map((tool) => tool.name);
+    expect(names('a')).toContain('typology');
+    expect(names('b')).not.toContain('typology');
   });
 });

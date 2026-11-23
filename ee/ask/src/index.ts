@@ -89,7 +89,7 @@ export interface EnterpriseExtension extends ProfileExtension {
   /** The Ask folder read at start-up; undefined before `configure` accepted it. */
   readonly askFolder: () => AskFolder | undefined;
   /** The instructions of a summary call, built at start-up; undefined before `configure` accepted them. */
-  readonly summaryInstructions: (sourceId?: string) => SummaryInstructions | undefined;
+  readonly summaryInstructions: (sourceId: string) => SummaryInstructions | undefined;
   /** The assistant's settings read at start-up; undefined before `configure` accepted them and while the assistant is off. */
   readonly assistantSettings: () => AssistantSettings | undefined;
   /** The assistant's instructions, with their hash; undefined before `configure` accepted them and while the assistant is off. */
@@ -228,7 +228,7 @@ export function createEnterpriseExtension(options: EnterpriseExtensionOptions = 
     },
     configuration: () => configuration,
     askFolder: () => folder,
-    summaryInstructions: (sourceId = '') => instructions?.(sourceId),
+    summaryInstructions: (sourceId) => instructions?.(sourceId),
     summarySettings: () => summarySettings,
     assistantSettings: () => assistantSettings,
     assistantInstructions: () => assistantInstructions,

@@ -39,6 +39,8 @@ export interface Report {
   readonly mode: 'stub' | 'live';
   readonly model: string;
   readonly instructionsSha256: string;
+  /** The hash of the instructions of each pack's views when the typology differs between them; absent when one text served every view. */
+  readonly instructionsByPack?: Readonly<Record<string, string>>;
   readonly budget: number;
   readonly usage: BudgetUsage;
   /** Present for a local run only: the provider kind, the grammar label and the schema probe. */
@@ -100,6 +102,7 @@ export function textOf(report: Report): string[] {
     `mode: ${report.mode}`,
     `model: ${report.model}`,
     `instructions hash: ${report.instructionsSha256}`,
+    ...(report.instructionsByPack === undefined ? [] : Object.entries(report.instructionsByPack).map(([pack, hash]) => `instructions hash of the views of ${pack}: ${hash}`)),
     `calls: ${report.usage.calls} of ${report.budget}${report.budgetSpent ? ' (the budget was spent)' : ''}`,
     `tokens: in ${report.usage.inputTokens}, out ${report.usage.outputTokens}, cache read ${report.usage.cacheReadTokens}, cache write ${report.usage.cacheWriteTokens}, calls without counts ${report.usage.withoutCounts}`,
     `failed calls: ${report.usage.failed}`,
