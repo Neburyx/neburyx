@@ -110,4 +110,23 @@ describe('the reach of the right-hand panels, given to the canvas region', () =>
     act(() => stub?.resize(scope, 396, 94));
     expect(box('inspector').style.top).toBe('110px');
   });
+
+  it('places the panels again when an obstacle moves without changing size and a style is written on the region', async () => {
+    const { region } = await open([panel('assistant', 'right', { initialWidth: 864, widestShareOfWindow: 1 }), { ...panel('inspector', 'right'), placement: { kind: 'floating', side: 'right', top: 16, beside: 'assistant' }, initialWidth: 320 }]);
+    const scope = document.createElement('div');
+    scope.className = 'graph-scope';
+    await act(async () => {
+      region.appendChild(scope);
+      await Promise.resolve();
+    });
+    act(() => stub?.resize(scope, 396, 44));
+    const box = (id: string) => need(region.querySelector<HTMLElement>(`[data-panel="${id}"]`)?.closest<HTMLElement>('.floating-panel'), id);
+    expect(box('inspector').style.top).toBe('60px');
+    scope.getBoundingClientRect = () => ({ ...scope.ownerDocument.body.getBoundingClientRect(), left: 0, top: 20, width: 396, height: 44 });
+    await act(async () => {
+      region.style.setProperty('--moved', '1');
+      await Promise.resolve();
+    });
+    expect(box('inspector').style.top).toBe('80px');
+  });
 });

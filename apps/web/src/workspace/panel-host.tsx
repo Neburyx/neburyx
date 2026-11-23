@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type MouseEvent } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { PanelBoundary } from './panel-boundary.js';
@@ -140,36 +141,59 @@ function FloatingPanel({ panel, side, top, inset, canvas, windowWidth, obstacles
 
 const CANVAS_OBSTACLES = '.graph-scope, .region-tool-strip';
 
-/** The boxes in the canvas region that a panel must not cover, measured again when one changes size or the region gains or loses a child; the region is the layer's parent. */
-function useCanvasObstacles(layer: HTMLElement | null): readonly CanvasBox[] {
-  const [boxes, setBoxes] = useState<readonly CanvasBox[]>([]);
-  useEffect(() => {
+interface CanvasLayout {
+  readonly canvas: { readonly width: number | undefined; readonly height: number | undefined };
+  readonly obstacles: readonly CanvasBox[];
+}
+
+const UNMEASURED_LAYOUT: CanvasLayout = { canvas: { width: undefined, height: undefined }, obstacles: [] };
+const knownSize = (value: number): number | undefined => (value > 0 ? value : undefined);
+
+function sameLayout(held: CanvasLayout, next: CanvasLayout): boolean {
+  return held.canvas.width === next.canvas.width && held.canvas.height === next.canvas.height && held.obstacles.length === next.obstacles.length && held.obstacles.every((box, index) => box.left === next.obstacles[index]?.left && box.top === next.obstacles[index]?.top && box.right === next.obstacles[index]?.right && box.bottom === next.obstacles[index]?.bottom);
+}
+
+/** The size of the panel layer and the boxes in the canvas region that a panel must not cover, measured before the first paint and again, still before the next paint, whenever the layer or one of them changes size, the region gains or loses a child, or a style is written on the region; the region is the layer's parent. */
+function useCanvasLayout(layer: HTMLElement | null): CanvasLayout {
+  const [layout, setLayout] = useState<CanvasLayout>(UNMEASURED_LAYOUT);
+  useLayoutEffect(() => {
     const region = layer?.parentElement;
-    if (region === null || region === undefined) return undefined;
-    const measure = (): void => {
+    if (layer === null || region === null || region === undefined) return undefined;
+    const measure = (): CanvasLayout => {
       const origin = region.getBoundingClientRect();
-      const next = [...region.querySelectorAll(CANVAS_OBSTACLES)]
+      const size = layer.getBoundingClientRect();
+      const obstacles = [...region.querySelectorAll(CANVAS_OBSTACLES)]
         .map((element) => element.getBoundingClientRect())
         .map((box) => ({ left: box.left - origin.left, top: box.top - origin.top, right: box.left - origin.left + box.width, bottom: box.top - origin.top + box.height }))
         .filter((box) => box.right > box.left && box.bottom > box.top);
-      setBoxes((held) => (held.length === next.length && held.every((box, index) => box.left === next[index]?.left && box.top === next[index]?.top && box.right === next[index]?.right && box.bottom === next[index]?.bottom) ? held : next));
+      return { canvas: { width: knownSize(size.width), height: knownSize(size.height) }, obstacles };
     };
-    const sizes = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(measure);
+    // flushed so that the panels are placed again before the frame that follows the change is painted
+    const update = (): void => {
+      const next = measure();
+      flushSync(() => setLayout((held) => (sameLayout(held, next) ? held : next)));
+    };
+    const sizes = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(update);
     const watch = (): void => {
       sizes?.disconnect();
       sizes?.observe(region);
+      sizes?.observe(layer);
       for (const element of region.querySelectorAll(CANVAS_OBSTACLES)) sizes?.observe(element);
-      measure();
     };
-    const children = new MutationObserver(watch);
-    children.observe(region, { childList: true });
+    const changes = new MutationObserver((records) => {
+      if (records.some((record) => record.type === 'childList')) watch();
+      update();
+    });
+    changes.observe(region, { childList: true, attributes: true, attributeFilter: ['style'] });
     watch();
+    const initial = measure();
+    setLayout((held) => (sameLayout(held, initial) ? held : initial));
     return () => {
-      children.disconnect();
+      changes.disconnect();
       sizes?.disconnect();
     };
   }, [layer]);
-  return boxes;
+  return layout;
 }
 
 const RESERVED = { right: { variable: '--panel-reserved-right', attribute: 'data-panels-right' }, left: { variable: '--panel-reserved-left', attribute: 'data-panels-left' } } as const;
@@ -220,9 +244,8 @@ export function FloatingPanels() {
   const sizes = useStoreSelector(useClientState().presentation.view, (current) => current.panelSizes);
   const floating = usePanels().filter((panel) => panel.placement.kind === 'floating');
   const [layer, setLayer] = useState<HTMLElement | null>(null);
-  const canvas = useElementSize(layer);
+  const { canvas, obstacles } = useCanvasLayout(layer);
   const windowWidth = useWindowWidth();
-  const obstacles = useCanvasObstacles(layer);
   const insetOf = (placement: { readonly inset?: number; readonly beside?: string }): number => {
     const next = placement.beside === undefined ? undefined : floating.find(({ id }) => id === placement.beside);
     if (next === undefined) return placement.inset ?? PANEL_GAP;
