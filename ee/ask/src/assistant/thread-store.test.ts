@@ -229,6 +229,33 @@ describe('the read of the context of the Postgres store', () => {
   });
 });
 
+describe('the text of the turns a Postgres read hands on', () => {
+  const rowOf = (seq: number, over: Record<string, unknown>) => ({ seq, at: new Date('2026-11-18T10:00:00Z'), route: 'ask', outcome: 'answered', cause: null, intent: null, steps: 1, cited: 0, question_text: null, mask_on: null, answer: null, sensitivity_version: null, ...over });
+
+  it('hands each turn its own text in the order of the turns, drops an answer that is not the stored form or not JSON and keeps its question, and none for a row with the four columns null', async () => {
+    const good = { blocks: [{ kind: 'sentences', items: [{ form: 'frozen', text: 'Fixed text.', cites: [] }] }] };
+    const { held } = pool({ turns: [rowOf(4, { question_text: 'Third?', mask_on: false, answer: good, sensitivity_version: 'sv1:a' }), rowOf(3, { question_text: 'Second?', mask_on: true, answer: JSON.stringify({ blocks: 'not an answer' }) }), rowOf(2, {}), rowOf(1, { question_text: 'Zero?', mask_on: false, answer: 'not json' })] });
+    const read = await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).read(INVESTIGATION, OWNER, 10);
+    // the rows come newest first and are given oldest first
+    expect(read.turns.map((held) => held.stored)).toEqual([{ question: 'Zero?', maskOn: false }, undefined, { question: 'Second?', maskOn: true }, { question: 'Third?', maskOn: false, answer: good, sensitivityVersion: 'sv1:a' }]);
+  });
+});
+
+describe('the context a turn is given', () => {
+  it('holds the references the thread keeps and no stored question or answer text, for the memory store and the statement of the Postgres store', async () => {
+    const memory = createMemoryAssistantThreadStore();
+    await memory.append(turn({ question: 'SENTINEL-QUESTION', maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [{ form: 'unbound', text: 'SENTINEL-ANSWER', cites: [] }] }] } as never }), 0);
+    const context = await memory.readContext(INVESTIGATION, OWNER, 10);
+    expect(context).toHaveLength(1);
+    expect(JSON.stringify(context)).not.toMatch(/SENTINEL/u);
+    // canary: a context that carried the text would show it
+    expect(JSON.stringify([{ ...context[0], question: 'SENTINEL-QUESTION' }])).toMatch(/SENTINEL/u);
+    const { held, statements } = pool({ turns: [] });
+    await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).readContext(INVESTIGATION, OWNER, 5);
+    expect(statements.filter((text) => /FROM assistant_turns/.test(text)).join('\n')).not.toMatch(/question_text|\banswer\b|mask_on|sensitivity_version/u);
+  });
+});
+
 describe('the read of the context of the memory store', () => {
   it('gives the caller’s own last turns oldest first, and none for a person with no thread', async () => {
     const store = createMemoryAssistantThreadStore();

@@ -8,21 +8,21 @@ const WITHHELD = { state: 'withheld' } as const;
 
 /**
  * What a read may send of one item of a stored answer. Under the mask an item that may hold a sensitive value is withheld, so that no text of it leaves: that is every item of a turn whose sensitivity version is not known to be the current one,
- * and the `unbound` items of a turn written with the mask off; an item that is bound is sent as segments (never with a value: the panel draws it from the element read again under the current mask), and a frozen one as stored. With the mask off
+ * and every `unbound` item; an item that is bound is sent as segments (never with a value: the panel draws it from the element read again under the current mask), and a frozen one as stored. With the mask off
  * every item is sent as stored.
  */
-function presentItem(item: { readonly form: string; readonly text?: string; readonly segments?: readonly unknown[] }, maskNow: boolean, verified: boolean, writtenMasked: boolean): ReadItem {
+function presentItem(item: { readonly form: string; readonly text?: string; readonly segments?: readonly unknown[] }, maskNow: boolean, verified: boolean): ReadItem {
   if (maskNow && !verified) return WITHHELD;
   if (item.form === 'bound') return { state: 'segments', segments: (item.segments ?? []) as never };
-  if (maskNow && item.form === 'unbound' && !writtenMasked) return WITHHELD;
+  // an unbound item is never sent under the mask, whatever mask it was written under
+  if (maskNow && item.form === 'unbound') return WITHHELD;
   return { state: 'text', text: item.text ?? '' };
 }
 
 function presentAnswer(stored: StoredTurnText, maskNow: boolean, verified: boolean): ReadAnswer | undefined {
   const { answer } = stored;
   if (answer === undefined) return undefined;
-  const writtenMasked = stored.maskOn === true;
-  const item = (value: Parameters<typeof presentItem>[0]) => presentItem(value, maskNow, verified, writtenMasked);
+  const item = (value: Parameters<typeof presentItem>[0]) => presentItem(value, maskNow, verified);
   const labelOf = (value: Parameters<typeof presentItem>[0]) => {
     const shown = item(value);
     return shown.state === 'segments' ? WITHHELD : shown;

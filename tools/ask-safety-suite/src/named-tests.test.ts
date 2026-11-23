@@ -27,6 +27,7 @@ const ASSISTANT_GUARANTEES = [
   'a streamed turn carries no model text',
   'AI reads leave manual exploration its share',
   'a value the person writes is checked against the type its role needs',
+  'the text a thread keeps leaves only through its own read',
 ] as const;
 
 const KINDS = ['real application', 'route rig', 'single module', 'static check'] as const;

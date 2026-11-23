@@ -80,10 +80,20 @@ const COUNT_TURNS = 'SELECT count(*)::int AS n FROM assistant_turns t JOIN assis
 const READ_CLEARED = 'SELECT cleared_at FROM assistant_thread_clears WHERE investigation_id = $1 AND user_id = $2';
 const HAS_THREAD = 'SELECT 1 FROM assistant_threads WHERE investigation_id = $1 AND user_id = $2';
 
+/** A stored answer as the driver gave it: JSON text or an object; text that is not JSON is nothing. */
+function parsedOrNothing(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
 /** The text a stored row kept, as the store hands it on: an answer that does not read as the stored form is none. */
 function storedOf(row: Record<string, unknown> | undefined): { readonly stored?: StoredTurnText } {
   if (row === undefined) return {};
-  const answer = row['answer'] === null || row['answer'] === undefined ? undefined : storedAnswerSchema.safeParse(typeof row['answer'] === 'string' ? JSON.parse(row['answer']) : row['answer']);
+  const answer = row['answer'] === null || row['answer'] === undefined ? undefined : storedAnswerSchema.safeParse(parsedOrNothing(row['answer']));
   const stored: StoredTurnText = {
     ...(row['question_text'] === null || row['question_text'] === undefined ? {} : { question: String(row['question_text']) }),
     ...(row['mask_on'] === null || row['mask_on'] === undefined ? {} : { maskOn: row['mask_on'] === true }),

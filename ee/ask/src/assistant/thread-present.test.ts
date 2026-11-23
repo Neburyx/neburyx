@@ -74,4 +74,18 @@ describe('what a read sends of a stored thread', () => {
   it('keeps the count of the earlier turns and the clearing', () => {
     expect(presentThread({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' }, false, undefined)).toEqual({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' });
   });
+
+  it('withholds an unbound item under the mask whatever mask the turn was written under, a refusal with its overview and an unbound column label when the version is not verified or the item may hold a value, and sends no literal of a bound item then', () => {
+    const odd: StoredAnswer = { blocks: [{ kind: 'sentences', items: [{ form: 'unbound', text: 'Jordan Lee is listed.', cites: [REF] }] }] };
+    expect(sentences(presentThread(read(turn({ question: 'Q?', maskOn: true, answer: odd, sensitivityVersion: 'sv1:a' })), true, 'sv1:a'))).toEqual([{ state: 'withheld' }]);
+    const refusal: StoredAnswer = { blocks: [{ kind: 'refusal', sentence: { form: 'frozen', text: 'A fixed refusal.' }, overview: [{ form: 'unbound', text: 'Jordan Lee is in view.', cites: [REF] }] }] };
+    const shown = presentThread(read(turn({ question: 'Q?', maskOn: false, answer: refusal, sensitivityVersion: 'sv1:a' })), true, 'sv1:old');
+    expect(JSON.stringify(shown)).not.toMatch(/Jordan|A fixed refusal/u);
+    expect(shown.turns[0]?.answer?.blocks[0]).toEqual({ kind: 'refusal', sentence: { state: 'withheld' }, overview: [{ item: { state: 'withheld' }, cites: [REF] }] });
+    const label: StoredAnswer = { blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'Jordan Lee' }], rows: [{ cells: [{ form: 'frozen', text: 'x' }], cites: [REF] }] }] };
+    const labelled = presentThread(read(turn({ question: 'Q?', maskOn: false, answer: label, sensitivityVersion: 'sv1:a' })), true, 'sv1:a');
+    expect(JSON.stringify(labelled)).not.toContain('Jordan');
+    const literal: StoredAnswer = { blocks: [{ kind: 'sentences', items: [{ form: 'bound', segments: [{ literal: 'Newly sensitive words ' }, { element: REF, property: 'holder' }], cites: [REF] }] }] };
+    expect(JSON.stringify(presentThread(read(turn({ question: 'Q?', maskOn: false, answer: literal, sensitivityVersion: 'sv1:a' })), true, 'sv1:other'))).not.toContain('Newly sensitive');
+  });
 });
