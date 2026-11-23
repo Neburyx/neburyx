@@ -336,12 +336,21 @@ export function rankingBroken(sentence: SummarySentence, sent: string, classes: 
   const at = tokens.findIndex((token) => RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase()));
   if (at < 0) return false;
   const word = (tokens[at] ?? '').toLowerCase();
-  if (tokens.slice(0, at).some((token) => ['not', 'no', 'never'].includes(token.toLowerCase()) || /n't$/iu.test(token))) return true;
-  if (tokens.some((token, index) => index > at && (RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase())))) return true;
   const held = heldElementsOf(sent);
+  const keysOfCited = [...new Set(sentence.cites.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))];
+  // a property whose key begins with the ranking word and is written out after it is named, not ranked; `a maximum of` is a quantity
+  const rest = tokens.slice(at + 1).join('').toLowerCase();
+  if (keysOfCited.some((key) => key.toLowerCase().startsWith(word) && key.length > word.length && rest.startsWith(key.toLowerCase().slice(word.length)))) return false;
+  if (/(?:^|\s)an?\s*$/iu.test(sentence.text.slice(0, sentence.text.toLowerCase().indexOf(word)))) return false;
+  if (tokens.slice(0, at).some((token) => ['not', 'no', 'never'].includes(token.toLowerCase()) || /n't$/iu.test(token))) return true;
+  const namedAfter = (index: number): boolean => keysOfCited.some((key) => key.toLowerCase().startsWith((tokens[index] ?? '').toLowerCase()) && key.toLowerCase().slice((tokens[index] ?? '').length) === tokens.slice(index + 1, index + 1 + 3).join('').toLowerCase().slice(0, key.length - (tokens[index] ?? '').length));
+  if (tokens.some((token, index) => index > at && (RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase())) && !namedAfter(index))) return true;
   const cited = sentence.cites.filter((key) => held.has(key));
-  const property = [...new Set(cited.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))].find((key) => key === tokens[at + 1]);
+  const property = [...new Set(cited.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))].find((key) => [1, 2, 3, 4].some((count) => tokens.slice(at + 1, at + 1 + count).join('').toLowerCase() === key.toLowerCase()));
   if (property === undefined) return true;
+  const count = [1, 2, 3, 4].find((length) => tokens.slice(at + 1, at + 1 + length).join('').toLowerCase() === property.toLowerCase()) ?? 1;
+  const last = (tokens[at + count] ?? '').toLowerCase();
+  const afterProperty = sentence.text.toLowerCase().indexOf(last, sentence.text.toLowerCase().indexOf(word)) + last.length;
   const type = defined(cited.map((key) => held.get(key)).find((element) => element?.values.has(property)), 'an element with the property').type;
   const population = [...held].filter(([, element]) => element.type === type);
   const dataClass = classes.get(property);
@@ -362,7 +371,7 @@ export function rankingBroken(sentence: SummarySentence, sent: string, classes: 
   const named = population.filter(([key, element]) => cited.includes(key) && element.names.some((name) => sentence.text.includes(name)));
   if (named.length > 1 || (named[0] !== undefined && named[0][0] !== top[0])) return true;
   const after = tokens.slice(at + 2).join(' ');
-  const figure = dataClass === 'number' ? /-?\d[\d,]*(?:\.\d+)?/u.exec(sentence.text.slice(sentence.text.indexOf(property) + property.length)) : /\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))?/u.exec(after);
+  const figure = dataClass === 'number' ? /-?\d[\d,]*(?:\.\d+)?/u.exec(sentence.text.slice(afterProperty)) : /\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))?/u.exec(after);
   if (figure === null) return named.length === 0;
   const claimed = dataClass === 'number' ? scaledDecimal(figure[0].replaceAll(',', '')) : timeAsNumber(figure[0], dataClass === 'date' && figure[0].includes('T') ? 'dateTime' : dataClass);
   return claimed === undefined || claimed !== top[1];

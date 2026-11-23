@@ -72,3 +72,15 @@ describe('a canary for each rule of a ranking: with the rule taken out of the pr
     expect(await keptWith(view, sentenceId, mutation)).toBe(true);
   });
 });
+
+describe('the suite\'s own rule leaves a property named with a ranking word, and a quantity, alone', () => {
+  const sent = ['n1 | "widget" | title: "Item A" | id: "W-1" | minimumBalance: 10', 'n2 | "widget" | title: "Item B" | id: "W-2" | minimumBalance: 20'].join('\n');
+  const classes = new Map([['minimumBalance', 'number']]);
+
+  it('does not take a property that begins with the word for a ranking, and takes the ranking of it', () => {
+    expect(rankingBroken({ text: 'Item A has a minimum balance of 10.', cites: ['n1'] }, sent, classes)).toBe(false);
+    expect(rankingBroken({ text: 'Item A has a maximum of 10 widgets.', cites: ['n1'] }, sent, classes)).toBe(false);
+    expect(rankingBroken({ text: 'Item A has the smallest minimum balance, 10.', cites: ['n1', 'n2'] }, sent, classes)).toBe(false);
+    expect(rankingBroken({ text: 'Item B has the smallest minimum balance, 20.', cites: ['n1', 'n2'] }, sent, classes)).toBe(true);
+  });
+});
