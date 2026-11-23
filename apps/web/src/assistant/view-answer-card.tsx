@@ -25,11 +25,14 @@ export function ViewAnswerCard({
   entries,
   heading,
   sources = true,
+  stored = false,
 }: {
   readonly answer: ViewAnswer;
   readonly entries: readonly CitationEntry[];
   readonly heading?: string;
   readonly sources?: boolean;
+  /** An earlier answer from the thread: its model, its coverage and its read steps are not kept, so none is drawn. */
+  readonly stored?: boolean;
 }) {
   const titleId = useId();
   const sourcesId = useId();
@@ -256,7 +259,7 @@ export function ViewAnswerCard({
         <span className="summary-tag summary-tag-accent">
           {ASSISTANT_COPY.drafted}
         </span>
-        <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>
+        {stored ? null : <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>}
       </div>
       {answer.blocks.map(blockOf)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
@@ -285,13 +288,15 @@ export function ViewAnswerCard({
       <p className="summary-note" role="status">
         {note}
       </p>
-      {"reads" in answer ? <ReadSteps reads={answer.reads} /> : null}
-      <div className="assistant-coverage">
-        <p>{ASSISTANT_COPY.coverage}</p>
-        {"summaryCited" in answer.coverage && answer.coverage.summaryCited !== undefined ? <p>{answer.coverage.summaryCited}</p> : null}
-        <p>{answer.coverage.retrieval}</p>
-        <p>{answer.coverage.summary}</p>
-      </div>
+      {stored ? null : "reads" in answer ? <ReadSteps reads={answer.reads} /> : null}
+      {stored ? null : (
+        <div className="assistant-coverage">
+          <p>{ASSISTANT_COPY.coverage}</p>
+          {"summaryCited" in answer.coverage && answer.coverage.summaryCited !== undefined ? <p>{answer.coverage.summaryCited}</p> : null}
+          <p>{answer.coverage.retrieval}</p>
+          <p>{answer.coverage.summary}</p>
+        </div>
+      )}
     </section>
   );
 }

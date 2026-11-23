@@ -1,5 +1,4 @@
-import type { AssistantThreadResponse } from '@neburyx/contracts';
-import { ASSISTANT_COPY, causeText, earlierText, sourcesText } from './copy.js';
+import { ASSISTANT_COPY } from './copy.js';
 
 export function StandingNote() {
   return <p id="assistant-standing" className="visually-hidden">{ASSISTANT_COPY.standing}</p>;
@@ -28,28 +27,5 @@ export function MaskingCard({ summary = false }: { readonly summary?: boolean })
       </section>
       <p className="ask-note">{summary ? ASSISTANT_COPY.maskingNoteWithSummary : ASSISTANT_COPY.maskingNote}</p>
     </div>
-  );
-}
-
-const routeTag = (route: AssistantThreadResponse['turns'][number]['route']): string => (route === 'ask' ? ASSISTANT_COPY.routeAsk : route === 'view' ? ASSISTANT_COPY.routeView : ASSISTANT_COPY.routeRefuse);
-
-export function StoredTurns({ turns, earlier }: { readonly turns: AssistantThreadResponse['turns']; readonly earlier: number }) {
-  return (
-    <section className="assistant-stored" aria-labelledby="assistant-stored-heading">
-      <h3 id="assistant-stored-heading" className="assistant-stored-heading">
-        {ASSISTANT_COPY.storedHeading}
-      </h3>
-      {earlier > 0 ? <p className="ask-note">{earlierText(earlier)}</p> : null}
-      <ol className="assistant-stored-list">
-        {turns.map((turn) => (
-          <li key={turn.seq} className="assistant-stored-row" aria-label={`${routeTag(turn.route)}, ${turn.outcome === 'answered' ? ASSISTANT_COPY.storedAnswered : ASSISTANT_COPY.storedRefused}`}>
-            <span className="assistant-tag">{routeTag(turn.route)}</span>
-            <span className="assistant-stored-what">{turn.intent ?? (turn.cause === undefined ? '' : causeText(turn.cause))}</span>
-            <span className="assistant-stored-end">{turn.outcome === 'answered' ? ASSISTANT_COPY.storedAnswered : turn.outcome === 'waiting' ? ASSISTANT_COPY.waitingClosed : ASSISTANT_COPY.storedRefused}</span>
-            <span className="assistant-stored-count">{sourcesText(turn.citedElements)}</span>
-          </li>
-        ))}
-      </ol>
-    </section>
   );
 }

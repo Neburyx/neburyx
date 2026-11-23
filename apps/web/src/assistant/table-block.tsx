@@ -136,7 +136,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   return (
     <div className="assistant-table-block">
       <div className="assistant-table-head">
-        <p className="assistant-table-title">{table.title}</p>
+        {table.title === "" ? <span /> : <p className="assistant-table-title">{table.title}</p>}
         <button type="button" className="assistant-table-copy" onClick={copyTable} onBlur={() => setCopy("idle")}>
           <span aria-hidden="true" className="icon icon-copy" />
           <span>{copy === "copied" ? ASSISTANT_COPY.tableCopied : ASSISTANT_COPY.copyTable}</span>
@@ -165,7 +165,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         </div>
       )}
       {table.droppedRows === undefined ? null : <p className="assistant-table-notice" role="note">{droppedRowsText(table.droppedRows)}</p>}
-      <p className="assistant-table-footnote">{table.note}</p>
+      {table.note === "" ? null : <p className="assistant-table-footnote">{table.note}</p>}
     </div>
   );
 }
