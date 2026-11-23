@@ -1,35 +1,13 @@
 import { spawn as nodeSpawn, type SpawnOptions } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseApprovalFile } from './schemas.js';
+import { parseApprovalFile, parseScoreList, type Score, type ScoreFile } from './schemas.js';
 
 export interface Slot {
   readonly repeat: number;
   readonly turn: number;
   readonly label: string;
-}
-
-export interface Score {
-  readonly repeat: number;
-  readonly turn: number;
-  readonly label: string;
-  readonly c1: 0 | 1;
-  readonly c2: 0 | 1;
-  readonly c3: 0 | 1;
-  readonly c4: 0 | 1;
-}
-
-export interface ScoreFile {
-  readonly scorer: string;
-  /** `harness` when this tool ran the scorer and counted its calls; `ingested` for scores made outside it. */
-  readonly origin: 'harness' | 'ingested';
-  /** The set these scores are for: its repeat and the hash of its text, so that scores of another set or of an edited one are not taken for these. */
-  readonly repeat: number;
-  readonly setSha256: string;
-  /** The calls the harness counted and enforced; absent for an ingested file. */
-  readonly invocations?: number | undefined;
-  readonly scores: readonly Score[];
 }
 
 /** A scorer run: the prompt goes in, the reply text and the number of model calls the run made come out. A failure to run is `ScorerUnavailable`. */
@@ -51,27 +29,16 @@ export function promptOf(rubric: string, set: string): string {
   return `${rubric.trim()}\n\n${RESPONSE_SHAPE}\nScore every answer of the set below, once, for criteria C1 to C4.\n\n${set}`;
 }
 
-/** The scores of a reply: the first JSON array in it, each entry with its slot and four scores; a reply of another shape gives undefined. */
+/** The scores of a reply: the first JSON array in it, each entry with its slot and four scores of 0 or 1; a reply of another shape gives undefined. */
 export function parseScores(reply: string): Score[] | undefined {
   const start = reply.indexOf('[');
   const end = reply.lastIndexOf(']');
   if (start < 0 || end < start) return undefined;
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(reply.slice(start, end + 1));
+    return parseScoreList(JSON.parse(reply.slice(start, end + 1)));
   } catch {
     return undefined;
   }
-  if (!Array.isArray(parsed)) return undefined;
-  const scores: Score[] = [];
-  for (const entry of parsed) {
-    if (!isRecord(entry)) return undefined;
-    const bit = (value: unknown): 0 | 1 | undefined => (value === 0 || value === 1 ? value : undefined);
-    const [c1, c2, c3, c4] = [bit(entry['c1']), bit(entry['c2']), bit(entry['c3']), bit(entry['c4'])];
-    if (typeof entry['repeat'] !== 'number' || typeof entry['turn'] !== 'number' || typeof entry['label'] !== 'string' || c1 === undefined || c2 === undefined || c3 === undefined || c4 === undefined) return undefined;
-    scores.push({ repeat: entry['repeat'], turn: entry['turn'], label: entry['label'], c1, c2, c3, c4 });
-  }
-  return scores;
 }
 
 const slotKey = (slot: Slot): string => `${slot.repeat}/${slot.turn}/${slot.label}`;
@@ -156,14 +123,18 @@ function runCommand(spawn: Spawn, command: string, args: readonly string[], prom
   });
 }
 
-/** The Codex CLI as the workflows call it: the named model, high effort, read-only, an empty working folder of its own, an environment of its own and the prompt on its input; out of quota is `ScorerUnavailable`. */
+/** The Codex CLI as the workflows call it: the named model, high effort, read-only, an empty working folder of its own, a home and configuration folder of its own that holds only its sign-in, an environment of its own and the prompt on its input; out of quota is `ScorerUnavailable`. */
 export function codexRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     const reply = join(dir, 'reply.txt');
     try {
       const args = ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-c', 'shell_environment_policy.inherit="none"', '-s', 'read-only', '--skip-git-repo-check', '-C', dir, '-o', reply, '-'];
-      const result = await runCommand(spawn, 'codex', args, prompt, { cwd: dir, env: scorerEnv(env, ['OPENAI_API_KEY', 'CODEX_HOME']) });
+      const home = join(dir, 'home');
+      mkdirSync(home);
+      const signIn = join(env['CODEX_HOME'] ?? join(env['HOME'] ?? '', '.codex'), 'auth.json');
+      if (existsSync(signIn)) copyFileSync(signIn, join(home, 'auth.json'));
+      const result = await runCommand(spawn, 'codex', args, prompt, { cwd: dir, env: { ...scorerEnv(env, ['OPENAI_API_KEY']), HOME: home, CODEX_HOME: home } });
       if (QUOTA.test(`${result.out}\n${result.err}`)) throw new ScorerUnavailable('out of quota');
       if (result.code !== 0) throw new ScorerUnavailable('the command failed');
       return { text: readFileSync(reply, 'utf8'), calls: 1 };
@@ -174,7 +145,8 @@ export function codexRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = p
 }
 
 /**
- * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, an empty working folder of its own and an environment of its own. With no tool a
+ * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, an empty working folder of its own and an environment of its own. With an API key of its own
+ * it also gets an empty configuration folder (no hooks or customizations of the user); signed in through the user's account it keeps that account's folder, because the sign-in lives there, and has no tool to read a file with. With no tool a
  * run is one model call; the CLI states the turns it made, and that figure is the count of calls, so a run that made more than one is counted in full and refused by the cap.
  */
 export function opusRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = process.env): Runner {
@@ -182,7 +154,10 @@ export function opusRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = pr
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     try {
       const args = ['-p', '--model', 'opus', '--tools', '', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json'];
-      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: scorerEnv(env, ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR']) });
+      const home = join(dir, 'home');
+      mkdirSync(home);
+      const own = scorerEnv(env, ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR']);
+      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: env['ANTHROPIC_API_KEY'] === undefined ? own : { ...own, HOME: home, CLAUDE_CONFIG_DIR: home } });
       if (QUOTA.test(`${result.out}\n${result.err}`) && result.code !== 0) throw new ScorerUnavailable('out of quota');
       if (result.code !== 0) throw new ScorerUnavailable('the command failed');
       let parsed: unknown;

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -231,6 +231,88 @@ describe('the settings seen in the first turn', () => {
     const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out]), r.io, hooks, { http: s.http, verifyFirstTurn: () => () => Promise.resolve('the run record shows another call limit than the settings file') });
     expect(code).toBe(1);
     expect(s.requests.filter((request) => request.path === '/v1/assistant/turns')).toHaveLength(1);
+  });
+});
+
+describe('the production check of the first turn', () => {
+  const runDb = (settings: Record<string, unknown> | undefined, fail = false): { database: () => Promise<{ db: { query: () => Promise<{ rows: Record<string, unknown>[] }> }; close: () => Promise<void> }> } => ({
+    database: () => Promise.resolve({ db: { query: () => (fail ? Promise.reject(new Error('connection lost postgres://u:SECRET@h/db')) : Promise.resolve({ rows: settings === undefined ? [] : [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings }] })) }, close: () => Promise.resolve() }),
+  });
+  const withSettings = (extra: string): ReturnType<typeof files> => {
+    const f = files();
+    writeFileSync(f.settings, `NEBURYX_ASSISTANT_MODEL=model-a\nNEBURYX_ASSISTANT_MAX_CALLS=7\n${extra}\n`);
+    return f;
+  };
+  const go = async (f: ReturnType<typeof files>, deps: Record<string, unknown>) => {
+    const s = standIn();
+    const r = io();
+    const code = await runCli(args(f, ['--repeats', '1', '--budget', '100', '--out', f.out, '--database-env-file', f.settings]), r.io, hooks, { http: s.http, ...deps });
+    const written = readdirSync(f.out).length === 0 ? undefined : (JSON.parse(readFileSync(join(f.out, 'thread-refs-r1.json'), 'utf8')) as { ended: string; stoppedBecause?: string; turns: unknown[] });
+    return { code, r, s, written };
+  };
+
+  it('passes when the run record shows every setting the file sets, and stops with the turn kept when any of them differs', async () => {
+    const f = withSettings('NEBURYX_ASSISTANT_MAX_STEPS=5\nNEBURYX_ASSISTANT_TIMEOUT_MS=1000');
+    const ok = await go(f, runDb({ model: 'model-a', maxCalls: 7, maxSteps: 5, timeoutMs: 1000 }));
+    expect(ok.code).toBe(0);
+    const g = withSettings('NEBURYX_ASSISTANT_MAX_STEPS=5');
+    const other = await go(g, runDb({ model: 'model-a', maxCalls: 7, maxSteps: 9 }));
+    expect(other.code).toBe(1);
+    expect(other.written).toMatchObject({ ended: 'failed', stoppedBecause: 'the run record of the first turn shows another maxSteps than the settings file' });
+    expect(other.written?.turns).toHaveLength(1);
+  });
+
+  it('treats a blank setting as the product default, as the product does, and does not compare it', async () => {
+    const f = withSettings('NEBURYX_ASSISTANT_MAX_STEPS=\nNEBURYX_ASSISTANT_TIMEOUT_MS=  ');
+    expect((await go(f, runDb({ model: 'model-a', maxCalls: 7, maxSteps: 12, timeoutMs: 30000 }))).code).toBe(0);
+  });
+
+  it('stops with the first turn kept when the database fails after it, naming the cause and no connection string', async () => {
+    const result = await go(withSettings(''), runDb(undefined, true));
+    expect(result.code).toBe(1);
+    expect(result.written).toMatchObject({ ended: 'failed' });
+    expect(result.written?.turns).toHaveLength(1);
+    expect(JSON.stringify([result.written, result.r])).not.toContain('SECRET');
+  });
+});
+
+describe('what the tool prints and sends', () => {
+  it('withholds a printed line that looks like a credential, so a value of the settings never reaches the terminal as such', async () => {
+    const f = files();
+    writeFileSync(f.settings, 'NEBURYX_ASSISTANT_MODEL=sk-ABCDEFGHIJKLMNOPQRSTUVWX\nNEBURYX_ASSISTANT_MAX_CALLS=7\n');
+    const r = io();
+    expect(await runCli(args(f, ['--dry-run']), r.io, hooks, { http: standIn().http })).toBe(0);
+    expect(r.out).toContain('[a line that looked like a credential was withheld]');
+    expect(JSON.stringify(r)).not.toContain('ABCDEFGHIJKLMNOPQRSTUVWX');
+  });
+
+  it('refuses an output folder that does not exist or an output that is a link, before the database is read or a scorer runs', async () => {
+    const f = files();
+    const run = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'refs', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [], ended: 'failed' };
+    const dir = scratch();
+    writeFileSync(join(dir, 'run.json'), JSON.stringify(run));
+    let opened = 0;
+    const database = () => ((opened += 1), Promise.reject(new Error('not reached')));
+    const records = (out: string) => runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', f.settings, '--allowed-tools', 'answer', '--out', out], io().io, hooks, { database });
+    expect(await records(join(dir, 'missing', 'records.json'))).toBe(2);
+    symlinkSync(join(dir, 'run.json'), join(dir, 'link.json'));
+    expect(await records(join(dir, 'link.json'))).toBe(2);
+    expect(opened).toBe(0);
+  });
+});
+
+describe('the documented command', () => {
+  it('runs: the live example of the README, with its placeholders filled, is accepted by the production check of the first turn', async () => {
+    const readme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+    const line = readme.split('\n').find((entry) => entry.startsWith('pnpm ask-eval thread run') && entry.includes('--budget'));
+    expect(line).toBeDefined();
+    const f = files();
+    const fill: Record<string, string> = { '--manifest': f.manifest, '--base': 'http://127.0.0.1:8000', '--settings-file': f.settings, '--head': 'abc1234', '--arm': 'refs', '--budget': '100', '--out': f.out, '--database-env-file': f.settings };
+    const argv = ['thread', 'run', ...[...(line ?? '').matchAll(/(--[a-z-]+)(?: (<[^>]*>|\S+))?/gu)].flatMap((match) => [match[1] ?? '', ...(match[2] === undefined ? [] : [fill[match[1] ?? ''] ?? match[2]])])];
+    expect(argv.some((token) => token.startsWith('<'))).toBe(false);
+    const db = { query: () => Promise.resolve({ rows: [{ id: 'run-1', outcome: 'ok', finished_at: new Date(), calls: 0, settings: { model: 'model-a', maxCalls: 7 } }] }) };
+    const s = standIn();
+    expect(await runCli(argv, io().io, hooks, { http: s.http, database: () => Promise.resolve({ db, close: () => Promise.resolve() }) })).toBe(0);
   });
 });
 

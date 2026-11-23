@@ -16,7 +16,7 @@ interface World {
   summaryCalls?: Record<string, Row[]>;
   fail?: boolean;
 }
-/** A stand-in database that answers the three queries of the reader from a small world, and notes the text of every query. */
+/** A stand-in database that answers the queries of the reader (the run, its calls, the summary's runs and calls, the audit events) from a small world, and notes the text of every query. */
 function dbOf(world: World, queries: string[] = []): Db {
   return {
     query: (text, values) => {
@@ -49,7 +49,7 @@ describe('the records of a turn', () => {
   it('stops with a named cause and no connection string when the database cannot be reached', async () => {
     await expect(readTurnRecords(dbOf(world({ fail: true })), 'tr-1')).rejects.toThrow();
     const dir = mkdtempSync(join(tmpdir(), 'thread-records-'));
-    const run: RepeatFile = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'refs', head: 'h', settings: { model: 'model-a', callLimit: 7 }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [{ n: 1, message: 'one', traceId: 'tr-1', ms: 1, httpStatus: 200, status: 'answered', answer: {} }], ended: 'complete' };
+    const run: RepeatFile = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'refs', head: 'h', settings: { model: 'model-a', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [{ n: 1, message: 'one', traceId: 'tr-1', ms: 1, httpStatus: 200, status: 'answered', answer: {} }], ended: 'complete' };
     writeFileSync(join(dir, 'run.json'), JSON.stringify(run));
     writeFileSync(join(dir, 'db.env'), 'NEBURYX_DEV_DATABASE_URL=postgres://u:SECRET@127.0.0.1/db\n');
     const out: string[] = [];
@@ -83,8 +83,10 @@ describe('the records of a turn', () => {
   });
 
   it('counts the calls of an AI case summary from its own run records with their tokens, reconciles them with the closing event and the audit events, and reports a difference', async () => {
-    const event = (action: string) => ({ id: `${action}-${Math.random()}`, action, result: 'success', source_id: 'demo', detail: { ai: {} } });
+    let issued = 0;
+    const event = (action: string) => ({ id: `${action}-${(issued += 1)}`, action, result: 'success', source_id: 'demo', detail: { ai: {} } });
     const summarised = world({
+      runs: { 'tr-1': [{ id: 'run-1', outcome: 'ok', finished_at: new Date('2026-01-01T00:00:05Z'), calls: 5, settings: {} }] },
       events: { 'tr-1': [event('assistant.route'), event('assistant.agent'), event('assistant.agent'), event('ai.case-summary'), event('ai.case-summary'), { id: 'c', action: 'assistant.turn.closed', result: 'success', detail: { turn: { modelCalls: 5 } } }] },
       summaryRuns: { 'tr-1': [{ id: 's-1' }] },
       summaryCalls: { 's-1': [{ call_number: 1, status: 'answered', tokens_in: 40, tokens_out: 4 }, { call_number: 2, status: 'answered', tokens_in: 60, tokens_out: 6 }] },
@@ -105,7 +107,7 @@ describe('the records of a turn', () => {
     const unfinished = await readTurnRecords(dbOf(world({ runs: { 'tr-1': [{ id: 'run-1', outcome: null, finished_at: null, calls: 3, settings: {} }] } })), 'tr-1');
     expect(unfinished.problems).toContain('the run is not finished in the record');
     const fewer = await readTurnRecords(dbOf(world({ calls: { 'run-1': [call(1), call(3)] } })), 'tr-1');
-    expect(fewer.problems.join(' ')).toContain('the run states 3 calls and the record holds 2');
+    expect(fewer.problems.join(' ')).toContain('the run states 3 calls and the records hold 2');
     expect(fewer.problems.join(' ')).toContain('the call numbers of the record are not 1 to n');
     const open = await readTurnRecords(dbOf(world({ events: { 'tr-1': [] } })), 'tr-1');
     expect(open.problems).toContain('no closing event for this turn in the audit events');
@@ -128,7 +130,7 @@ describe('the records of a turn', () => {
     await readTurnRecords(dbOf(world(), queries), 'tr-1');
     for (const text of queries) expect(text).toMatch(/^SELECT /u);
     const dir = mkdtempSync(join(tmpdir(), 'thread-records-'));
-    const run: RepeatFile = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'refs', head: 'h', settings: { model: 'model-a', callLimit: 7 }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [{ n: 1, message: 'one', traceId: 'tr-1', ms: 1, httpStatus: 200, status: 'answered', answer: {} }], ended: 'complete' };
+    const run: RepeatFile = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'refs', head: 'h', settings: { model: 'model-a', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [{ n: 1, message: 'one', traceId: 'tr-1', ms: 1, httpStatus: 200, status: 'answered', answer: {} }], ended: 'complete' };
     writeFileSync(join(dir, 'run.json'), JSON.stringify(run));
     const out: string[] = [];
     const code = await runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', join(dir, 'unused.env'), '--allowed-tools', 'answer,view', '--out', join(dir, 'records.json')], { out: (line) => out.push(line), err: () => undefined, env: {} }, {} as unknown as EvalHooks, { database: () => Promise.resolve({ db: dbOf(world()), close: () => Promise.resolve() }) });

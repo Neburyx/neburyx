@@ -1,7 +1,7 @@
 import { UsageError } from '../questions.js';
-import type { KeyEntry } from './blind.js';
-import { scoreProblems, zeroNoAnswers, type ScoreFile } from './scorer.js';
-import type { Calibration } from './schemas.js';
+import type { EnrichedRepeat } from './enrich.js';
+import { scoreProblems, zeroNoAnswers } from './scorer.js';
+import type { Bars, Calibration, KeyFile, ScoreFile } from './schemas.js';
 
 type Criterion = 'c1' | 'c2' | 'c3' | 'c4';
 const CRITERIA: readonly Criterion[] = ['c1', 'c2', 'c3', 'c4'];
@@ -25,11 +25,6 @@ export interface ArmFigures {
   /** The criterion, turn and repeat of every point a counted repeat did not earn. */
   readonly misses: readonly { readonly repeat: number; readonly turn: number; readonly criterion: Criterion }[];
   readonly turns: number;
-}
-
-export interface KeyFile {
-  readonly key: { readonly entries: readonly KeyEntry[]; readonly sets: Readonly<Record<string, string>>; readonly noAnswer: readonly string[] };
-  readonly slots: readonly { readonly repeat: number; readonly turn: number; readonly label: string }[];
 }
 
 const medianOf = (values: readonly number[]): number | undefined => {
@@ -64,6 +59,7 @@ function chosenFiles(files: readonly ScoreFile[], key: KeyFile, calibrations: re
     if (other === undefined) continue;
     const calibration = calibrations.find((entry) => entry.scorers.includes(primary) && entry.scorers.includes(other.scorer) && key.key.sets[String(entry.repeat)] === entry.setSha256);
     if (calibration === undefined) throw new UsageError(`the scores of ${other.scorer} for repeat ${repeat} need a calibration against ${primary} made on a set of this run`);
+    if (calibration.slots !== key.slots.filter((slot) => slot.repeat === calibration.repeat).length) throw new UsageError(`the calibration of ${other.scorer} does not cover its whole set`);
     chosen.push({ file: other, counted: !calibration.indicative, indicative: calibration.indicative });
   }
   return chosen;
@@ -106,16 +102,54 @@ export function unblind(files: readonly ScoreFile[], key: KeyFile, calibrations:
   });
 }
 
-export interface Bars {
-  /** The trial's median of the comparison arm (an external private input). */
-  readonly threadMedian: number;
-  readonly plans: { readonly right: number; readonly of: number; readonly bar: number };
-  readonly refusals: { readonly refused: number; readonly of: number };
-  /** The regression sets against their Sonnet baselines, higher is better; a baseline of `null` says none exists, and a baseline names the model, commit and run it came from. */
-  readonly regressions: readonly { readonly set: string; readonly now: number; readonly baseline: number | null; readonly baselineModel: string | null; readonly baselineCommit: string | null; readonly baselineRun: string | null }[];
+/** The key must describe exactly the experiment the bars file defines: unique turns, labels that map to the same arms everywhere, slots that are exactly the entries' labels, sets for exactly the repeats, no-answer slots among the slots. */
+export function validateKey(key: KeyFile, experiment: { readonly repeats: number; readonly turns: number }): void {
+  const repeats = new Map<number, Set<number>>();
+  let arms: string | undefined;
+  const expected = new Set<string>();
+  for (const entry of key.key.entries) {
+    const turns = repeats.get(entry.repeat) ?? new Set<number>();
+    if (turns.has(entry.turn)) throw new UsageError(`the key holds turn ${entry.turn} of repeat ${entry.repeat} twice`);
+    turns.add(entry.turn);
+    repeats.set(entry.repeat, turns);
+    const mapped = Object.values(entry.labels);
+    if (new Set(mapped).size !== mapped.length) throw new UsageError(`the key maps two labels of turn ${entry.turn} of repeat ${entry.repeat} to one arm`);
+    const armSet = [...mapped].sort().join(',');
+    if (arms !== undefined && arms !== armSet) throw new UsageError('the key maps other arms in some turns than in others');
+    arms = armSet;
+    for (const label of Object.keys(entry.labels)) expected.add(`${entry.repeat}/${entry.turn}/${label}`);
+  }
+  const slotKeys = key.slots.map((slot) => `${slot.repeat}/${slot.turn}/${slot.label}`);
+  if (new Set(slotKeys).size !== slotKeys.length || slotKeys.length !== expected.size || !slotKeys.every((slot) => expected.has(slot))) throw new UsageError('the key slots are not exactly the labels of its entries');
+  if (repeats.size !== experiment.repeats) throw new UsageError(`the key holds ${repeats.size} repeats and the experiment has ${experiment.repeats}`);
+  for (const [repeat, turns] of repeats) if (turns.size !== experiment.turns || ![...turns].every((turn) => turn >= 1 && turn <= experiment.turns)) throw new UsageError(`repeat ${repeat} of the key holds ${turns.size} turns and the experiment has ${experiment.turns}`);
+  const setRepeats = Object.keys(key.key.sets).map(Number).sort((a, b) => a - b).join(',');
+  if (setRepeats !== [...repeats.keys()].sort((a, b) => a - b).join(',')) throw new UsageError('the key has sets for other repeats than its entries');
+  for (const slot of key.key.noAnswer) if (!expected.has(slot)) throw new UsageError('the key names a no-answer slot that is not one of its slots');
 }
 
 const REQUIRED_REGRESSIONS = ['ask', 'summary'];
+
+type Verdict = 'passed' | 'failed' | 'unverified';
+
+/** C5 of every turn of the product arm: the three pieces of evidence kept with its records, and the citations the turn made that have no line or cannot be read. */
+export interface C5 {
+  readonly pieces: readonly { readonly repeat: number; readonly turn: number; readonly piece: string; readonly verdict: Verdict }[];
+}
+
+export function c5Of(repeats: readonly EnrichedRepeat[]): C5 {
+  return {
+    pieces: repeats.flatMap((entry) =>
+      entry.file.turns.flatMap((turn, index) => {
+        const evidence = entry.evidence[index];
+        const where = { repeat: entry.file.repeat, turn: turn.n };
+        if (evidence === undefined) return [{ ...where, piece: 'records', verdict: 'unverified' as const }];
+        const citations: Verdict = evidence.citations.missing.length > 0 || evidence.citations.malformed > 0 ? 'failed' : 'passed';
+        return [{ ...where, piece: 'gate', verdict: evidence.gate.gated.verdict }, { ...where, piece: 'tools called', verdict: evidence.gate.called.verdict }, { ...where, piece: 'tools offered', verdict: evidence.gate.offered.verdict }, { ...where, piece: 'citations', verdict: citations }];
+      }),
+    ),
+  };
+}
 
 interface Finding {
   readonly bar: string;
@@ -132,7 +166,7 @@ export interface BarReport {
 }
 
 /** The bars checked: each figure against its bar, below / at or above; a figure below a bar is an open finding with its kind and place, never a wording. The bars file must name the Ask and summary regression sets. */
-export function checkBars(arms: readonly ArmFigures[], product: string, bars: Bars): BarReport {
+export function checkBars(arms: readonly ArmFigures[], product: string, bars: Bars, c5: C5 | undefined): BarReport {
   for (const set of REQUIRED_REGRESSIONS) if (!bars.regressions.some((regression) => regression.set === set)) throw new UsageError(`the bars file has no regression set ${set}`);
   const lines: string[] = [];
   const findings: Finding[] = [];
@@ -146,10 +180,8 @@ export function checkBars(arms: readonly ArmFigures[], product: string, bars: Ba
     lines.push(`thread rubric: median ${median} against ${bars.threadMedian}: ${verdict}`);
     if (verdict === 'below') findings.push({ bar: 'thread rubric', figure: String(median), kind: 'below the trial median', where: 'counted repeats' });
     if (verdict === 'below') for (const miss of figure.misses) findings.push({ bar: 'thread rubric', figure: String(median), kind: 'point missed', where: `criterion ${miss.criterion.toUpperCase()} turn ${miss.turn} repeat ${miss.repeat}` });
-    if (figure.repeats.some((entry) => !entry.counted)) {
-      lines.push('thread rubric: some repeats are indicative and are not counted');
-      findings.push({ bar: 'thread rubric', figure: String(median), kind: 'repeats not counted', where: figure.repeats.filter((entry) => !entry.counted).map((entry) => `repeat ${entry.repeat}`).join(', ') });
-    }
+    const scorers = [...new Set(figure.repeats.map((entry) => entry.scorer))].sort();
+    lines.push(`thread rubric: judged on the counted repeats ${figure.repeats.filter((entry) => entry.counted).map((entry) => entry.repeat).join(', ')}; scorers ${scorers.join(', ')}${figure.repeats.some((entry) => entry.indicative) ? `; indicative, not counted: repeats ${figure.repeats.filter((entry) => entry.indicative).map((entry) => entry.repeat).join(', ')}` : ''}`);
   }
   lines.push(`plans: ${bars.plans.right} of ${bars.plans.of} against ${bars.plans.bar}: ${bars.plans.right < bars.plans.bar ? 'below' : bars.plans.right === bars.plans.bar ? 'at' : 'above'}`);
   if (bars.plans.right < bars.plans.bar) findings.push({ bar: 'plans', figure: `${bars.plans.right} of ${bars.plans.of}`, kind: 'plans below the bar', where: 'set router' });
@@ -160,13 +192,24 @@ export function checkBars(arms: readonly ArmFigures[], product: string, bars: Ba
       lines.push(`regression ${regression.set}: no baseline exists: the regression is not checked`);
       continue;
     }
-    if (regression.baselineModel === null || regression.baselineCommit === null || regression.baselineRun === null) {
-      lines.push(`regression ${regression.set}: the baseline names no model, commit or run: not checked`);
-      findings.push({ bar: `regression ${regression.set}`, figure: String(regression.now), kind: 'baseline provenance missing', where: `set ${regression.set}` });
+    const named = regression.baselineModel !== null && regression.baselineCommit !== null && regression.baselineRun !== null;
+    if (!named || regression.baselineModel !== bars.baselineModel || (bars.run === 2 && regression.baselineRun !== 'run-1')) {
+      lines.push(`regression ${regression.set}: the baseline does not name the model, commit and run the record requires: not checked`);
+      findings.push({ bar: `regression ${regression.set}`, figure: String(regression.now), kind: 'baseline provenance missing or wrong', where: `set ${regression.set}` });
       continue;
     }
     lines.push(`regression ${regression.set}: ${regression.now} against baseline ${regression.baseline} (${regression.baselineModel}, ${regression.baselineCommit}, ${regression.baselineRun}): ${regression.now < regression.baseline ? 'below' : 'at or above'}`);
     if (regression.now < regression.baseline) findings.push({ bar: `regression ${regression.set}`, figure: String(regression.now), kind: 'below the baseline', where: `set ${regression.set}` });
+  }
+  if (c5 === undefined || c5.pieces.length === 0) {
+    lines.push('C5: no evidence was given: shown as unverified');
+    findings.push({ bar: 'C5', figure: 'none', kind: 'no evidence', where: 'all turns' });
+  } else {
+    for (const piece of ['gate', 'tools called', 'tools offered', 'citations', 'records']) {
+      const mine = c5.pieces.filter((entry) => entry.piece === piece);
+      if (mine.length > 0) lines.push(`C5 ${piece}: passed ${mine.filter((entry) => entry.verdict === 'passed').length}, failed ${mine.filter((entry) => entry.verdict === 'failed').length}, unverified ${mine.filter((entry) => entry.verdict === 'unverified').length}`);
+    }
+    for (const entry of c5.pieces.filter((candidate) => candidate.verdict !== 'passed')) findings.push({ bar: 'C5', figure: entry.piece, kind: entry.verdict, where: `turn ${entry.turn} repeat ${entry.repeat}` });
   }
   lines.push(findings.length === 0 ? 'status: every figure is at or above its bar' : 'status: open (a figure is below its bar or missing)');
   return { lines, findings, status: findings.length === 0 ? 'met' : 'open' };

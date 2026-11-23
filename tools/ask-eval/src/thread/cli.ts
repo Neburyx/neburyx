@@ -5,9 +5,9 @@ import { AI_DEFAULTS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
 import { factsOf } from './facts.js';
-import { checkBars, textDecision, unblind } from './report.js';
-import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile } from './scorer.js';
-import { parseBars, parseCalibration, parseEnriched, parseIngested, parseKeyFile, parseLedger, parsePrices, parseRepeatFile, parseScoreFile, type Calibration } from './schemas.js';
+import { c5Of, checkBars, textDecision, unblind, validateKey } from './report.js';
+import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner } from './scorer.js';
+import { parseBars, parseCalibration, parseEnriched, parseIngested, parseKeyFile, parseLedger, parsePrices, parseRepeatFile, parseScoreFile, type Calibration, type Score, type ScoreFile } from './schemas.js';
 import { blindSets, type ArmRepeat } from './blind.js';
 import { readTurnRecords, type Waiting } from './records.js';
 import { enrichRepeat } from './enrich.js';
@@ -18,10 +18,10 @@ import { parseManifest } from './manifest.js';
 import { readSettingsFile, type AllowedName } from './settings-file.js';
 
 const THREAD_USAGE = `usage:
-  ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> --out <file>
+  ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> [--non-gate-tools <a,b,...>] --out <file>
   ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
   ask-eval thread score --ingest <scores file> --scorer-name <name> --slots <key file> --set <file> --out <file>
-  ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--calibrations <file>,...] [--text-arm <arm>] <scores file>...
+  ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> --evidence <records file>,... [--calibrations <file>,...] [--text-arm <arm>] <scores file>...
   ask-eval thread facts [--call-limit <n>] [--prices <file>] <records file>...
   ask-eval thread calibrate --key-file <key file> --a <scores file> --b <scores file> --out <file>
   ask-eval thread blind --seed <text> --sets <folder> --key-folder <another folder> <records file>...
@@ -45,7 +45,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'calibrations', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'allowed-tools', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'calibrations', 'evidence', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'allowed-tools', 'non-gate-tools', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
@@ -239,7 +239,7 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   const connection = await (deps.database ?? connectDb)(resolve(envFile));
   try {
     const waiting = deps.waiting ?? { attempts: RECORD_WAITS, delayMs: RECORD_WAIT_MS, sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
-    const enriched = await enrichRepeat(file, connection.db, { allowedTools, waiting });
+    const enriched = await enrichRepeat(file, connection.db, { allowedTools, withoutGate: (values.get('non-gate-tools') ?? 'answer,view').split(',').filter((name) => name !== ''), waiting });
     writeChecked(resolve(out), `${JSON.stringify(enriched, null, 2)}\n`, false);
     const incomplete = enriched.records.flatMap((entry, index) => (entry === undefined ? [`turn ${index + 1}: no trace id`] : entry.problems.map((problem) => `turn ${index + 1}: ${problem}`)));
     enriched.evidence.forEach((entry, index) => {
@@ -457,15 +457,19 @@ function runReport(args: readonly string[], io: CliIo): number {
   const primary = values.get('primary');
   const product = values.get('product');
   if (keyPath === undefined || barsPath === undefined || primary === undefined || product === undefined || rest.length === 0) throw new UsageError(THREAD_USAGE);
+  if (primary !== 'codex') throw new UsageError('the primary scorer is codex: the bar is judged on its repeats');
   const key = parseKeyFile(readJson(keyPath, 'the key file'), 'the key file');
   const bars = parseBars(readJson(barsPath, 'the bars file'), 'the bars file');
+  validateKey(key, bars);
   const files = rest.map((path) => parseScoreFile(readJson(path, 'a scores file'), 'a scores file'));
   const calibrations = (values.get('calibrations') ?? '').split(',').filter((path) => path !== '').map((path) => parseCalibration(readJson(path, 'a calibration file'), 'a calibration file'));
   const arms = unblind(files, key, calibrations, primary);
   for (const arm of arms) {
     io.out(`arm ${arm.arm}: ${arm.repeats.map((entry) => `repeat ${entry.repeat} ${entry.total}${entry.indicative ? ' (indicative)' : ''}${entry.counted ? '' : ' (not counted)'}`).join(', ')}; median ${arm.median ?? 'none'}; counts C1 ${arm.criteria.c1} C2 ${arm.criteria.c2} C3 ${arm.criteria.c3} C4 ${arm.criteria.c4}`);
   }
-  const report = checkBars(arms, product, bars);
+  const evidencePaths = (values.get('evidence') ?? '').split(',').filter((path) => path !== '');
+  const c5 = evidencePaths.length === 0 ? undefined : c5Of(evidencePaths.map((path) => parseEnriched(readJson(path, 'an evidence file'), 'an evidence file')));
+  const report = checkBars(arms, product, bars, c5);
   for (const line of report.lines) io.out(line);
   for (const finding of report.findings) io.out(`finding: ${finding.bar}: ${finding.figure}: ${finding.kind}: ${finding.where}`);
   io.out(`decision: ${textDecision(arms, product, values.get('text-arm'))}`);

@@ -130,7 +130,6 @@ async function readOnce(db: Db, traceId: string): Promise<TurnRecords> {
   const run = first === undefined ? undefined : { id: text(first['id']) ?? '', outcome: text(first['outcome']), finished: first['finished_at'] !== null && first['finished_at'] !== undefined, calls: count(first['calls']) ?? 0, settings: isRecord(first['settings']) ? first['settings'] : {} };
   if (run !== undefined) {
     if (!run.finished || run.outcome === null) problems.push('the run is not finished in the record');
-    if (run.calls !== calls.length) problems.push(`the run states ${run.calls} calls and the record holds ${calls.length}: count differs`);
     if (!calls.every((call, index) => call.number === index + 1)) problems.push('the call numbers of the record are not 1 to n: count differs');
   }
   const summaryRuns = (await db.query(SUMMARY_RUNS, [traceId])).rows.flatMap((row) => (typeof row['id'] === 'string' ? [row['id']] : []));
@@ -139,6 +138,7 @@ async function readOnce(db: Db, traceId: string): Promise<TurnRecords> {
   const summaryEvents = events.filter((event) => event.action === 'ai.case-summary').length;
   if (summaryEvents !== summaryUsage.length) problems.push(`the audit events name ${summaryEvents} summary calls and the summary records hold ${summaryUsage.length}: count differs`);
   const summaryCalls = summaryUsage.length;
+  if (run !== undefined && run.calls !== calls.length + summaryCalls) problems.push(`the run states ${run.calls} calls and the records hold ${calls.length + summaryCalls}: count differs`);
   const closing = events.find((event) => event.modelCalls !== null);
   const counted = calls.length + summaryCalls;
   const reconciled = closing === undefined || closing.modelCalls === null ? undefined : { counted, stated: closing.modelCalls, agree: counted === closing.modelCalls };

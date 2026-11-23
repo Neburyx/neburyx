@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const root = join(here, '..', '..', '..', '..');
-const SURFACE = ['tools/ask-eval', 'ee/assistant-agent/src', 'ee/ask/src/assistant', 'ee/migrations', 'docs/ai-preview.md'];
+const SURFACE = ['tools/ask-eval', 'ee', 'services/api/src/migrate', 'docs'];
 const SKIPPED = new Set(['node_modules', 'dist', 'coverage']);
 
 /** Every file of the public surface this feature changes, the scanner's own file included. */
@@ -28,19 +28,22 @@ function matches(files: readonly string[], patterns: readonly RegExp[]): string[
   });
 }
 
-/** The private signatures (anchors, term lists, trial figures) are kept outside every repository; a list of patterns, one JSON array of strings, is read from the file the environment names. */
-function privateSignatures(): RegExp[] {
-  const path = process.env['NEBURYX_PRIVATE_SIGNATURES'];
-  if (path === undefined || !existsSync(path)) return [];
+const signaturesPath = process.env['NEBURYX_PRIVATE_SIGNATURES'];
+
+/** The private signatures (anchors, term lists, trial figures) are kept outside every repository: one JSON array of patterns in the file the environment names. A file that is named and cannot be read as that fails the test. */
+function privateSignatures(path: string): RegExp[] {
+  if (!existsSync(path)) throw new Error('NEBURYX_PRIVATE_SIGNATURES names a file that does not exist');
+  if (relative(root, path).startsWith('..') === false) throw new Error('NEBURYX_PRIVATE_SIGNATURES names a file inside the repository');
   const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
-  return Array.isArray(parsed) ? parsed.flatMap((entry) => (typeof entry === 'string' && entry !== '' ? [new RegExp(entry, 'iu')] : [])) : [];
+  if (!Array.isArray(parsed) || parsed.length === 0 || !parsed.every((entry) => typeof entry === 'string' && entry !== '')) throw new Error('NEBURYX_PRIVATE_SIGNATURES is not a non-empty JSON array of patterns');
+  return parsed.map((entry) => new RegExp(String(entry), 'iu'));
 }
 
 describe('the public surface of the thread evaluation', () => {
   const files = SURFACE.flatMap(filesOf);
 
   it('scans the whole changed public surface, this file included', () => {
-    expect(files.length).toBeGreaterThan(30);
+    expect(files.length).toBeGreaterThan(100);
     expect(files).toContain(join(here, 'thread-public.test.ts'));
     expect(files.some((file) => file.endsWith('0012-assistant-run-tools.sql'))).toBe(true);
   });
@@ -49,8 +52,18 @@ describe('the public surface of the thread evaluation', () => {
     expect(matches(files, GENERIC)).toEqual([]);
   });
 
-  it('holds none of the private signatures when they are supplied from outside the repository', () => {
-    expect(matches(files, privateSignatures())).toEqual([]);
+  it.skipIf(signaturesPath === undefined)('holds none of the private signatures supplied from outside the repository (skipped, and shown as skipped, when none are supplied)', () => {
+    expect(matches(files, privateSignatures(signaturesPath ?? ''))).toEqual([]);
+  });
+
+  it('refuses a signatures file that is missing, malformed or inside the repository, so that an unavailable private check is never a clean scan', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'thread-signatures-'));
+    writeFileSync(join(dir, 'empty.json'), '[]');
+    writeFileSync(join(dir, 'text.json'), '"x"');
+    expect(() => privateSignatures(join(dir, 'missing.json'))).toThrow('does not exist');
+    expect(() => privateSignatures(join(dir, 'empty.json'))).toThrow('non-empty');
+    expect(() => privateSignatures(join(dir, 'text.json'))).toThrow('non-empty');
+    expect(() => privateSignatures(join(here, 'thread-public.test.ts'))).toThrow('inside the repository');
   });
 
   it('fails on a planted identifier and a planted private signature, so that the scan can be seen to fail', () => {

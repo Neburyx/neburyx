@@ -19,8 +19,7 @@ function calledIn(reply: string): readonly string[] | undefined {
   const blocks = [...reply.matchAll(/"type"\s*:\s*"tool_use"[^}]*?"name"\s*:\s*"([^"]+)"/gu)].flatMap((match) => (match[1] === undefined ? [] : [match[1]]));
   const at = reply.lastIndexOf(TOOL_CALLS_AT);
   if (at < 0) return reply.startsWith(TOOL_CALLS_AT.trimStart()) ? parsedNames(reply) : blocks;
-  const listed = parsedNames(reply.slice(at + 1));
-  return listed === undefined ? undefined : [...new Set([...blocks, ...listed])];
+  return parsedNames(reply.slice(at + 1));
 }
 
 function parsedNames(list: string): readonly string[] | undefined {
@@ -42,17 +41,19 @@ function parsedNames(list: string): readonly string[] | undefined {
  * The three pieces of evidence for the criterion that no read bypasses the gate and no tool outside the allowed ones was offered or called: gate events of the turn against the reads of the answer, tool names called, and the
  * tool names stored with each agent call. The agent calls are those whose instructions differ from the router's (the first call's); a piece that cannot be established is `unverified`, never `passed`.
  */
-export function gateEvidenceOf(records: TurnRecords, expected: { readonly reads: number; readonly sourceId: string }, allowed: readonly string[]): GateEvidence {
+export function gateEvidenceOf(records: TurnRecords, expected: { readonly reads: number; readonly sourceId: string }, allowed: readonly string[], withoutGate: readonly string[]): GateEvidence {
   const allowedSet = new Set(allowed);
   const read = records.events.filter((event) => !MODEL_OR_TURN.test(event.action) && event.sourceId === expected.sourceId);
   const gateEvents = read.filter((event) => event.result === 'success' || event.result === 'partial').length;
   const failedEvents = read.length - gateEvents;
-  const gatedVerdict: PieceVerdict = records.run === undefined ? 'unverified' : expected.reads === 0 || gateEvents >= expected.reads ? 'passed' : 'failed';
-  const gated = { verdict: gatedVerdict, reads: expected.reads, gateEvents, failedEvents };
   const routerSha = records.calls[0]?.instructionsSha256;
   const agentCalls = records.calls.filter((call) => routerSha !== undefined && call.instructionsSha256 !== routerSha);
   const parsed = agentCalls.map((call) => (call.replyText === null ? [] : calledIn(call.replyText)));
+  const readsMade = parsed.flatMap((names) => names ?? []).filter((name) => !withoutGate.includes(name)).length;
+  const reads = Math.max(expected.reads, readsMade);
+  const gatedVerdict: PieceVerdict = records.run === undefined ? 'unverified' : reads === 0 || gateEvents >= reads ? 'passed' : 'failed';
   const unparsed = parsed.filter((names) => names === undefined).length;
+  const gated = { verdict: gatedVerdict, reads, gateEvents, failedEvents };
   const calledNames = [...new Set(parsed.flatMap((names) => names ?? []))].sort();
   const calledOutside = calledNames.filter((name) => !allowedSet.has(name));
   const calledVerdict: PieceVerdict = calledOutside.length > 0 ? 'failed' : records.run === undefined || unparsed > 0 || agentCalls.length === 0 ? 'unverified' : 'passed';

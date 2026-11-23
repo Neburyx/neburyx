@@ -1,12 +1,5 @@
 import type { EnrichedRepeat } from './enrich.js';
-
-export interface Prices {
-  readonly input: number;
-  readonly output: number;
-  readonly cacheRead: number;
-  readonly cacheWrite: number;
-  readonly date: string;
-}
+import type { Prices } from './schemas.js';
 
 interface TurnFacts {
   readonly repeat: number;
@@ -49,10 +42,14 @@ const median = (values: readonly number[]): number | undefined => {
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 1 ? sorted[middle] : ((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2;
 };
-const PRICE_DATE = /^\d{4}-\d{2}-\d{2}$/u;
+/** Whether text is a date of the calendar written as year-month-day: the date made from it must write itself back the same. */
+export const isCalendarDate = (text: string): boolean => {
+  const date = new Date(`${text}T00:00:00Z`);
+  return /^\d{4}-\d{2}-\d{2}$/u.test(text) && !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === text;
+};
 const priceProblem = (prices: Prices): string | undefined => {
   if (![prices.input, prices.output, prices.cacheRead, prices.cacheWrite].every((price) => Number.isFinite(price) && price >= 0)) return 'the prices are not finite and non-negative numbers: not accepted as evidence';
-  if (!PRICE_DATE.test(prices.date) || Number.isNaN(Date.parse(prices.date))) return 'the prices carry no valid date: not accepted as evidence';
+  if (!isCalendarDate(prices.date)) return 'the prices carry no valid date: not accepted as evidence';
   return undefined;
 };
 const sum = (values: readonly (number | undefined)[]): number | undefined => (values.some((value) => value === undefined) ? undefined : values.reduce<number>((total, value) => total + (value ?? 0), 0));
@@ -71,12 +68,16 @@ export function factsOf(repeats: readonly EnrichedRepeat[], options: { readonly 
   if (options.callLimit !== undefined && limits.length > 0 && !limits.every((limit) => limit === options.callLimit)) runProblems.push(`the call limit given (${options.callLimit}) is not the limit the repeats ran with (${limits.join(', ')})`);
   const turnCounts = [...new Set(repeats.map((entry) => entry.file.turns.length))];
   if (turnCounts.length > 1) runProblems.push(`the repeats hold different numbers of turns (${turnCounts.join(', ')})`);
-  repeats.forEach((entry, index) => {
-    if (entry.file.ended !== 'complete') runProblems.push(`repeat ${index + 1} ended as ${entry.file.ended}, not complete`);
-    if (entry.inconsistent) runProblems.push(`repeat ${index + 1} ran with settings that differ from one turn to another`);
-    if (entry.file.turns.length === 0) runProblems.push(`repeat ${index + 1} holds no turn`);
+  repeats.forEach((entry) => {
+    if (entry.file.ended !== 'complete') runProblems.push(`repeat ${entry.file.repeat} ended as ${entry.file.ended}, not complete`);
+    if (entry.inconsistent) runProblems.push(`repeat ${entry.file.repeat} ran with settings that differ from one turn to another`);
+    if (entry.file.turns.length === 0) runProblems.push(`repeat ${entry.file.repeat} holds no turn`);
+    if (entry.file.turns.length !== entry.file.expectedMessages.length) runProblems.push(`repeat ${entry.file.repeat} holds ${entry.file.turns.length} turns and was to send ${entry.file.expectedMessages.length} messages`);
+    entry.file.turns.forEach((turn, position) => {
+      if (turn.n !== position + 1 || turn.message !== entry.file.expectedMessages[position]) runProblems.push(`repeat ${entry.file.repeat} turn ${position + 1} is not the message that was to be sent`);
+    });
   });
-  repeats.forEach((entry, repeatIndex) => {
+  repeats.forEach((entry) => {
     entry.file.turns.forEach((turn, index) => {
       const records = entry.records[index];
       const incomplete: string[] = [];
@@ -103,7 +104,7 @@ export function factsOf(repeats: readonly EnrichedRepeat[], options: { readonly 
         if (inputTokens === undefined || outputTokens === undefined || cacheReadTokens === undefined || cacheWriteTokens === undefined) incomplete.push('usage incomplete: no cost');
         else cost = (inputTokens * options.prices.input + outputTokens * options.prices.output + cacheReadTokens * options.prices.cacheRead + cacheWriteTokens * options.prices.cacheWrite) / 1_000_000;
       }
-      turns.push({ repeat: repeatIndex + 1, turn: turn.n, traceId: turn.traceId, calls, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, ms: turn.ms, cost, incomplete });
+      turns.push({ repeat: entry.file.repeat, turn: turn.n, traceId: turn.traceId, calls, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, ms: turn.ms, cost, incomplete });
     });
   });
   const callCounts = turns.flatMap((turn) => (turn.calls === undefined ? [] : [turn.calls]));

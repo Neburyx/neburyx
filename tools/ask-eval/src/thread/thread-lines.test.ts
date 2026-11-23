@@ -50,47 +50,56 @@ describe('the evidence for the gate and the tools', () => {
   const ALLOWED = ['view', 'degree-preview', 'answer'];
   const agent = (over: Record<string, unknown> = {}) => call(2, { instructionsSha256: 'sha-agent', replyText: '[{"type":"tool_use","id":"t","name":"view","input":{}}] [{"name":"view","args":{}}]', toolsOffered: ['answer', 'degree-preview', 'view'], ...over });
   const event = (action: string, over: Record<string, unknown> = {}) => ({ action, result: 'success', sourceId: 'demo', tokensIn: null, tokensOut: null, cacheReadTokens: null, cacheWriteTokens: null, modelCalls: null, ...over });
+  const WITHOUT_GATE = ['answer', 'view'];
   const router = call(1, { instructionsSha256: 'sha-router' });
   const expected = (reads: number) => ({ reads, sourceId: 'demo' });
 
   it('reports a piece that cannot be established as unverified, never as passed: no stored tool names, no run record, a reply whose tool calls cannot be read', () => {
-    const noNames = gateEvidenceOf(records({ calls: [router, agent({ toolsOffered: null })] }), expected(1), ALLOWED);
+    const noNames = gateEvidenceOf(records({ calls: [router, agent({ toolsOffered: null })] }), expected(1), ALLOWED, WITHOUT_GATE);
     expect(noNames.offered.verdict).toBe('unverified');
     expect(noNames.offered.callsWithoutNames).toBe(1);
-    const noRun = gateEvidenceOf(records({ run: undefined, calls: [] }), expected(1), ALLOWED);
+    const noRun = gateEvidenceOf(records({ run: undefined, calls: [] }), expected(1), ALLOWED, WITHOUT_GATE);
     expect([noRun.gated.verdict, noRun.called.verdict, noRun.offered.verdict]).toEqual(['unverified', 'unverified', 'unverified']);
-    const broken = gateEvidenceOf(records({ calls: [router, agent({ replyText: 'text [{"name":"view","args":' })] }), expected(0), ALLOWED);
+    const broken = gateEvidenceOf(records({ calls: [router, agent({ replyText: 'text [{"name":"view","args":' })] }), expected(0), ALLOWED, WITHOUT_GATE);
     expect(broken.called).toMatchObject({ verdict: 'unverified', unparsed: 1 });
   });
 
   it('identifies an agent call by its instructions, not by what its reply holds, so a call with no recognisable reply still has its offered names checked', () => {
-    const silent = gateEvidenceOf(records({ calls: [router, agent({ replyText: null, toolsOffered: ['answer', 'delete'] })] }), expected(0), ALLOWED);
+    const silent = gateEvidenceOf(records({ calls: [router, agent({ replyText: null, toolsOffered: ['answer', 'delete'] })] }), expected(0), ALLOWED, WITHOUT_GATE);
     expect(silent.offered).toMatchObject({ verdict: 'failed', outside: ['delete'] });
   });
 
   it('reads the tool calls as the audited model stores them, a list of name and args after the content', () => {
-    const outside = gateEvidenceOf(records({ calls: [router, agent({ replyText: 'thinking [{"name":"delete","args":{"id":"x"}}]', toolsOffered: ['answer'] })] }), expected(0), ALLOWED);
+    const outside = gateEvidenceOf(records({ calls: [router, agent({ replyText: 'thinking [{"name":"delete","args":{"id":"x"}}]', toolsOffered: ['answer'] })] }), expected(0), ALLOWED, WITHOUT_GATE);
     expect(outside.called).toMatchObject({ verdict: 'failed', outside: ['delete'], names: ['delete'] });
   });
 
   it('fails a tool outside the allowlist that was called or offered, and a read with no gate event', () => {
-    const outside = gateEvidenceOf(records({ calls: [router, agent({ replyText: '[{"type":"tool_use","id":"t","name":"delete","input":{}}]', toolsOffered: ['answer', 'delete'] })], events: [event('entity.load')] }), expected(1), ALLOWED);
+    const outside = gateEvidenceOf(records({ calls: [router, agent({ replyText: '[{"type":"tool_use","id":"t","name":"delete","input":{}}]', toolsOffered: ['answer', 'delete'] })], events: [event('entity.load')] }), expected(1), ALLOWED, WITHOUT_GATE);
     expect(outside.called).toMatchObject({ verdict: 'failed', outside: ['delete'] });
     expect(outside.offered).toMatchObject({ verdict: 'failed', outside: ['delete'] });
-    const ungated = gateEvidenceOf(records({ calls: [router, agent()], events: [] }), expected(2), ALLOWED);
+    const ungated = gateEvidenceOf(records({ calls: [router, agent()], events: [] }), expected(2), ALLOWED, WITHOUT_GATE);
     expect(ungated.gated).toMatchObject({ verdict: 'failed', reads: 2, gateEvents: 0 });
   });
 
   it('counts only events of a read of the turn\'s source that ended in success: a failed event, an event of another source and a model or turn event are not a gated read', () => {
     const events = [event('entity.degree_preview', { result: 'failed' }), event('entity.load', { sourceId: 'other' }), event('assistant.agent'), event('ai.case-summary'), event('assistant.turn.closed')];
-    const evidence = gateEvidenceOf(records({ calls: [router, agent()], events }), expected(1), ALLOWED);
+    const evidence = gateEvidenceOf(records({ calls: [router, agent()], events }), expected(1), ALLOWED, WITHOUT_GATE);
     expect(evidence.gated).toMatchObject({ verdict: 'failed', gateEvents: 0, failedEvents: 1 });
-    const good = gateEvidenceOf(records({ calls: [router, agent()], events: [...events, event('entity.degree_preview', { result: 'partial' })] }), expected(1), ALLOWED);
+    const good = gateEvidenceOf(records({ calls: [router, agent()], events: [...events, event('entity.degree_preview', { result: 'partial' })] }), expected(1), ALLOWED, WITHOUT_GATE);
     expect(good.gated).toMatchObject({ verdict: 'passed', gateEvents: 1 });
   });
 
+  it('counts the reads the model made from its own calls, so a read tool called twice with one gate event fails even when the answer lists none', () => {
+    const twice = agent({ replyText: '[{"type":"tool_use","id":"t","name":"degree-preview","input":{}}] [{"name":"degree-preview","args":{}},{"name":"degree-preview","args":{}}]' });
+    const evidence = gateEvidenceOf(records({ calls: [router, twice], events: [event('entity.degree_preview')] }), expected(0), ALLOWED, WITHOUT_GATE);
+    expect(evidence.gated).toMatchObject({ verdict: 'failed', reads: 2, gateEvents: 1 });
+    const viewOnly = gateEvidenceOf(records({ calls: [router, agent()], events: [] }), expected(0), ALLOWED, WITHOUT_GATE);
+    expect(viewOnly.gated).toMatchObject({ verdict: 'passed', reads: 0 });
+  });
+
   it('passes the three pieces only with gate events for the reads, called tools inside the list and stored offered names inside the list', () => {
-    const evidence = gateEvidenceOf(records({ calls: [router, agent()], events: [event('entity.degree_preview'), event('assistant.agent', { tokensIn: 1, tokensOut: 1, cacheReadTokens: 0, cacheWriteTokens: 0 })] }), expected(1), ALLOWED);
+    const evidence = gateEvidenceOf(records({ calls: [router, agent()], events: [event('entity.degree_preview'), event('assistant.agent', { tokensIn: 1, tokensOut: 1, cacheReadTokens: 0, cacheWriteTokens: 0 })] }), expected(1), ALLOWED, WITHOUT_GATE);
     expect([evidence.gated.verdict, evidence.called.verdict, evidence.offered.verdict]).toEqual(['passed', 'passed', 'passed']);
     expect(evidence.offered.names).toEqual(['answer', 'degree-preview', 'view']);
   });

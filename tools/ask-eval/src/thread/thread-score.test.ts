@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../cli.js';
 import type { EvalHooks } from '../hooks.js';
-import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, parseScores, promptOf, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type Slot } from './scorer.js';
+import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, parseScores, promptOf, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Slot } from './scorer.js';
+import type { Score } from './schemas.js';
 
 const SLOTS: Slot[] = [{ repeat: 1, turn: 1, label: 'A' }, { repeat: 1, turn: 1, label: 'B' }];
 const scoreOf = (slot: Slot, bits: [0 | 1, 0 | 1, 0 | 1, 0 | 1] = [1, 1, 1, 1]): Score => ({ ...slot, c1: bits[0], c2: bits[1], c3: bits[2], c4: bits[3] });
@@ -110,6 +111,24 @@ describe('the scorer and its approval', () => {
     expect(seen[1]?.args.slice(seen[1].args.indexOf('--tools'), seen[1].args.indexOf('--tools') + 2)).toEqual(['--tools', '']);
   });
 
+  it('gives Codex a home of its own that holds only its sign-in: the user\'s configuration is not there, and the original folder is not its home', async () => {
+    const real = mkdtempSync(join(tmpdir(), 'thread-codex-home-'));
+    writeFileSync(join(real, 'auth.json'), '{"token":"scorer-own"}');
+    writeFileSync(join(real, 'config.toml'), 'model = "user-setting"');
+    let seen: { home: string | undefined; files: string[]; auth: string } | undefined;
+    const spawn = ((_: string, args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
+      const home = options.env?.['CODEX_HOME'];
+      seen = { home, files: home === undefined ? [] : readdirSync(home).sort(), auth: home === undefined ? '' : readFileSync(join(home, 'auth.json'), 'utf8') };
+      writeFileSync(args[args.indexOf('-o') + 1] ?? '', '[]');
+      return { stdin: { end: () => undefined }, stdout: { on: () => undefined }, stderr: { on: () => undefined }, on: (event: string, listener: (value?: number) => void) => { if (event === 'close') setTimeout(() => listener(0), 5); } };
+    }) as never;
+    await codexRunner(spawn, { CODEX_HOME: real, HOME: '/home/user', PATH: '/bin' })('p');
+    expect(seen?.home).not.toBe(real);
+    expect(seen?.files).toEqual(['auth.json']);
+    expect(seen?.auth).toContain('scorer-own');
+    expect(existsSync(seen?.home ?? real)).toBe(false);
+  });
+
   it('counts the model calls an Opus run states and refuses a reply that does not state them', async () => {
     const spawnOf = (out: string) =>
       ((_: string, __: readonly string[]) => ({
@@ -189,6 +208,47 @@ describe('the score command', () => {
     expect(spent.err.join('\n')).toContain('used up');
     expect(calls).toBe(0);
     expect(existsSync(join(dir, 'c.json'))).toBe(false);
+  });
+
+  it('counts a launch that fails or is cut off, because the invocation is taken before the program starts', async () => {
+    const dir = setup(5);
+    const crash: Runner = () => Promise.reject(new ScorerUnavailable('cut off'));
+    const failed = await run([...common(dir), '--scorer', 'codex', '--approval', join(dir, 'approval.json'), '--out', join(dir, 'a.json')], { codex: crash, opus: crash });
+    expect(failed.code).toBe(1);
+    expect(JSON.parse(readFileSync(join(dir, 'approval.json.ledger.json'), 'utf8'))).toEqual({ used: 1 });
+  });
+
+  it('takes an invocation under a lock: a lock another command holds stops the launch with no invocation spent, and a lock left by a crashed command long ago is cleared', async () => {
+    const dir = setup(5);
+    const lock = join(dir, 'approval.json.ledger.json.lock');
+    let launches = 0;
+    const good: Runner = () => ((launches += 1), Promise.resolve(ran(reply(SLOTS.map((slot) => scoreOf(slot))))));
+    const args = (out: string) => [...common(dir), '--scorer', 'codex', '--approval', join(dir, 'approval.json'), '--out', join(dir, out)];
+    mkdirSync(lock);
+    const held = await run(args('a.json'), { codex: good, opus: good });
+    expect(held.code).toBe(1);
+    expect(held.err.join('\n')).toContain('locked by another command');
+    expect(launches).toBe(0);
+    expect(existsSync(join(dir, 'approval.json.ledger.json'))).toBe(false);
+    const old = new Date(Date.now() - 120_000);
+    utimesSync(lock, old, old);
+    expect((await run(args('b.json'), { codex: good, opus: good })).code).toBe(0);
+    expect(launches).toBe(1);
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it('refuses a rubric or a set that looks like it holds a credential, before any scorer runs, and a ledger that cannot be written, before any invocation', async () => {
+    const dir = setup();
+    let launches = 0;
+    const good: Runner = () => ((launches += 1), Promise.resolve(ran(reply(SLOTS.map((slot) => scoreOf(slot))))));
+    writeFileSync(join(dir, 'leaky.md'), 'use sk-ABCDEFGHIJKLMNOPQRSTUVWX to score');
+    const leaky = await run(['--set', join(dir, 'set-1.md'), '--slots', join(dir, 'key.json'), '--rubric', join(dir, 'leaky.md'), '--scorer', 'opus', '--max-calls', '1', '--out', join(dir, 'a.json')], { codex: good, opus: good });
+    expect(leaky.code).toBe(2);
+    expect(JSON.stringify(leaky)).not.toContain('ABCDEFGH');
+    symlinkSync(join(dir, 'rubric.md'), join(dir, 'approval.json.ledger.json'));
+    const linked = await run([...common(dir), '--scorer', 'codex', '--approval', join(dir, 'approval.json'), '--out', join(dir, 'b.json')], { codex: good, opus: good });
+    expect(linked.code).toBe(2);
+    expect(launches).toBe(0);
   });
 
   it('runs the Opus path with an enforced count and records the calls, and marks ingested scores as not harness-run', async () => {

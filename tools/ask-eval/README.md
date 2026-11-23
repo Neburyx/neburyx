@@ -86,12 +86,12 @@ The scoring, loading, reporting, baseline and scan are here. The classifier, the
 
 ```bash
 pnpm ask-eval thread run --manifest <file> --base http://127.0.0.1:<port> --settings-file <env file the product was started with> --head <commit> --arm <name> --dry-run
-pnpm ask-eval thread run --manifest <file> --base http://127.0.0.1:<port> --settings-file <env file> --head <commit> --arm <name> --budget <model calls> --out <folder outside every git tree>
-pnpm ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> --out <file>
+pnpm ask-eval thread run --manifest <file> --base http://127.0.0.1:<port> --settings-file <env file> --head <commit> --arm <name> --budget <model calls> --out <folder outside every git tree> --database-env-file <env file>
+pnpm ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> [--non-gate-tools <a,b,...>] --out <file>
 pnpm ask-eval thread blind --seed <text> --sets <folder> --key-folder <another folder> <records file>...
 pnpm ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
 pnpm ask-eval thread calibrate --key-file <key file> --a <scores file> --b <scores file> --out <file>
-pnpm ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--calibrations <file>,...] [--text-arm <arm>] <scores file>...
+pnpm ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> --evidence <records file>,... [--calibrations <file>,...] [--text-arm <arm>] <scores file>...
 pnpm ask-eval thread facts [--call-limit <n>] [--prices <file>] <records file>...
 ```
 

@@ -1,17 +1,14 @@
 import { z } from 'zod';
 import { UsageError } from '../questions.js';
-import type { KeyFile } from './report.js';
-import type { Bars } from './report.js';
-import type { Prices } from './facts.js';
+import { isCalendarDate } from './facts.js';
 import type { EnrichedRepeat } from './enrich.js';
 import type { RepeatFile } from './driver.js';
-import type { ScoreFile } from './scorer.js';
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u);
 const whole = z.number().int().min(0);
 const position = z.number().int().min(1);
 const bit = z.union([z.literal(0), z.literal(1)]);
-const label = z.enum(['A', 'B', 'C', 'D']);
+const label = z.string().regex(/^[A-D]$/u);
 const slot = z.strictObject({ repeat: position, turn: position, label });
 const nullToUndefined = <T>(value: T | null | undefined): T | undefined => value ?? undefined;
 
@@ -39,22 +36,29 @@ const keyFile = z.strictObject({
 
 const finite = z.number().finite();
 const bars = z.strictObject({
+  repeats: position,
+  turns: position,
+  run: z.union([z.literal(1), z.literal(2)]),
+  baselineModel: z.string().min(1),
   threadMedian: finite.min(0),
   plans: z.strictObject({ right: whole, of: position, bar: whole }).refine((plans) => plans.right <= plans.of && plans.bar <= plans.of, { message: 'plans: the figures do not fit their denominator' }),
   refusals: z.strictObject({ refused: whole, of: position }).refine((refusals) => refusals.refused <= refusals.of, { message: 'refusals: more refused than asked' }),
   regressions: z.array(z.strictObject({ set: z.string().min(1), now: finite, baseline: finite.nullable(), baselineModel: z.string().min(1).nullable(), baselineCommit: z.string().min(1).nullable(), baselineRun: z.string().min(1).nullable() })),
 });
 
-const prices = z.strictObject({ input: finite.min(0), output: finite.min(0), cacheRead: finite.min(0), cacheWrite: finite.min(0), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u) });
+const prices = z.strictObject({ input: finite.min(0), output: finite.min(0), cacheRead: finite.min(0), cacheWrite: finite.min(0), date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u).refine(isCalendarDate, { message: 'not a calendar date' }) });
 
+const percent = finite.min(0).max(100);
 const calibration = z.strictObject({
   repeat: position,
   setSha256: sha256,
   scorers: z.tuple([z.string().min(1), z.string().min(1)]),
   slots: position,
-  agreement: z.strictObject({ overall: finite, c1: finite, c2: finite, c3: finite, c4: finite }),
+  agreement: z.strictObject({ overall: percent, c1: percent, c2: percent, c3: percent, c4: percent }),
   indicative: z.boolean(),
-});
+})
+.refine((value) => Math.abs(value.agreement.overall - (value.agreement.c1 + value.agreement.c2 + value.agreement.c3 + value.agreement.c4) / 4) < 1e-6, { message: 'the overall agreement is not the mean of the four criteria' })
+.refine((value) => value.indicative === value.agreement.overall < 90, { message: 'indicative does not follow from the overall agreement' });
 
 const approval = z.strictObject({ exceptionConfirmed: z.literal(true), invocations: position, by: z.string().min(1), at: z.string().min(1) });
 const ledger = z.strictObject({ used: whole });
@@ -141,12 +145,16 @@ function parsed<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
   throw new UsageError(`${what} does not have the shape it should: ${first === undefined ? '' : `${first.path.join('.') || 'the file'}: ${first.message}`}`.slice(0, 160));
 }
 
+export const parseScoreList = (value: unknown): Score[] | undefined => {
+  const result = z.array(score).safeParse(value);
+  return result.success ? result.data : undefined;
+};
 export const parseIngested = (value: unknown, what: string): { readonly scores: readonly z.infer<typeof score>[] } => parsed(z.strictObject({ scores: z.array(score) }), value, what);
-export const parseScoreFile = (value: unknown, what: string): ScoreFile => parsed(scoreFile, value, what);
-export const parseKeyFile = (value: unknown, what: string): KeyFile & { readonly key: { readonly sets: Readonly<Record<string, string>>; readonly noAnswer: readonly string[] }; readonly slots: readonly { readonly repeat: number; readonly turn: number; readonly label: string }[] } => parsed(keyFile, value, what);
-export const parseBars = (value: unknown, what: string): Bars => parsed(bars, value, what);
-export const parsePrices = (value: unknown, what: string): Prices => parsed(prices, value, what);
-export const parseCalibration = (value: unknown, what: string): Calibration => parsed(calibration, value, what);
+export const parseScoreFile = (value: unknown, what: string) => parsed(scoreFile, value, what);
+export const parseKeyFile = (value: unknown, what: string) => parsed(keyFile, value, what);
+export const parseBars = (value: unknown, what: string) => parsed(bars, value, what);
+export const parsePrices = (value: unknown, what: string) => parsed(prices, value, what);
+export const parseCalibration = (value: unknown, what: string) => parsed(calibration, value, what);
 export const parseApprovalFile = (value: unknown): z.infer<typeof approval> | undefined => {
   const result = approval.safeParse(value);
   return result.success ? result.data : undefined;
@@ -155,11 +163,9 @@ export const parseLedger = (value: unknown, what: string): z.infer<typeof ledger
 export const parseRepeatFile = (value: unknown, what: string): RepeatFile => parsed(repeatFile, value, what);
 export const parseEnriched = (value: unknown, what: string): EnrichedRepeat => parsed(enriched, value, what);
 
-export interface Calibration {
-  readonly repeat: number;
-  readonly setSha256: string;
-  readonly scorers: readonly [string, string];
-  readonly slots: number;
-  readonly agreement: { readonly overall: number; readonly c1: number; readonly c2: number; readonly c3: number; readonly c4: number };
-  readonly indicative: boolean;
-}
+export type Score = z.infer<typeof score>;
+export type ScoreFile = z.infer<typeof scoreFile>;
+export type KeyFile = z.infer<typeof keyFile>;
+export type Bars = z.infer<typeof bars>;
+export type Prices = z.infer<typeof prices>;
+export type Calibration = z.infer<typeof calibration>;

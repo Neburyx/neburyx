@@ -4,16 +4,15 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../cli.js';
 import type { EvalHooks } from '../hooks.js';
-import { checkBars, textDecision, unblind, type ArmFigures, type Bars, type KeyFile } from './report.js';
-import type { Calibration } from './schemas.js';
-import type { Score, ScoreFile } from './scorer.js';
+import { c5Of, checkBars, textDecision, unblind, validateKey, type ArmFigures, type C5 } from './report.js';
+import type { Bars, Calibration, KeyFile, Score, ScoreFile } from './schemas.js';
 
 type Bits = [0 | 1, 0 | 1, 0 | 1, 0 | 1];
 const shaOf = (repeat: number): string => String(repeat).repeat(64).slice(0, 64).replace(/[^0-9a-f]/gu, 'a');
 const keyOf = (repeats: number, turns: number, noAnswer: string[] = []): KeyFile => {
   const numbers = Array.from({ length: repeats }, (_, index) => index + 1);
   return {
-    key: { entries: numbers.flatMap((repeat) => Array.from({ length: turns }, (_, index) => ({ repeat, turn: index + 1, labels: { A: 'arm-refs', B: 'arm-text' } }))), sets: Object.fromEntries(numbers.map((repeat) => [String(repeat), shaOf(repeat)])), noAnswer },
+    key: { entries: numbers.flatMap((repeat) => Array.from({ length: turns }, (_, index) => ({ repeat, turn: index + 1, labels: { A: 'arm-refs', B: 'arm-text' } }))), seed: 's', manifestSha256: 'm', sets: Object.fromEntries(numbers.map((repeat) => [String(repeat), shaOf(repeat)])), noAnswer },
     slots: numbers.flatMap((repeat) => Array.from({ length: turns }, (_, index) => ['A', 'B'].map((label) => ({ repeat, turn: index + 1, label }))).flat()),
   };
 };
@@ -27,7 +26,8 @@ const scoresFor = (repeat: number, scorer: string, bits: Record<string, Bits>, t
 });
 const calibration = (scorer: string, indicative: boolean, repeat = 1): Calibration => ({ repeat, setSha256: shaOf(repeat), scorers: ['codex', scorer], slots: 4, agreement: { overall: indicative ? 60 : 95, c1: 60, c2: 60, c3: 60, c4: 60 }, indicative });
 const PROVENANCE = { baselineModel: 'model-x', baselineCommit: 'abc1234', baselineRun: 'run-1' };
-const BARS: Bars = { threadMedian: 6, plans: { right: 183, of: 185, bar: 182 }, refusals: { refused: 29, of: 29 }, regressions: [{ set: 'ask', now: 30, baseline: 30, ...PROVENANCE }, { set: 'summary', now: 12, baseline: 12, ...PROVENANCE }] };
+const C5_OK: C5 = { pieces: [{ repeat: 1, turn: 1, piece: 'gate', verdict: 'passed' }] };
+const BARS: Bars = { repeats: 3, turns: 2, run: 1, baselineModel: 'model-x', threadMedian: 6, plans: { right: 183, of: 185, bar: 182 }, refusals: { refused: 29, of: 29 }, regressions: [{ set: 'ask', now: 30, baseline: 30, ...PROVENANCE }, { set: 'summary', now: 12, baseline: 12, ...PROVENANCE }] };
 
 describe('the unblinded figures', () => {
   it('sums C1 to C4 per arm and repeat, takes the median over repeats and counts per criterion', () => {
@@ -79,38 +79,92 @@ describe('the bars', () => {
   const armsOf = (median: number): ArmFigures[] => unblind([scoresFor(1, 'codex', { A: [1, 1, 1, 1], B: [0, 0, 0, 0] })], keyOf(1, 2), [], 'codex').map((arm) => ({ ...arm, countedMedian: arm.arm === 'arm-refs' ? median : arm.countedMedian }));
 
   it('says below, at or above for each bar, writes a miss as an open finding with its kind and place and no wording, and keeps the status open', () => {
-    const below = checkBars(armsOf(5), 'arm-refs', { ...BARS, plans: { right: 181, of: 185, bar: 182 }, refusals: { refused: 28, of: 29 }, regressions: [{ set: 'ask', now: 30, baseline: 30, ...PROVENANCE }, { set: 'summary', now: 10, baseline: 12, ...PROVENANCE }] });
+    const below = checkBars(armsOf(5), 'arm-refs', { ...BARS, plans: { right: 181, of: 185, bar: 182 }, refusals: { refused: 28, of: 29 }, regressions: [{ set: 'ask', now: 30, baseline: 30, ...PROVENANCE }, { set: 'summary', now: 10, baseline: 12, ...PROVENANCE }] }, C5_OK);
     expect(below.status).toBe('open');
     expect(below.findings.map((finding) => finding.bar)).toEqual(expect.arrayContaining(['plans', 'refusals', 'regression summary']));
     expect(below.lines.join('\n')).toMatch(/median 5 against 6: below/u);
     expect(JSON.stringify(below.findings)).not.toMatch(/sentence|answer text/iu);
-    const at = checkBars(armsOf(6), 'arm-refs', BARS);
+    const at = checkBars(armsOf(6), 'arm-refs', BARS, C5_OK);
     expect(at.lines[0]).toMatch(/against 6: at/u);
     expect(at.status).toBe('met');
-    expect(checkBars(armsOf(7), 'arm-refs', BARS).lines[0]).toMatch(/above/u);
+    expect(checkBars(armsOf(7), 'arm-refs', BARS, C5_OK).lines[0]).toMatch(/above/u);
   });
 
   it('names a missed thread point by its criterion, turn and repeat, from the counted repeats', () => {
     const arms = unblind([scoresFor(1, 'codex', { A: [1, 0, 1, 1], B: [1, 1, 1, 1] })], keyOf(1, 2), [], 'codex');
-    const report = checkBars(arms, 'arm-refs', { ...BARS, threadMedian: 99 });
+    const report = checkBars(arms, 'arm-refs', { ...BARS, threadMedian: 99 }, C5_OK);
     expect(report.findings.filter((finding) => finding.bar === 'thread rubric').map((finding) => finding.where)).toEqual(['counted repeats', 'criterion C2 turn 1 repeat 1', 'criterion C2 turn 2 repeat 1']);
   });
 
   it('requires the Ask and summary regression sets, says plainly when no baseline exists and does not claim a check, and opens a finding for a baseline with no provenance', () => {
-    expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [] })).toThrow(/no regression set ask/u);
-    expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [BARS.regressions[0] as Bars['regressions'][number]] })).toThrow(/no regression set summary/u);
-    const none = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: null, baselineModel: null, baselineCommit: null, baselineRun: null }, BARS.regressions[1] as Bars['regressions'][number]] });
+    expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [] }, C5_OK)).toThrow(/no regression set ask/u);
+    expect(() => checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [BARS.regressions[0] as Bars['regressions'][number]] }, C5_OK)).toThrow(/no regression set summary/u);
+    const none = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: null, baselineModel: null, baselineCommit: null, baselineRun: null }, BARS.regressions[1] as Bars['regressions'][number]] }, C5_OK);
     expect(none.lines.join('\n')).toContain('regression ask: no baseline exists: the regression is not checked');
     expect(none.status).toBe('met');
-    const bare = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: 30, baselineModel: null, baselineCommit: 'c', baselineRun: 'r' }, BARS.regressions[1] as Bars['regressions'][number]] });
-    expect(bare.findings).toEqual([{ bar: 'regression ask', figure: '30', kind: 'baseline provenance missing', where: 'set ask' }]);
+    const bare = checkBars(armsOf(6), 'arm-refs', { ...BARS, regressions: [{ set: 'ask', now: 30, baseline: 30, baselineModel: null, baselineCommit: 'c', baselineRun: 'r' }, BARS.regressions[1] as Bars['regressions'][number]] }, C5_OK);
+    expect(bare.findings).toEqual([{ bar: 'regression ask', figure: '30', kind: 'baseline provenance missing or wrong', where: 'set ask' }]);
   });
 
-  it('opens a finding when no repeat is counted and when some repeats are only indicative', () => {
-    const arms = unblind([scoresFor(1, 'codex', { A: [1, 1, 1, 1] }), scoresFor(2, 'opus', { A: [1, 1, 1, 1] })], keyOf(2, 2), [calibration('opus', true)], 'codex');
-    const report = checkBars(arms, 'arm-refs', BARS);
-    expect(report.findings.map((finding) => finding.kind)).toContain('repeats not counted');
-    expect(checkBars([], 'arm-refs', BARS).findings[0]).toMatchObject({ kind: 'no figure' });
+  it('judges the bar on the counted repeats only, says which are indicative and names the scorers, and opens a finding when no repeat is counted', () => {
+    const arms = unblind([scoresFor(1, 'codex', { A: [1, 1, 1, 1] }), scoresFor(2, 'opus', { A: [0, 0, 0, 0] })], keyOf(2, 2), [calibration('opus', true)], 'codex');
+    const report = checkBars(arms, 'arm-refs', { ...BARS, repeats: 2, threadMedian: 8 }, C5_OK);
+    expect(report.status).toBe('met');
+    expect(report.lines.join('\n')).toContain('judged on the counted repeats 1; scorers codex, opus; indicative, not counted: repeats 2');
+    expect(checkBars([], 'arm-refs', BARS, C5_OK).findings[0]).toMatchObject({ kind: 'no figure' });
+  });
+
+  it('rejects a baseline of another model, and for run 2 a baseline that is not run 1\'s', () => {
+    const arms = armsOf(6);
+    const regressions = (over: Partial<Bars['regressions'][number]>) => [{ ...(BARS.regressions[0] as Bars['regressions'][number]), ...over }, BARS.regressions[1] as Bars['regressions'][number]];
+    expect(checkBars(arms, 'arm-refs', { ...BARS, regressions: regressions({ baselineModel: 'another' }) }, C5_OK).findings.map((finding) => finding.kind)).toEqual(['baseline provenance missing or wrong']);
+    expect(checkBars(arms, 'arm-refs', { ...BARS, run: 2, regressions: regressions({ baselineRun: 'run-9' }) }, C5_OK).findings).toHaveLength(1);
+    expect(checkBars(arms, 'arm-refs', { ...BARS, run: 2, regressions: BARS.regressions.map((entry) => ({ ...entry, baselineRun: 'run-1' })) }, C5_OK).status).toBe('met');
+  });
+
+  it('shows C5 as unverified when there is no evidence, shows the three pieces and the citations, and keeps the status open on a failed or unverified piece', () => {
+    expect(checkBars(armsOf(6), 'arm-refs', BARS, undefined)).toMatchObject({ status: 'open', findings: [{ bar: 'C5', kind: 'no evidence' }] });
+    const mixed: C5 = { pieces: [{ repeat: 1, turn: 2, piece: 'gate', verdict: 'failed' }, { repeat: 1, turn: 2, piece: 'tools offered', verdict: 'unverified' }, { repeat: 1, turn: 3, piece: 'gate', verdict: 'passed' }] };
+    const report = checkBars(armsOf(6), 'arm-refs', BARS, mixed);
+    expect(report.status).toBe('open');
+    expect(report.lines.join('\n')).toContain('C5 gate: passed 1, failed 1, unverified 0');
+    expect(report.findings.filter((finding) => finding.bar === 'C5').map((finding) => [finding.kind, finding.where])).toEqual([['failed', 'turn 2 repeat 1'], ['unverified', 'turn 2 repeat 1']]);
+  });
+
+  it('works C5 out of the evidence kept with the records: a turn with no evidence is unverified, a citation with no line fails', () => {
+    const gate = { gated: { verdict: 'passed' as const, reads: 0, gateEvents: 0, failedEvents: 0 }, called: { verdict: 'passed' as const, names: [], outside: [], unparsed: 0 }, offered: { verdict: 'unverified' as const, names: [], outside: [], callsWithoutNames: 1 } };
+    const turn = (n: number) => ({ n, message: 'q', traceId: `t${n}`, ms: 1, httpStatus: 200, status: 'answered' as const, answer: {} });
+    const enriched = { file: { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 2, expectedMessages: ['q', 'q'], arm: 'a', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [turn(1), turn(2)], ended: 'complete' as const }, records: [undefined, undefined], evidence: [{ citations: { callNumber: 2, mapped: [], missing: ['n9'], malformed: 0 }, gate }, undefined], inconsistent: false, disagreeing: [] };
+    const c5 = c5Of([enriched]);
+    expect(c5.pieces.map((piece) => [piece.turn, piece.piece, piece.verdict])).toEqual([[1, 'gate', 'passed'], [1, 'tools called', 'passed'], [1, 'tools offered', 'unverified'], [1, 'citations', 'failed'], [2, 'records', 'unverified']]);
+    expect(c5.pieces.every((piece) => piece.repeat === 2)).toBe(true);
+  });
+});
+
+describe('the key', () => {
+  const experiment = { repeats: 3, turns: 2 };
+  it('accepts a key that is exactly the experiment', () => {
+    expect(() => validateKey(keyOf(3, 2, ['1/1/A']), experiment)).not.toThrow();
+  });
+
+  it('refuses a key of another size, with a turn twice, slots that are not its labels, sets for other repeats, arms that change, or a no-answer slot that is not a slot', () => {
+    expect(() => validateKey(keyOf(1, 2), experiment)).toThrow(/holds 1 repeats and the experiment has 3/u);
+    expect(() => validateKey(keyOf(3, 1), experiment)).toThrow(/holds 1 turns and the experiment has 2/u);
+    const key = keyOf(3, 2);
+    expect(() => validateKey({ ...key, key: { ...key.key, entries: [...key.key.entries, key.key.entries[0] as KeyFile['key']['entries'][number]] } }, experiment)).toThrow(/twice/u);
+    expect(() => validateKey({ ...key, slots: key.slots.slice(1) }, experiment)).toThrow(/slots are not exactly/u);
+    expect(() => validateKey({ ...key, slots: [...key.slots.slice(1), key.slots[1] as KeyFile['slots'][number]] }, experiment)).toThrow(/slots are not exactly/u);
+    expect(() => validateKey({ ...key, key: { ...key.key, sets: { ...key.key.sets, '9': shaOf(9) } } }, experiment)).toThrow(/sets for other repeats/u);
+    expect(() => validateKey({ ...key, key: { ...key.key, noAnswer: ['7/7/A'] } }, experiment)).toThrow(/no-answer slot/u);
+    const swapped = { ...key, key: { ...key.key, entries: key.key.entries.map((entry, index) => (index === 0 ? { ...entry, labels: { A: 'arm-refs', B: 'arm-other' } } : entry)) } };
+    expect(() => validateKey(swapped, experiment)).toThrow(/other arms/u);
+    const doubled = { ...key, key: { ...key.key, entries: key.key.entries.map((entry, index) => (index === 0 ? { ...entry, labels: { A: 'arm-refs', B: 'arm-refs' } } : entry)) } };
+    expect(() => validateKey(doubled, experiment)).toThrow(/one arm/u);
+  });
+
+  it('refuses a calibration that contradicts itself or does not cover its set', () => {
+    const files = [scoresFor(1, 'codex', { A: [1, 1, 1, 1] }), scoresFor(2, 'opus', { A: [1, 1, 1, 1] })];
+    expect(() => unblind(files, keyOf(2, 2), [{ ...calibration('opus', false), slots: 3 }], 'codex')).toThrow(/does not cover its whole set/u);
   });
 });
 
@@ -133,27 +187,53 @@ describe('the text decision', () => {
 });
 
 describe('the report command', () => {
-  it('exits 1 and names the finding when a bar is missed, 0 when every figure is at or above, and always states the text decision', async () => {
+  const setup = () => {
     const dir = mkdtempSync(join(tmpdir(), 'thread-bars-'));
-    const key = keyOf(1, 2);
-    writeFileSync(join(dir, 'key.json'), JSON.stringify({ ...key, key: { ...key.key, seed: 's', manifestSha256: 'm' } }));
+    writeFileSync(join(dir, 'key.json'), JSON.stringify(keyOf(1, 2)));
     writeFileSync(join(dir, 'scores.json'), JSON.stringify(scoresFor(1, 'codex', { A: [1, 1, 1, 1], B: [0, 0, 0, 0] })));
-    const run = async (bars: unknown, extra: string[] = ['--text-arm', 'arm-text']) => {
-      writeFileSync(join(dir, 'bars.json'), JSON.stringify(bars));
-      const out: string[] = [];
-      const err: string[] = [];
-      const code = await runCli(['thread', 'report', '--key-file', join(dir, 'key.json'), '--bars', join(dir, 'bars.json'), '--primary', 'codex', '--product', 'arm-refs', ...extra, join(dir, 'scores.json')], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, {} as unknown as EvalHooks);
-      return { code, out, err };
-    };
-    const miss = await run({ ...BARS, threadMedian: 9 });
+    const gate = { gated: { verdict: 'passed', reads: 0, gateEvents: 0, failedEvents: 0 }, called: { verdict: 'passed', names: [], outside: [], unparsed: 0 }, offered: { verdict: 'passed', names: [], outside: [], callsWithoutNames: 0 } };
+    const evidence = { citations: { callNumber: 2, mapped: [], missing: [], malformed: 0 }, gate };
+    const turn = (n: number) => ({ n, message: 'q', traceId: `t${n}`, ms: 1, httpStatus: 200, status: 'answered', answer: {} });
+    const file = { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q', 'q'], arm: 'arm-refs', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: [turn(1), turn(2)], ended: 'complete' };
+    writeFileSync(join(dir, 'evidence.json'), JSON.stringify({ file, records: [null, null], evidence: [evidence, evidence], inconsistent: false, disagreeing: [] }));
+    return dir;
+  };
+  const run = async (dir: string, bars: unknown, extra: string[] = ['--text-arm', 'arm-text'], primary = 'codex') => {
+    writeFileSync(join(dir, 'bars.json'), JSON.stringify(bars));
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await runCli(['thread', 'report', '--key-file', join(dir, 'key.json'), '--bars', join(dir, 'bars.json'), '--primary', primary, '--product', 'arm-refs', '--evidence', join(dir, 'evidence.json'), ...extra, join(dir, 'scores.json')], { out: (line) => out.push(line), err: (line) => err.push(line), env: {} }, {} as unknown as EvalHooks);
+    return { code, out, err };
+  };
+  const bars = { ...BARS, repeats: 1, turns: 2 };
+
+  it('exits 1 and names the finding when a bar is missed, 0 when every figure is at or above, and always states the text decision', async () => {
+    const dir = setup();
+    const miss = await run(dir, { ...bars, threadMedian: 9 });
     expect(miss.code).toBe(1);
     expect(miss.out.join('\n')).toContain('finding: thread rubric');
     expect(miss.out.join('\n')).toContain('decision: ');
-    const met = await run(BARS, []);
+    const met = await run(dir, bars, []);
     expect(met.code).toBe(0);
     expect(met.out.join('\n')).toContain('decision: text arm not run: references stay');
-    expect((await run({ ...BARS, plans: { right: 190, of: 185, bar: 182 } })).code).toBe(2);
-    expect((await run({ ...BARS, regressions: [] })).code).toBe(2);
-    expect((await run({ ...BARS, unknown: 1 })).code).toBe(2);
+    expect(met.out.join('\n')).toContain('C5 gate: passed 2, failed 0, unverified 0');
+    expect((await run(dir, { ...bars, plans: { right: 190, of: 185, bar: 182 } })).code).toBe(2);
+    expect((await run(dir, { ...bars, regressions: [] })).code).toBe(2);
+    expect((await run(dir, { ...bars, unknown: 1 })).code).toBe(2);
+  });
+
+  it('refuses a key of another size than the bars file defines, and a primary scorer that is not codex', async () => {
+    const dir = setup();
+    expect((await run(dir, { ...bars, repeats: 3 })).err.join('\n')).toContain('holds 1 repeats and the experiment has 3');
+    expect((await run(dir, bars, [], 'opus')).err.join('\n')).toContain('the primary scorer is codex');
+  });
+
+  it('refuses a calibration whose figures contradict each other', async () => {
+    const dir = setup();
+    for (const [name, body] of [['zero.json', { ...calibration('opus', false), agreement: { overall: 0, c1: 0, c2: 0, c3: 0, c4: 0 } }], ['mean.json', { ...calibration('opus', true), agreement: { overall: 50, c1: 60, c2: 60, c3: 60, c4: 60 } }], ['range.json', { ...calibration('opus', true), agreement: { overall: 120, c1: 120, c2: 120, c3: 120, c4: 120 } }]] as const) {
+      writeFileSync(join(dir, name), JSON.stringify(body));
+      const result = await run(dir, bars, ['--calibrations', join(dir, name)]);
+      expect(result.code, name).toBe(2);
+    }
   });
 });

@@ -6,7 +6,7 @@ import type { TurnRecords } from './records.js';
 const call = (number: number, tokensIn: number | null = 100, tokensOut: number | null = 10) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn, tokensOut, instructionsSha256: 'sha-x', instructionsText: '', valuesText: '', replyText: null, toolsOffered: null });
 const event = (action: string, cacheRead: number | 'unknown' | null = 1000, cacheWrite: number | 'unknown' | null = 200) => ({ action, result: 'success', sourceId: 'demo', tokensIn: null, tokensOut: null, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, modelCalls: null });
 const records = (calls: number, over: Partial<TurnRecords> = {}): TurnRecords => ({ traceId: 't', run: { id: 'r', outcome: 'ok', finished: true, calls, settings: {} }, calls: Array.from({ length: calls }, (_, index) => call(index + 1)), events: [event('assistant.route'), ...Array.from({ length: calls - 1 }, () => event('assistant.agent'))], summaryCalls: 0, summaryUsage: [], reconciled: undefined, problems: [], ...over });
-const repeat = (turns: { ms: number; records: TurnRecords | undefined }[]): EnrichedRepeat => ({ file: { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: ['q'], arm: 'a', head: 'h', settings: { model: 'm', callLimit: 7 }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: turns.map((turn, index) => ({ n: index + 1, message: 'q', traceId: `t${index}`, ms: turn.ms, httpStatus: 200, status: 'answered', answer: {} })), ended: 'complete' }, records: turns.map((turn) => turn.records), evidence: [], inconsistent: false, disagreeing: [] });
+const repeat = (turns: { ms: number; records: TurnRecords | undefined }[]): EnrichedRepeat => ({ file: { manifest: { name: 'm', sha256: 'x' }, sourceId: 'demo', repeat: 1, expectedMessages: turns.map(() => 'q'), arm: 'a', head: 'h', settings: { model: 'm', callLimit: 7, configured: {} }, startedAt: '', endedAt: '', view: { entities: 26 }, turns: turns.map((turn, index) => ({ n: index + 1, message: 'q', traceId: `t${index}`, ms: turn.ms, httpStatus: 200, status: 'answered', answer: {} })), ended: 'complete' }, records: turns.map((turn) => turn.records), evidence: [], inconsistent: false, disagreeing: [] });
 const PRICES = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75, date: '2026-11-01' };
 
 describe('the facts of a run', () => {
@@ -64,5 +64,18 @@ describe('the facts of a run', () => {
     expect(partial.incomplete).toContain('repeat 1 turn 1: the model events do not cover every call: no cache counts');
     expect(partial.evidence).toBe(false);
     for (const bad of [{ ...PRICES, input: -1 }, { ...PRICES, output: Number.NaN }, { ...PRICES, date: 'yesterday' }]) expect(factsOf([base], { callLimit: 7, prices: bad }).evidence).toBe(false);
+  });
+
+  it('accepts no evidence from a file that holds fewer turns than messages it was to send or other messages, reports the repeat by the number the file says, and refuses a date that is not on the calendar', () => {
+    const base = repeat([{ ms: 1, records: records(3) }]);
+    const short = { ...base, file: { ...base.file, repeat: 3, expectedMessages: Array.from({ length: 12 }, () => 'q') } };
+    const facts = factsOf([short], { callLimit: 7, prices: PRICES });
+    expect(facts.incomplete).toContain('repeat 3 holds 1 turns and was to send 12 messages');
+    expect(facts.turns[0]?.repeat).toBe(3);
+    expect(facts.evidence).toBe(false);
+    const other = { ...base, file: { ...base.file, expectedMessages: ['another'] } };
+    expect(factsOf([other], { callLimit: 7, prices: PRICES }).incomplete).toContain('repeat 1 turn 1 is not the message that was to be sent');
+    for (const date of ['2026-02-31', '2026-13-01', '2026-1-1']) expect(factsOf([base], { callLimit: 7, prices: { ...PRICES, date } }).evidence).toBe(false);
+    expect(factsOf([base], { callLimit: 7, prices: { ...PRICES, date: '2026-02-28' } }).evidence).toBe(true);
   });
 });

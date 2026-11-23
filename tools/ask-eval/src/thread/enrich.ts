@@ -22,20 +22,20 @@ export interface EnrichedRepeat {
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const readsOf = (answer: unknown): number => (isRecord(answer) && Array.isArray(answer['reads']) ? answer['reads'].length : 0);
 
-function evidenceOf(records: TurnRecords, answer: unknown, sourceId: string, allowedTools: readonly string[]): TurnEvidence {
+function evidenceOf(records: TurnRecords, answer: unknown, sourceId: string, allowedTools: readonly string[], withoutGate: readonly string[]): TurnEvidence {
   const lines = linesOfAnswer(records);
   const cited = citedLinesOf(answer, lines);
   return {
     citations: { callNumber: lines?.callNumber ?? null, mapped: [...cited.mapped.entries()], missing: cited.missing, malformed: cited.malformed },
-    gate: gateEvidenceOf(records, { reads: readsOf(answer), sourceId }, allowedTools),
+    gate: gateEvidenceOf(records, { reads: readsOf(answer), sourceId }, allowedTools, withoutGate),
   };
 }
 
 /** The run file with the records of each of its turns read back by trace id, and the citation and gate evidence worked out once from them. */
-export async function enrichRepeat(file: RepeatFile, db: Db, options: { readonly allowedTools: readonly string[]; readonly waiting?: Waiting }): Promise<EnrichedRepeat> {
+export async function enrichRepeat(file: RepeatFile, db: Db, options: { readonly allowedTools: readonly string[]; readonly withoutGate: readonly string[]; readonly waiting?: Waiting }): Promise<EnrichedRepeat> {
   const records: (TurnRecords | undefined)[] = [];
   for (const turn of file.turns) records.push(turn.traceId === undefined ? undefined : await readTurnRecords(db, turn.traceId, options.waiting));
-  const evidence = records.map((entry, index) => (entry === undefined ? undefined : evidenceOf(entry, file.turns[index]?.answer, file.sourceId, options.allowedTools)));
+  const evidence = records.map((entry, index) => (entry === undefined ? undefined : evidenceOf(entry, file.turns[index]?.answer, file.sourceId, options.allowedTools, options.withoutGate)));
   const disagreeing = settingsDisagreements(records.flatMap((entry) => (entry === undefined ? [] : [entry])));
   return { file, records, evidence, inconsistent: disagreeing.length > 0, disagreeing };
 }

@@ -8,7 +8,7 @@ export interface ArmRepeat {
   readonly enriched: EnrichedRepeat;
 }
 
-export interface KeyEntry {
+interface KeyEntry {
   readonly repeat: number;
   readonly turn: number;
   readonly labels: Readonly<Record<string, string>>;
@@ -50,6 +50,8 @@ export function permutationOf(arms: readonly string[], random: () => number): st
 const LABELS = ['A', 'B', 'C', 'D'];
 const NO_ANSWER = '(no answer: this turn did not run or did not give an answer)';
 
+/** Whether the product answered: a response that is not an answer (not-answered, a question back, a failure) has nothing to score and earns no point. */
+const isAnswered = (answer: unknown): boolean => isRecord(answer) && answer['status'] === 'answered';
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** The answer as the scorer reads it: its sentences or table rows with their cites, and the notes the server wrote; never an id, a model name or an arm. */
@@ -67,21 +69,17 @@ function answerText(answer: unknown): string {
   return parts.length === 0 ? NO_ANSWER : parts.join('\n');
 }
 
-const QUALITY = /\b(exact|estimated|lower[ -]?bound|unknown)\b/iu;
-
 /**
- * The coverage lines of an answer in one neutral form: whitespace collapsed, the separators made one, the quality words written one way. Each line must hold a count and a quality label, so a format that cannot be
- * made neutral fails and names the turn rather than reaching a scorer in an arm-specific shape.
+ * The coverage lines of an answer in one neutral form: whitespace collapsed and the separators made one, with nothing added and no label invented. The view route writes two lines (and a third for a cited summary), the ask route
+ * one text or none; a view answer with no coverage, or a line that is not text, fails naming the turn rather than reaching a scorer in an arm-specific shape.
  */
 function coverageText(answer: unknown, where: string): string {
   if (!isRecord(answer) || answer['status'] !== 'answered' || answer['route'] === 'refuse') return '(none)';
   const coverage = answer['coverage'];
-  if (!isRecord(coverage)) throw new UsageError(`${where}: the coverage lines are missing, so they cannot be made neutral`);
-  const lines = ['retrieval', 'summary'].map((name) => coverage[name]).filter((line) => line !== undefined);
-  if (lines.length === 0 || !lines.every((line): line is string => typeof line === 'string')) throw new UsageError(`${where}: the coverage lines are not text, so they cannot be made neutral`);
-  const retrieval = coverage['retrieval'];
-  if (typeof retrieval === 'string' && (!/\d/u.test(retrieval) || !QUALITY.test(retrieval))) throw new UsageError(`${where}: the retrieval line holds no count or no quality label, so it cannot be made neutral`);
-  return lines.map((line) => line.replace(/[·•|]/gu, ' · ').replace(/lower[ -]?bound/giu, 'lower bound').replace(/\s+/gu, ' ').trim()).join(' | ');
+  if (coverage === undefined && answer['route'] === 'ask') return '(none)';
+  const lines = typeof coverage === 'string' ? [coverage] : isRecord(coverage) ? ['retrieval', 'summary', 'summaryCited'].map((name) => coverage[name]).filter((line) => line !== undefined) : [];
+  if (lines.length === 0 || !lines.every((line): line is string => typeof line === 'string')) throw new UsageError(`${where}: the coverage lines are missing or not text, so they cannot be made neutral`);
+  return lines.map((line) => line.replace(/[·•|]/gu, ' · ').replace(/\s+/gu, ' ').trim()).join(' | ');
 }
 
 /** The leak check: a forbidden text (an arm name, a trace id, a model name, a manifest or file name) in a written set fails and names the turn. */
@@ -135,7 +133,7 @@ export function blindSets(repeats: readonly ArmRepeat[], options: { readonly see
         const record = source?.enriched.file.turns[index];
         const evidence = source?.enriched.evidence[index];
         out.push(`### Answer ${label}`);
-        if (record === undefined || record.status === 'failed') {
+        if (record === undefined || record.status === 'failed' || !isAnswered(record.answer)) {
           out.push(NO_ANSWER);
           noAnswer.push(`${repeat}/${turn}/${label}`);
         } else {

@@ -19,7 +19,7 @@ function repeatOf(arm: string, repeat: number, turns: { message: string; answer:
     expectedMessages: expected,
     arm,
     head: 'headsha1',
-    settings: { model: 'model-secret-name', callLimit: 7 },
+    settings: { model: 'model-secret-name', callLimit: 7, configured: {} },
     startedAt: '',
     endedAt: '',
     view: { entities: 26 },
@@ -94,13 +94,27 @@ describe('the blind sets', () => {
     expect(() => blindSets([], options())).toThrow(/no run/u);
   });
 
+  it('takes the coverage formats the product writes as they are, with nothing added: no count to find, a text of the ask route, no coverage for a refusal or an ask answer without one', () => {
+    const shown = (coverage: unknown, route = 'view') => blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { ...answer('Alpha.'), route, coverage } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options()).sets.get(1) ?? '';
+    expect(shown({ retrieval: 'read 1, typology: 2 lines', summary: 'The answer cites 0 of 2.' })).toContain('Coverage: read 1, typology: 2 lines | The answer cites 0 of 2.');
+    expect(shown({ retrieval: 'nothing found', summary: 'none', summaryCited: 'two sentences of the summary' })).toContain('Coverage: nothing found | none | two sentences of the summary');
+    expect(shown('one text of the ask route', 'ask')).toContain('Coverage: one text of the ask route');
+    expect(shown(undefined, 'ask')).toContain('Coverage: (none)');
+  });
+
+  it('scores a response that is not an answer as no answer: nothing to score, no point, and the slot is recorded in the key', () => {
+    const output = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: { status: 'not-answered', sentence: 'x' } }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options());
+    expect(output.key.noAnswer).toHaveLength(1);
+    expect(output.sets.get(1)).toContain('(no answer: this turn did not run or did not give an answer)');
+  });
+
   it('writes every coverage line in one neutral form, and fails naming the turn when a coverage line cannot be made neutral', () => {
     const odd = { ...answer('Alpha is in view.'), coverage: { retrieval: '6  shown • all types 184,533 (lowerBound)', summary: 'Cites 1 of 1.' } };
     const set = blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: odd }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options()).sets.get(1) ?? '';
-    expect(set).toContain('Coverage: 6 shown · all types 184,533 (lower bound) | Cites 1 of 1.');
-    for (const coverage of [undefined, { retrieval: 'no figures here', summary: 'x' }, { retrieval: 7, summary: 'x' }]) {
+    expect(set).toContain('Coverage: 6 shown · all types 184,533 (lowerBound) | Cites 1 of 1.');
+    for (const coverage of [undefined, { retrieval: 7, summary: 'x' }, {}]) {
       const bad = { ...answer('Alpha.'), coverage };
-      expect(() => blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: bad }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options())).toThrow(/repeat 1 turn 1 of arm arm-refs: the (coverage|retrieval)/u);
+      expect(() => blindSets([repeatOf('arm-refs', 1, [{ message: 'q', answer: bad }]), repeatOf('arm-text', 1, [{ message: 'q', answer: answer('Beta.') }])], options())).toThrow(/repeat 1 turn 1 of arm arm-refs: the coverage lines/u);
     }
   });
 });
