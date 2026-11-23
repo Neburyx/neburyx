@@ -150,6 +150,18 @@ describe.each([
     expect(verdict(`The elements do not show which ${type} has the largest ${key}.`, ['n9', 's1'], held)).toBe('kept');
   });
 
+  it('does not take a property whose key begins with a ranking word for a ranking, nor a quantity', () => {
+    const held = build(['10', '2', '7']);
+    const rename = (name: string): CheckedText => {
+      const lines = new Map([...held.lines].map(([id, line]) => [id, line.replace(`${key}:`, `${name}:`)]));
+      return { ...held, lines, text: [...lines.values()].join('\n'), rankedValues: new Map(all.map((id) => [id, [{ key: name, dataClass: 'number', value: held.rankedValues?.get(id)?.[0]?.value ?? '' }]])) };
+    };
+    expect(verdict(`${a} has a minimum balance of 10.`, all, rename('minimumBalance'))).toBe('kept');
+    expect(verdict(`${a} has a highest_bid of 10.`, all, rename('highest_bid'))).toBe('kept');
+    expect(verdict(`${a} has a maximum of 10 ${key}.`, all, held)).toBe('kept');
+    expect(verdict(`${a} has the smallest minimum balance, 10.`, all, rename('minimumBalance'))).toBe('comparison');
+  });
+
   it('removes a ranking over more than was read, and keeps one over those shown that cites them all with the line of a bounded read', () => {
     const held = build(['10', '2', '7']);
     expect(verdict(`${a} has the largest ${key}, 10, in total.`, all, held)).toBe('comparison');
@@ -290,6 +302,12 @@ describe.each([
       const tied = times(['2022-09-10T12:00:00+02:00', '2022-09-10T10:00:00Z', '2022-09-10T10:00:00.000000001Z'], 'dateTime');
       expect(verdict(`The earliest ${time} is 2022-09-10T10:00:00Z.`, all, tied)).toBe('comparison');
       expect(verdict(`The earliest ${time} is 2022-09-10T10:00:00.`, all, instants)).toBe('comparison');
+    });
+
+    it('reads a claimed instant written with a zone in brackets whole', () => {
+      const zone = times(['2022-09-10T10:00:00Z[UTC]', '2022-09-09T10:00:00Z[UTC]', '2022-09-08T10:00:00Z[UTC]'], 'dateTime');
+      expect(verdict(`The latest ${time} is 2022-09-10T10:00:00Z[UTC].`, all, zone)).toBe('kept');
+      expect(verdict(`The latest ${time} is 2022-09-09T10:00:00Z[UTC].`, all, zone)).toBe('comparison');
     });
 
     it('does not rank mixed classes', () => {

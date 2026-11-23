@@ -694,7 +694,7 @@ function claimedValueOf(text: string, from: number, dataClass: string): { readon
   const pattern = dataClass === 'number' ? NUMBER_LITERAL : TEMPORAL_LITERAL[dataClass];
   const found = pattern === undefined ? null : pattern.exec(clause);
   if (dataClass !== 'number') {
-    const any = /\d{4}-\d{2}-\d{2}[T\d:.Z+-]*/u.exec(clause);
+    const any = /\d{4}-\d{2}-\d{2}[T\d:.Z+-]*(?:\[[^\]]*\])?/u.exec(clause);
     if (any !== null && (found === null || found.index !== any.index || found[0] !== any[0])) return { invalid: true };
   }
   if (found === null) return {};
@@ -721,7 +721,18 @@ function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolea
   const shownKeys = [...new Set(cited.flatMap((key) => carries(key).filter((entry) => entry.value !== undefined).map((entry) => entry.key)))];
   // a clause that says the elements do not show an answer, and ranks no property that the cited elements show a value of, is an honest statement judged as before
   const exempt = (claim: { readonly index: number; readonly end: number }): boolean => UNAVAILABLE.test(clauseAt(text, claim.index)) && propertyAfter(text, claim.end, shownKeys) === undefined;
-  const claims = all.filter((claim) => !exempt(claim));
+  // a ranking word that begins a property key the cited elements carry, and is followed by the rest of its words, names the property and ranks nothing (`latest status`); `a maximum of` is a quantity, not an assertion
+  const everyKey = [...new Set(cited.flatMap((key) => carries(key).map((entry) => entry.key)))];
+  const namesProperty = (claim: { readonly end: number; readonly word: string; readonly index: number }): boolean => {
+    const following = wordsAfter(text, claim.end).flatMap((word) => subwordsOf(word.raw));
+    const words = [claim.word, ...following];
+    const asKey = everyKey.some((key) => {
+      const own = subwordsOf(key);
+      return own.length >= 2 && own[0] === claim.word && own.every((part, position) => words[position] === part);
+    });
+    return asKey || /(?:^|\s)an?\s+$/iu.test(text.slice(0, claim.index));
+  };
+  const claims = all.filter((claim) => !namesProperty(claim) && !exempt(claim));
   if (claims.length === 0) return true;
   // one ranking claim in a sentence: a compound ranking is written as separate sentences
   const [claim] = claims;
