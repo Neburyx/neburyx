@@ -442,7 +442,8 @@
   color: var(--color-danger);
 }
 
-.select-control[data-broken='true'] {
+.patterns-field .select-control[data-broken='true'],
+.patterns-field .select-control[data-broken='true']:disabled {
   border-color: var(--color-danger);
   color: var(--color-danger);
 }
