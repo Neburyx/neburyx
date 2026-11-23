@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_POINTERS, type AskAnswer, type AssistantLimit, type AssistantPointer, type AssistantRead, type SummaryReading, type SummarySentence } from '@neburyx/contracts';
 import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentRun, type AgentControl, type AgentTool, type AuditedModelHook } from '@neburyx/ee-assistant-agent';
-import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from '@neburyx/ee-ai-runtime';
+import { AuditUnavailableError, removalNoteOf, type AuditedCallContext, type CheckRunner, type RejectedSentence } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
 import { judgeTableRows, parseTable, rowSentenceOf } from './table.js';
@@ -26,11 +26,11 @@ const FINAL_TEXT = 'Done.';
 const NOT_ANSWERED = 'Nothing has been read yet. Read first, then call answer.';
 const LIMIT_TEXT = 'Not read: this turn has reached its limit. Call answer now with what you have.';
 
-/** What the model is told when `answer` removes sentences. A caller may replace it; the default says only how many were removed. */
-type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean }) => string;
+/** What the model is told when `answer` removes sentences. A caller may replace it; the default says how many were removed and names each removed sentence with its reason. */
+type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean; readonly rejected: readonly RejectedSentence[] }) => string;
 
-const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound }) =>
-  removed === 0 ? `Checked: all ${kept} sentences kept. Reply "${FINAL_TEXT}".` : `Checked: ${kept} sentences kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. Call answer again with sentences that cite elements, or reply "${FINAL_TEXT}".`;
+const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound, rejected }) =>
+  removed === 0 ? `Checked: all ${kept} sentences kept. Reply "${FINAL_TEXT}".` : `Checked: ${kept} sentences kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. Call answer again with sentences that cite elements, or reply "${FINAL_TEXT}".${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
 
 interface AgentTurnSettings {
   readonly maxCalls: number;
@@ -276,7 +276,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           } else standing ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
           // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown
           if ((tabled.kind === 'sentences' || tabled.kind === 'table') && judgedRows.removed === 0 && !judgedRows.verdictFound) control.stop = true;
-          return feedback({ kept: judgedRows.kept.length, removed: judgedRows.removed, verdictFound: judgedRows.verdictFound });
+          return feedback({ kept: judgedRows.kept.length, removed: judgedRows.removed, verdictFound: judgedRows.verdictFound, rejected: judgedRows.rejected });
         }
         const parsed = answerSchema.parse(args);
         const named = parsed.noDescription === undefined ? undefined : undescribedNamesOf(parsed.noDescription, basis.typeLines);
@@ -292,7 +292,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         else standing ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
         // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it
         if ((outcome.kind === 'sentences' || outcome.kind === 'table') && judged.removed === 0 && !judged.verdictFound) control.stop = true;
-        return feedback({ kept: judged.kept.length, removed: judged.removed, verdictFound: judged.verdictFound });
+        return feedback({ kept: judged.kept.length, removed: judged.removed, verdictFound: judged.verdictFound, rejected: judged.rejected });
       },
     });
 
