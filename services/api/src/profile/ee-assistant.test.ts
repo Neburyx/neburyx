@@ -149,8 +149,8 @@ describe('POST /v1/assistant/turns in the real application, with the assistant a
 });
 
 describe('the refusals of the router through the real application', () => {
-  const CAUSES = ['verdict', 'raw-query', 'other-source', 'unplaced'] as const;
-  const MESSAGES = { verdict: 'Is this person guilty of fraud?', 'raw-query': 'MATCH (n) RETURN n', 'other-source': 'Show me the other source instead', unplaced: 'Tell me about the big ones' } as const;
+  const CAUSES = ['verdict', 'raw-query', 'other-source'] as const;
+  const MESSAGES = { verdict: 'Is this person guilty of fraud?', 'raw-query': 'MATCH (n) RETURN n', 'other-source': 'Show me the other source instead' } as const;
   const everything = (rig: Awaited<ReturnType<typeof assistantRig>>): AuditEvent[] => [...rig.events, ...rig.rig.events];
 
   it('hands a refuse reply with extra text beside the cause to the agent after the router’s one repeat, and answers not-answered with none of the model’s words when the agent never calls answer', async () => {
@@ -159,6 +159,14 @@ describe('the refusals of the router through the real application', () => {
     expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'not-answered', route: 'view' });
     expect(JSON.stringify([answer.json(), everything(rig)])).not.toContain('MODEL-WORDS-CANARY');
     expect(rig.stub.bodies).toHaveLength(3);
+    await rig.stop();
+  });
+
+  it('hands a message the router cannot place to the agent, and answers not-answered, never the unplaced refusal, when the agent never calls answer', async () => {
+    const rig = await assistantRig({ reply: JSON.stringify({ route: 'refuse', cause: 'unplaced' }) });
+    const answer = await rig.post({ ...rig.body, message: 'Tell me about the big ones' });
+    expect(assistantTurnAnswerSchema.parse(answer.json())).toMatchObject({ status: 'not-answered', route: 'view' });
+    expect(rig.stub.bodies.length).toBeGreaterThan(1);
     await rig.stop();
   });
 
