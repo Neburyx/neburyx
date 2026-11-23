@@ -58,6 +58,8 @@ export interface AssistantRig {
   /** What the person's thread holds, as stored. */
   threadRows(): string;
   threadText(): string;
+  runRows(): string;
+  exportText(entities: readonly { readonly sourceId: string; readonly entityType: string; readonly stableId: string }[]): Promise<string>;
   /** Waits until the thread holds this many turns. */
   threadWritten(count: number): Promise<void>;
   /** One turn: the replies the model gives in order (the router's, then each step's, then the answer's), then the message. */
@@ -83,6 +85,8 @@ export async function startAssistantRig(options: AssistantRigOptions): Promise<A
     threadWritten: app.threadWritten,
     threadRows: app.threadRows,
     threadText: app.threadText,
+    runRows: app.runRows,
+    exportText: app.exportText,
     turn: (message, replies, over) => {
       stub.replies.push(...replies);
       return app.turn(message, over);

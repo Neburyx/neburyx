@@ -21,6 +21,14 @@ function filesUnder(folder: string): string[] {
 const forbiddenNamers = (files: readonly { readonly path: string; readonly text: string }[]): string[] =>
   files.filter((file) => /\b(?:question_text|mask_on|sensitivity_version)\b|\bassistant_turns\b/u.test(file.text) && !ALLOWED.has(file.path)).map((file) => file.path);
 
+/** The files that reach the text through the store's own read or the presenter and are not the route that sends it. */
+const REACHES_TEXT = /\b(?:thread-present|AssistantThreadRead|StoredTurnText|presentThread)\b/u;
+const ALLOWED_READERS = new Set(['ee/ask/src/assistant/thread-route.ts', 'ee/ask/src/assistant/thread-present.ts', 'ee/ask/src/assistant/thread-store.ts', 'packages/contracts/src/assistant-thread.ts', 'packages/contracts/src/index.ts']);
+const forbiddenReaders = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => REACHES_TEXT.test(file.text) && !ALLOWED_READERS.has(file.path)).map((file) => file.path);
+
+/** Whether the statement that gives the router its context selects any text of a stored turn. */
+const contextSelectsText = (statement: string): boolean => /question_text|\banswer\b|mask_on|sensitivity_version/u.test(statement);
+
 describe('the text a thread keeps', () => {
   const sources = FOLDERS.flatMap((folder) => filesUnder(join(ROOT, folder)))
     .map((path) => relative(ROOT, path))
@@ -34,7 +42,7 @@ describe('the text a thread keeps', () => {
     const text = readFileSync(join(ROOT, 'ee/ask/src/assistant/thread-store.ts'), 'utf8');
     const context = /const READ_CONTEXT =\s*'([^']+)'/u.exec(text)?.[1] ?? '';
     expect(context).toContain('FROM assistant_turns');
-    expect(context).not.toMatch(/question_text|\banswer\b|mask_on|sensitivity_version/u);
+    expect(contextSelectsText(context)).toBe(false);
   });
 
   it('canary: the same check fails a new route, export or log module that names a column or the table, and passes the thread store and the migration', () => {
@@ -43,8 +51,13 @@ describe('the text a thread keeps', () => {
     expect(sources).toContain('ee/ask/src/assistant/thread-store.ts');
   });
 
-  it('canary: a context statement that selected the text would fail the check of the statement', () => {
-    const selecting = "SELECT t.route, t.question_text, t.answer FROM assistant_turns t";
-    expect(/question_text|\banswer\b/u.test(selecting)).toBe(true);
+  it('is sent by the thread route alone: no other module imports the presenter or names the read of the store that carries it', () => {
+    expect(forbiddenReaders(sources.map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf8') })))).toEqual([]);
+  });
+
+  it('canary: the same check fails a new module that imports the presenter or names the stored text, and the check of the context statement fails one that selects it', () => {
+    expect(forbiddenReaders([{ path: 'ee/ask/src/assistant/new-export.ts', text: "import { presentThread } from './thread-present.js';" }, { path: 'services/api/src/graph/new-route.ts', text: 'const turns: StoredTurnText[] = [];' }, { path: 'ee/ask/src/assistant/thread-route.ts', text: "import { presentThread } from './thread-present.js';" }])).toEqual(['ee/ask/src/assistant/new-export.ts', 'services/api/src/graph/new-route.ts']);
+    expect(contextSelectsText('SELECT t.route, t.question_text FROM assistant_turns t')).toBe(true);
+    expect(contextSelectsText('SELECT t.route, t.outcome FROM assistant_turns t')).toBe(false);
   });
 });

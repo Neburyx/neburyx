@@ -161,7 +161,8 @@ export function typologyFile(): string {
 
 export async function startAssistantApp(options: AssistantAppOptions) {
   const threadStore = createMemoryAssistantThreadStore();
-  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => createMemoryAssistantRunStore(), assistantThreadStore: () => threadStore, assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
+  const runStore = createMemoryAssistantRunStore();
+  const extension = createEnterpriseExtension({ modelBaseUrl: options.model.baseUrl, assistantRunStore: () => runStore, assistantThreadStore: () => threadStore, assistantPendingStore: () => createMemoryAssistantPendingStore(), ...(options.now === undefined ? {} : { now: options.now }) });
   const records = options.threads === true ? createEventQueue<RecordJob>({ sinks: [{ name: 'run-records', sink: { record: (job) => job.write() } }], idFields: (job) => job.ids, settings: { queueSize: 100, retryLimit: 0, retryWaitMs: 10, writeTimeoutMs: 1000 }, logger: { warn: () => undefined } }) : undefined;
   if (records !== undefined) extension.attachRecordQueue?.({ enqueue: (job) => void records.sink.record(job) });
   const env = {
@@ -204,6 +205,17 @@ export async function startAssistantApp(options: AssistantAppOptions) {
     /** What the person's thread holds, as stored: the rows a test scans for text that must not be kept. */
     /** The rows of the threads without their text: the question as typed and the answer are the thread's own text, read by the thread route alone; everything else in a row is references and metadata. */
     threadRows: (): string => JSON.stringify([...threadStore.threads.values()].map((thread) => ({ ...thread, turns: thread.turns.map((turn) => ({ ...turn, question: undefined, answer: undefined })) }))),
+    /** The record of each turn's run without the texts of its model calls (the calls keep the message and the reply by design, read by no route): what a test scans for the question and the answer. */
+    runRows: (): string => JSON.stringify(runStore.runs.map(({ callStarts: _starts, callEnds: _ends, ...run }) => run)),
+    /** The export of the investigation as the person would download it: a JSON export of its view, as text. */
+    exportText: async (entities: readonly { readonly sourceId: string; readonly entityType: string; readonly stableId: string }[]): Promise<string> => {
+      const created = await rig.create(investigation.id, { kind: 'view', format: 'json', entities });
+      const id = created.statusCode >= 200 && created.statusCode < 300 ? (created.json() as { id?: string }).id : undefined;
+      if (id === undefined) throw new Error(`the export was not made: ${created.statusCode}`);
+      const downloaded = await rig.download(id);
+      if (downloaded.statusCode !== 200) throw new Error(`the export was not downloaded: ${downloaded.statusCode}`);
+      return downloaded.body;
+    },
     /** The text of the rows of the threads: the question as typed and the answer in its stored form. */
     threadText: (): string => JSON.stringify([...threadStore.threads.values()].flatMap((thread) => thread.turns.map((turn) => ({ question: turn.question, answer: turn.answer })))),
     /** The investigation the turns are made in. */
