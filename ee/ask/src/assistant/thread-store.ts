@@ -1,4 +1,4 @@
-import { assistantThreadResponseSchema, assistantThreadTurnWriteSchema, type AssistantThreadResponse, type AssistantThreadTurnWrite, type AuditSinkContext } from '@neburyx/contracts';
+import { assistantThreadResponseSchema, assistantThreadTurnWriteSchema, storedAnswerSchema, type AssistantThreadResponse, type AssistantThreadTurnWrite, type AuditSinkContext, type StoredTurnText } from '@neburyx/contracts';
 import pg from 'pg';
 import { randomUUID } from 'node:crypto';
 
@@ -28,13 +28,20 @@ export interface AssistantContextTurn {
   readonly citationRefs: AssistantThreadTurnWrite['citationRefs'];
 }
 
+/** A read of the thread as the store gives it: each turn as the panel is told of it, and beside it the text it kept, before the mask and the sensitivity version decide what is sent. */
+export interface AssistantThreadRead {
+  readonly turns: readonly (AssistantThreadResponse['turns'][number] & { readonly stored?: StoredTurnText })[];
+  readonly earlierTurns: number;
+  readonly previousThreadClearedAt: string | null;
+}
+
 export interface AssistantThreadStore {
   /** How many times the investigation has been cleared; 0 when never. Read before a turn does any other work. */
   epoch(investigationId: string): Promise<number>;
   /** Appends a turn to the person's thread, created if there is none, for the epoch the turn read; safe to write twice. */
   append(turn: AssistantThreadTurnWrite, epoch: number): Promise<AppendResult>;
   /** The caller's own thread of the investigation, its most recent `limit` turns and how many older ones there are, and when the caller's previous thread was cleared if they have no thread since. */
-  read(investigationId: string, userId: string, limit: number): Promise<AssistantThreadResponse>;
+  read(investigationId: string, userId: string, limit: number): Promise<AssistantThreadRead>;
   /** The caller's own most recent `limit` turns of the investigation with the references they ran and cited, oldest first; none for a caller with no thread. */
   readContext(investigationId: string, userId: string, limit: number): Promise<readonly AssistantContextTurn[]>;
   close(): Promise<void>;
@@ -66,12 +73,25 @@ const NEXT_SEQ = 'SELECT COALESCE(MAX(seq), 0) + 1 AS seq FROM assistant_turns W
 const INSERT_TURN =
   'INSERT INTO assistant_turns (id, thread_id, seq, at, route, outcome, cause, question_hash, intent, template_id, entities, citation_refs, steps, model_ref, prompt_version, tokens_in, tokens_out, run_id, question_text, mask_on, answer, sensitivity_version) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22) ON CONFLICT (id) DO NOTHING';
 const READ_TURNS =
-  'SELECT t.seq, t.at, t.route, t.outcome, t.cause, t.intent, t.steps, jsonb_array_length(t.citation_refs) AS cited, h.id AS thread_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
+  'SELECT t.seq, t.at, t.route, t.outcome, t.cause, t.intent, t.steps, jsonb_array_length(t.citation_refs) AS cited, t.question_text, t.mask_on, t.answer, t.sensitivity_version, h.id AS thread_id FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
 const READ_CONTEXT =
   'SELECT t.route, t.outcome, t.cause, t.intent, t.entities, t.citation_refs FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2 ORDER BY t.seq DESC LIMIT $3';
 const COUNT_TURNS = 'SELECT count(*)::int AS n FROM assistant_turns t JOIN assistant_threads h ON h.id = t.thread_id WHERE h.investigation_id = $1 AND h.user_id = $2';
 const READ_CLEARED = 'SELECT cleared_at FROM assistant_thread_clears WHERE investigation_id = $1 AND user_id = $2';
 const HAS_THREAD = 'SELECT 1 FROM assistant_threads WHERE investigation_id = $1 AND user_id = $2';
+
+/** The text a stored row kept, as the store hands it on: an answer that does not read as the stored form is none. */
+function storedOf(row: Record<string, unknown> | undefined): { readonly stored?: StoredTurnText } {
+  if (row === undefined) return {};
+  const answer = row['answer'] === null || row['answer'] === undefined ? undefined : storedAnswerSchema.safeParse(typeof row['answer'] === 'string' ? JSON.parse(row['answer']) : row['answer']);
+  const stored: StoredTurnText = {
+    ...(row['question_text'] === null || row['question_text'] === undefined ? {} : { question: String(row['question_text']) }),
+    ...(row['mask_on'] === null || row['mask_on'] === undefined ? {} : { maskOn: row['mask_on'] === true }),
+    ...(answer?.success === true ? { answer: answer.data } : {}),
+    ...(row['sensitivity_version'] === null || row['sensitivity_version'] === undefined ? {} : { sensitivityVersion: String(row['sensitivity_version']) }),
+  };
+  return Object.keys(stored).length === 0 ? {} : { stored };
+}
 
 const isoOf = (value: unknown): string => (value instanceof Date ? value.toISOString() : new Date(String(value)).toISOString());
 const numberOf = (value: unknown): number => Number(value);
@@ -149,7 +169,7 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
           const hasThread = (await client.query(HAS_THREAD, [investigationId, userId])).rows[0] !== undefined;
           const cleared = hasThread ? undefined : (await client.query(READ_CLEARED, [investigationId, userId])).rows[0];
           await client.query('COMMIT');
-          return assistantThreadResponseSchema.parse({
+          const parsed = assistantThreadResponseSchema.parse({
             turns: [...recent].reverse().map((row) => ({
               seq: numberOf(row['seq']),
               at: isoOf(row['at']),
@@ -163,6 +183,8 @@ export function createPgAssistantThreadStore(context: AuditSinkContext, deps: De
             earlierTurns: Math.max(0, total - recent.length),
             previousThreadClearedAt: cleared === undefined ? null : isoOf(cleared['cleared_at']),
           });
+          // the text each turn kept rides beside the turn, outside the public shape, for the route to decide what is sent
+          return { ...parsed, turns: parsed.turns.map((turn, index) => ({ ...turn, ...storedOf([...recent].reverse()[index]) })) };
         } catch (error) {
           await client.query('ROLLBACK').catch(() => undefined);
           throw error;
@@ -269,6 +291,7 @@ export function createMemoryAssistantThreadStore(options: { readonly failOn?: 'e
           ...(turn.intent === undefined ? {} : { intent: turn.intent }),
           citedElements: turn.citationRefs.length,
           steps: turn.steps,
+          ...(turn.question === undefined && turn.answer === undefined ? {} : { stored: { ...(turn.question === undefined ? {} : { question: turn.question }), ...(turn.maskOn === undefined ? {} : { maskOn: turn.maskOn }), ...(turn.answer === undefined ? {} : { answer: turn.answer }), ...(turn.sensitivityVersion === undefined ? {} : { sensitivityVersion: turn.sensitivityVersion }) } }),
         })),
         earlierTurns: first,
         previousThreadClearedAt: thread === undefined && when !== undefined ? when.toISOString() : null,

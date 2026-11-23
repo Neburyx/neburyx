@@ -115,6 +115,30 @@ export const assistantThreadTurnWriteSchema = z
 
 export type AssistantThreadTurnWrite = z.infer<typeof assistantThreadTurnWriteSchema>;
 
+/**
+ * An item of a stored answer as a read gives it: its text, its segments (literal text and, in place of each sensitive value, the element and the property it is the value of: the value is never sent, the panel draws it from the element read
+ * again under the current mask), or nothing but a marker that it is withheld.
+ */
+const readText = z.strictObject({ state: z.literal('text'), text: z.string().max(THREAD_SENTENCE_MAX) });
+const readSegments = z.strictObject({ state: z.literal('segments'), segments: z.array(segmentSchema).min(1).max(THREAD_SEGMENTS_MAX) });
+const readWithheld = z.strictObject({ state: z.literal('withheld') });
+const readItem = z.union([readText, readSegments, readWithheld]);
+const readCited = z.array(threadCitationRefSchema).max(Math.max(ASK_SUMMARY_MAX_CITATIONS, ASSISTANT_VIEW_KEYS_MAX));
+/** The answer of a turn as a read gives it, block by block, each item in one of the three states. */
+export const readAnswerSchema = z.strictObject({
+  blocks: z
+    .array(
+      z.discriminatedUnion('kind', [
+        z.strictObject({ kind: z.literal('sentences'), items: z.array(z.object({ item: readItem, cites: readCited }).strict()).min(1).max(12) }),
+        z.strictObject({ kind: z.literal('table'), columns: z.array(z.union([readText, readWithheld])).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX), rows: z.array(z.strictObject({ cells: z.array(readItem).max(ASSISTANT_TABLE_COLUMNS_MAX), cites: readCited })).min(1).max(ASSISTANT_TABLE_ROWS_MAX) }),
+        z.strictObject({ kind: z.literal('refusal'), sentence: z.union([readText, readWithheld]), overview: z.array(z.object({ item: readItem, cites: readCited }).strict()).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX).optional() }),
+      ]),
+    )
+    .min(1)
+    .max(THREAD_ANSWER_BLOCKS_MAX),
+});
+export type ReadAnswer = z.infer<typeof readAnswerSchema>;
+
 /** One stored turn as the panel is told of it: what kind of turn it was and how it ended, never a hash, a reference, a token or a run id. */
 export const assistantThreadTurnSchema = z.strictObject({
   seq: z.number().int().min(1),
@@ -125,6 +149,9 @@ export const assistantThreadTurnSchema = z.strictObject({
   intent: label.optional(),
   citedElements: wholeCount,
   steps: wholeCount,
+  /** The question as the person typed it, for a turn that kept one; and the answer, item by item, in the state the mask and the sensitivity version allow. A turn stored before text was kept has neither. */
+  question: z.string().max(THREAD_QUESTION_MAX).optional(),
+  answer: readAnswerSchema.optional(),
 });
 
 /** How many of the most recent turns of a thread one read gives, and the most a setting may raise it to. Working limits, not taken from a source, to be measured with the other provisional settings; they bound the answer and what the panel draws and trim nothing that is stored. */
@@ -136,5 +163,8 @@ export const THREAD_READ_TURNS_CEILING = 500;
  * if it was and no thread has been started since.
  */
 export const assistantThreadResponseSchema = z.strictObject({ turns: z.array(assistantThreadTurnSchema).max(THREAD_READ_TURNS_CEILING), earlierTurns: wholeCount, previousThreadClearedAt: z.iso.datetime().nullable() });
+
+/** What the store gives a read of the thread: the turns with their stored text, before the mask and the version decide what is sent. */
+export type StoredTurnText = { readonly question?: string; readonly maskOn?: boolean; readonly answer?: StoredAnswer; readonly sensitivityVersion?: string };
 
 export type AssistantThreadResponse = z.infer<typeof assistantThreadResponseSchema>;

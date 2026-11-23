@@ -500,8 +500,8 @@
     "/v1/assistant/investigations/{id}/thread": {
       "get": {
         "operationId": "readAssistantThread",
-        "summary": "The caller's own thread of an investigation, as the kind and end of each turn",
-        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Answers the caller's own thread of one of their investigations: for each turn its order, time, route, outcome, cause, intent, the number of things it cited and the number of reads. It holds no text of a question or an answer and no reference, hash, token or run id; a thread holds references and metadata only, is cleared when the investigation is closed, archived or deleted, and is never used for training. The answer holds the most recent turns of the thread (100 by default, a setting) and earlierTurns, how many older ones there are (nothing stored is trimmed; the bound only limits what one answer and the panel hold). previousThreadClearedAt says when the caller's previous thread was cleared, when they have no thread since; it is null otherwise.",
+        "summary": "The caller's own thread of an investigation: each turn with its question and answer, as the mask allows",
+        "description": "With no AI provider, with every AI feature off or with the assistant off this path answers 403 with the reason ai-off. Answers the caller's own thread of one of their investigations: for each turn its order, time, route, outcome, cause, intent, the number of things it cited and the number of reads. It holds the question as the person typed it and the answer item by item (the text, segments that name an element and a property in place of a value the mask may hide, or a marker that the item is withheld), and no hash, token or run id; the query mask says whether the mask is on for the caller, and under it an item that may hold a sensitive value is withheld; a thread is cleared when the investigation is closed, archived or deleted, and is never used for training. The answer holds the most recent turns of the thread (100 by default, a setting) and earlierTurns, how many older ones there are (nothing stored is trimmed; the bound only limits what one answer and the panel hold). previousThreadClearedAt says when the caller's previous thread was cleared, when they have no thread since; it is null otherwise.",
         "parameters": [
           {
             "name": "id",
@@ -509,6 +509,18 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "mask",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
             }
           }
         ],
@@ -10702,6 +10714,1752 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 9007199254740991
+                },
+                "question": {
+                  "type": "string",
+                  "maxLength": 4000
+                },
+                "answer": {
+                  "type": "object",
+                  "properties": {
+                    "blocks": {
+                      "minItems": 1,
+                      "maxItems": 8,
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "sentences"
+                              },
+                              "items": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "item": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "text"
+                                            },
+                                            "text": {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "segments"
+                                            },
+                                            "segments": {
+                                              "minItems": 1,
+                                              "maxItems": 40,
+                                              "type": "array",
+                                              "items": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "literal": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 2000
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "literal"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "element": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "sourceId": {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                              },
+                                                              "entityType": {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                              },
+                                                              "stableId": {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "sourceId",
+                                                              "entityType",
+                                                              "stableId"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
+                                                          {
+                                                            "anyOf": [
+                                                              {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                  "sourceId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "type": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "from": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "to": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "stableId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "sourceId",
+                                                                  "type",
+                                                                  "from",
+                                                                  "to",
+                                                                  "stableId"
+                                                                ],
+                                                                "additionalProperties": false
+                                                              },
+                                                              {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                  "sourceId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "aggregate": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                      "type": {
+                                                                        "type": "string",
+                                                                        "minLength": 1
+                                                                      },
+                                                                      "from": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      },
+                                                                      "to": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      }
+                                                                    },
+                                                                    "required": [
+                                                                      "type",
+                                                                      "from",
+                                                                      "to"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "sourceId",
+                                                                  "aggregate"
+                                                                ],
+                                                                "additionalProperties": false
+                                                              },
+                                                              {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                  "sourceId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "derived": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                      "ruleId": {
+                                                                        "type": "string",
+                                                                        "minLength": 1
+                                                                      },
+                                                                      "from": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      },
+                                                                      "to": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      }
+                                                                    },
+                                                                    "required": [
+                                                                      "ruleId",
+                                                                      "from",
+                                                                      "to"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "sourceId",
+                                                                  "derived"
+                                                                ],
+                                                                "additionalProperties": false
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      },
+                                                      "property": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "element",
+                                                      "property"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "segments"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "withheld"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    },
+                                    "cites": {
+                                      "maxItems": 300,
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "sourceId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "entityType": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "stableId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "sourceId",
+                                              "entityType",
+                                              "stableId"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "anyOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "from": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "to": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "stableId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "type",
+                                                  "from",
+                                                  "to",
+                                                  "stableId"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "aggregate": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "from": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "to": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "from",
+                                                      "to"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "aggregate"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "derived": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "ruleId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "from": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "to": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "ruleId",
+                                                      "from",
+                                                      "to"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "derived"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "item",
+                                    "cites"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "items"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "table"
+                              },
+                              "columns": {
+                                "minItems": 1,
+                                "maxItems": 6,
+                                "type": "array",
+                                "items": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "state": {
+                                          "type": "string",
+                                          "const": "text"
+                                        },
+                                        "text": {
+                                          "type": "string",
+                                          "maxLength": 2000
+                                        }
+                                      },
+                                      "required": [
+                                        "state",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "state": {
+                                          "type": "string",
+                                          "const": "withheld"
+                                        }
+                                      },
+                                      "required": [
+                                        "state"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              },
+                              "rows": {
+                                "minItems": 1,
+                                "maxItems": 25,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "cells": {
+                                      "maxItems": 6,
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "state": {
+                                                "type": "string",
+                                                "const": "text"
+                                              },
+                                              "text": {
+                                                "type": "string",
+                                                "maxLength": 2000
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "text"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "state": {
+                                                "type": "string",
+                                                "const": "segments"
+                                              },
+                                              "segments": {
+                                                "minItems": 1,
+                                                "maxItems": 40,
+                                                "type": "array",
+                                                "items": {
+                                                  "anyOf": [
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "literal": {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 2000
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "literal"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    },
+                                                    {
+                                                      "type": "object",
+                                                      "properties": {
+                                                        "element": {
+                                                          "anyOf": [
+                                                            {
+                                                              "type": "object",
+                                                              "properties": {
+                                                                "sourceId": {
+                                                                  "type": "string",
+                                                                  "minLength": 1
+                                                                },
+                                                                "entityType": {
+                                                                  "type": "string",
+                                                                  "minLength": 1
+                                                                },
+                                                                "stableId": {
+                                                                  "type": "string",
+                                                                  "minLength": 1
+                                                                }
+                                                              },
+                                                              "required": [
+                                                                "sourceId",
+                                                                "entityType",
+                                                                "stableId"
+                                                              ],
+                                                              "additionalProperties": false
+                                                            },
+                                                            {
+                                                              "anyOf": [
+                                                                {
+                                                                  "type": "object",
+                                                                  "properties": {
+                                                                    "sourceId": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    },
+                                                                    "type": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    },
+                                                                    "from": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    },
+                                                                    "to": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    },
+                                                                    "stableId": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    }
+                                                                  },
+                                                                  "required": [
+                                                                    "sourceId",
+                                                                    "type",
+                                                                    "from",
+                                                                    "to",
+                                                                    "stableId"
+                                                                  ],
+                                                                  "additionalProperties": false
+                                                                },
+                                                                {
+                                                                  "type": "object",
+                                                                  "properties": {
+                                                                    "sourceId": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    },
+                                                                    "aggregate": {
+                                                                      "type": "object",
+                                                                      "properties": {
+                                                                        "type": {
+                                                                          "type": "string",
+                                                                          "minLength": 1
+                                                                        },
+                                                                        "from": {
+                                                                          "type": "object",
+                                                                          "properties": {
+                                                                            "sourceId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "entityType": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "stableId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            }
+                                                                          },
+                                                                          "required": [
+                                                                            "sourceId",
+                                                                            "entityType",
+                                                                            "stableId"
+                                                                          ],
+                                                                          "additionalProperties": false
+                                                                        },
+                                                                        "to": {
+                                                                          "type": "object",
+                                                                          "properties": {
+                                                                            "sourceId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "entityType": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "stableId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            }
+                                                                          },
+                                                                          "required": [
+                                                                            "sourceId",
+                                                                            "entityType",
+                                                                            "stableId"
+                                                                          ],
+                                                                          "additionalProperties": false
+                                                                        }
+                                                                      },
+                                                                      "required": [
+                                                                        "type",
+                                                                        "from",
+                                                                        "to"
+                                                                      ],
+                                                                      "additionalProperties": false
+                                                                    }
+                                                                  },
+                                                                  "required": [
+                                                                    "sourceId",
+                                                                    "aggregate"
+                                                                  ],
+                                                                  "additionalProperties": false
+                                                                },
+                                                                {
+                                                                  "type": "object",
+                                                                  "properties": {
+                                                                    "sourceId": {
+                                                                      "type": "string",
+                                                                      "minLength": 1
+                                                                    },
+                                                                    "derived": {
+                                                                      "type": "object",
+                                                                      "properties": {
+                                                                        "ruleId": {
+                                                                          "type": "string",
+                                                                          "minLength": 1
+                                                                        },
+                                                                        "from": {
+                                                                          "type": "object",
+                                                                          "properties": {
+                                                                            "sourceId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "entityType": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "stableId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            }
+                                                                          },
+                                                                          "required": [
+                                                                            "sourceId",
+                                                                            "entityType",
+                                                                            "stableId"
+                                                                          ],
+                                                                          "additionalProperties": false
+                                                                        },
+                                                                        "to": {
+                                                                          "type": "object",
+                                                                          "properties": {
+                                                                            "sourceId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "entityType": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            },
+                                                                            "stableId": {
+                                                                              "type": "string",
+                                                                              "minLength": 1
+                                                                            }
+                                                                          },
+                                                                          "required": [
+                                                                            "sourceId",
+                                                                            "entityType",
+                                                                            "stableId"
+                                                                          ],
+                                                                          "additionalProperties": false
+                                                                        }
+                                                                      },
+                                                                      "required": [
+                                                                        "ruleId",
+                                                                        "from",
+                                                                        "to"
+                                                                      ],
+                                                                      "additionalProperties": false
+                                                                    }
+                                                                  },
+                                                                  "required": [
+                                                                    "sourceId",
+                                                                    "derived"
+                                                                  ],
+                                                                  "additionalProperties": false
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        },
+                                                        "property": {
+                                                          "type": "string",
+                                                          "minLength": 1,
+                                                          "maxLength": 200
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "element",
+                                                        "property"
+                                                      ],
+                                                      "additionalProperties": false
+                                                    }
+                                                  ]
+                                                }
+                                              }
+                                            },
+                                            "required": [
+                                              "state",
+                                              "segments"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "state": {
+                                                "type": "string",
+                                                "const": "withheld"
+                                              }
+                                            },
+                                            "required": [
+                                              "state"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "cites": {
+                                      "maxItems": 300,
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "sourceId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "entityType": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "stableId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "sourceId",
+                                              "entityType",
+                                              "stableId"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "anyOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "from": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "to": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "stableId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "type",
+                                                  "from",
+                                                  "to",
+                                                  "stableId"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "aggregate": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "from": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "to": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "from",
+                                                      "to"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "aggregate"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "derived": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "ruleId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "from": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "to": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "ruleId",
+                                                      "from",
+                                                      "to"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "derived"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "cells",
+                                    "cites"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "columns",
+                              "rows"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "kind": {
+                                "type": "string",
+                                "const": "refusal"
+                              },
+                              "sentence": {
+                                "anyOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "state": {
+                                        "type": "string",
+                                        "const": "text"
+                                      },
+                                      "text": {
+                                        "type": "string",
+                                        "maxLength": 2000
+                                      }
+                                    },
+                                    "required": [
+                                      "state",
+                                      "text"
+                                    ],
+                                    "additionalProperties": false
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "state": {
+                                        "type": "string",
+                                        "const": "withheld"
+                                      }
+                                    },
+                                    "required": [
+                                      "state"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                ]
+                              },
+                              "overview": {
+                                "minItems": 1,
+                                "maxItems": 12,
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "properties": {
+                                    "item": {
+                                      "anyOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "text"
+                                            },
+                                            "text": {
+                                              "type": "string",
+                                              "maxLength": 2000
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "segments"
+                                            },
+                                            "segments": {
+                                              "minItems": 1,
+                                              "maxItems": 40,
+                                              "type": "array",
+                                              "items": {
+                                                "anyOf": [
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "literal": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 2000
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "literal"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  },
+                                                  {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "element": {
+                                                        "anyOf": [
+                                                          {
+                                                            "type": "object",
+                                                            "properties": {
+                                                              "sourceId": {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                              },
+                                                              "entityType": {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                              },
+                                                              "stableId": {
+                                                                "type": "string",
+                                                                "minLength": 1
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "sourceId",
+                                                              "entityType",
+                                                              "stableId"
+                                                            ],
+                                                            "additionalProperties": false
+                                                          },
+                                                          {
+                                                            "anyOf": [
+                                                              {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                  "sourceId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "type": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "from": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "to": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "stableId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "sourceId",
+                                                                  "type",
+                                                                  "from",
+                                                                  "to",
+                                                                  "stableId"
+                                                                ],
+                                                                "additionalProperties": false
+                                                              },
+                                                              {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                  "sourceId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "aggregate": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                      "type": {
+                                                                        "type": "string",
+                                                                        "minLength": 1
+                                                                      },
+                                                                      "from": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      },
+                                                                      "to": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      }
+                                                                    },
+                                                                    "required": [
+                                                                      "type",
+                                                                      "from",
+                                                                      "to"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "sourceId",
+                                                                  "aggregate"
+                                                                ],
+                                                                "additionalProperties": false
+                                                              },
+                                                              {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                  "sourceId": {
+                                                                    "type": "string",
+                                                                    "minLength": 1
+                                                                  },
+                                                                  "derived": {
+                                                                    "type": "object",
+                                                                    "properties": {
+                                                                      "ruleId": {
+                                                                        "type": "string",
+                                                                        "minLength": 1
+                                                                      },
+                                                                      "from": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      },
+                                                                      "to": {
+                                                                        "type": "object",
+                                                                        "properties": {
+                                                                          "sourceId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "entityType": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          },
+                                                                          "stableId": {
+                                                                            "type": "string",
+                                                                            "minLength": 1
+                                                                          }
+                                                                        },
+                                                                        "required": [
+                                                                          "sourceId",
+                                                                          "entityType",
+                                                                          "stableId"
+                                                                        ],
+                                                                        "additionalProperties": false
+                                                                      }
+                                                                    },
+                                                                    "required": [
+                                                                      "ruleId",
+                                                                      "from",
+                                                                      "to"
+                                                                    ],
+                                                                    "additionalProperties": false
+                                                                  }
+                                                                },
+                                                                "required": [
+                                                                  "sourceId",
+                                                                  "derived"
+                                                                ],
+                                                                "additionalProperties": false
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      },
+                                                      "property": {
+                                                        "type": "string",
+                                                        "minLength": 1,
+                                                        "maxLength": 200
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "element",
+                                                      "property"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "state",
+                                            "segments"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "state": {
+                                              "type": "string",
+                                              "const": "withheld"
+                                            }
+                                          },
+                                          "required": [
+                                            "state"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    },
+                                    "cites": {
+                                      "maxItems": 300,
+                                      "type": "array",
+                                      "items": {
+                                        "anyOf": [
+                                          {
+                                            "type": "object",
+                                            "properties": {
+                                              "sourceId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "entityType": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              },
+                                              "stableId": {
+                                                "type": "string",
+                                                "minLength": 1
+                                              }
+                                            },
+                                            "required": [
+                                              "sourceId",
+                                              "entityType",
+                                              "stableId"
+                                            ],
+                                            "additionalProperties": false
+                                          },
+                                          {
+                                            "anyOf": [
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "type": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "from": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "to": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "stableId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "type",
+                                                  "from",
+                                                  "to",
+                                                  "stableId"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "aggregate": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "type": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "from": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "to": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "type",
+                                                      "from",
+                                                      "to"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "aggregate"
+                                                ],
+                                                "additionalProperties": false
+                                              },
+                                              {
+                                                "type": "object",
+                                                "properties": {
+                                                  "sourceId": {
+                                                    "type": "string",
+                                                    "minLength": 1
+                                                  },
+                                                  "derived": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                      "ruleId": {
+                                                        "type": "string",
+                                                        "minLength": 1
+                                                      },
+                                                      "from": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      },
+                                                      "to": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                          "sourceId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "entityType": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          },
+                                                          "stableId": {
+                                                            "type": "string",
+                                                            "minLength": 1
+                                                          }
+                                                        },
+                                                        "required": [
+                                                          "sourceId",
+                                                          "entityType",
+                                                          "stableId"
+                                                        ],
+                                                        "additionalProperties": false
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "ruleId",
+                                                      "from",
+                                                      "to"
+                                                    ],
+                                                    "additionalProperties": false
+                                                  }
+                                                },
+                                                "required": [
+                                                  "sourceId",
+                                                  "derived"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "item",
+                                    "cites"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "sentence"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "blocks"
+                  ],
+                  "additionalProperties": false
                 }
               },
               "required": [

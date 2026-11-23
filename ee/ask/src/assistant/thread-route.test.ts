@@ -26,6 +26,30 @@ describe('the route that reads the thread of an investigation', () => {
     expect(JSON.stringify(answer)).not.toMatch(/aaaaaaaa|W-1|modelRef|tokens|runId|questionHash/);
   });
 
+  it('sends the question and the answer item by item under the mask of the query and the current version, and withholds an unbound item only under the mask', async () => {
+    const store = createMemoryAssistantThreadStore();
+    const answer = { blocks: [{ kind: 'sentences', items: [{ form: 'frozen', text: 'Fixed text.', cites: [] }, { form: 'unbound', text: 'Jordan is listed.', cites: [] }] }] };
+    await store.append(turn({ question: 'Who?', maskOn: false, answer: answer as never, sensitivityVersion: 'sv1:a' }), 0);
+    const route = createAssistantThreadRoute({ threads: () => store, limit: () => 100, logger: () => undefined });
+    const read = async (query: unknown, version: string | undefined) => assistantThreadResponseSchema.parse(await route.handler(requestOf({ query, sensitivityVersion: () => version as string })));
+    const items = (shown: Awaited<ReturnType<typeof read>>) => (shown.turns[0]?.answer?.blocks[0]?.kind === 'sentences' ? shown.turns[0].answer.blocks[0].items.map((entry) => entry.item) : []);
+    expect(items(await read({ mask: 'true' }, 'sv1:a'))).toEqual([{ state: 'text', text: 'Fixed text.' }, { state: 'withheld' }]);
+    expect(items(await read({ mask: 'false' }, 'sv1:a'))[1]).toEqual({ state: 'text', text: 'Jordan is listed.' });
+    expect(items(await read(undefined, 'sv1:a'))[1]).toEqual({ state: 'text', text: 'Jordan is listed.' });
+    expect(items(await read({ mask: 'true' }, 'sv1:other'))).toEqual([{ state: 'withheld' }, { state: 'withheld' }]);
+    expect(items(await read({ mask: 'true' }, undefined))).toEqual([{ state: 'withheld' }, { state: 'withheld' }]);
+    expect((await read({ mask: 'true' }, 'sv1:a')).turns[0]?.question).toBe('Who?');
+    expect(createAssistantThreadRoute({ threads: () => store, limit: () => 100, logger: () => undefined }).query?.safeParse({ mask: 'maybe' }).success).toBe(false);
+  });
+
+  it('treats a version that cannot be read as unknown: every item is withheld under the mask', async () => {
+    const store = createMemoryAssistantThreadStore();
+    await store.append(turn({ question: 'Who?', maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [{ form: 'frozen', text: 'Fixed text.', cites: [] }] }] } as never, sensitivityVersion: 'sv1:a' }), 0);
+    const route = createAssistantThreadRoute({ threads: () => store, limit: () => 100, logger: () => undefined });
+    const shown = assistantThreadResponseSchema.parse(await route.handler(requestOf({ query: { mask: 'true' }, sensitivityVersion: () => { throw new Error('down'); } })));
+    expect(JSON.stringify(shown.turns[0]?.answer)).not.toContain('Fixed text.');
+  });
+
   it('answers only the caller’s own thread, whoever else has one in the investigation', async () => {
     const store = createMemoryAssistantThreadStore();
     await store.append(turn({ userId: OTHER }), 0);

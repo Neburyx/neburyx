@@ -928,7 +928,7 @@ describe('the thread of an investigation in the running application', () => {
     return { queue, logs, attached: { enqueue: (job: RecordJob) => void queue.sink.record(job) } satisfies RecordQueue, auditCounts: () => queue.counts() };
   };
   type ThreadRig = Awaited<ReturnType<typeof assistantRig>>;
-  const readThread = (rig: ThreadRig, id = rig.body.investigationId) => rig.rig.app.inject({ method: 'GET', url: `/v1/assistant/investigations/${id}/thread` });
+  const readThread = (rig: ThreadRig, id = rig.body.investigationId, mask?: boolean) => rig.rig.app.inject({ method: 'GET', url: `/v1/assistant/investigations/${id}/thread${mask === undefined ? '' : `?mask=${mask}`}` });
   const send = (rig: ThreadRig, message = `Show ${CANARY} W-1`) => rig.post({ ...rig.body, message, viewElementKeys: [CANARY_KEY] });
   /** The replies of a first turn the agent answers over its read of W-1 (the router's, `{"done":true}` and the answer), then those of the next turn. */
   const answeredThen = (...next: string[]) => sequenceOf(ASK, DONE, ANSWER_OF_W1, ...next);
@@ -945,8 +945,14 @@ describe('the thread of an investigation in the running application', () => {
     const answer = await readThread(rig);
     expect(answer.statusCode).toBe(200);
     expect(assistantThreadResponseSchema.parse(answer.json())).toMatchObject({ turns: [{ seq: 1, route: 'ask', outcome: 'answered', intent: 'widgetById', citedElements: expect.any(Number), steps: 1 }], previousThreadClearedAt: null });
-    for (const canary of [CANARY, 'key-canary-9', 'Ana Silva', 'Choose the intent that answers the question']) expect(answer.body, canary).not.toContain(canary);
-    expect(answer.body).not.toMatch(/questionHash|runId|tokens|stableId|W-1/);
+    // the read gives the question as typed and the answer item by item; what it never gives is a hash, a token, a run id, an instruction or a bound value
+    expect(answer.body).toContain(CANARY);
+    for (const canary of ['key-canary-9', 'Choose the intent that answers the question']) expect(answer.body, canary).not.toContain(canary);
+    expect(answer.body).not.toMatch(/questionHash|runId|tokens/);
+    // under the mask an item that may hold a sensitive value is withheld, with a marker and no text
+    const masked = await readThread(rig, undefined, true);
+    expect(masked.statusCode).toBe(200);
+    expect(masked.body).not.toContain('Ana Silva');
     // the stored row holds the question as typed and the answer in its stored form, in those two members and nowhere else
     const turns = [...threads.threads.values()].flatMap((thread) => thread.turns);
     expect(turns[0]?.question).toContain(CANARY);
