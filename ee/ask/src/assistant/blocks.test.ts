@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { AssistantTable, TypeDescriptions } from '@neburyx/contracts';
 import { noteOfTable, parseBlocksInput, withinTotals, type KeptBlock } from './blocks.js';
@@ -39,6 +41,20 @@ describe('the note of a table block', () => {
   it('gives two units when two columns show values in two units', () => {
     const display = { feeUsd: { label: 'fee', unit: 'USD' }, weight: { label: 'weight', unit: 'kg' } };
     expect(note(['Fee', 'Weight'], [{ cells: ['12', '4200'], cites: ['n1'] }], display)).toBe(`Fee in USD. Weight in kg. ${SELECT}`);
+  });
+});
+
+describe('the note of a table block for a second pack', () => {
+  it('writes the same clauses from the display of another pack, with no change of code', () => {
+    // the first entity type and its label are read from the second pack's own mapping
+    const mapping = readFileSync(fileURLToPath(new URL('../../../../domain-packs/insurance-claims/neburyx.yaml', import.meta.url)), 'utf8');
+    const type = /^\s+- type: (\S+)$/m.exec(mapping)?.[1] ?? '';
+    const label = /^\s+label: (\S+)$/m.exec(mapping)?.[1] ?? '';
+    expect(type).not.toBe('');
+    const lines = new Map([['c1', `c1 | "${type}" | title: "${label} 1" | reserveEur: 1500; status: "open"`]]);
+    const elements = new Map([['c1', { ref: { entityType: type } }]]);
+    const descriptions: TypeDescriptions = { entityTypes: [{ type, label, displayName: label, propertyDisplay: { reserveEur: { label: 'reserve', unit: 'EUR' } } }], relationshipTypes: [] };
+    expect(noteOfTable({ columns: [label, 'Reserve'], rows: [{ cells: [`${label} 1`, '1,500'], cites: ['c1'] }], lines, elements, descriptions })).toBe(`Reserve in EUR. ${SELECT}`);
   });
 });
 

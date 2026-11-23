@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -229,5 +231,26 @@ describe('the Assistant panel: a table answer', () => {
     await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
     await screen.findAllByText(ASSISTANT_COPY.tableCopyFailed);
     expect(screen.getAllByRole('status').some((node) => node.textContent === ASSISTANT_COPY.tableCopyFailed)).toBe(true);
+  });
+
+  it('draws the table of a second pack from the words the answer carries, with no change of code', async () => {
+    // the first entity label of the second pack is read from its own mapping
+    const mapping = readFileSync(resolve(process.cwd(), '../../domain-packs/insurance-claims/neburyx.yaml'), 'utf8');
+    const label = /^\s+label: (\S+)$/m.exec(mapping)?.[1] ?? '';
+    expect(label).not.toBe('');
+    const note = 'Reserve in EUR. Each row selects its elements on the graph.';
+    const answer: AssistantTurnAnswer = {
+      status: 'answered',
+      route: 'view',
+      blocks: [{ kind: 'table', table: { title: `${label} figures · 1 row`, columns: [label, 'Reserve'], rows: [{ cells: [`${label} 1`, '1,500'], cites: ['n1'] }], note } }],
+      citations: [{ key: 'n1', kind: 'entity', ref: A }],
+      coverage: { retrieval: '1 shown · exact', summary: '1 of 1 figures in view shown · exact' },
+      model: 'stub-model',
+      calls: 2,
+    };
+    await draw(answer);
+    const table = screen.getByRole('table', { name: `${label} figures · 1 row` });
+    expect(within(table).getAllByRole('columnheader').map((header) => header.textContent)).toEqual([label, 'Reserve', ASSISTANT_COPY.citeColumn]);
+    expect(screen.getByText(note)).toBeTruthy();
   });
 });
