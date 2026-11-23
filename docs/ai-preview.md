@@ -231,7 +231,7 @@ The assistant's settings are read when a provider key is set and the assistant i
 | `NEBURYX_ASSISTANT_MODEL` | `claude-sonnet-5-5` | |
 | `NEBURYX_ASSISTANT_TIMEOUT_MS` (one model call) | 60000 | 600000, and not above the total |
 | `NEBURYX_ASSISTANT_TOTAL_TIMEOUT_MS` (a whole turn) | 180000 | 600000 |
-| `NEBURYX_ASSISTANT_MAX_CALLS` (model calls a turn) | 5 | 10 |
+| `NEBURYX_ASSISTANT_MAX_CALLS` (model calls a turn) | 8 | 10 |
 | `NEBURYX_ASSISTANT_MAX_STEPS` (reads a turn) | 4 | 8 |
 | `NEBURYX_ASSISTANT_MAX_ROWS` (rows read a turn) | the source's own page limit times the steps | an operator may only lower it |
 | `NEBURYX_ASSISTANT_CONTEXT_TURNS` (earlier turns the router, the answer from the view and the answer after tool steps see: references and titles only, read again through the gate, with the relationships those turns cited and the titles of their ends) | 3 | 6 |
