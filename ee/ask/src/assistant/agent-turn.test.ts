@@ -64,6 +64,22 @@ describe('a view question on the agent', () => {
     }
   });
 
+  it('shows the answer that stands when the model call that follows it fails, and the failure when no answer stands', async () => {
+    const withAnswer = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(() => {
+        throw new Error('fetch failed: connection reset');
+      });
+    const r = await rig({ reply: VIEW, agent: { model: withAnswer } });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] });
+    const none = fakeModel().respond(() => {
+      throw new Error('fetch failed: connection reset');
+    });
+    const failed = await rig({ reply: VIEW, agent: { model: none } });
+    expect(await answerOf(failed.route.handler(failed.request(VIEW_BODY)))).toMatchObject({ status: 'unavailable' });
+  });
+
   it('is not called for a verdict the router refuses', async () => {
     const model = fakeModel().respond(new AIMessage('never asked'));
     const r = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}'), agent: { model } });

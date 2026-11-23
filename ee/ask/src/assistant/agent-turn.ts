@@ -337,7 +337,11 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
       if (error instanceof AuditUnavailableError || (error instanceof Error && 'code' in error && error.code === 'AUDIT_UNAVAILABLE')) throw error;
       else if (scope.request.signal.aborted) throw new Error('the request was cancelled');
       else if (input.deadline.aborted) return { kind: 'limit', limit: 'time', reads: entries };
-      else if (error instanceof AuditedModelFailure) return { kind: 'failed', why: failureOf(error.code) };
+      // a model call that fails after an answer stands (the one that only acknowledges it) never takes the answer away
+      else if (error instanceof AuditedModelFailure && standing === undefined) return { kind: 'failed', why: failureOf(error.code) };
+      else if (error instanceof AuditedModelFailure) {
+        // the answer stands: it is returned below
+      }
       else throw error;
     }
     const modelCalls = control.calls + control.extra;
