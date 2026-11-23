@@ -84,4 +84,12 @@ describe.each(VOCABULARIES)('a count of the $name that the sentence cites throug
     expect(kept(`The ${vocabulary.owner.toLowerCase()}s of three ${vocabulary.things} were read.`, links)).toBe(true);
     expect(kept(`Five ${vocabulary.things} were read.`, links)).toBe(false);
   });
+
+  it('reads the first person as language, not as a name: the exact sentence is kept when its figures are backed, and a made-up capitalised name is still removed', () => {
+    const owner = vocabulary.owner.toLowerCase();
+    for (const opening of ['I read', "I've read", "I'm reading", "I'd read"]) expect(kept(`${opening} the sender of three ${vocabulary.things}: ${vocabulary.ids.join(', ')}.`, links), opening).toBe(true);
+    expect(kept(`I read the sender of four ${vocabulary.things}.`, links)).toBe(false);
+    expect(judgeSentences([{ text: `I read the ${owner} Zorblax of three ${vocabulary.things}.`, cites: links }], text).rejected.map((entry) => entry.reason)).toEqual(['name']);
+    expect(judgeSentences([{ text: `Zorblax read the sender of three ${vocabulary.things}.`, cites: links }], text).rejected.map((entry) => entry.reason)).toEqual(['name']);
+  });
 });
