@@ -1,13 +1,14 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AssistantThreadResponse, GraphNode, ReadRefsResponse, StoredAskResult } from '@neburyx/contracts';
+import type { AssistantThreadResponse, GraphNode, ReadAskResult, ReadRefsResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { edge, node as baseNode, ref } from '../state/test-data.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
 import { bindAssistantPanel } from './assistant-binder.js';
 import { harness, REFUSE, type ReadRefsCall } from './assistant-kit.js';
-import { ASSISTANT_COPY, linesNotKept, noticeEntriesNotKept, pathsNotKept, rowsNotKept } from './copy.js';
+import { ASK_COPY, pathCapText } from '../ask/copy.js';
+import { ASSISTANT_COPY, listedText, noticeKeptOf, linesNotKept, noticeEntriesNotKept, pathsNotKept, rowsNotKept } from './copy.js';
 
 afterEach(cleanup);
 
@@ -17,9 +18,9 @@ const B = ref('a', 'type-a', 'ent-2');
 const EDGE = edge('a', 'rel-1', 'ent-1', 'ent-2');
 const titled = (id: string, title: string): GraphNode => ({ ...baseNode('a', id), display: { title, type: 'type-a' } });
 const read = (nodes: GraphNode[], edges = [EDGE], missing: ReadRefsResponse['missing'] = { entities: [], edges: [] }): ApiResult<ReadRefsResponse> => ok({ nodes, edges, missing });
-const empty = { values: [], lines: [], rows: [], paths: [], notices: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
-const block = (over: Partial<StoredAskResult>): StoredAskResult => ({ kind: 'ask-result', templateId: 'file-query', outcome: 'complete', ...empty, ...over }) as StoredAskResult;
-const thread = (result: StoredAskResult, over: Record<string, unknown> = {}): AssistantThreadResponse => ({
+const empty = { values: [], lines: [], rows: [], paths: [], notices: [], noticeTotals: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
+const block = (over: Partial<ReadAskResult>): ReadAskResult => ({ kind: 'ask-result', templateId: 'file-query', outcome: 'complete', ...empty, ...over }) as ReadAskResult;
+const thread = (result: ReadAskResult, over: Record<string, unknown> = {}): AssistantThreadResponse => ({
   turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', citedElements: 0, steps: 0, intent: 'find_accounts', question: 'Find them', answer: { blocks: [result] }, ...over } as AssistantThreadResponse['turns'][number]],
   earlierTurns: 0,
   previousThreadClearedAt: null,
@@ -100,6 +101,31 @@ describe('the stored result of an Ask answer in the panel', () => {
     expect(screen.getByText(/1 of 5 requested paths retained/)).toBeTruthy();
     expect(screen.getByText(pathsNotKept(2))).toBeTruthy();
     expect(screen.getByText('1 found')).toBeTruthy();
+    h.stop();
+  });
+
+  it('says how many are listed when that differs from the count, keeps the quality word of a heavy stop beside the stop, says the notice lists only some of the entries the source gave, and takes the cap of paths from what the search returned', async () => {
+    const h = open(thread(block({ templateId: 'shared-attribute', count: { count: exact(500), noun: 'match' }, listed: 25, notices: [{ code: 'supernodesSkipped', entities: [A] }], noticeTotals: [{ code: 'supernodesSkipped', total: 40 }] })));
+    expect(await screen.findByText(listedText(25))).toBeTruthy();
+    expect(screen.getByText(noticeKeptOf(40))).toBeTruthy();
+    h.stop();
+    cleanup();
+    const heavy = open(thread(block({ templateId: 'shared-attribute', stop: { estimate: { value: 500, quality: 'lowerBound', scope: 's' }, threshold: 500 } })));
+    expect(await screen.findByText('Lower bound')).toBeTruthy();
+    expect(screen.getByText(ASK_COPY.stopped)).toBeTruthy();
+    heavy.stop();
+    cleanup();
+    const capped = open(thread(block({ templateId: 'shortest-paths', outcome: 'partial', paths: [], lines: [{ label: 'Paths', shown: 25 }], pathCut: { capReached: true, partial: false }, omitted: { rows: 0, paths: 20, lines: 0, noticeEntries: 0 } })));
+    expect(await screen.findByText(pathCapText(25))).toBeTruthy();
+    capped.stop();
+  });
+
+  it('shows the masking line in place of a frozen row a read withheld, keeps the counts and the typed values, and makes no read for it', async () => {
+    const h = open(thread(block({ count: { count: exact(2), noun: 'row' }, values: [{ name: 'widget', text: 'typed text' }], rows: [{ form: 'withheld' }], lines: [{ label: 'Entity', item: { form: 'withheld' } }] })));
+    expect(await screen.findAllByText(ASSISTANT_COPY.storedWithheld)).toHaveLength(2);
+    expect(screen.getByText('typed text')).toBeTruthy();
+    expect(screen.getByText(/2 rows/)).toBeTruthy();
+    expect(h.askedRefs).toEqual([]);
     h.stop();
   });
 

@@ -90,15 +90,21 @@ describe('what a read sends of a stored thread', () => {
     expect(open).toMatchObject({ label: { state: 'text', text: 'Jordan Lee holds' }, items: [{ item: { state: 'text' } }, { item: { state: 'segments' } }, { item: { state: 'text', text: 'Jordan.' } }] });
   });
 
-  it('sends a stored result as stored whatever the mask, the version of the sensitivity and a change of the mapping and back: a masked title written with the mask on never comes back in clear', () => {
-    const result = { kind: 'ask-result', templateId: 'entity', outcome: 'complete', values: [], lines: [{ label: 'Entity', item: { form: 'frozen', text: 'J••• L•••' } }], rows: [], paths: [], notices: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } } as const;
+  it('sends a stored result with its frozen rows as stored when the mask is off or the version is the one it was written under, and withholds them, keeping the counts, when the mask is on and the version is unknown or changed, so that a title that was public and became sensitive does not come back, through a change of the mapping and back', () => {
+    const result = { kind: 'ask-result', templateId: 'entity', outcome: 'complete', values: [{ name: 'widget', text: 'typed' }], count: { count: { value: 2, quality: 'exact', scope: 's' }, noun: 'row' }, lines: [{ label: 'Entity', item: { form: 'frozen', text: 'Jordan Lee' } }], rows: [{ form: 'frozen', text: 'Jordan Lee → rel → Maria' }, { form: 'ref', ref: REF }], paths: [{ hops: 1, steps: [{ relationshipType: 'rel', from: { form: 'frozen', text: 'Jordan Lee' }, to: { form: 'ref', ref: REF } }] }], notices: [], noticeTotals: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } } as const;
     const stored = writtenOff({ maskOn: true, answer: { blocks: [result] } as unknown as StoredAnswer });
-    // the version is the one written, then another (the mapping changed), then the first again, and the mask is on and off at return
-    for (const [mask, version] of [[true, 'sv1:a'], [false, 'sv1:a'], [true, 'sv1:b'], [false, 'sv1:b'], [true, 'sv1:a'], [true, undefined]] as const) {
-      const block = presentThread(read(turn(stored)), mask, version).turns[0]?.answer?.blocks[0];
-      expect(block).toEqual(result);
+    const shown = (mask: boolean, version: string | undefined) => presentThread(read(turn(stored)), mask, version).turns[0]?.answer?.blocks[0];
+    // verified under the mapping it was written under (the sensitivity version of the turn is 'sv1:a'), in either mask state
+    for (const mask of [true, false]) expect(shown(mask, 'sv1:a')).toEqual(result);
+    // mask off: shown as stored whatever the version
+    for (const version of ['sv1:b', undefined]) expect(shown(false, version)).toEqual(result);
+    // mask on and the version changed (A to B), unknown, or back again (B to A, the turn's version being 'sv1:a' only when it is current again)
+    for (const version of ['sv1:b', undefined]) {
+      const block = shown(true, version);
       expect(JSON.stringify(block)).not.toContain('Jordan');
+      expect(block).toMatchObject({ count: result.count, values: result.values, rows: [{ form: 'withheld' }, { form: 'ref' }], lines: [{ item: { form: 'withheld' } }], paths: [{ steps: [{ from: { form: 'withheld' }, to: { form: 'ref' } }] }] });
     }
+    expect(shown(true, 'sv1:a')).toEqual(result);
   });
 
   it('keeps the count of the earlier turns and the clearing', () => {

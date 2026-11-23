@@ -135,6 +135,11 @@ describe('the answers of the stored turns, in the card of a live answer (frame A
     expect(screen.getByText(ASSISTANT_COPY.storedWithheld)).toBeTruthy();
   });
 
+  it('gives the overview of a refusal its Sources control, as the other answers have one', async () => {
+    await panel(thread([turn(1, { route: 'refuse', outcome: 'refused', answer: { blocks: [{ kind: 'refusal', sentence: text('I cannot say whether this is fraud.'), overview: [{ item: text('Account A-1 is held at Bank 7.'), cites: [REF_A, REF_B] }] }] } })]));
+    expect(await screen.findByRole('button', { name: `${ASSISTANT_COPY.sources} · 2` })).toBeTruthy();
+  });
+
   it('shows a turn with a question and no answer as the question over its row, and a turn with neither as the row alone', async () => {
     await panel(thread([turn(1, { question: 'Only a question', outcome: 'refused', cause: 'verdict', route: 'refuse' }), turn(2, { outcome: 'refused', cause: 'verdict', route: 'refuse' })]));
     expect(await screen.findByText('Only a question')).toBeTruthy();

@@ -13,7 +13,7 @@ import type { Answered } from './ask-session.js';
 import { SUMMARY_COPY, citationKey, markerNumber, pressOutcome } from './summary-model.js';
 import { humanize } from './text.js';
 
-const QUALITY_WORDS: Readonly<Record<Count['quality'], string>> = { exact: 'Exact', estimated: 'Estimated', lowerBound: 'Lower bound', unknown: 'Unknown' };
+export const QUALITY_WORDS: Readonly<Record<Count['quality'], string>> = { exact: 'Exact', estimated: 'Estimated', lowerBound: 'Lower bound', unknown: 'Unknown' };
 
 /** The figure of a count as the person reads it: the sign of its quality before the number, the noun after it. */
 export function countFigure({ count, noun }: CountFact): string {

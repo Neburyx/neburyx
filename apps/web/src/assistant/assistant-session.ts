@@ -101,8 +101,6 @@ export interface AssistantSessionState {
   readonly principalId: string | null;
   readonly mask: boolean;
   readonly epoch: number;
-  /** When the first turn of this thread was sent, in milliseconds: the stored turns from before it are the earlier conversation. */
-  readonly liveSince?: number;
   readonly input: string;
   readonly nextId: number;
   readonly turns: readonly Turn[];

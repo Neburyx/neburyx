@@ -1,4 +1,4 @@
-import { SENSITIVE_TITLE_KEY, type EdgeRef, type ElementRef, type ReadAnswer, type StoredAskResult } from '@neburyx/contracts';
+import { SENSITIVE_TITLE_KEY, type EdgeRef, type ElementRef, type ReadAnswer, type ReadAskResult } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import type { CitationEntry } from '../summary/summary-model.js';
 import { ASSISTANT_COPY } from './copy.js';
@@ -26,7 +26,7 @@ function itemTextOf(item: Item, valueFor: ValueOf): string {
 /** What the card draws of a stored answer: its blocks as a live answer's (the fixed sentence and the overview of a refusal beside them), and the cited elements numbered in the order they are first cited. */
 export interface StoredView {
   /** The results of Ask the answer holds, in order. */
-  readonly askResults: readonly StoredAskResult[];
+  readonly askResults: readonly ReadAskResult[];
   /** The elements the answer cites, in the order they are first cited, as references (what a read by reference is asked for). */
   readonly refs: readonly Cited[];
   readonly blocks: ViewAnswer['blocks'];
@@ -48,7 +48,7 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
   const sentencesOf = (items: readonly { readonly item: Item; readonly cites: readonly Cited[] }[]) => items.map((each) => ({ text: itemTextOf(each.item, valueFor), cites: each.cites.map(keyOf) }));
   const blocks: ViewAnswer['blocks'][number][] = [];
   const refusals: StoredView['refusals'][number][] = [];
-  const askResults: StoredAskResult[] = [];
+  const askResults: ReadAskResult[] = [];
   for (const block of answer.blocks) {
     if (block.kind === 'ask-result') askResults.push(block);
     else if (block.kind === 'sentences') blocks.push({ kind: 'sentences', sentences: sentencesOf(block.items) } as ViewAnswer['blocks'][number]);

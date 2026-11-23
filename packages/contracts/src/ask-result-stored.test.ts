@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ASK_RESULT_LINES_MAX, ASK_RESULT_NOTICE_ENTRIES_MAX, ASK_RESULT_REFS_MAX, ASK_RESULT_ROWS_MAX, storedAskResultOf, storedAskResultSchema } from './ask-result-stored.js';
+import { cutText, ASK_RESULT_LINES_MAX, ASK_RESULT_NOTICE_ENTRIES_MAX, ASK_RESULT_REFS_MAX, ASK_RESULT_ROWS_MAX, storedAskResultOf, storedAskResultSchema } from './ask-result-stored.js';
 import type { AskAnswer } from './ask-question.js';
 import type { Count } from './graph.js';
 
@@ -51,7 +51,7 @@ describe.each(VOCABULARIES)('the stored result of an Ask answer over $name', (v)
   });
 
   it('keeps the typed values under the rule of the question, the operator label alone, and no name of a pattern', () => {
-    const stored = storedAskResultOf(f.answered({ templateId: 'entity', result: f.node('ax1') }, { label: 'Find them', patternName: 'MY-PATTERN', entities: { [v.thing]: 'typed text', pattern: 'p-1' } }), false);
+    const stored = storedAskResultOf(f.answered({ templateId: 'entity', result: f.node('ax1') }, { label: 'Find them', intent: 'saved-pattern', patternName: 'MY-PATTERN', entities: { [v.thing]: 'typed text', pattern: 'p-1' } }), false);
     expect(stored?.values).toEqual([{ name: v.thing, text: 'typed text' }]);
     expect(stored?.label).toBe('Find them');
     expect(JSON.stringify(stored)).not.toContain('MY-PATTERN');
@@ -130,6 +130,44 @@ describe.each(VOCABULARIES)('the stored result of an Ask answer over $name', (v)
     expect(stored?.omitted.noticeEntries).toBe(40 - ASK_RESULT_NOTICE_ENTRIES_MAX);
   });
 
+  it('charges a reference two paths share once, so that twenty-five paths sharing their ends are all kept', () => {
+    const shared = Array.from({ length: 25 }, (_, index) => ({ hops: 4, steps: [{ from: f.ref('start'), to: f.ref(`m${index}-1`) }, { from: f.ref(`m${index}-1`), to: f.ref(`m${index}-2`) }, { from: f.ref(`m${index}-2`), to: f.ref(`m${index}-3`) }, { from: f.ref(`m${index}-3`), to: f.ref('end') }].map((step) => ({ ...step, relationshipType: v.link, evidenceRefs: [] })) }));
+    const stored = storedAskResultOf(f.answered({ templateId: 'shortest-paths', result: { status: 'ok', paths: shared, nodes: [], edges: [], capReached: false, partial: false, elapsedMs: 1, warnings: [] } }), false);
+    expect(stored?.paths).toHaveLength(25);
+    expect(stored?.omitted.paths).toBe(0);
+    expect(storedAskResultSchema.safeParse(stored).success).toBe(true);
+  });
+
+  it('cuts a name or a text over its bound at a character boundary and never refuses the turn: a long relationship name in a line and in a step, a long label, a title that ends in a surrogate pair', () => {
+    const long = 'x'.repeat(300);
+    const lines = storedAskResultOf(f.answered({ templateId: 'degree-preview', result: { total: exact(1), byType: [{ relationshipType: long, direction: 'out', count: exact(1), neighborTypes: [v.other] }] } }), false);
+    expect(storedAskResultSchema.safeParse(lines).success).toBe(true);
+    expect(lines?.lines[1]?.label.length).toBeLessThanOrEqual(120);
+    const step = storedAskResultOf(f.answered({ templateId: 'shortest-paths', result: { status: 'ok', paths: [{ hops: 1, steps: [{ from: f.ref('a'), to: f.ref('b'), relationshipType: long, evidenceRefs: [] }] }], nodes: [], edges: [], capReached: false, partial: false, elapsedMs: 1, warnings: [] } }), false);
+    expect(storedAskResultSchema.safeParse(step).success).toBe(true);
+    const labelled = storedAskResultOf(f.answered({ templateId: 'entity', result: f.node('a') }, { label: 'L'.repeat(100) }), false);
+    expect(labelled?.label?.length).toBeLessThanOrEqual(80);
+    const emoji = `${'e'.repeat(298)}😀tail`;
+    const entity = storedAskResultOf(f.answered({ templateId: 'entity', result: { ...f.node('a'), display: { title: emoji, type: v.thing } } }), true);
+    const text = entity?.lines[0]?.item?.form === 'frozen' ? entity.lines[0].item.text : '';
+    expect(text.length).toBeLessThanOrEqual(300);
+    expect(JSON.parse(JSON.stringify(text))).toBe(text);
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(text)).toBe(false);
+    expect(cutText('abc', 10)).toBe('abc');
+  });
+
+  it('keeps a pattern input that is a value of the question, and leaves out the internal pattern input of a saved pattern only', () => {
+    const asked = (intent: string) => storedAskResultOf(f.answered({ templateId: 'entity', result: f.node('a') }, { intent, entities: { pattern: 'a value', other: 'b' } }), false);
+    expect(asked('plain')?.values).toEqual([{ name: 'pattern', text: 'a value' }, { name: 'other', text: 'b' }]);
+    expect(asked('saved-pattern')?.values).toEqual([{ name: 'other', text: 'b' }]);
+  });
+
+  it('records for a notice whose payload was cut how many entries the source gave', () => {
+    const stored = storedAskResultOf(f.answered({ templateId: 'shared-attribute', result: { status: 'ok', count: exact(1), matchIds: [], nodes: [], edges: [], notices: [{ code: 'supernodesSkipped', entities: Array.from({ length: 40 }, (_, index) => f.ref(`q${index}`)) }, { code: 'windowNotApplied', relationshipTypes: Array.from({ length: 30 }, (_, index) => `T${index}`) }], warnings: [] } }), false);
+    expect(stored?.noticeTotals).toEqual([{ code: 'windowNotApplied', total: 30 }, { code: 'supernodesSkipped', total: 40 }]);
+    expect(storedAskResultSchema.safeParse(stored).success).toBe(true);
+  });
+
   it('stores nothing for a refusal and no element for a derived rule run or a shared attribute', () => {
     expect(storedAskResultOf({ refused: { cause: 'no-intent', sentence: 'No.' } } as unknown as AskAnswer, false)).toBeUndefined();
     const rule = kinds.find(([name]) => name === 'derived-rule-run')?.[1] as AskAnswer;
@@ -141,7 +179,7 @@ describe.each(VOCABULARIES)('the stored result of an Ask answer over $name', (v)
 
 describe('the strict stored result', () => {
   it('refuses a free member, a block over the bound of references, and takes an answer without the block', () => {
-    const base = { kind: 'ask-result', templateId: 'entity', outcome: 'complete', values: [], lines: [], rows: [], paths: [], notices: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
+    const base = { kind: 'ask-result', templateId: 'entity', outcome: 'complete', values: [], lines: [], rows: [], paths: [], notices: [], noticeTotals: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
     expect(storedAskResultSchema.safeParse(base).success).toBe(true);
     expect(storedAskResultSchema.safeParse({ ...base, title: 'x' }).success).toBe(false);
     const refs = Array.from({ length: ASK_RESULT_REFS_MAX + 1 }, (_, index) => ({ form: 'ref', ref: { sourceId: 's', entityType: 't', stableId: `rx${index}` } }));

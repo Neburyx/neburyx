@@ -6,6 +6,7 @@ import type { ApiResult } from '../api/client.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
 import { bindAssistantPanel } from './assistant-binder.js';
 import { harness, RECORD, REFUSE, typeAndSend, type ThreadCall } from './assistant-kit.js';
+import { withoutLiveTurns } from './stored-thread.js';
 import { ASSISTANT_COPY } from './copy.js';
 
 afterEach(() => {
@@ -181,7 +182,7 @@ describe('the stored thread in the panel', () => {
     await screen.findByText(ASSISTANT_COPY.storedLoading);
     await typeAndSend('sent first');
     await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
-    const own = { seq: 4, at: new Date(Date.now() + 60_000).toISOString(), route: 'refuse' as const, outcome: 'refused' as const, cause: 'verdict', citedElements: 0, steps: 0, question: 'sent first' };
+    const own = { seq: 4, at: '2020-01-01T00:00:00.000Z', route: 'refuse' as const, outcome: 'refused' as const, cause: 'verdict', citedElements: 0, steps: 0, question: 'sent first' };
     await act(async () => {
       wait.resolve(ok({ ...STORED, turns: [...STORED.turns, own] }));
     });
@@ -190,6 +191,16 @@ describe('the stored thread in the panel', () => {
     expect(screen.getAllByText('sent first')).toHaveLength(1);
     const earlier = within(list).getAllByRole('listitem')[0] as HTMLElement;
     expect(earlier.compareDocumentPosition(screen.getByText('sent first')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('matches a live turn to its stored turn by its question and not by a clock: the newest stored turns that are the live ones are left out whatever their times, an earlier turn with the same words stays, and a live turn that was not written takes none', () => {
+    const turn = (question: string, at = '2026-01-01T00:00:00.000Z') => ({ question, at });
+    const stored = [turn('same'), turn('other', '2030-01-01T00:00:00.000Z'), turn('same', '1999-01-01T00:00:00.000Z')];
+    expect(withoutLiveTurns(stored, ['same']).map((entry) => entry.question)).toEqual(['same', 'other']);
+    expect(withoutLiveTurns(stored, ['other', 'same']).map((entry) => entry.question)).toEqual(['same']);
+    expect(withoutLiveTurns(stored, ['same', 'never written']).map((entry) => entry.question)).toEqual(['same', 'other']);
+    expect(withoutLiveTurns(stored, []).length).toBe(3);
+    expect(withoutLiveTurns([{ question: undefined }, { question: 'a' }], ['a']).length).toBe(1);
   });
 
   it('asks for the thread under the masking the session has, at the first opening and after the switch changes either way', async () => {

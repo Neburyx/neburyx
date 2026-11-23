@@ -207,5 +207,5 @@ export { DECIMAL_TEXT, canonicalNumberText, compareNumbers, compareStyleValue, i
 export type { StyleValue, StyleValueClass } from './value.js';
 export { momentKey } from './moment-key.js';
 
-export { ASK_RESULT_LABEL_MAX, ASK_RESULT_LINES_MAX, ASK_RESULT_NOTICE_ENTRIES_MAX, ASK_RESULT_REFS_MAX, ASK_RESULT_ROWS_MAX, ASK_RESULT_TEXT_MAX, ASK_RESULT_WORDS, storedAskResultOf, storedAskResultSchema } from './ask-result-stored.js';
-export type { StoredAskResult } from './ask-result-stored.js';
+export { ASK_RESULT_LABEL_MAX, ASK_RESULT_LINES_MAX, ASK_RESULT_NAME_MAX, ASK_RESULT_TYPE_MAX, cutText, readAskResultSchema, ASK_RESULT_NOTICE_ENTRIES_MAX, ASK_RESULT_REFS_MAX, ASK_RESULT_ROWS_MAX, ASK_RESULT_TEXT_MAX, ASK_RESULT_WORDS, storedAskResultOf, storedAskResultSchema } from './ask-result-stored.js';
+export type { ReadAskResult, StoredAskResult } from './ask-result-stored.js';

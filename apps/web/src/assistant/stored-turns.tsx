@@ -5,7 +5,7 @@ import type { RefReads } from './stored-reads.js';
 import type { ViewAnswer } from './assistant-session.js';
 import { StoredAskCard } from './stored-ask-card.js';
 import { StoredSources } from './stored-sources.js';
-import { ViewAnswerCard } from './view-answer-card.js';
+import { ViewAnswerCard, type SourcesControl } from './view-answer-card.js';
 
 type Turn = AssistantThreadResponse['turns'][number];
 
@@ -28,6 +28,9 @@ function StoredAnswer({ answer, valueFor, intent, reads }: { readonly answer: No
   const view = storedViewOf(answer, valueFor);
   // an answer stored before the model and the coverage were kept has neither, and the card draws neither
   const shown = { status: 'answered', route: 'view', blocks: view.blocks, citations: [], coverage: answer.coverage ?? { retrieval: '', summary: '' }, model: answer.model ?? '', calls: 0 } as unknown as ViewAnswer;
+  const sourcesControl = (control: SourcesControl) => <StoredSources entries={view.entries} refs={view.refs} open={control.open} onOpenChange={control.setOpen} focusRequest={control.focusRequest} onFocusHandled={control.onFocusHandled} />;
+  // the list of sources stands under the overview of a refusal when there is one, else under the blocks
+  const overviewAt = view.refusals.findIndex((refusal) => refusal.overview !== undefined);
   return (
     <>
       {view.askResults.map((result, index) => (
@@ -36,10 +39,10 @@ function StoredAnswer({ answer, valueFor, intent, reads }: { readonly answer: No
       {view.refusals.map((refusal, index) => (
         <div key={index} className="assistant-stored-refusal">
           <p className="assistant-refusal-sentence">{refusal.sentence}</p>
-          {refusal.overview === undefined ? null : <ViewAnswerCard answer={{ ...shown, blocks: refusal.overview }} entries={view.entries} heading={ASSISTANT_COPY.overviewHeading} sources={false} stored />}
+          {refusal.overview === undefined ? null : <ViewAnswerCard answer={{ ...shown, blocks: refusal.overview }} entries={view.entries} heading={ASSISTANT_COPY.overviewHeading} sources={false} stored {...(index === overviewAt ? { renderSources: sourcesControl } : {})} />}
         </div>
       ))}
-      {view.blocks.length === 0 ? null : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored renderSources={(control) => <StoredSources entries={view.entries} refs={view.refs} open={control.open} onOpenChange={control.setOpen} focusRequest={control.focusRequest} onFocusHandled={control.onFocusHandled} />} />}
+      {view.blocks.length === 0 ? null : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored {...(overviewAt === -1 ? { renderSources: sourcesControl } : {})} />}
     </>
   );
 }

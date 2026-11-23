@@ -19,6 +19,23 @@ function presentItem(item: { readonly form: string; readonly text?: string; read
   return { state: 'text', text: item.text ?? '' };
 }
 
+type StoredAskBlock = Extract<StoredAnswer['blocks'][number], { kind: 'ask-result' }>;
+type ReadAskBlock = Extract<ReadAnswer['blocks'][number], { kind: 'ask-result' }>;
+
+/**
+ * A stored result as a read sends it: counts, references and the typed values as stored; a frozen text (the masked rows of a result written with the mask on) is withheld, as a frozen sentence is, when the mask is on and the sensitivity of the mapping is not known
+ * to be the one it was written under, since a title that was public then may be sensitive now.
+ */
+function presentAskResult(block: StoredAskBlock, withhold: boolean): ReadAskBlock {
+  const hide = <T extends { readonly form: string }>(item: T): T | { readonly form: 'withheld' } => (withhold && item.form === 'frozen' ? { form: 'withheld' } : item);
+  return {
+    ...block,
+    rows: block.rows.map(hide),
+    lines: block.lines.map((entry) => (entry.item === undefined ? entry : { ...entry, item: hide(entry.item) })),
+    paths: block.paths.map((entry) => ({ ...entry, steps: entry.steps.map((step) => ({ ...step, from: hide(step.from), to: hide(step.to) })) })),
+  } as ReadAskBlock;
+}
+
 function presentAnswer(stored: StoredTurnText, maskNow: boolean, verified: boolean): ReadAnswer | undefined {
   const { answer } = stored;
   if (answer === undefined) return undefined;
@@ -32,7 +49,7 @@ function presentAnswer(stored: StoredTurnText, maskNow: boolean, verified: boole
     ...(answer.coverage === undefined ? {} : { coverage: answer.coverage }),
     blocks: answer.blocks.map((block): ReadAnswer['blocks'][number] => {
       if (block.kind === 'sentences') return { kind: 'sentences', items: block.items.map((sentence: StoredItem & { readonly cites: readonly unknown[] }) => ({ item: item(sentence), cites: sentence.cites as never })) };
-      if (block.kind === 'ask-result') return block;
+      if (block.kind === 'ask-result') return presentAskResult(block, maskNow && !verified);
       if (block.kind === 'list') return { kind: 'list', ...(block.label === undefined ? {} : { label: labelOf(block.label) }), items: block.items.map((entry: StoredItem & { readonly cites: readonly unknown[] }) => ({ item: item(entry), cites: entry.cites as never })) };
       if (block.kind === 'table') return { kind: 'table', columns: block.columns.map(labelOf), rows: block.rows.map((row) => ({ cells: row.cells.map(item), cites: row.cites })) };
       return { kind: 'refusal', sentence: labelOf(block.sentence), ...(block.overview === undefined ? {} : { overview: block.overview.map((sentence) => ({ item: item(sentence), cites: sentence.cites })) }) };

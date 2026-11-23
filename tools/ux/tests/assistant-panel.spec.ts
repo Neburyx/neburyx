@@ -105,8 +105,8 @@ test.describe('the Assistant panel', () => {
   test('shows the result of an earlier Ask answer: the count with its quality word, the typed values, rows kept as the masked text they were written as and rows read by reference', async ({ page }) => {
     const account = { sourceId: 'banking-demo', entityType: 'account', stableId: 'AC-1' };
     await page.route((url) => url.pathname === '/v1/graph/read-refs', (route) => route.fulfill({ json: { nodes: [{ ref: account, display: { title: 'Account AC-1', type: 'account' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } }], edges: [], missing: { entities: [], edges: [] } } }));
-    const empty = { values: [{ name: 'account', text: 'AC-1' }], lines: [], paths: [], notices: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
-    const answer = { blocks: [{ kind: 'ask-result', templateId: 'file-query', outcome: 'complete', ...empty, count: { count: { value: 2, quality: 'exact', scope: 'rows' }, noun: 'row' }, listed: 2, rows: [{ form: 'frozen', text: 'J••• L••• → SENT → A•••' }, { form: 'ref', ref: account }] }] } as AssistantThreadResponse['turns'][number]['answer'];
+    const empty = { values: [{ name: 'account', text: 'AC-1' }], lines: [], paths: [], notices: [], noticeTotals: [], omitted: { rows: 0, paths: 0, lines: 0, noticeEntries: 0 } };
+    const answer = { blocks: [{ kind: 'ask-result', templateId: 'file-query', outcome: 'complete', ...empty, count: { count: { value: 2, quality: 'exact', scope: 'rows' }, noun: 'row' }, listed: 2, rows: [{ form: 'frozen', text: 'J••• L••• → SENT → A•••' }, { form: 'ref', ref: account }] }] } as unknown as AssistantThreadResponse['turns'][number]['answer'];
     await openWorkspace(page, { available: true, messageWords: 1000 }, { turns: [{ seq: 1, at: '2026-11-18T10:00:00.000Z', route: 'ask', outcome: 'answered', intent: 'find_accounts', citedElements: 0, steps: 0, question: 'Find the accounts', answer }], earlierTurns: 0, previousThreadClearedAt: null });
     await open(page);
     await expect(panel(page).getByText('Find the accounts')).toBeVisible();

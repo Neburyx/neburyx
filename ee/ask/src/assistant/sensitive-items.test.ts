@@ -47,6 +47,8 @@ describe.each([
     expect(classifyItem('The figure is 1,23.', ['n4'], short)).toEqual({ form: 'unbound' });
     expect(classifyItem('The holder is w-u.', ['n5'], short)).toEqual({ form: 'unbound' });
     expect(classifyItem('The holder is jor-dan.', ['n1'], short)).toEqual({ form: 'unbound' });
+    const one = make({}, { n6: [value('(title)', 'Item Six'), value(secret, '1'), value(plain, 'gold')] });
+    expect(classifyItem('The figure is \uff11.', ['n6'], one)).toEqual({ form: 'unbound' });
     expect(classifyItem('Item One has the segment gold.', ['n1'], short)).toEqual({ form: 'frozen' });
   });
 
