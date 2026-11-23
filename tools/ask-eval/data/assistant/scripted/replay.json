@@ -1,8 +1,8 @@
 {
   "note": "scripted",
   "folders": {
-    "banking-demo": "5e53008a58d2f5bd3c0c613c095690affd72893c6129a3adcef19e99ba835914",
-    "insurance-demo": "1435b0f165f4d70a499866193d1a77ac94f220070a6d410cf2b41b4895529376"
+    "banking-demo": "bea1390a38302192e9e540513e816446b1912ce87bcaf318392b6a2221ebbca4",
+    "insurance-demo": "b0a54c544626defbe4a9fcacf8f8c5490cf66042d66cdfbe2eae964bac1a1b38"
   },
   "answers": {
     "Message:\nWhat am I looking at?\n\nIn view:\nElements in view, by key | what | type or relationship | id or ends (the key names the element in `elements`):\nc1 | \"account\" | \"AC-0002000\"\nc2 | \"account\" | \"AC-0002001\"": {

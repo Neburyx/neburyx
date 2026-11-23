@@ -49,8 +49,6 @@ const AI_TEXT_ALLOWLIST: readonly AiTextAllowance[] = [
   { file: 'ee/ask/src/case-summary/notes-words.ts', word: 'owner', reason: 'an ordinary English word in the list of words the notes may not use' },
   { file: 'ee/ask/src/case-summary/notes-words.ts', word: 'address', reason: 'an ordinary English word in the list of words the notes may not use' },
   { file: 'ee/ask/src/case-summary/notes-words.ts', word: 'city', reason: 'an ordinary English word in the list of words the notes may not use' },
-  { file: 'ee/ask/prompts/assistant-router.md', word: 'account', reason: 'open: examples in the router text name a type of the AML pack; changing them re-records the model replays of the router (a live run)' },
-  { file: 'ee/ask/prompts/assistant-router.md', word: 'lives at', reason: 'open: an example in the router text names a link of the AML pack; changing it re-records the model replays of the router (a live run)' },
 ];
 
 
