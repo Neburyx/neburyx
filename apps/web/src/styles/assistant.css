@@ -616,7 +616,8 @@
   color: var(--color-text-muted);
 }
 
-.assistant-no-description {
+.assistant-no-description,
+.assistant-pointer {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
