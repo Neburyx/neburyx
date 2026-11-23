@@ -146,8 +146,8 @@ describe('a view question on the agent', () => {
   it('keeps no sentence that cites a key of no line: c1 is not offered without a view', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }] } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: 'No relationship is shown in the view.', cites: ['c1'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(r.route.handler(r.request({ ...BODY, viewElementKeys: [] })));
@@ -158,7 +158,7 @@ describe('a view question on the agent', () => {
     const store = createMemoryAssistantRunStore();
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -180,12 +180,12 @@ describe('a view question on the agent', () => {
     const kept = { text: `${V.title} A-1 is in view.`, cites: ['n1'] };
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [kept, { text: `${V.title} A-2 has 7311 rows.`, cites: ['n2'] }] } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [kept, { text: `${V.title} A-2 is in view too.`, cites: ['n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [kept, { text: `${V.title} A-2 has 7311 rows.`, cites: ['n2'] }] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [kept, { text: `${V.title} A-2 is in view too.`, cites: ['n2'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, runStore: store });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: kept.text }, { text: `${V.title} A-2 is in view too.` }] });
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: kept.text }, { text: `${V.title} A-2 is in view too.` }] }] });
     const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
     expect(told).toContain('Your next answer replaces this one if any of its sentences is kept: call answer again with every sentence you want shown');
     expect(told).toContain('copy a figure as the line writes it, with its label');
@@ -196,7 +196,7 @@ describe('a view question on the agent', () => {
   it('tells the model that a sentence removed for verdict wording is left out, and a table that the whole table is sent again with the removed rows corrected', async () => {
     const verdictModel = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-2 is guilty of fraud.`, cites: ['n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-2 is guilty of fraud.`, cites: ['n2'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const storeA = createMemoryAssistantRunStore();
     const a = await rig({ reply: VIEW, agent: { model: verdictModel, maxCalls: 8 }, runStore: storeA });
@@ -204,7 +204,7 @@ describe('a view question on the agent', () => {
     expect((storeA.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n')).toContain('A sentence removed for verdict wording is left out, not reworded.');
     const tableModel = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} Z-9`], cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} Z-9`], cites: ['n9'] }] }] } }])
       .respond(new AIMessage('Done.'));
     const storeB = createMemoryAssistantRunStore();
     const b = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model: tableModel, maxCalls: 8 }, runStore: storeB });
