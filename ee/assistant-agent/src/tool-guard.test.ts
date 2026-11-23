@@ -56,3 +56,27 @@ describe('a hole that lets framework tools reach the model', () => {
     for (const name of ['read_file', 'task']) expect(failures.join('\n')).toContain(`"${name}"`);
   });
 });
+
+describe('canaries of the guard of the offered tools', () => {
+  const plant = (name: string) => createMiddleware({ name: 'Planted', tools: [tool(() => 'x', { name, description: 'A planted tool.', schema: z.object({}) })] });
+  const recorder = (assembled: string[][]) => createMiddleware({ name: 'Recorder', wrapModelCall: (request, handler) => (assembled.push(request.tools.map((entry) => ('name' in entry ? String(entry.name) : '')).sort()), handler(request)) });
+
+  it('a planted extra tool is found at the assembled capture, by name, with no value in the message', async () => {
+    const assembled: string[][] = [];
+    const agent = createDeepAgent({ model: new Recording(), tools: [readView, answer], systemPrompt: 'rules', middleware: [recorder(assembled), plant('planted_tool')] });
+    await agent.invoke({ messages: [new HumanMessage('question')] });
+    const failures = toolListFailures({ allowed: ALLOWED, knownRemoved: KNOWN, assembled, sent: [], requireAllOnFirst: false });
+    expect(failures.some((failure) => failure.includes('"planted_tool"'))).toBe(true);
+  });
+
+  it('a default tool named delete in the assembled list is found by name (planted in the list: the framework refuses to take a second tool of that name, so a middleware cannot plant it)', () => {
+    const failures = toolListFailures({ allowed: ALLOWED, knownRemoved: KNOWN, assembled: [['answer', 'delete', 'read_file', 'read_view', 'task']], sent: [], requireAllOnFirst: false });
+    expect(failures).toEqual(['request 1: the framework assembled "delete", which is extra: neither allowed nor a known framework tool that is removed']);
+  });
+
+  it('a failure message holds tool names and the rule, never a value of a tool list entry other than its name', () => {
+    const failures = toolListFailures({ allowed: ALLOWED, knownRemoved: KNOWN, assembled: [['SECRET-VALUE-AS-A-NAME']], sent: [['answer', 'read_view']], requireAllOnFirst: true });
+    expect(failures).toEqual(['request 1: the framework assembled "SECRET-VALUE-AS-A-NAME", which is extra: neither allowed nor a known framework tool that is removed']);
+  });
+});
+
