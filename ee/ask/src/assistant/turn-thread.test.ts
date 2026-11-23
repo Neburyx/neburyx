@@ -113,6 +113,9 @@ describe('a turn kept in the thread as references and metadata', () => {
     await run(continued, { sourceId: 'demo', investigationId: INVESTIGATION, viewElementKeys: [], continue: { intent: 'shared', entities: { id: 'A-1' }, continueToken: token } });
     const after = stored(continued)[1];
     expect(after).toMatchObject({ route: 'ask', outcome: 'answered', intent: 'shared', steps: 1 });
+    // a continue carries no typed message: its row keeps no question, and the first turn kept the one typed
+    expect(after).not.toHaveProperty('question');
+    expect(stored(continued)[0]?.question).toBe(BASE.message);
     for (const key of ['modelRef', 'promptVersion', 'tokensIn', 'tokensOut']) expect(after).not.toHaveProperty(key);
     const query = await turnRig({ reply: routeAsk('byId', { id: 'A-1' }), run: () => ({ status: 'ok', result: fileQueryResult() }) });
     await run(query);
@@ -192,7 +195,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
     expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
-    expect(kept?.answer).toEqual({ blocks: [{ kind: 'table', columns: ['Element'], rows: answer.table.rows.map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
+    expect(kept?.answer).toEqual({ blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'Element' }], rows: answer.table.rows.map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
     const closed = view.r.events.find((event) => event.action === TURN_CLOSED_ACTION);
     expect(closed?.detail).toMatchObject({ turn: { route: 'view', outcome: 'answered', citedElements: 2, form: 'table', tableRowsShown: 2 } });
     expect((closed?.detail as { turn: Record<string, unknown> }).turn).not.toHaveProperty('tableRowsDropped');

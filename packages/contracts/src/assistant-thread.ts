@@ -33,7 +33,8 @@ export const THREAD_ANSWER_BLOCKS_MAX = 8;
  */
 export const THREAD_ITEM_FORMS = ['frozen', 'unbound'] as const;
 
-const storedItem = (max: number) => z.strictObject({ form: z.enum(THREAD_ITEM_FORMS), text: z.string().min(1).max(max) });
+/** An item of a stored answer: its text in one form. A table cell may be empty (a property with no value); a sentence and a label may not. */
+const storedItem = (max: number, min = 1) => z.strictObject({ form: z.enum(THREAD_ITEM_FORMS), text: z.string().min(min).max(max) });
 const storedCites = z.array(threadCitationRefSchema).max(Math.max(ASK_SUMMARY_MAX_CITATIONS, ASSISTANT_VIEW_KEYS_MAX));
 /** A sentence of a stored answer: its text in one form, and the references of the elements it cites. */
 const storedSentence = z.strictObject({ ...storedItem(THREAD_SENTENCE_MAX).shape, cites: storedCites });
@@ -47,11 +48,13 @@ export const storedAnswerSchema = z.strictObject({
     .array(
       z.discriminatedUnion('kind', [
         z.strictObject({ kind: z.literal('sentences'), items: z.array(storedSentence).min(1).max(12) }),
-        z.strictObject({
-          kind: z.literal('table'),
-          columns: z.array(z.string().min(1).max(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
-          rows: z.array(z.strictObject({ cells: z.array(storedItem(ASSISTANT_TABLE_CELL_MAX)), cites: storedCites })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
-        }),
+        z
+          .strictObject({
+            kind: z.literal('table'),
+            columns: z.array(storedItem(ASSISTANT_TABLE_LABEL_MAX)).min(1).max(ASSISTANT_TABLE_COLUMNS_MAX),
+            rows: z.array(z.strictObject({ cells: z.array(storedItem(ASSISTANT_TABLE_CELL_MAX, 0)).max(ASSISTANT_TABLE_COLUMNS_MAX), cites: storedCites })).min(1).max(ASSISTANT_TABLE_ROWS_MAX),
+          })
+          .refine((table) => table.rows.every((row) => row.cells.length === table.columns.length), { message: 'a row has a cell for each column', path: ['rows'] }),
         z.strictObject({ kind: z.literal('refusal'), sentence: storedItem(THREAD_SENTENCE_MAX), overview: z.array(storedSentence).min(1).max(ASSISTANT_OVERVIEW_SENTENCES_MAX).optional() }),
       ]),
     )
@@ -91,6 +94,7 @@ export const assistantThreadTurnWriteSchema = z
     sensitivityVersion: label.optional(),
   })
   .refine((turn) => (turn.answer === undefined && turn.question === undefined) || turn.outcome === 'answered' || turn.outcome === 'refused', { message: 'only an answered or a refused turn keeps its text', path: ['answer'] })
+  .refine((turn) => (turn.answer === undefined && turn.question === undefined) || turn.maskOn !== undefined, { message: 'text is kept with the state of the mask it was written under', path: ['maskOn'] })
   .refine((turn) => turn.route === 'view' || turn.citationRefs.length <= ASK_SUMMARY_MAX_CITATIONS, { message: 'an Ask answer cites at most as many things as a summary holds', path: ['citationRefs'] });
 
 export type AssistantThreadTurnWrite = z.infer<typeof assistantThreadTurnWriteSchema>;

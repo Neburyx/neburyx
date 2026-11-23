@@ -431,11 +431,15 @@ describe('the text of a turn (0013)', () => {
     expect(await rows(database.ownerUrl, 'SELECT 1 FROM assistant_turns')).toEqual([]);
   });
 
-  it('leaves a turn written before the file with null in the four columns', async () => {
+  it('leaves a turn written without the four columns (as before the file) with null in them, and the rollback note drops them without touching another table', async () => {
     const database = await seeded();
-    await withStore(database, async (store) => {
-      expect(await store.append(turn(), 0)).toBe('stored');
-    });
+    const thread = randomUUID();
+    await rows(database.ownerUrl, `INSERT INTO assistant_threads (id, investigation_id, user_id, created_at, last_turn_at) VALUES ('${thread}', '${FIRST}', '${OWNER}', now(), now())`);
+    await rows(database.ownerUrl, `INSERT INTO assistant_turns (id, thread_id, seq, at, route, outcome, question_hash) VALUES ('${randomUUID()}', '${thread}', 1, now(), 'ask', 'answered', '${HASH}')`);
     expect(await rows(database.ownerUrl, 'SELECT question_text, mask_on, answer, sensitivity_version FROM assistant_turns')).toEqual([{ question_text: null, mask_on: null, answer: null, sensitivity_version: null }]);
+    // the rollback note of the file: the four columns go and nothing else changes
+    await rows(database.ownerUrl, 'ALTER TABLE assistant_turns DROP COLUMN question_text, DROP COLUMN mask_on, DROP COLUMN answer, DROP COLUMN sensitivity_version');
+    expect(await rows(database.ownerUrl, 'SELECT route, outcome, question_hash FROM assistant_turns')).toEqual([{ route: 'ask', outcome: 'answered', question_hash: HASH }]);
+    expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM assistant_threads')).toEqual([{ n: 1 }]);
   });
 });

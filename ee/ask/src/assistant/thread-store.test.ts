@@ -37,9 +37,11 @@ interface Script {
 function pool(script: Script = {}) {
   const statements: string[] = [];
   const released = { count: 0 };
+  const parameters: (readonly unknown[] | undefined)[] = [];
   const client: ThreadClient = {
-    async query(text) {
+    async query(text, values) {
       statements.push(text);
+      parameters.push(values);
       if (script.failAt?.test(text) === true) throw new Error('DRIVER-TEXT canary-secret-7f3 INSERT INTO ...');
       if (/FOR SHARE/.test(text)) return { rows: script.status === 'none' ? [] : [{ status: script.status ?? 'open', deleted: false }] };
       if (/FROM assistant_investigation_epochs/.test(text)) return { rows: script.epoch === undefined ? [] : [{ epoch: script.epoch }] };
@@ -56,7 +58,7 @@ function pool(script: Script = {}) {
     release: () => void (released.count += 1),
   };
   const held: ThreadPool = { connect: async () => client, end: async () => undefined, on: () => undefined };
-  return { held, statements, released };
+  return { held, statements, released, parameters };
 }
 
 describe('the Postgres store of the threads', () => {
@@ -131,9 +133,11 @@ const ANSWER = { blocks: [{ kind: 'sentences', items: [SENTENCE()] }] };
 
 describe('the text of a turn, stored through the strict schema', () => {
   it('writes the question, the mask state, the answer and the version in four columns of the one insert, and null for a turn that has none', async () => {
-    const { held, statements } = pool();
+    const { held, statements, parameters } = pool();
     const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
     await store.append(turn({ question: 'Which accounts?', maskOn: true, answer: ANSWER as never }), 0);
+    const bound = parameters[statements.findIndex((text) => /INSERT INTO assistant_turns/.test(text))] ?? [];
+    expect(bound.slice(18)).toEqual(['Which accounts?', true, JSON.stringify(ANSWER), null]);
     const insert = statements.find((text) => /INSERT INTO assistant_turns/.test(text)) ?? '';
     expect(insert).toContain('question_text, mask_on, answer, sensitivity_version');
     const bare = pool();
@@ -142,13 +146,15 @@ describe('the text of a turn, stored through the strict schema', () => {
   });
 
   it.each([
-    ['a question one over the bound', { question: 'q'.repeat(4001) }],
-    ['a sentence one over the bound', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2001) })] }] } }],
-    ['a cell one over the bound', { answer: { blocks: [{ kind: 'table', columns: ['A'], rows: [{ cells: [{ form: 'unbound', text: 'c'.repeat(81) }], cites: [] }] }] } }],
-    ['a member the schema does not name', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ token: 'T' })] }] } }],
-    ['an extra key beside the blocks', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE()] }], runId: 'x' } }],
-    ['a form that is not one', { answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ form: 'bound' })] }] } }],
-    ['text on a waiting turn', { outcome: 'waiting', question: 'Which accounts?' }],
+    ['a question one over the bound', { maskOn: false, question: 'q'.repeat(4001) }],
+    ['a sentence one over the bound', { maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2001) })] }] } }],
+    ['a cell one over the bound', { maskOn: false, answer: { blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'A' }], rows: [{ cells: [{ form: 'unbound', text: 'c'.repeat(81) }], cites: [] }] }] } }],
+    ['a member the schema does not name', { maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ token: 'T' })] }] } }],
+    ['an extra key beside the blocks', { maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [SENTENCE()] }], runId: 'x' } }],
+    ['a form that is not one', { maskOn: false, answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ form: 'bound' })] }] } }],
+    ['text on a waiting turn', { outcome: 'waiting', question: 'Which accounts?', maskOn: false }],
+    ['text with no state of the mask', { question: 'Which accounts?' }],
+    ['a row with fewer cells than columns', { maskOn: false, answer: { blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'A' }, { form: 'unbound', text: 'B' }], rows: [{ cells: [{ form: 'unbound', text: 'x' }], cites: [] }] }] } }],
   ])('refuses %s as a whole before any statement', async (_name, over) => {
     const { held, statements } = pool();
     const store = createPgAssistantThreadStore(CONTEXT, { createPool: () => held });
@@ -161,9 +167,13 @@ describe('the text of a turn, stored through the strict schema', () => {
 
   it('keeps the text at its bounds, and the memory store keeps it in the stored form', async () => {
     const memory = createMemoryAssistantThreadStore();
-    const edge = turn({ question: 'q'.repeat(4000), answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2000) })] }] } as never });
+    const edge = turn({ maskOn: false, question: 'q'.repeat(4000), answer: { blocks: [{ kind: 'sentences', items: [SENTENCE({ text: 's'.repeat(2000) })] }] } as never });
     expect(await memory.append(edge, 0)).toBe('stored');
     expect([...memory.threads.values()][0]?.turns[0]?.question).toHaveLength(4000);
+    const { held, statements, parameters } = pool();
+    expect(await createPgAssistantThreadStore(CONTEXT, { createPool: () => held }).append(edge, 0)).toBe('stored');
+    const bound = parameters[statements.findIndex((text) => /INSERT INTO assistant_turns/.test(text))] ?? [];
+    expect(String(bound[18])).toHaveLength(4000);
   });
 });
 

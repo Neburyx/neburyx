@@ -25,11 +25,13 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean): St
   }
   if (!('citations' in answer)) return undefined;
   const refs = refsOf(answer.citations);
+  // the fixed sentences of the server (a type with no description, a pointer, the note of the last call) are a block of their own, kept as written
+  const server = [answer.noDescription, answer.pointer, answer.lastCallNote].flatMap((text) => (text === undefined || text === '' ? [] : [{ form: fixed, text, cites: [] as Cite[] }]));
+  const fixedBlock = server.length === 0 ? [] : [{ kind: 'sentences' as const, items: server }];
   if ('table' in answer) {
     const { table } = answer;
-    return { blocks: [{ kind: 'table', columns: table.columns, rows: table.rows.map((row) => ({ cells: row.cells.map((cell) => ({ form: item, text: cell })), cites: row.cites.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : [])) })) }] };
+    return { blocks: [{ kind: 'table', columns: table.columns.map((label) => ({ form: item, text: label })), rows: table.rows.map((row) => ({ cells: row.cells.map((cell) => ({ form: item, text: cell })), cites: row.cites.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : [])) })) }, ...fixedBlock] };
   }
   if (!('sentences' in answer)) return undefined;
-  const server = [answer.noDescription, answer.pointer, answer.lastCallNote].flatMap((text) => (text === undefined || text === '' ? [] : [{ form: fixed, text, cites: [] as Cite[] }]));
-  return { blocks: [{ kind: 'sentences', items: [...sentences(answer.sentences, refs, item), ...server].slice(0, 12) }] };
+  return { blocks: [{ kind: 'sentences', items: sentences(answer.sentences, refs, item) }, ...fixedBlock] };
 }
