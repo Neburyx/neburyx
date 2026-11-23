@@ -352,7 +352,7 @@ async function checks(port: number, answered: () => void): Promise<void> {
   expect(file.status).toBe(200);
   const header = (JSON.parse(file.text) as { header: { lines: string[] } }).header.lines;
   record('export header', header);
-  for (const prefix of ['source:', 'exported:', 'scope:', 'coverage:', 'masking:']) expect(header.some((line) => line.startsWith(prefix)), prefix).toBe(true);
+  for (const prefix of ['source:', 'exported time:', 'scope:', 'coverage:', 'masking:']) expect(header.some((line) => line.startsWith(prefix)), prefix).toBe(true);
   expect(header.find((line) => line.startsWith('scope:'))).toContain('partial');
   const reopened = await call(base, 'POST', `/v1/investigations/${investigation.id}/status`, { status: 'open', expectedVersion: investigation.version });
   investigation = (reopened.json as { investigation: Investigation }).investigation;

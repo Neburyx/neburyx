@@ -15,6 +15,8 @@ describe('which slow steps a list of changed files calls for', () => {
     ['services/api/src/compose/readme-quickstart.compose.test.ts', { image: false, quickstart: true }],
     ['services/api/src/compose/stack.ts', { image: false, quickstart: true }],
     ['services/api/vitest.compose.config.ts', { image: false, quickstart: true }],
+    ['services/api/src/exports/export-png.ts', { image: false, quickstart: true }],
+    ['apps/web/src/exports/picture.ts', { image: false, quickstart: true }],
     ['services/api/src/gate/gate.ts', { image: false, quickstart: false }],
     ['docs/README.md', { image: false, quickstart: false }],
     ['apps/web/package.json', { image: false, quickstart: false }],

@@ -4,7 +4,8 @@ import { pathToFileURL } from 'node:url';
 const IMAGE_FILES = ['pnpm-lock.yaml', 'package.json', '.nvmrc'];
 const IMAGE_FOLDERS = ['deploy/', '.github/workflows/'];
 const QUICKSTART_FILES = ['README.md', 'services/api/src/compose/readme-quickstart.compose.test.ts', 'services/api/src/compose/stack.ts', 'services/api/vitest.compose.config.ts'];
-const QUICKSTART_FOLDERS = ['deploy/'];
+// the quickstart exports a file and reads its header, so the code that writes the export is watched too
+const QUICKSTART_FOLDERS = ['deploy/', 'services/api/src/exports/', 'apps/web/src/exports/'];
 const ZERO_REVISION = /^0+$/;
 const USAGE = 'usage: changed-paths.mjs --base <revision> --head <revision>';
 
