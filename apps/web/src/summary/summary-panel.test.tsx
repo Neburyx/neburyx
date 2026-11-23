@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it } from 'vitest';
+import { StrictMode } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SUMMARY_FAILURE_KINDS, type SummaryRequest, type SummaryResponse } from '@neburyx/contracts';
 import { ApiClientProvider } from '../api/client-context.js';
 import type { ApiResult } from '../api/client.js';
@@ -102,6 +103,22 @@ describe('the summary panel: one click to a draft', () => {
     expect(screen.getByText('This is not a finding.')).toBeTruthy();
   });
 
+  it('makes one request for one press, also when React draws the panel twice as it does in development, and the one request is never cancelled', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = harness(async () => ok(draft()));
+      render(<StrictMode>{h.tree(true)}</StrictMode>);
+      expect(h.sent).toHaveLength(0);
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+      expect(h.sent).toHaveLength(1);
+      expect(h.sent[0]?.signal?.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('numbers the cited elements in the order of their first citation, one number for one key, apart from the sentences', async () => {
     const h = harness(async () => ok(draft()));
     render(h.tree(true));
@@ -153,11 +170,13 @@ describe('the summary panel: one click to a draft', () => {
     let finish: (value: ApiResult<SummaryResponse>) => void = () => undefined;
     const h = harness(() => new Promise((resolve) => (finish = resolve)));
     const view = render(h.tree(true));
+    await waitFor(() => expect(h.sent.length).toBeGreaterThan(0));
     const first = h.sent[0]?.signal;
     view.rerender(h.tree(false));
     expect(first?.aborted).toBe(true);
     await act(async () => finish(ok(draft())));
     view.rerender(h.tree(true));
+    await waitFor(() => expect(h.sent).toHaveLength(2));
     expect(screen.queryByRole('heading', { name: 'Draft' })).toBeNull();
     expect(h.sent).toHaveLength(2);
   });
@@ -223,6 +242,7 @@ describe('the summary panel: generating, Cancel, Regenerate and Discard', () => 
   it('lists the steps of one request held open and cancels on the client without changing the view', async () => {
     const h = harness(() => new Promise(() => undefined));
     render(h.tree(true));
+    await waitFor(() => expect(h.sent.length).toBeGreaterThan(0));
     for (const step of ['Read through the gate', 'Size checked', 'Drafting', 'Checking citations']) expect(screen.getByText(step)).toBeTruthy();
     expect(screen.queryByText('Names replaced')).toBeNull();
     const selection = h.state.presentation.view.getState().selection;
@@ -249,6 +269,7 @@ describe('the summary panel: generating, Cancel, Regenerate and Discard', () => 
     let finish: (value: ApiResult<SummaryResponse>) => void = () => undefined;
     const h = harness(() => new Promise((resolve) => (finish = resolve)));
     render(h.tree(true));
+    await waitFor(() => expect(h.sent.length).toBeGreaterThan(0));
     expect(screen.queryByRole('button', { name: 'Regenerate' })).toBeNull();
     await act(async () => finish(ok(draft())));
     await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }));
@@ -487,6 +508,7 @@ describe('the summary panel: keeping the person going and the focus', () => {
     let finish: (value: ApiResult<SummaryResponse>) => void = () => undefined;
     const h = harness(() => new Promise((resolve) => (finish = resolve)));
     render(h.tree(true));
+    await waitFor(() => expect(h.sent.length).toBeGreaterThan(0));
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await act(async () => finish(ok(draft())));
     expect(screen.queryByRole('heading', { name: 'Draft' })).toBeNull();
@@ -496,6 +518,7 @@ describe('the summary panel: keeping the person going and the focus', () => {
   it('asks again from the Cancelled state with Try again', async () => {
     const h = harness(() => (h.sent.length === 1 ? new Promise(() => undefined) : Promise.resolve(ok(draft()))));
     render(h.tree(true));
+    await waitFor(() => expect(h.sent.length).toBeGreaterThan(0));
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(h.sent).toHaveLength(2);
@@ -564,6 +587,7 @@ describe('the summary panel: keeping the person going and the focus', () => {
     let finish: (value: ApiResult<SummaryResponse>) => void = () => undefined;
     const h = harness(() => new Promise((resolve) => (finish = resolve)));
     render(h.tree(true));
+    await waitFor(() => expect(h.sent.length).toBeGreaterThan(0));
     act(() => h.state.setLoaded([key('a')], [A], []));
     await act(async () => finish(ok(draft())));
     await screen.findByRole('heading', { name: 'Draft' });

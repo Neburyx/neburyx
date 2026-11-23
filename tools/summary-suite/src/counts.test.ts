@@ -2,7 +2,7 @@ import type { SummarySentence } from '@neburyx/contracts';
 import { z } from 'zod';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { caseOf, loadCases } from './cases.js';
-import { numbersUnsupported, SuiteCheckFailed } from './checks.js';
+import { countRuleBroken, numbersUnsupported, SuiteCheckFailed } from './checks.js';
 import { mutatedChecks, type Mutation } from './mutants.js';
 import { replyOf, startRig } from './testing/rig.js';
 import { expectClean, twinsOf, viewOf, type Evidence } from './rules.js';
@@ -87,6 +87,48 @@ describe('25 transactions over 25 cited transactions, in the case summary', () =
   });
 });
 
+describe('the suite\'s own rule for a count written in words', () => {
+  const twelve = Array.from({ length: 12 }, (_, index) => `n${index + 1}`);
+  const sent = twelve.map((key, index) => `${key} | "widget" | title: "Item ${String.fromCharCode(65 + index)}" | id: "w${index + 1}"`).join('\n');
+
+  it('supports a count in words from eleven that equals the cited elements of the type', () => {
+    expect(numbersUnsupported({ text: 'Twelve widgets are listed.', cites: twelve }, sent)).toEqual([]);
+    expect(numbersUnsupported({ text: 'Twelve of the widgets are listed.', cites: twelve }, sent)).toEqual(['12']);
+  });
+
+  it('does not support a wrong count in words, nor one said of another population', () => {
+    expect(numbersUnsupported({ text: 'Thirteen widgets are listed.', cites: twelve }, sent)).toEqual(['13']);
+    expect(numbersUnsupported({ text: 'At least twelve widgets are listed.', cites: twelve }, sent)).toEqual(['12']);
+  });
+
+  it('does not support another number written in words that no cited line holds, though the count of the sentence stands', () => {
+    expect(numbersUnsupported({ text: 'Twelve widgets sum to ninety-nine.', cites: twelve }, sent)).toEqual(['99']);
+    expect(numbersUnsupported({ text: 'Twelve widgets represent ninety-nine percent.', cites: twelve }, sent)).toEqual(['99']);
+    expect(numbersUnsupported({ text: 'Twelve of them are listed.', cites: ['n1'] }, sent)).toEqual(['12']);
+  });
+
+  it('supports a number in words that a cited line holds, quoted or not', () => {
+    const held = 'n1 | "widget" | title: "W" | id: "w1" | label: "twenty-five"\nn2 | "widget" | title: "V" | id: "w2" | rating: thirty';
+    expect(numbersUnsupported({ text: 'The label is twenty-five.', cites: ['n1'] }, held)).toEqual([]);
+    expect(numbersUnsupported({ text: 'The rating is thirty.', cites: ['n2'] }, held)).toEqual([]);
+    expect(numbersUnsupported({ text: 'The label is twenty-six.', cites: ['n1'] }, held)).toEqual(['26']);
+  });
+
+  it('does not read the words of a quoted title as a number', () => {
+    expect(numbersUnsupported({ text: '"Twelve widgets" is listed.', cites: ['n1'] }, sent)).toEqual([]);
+  });
+
+  it('breaks the rule of the quality of a count when a count that is not known is stated in words', () => {
+    const lines = 'n1 | "payment" | title: "P" | id: "p1x" | members: not known';
+    expect(countRuleBroken({ text: 'Twenty-five payments are listed.', cites: ['n1'] }, lines)).toBe(true);
+    expect(countRuleBroken({ text: 'The payments are listed.', cites: ['n1'] }, lines)).toBe(false);
+  });
+
+  it('does not read the words up to ten as a count: a known gap, as before', () => {
+    expect(numbersUnsupported({ text: 'Three widgets are listed.', cites: twelve }, sent)).toEqual([]);
+  });
+});
+
 describe('the suite\'s own rule for the count of cited elements', () => {
   const sent = ['n1 | "category" | title: "Alpha" | id: "a1"', 'n2 | "category" | title: "Beta" | id: "b2"', 'n3 | "widget" | title: "Gamma" | id: "g3"', 'n4 | "widget" | title: "Delta" | id: "d4"', 'e1 | "widget" | n3 -> n4', 'n5 | "Widget" | title: "Eps" | id: "e5"', 'n6 | "widget" | title: "Zeta" | id: "z6"', 'n7 | "money  movement" | title: "Eta" | id: "h7"', 'n8 | "money  movement" | title: "Theta" | id: "t8"'].join('\n');
   const unsupported = (text: string, cites: string[]): string[] => numbersUnsupported({ text, cites }, sent);
@@ -106,6 +148,7 @@ describe('the suite\'s own rule for the count of cited elements', () => {
 
   it.each([
     ['3 widgets are listed.', ['n3', 'n4', 'e1']],
+    ['Twenty-two widgets are listed.', ['n3', 'n4', 'e1']],
     ['2 widgets are listed.', ['n5', 'n6']],
     ['2 categories have a fee of 2.', ['n1', 'n2']],
     ['2 categories are unretrieved.', ['n1', 'n2']],

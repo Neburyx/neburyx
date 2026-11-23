@@ -127,9 +127,10 @@ function numbersIn(text: string): string[] {
   return (plain.match(NUMBER) ?? []).map((token) => token.replaceAll(',', '').replace(/^\+/u, ''));
 }
 
-/** The numbers of a sent line, after its key. */
+/** The numbers of a sent line, after its key, and the cardinals it writes in words from eleven up, quoted ones included. */
 function numbersOfLine(line: string): string[] {
-  return numbersIn(line.slice(line.indexOf('|') + 1));
+  const after = line.slice(line.indexOf('|') + 1);
+  return [...numbersIn(after), ...wordMentionsIn(after, true).map((found) => found.value)];
 }
 
 /** Words that make a number about something other than the cited elements: the whole source, what was not retrieved or shown, a bound or an approximation. */
@@ -166,10 +167,31 @@ function mentionsIn(text: string): { readonly value: string; readonly after: str
   return [...plain.matchAll(NUMBER)].map((found) => ({ value: found[0].replaceAll(',', '').replace(/^\+/u, ''), after: text.slice(found.index + found[0].length) }));
 }
 
+const UNIT_WORDS = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(' ');
+const TEN_WORDS = 'twenty thirty forty fifty sixty seventy eighty ninety'.split(' ');
+
+/** The value of a cardinal written in words, zero to ninety-nine (`twenty-five`), or nothing for any other word. */
+function wordValue(word: string): number | undefined {
+  const [head = '', unit] = word.toLowerCase().split('-');
+  const units = UNIT_WORDS.indexOf(head);
+  if (unit === undefined) return units >= 0 ? units : TEN_WORDS.includes(head) ? (TEN_WORDS.indexOf(head) + 2) * 10 : undefined;
+  const added = UNIT_WORDS.indexOf(unit);
+  return TEN_WORDS.includes(head) && added >= 1 && added <= 9 ? (TEN_WORDS.indexOf(head) + 2) * 10 + added : undefined;
+}
+
+/** The cardinals written in words from eleven up in a text, outside quotes, with the text after each; the words up to ten are ordinary words of a sentence. */
+function wordMentionsIn(text: string, quotedToo = false): { readonly value: string; readonly after: string }[] {
+  const outside = quotedToo ? text : text.replace(/"[^"]+"/gu, (quoted) => ' '.repeat(quoted.length));
+  return [...outside.matchAll(/(?<![\p{L}\p{N}_-])[a-z]+(?:-[a-z]+)?(?![\p{L}\p{N}_-])/giu)].flatMap((found) => {
+    const value = wordValue(found[0]);
+    return value === undefined || value <= 10 ? [] : [{ value: String(value), after: text.slice(found.index + found[0].length) }];
+  });
+}
+
 export function numbersUnsupported(sentence: SummarySentence, sent: string): string[] {
   const lines = linesOfKeys(sent);
   const supported = new Set(sentence.cites.flatMap((key) => numbersOfLine(lines.get(key) ?? '')));
-  return mentionsIn(sentence.text).filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
+  return [...mentionsIn(sentence.text), ...wordMentionsIn(sentence.text)].filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
 }
 
 export function expectNumbersCited(sentences: readonly SummarySentence[], sent: string): void {
@@ -182,7 +204,7 @@ export function expectNumbersCited(sentences: readonly SummarySentence[], sent: 
 /** A sentence that states a number beside a count the text gives as not known, or the number of an inexact count without the phrase that labels it; an exact count needs no label. */
 export function countRuleBroken(sentence: SummarySentence, sent: string): boolean {
   const lines = linesOfKeys(sent);
-  const stated = numbersIn(sentence.text);
+  const stated = [...numbersIn(sentence.text), ...wordMentionsIn(sentence.text).map((found) => found.value)];
   return sentence.cites.some((key) => {
     const members = /\| members: ([^|]+)/u.exec(lines.get(key) ?? '')?.[1]?.trim();
     if (members === undefined) return false;

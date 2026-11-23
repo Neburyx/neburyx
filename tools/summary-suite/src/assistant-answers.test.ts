@@ -193,6 +193,12 @@ describe.each(PATHS)('%s: the entities and the relationships of a view, counted 
     expect(await path(undefined, sentencesOf({ text: '28 entities and 26 relationships are in view.', cites }), evidence)).toEqual([]);
   });
 
+  it('shows twenty-five transactions in words over the 25 cited transactions, and removes twenty-six', async () => {
+    const cites = entityCites.slice(3);
+    expect(await path(undefined, sentencesOf({ text: 'Twenty-five transactions, Transfer 1 through Transfer 25, are each linked to the account by a RECEIVED_BY relationship.', cites: [...cites, ...edgeCites.slice(0, 25)] }), evidence)).toEqual(['Twenty-five transactions, Transfer 1 through Transfer 25, are each linked to the account by a RECEIVED_BY relationship.']);
+    expect(await path(undefined, sentencesOf({ text: 'Twenty-six transactions are in view.', cites }), evidence)).toEqual([]);
+  });
+
   it('removes the count of relationships said of another population, so the source-wide figure is not backed by the cited ones', async () => {
     expect(await path(undefined, sentencesOf({ text: 'In total 27 relationships are in view.', cites: edgeCites }), evidence)).toEqual([]);
   });

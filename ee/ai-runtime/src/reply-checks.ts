@@ -14,6 +14,8 @@ export interface CheckedText {
   readonly descriptionKeys?: ReadonlySet<string>;
   /** The type of each element key (an entity type, or a relationship type), so that the comparison check knows which elements are of one type without the references a worker thread would have to copy. */
   readonly elementTypes?: ReadonlyMap<string, string>;
+  /** False for the rows of a table: a cardinal written in words is read as a number everywhere else. */
+  readonly readWordNumbers?: boolean;
   /** The keys of the properties each element's line holds a value for, by the element's key. */
   readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
   /** The keys of the elements each read listed, by the key of the read's own line: only a line of a read that listed an element speaks for it. */
@@ -136,6 +138,37 @@ const numberMentionsIn = (text: string): { readonly value: string; readonly afte
   return [...plain.matchAll(NUMBER_TOKEN)].map((found) => ({ value: normalise(found[0]), after: text.slice(found.index + found[0].length) }));
 };
 
+const NUMBER_UNITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const NUMBER_TENS = ['twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+const NUMBER_WORD = new RegExp(`(?<![\\p{L}\\p{N}_-])(?:(?:${NUMBER_TENS.join('|')})(?:-(?:${NUMBER_UNITS.slice(1, 10).join('|')}))?|${NUMBER_UNITS.join('|')})(?![\\p{L}\\p{N}_-])`, 'giu');
+
+/** The value of a cardinal written in words, from zero to ninety-nine (`twenty-five` is 25). */
+function numberWordValue(word: string): string {
+  const [head = '', unit] = word.toLowerCase().split('-');
+  const tens = NUMBER_TENS.indexOf(head);
+  return String(tens >= 0 ? (tens + 2) * 10 + (unit === undefined ? 0 : NUMBER_UNITS.indexOf(unit)) : NUMBER_UNITS.indexOf(head));
+}
+
+/** The values of the cardinals written in words from eleven to ninety-nine in a line of the text sent, quoted values included: a reply that restates `twenty-five` finds it where the line holds it. */
+const writtenValuesOfLine = (line: string): string[] => [...line.matchAll(NUMBER_WORD)].map((found) => numberWordValue(found[0])).filter((value) => Number(value) > 10);
+
+/**
+ * The cardinals written in words from eleven to ninety-nine, outside quoted text (a quoted title is a name the name check judges), as the digits would give them. One is `counting` when a word that names a type of an
+ * element the text sent holds, or a kind (entity, relationship, element), follows at once: the count rule may then verify it against the cited elements. The words up to ten are ordinary words of a sentence (`one of`,
+ * `no one`, `two payments`) that the name check lets pass and no number check reads.
+ */
+function writtenNumbersIn(text: string, assembled: CheckedText): { readonly index: number; readonly length: number; readonly value: string; readonly after: string; readonly counting: boolean }[] {
+  if (assembled.readWordNumbers === false) return [];
+  const types = assembled.elementTypes === undefined ? [] : [...new Set([...assembled.elementTypes.values()].map(elementTypeName)), 'entity', 'relationship', 'element'];
+  const outside = text.replace(QUOTED, (quoted) => ' '.repeat(quoted.length));
+  return [...outside.matchAll(NUMBER_WORD)].flatMap((found) => {
+    const value = numberWordValue(found[0]);
+    if (Number(value) <= 10) return [];
+    const after = text.slice(found.index + found[0].length);
+    return [{ index: found.index, length: found[0].length, value, after, counting: /^\s+\S/u.test(after) && types.some((name) => namesType(after.trimStart(), name)) }];
+  });
+}
+
 /** Whether a text occurs in another as a whole: not in the middle of a longer word or identifier. */
 const occursWhole = (text: string, inside: string): boolean => new RegExp(`(?<![\\p{L}\\p{N}_-])${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_-])`, 'u').test(inside);
 
@@ -218,16 +251,17 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
 
 function numbersHold(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): boolean {
   const stated = numbersIn(sentence.text);
-  if (stated.length === 0) return true;
+  const written = countElements ? writtenNumbersIn(sentence.text, assembled) : [];
+  if (stated.length === 0 && written.length === 0) return true;
   if (sentence.cites.some((cite) => assembled.unknownCountKeys.has(cite))) return false;
   const descriptions = assembled.descriptionKeys;
   const elementCites = descriptions === undefined ? sentence.cites : sentence.cites.filter((cite) => !descriptions.has(cite));
   // a sentence that cites an element holds the numbers of the element lines alone; one that cites only meanings may restate their numbers
   const numberCites = elementCites.length === 0 ? sentence.cites : elementCites;
-  const numbers = countElements ? numberMentionsIn(sentence.text).filter((mention) => !countsCitedElements(mention.value, mention.after, sentence, assembled)).map((mention) => mention.value) : stated;
-  const cited = new Set(numberCites.flatMap((cite) => numbersIn(assembled.lines.get(cite) ?? '')));
+  const numbers = countElements ? [...numberMentionsIn(sentence.text), ...written].filter((mention) => !countsCitedElements(mention.value, mention.after, sentence, assembled)).map((mention) => mention.value) : stated;
+  const cited = new Set(numberCites.flatMap((cite) => [...numbersIn(assembled.lines.get(cite) ?? ''), ...writtenValuesOfLine(assembled.lines.get(cite) ?? '')]));
   if (!numbers.every((number) => cited.has(number))) return false;
-  const standalone = numbersIn(sentence.text, true);
+  const standalone = [...numbersIn(sentence.text, true), ...written.map((number) => number.value)];
   return assembled.inexactCounts.every((count) => !standalone.includes(count.value) || sentence.text.includes(count.phrase));
 }
 
@@ -307,10 +341,12 @@ function namesHold(sentence: SummarySentence, assembled: CheckedText): boolean {
   }
   // a key of a property written with a capital inside (`paidValue`) is a name the text sent gave when it holds that word whole: its capital is not the start of a name
   const withoutIdentifiers = unquoted.replace(IDENTIFIER_LIKE, (token) => (/\d/.test(token) || (/\p{Ll}\p{Lu}/u.test(token) && sentTokens.has(token)) ? ' '.repeat(token.length) : token));
-  for (const found of withoutIdentifiers.matchAll(CAPITALISED)) {
+  const countedWords = writtenNumbersIn(unquoted, assembled).filter((number) => number.counting);
+  const withoutCountWords = countedWords.reduce((blanked, counted) => blanked.slice(0, counted.index) + ' '.repeat(counted.length) + blanked.slice(counted.index + counted.length), withoutIdentifiers);
+  for (const found of withoutCountWords.matchAll(CAPITALISED)) {
     const lower = found[0].toLowerCase();
     if (STRUCTURAL_VOCABULARY.has(lower) || known.has(lower)) continue;
-    const opensSentence = /(^\s*|[.!?]\s+)$/u.test(withoutIdentifiers.slice(0, found.index));
+    const opensSentence = /(^\s*|[.!?]\s+)$/u.test(withoutCountWords.slice(0, found.index));
     if (opensSentence && ordinaryOpener(lower, ordinary)) continue;
     return false;
   }
@@ -342,9 +378,10 @@ function withoutKeys(text: string, assembled: CheckedText): { readonly text: str
 
 /** Whether a sentence states a number for a count that is not known, or the number of an estimated or lower-bound count without the phrase that labels it. */
 function breaksCountRule(sentence: SummarySentence, assembled: CheckedText): boolean {
-  if (numbersIn(sentence.text).length === 0) return false;
+  const written = writtenNumbersIn(sentence.text, assembled);
+  if (numbersIn(sentence.text).length === 0 && written.length === 0) return false;
   if (sentence.cites.some((cite) => assembled.unknownCountKeys.has(cite))) return true;
-  const standalone = numbersIn(sentence.text, true);
+  const standalone = [...numbersIn(sentence.text, true), ...written.map((number) => number.value)];
   return assembled.inexactCounts.some((count) => standalone.includes(count.value) && !sentence.text.includes(count.phrase));
 }
 
@@ -356,7 +393,8 @@ function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, coun
 }
 
 /** Keeps the sentences that cite real elements, hold only the numbers of the elements they cite and the ids, quoted texts and capitalised words the text sent holds, and state no verdict, with the keys of the elements taken out of their text; counts each removed sentence once. */
-export function judgeSentences(sentences: readonly SummarySentence[], assembled: CheckedText, options: { readonly tableRows?: boolean } = {}): Judged {
+export function judgeSentences(sentences: readonly SummarySentence[], input: CheckedText, options: { readonly tableRows?: boolean } = {}): Judged {
+  const assembled = options.tableRows === true ? { ...input, readWordNumbers: false } : input;
   const kept: SummarySentence[] = [];
   const rejected: RejectedSentence[] = [];
   let removed = 0;

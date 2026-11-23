@@ -42,7 +42,11 @@ export function SummaryPanel({ onClose, returnToGraph }: { readonly onClose: () 
   useEffect(() => {
     begin.current = model.begin;
   });
-  useEffect(() => begin.current(), []);
+  // the start waits one turn, so that the mount React repeats in development (it runs the effect, its cleanup and the effect again) makes one request and not one that is cancelled before a second
+  useEffect(() => {
+    const timer = setTimeout(() => begin.current(), 0);
+    return () => clearTimeout(timer);
+  }, []);
   useEffect(() => {
     const target = model.focus.target;
     if (target !== undefined) body.current?.querySelector<HTMLElement>(`[data-summary-focus="${target}"]`)?.focus();

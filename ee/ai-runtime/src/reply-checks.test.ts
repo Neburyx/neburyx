@@ -171,6 +171,12 @@ describe('the comparison check: the larger is named only from lines that show wh
     expect(kept('Transaction T-2 is the larger.', ['r2', 'r3'])).toBe(false);
   });
 
+  it('still removes a comparison in a table row, where the numbers of words are not read', () => {
+    const row = { text: 'Transaction T-1 is the larger', cites: ['r1', 'r3'] };
+    expect(judgeSentences([row], LINES_TEXT, { tableRows: true }).kept).toEqual([]);
+    expect(judgeSentences([row], LINES_TEXT, { tableRows: true }).rejected).toEqual([{ text: row.text, reason: 'comparison' }]);
+  });
+
   it('removes the largest named from one transaction while the text holds others it does not cite, unless it cites the line of the read that listed it', () => {
     expect(kept('Transaction T-2 is the largest, with a figure of 5000.', ['r2'])).toBe(false);
     expect(kept('Transaction T-2 is the largest of those shown, with a figure of 5000.', ['r2', 's1'])).toBe(true);
@@ -285,6 +291,86 @@ describe('a count of the cited elements', () => {
   it('shows a count of relationships written with the name of their type, and the singular', () => {
     expect(judged('2 received by relationships end at Holder D.', ['e1', 'e2', 'n4']).kept).toHaveLength(1);
     expect(judged('1 transaction is listed.', ['n1']).kept).toHaveLength(1);
+  });
+
+  describe('a count written in words', () => {
+    const ids = Array.from({ length: 25 }, (_, index) => `TX-${String(index + 1).padStart(3, '0')}`);
+    const transactionLine = (key: string, id: string): string => `${key} | "Transaction" | title: "${id}" | id: "${id}"`;
+    const linkLine = (key: string, from: string): string => `${key} | "RECEIVED_BY" | ${from} -> n26`;
+    const wide: CheckedText = {
+      text: [...ids.map((id, index) => transactionLine(`n${index + 1}`, id)), 'n26 | "Account" | title: "ACC-1" | id: "ACC-1"', ...ids.map((_, index) => linkLine(`e${index + 1}`, `n${index + 1}`))].join('\n'),
+      keys: new Map([...ids.map((_, index) => `n${index + 1}`), 'n26', ...ids.map((_, index) => `e${index + 1}`)].map((key) => [key, true])),
+      lines: new Map([...ids.map((id, index) => [`n${index + 1}`, transactionLine(`n${index + 1}`, id)] as const), ['n26', 'n26 | "Account" | title: "ACC-1" | id: "ACC-1"'], ...ids.map((_, index) => [`e${index + 1}`, linkLine(`e${index + 1}`, `n${index + 1}`)] as const)]),
+      inexactCounts: [],
+      unknownCountKeys: new Set(),
+      elementTypes: new Map([...ids.map((_, index) => [`n${index + 1}`, 'entity Transaction'] as const), ['n26', 'entity Account'], ...ids.map((_, index) => [`e${index + 1}`, 'relationship RECEIVED_BY'] as const)]),
+    };
+    const cites = [...ids.map((_, index) => `n${index + 1}`), ...ids.map((_, index) => `e${index + 1}`)];
+    const keptWide = (text: string, over: string[] = cites): boolean => judged(text, over, wide).kept.length === 1;
+
+    it('shows a count in words that equals the cited elements of the type, with the ids and the type of the relationship in the sentence', () => {
+      expect(keptWide('Twenty-five transactions, TX-001 through TX-025, are each linked to the account by a RECEIVED_BY relationship.')).toBe(true);
+      expect(keptWide('There are twenty-five transactions in view.')).toBe(true);
+      expect(keptWide('Twenty-five received by relationships are in view.')).toBe(true);
+    });
+
+    it('removes a wrong count in words, in a capital and in lower case', () => {
+      expect(keptWide('Twenty-six transactions, TX-001 through TX-025, are each linked to the account by a RECEIVED_BY relationship.')).toBe(false);
+      expect(keptWide('There are twenty-four transactions in view.')).toBe(false);
+      expect(keptWide('Twenty transactions are in view.')).toBe(false);
+    });
+
+    it('does not read the words up to ten as a count: a known gap, pinned, as before', () => {
+      expect(keptWide('Four transactions are listed.', ['n1', 'n2', 'n3'])).toBe(true);
+      expect(keptWide('Two accounts are in view.', ['n26'])).toBe(true);
+    });
+
+    it('removes a count in words said of another population, as it removes the digits', () => {
+      expect(keptWide('At least twenty-five transactions are in view.')).toBe(false);
+      expect(keptWide('In total there are twenty-five transactions.')).toBe(false);
+    });
+
+    it('removes a count in words stated without the phrase of a count that is a lower bound, an estimate or not known, with the reason count', () => {
+      const payments = (line: string, over: Partial<CheckedText>): CheckedText => ({ ...counted, lines: new Map([['p1', line]]), keys: new Map([['p1', true]]), elementTypes: new Map([['p1', 'entity Payment']]), ...over });
+      const lower = payments('p1 | "Payment" | title: "P" | id: "p1x" | members: ≥ 25 (lower bound)', { inexactCounts: [{ phrase: '≥ 25 (lower bound)', value: '25' }] });
+      const estimated = payments('p1 | "Payment" | title: "P" | id: "p1x" | members: ~25 (estimated)', { inexactCounts: [{ phrase: '~25 (estimated)', value: '25' }] });
+      const unknown = payments('p1 | "Payment" | title: "P" | id: "p1x" | members: not known', { unknownCountKeys: new Set(['p1']) });
+      for (const held of [lower, estimated, unknown]) {
+        expect(judged('Twenty-five payments are listed.', ['p1'], held).kept).toEqual([]);
+        expect(judged('Twenty-five payments are listed.', ['p1'], held).rejected).toEqual([{ text: 'Twenty-five payments are listed.', reason: 'count' }]);
+      }
+      expect(judged('There are ≥ 25 (lower bound) payments, twenty-five of them listed.', ['p1'], lower).kept).toHaveLength(1);
+    });
+
+    it('removes another number written in words that no cited line holds, though the count of the sentence stands', () => {
+      expect(keptWide('Twenty-five transactions sum to ninety-nine.')).toBe(false);
+      expect(keptWide('Twenty-five transactions represent ninety-nine percent.')).toBe(false);
+      expect(keptWide('Twenty-five transactions have a fee of twenty-five.')).toBe(false);
+      expect(keptWide('Twenty-five of them are in view.')).toBe(false);
+    });
+
+    it('keeps a quoted title that is written in number words, as a name, and removes one that was not sent', () => {
+      const titled: CheckedText = { ...wide, text: `${wide.text}\nn27 | "Widget" | title: "Twenty-five widgets" | id: "WID-1"`, keys: new Map([...wide.keys, ['n27', true]]), lines: new Map([...wide.lines, ['n27', 'n27 | "Widget" | title: "Twenty-five widgets" | id: "WID-1"']]), elementTypes: new Map([...(wide.elementTypes ?? []), ['n27', 'entity Widget']]) };
+      expect(judged('"Twenty-five widgets" is listed.', ['n27'], titled).kept).toHaveLength(1);
+      expect(judged('"Twenty-six widgets" is listed.', ['n27'], titled).kept).toEqual([]);
+    });
+
+    it('keeps a number in words that a cited line holds, in a property value or in the meaning of a type, as it kept it before', () => {
+      const labelled: CheckedText = { ...wide, text: `${wide.text}\nn27 | "Widget" | title: "W" | id: "WID-1" | label: "twenty-five"\nm1: a widget is held for twenty-five days`, keys: new Map([...wide.keys, ['n27', true], ['m1', true]]), lines: new Map([...wide.lines, ['n27', 'n27 | "Widget" | title: "W" | id: "WID-1" | label: "twenty-five"'], ['m1', 'm1: a widget is held for twenty-five days']]), elementTypes: new Map([...(wide.elementTypes ?? []), ['n27', 'entity Widget']]), descriptionKeys: new Set(['m1']) };
+      expect(judged('The label is twenty-five.', ['n27'], labelled).kept).toHaveLength(1);
+      expect(judged('A widget is held for twenty-five days.', ['m1'], labelled).kept).toHaveLength(1);
+      expect(judged('The label is twenty-six.', ['n27'], labelled).kept).toEqual([]);
+    });
+
+    it('does not read a number word that opens no count as one, and does not excuse it in a table row', () => {
+      expect(keptWide('One of the transactions is TX-001.', ['n1'])).toBe(true);
+      expect(judgeSentences([{ text: 'Twenty-five transactions', cites }], wide, { tableRows: true }).kept).toEqual([]);
+    });
+
+    it('counts a number in words of a kind', () => {
+      expect(keptWide('Twenty-five relationships are in view.', cites.filter((key) => key.startsWith('e')))).toBe(true);
+      expect(keptWide('Twenty-six relationships are in view.', cites.filter((key) => key.startsWith('e')))).toBe(false);
+    });
   });
 
   describe('a count of a kind: entities, relationships or elements', () => {
