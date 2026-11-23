@@ -152,11 +152,19 @@ describe('the comparison check: the larger is named only from lines that show wh
     elementTypes: new Map([['r1', 'entity transaction'], ['r2', 'entity transaction'], ['r3', 'entity transaction'], ['r4', 'entity customer'], ['r5', 'relationship PAID'], ['r6', 'relationship PAID']]),
     propertyKeys: new Map([['r1', ['figure', 'lane']], ['r2', ['figure', 'lane']], ['r3', ['stamp', 'lane']], ['r4', ['tier']], ['r5', ['figure']], ['r6', []]]),
     readElements: new Map([['s1', ['r1', 'r2', 'r3', 'r5', 'r6']], ['s2', ['r4']]]),
+    rankedValues: new Map([
+      ['r1', [{ key: 'figure', dataClass: 'number', value: '4200' }, { key: 'stamp', dataClass: 'date' }]],
+      ['r2', [{ key: 'figure', dataClass: 'number', value: '5000' }]],
+      ['r3', [{ key: 'stamp', dataClass: 'date', value: '2026-01-02' }]],
+      ['r5', [{ key: 'figure', dataClass: 'number', value: '12' }]],
+    ]),
+    elementNames: new Map([['r1', ['Transaction T-1']], ['r2', ['Transaction T-2']], ['r3', ['Transaction T-3']], ['r4', ['Customer C-1']], ['r5', ['Transaction T-1 → Transaction T-2']], ['r6', []]]),
     inexactCounts: [],
     unknownCountKeys: new Set(),
     readKeys: new Set(['s1', 's2']),
   };
   const kept = (text: string, cites: string[], over: Partial<CheckedText> = {}): boolean => judgeSentences([{ text, cites }], { ...LINES_TEXT, ...over }).kept.length === 1;
+  const reasonOf = (text: string, cites: string[], over: Partial<CheckedText> = {}): unknown => judgeSentences([{ text, cites }], { ...LINES_TEXT, ...over }).rejected;
 
   it('keeps the larger of two transactions that both hold an amount, with its amount', () => {
     expect(kept('Transaction T-2 is the larger, with a figure of 5000.', ['r1', 'r2'])).toBe(true);
@@ -177,48 +185,67 @@ describe('the comparison check: the larger is named only from lines that show wh
     expect(judgeSentences([row], LINES_TEXT, { tableRows: true }).rejected).toEqual([{ text: row.text, reason: 'comparison' }]);
   });
 
-  it('removes the largest named from one transaction while the text holds others it does not cite, unless it cites the line of the read that listed it', () => {
-    expect(kept('Transaction T-2 is the largest, with a figure of 5000.', ['r2'])).toBe(false);
-    expect(kept('Transaction T-2 is the largest of those shown, with a figure of 5000.', ['r2', 's1'])).toBe(true);
+  it('removes a ranking that cites one transaction while the text holds others it does not cite, and the line of a read does not excuse it', () => {
+    expect(kept('Transaction T-2 has the largest figure, 5000.', ['r2'])).toBe(false);
+    expect(kept('Transaction T-2 has the largest figure, 5000.', ['r2', 's1'])).toBe(false);
   });
 
-  it('removes the largest named from two transactions that both show an amount while a third is not cited, and keeps it with the line of the read, or with all three', () => {
-    expect(kept('Transaction T-2 is the largest, with a figure of 5000.', ['r1', 'r2'])).toBe(false);
-    expect(kept('Transaction T-2 is the largest of those shown, with a figure of 5000.', ['r1', 'r2', 's1'])).toBe(true);
-    expect(kept('Transaction T-2 is the largest, with a figure of 5000.', ['r1', 'r2', 'r3'])).toBe(false);
-    expect(kept('Transaction T-2 is the larger, with a figure of 5000.', ['r1', 'r2'])).toBe(true);
+  it('removes a ranking over transactions one of which holds no value of the property, and keeps it over those that all hold one', () => {
+    expect(kept('Transaction T-2 has the largest figure, 5000.', ['r1', 'r2', 'r3'])).toBe(false);
+    const two = { elementTypes: new Map([['r1', 'entity transaction'], ['r2', 'entity transaction'], ['r4', 'entity customer']]) };
+    expect(kept('Transaction T-2 has the largest figure, 5000.', ['r1', 'r2'], two)).toBe(true);
+    expect(kept('Transaction T-1 has the largest figure, 4200.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-2 has the smallest figure, 5000.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-1 has the smallest figure, 4200.', ['r1', 'r2'], two)).toBe(true);
+    expect(kept('The largest figure, 5000.', ['r1', 'r2'], two)).toBe(true);
+    expect(kept('The largest figure, 4200.', ['r1', 'r2'], two)).toBe(false);
   });
 
-  it('does not take the line of a read that did not list the cited element for the absence claim', () => {
-    expect(kept('Transaction T-2 is the largest of those shown, with a figure of 5000.', ['r2', 's2'])).toBe(false);
+  it('removes a ranking that is tied, negated, conflicting, over more than was read, or of something that is no property', () => {
+    const two = { elementTypes: new Map([['r1', 'entity transaction'], ['r2', 'entity transaction'], ['r4', 'entity customer']]) };
+    const tied = { ...two, rankedValues: new Map([...(LINES_TEXT.rankedValues ?? [])]).set('r1', [{ key: 'figure', dataClass: 'number', value: '5000.0' }].map((entry) => ({ ...entry, value: '5000' }))) };
+    expect(kept('Transaction T-2 has the largest figure, 5000.', ['r1', 'r2'], tied)).toBe(false);
+    expect(kept('The largest figure, 5000.', ['r1', 'r2'], tied)).toBe(false);
+    expect(kept('Transaction T-1 does not have the largest figure.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-2 has the largest figure, 5000, and the smallest figure, 4200.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-2 has the largest figure, 5000, overall.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-2 is the largest.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-2 has the most customers.', ['r1', 'r2'], two)).toBe(false);
+    expect(kept('Transaction T-2 has the largest lane.', ['r1', 'r2'], two)).toBe(false);
   });
 
-  it('removes a count of the transactions not shown that the model worked out, because no line holds the number', () => {
-    expect(kept('Transaction T-2 is the largest, with a figure of 5000, and 2 transactions are not shown.', ['r2', 's1'])).toBe(false);
-  });
-
-  it('does not remove a sentence for an element of another type that it cites beside the transaction, nor one that uses "most"', () => {
-    expect(kept('Transaction T-2 is the largest of those shown, with a figure of 5000, and Customer C-1 is listed.', ['r2', 'r4', 's1'])).toBe(true);
+  it('keeps most as a quantifier, and a ranking word inside a name, and a statement that the elements do not show', () => {
     expect(kept('Most of the elements are listed.', ['r1', 'r4'])).toBe(true);
+    expect(reasonOf('Transaction T-2 has a figure of at most 5000.', ['r2'])).toEqual([]);
+    expect(kept('The elements do not show which transaction has the largest figure.', ['r4', 's1'])).toBe(true);
+  });
+
+  it('counts the same element once whether its title or its id is written, and refuses a ranking when two cited elements share a name', () => {
+    const two = { elementTypes: new Map([['r1', 'entity transaction'], ['r2', 'entity transaction'], ['r4', 'entity customer']]), elementNames: new Map([['r1', ['Same']], ['r2', ['Same']], ['r4', ['Customer C-1']]]) };
+    expect(kept('Same has the largest figure, 5000.', ['r1', 'r2'], two)).toBe(false);
+  });
+
+  it('does not take the figure of a count for the claimed value', () => {
+    const two = { elementTypes: new Map([['r1', 'entity transaction'], ['r2', 'entity transaction'], ['r4', 'entity customer']]) };
+    expect(reasonOf('Transaction T-2 has the largest figure, 5000, of the 2 transactions listed.', ['r1', 'r2'], two)).toEqual([]);
   });
 
   it('treats an element of another type as context, though the text holds others of that type that it does not cite', () => {
-    const lines = new Map(LINES).set('r7', 'r7: customer: Customer C-2 | tier: "retail"').set('r8', 'r8: account: Account A-1 | status: "open"').set('r9', 'r9: account: Account A-2 | status: "open"');
+    const lines = new Map(LINES).set('r7', 'r7: customer: Customer C-2 | tier: "retail"').set('r8', 'r8: account: Account A-1 | status: "open"');
     const more = {
       lines,
       keys: new Map<string, unknown>([...lines.keys()].map((key) => [key, true])),
       text: [...lines.values()].join('\n'),
-      elementTypes: new Map(LINES_TEXT.elementTypes).set('r7', 'entity customer').set('r8', 'entity account').set('r9', 'entity account'),
-      propertyKeys: new Map(LINES_TEXT.propertyKeys).set('r7', ['tier']).set('r8', ['status']).set('r9', ['status']),
+      elementTypes: new Map([['r1', 'entity transaction'], ['r2', 'entity transaction'], ['r4', 'entity customer'], ['r7', 'entity customer'], ['r8', 'entity account']]),
+      propertyKeys: new Map(LINES_TEXT.propertyKeys).set('r7', ['tier']).set('r8', ['status']),
+      elementNames: new Map([...(LINES_TEXT.elementNames ?? []), ['r8', ['Account A-1']], ['r7', ['Customer C-2']]]),
     };
-    expect(kept('Account A-1 sent the largest of those shown, with a figure of 5000, and Customer C-1 is listed.', ['r2', 's1', 'r4', 'r8'], more)).toBe(true);
+    expect(reasonOf('Transaction T-2 has the largest figure, 5000, and Account A-1 sent it.', ['r1', 'r2', 'r8'], more)).toEqual([]);
     expect(kept('Transaction T-2 is larger than Transaction T-1, both sent by Account A-1.', ['r1', 'r2', 'r8'], more)).toBe(true);
-    expect(kept('Transaction T-2 is the largest.', ['r2', 'r8'], more)).toBe(false);
   });
 
-  it('holds the relationships of one type to the same rule: the larger of two that do not both show an amount is removed', () => {
+  it('holds a comparative to the rule of old and a ranking of relationships to the new one', () => {
     expect(kept('The first payment is the larger, with a figure of 12.', ['r5', 'r6'])).toBe(false);
-    expect(kept('The first payment is the largest of those shown, with a figure of 12.', ['r5', 's1'])).toBe(true);
   });
 
   it('reads the properties of a line from what it was written from, so a title that imitates a property cannot change it', () => {

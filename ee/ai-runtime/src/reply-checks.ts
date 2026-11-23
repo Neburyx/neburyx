@@ -24,6 +24,8 @@ export interface CheckedText {
   readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
   /** The keys of the elements each read listed, by the key of the read's own line: only a line of a read that listed an element speaks for it. */
   readonly readElements?: ReadonlyMap<string, readonly string[]>;
+  /** The properties of each element a ranking may rest on, by the element's key (see `RankedProperty`): plain text and data, so that it crosses to a worker thread. */
+  readonly rankedValues?: ReadonlyMap<string, readonly RankedProperty[]>;
 }
 
 const NUMBER_TOKEN = /[-+]?(?:\d[\d,]*(?:\.\d+)?|\.\d+)/g;
@@ -545,8 +547,220 @@ function readDescribedHolds(sentence: SummarySentence, assembled: CheckedText): 
 /** Whether the claims a sentence makes about absence, about all of a set and about what a read returned are backed by the lines it cites. */
 const claimsAreBacked = (sentence: SummarySentence, assembled: CheckedText): boolean => absenceHolds(sentence, assembled) && universalHolds(sentence, assembled) && readDescribedHolds(sentence, assembled);
 
+/** A property of an element that a ranking may rest on: its key and data class, and its value as exact text when it is shown, not masked and valid in its class (a decimal for `number`, an instant in nanoseconds for `dateTime`, the fixed-width text of the moment key for `date` and `localDateTime`). */
+export interface RankedProperty {
+  readonly key: string;
+  readonly dataClass: string;
+  readonly value?: string;
+}
+
+/** The data classes a ranking can be verified over. */
+const ORDERED_CLASSES: ReadonlySet<string> = new Set(['number', 'date', 'dateTime', 'localDateTime']);
+const TIME_CLASSES: ReadonlySet<string> = new Set(['date', 'dateTime', 'localDateTime']);
+
+/** A finite decimal as canonical text (no plus sign, no leading or trailing zeros, no exponent, no negative zero), or undefined for anything else. The one reader of numbers of the ranking check, for the values it holds and the figure a sentence claims. */
+export function decimalKey(input: unknown): string | undefined {
+  const text = typeof input === 'number' ? (Number.isFinite(input) ? String(input) : '') : typeof input === 'string' ? input.trim() : '';
+  const match = /^([-+]?)(\d*)(?:\.(\d*))?(?:[eE]([-+]?\d+))?$/u.exec(text);
+  if (match === null) return undefined;
+  const [, sign = '', whole = '', fraction = '', exponent = '0'] = match;
+  if (whole === '' && fraction === '') return undefined;
+  const shift = Number(exponent);
+  if (!Number.isInteger(shift) || Math.abs(shift) > 400) return undefined;
+  let digits = whole + fraction;
+  let point = whole.length + shift;
+  if (point < 0) {
+    digits = '0'.repeat(-point) + digits;
+    point = 0;
+  } else if (point > digits.length) digits += '0'.repeat(point - digits.length);
+  const integer = digits.slice(0, point).replace(/^0+/u, '') || '0';
+  const decimals = digits.slice(point).replace(/0+$/u, '');
+  const magnitude = decimals === '' ? integer : `${integer}.${decimals}`;
+  return sign === '-' && magnitude !== '0' ? `-${magnitude}` : magnitude;
+}
+
+/** The order of two canonical decimals, exact: no rounding through a binary number. */
+function compareDecimals(first: string, second: string): number {
+  const negative = (text: string): boolean => text.startsWith('-');
+  if (negative(first) !== negative(second)) return negative(first) ? -1 : 1;
+  const [firstWhole = '', firstFraction = ''] = first.replace('-', '').split('.');
+  const [secondWhole = '', secondFraction = ''] = second.replace('-', '').split('.');
+  const length = Math.max(firstFraction.length, secondFraction.length);
+  const left = firstWhole + firstFraction.padEnd(length, '0');
+  const right = secondWhole + secondFraction.padEnd(length, '0');
+  const order = left.length !== right.length ? left.length - right.length : left < right ? -1 : left > right ? 1 : 0;
+  return negative(first) ? -Math.sign(order) : Math.sign(order);
+}
+
+const validDay = (year: number, month: number, day: number): boolean => month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(2000, month, 0)).getUTCDate() - (month === 2 && !((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) ? 1 : 0);
+const validClock = (hours: number, minutes: number, seconds: number): boolean => hours <= 23 && minutes <= 59 && seconds <= 59;
+
+/**
+ * A moment of one data class as an ordered key, with the class and the calendar checked first: a calendar day (`date`: the day, no time; the key of the contract, at midnight), a `localDateTime` (a time is required; the fixed-width text of the moment key) and a zoned `dateTime`
+ * (an instant in nanoseconds, as decimal text, so that two spellings of one instant are one value). Nothing for text that is not a whole, valid value of the class. It never reads the time zone or locale of the host; a test holds it equal to the contract's moment key.
+ */
+export function temporalKey(dataClass: string, text: string): string | undefined {
+  if (dataClass === 'date') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(text);
+    return match !== null && validDay(Number(match[1]), Number(match[2]), Number(match[3])) ? `${text}T00:00:00.000000000` : undefined;
+  }
+  if (dataClass === 'localDateTime') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?$/u.exec(text);
+    if (match === null || !validDay(Number(match[1]), Number(match[2]), Number(match[3])) || !validClock(Number(match[4]), Number(match[5]), Number(match[6]))) return undefined;
+    return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}.${(match[7] ?? '').padEnd(9, '0')}`;
+  }
+  if (dataClass === 'dateTime') {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})(?:\[[^\]]*\])?$/u.exec(text);
+    if (match === null || !validDay(Number(match[1]), Number(match[2]), Number(match[3])) || !validClock(Number(match[4]), Number(match[5]), Number(match[6]))) return undefined;
+    const offset = match[8] ?? 'Z';
+    if (offset !== 'Z' && (Number(offset.slice(1, 3)) > 23 || Number(offset.slice(4, 6)) > 59)) return undefined;
+    const offsetSeconds = offset === 'Z' ? 0 : (offset.startsWith('-') ? -1 : 1) * (Number(offset.slice(1, 3)) * 3600 + Number(offset.slice(4, 6)) * 60);
+    const day = new Date(0);
+    day.setUTCFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    day.setUTCHours(Number(match[4]), Number(match[5]), Number(match[6]), 0);
+    return String((BigInt(day.getTime()) - BigInt(offsetSeconds) * 1000n) * 1_000_000n + BigInt((match[7] ?? '').padEnd(9, '0')));
+  }
+  return undefined;
+}
+
+const compareValues = (dataClass: string, first: string, second: string): number => (dataClass === 'number' ? compareDecimals(first, second) : dataClass === 'dateTime' ? (BigInt(first) < BigInt(second) ? -1 : BigInt(first) > BigInt(second) ? 1 : 0) : first < second ? -1 : first > second ? 1 : 0);
+
+const WB = '(?<![\\p{L}\\p{N}_-])';
+const WE = '(?![\\p{L}\\p{N}_-])';
+/** The words of a ranking, with their direction: language, never a word of a domain. `most` counts only after the words that make it a measure (`the most`, `has most`), never as a quantifier; `at least` and `at most` are neither. */
+const RANKING_WORDS: readonly (readonly [RegExp, 'max' | 'min'])[] = [
+  [new RegExp(`${WB}(?:largest|biggest|greatest|highest|maximum|latest)${WE}`, 'giu'), 'max'],
+  [new RegExp(`${WB}(?:smallest|lowest|minimum|earliest|fewest)${WE}`, 'giu'), 'min'],
+  [new RegExp(`${WB}(?<!at\\s)least${WE}`, 'giu'), 'min'],
+  [new RegExp(`${WB}(?:the|has|have|had|holds?|with)\\s+(most)${WE}(?!\\s+of${WE})`, 'giu'), 'max'],
+];
+const MORE_THAN_READ = /(?<![\p{L}\p{N}_-])(?:in total|overall|in the source|source-wide|across the source|not yet retrieved)(?![\p{L}\p{N}_-])/iu;
+const UNAVAILABLE = /(?<![\p{L}\p{N}_-])(?:do not show|does not show|is not shown|are not shown|cannot say|do not hold)(?![\p{L}\p{N}_-])/iu;
+
+/** The words of a key or of a sentence: at capital letters, digits and anything that is no letter. */
+const subwordsOf = (text: string): string[] => (text.match(/\p{Lu}?\p{Ll}+|\p{Lu}+(?!\p{Ll})|\p{N}+/gu) ?? []).map((word) => word.toLowerCase());
+
+/** The ranking words of a text, with where each one ends. */
+const rankingWordsIn = (text: string): { readonly direction: 'max' | 'min'; readonly index: number; readonly end: number; readonly word: string }[] =>
+  RANKING_WORDS.flatMap(([pattern, direction]) => [...text.matchAll(pattern)].map((found) => ({ direction, index: found.index, end: found.index + found[0].length, word: (found[1] ?? found[0]).toLowerCase() }))).sort((first, second) => first.index - second.index);
+
+/** The raw words that follow a position, up to a mark of punctuation or a number, at most five, each with where it ends. */
+function wordsAfter(text: string, from: number): { readonly raw: string; readonly end: number }[] {
+  const out: { raw: string; end: number }[] = [];
+  let at = from;
+  while (out.length < 5) {
+    const found = /^\s+([\p{L}][\p{L}\p{N}_]*)/u.exec(text.slice(at));
+    if (found === null) break;
+    at += found[0].length;
+    out.push({ raw: found[1] ?? '', end: at });
+  }
+  return out;
+}
+
+/** The property a ranking word names: the key whose words follow it whole and in order, an exact raw key before any other match, and a prefix of a key's words only when no other key starts with them. Undefined when none or more than one. */
+function propertyAfter(text: string, from: number, keys: readonly string[]): { readonly key: string; readonly end: number } | undefined {
+  const following = wordsAfter(text, from);
+  const first = following[0];
+  if (first === undefined) return undefined;
+  const exact = keys.find((key) => key === first.raw);
+  if (exact !== undefined) return { key: exact, end: first.end };
+  const pieces = following.flatMap((word, index) => subwordsOf(word.raw).map((sub) => ({ sub, token: index })));
+  const matched = keys.map((key) => {
+    const own = subwordsOf(key);
+    let length = 0;
+    while (length < own.length && length < pieces.length && own[length] === pieces[length]?.sub) length += 1;
+    return { key, length, whole: length === own.length && own.length > 0 };
+  }).filter((entry) => entry.length > 0);
+  const wholes = matched.filter((entry) => entry.whole);
+  const best = wholes.length > 0 ? wholes : matched;
+  const longest = Math.max(...best.map((entry) => entry.length), 0);
+  const chosen = best.filter((entry) => entry.length === longest);
+  const only = chosen[0];
+  if (only === undefined || chosen.length !== 1) return undefined;
+  const lastToken = pieces[only.length - 1]?.token ?? 0;
+  return { key: only.key, end: following[lastToken]?.end ?? first.end };
+}
+
+const NUMBER_LITERAL = /[-+]?\d(?:[\d,]*\d)?(?:\.\d+)?|[-+]?\.\d+/u;
+const TEMPORAL_LITERAL: Readonly<Record<string, RegExp>> = {
+  dateTime: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})(?:\[[^\]]*\])?/u,
+  localDateTime: /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?![\d.:]|Z|[+-]\d)/u,
+  date: /\d{4}-\d{2}-\d{2}(?![\dT])/u,
+};
+
+/** The figure a sentence claims for the ranked property: the first literal of the class that follows the words of the property, within a few words and the same clause. `invalid` for a literal that is no valid value of the class. */
+function claimedValueOf(text: string, from: number, dataClass: string): { readonly value?: string; readonly invalid?: true } {
+  const clause = text.slice(from).split(/[.;!?](?:\s|$)/u)[0] ?? '';
+  const pattern = dataClass === 'number' ? NUMBER_LITERAL : TEMPORAL_LITERAL[dataClass];
+  const found = pattern === undefined ? null : pattern.exec(clause);
+  if (found === null) return {};
+  if ((clause.slice(0, found.index).match(/[\p{L}\p{N}_]+/gu) ?? []).length > 4) return {};
+  const literal = found[0];
+  const value = dataClass === 'number' ? decimalKey(/^\d{1,3}(?:,\d{3})+(?:\.\d+)?$/u.test(literal.replace(/^[-+]/u, '')) ? literal.replaceAll(',', '') : literal) : temporalKey(dataClass, literal);
+  return value === undefined ? { invalid: true } : { value };
+}
+
+/**
+ * A sentence that ranks (says the largest, smallest, latest, earliest, fewest, most or least) is verified against the values it rests on, or removed. It must name one property of the cited elements whose words follow the ranking word, in a data class
+ * that can be ordered (a number, a date or an instant, compared exactly), and every element of the ranked type that was sent must be cited with a shown value of it: the element it names, or the figure it claims, must be the one extreme value, held by
+ * exactly one element. A negated or conflicting ranking, a ranking of something that is no property (a count of related elements, a sum), a ranking over more than was read, a masked or missing value, an uncited element and a tie are not verified.
+ * An honest statement that the elements do not show an answer is judged as before. The names of the elements and the keys of the properties are the mapping's: nothing here is a word of a domain.
+ */
+function rankingHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
+  const names = namesOfElements(assembled);
+  let text = withoutQuoted(sentence.text);
+  for (const name of names) text = text.replace(new RegExp(`${WB}${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${WE}`, 'giu'), (found) => ' '.repeat(found.length));
+  const claims = rankingWordsIn(text);
+  if (claims.length === 0) return true;
+  const cited = citedElements(sentence, assembled);
+  const carries = (key: string): readonly RankedProperty[] => assembled.rankedValues?.get(key) ?? [];
+  const unavailable = clausesOf(text).some((clause) => UNAVAILABLE.test(clause));
+  if (unavailable && !cited.some((key) => carries(key).length > 0)) return true;
+  if (new Set(claims.map((claim) => claim.direction)).size > 1) return false;
+  const [claim] = claims;
+  if (claim === undefined || assembled.rankedValues === undefined) return false;
+  if (clausesOf(text).some((clause) => NEGATION.test(clause) && rankingWordsIn(clause).length > 0)) return false;
+  if (MORE_THAN_READ.test(text)) return false;
+  const carriers = cited.filter((key) => carries(key).length > 0);
+  const keys = [...new Set(carriers.flatMap((key) => carries(key).map((property) => property.key)))];
+  const property = propertyAfter(text, claim.end, keys);
+  if (property === undefined) return false;
+  const typeOf = (key: string): string | undefined => assembled.elementTypes?.get(key);
+  const holders = carriers.filter((key) => carries(key).some((entry) => entry.key === property.key));
+  const sentence_ = sentence.text.normalize('NFC');
+  const named = (key: string): boolean => namesOfKey(key, assembled).some((name) => name !== '' && occursWhole(name, sentence_));
+  let types = [...new Set(holders.map((key) => typeOf(key)).filter((type): type is string => type !== undefined))];
+  if (types.length > 1) types = [...new Set(holders.filter(named).map((key) => typeOf(key)).filter((type): type is string => type !== undefined))];
+  const [rankedType] = types;
+  if (rankedType === undefined || types.length !== 1) return false;
+  const candidates = holders.filter((key) => typeOf(key) === rankedType && named(key));
+  if (candidates.length > 1) return false;
+  const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
+  const population = [...(assembled.elementTypes ?? [])].filter(([key, type]) => type === rankedType && !lines.has(key)).map(([key]) => key);
+  const values = new Map<string, { readonly dataClass: string; readonly value: string }>();
+  for (const key of population) {
+    const entry = carries(key).find((candidate) => candidate.key === property.key);
+    if (!cited.includes(key) || entry === undefined || entry.value === undefined || !ORDERED_CLASSES.has(entry.dataClass)) return false;
+    values.set(key, { dataClass: entry.dataClass, value: entry.value });
+  }
+  const classes = new Set([...values.values()].map((held) => held.dataClass));
+  const [dataClass] = classes;
+  if (dataClass === undefined || classes.size !== 1) return false;
+  if ((claim.word === 'latest' || claim.word === 'earliest') && !TIME_CLASSES.has(dataClass)) return false;
+  const sign = claim.direction === 'max' ? 1 : -1;
+  const ordered = [...values].sort(([, first], [, second]) => sign * compareValues(dataClass, second.value, first.value));
+  const [top, next] = ordered;
+  if (top === undefined || (next !== undefined && compareValues(dataClass, top[1].value, next[1].value) === 0)) return false;
+  const claimed = claimedValueOf(text, property.end, dataClass);
+  if (claimed.invalid === true) return false;
+  const [only] = candidates;
+  if (only === undefined && claimed.value === undefined) return false;
+  if (only !== undefined && only !== top[0]) return false;
+  return claimed.value === undefined || compareValues(dataClass, claimed.value, top[1].value) === 0;
+}
+
 function comparisonHolds(sentence: SummarySentence, assembled: CheckedText): boolean {
-  return comparedElementsHold(sentence, assembled) && claimsAreBacked(sentence, assembled);
+  return comparedElementsHold(sentence, assembled) && rankingHolds(sentence, assembled) && claimsAreBacked(sentence, assembled);
 }
 
 /** The text a sentence's names are checked against: all of it, or, for a sentence that cites only the lines of reads, the lines it cites. */
@@ -629,7 +843,7 @@ function breaksCountRule(sentence: SummarySentence, assembled: CheckedText): boo
 function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): RemovalReason {
   if (!citationsHold(sentence, assembled)) return 'citation';
   if (!numbersHold(sentence, assembled, countElements)) return breaksCountRule(sentence, assembled) ? 'count' : 'number';
-  if (!comparedElementsHold(sentence, assembled)) return 'comparison';
+  if (!comparedElementsHold(sentence, assembled) || !rankingHolds(sentence, assembled)) return 'comparison';
   if (!claimsAreBacked(sentence, assembled)) return 'citation';
   return 'name';
 }

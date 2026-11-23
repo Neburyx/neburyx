@@ -1,4 +1,5 @@
 import { canonicalText } from '../questions/canonical.js';
+import { decimalKey, temporalKey, type RankedProperty } from '@neburyx/ee-ai-runtime';
 import type { Count, ElementRef, GraphEdge, GraphNode, GraphProperty, SummaryReading } from '@neburyx/contracts';
 
 /**
@@ -34,7 +35,24 @@ export interface AssembledText {
   readonly propertyKeys?: ReadonlyMap<string, readonly string[]>;
   /** The keys of the elements each read listed, by the key of the read's own line (`s1`, …): a line of a read that listed an element states how many that read returned and did not show. */
   readonly readElements?: ReadonlyMap<string, readonly string[]>;
+  /** The properties each element's ranking may rest on, by the element's key. */
+  readonly rankedValues?: ReadonlyMap<string, readonly RankedProperty[]>;
 }
+
+/**
+ * What a ranking may rest on, by the data class the gate returned with each property and never by a name: a number as exact decimal text, a date, a local time or an instant as the key of the contract's moment, each only when it is shown, not masked and valid in its class.
+ * A masked property, and a property of an orderable class without a usable value, is held with no value: it takes part in naming a property and removes a ranking, and no value of it is held.
+ */
+export function rankedOf(properties: readonly GraphProperty[]): RankedProperty[] {
+  return properties.flatMap((property): RankedProperty[] => {
+    const orderable = !property.masked && ORDERED.has(property.dataClass);
+    if (!orderable) return property.masked ? [{ key: property.key, dataClass: property.dataClass }] : [];
+    const value = property.value === undefined ? undefined : property.dataClass === 'number' ? decimalKey(property.value) : typeof property.value === 'string' ? temporalKey(property.dataClass, property.value) : undefined;
+    return [{ key: property.key, dataClass: property.dataClass, ...(value === undefined ? {} : { value }) }];
+  });
+}
+
+const ORDERED: ReadonlySet<string> = new Set(['number', 'date', 'dateTime', 'localDateTime']);
 
 /** The keys of the properties that hold a value, a masked form included. */
 export const valueKeysOf = (properties: readonly GraphProperty[]): string[] => properties.filter((property) => property.value !== undefined).map((property) => property.key);
@@ -107,6 +125,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
   const unknownCountKeys = new Set<string>();
   let carriesPropertyValues = false;
   const propertyKeys = new Map<string, readonly string[]>();
+  const rankedValues = new Map<string, readonly RankedProperty[]>();
   const nodes = [...reading.nodes].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const edges = [...reading.edges].sort((a, b) => canonicalText(a.ref).localeCompare(canonicalText(b.ref)));
   const nodeKeys = new Map<string, string>();
@@ -118,6 +137,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
     const properties = propertiesOf(node.properties);
     carriesPropertyValues ||= properties.carriesValue;
     propertyKeys.set(key, valueKeysOf(node.properties));
+    rankedValues.set(key, rankedOf(node.properties));
     const line = `${key} | ${JSON.stringify(node.display.type)} | title: ${JSON.stringify(node.display.title)} | id: ${JSON.stringify(node.ref.stableId)}${properties.text === '' ? '' : ` | ${properties.text}`}`;
     lines.set(key, line);
     out.push(line);
@@ -131,6 +151,7 @@ export function assembleText(reading: SummaryReading): AssembledText {
     const detail = edgeDetailOf(edge);
     carriesPropertyValues ||= detail.carriesValue;
     propertyKeys.set(key, valueKeysOf(edge.properties));
+    rankedValues.set(key, rankedOf(edge.properties));
     if (detail.inexact !== undefined) inexactCounts.push(detail.inexact);
     if (detail.unknownCount) unknownCountKeys.add(key);
     const line = [key, JSON.stringify(edge.type), `${endOf(edge.from)} -> ${endOf(edge.to)}`, ...detail.parts].join(' | ');
@@ -139,5 +160,5 @@ export function assembleText(reading: SummaryReading): AssembledText {
   });
   if (edges.length === 0) out.push('(none)');
   if (reading.unresolved > 0) out.push(`${reading.unresolved} references could not be read.`);
-  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys };
+  return { text: out.join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, rankedValues };
 }

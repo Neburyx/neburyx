@@ -1,5 +1,6 @@
 import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_READ_FINDING_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
-import { type AssembledText, edgeDetailOf, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
+import type { RankedProperty } from '@neburyx/ee-ai-runtime';
+import { type AssembledText, edgeDetailOf, propertiesOf, rankedOf, valueKeysOf } from '../case-summary/assemble.js';
 import { retrievalLine, viewCoverageOf } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf } from '../case-summary/judge.js';
@@ -137,6 +138,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
   // the reads whose result lists elements and no relationship: their line says so, and a direction is not known from them
   const noRelationship = new Set<number>();
   const propertyKeys = new Map<string, readonly string[]>(view?.propertyKeys);
+  const rankedValues = new Map<string, readonly RankedProperty[]>(view?.rankedValues);
   const readElements = new Map<string, string[]>();
   const keyFor = (id: string, element: ElementKey['ref'], type: string, title: string): string => {
     const held = seen.get(id);
@@ -169,7 +171,10 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
       lines.set(key, 'entityType' in listed.element ? `${key}: ${listed.type}: ${listed.title}${propertyPart(listed)}` : `${key}: ${listed.title}${edgePart(listed, key)}`);
       listedKeys.push(key);
       const held = listed.node ?? listed.edge;
-      if (held !== undefined) propertyKeys.set(key, valueKeysOf(held.properties));
+      if (held !== undefined) {
+        propertyKeys.set(key, valueKeysOf(held.properties));
+        rankedValues.set(key, rankedOf(held.properties));
+      }
     }
   });
   // the lines of the typology: operator text, each with a key of its own that is no element
@@ -209,7 +214,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
     if (inexact === 'unknown') unknownCountKeys.add(`s${index + 1}`);
     else if (inexact !== undefined) inexactCounts.push(inexact);
   });
-  return { assembled: { text: [...lines.values()].join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, readElements }, readKeys, noteLines, noteElements };
+  return { assembled: { text: [...lines.values()].join('\n'), keys, lines, inexactCounts, unknownCountKeys, carriesPropertyValues, propertyKeys, readElements, rankedValues }, readKeys, noteLines, noteElements };
 }
 
 const NOTES_HEADING = "Sentences written by a model: the AI notes the person copied into this investigation's draft, or an AI case summary drafted for this turn (each lists the elements it rests on; cite those elements, or its a key, and never copy a name, a figure or a claim from it that the elements do not state)";

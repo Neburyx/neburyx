@@ -1019,10 +1019,10 @@ describe('counts and what the model is told of a removal, through the answer too
   });
 
   it('keeps "Of those five widgets" when the sentence cites the five, and removes it, with the reason told to the model, when it cites only the one it speaks of', async () => {
-    const text = `Of those five ${W}, the first is the latest listed.`;
+    const text = `Of those five ${W}, the first is shown first.`;
     expect(await turn(answering([{ text, cites: keys(5) }]), listed(5))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text }] }] });
-    const model = answering([{ text, cites: ['r1'] }], [{ text: `The first ${V.anchor} is the latest listed.`, cites: ['r1'] }]);
-    expect(await turn(model, listed(5))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: `The first ${V.anchor} is the latest listed.` }] }] });
+    const model = answering([{ text, cites: ['r1'] }], [{ text: `The first ${V.anchor} is shown first.`, cites: ['r1'] }]);
+    expect(await turn(model, listed(5))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: `The first ${V.anchor} is shown first.` }] }] });
     expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text, reason: 'number' }]));
   });
 

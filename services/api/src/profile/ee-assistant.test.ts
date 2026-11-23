@@ -1411,9 +1411,9 @@ describe('the larger of two amounts in the lines of a tool result, through the r
     expect(answerCall).toContain('no relationship listed');
   });
 
-  it('keeps the larger named from two lines that both show an amount, and the largest named from one line only with the line of the read', async () => {
+  it('keeps the larger named from two lines that both show an amount, and the larger named from one line only with the line of the read', async () => {
     expect(await turn([{ text: 'The larger is 5000, against 4200.', cites: ['r1', 'r2'] }])).toMatchObject({ answer: { status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ cites: ['r1', 'r2'] }] }] } });
-    expect(await turn([{ text: '5000 is the largest of those shown.', cites: ['r2', 's1'] }])).toMatchObject({ answer: { status: 'answered' } });
+    expect(await turn([{ text: 'The larger of those shown is 5000.', cites: ['r2', 's1'] }])).toMatchObject({ answer: { status: 'answered' } });
   });
 
   it('drops the largest named from one line while another element of the read is not cited, and an amount that no cited line holds', async () => {
