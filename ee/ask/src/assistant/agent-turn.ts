@@ -29,7 +29,7 @@ const NOT_ANSWERED = 'Nothing has been read yet. Read first, then call answer.';
 const LIMIT_TEXT = 'Not read: this turn has reached its limit. Call answer now with what you have.';
 
 /** What the model is told when `answer` removes sentences. A caller may replace it; the default says how many were removed and names each removed sentence with its reason. */
-type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean; readonly rejected: readonly RejectedSentence[]; readonly form?: RemovalForm }) => string;
+type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean; readonly rejected: readonly RejectedSentence[]; readonly form?: RemovalForm; /** For an answer of both kinds of block: what was kept of each. */ readonly keptOf?: { readonly sentences: number; readonly rows: number } }) => string;
 
 /** What the model is told to do with a removed sentence or row: the next answer replaces this one when any of its own is kept, so what is removed for a reason that can be mended is mended and sent again, and what no line can hold is left out. */
 const RESEND_SENTENCES = 'Your next answer replaces this one if any of its sentences is kept: call answer again with every sentence you want shown, the kept ones and each removed one corrected as its reason says (copy a figure as the line writes it, with its label; cite every element a count or an all, each or latest sentence speaks of). Leave a sentence out when no line holds its figure, name or comparison, or when it states a conclusion; never add a cite only to keep it.';
@@ -37,12 +37,19 @@ const RESEND_TABLE = 'Your next answer replaces this one if any of its rows is k
 const VERDICT_LEFT_OUT = ' A sentence removed for verdict wording is left out, not reworded.';
 const VERDICT_ROW_LEFT_OUT = ' A row removed for verdict wording is left out, not reworded.';
 
-type RemovalForm = 'sentences' | 'table';
+/** An answer that holds sentences and a table: the next answer replaces the whole of it, so it must hold every block again. */
+const RESEND_BLOCKS = 'Your next answer replaces this whole answer if any of its sentences or rows is kept: call answer again with every block you want shown, the sentences and the table, the kept ones and each removed one corrected as its reason says (copy a figure as the line writes it, with its label; cite every element a count or an all, each or latest sentence speaks of; a cell copies a figure of the lines its row cites). Leave a sentence or a row out when no line holds its figure, name or comparison; never add a cite only to keep it.';
+const VERDICT_BLOCKS_LEFT_OUT = ' A sentence or a row removed for verdict wording is left out, not reworded.';
 
-const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound, rejected, form }) =>
+type RemovalForm = 'sentences' | 'table' | 'blocks';
+
+const keptText = (kept: number, form: RemovalForm | undefined, keptOf: { readonly sentences: number; readonly rows: number } | undefined): string =>
+  form === 'blocks' && keptOf !== undefined ? `${keptOf.sentences} ${keptOf.sentences === 1 ? 'sentence' : 'sentences'} and ${keptOf.rows} ${keptOf.rows === 1 ? 'row' : 'rows'}` : `${kept} ${form === 'table' ? 'rows' : 'sentences'}`;
+
+const plainFeedback: RemovalFeedback = ({ kept, removed, verdictFound, rejected, form, keptOf }) =>
   removed === 0
-    ? `Checked: all ${kept} sentences kept. Reply "${FINAL_TEXT}".`
-    : `Checked: ${kept} ${form === 'table' ? 'rows' : 'sentences'} kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. ${form === 'table' ? RESEND_TABLE : RESEND_SENTENCES}${verdictFound ? (form === 'table' ? VERDICT_ROW_LEFT_OUT : VERDICT_LEFT_OUT) : ''} Or reply "${FINAL_TEXT}" to leave the answer as it stands.${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
+    ? `Checked: all ${keptText(kept, form, keptOf)} kept. Reply "${FINAL_TEXT}".`
+    : `Checked: ${keptText(kept, form, keptOf)} kept, ${removed} removed${verdictFound ? ' (verdict wording found)' : ''}. ${form === 'blocks' ? RESEND_BLOCKS : form === 'table' ? RESEND_TABLE : RESEND_SENTENCES}${verdictFound ? (form === 'blocks' ? VERDICT_BLOCKS_LEFT_OUT : form === 'table' ? VERDICT_ROW_LEFT_OUT : VERDICT_LEFT_OUT) : ''} Or reply "${FINAL_TEXT}" to leave the answer as it stands.${rejected.length === 0 ? '' : `\n${removalNoteOf(rejected)}`}`;
 
 interface AgentTurnSettings {
   readonly maxCalls: number;
@@ -281,6 +288,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         const judgedBlocks: Extract<ToolAnswerOutcome, { kind: 'sentences' | 'table' }>[] = [];
         let other: Extract<ToolAnswerOutcome, { kind: 'noDescription' | 'unsupported' }> | undefined;
         let kept = 0;
+        let keptSentences = 0;
+        let keptRows = 0;
         let removed = 0;
         let verdictFound = false;
         let droppedWithTable = 0;
@@ -291,6 +300,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
             const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
             if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
             kept += judgedRows.kept.length;
+            keptRows += judgedRows.kept.length;
             rejected.push(...judgedRows.rejected);
             removed += judgedRows.removed + draft.uncited;
             verdictFound ||= judgedRows.verdictFound;
@@ -307,6 +317,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           if (checked.status === 'refused') return 'The answer could not be checked. Reply "Done."';
           const judged = checked.value;
           kept += judged.kept.length;
+          keptSentences += judged.kept.length;
           rejected.push(...judged.rejected);
           removed += judged.removed;
           verdictFound ||= judged.verdictFound;
@@ -323,7 +334,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         else standing ??= other;
         // an answer the checks accepted whole ends the run: the model has nothing more to say that is shown, so no call acknowledges it
         if (combined !== undefined && removed === 0 && combined.leftOut === 0 && !verdictFound) control.stop = true;
-        return feedback({ kept, removed: removed + (combined?.leftOut ?? 0), verdictFound, rejected, form: inputs.every((block) => block.kind === 'table') ? 'table' : 'sentences' });
+        return feedback({ kept, removed: removed + (combined?.leftOut ?? 0), verdictFound, rejected, form: inputs.every((block) => block.kind === 'table') ? 'table' : inputs.some((block) => block.kind === 'table') ? 'blocks' : 'sentences', keptOf: { sentences: keptSentences, rows: keptRows } });
       },
     });
 

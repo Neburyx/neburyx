@@ -214,6 +214,35 @@ describe('a view question on the agent', () => {
     expect(told).not.toContain('every sentence you want shown');
   });
 
+  it('tells the model of an answer with sentences and a table, one row removed, to send every block again, and shows both blocks of the answer that keeps the table', async () => {
+    const sentence = { kind: 'sentences', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] };
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [sentence, { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} Z-9`], cites: ['n9'] }] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [sentence, { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} A-2`], cites: ['n2'] }] }] } }])
+      .respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model, maxCalls: 8 }, runStore: store });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('Checked: 1 sentence and 1 row kept, 1 removed.');
+    expect(told).toContain('Your next answer replaces this whole answer if any of its sentences or rows is kept: call answer again with every block you want shown, the sentences and the table');
+    expect(told).not.toContain('every sentence you want shown');
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences' }, { kind: 'table', table: { rows: [{ cells: [`${V.title} A-1`] }, { cells: [`${V.title} A-2`] }] } }] });
+  });
+
+  it('says that a sentence or a row removed for verdict wording is left out when the answer holds both kinds of block', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [{ text: `${V.title} A-1 is guilty of fraud.`, cites: ['n1'] }] }, { kind: 'table', columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }] }] } }])
+      .respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model, maxCalls: 8 }, runStore: store });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('A sentence or a row removed for verdict wording is left out, not reworded.');
+  });
+
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
     const answered = (cites: string[]) =>
       fakeModel()
