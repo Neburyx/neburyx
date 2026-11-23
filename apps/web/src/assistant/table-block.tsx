@@ -70,7 +70,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         }}
       >
         {entry.row.cells.map((cell, column) => (
-          <td key={column} className={classOf(column)} title={column === 0 && titled ? cell : undefined}>{cellOf(cell, kinds[column] ?? "text")}</td>
+          <td key={column} className={classOf(column)} title={column === 0 && titled ? cell : undefined}>{cellOf(cell, kinds[column] ?? "text", table.rows, column)}</td>
         ))}
         <td className="assistant-table-cite">
           <span className="summary-chips">{markersOf(entry.row.cites)}</span>

@@ -302,4 +302,20 @@ describe('the Assistant panel: a table answer', () => {
     expect(title.getAttribute('title')).toBe('Element with a rather long title 1');
     expect(title.className).toBe('assistant-table-title-cell');
   });
+
+  it('copies the cells as read when the table draws them grouped and formatted', async () => {
+    const base = tableAnswer();
+    if (base.status !== 'answered' || !('blocks' in base)) throw new Error('not blocks');
+    const answer: AssistantTurnAnswer = {
+      ...base,
+      blocks: [{ kind: 'table', table: { title: 'figures · 1 row', columns: ['Element', 'Size', 'Date'], rows: [{ cells: ['Element 1', '1664.72', '2022-09-09T22:33:00Z'], cites: ['n1'] }], note: 'Each row selects its elements on the graph.' } }],
+    };
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => void written.push(text) } });
+    await draw(answer);
+    expect(screen.getByText('1,664.72')).toBeTruthy();
+    expect(screen.getByText('2022-09-09 22:33:00')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.copyTable }));
+    expect(written[0]?.split('\n')[1]).toBe(`Element 1\t1664.72\t2022-09-09T22:33:00Z\t[1]`);
+  });
 });

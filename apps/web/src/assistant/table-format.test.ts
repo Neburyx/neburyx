@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cellOf, columnKinds, groupedNumber, headerOf, instantOf } from './table-format.js';
+import { cellOf, columnKinds, groupedNumber, headerOf, instantOf, zoneOf } from './table-format.js';
 
 const rows = (...cells: string[][]) => cells.map((row) => ({ cells: row }));
 
@@ -14,6 +14,8 @@ describe('the figures of a table', () => {
     expect(groupedNumber('004856714')).toBe('004856714');
     expect(groupedNumber('0.5')).toBe('0.5');
     expect(groupedNumber('12 kg')).toBe('12 kg');
+    // a decimal identifier is grouped like any decimal number: the rule reads the text, not what it stands for (a recorded deviation)
+    expect(groupedNumber('10234.001')).toBe('10,234.001');
   });
 
   it('never changes the decimal places', () => {
@@ -25,7 +27,7 @@ describe('the figures of a table', () => {
 describe('the time stamps of a table', () => {
   it('writes an instant as date and time, and says UTC in the header only when every cell says it', () => {
     expect(instantOf('2022-09-09T22:33:00Z')).toEqual({ text: '2022-09-09 22:33:00', utc: true });
-    expect(instantOf('2022-09-09 22:33:00.250+00:00')).toEqual({ text: '2022-09-09 22:33:00', utc: true });
+    expect(instantOf('2022-09-09 22:33:00.250+00:00')).toEqual({ text: '2022-09-09 22:33:00.250', utc: true });
     expect(instantOf('2022-09-09T22:33:00')).toEqual({ text: '2022-09-09 22:33:00', utc: false });
     expect(instantOf('2022-09-09')).toBeUndefined();
     const utc = rows(['2022-09-09T22:33:00Z'], ['2022-09-10T01:02:03Z']);
@@ -37,9 +39,24 @@ describe('the time stamps of a table', () => {
   });
 
   it('shows a date as it is and an instant as date and time', () => {
-    expect(cellOf('2022-09-09', 'stamp')).toBe('2022-09-09');
-    expect(cellOf('2022-09-09T22:33:00Z', 'stamp')).toBe('2022-09-09 22:33:00');
-    expect(cellOf('Cash', 'text')).toBe('Cash');
+    const one = rows(['2022-09-09T22:33:00Z']);
+    expect(cellOf('2022-09-09', 'stamp', rows(['2022-09-09']), 0)).toBe('2022-09-09');
+    expect(cellOf('2022-09-09T22:33:00Z', 'stamp', one, 0)).toBe('2022-09-09 22:33:00');
+    expect(cellOf('Cash', 'text', one, 0)).toBe('Cash');
+  });
+});
+
+describe('time stamps that differ in their zone', () => {
+  it('are shown as read, with no UTC in the header, so a cell that says UTC and one that does not stay apart', () => {
+    const mixed = rows(['2022-09-09T22:33:00Z'], ['2022-09-09T22:33:00']);
+    expect(zoneOf(mixed, 0)).toBe('mixed');
+    expect(cellOf('2022-09-09T22:33:00Z', 'stamp', mixed, 0)).toBe('2022-09-09T22:33:00Z');
+    expect(headerOf('Date', 'stamp', mixed, 0)).toBe('Date');
+    expect(zoneOf(rows(['2022-09-09T22:33:00'], ['2022-09-10 01:02:03']), 0)).toBe('none');
+  });
+
+  it('keeps the fraction of a second', () => {
+    expect(cellOf('2022-09-09T22:33:05.250Z', 'stamp', rows(['2022-09-09T22:33:05.250Z']), 0)).toBe('2022-09-09 22:33:05.250');
   });
 });
 

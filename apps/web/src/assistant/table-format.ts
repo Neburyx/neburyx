@@ -2,7 +2,7 @@ type Rows = readonly { readonly cells: readonly string[] }[];
 
 const NUMBER = /^[-+(]?\p{Sc}?\s?\d[\d,. ]*\s?[%\p{Sc}A-Za-z]{0,3}\)?$/u;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const INSTANT = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)(?:\.\d+)?\s?(Z|UTC|\+00:?00)?$/;
+const INSTANT = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s?(Z|UTC|\+00:?00)?$/;
 const PLAIN_DECIMAL = /^(-?)([1-9]\d*|0)\.(\d+)$/;
 
 export type ColumnKind = "number" | "stamp" | "text";
@@ -33,6 +33,13 @@ export function columnKinds(columns: readonly string[], rows: Rows): readonly Co
   });
 }
 
+/** Whether the time stamps of a column all say UTC, none says it, or they differ (a date alone has no zone and is left out). A column is reformatted only when they all agree. */
+export function zoneOf(rows: Rows, index: number): "utc" | "none" | "mixed" {
+  const instants = rows.flatMap((row) => instantOf(row.cells[index] ?? "") ?? []);
+  if (instants.length === 0) return "none";
+  return instants.every((instant) => instant.utc) ? "utc" : instants.every((instant) => !instant.utc) ? "none" : "mixed";
+}
+
 /** The header of a column of time stamps that all say UTC names it: "(UTC)" is added unless the header already says so. */
 export function headerOf(column: string, kind: ColumnKind, rows: Rows, index: number): string {
   if (kind !== "stamp" || /\(UTC\)/i.test(column)) return column;
@@ -40,9 +47,9 @@ export function headerOf(column: string, kind: ColumnKind, rows: Rows, index: nu
   return instants.length > 0 && instants.every((instant) => instant?.utc === true) ? `${column} (UTC)` : column;
 }
 
-/** The text of a cell as the table shows it; the copy of the table keeps the cell as read. */
-export function cellOf(cell: string, kind: ColumnKind): string {
+/** The text of a cell as the table shows it; the copy of the table keeps the cell as read. Time stamps that do not agree on their zone are shown as read. */
+export function cellOf(cell: string, kind: ColumnKind, rows: Rows, index: number): string {
   if (kind === "number") return groupedNumber(cell);
-  if (kind === "stamp") return instantOf(cell)?.text ?? cell;
+  if (kind === "stamp" && zoneOf(rows, index) !== "mixed") return instantOf(cell)?.text ?? cell;
   return cell;
 }
