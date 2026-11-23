@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { prepareOutFolder, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
+import { factsOf, type Prices } from './facts.js';
 import { checkBars, textDecision, unblind, type Bars } from './report.js';
 import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile, type Slot } from './scorer.js';
 import { blindSets, type ArmRepeat } from './blind.js';
@@ -17,6 +18,7 @@ const THREAD_USAGE = `usage:
   ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
   ask-eval thread score --ingest <scores file> --scorer-name <name> --slots <key file> --set <file> --out <file>
   ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--indicative-scorers <names>] [--text-arm <arm>] <scores file>...
+  ask-eval thread facts --call-limit <n> [--prices <file>] <records file>...
   ask-eval thread calibrate --a <scores file> --b <scores file>
   ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)`;
@@ -38,7 +40,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['key-file', 'bars', 'primary', 'product', 'indicative-scorers', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['prices', 'key-file', 'bars', 'primary', 'product', 'indicative-scorers', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
@@ -125,6 +127,7 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
   if (argv[0] === 'score') return await runScore(argv.slice(1), io, deps);
   if (argv[0] === 'calibrate') return runCalibrate(argv.slice(1), io);
   if (argv[0] === 'report') return runReport(argv.slice(1), io);
+  if (argv[0] === 'facts') return runFacts(argv.slice(1), io);
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
   const { values, dryRun } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
@@ -345,4 +348,22 @@ function runReport(args: readonly string[], io: CliIo): number {
   const textArm = values.get('text-arm');
   if (textArm !== undefined) io.out(`decision: ${textDecision(arms, product, textArm)}`);
   return report.status === 'met' ? 0 : 1;
+}
+
+/** `ask-eval thread facts`: calls, tokens, time and cost per turn and per run from the records files; exit 1 when any figure is incomplete (printed, never hidden). */
+function runFacts(args: readonly string[], io: CliIo): number {
+  const { values, rest } = parse(args, true);
+  const limit = wholeNumber(values.get('call-limit'), 'call-limit', 1, 10);
+  if (limit === undefined || rest.length === 0) throw new UsageError(THREAD_USAGE);
+  const pricesPath = values.get('prices');
+  const prices = pricesPath === undefined ? undefined : (readJson(pricesPath, 'the prices file') as Prices);
+  const facts = factsOf(rest.map((path) => readJson(path, 'a records file') as EnrichedRepeat), { callLimit: limit, ...(prices === undefined ? {} : { prices }) });
+  for (const turn of facts.turns) io.out(`repeat ${turn.repeat} turn ${turn.turn}: calls ${turn.calls ?? 'unknown'}, tokens in ${turn.inputTokens ?? 'unknown'} out ${turn.outputTokens ?? 'unknown'} cache read ${turn.cacheReadTokens ?? 'unknown'} write ${turn.cacheWriteTokens ?? 'unknown'}, ${turn.ms} ms${turn.cost === undefined ? '' : `, cost ${turn.cost.toFixed(4)}`}`);
+  io.out(`calls per turn: mean ${facts.callsMean?.toFixed(2) ?? 'none'}, median ${facts.callsMedian ?? 'none'}, p95 ${facts.callsP95 ?? 'none'}; median time ${facts.medianMs ?? 'none'} ms`);
+  io.out(facts.p95Verdict);
+  if (facts.turnsAtLimit.length > 0) io.out(`turns that used the whole limit: ${facts.turnsAtLimit.join(', ')}`);
+  if (facts.totalCost !== undefined) io.out(`cost of the run: ${facts.totalCost.toFixed(4)} (prices of ${prices?.date ?? ''})`);
+  for (const line of facts.incomplete) io.out(`incomplete: ${line}`);
+  io.out(facts.evidence ? 'accepted as evidence' : 'not accepted as evidence');
+  return facts.evidence ? 0 : 1;
 }
