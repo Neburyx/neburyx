@@ -9,11 +9,16 @@ import { withoutEarlierThinking, withoutThinking } from './audited-model.js';
 /** The names deepagents adds on its own: the file tools, the shell, the sub-agent tool, the async-task tools and the planning tool. None is ever offered or run. */
 export const DEFAULT_TOOL_NAMES = ['ls', 'read_file', 'write_file', 'edit_file', 'delete', 'glob', 'grep', 'execute', 'task', 'write_todos', 'start_async_task', 'check_async_task', 'update_async_task', 'cancel_async_task', 'list_async_tasks'] as const;
 
-const PROFILE_KEYS = ['openai', 'anthropic'] as const;
+/** The profile key of the audited chat model (its `model_name` is `audited:model`), and of a bare model of each provider. */
+const AUDITED_PROFILE_KEY = 'audited';
+const PROFILE_KEYS = [AUDITED_PROFILE_KEY, 'openai', 'anthropic'] as const;
 let profilesRegistered = false;
 
-/** deepagents picks a profile from the provider of the model class, which a wrapped model does not name, so this only covers a bare model; the guards of `TurnLimits` hold either way. */
-function registerProfiles(): void {
+/**
+ * Registers the profile that has deepagents' exclusion middleware remove its own tools from every request. It applies to the audited model through its `model_name`, and to a bare model of a provider; a model that names
+ * neither gets no profile and `TurnLimits` alone keeps deepagents' tools from it.
+ */
+export function registerProfiles(): void {
   if (profilesRegistered) return;
   profilesRegistered = true;
   for (const key of PROFILE_KEYS) registerHarnessProfile(key, { excludedTools: [...DEFAULT_TOOL_NAMES], generalPurposeSubagent: { enabled: false } });

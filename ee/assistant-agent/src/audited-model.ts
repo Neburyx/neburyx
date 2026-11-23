@@ -147,8 +147,17 @@ export function withoutThinking(messages: readonly BaseMessage[]): BaseMessage[]
 
 type Inner = Runnable<BaseLanguageModelInput, AIMessageChunk>;
 
+/**
+ * The identifier deepagents reads from the model to pick its harness profile: one colon and the prefix `audited`, so that the profile registered under `audited` applies and no profile of a provider does. It is fixed and never
+ * holds the configured model id, which can itself hold a colon (a spec with two colons resolves no profile) and would pull in the built-in profile of that model.
+ */
+export const AUDITED_MODEL_NAME = 'audited:model';
+
 /** A chat model that makes every call through the inner one and writes the call's audit event. A copy that deepagents makes by binding tools is another audited model, never the bare inner one. */
 class AuditedChatModel extends BaseChatModel {
+  /** Read by deepagents (`model_name`) to resolve the profile of this model. */
+  readonly model_name = AUDITED_MODEL_NAME;
+
   constructor(
     private readonly inner: Inner,
     private readonly hook: AuditedModelHook,
