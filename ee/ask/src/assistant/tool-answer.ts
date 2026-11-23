@@ -1,4 +1,4 @@
-import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
+import { ASSISTANT_CITATION_TITLE_MAX, ASSISTANT_READ_FINDING_MAX, ASSISTANT_TABLE_ROWS_MAX, type AssistantTable, type AskRunResult, type GraphEdge, type GraphNode, type SummaryReading, type AssistantFailureKind, type AssistantTurnAnswer, type SummarySentence } from '@neburyx/contracts';
 import { type AssembledText, edgeDetailOf, propertiesOf, valueKeysOf } from '../case-summary/assemble.js';
 import { retrievalLine } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
@@ -75,6 +75,13 @@ export function citationTitleOf(title: string | undefined): string | undefined {
   return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
 }
 
+/** The finding of a read as a citation carries it: cut to what the contract allows, with an ellipsis, without splitting a surrogate pair. */
+export function findingCitationOf(finding: string): string {
+  if (finding.length <= ASSISTANT_READ_FINDING_MAX) return finding;
+  const cut = finding.slice(0, ASSISTANT_READ_FINDING_MAX - 1);
+  return `${/[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut}…`;
+}
+
 const linesPhrase = (count: number): string => `${count} ${count === 1 ? 'line' : 'lines'}`;
 const sentencesPhrase = (count: number): string => `${count} ${count === 1 ? 'sentence' : 'sentences'}`;
 const withDegreeCounts = (run: AskRunResult, names?: ReadonlyMap<string, string>): string => {
@@ -87,7 +94,7 @@ const readLine = (key: string, read: ReadDone, names?: ReadonlyMap<string, strin
 /**
  * The lines the model may cite. The elements the reads listed, once each (those of a view keep the view's keys, the reads' are r1, r2, ...): the type and the title as the result gave them (masked as it was asked), never
  * a property value. Then one line for each read, written by the server (s1, s2, ...): what the read found with its count and its quality, so that a sentence can state that a read found nothing and the numbers of the
- * sentence are checked against the line it cites. A read's key is no element: it is in the lines and the checked keys and never in the citations.
+ * sentence are checked against the line it cites. A read's key is no element: it is in the lines and the checked keys, and a sentence that cites it carries a citation of the kind `read` that holds what the server wrote of that read.
  */
 export interface AssembledResults {
   readonly assembled: AssembledText;
@@ -294,7 +301,14 @@ export function outcomeOfDraft(context: DraftContext): ToolAnswerOutcome {
         const element = assembled.keys.get(key);
         return element === undefined ? [] : [{ key, kind: element.kind, ref: element.ref, ...(citationTitleOf(element.title) === undefined ? {} : { title: citationTitleOf(element.title) }) }];
       });
-      const withDescriptions = [...citations, ...descriptionCitationsOf(drafted.sentences, typeLines)];
+      // a cite to a read line (`s1`) is no element: the server writes what that read found, as a marker of its own beside the sentence
+      const names = typeNamesOf(input.scope.request, input.scope.sourceId);
+      const readCitations = [...cited].flatMap((key) => {
+        const index = /^s(\d+)$/.exec(key)?.[1];
+        const read = index === undefined ? undefined : input.reads[Number(index) - 1];
+        return read === undefined ? [] : [{ key, kind: 'read' as const, label: citationTitleOf(read.label ?? read.tool) ?? read.tool, finding: findingCitationOf(findingOf(read, names)) }];
+      });
+      const withDescriptions = [...citations, ...descriptionCitationsOf(drafted.sentences, typeLines), ...readCitations];
       return { kind: 'sentences', sentences: drafted.sentences, citations: withDescriptions, coverage: { retrieval: coverage, summary: `The answer cites ${citations.length} of the ${assembled.keys.size} elements the reads returned.` }, model: modelRef, calls: drafted.calls, ...(fixed.length === 0 ? {} : { noDescription: noDescriptionSentence(fixed) }) };
     }
     default: {

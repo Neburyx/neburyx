@@ -193,7 +193,7 @@ export function useAssistant(): AssistantModel {
           setFocus(turnId);
           return;
         }
-        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: 'table' in answer ? answer.table.rows : answer.sentences, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation])) }, state.visibleGraph(), (type) => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type));
+        const outcome = outcomeOf(result.value, retry, request, Date.now(), (answer) => citationEntries({ sentences: 'table' in answer ? answer.table.rows : answer.sentences, citations: answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation])) }, state.visibleGraph(), (type) => profile?.entityTypes.find((entry) => entry.type === type)?.displayName ?? type));
         if ('tooLong' in outcome) {
           store.setState({ ...store.getState(), turns: store.getState().turns.filter((turn) => turn.id !== turnId), notice: { kind: 'too-long', ...outcome.tooLong } });
           if (retry.kind === 'message') restoreInput(retry.text);

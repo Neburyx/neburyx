@@ -52,6 +52,8 @@ export const ASSISTANT_COPY = {
   clarifyStatus: 'Awaiting your choice · nothing was read. These are elements of this investigation.',
   notAnswered: 'Not answered',
   citedElement: 'Element:',
+  readCitation: 'Read',
+  serverWritten: 'Written by the server',
   noDescriptionTitle: 'About these types',
   aboutType: 'About',
   meaningTitle: 'What these types mean',

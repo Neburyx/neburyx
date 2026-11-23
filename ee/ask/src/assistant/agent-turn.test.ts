@@ -118,6 +118,21 @@ describe('a view question on the agent', () => {
     expect(await answerOf(lineOnly.route.handler(lineOnly.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered' });
   });
 
+  it('gives a sentence that cites only a read line a marker of its own: a citation of the kind read with what the server wrote of that read', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }, { text: 'The degree read states all types 184,533 (exact).', cites: ['s1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ cites: ['n1'] }, { cites: ['s1'] }] });
+    const citations = (answer as { citations: { key: string; kind: string; label?: string; finding?: string }[] }).citations;
+    expect(citations.find((citation) => citation.key === 's1')).toMatchObject({ kind: 'read', label: 'degree-preview' });
+    expect(citations.find((citation) => citation.key === 's1')?.finding).toContain('all types 184,533 (exact)');
+    expect(citations.filter((citation) => citation.kind === 'read')).toHaveLength(1);
+  });
+
   it('removes a count that the degree read does not state', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
@@ -461,7 +476,8 @@ describe('what an agent answer may say beyond the elements', () => {
     const answer = await answerOf(r.route.handler(r.request()));
     if (answer.status !== 'answered' || !('sentences' in answer)) throw new Error(`not a sentence answer: ${JSON.stringify(answer).slice(0, 200)}`);
     expect(answer.sentences[0]?.cites).toEqual(['s1']);
-    expect(answer.citations.map((citation) => citation.key)).not.toContain('s1');
+    // a cite to a read line is no element: it carries a citation of the kind read, which the card draws as a marker, and no element citation
+    expect(answer.citations.filter((citation) => citation.key === 's1').map((citation) => citation.kind)).toEqual(['read']);
   });
 
   it('shows the fixed sentence for a type the mapping does not describe beside a table and beside sentences', async () => {

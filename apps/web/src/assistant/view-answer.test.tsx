@@ -54,6 +54,24 @@ describe('the Assistant panel: an answer from the view', () => {
     expect(h.sent[0]?.viewElementKeys).toEqual(expect.arrayContaining([elementKey(A), elementKey(B)]));
   });
 
+  it('draws a marker for a sentence that cites a read line, and shows what the server wrote of that read when it is pressed', async () => {
+    const answer: AssistantTurnAnswer = {
+      ...ANSWER,
+      sentences: [...ANSWER.sentences, { text: 'The read states 25 matches shown, as a lower bound.', cites: ['s1'] }],
+      citations: [...ANSWER.citations, { key: 's1', kind: 'read', label: 'expand', finding: '25 matches shown · lower bound' }],
+    } as AssistantTurnAnswer;
+    const h = harness(async () => ok(answer));
+    shown(h);
+    render(h.tree());
+    await typeAndSend('what is linked?');
+    expect(await screen.findByText('The read states 25 matches shown, as a lower bound.')).toBeTruthy();
+    const marker = screen.getByRole('button', { name: 'Read: expand' });
+    expect(screen.queryByText('25 matches shown · lower bound')).toBeNull();
+    await userEvent.click(marker);
+    expect(screen.getByText('25 matches shown · lower bound')).toBeTruthy();
+    expect(screen.getByText('Written by the server')).toBeTruthy();
+  });
+
   it('selects a drawn element from a marker and says why a hidden one cannot be selected', async () => {
     const h = harness(async () => ok(ANSWER));
     shown(h);

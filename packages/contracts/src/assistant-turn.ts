@@ -142,6 +142,10 @@ export const ASSISTANT_MEANING_NAMES_MAX = 8;
 export const ASSISTANT_MEANING_NAME_MAX = 80;
 
 /** The citation of a meaning line (`m1`): what the mapping says a type means, as the server wrote it into the call. It names no element and no record; `type` is the type's display name, or the relationship type's name. */
+/** A cite to a read line (`s1`): what the server wrote of that read (its label and its finding with the count and its quality), shown as a marker of its own beside the sentence. It is no element, so it has no reference. */
+/** The most characters (UTF-16 code units) of the finding a read citation carries. */
+export const ASSISTANT_READ_FINDING_MAX = 600;
+const assistantReadCitationSchema = z.strictObject({ key: text, kind: z.literal('read'), label: text.max(ASSISTANT_CITATION_TITLE_MAX), finding: text.max(ASSISTANT_READ_FINDING_MAX) });
 const assistantDescriptionCitationSchema = z.strictObject({ key: text, kind: z.literal('description'), typeKind: z.enum(['entity', 'relationship']), type: text.max(ASSISTANT_CITATION_TITLE_MAX), description: text.max(300) });
 
 /** What kind of tool a read was, as the registry names it: an intent of the source's folder, a catalog template, a pattern, the view, or one of the application's own reads: the typology, the person's AI notes and the AI case summary. */
@@ -299,7 +303,7 @@ export const assistantTurnAnswerSchema = z.union([
     status: z.literal('answered'),
     route: z.literal('view'),
     sentences: z.array(summarySentenceSchema).min(1).max(12),
-    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema])).min(1),
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(1),
     /** The two lines of coverage the server writes: what was read and what is not yet retrieved, and how much of what was read the sentences cite. */
     coverage: z.strictObject({ retrieval: text, summary: text, /** Written by the server when the answer rests on sentences of an attached summary: which of them, in words. */ summaryCited: text.optional() }),
     /** The positions (from 1, as the summary's sentences are numbered in the draft) of the attached summary's sentences the answer cites; present only when there are some. */
@@ -319,7 +323,7 @@ export const assistantTurnAnswerSchema = z.union([
     route: z.enum(['ask', 'view']),
     sentences: z.array(summarySentenceSchema).min(1).max(12),
     /** `title` is the element's title as the result gave it (masked as it was asked), so an element that is not drawn is still named. */
-    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema])).min(0),
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(0),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     /** As for the view route's answer. */
     noDescription: text.optional(),
@@ -342,7 +346,7 @@ export const assistantTurnAnswerSchema = z.union([
     status: z.literal('answered'),
     route: z.literal('view'),
     table: assistantTableSchema,
-    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema])).min(1),
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]) }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(1),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     /** The fixed sentence for a type in the question that the mapping does not describe, beside the table. */
     noDescription: text.optional(),
@@ -358,7 +362,7 @@ export const assistantTurnAnswerSchema = z.union([
     status: z.literal('answered'),
     route: z.literal('view'),
     table: assistantTableSchema,
-    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema])).min(1),
+    citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema, assistantReadCitationSchema])).min(1),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     noDescription: text.optional(),
     /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
@@ -377,6 +381,7 @@ export const assistantTurnAnswerSchema = z.union([
 
 export type AssistantTurnAnswer = z.infer<typeof assistantTurnAnswerSchema>;
 export type AssistantDescriptionCitation = z.infer<typeof assistantDescriptionCitationSchema>;
+export type AssistantReadCitation = z.infer<typeof assistantReadCitationSchema>;
 
 /** The longest a streamed turn stays open: the highest total time of a turn the settings accept (10 minutes) and a minute more. */
 export const ASSISTANT_STREAM_MAX_MS = 660_000;

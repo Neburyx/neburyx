@@ -66,7 +66,7 @@ export async function verdictRefusal(input: VerdictOverviewInput): Promise<Assis
   const { answer } = outcome;
   // a table answer has no sentences: the overview is never asked for one
   if (!('sentences' in answer)) return plain();
-  const citations = answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation]));
+  const citations = answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation]));
   const drawn = { ...plain(), overview: { sentences: [...answer.sentences], citations, coverage: { retrieval: answer.coverage.retrieval, summary: answer.coverage.summary }, model: answer.model } };
   const checked = assistantTurnAnswerSchema.safeParse(drawn);
   return checked.success ? checked.data : plain();

@@ -180,7 +180,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     const [kept] = stored(view);
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
-    expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref])));
+    expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
   });
 
   it('keeps an answered table turn with the references its rows cited and the count the audit event holds, and no cell', async () => {
@@ -191,7 +191,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     const [kept] = stored(view);
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
-    expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' ? [] : [citation.ref])));
+    expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
     expect(JSON.stringify(kept)).not.toContain('Account A-1');
     const closed = view.r.events.find((event) => event.action === TURN_CLOSED_ACTION);
     expect(closed?.detail).toMatchObject({ turn: { route: 'view', outcome: 'answered', citedElements: 2, form: 'table', tableRowsShown: 2 } });

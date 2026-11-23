@@ -44,6 +44,7 @@ export function ViewAnswerCard({
   const meanings = new Map(
     answer.citations.flatMap((citation) => (citation.kind === "description" ? [[citation.key, citation] as const] : [])),
   );
+  const reads = new Map(answer.citations.flatMap((citation) => (citation.kind === "read" ? [[citation.key, citation] as const] : [])));
   const toggle = (key: string): void => {
     const next = new Set(opened);
     if (!next.delete(key)) next.add(key);
@@ -94,6 +95,7 @@ export function ViewAnswerCard({
     </button>
   );
   const descriptionKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => meanings.has(key));
+  const readKeys = (cites: readonly string[]): readonly string[] => cites.filter((key) => reads.has(key));
   const sentencesOf = (shown: SentencesAnswer) => (
     <ol className="summary-sentences">
       {shown.sentences.map((sentence, index) => (
@@ -126,6 +128,34 @@ export function ViewAnswerCard({
               })}
             </span>
           )}
+          {readKeys(sentence.cites).length === 0 ? null : (
+            <span className="summary-chips">
+              {readKeys(sentence.cites).map((key) => {
+                const read = reads.get(key);
+                return read === undefined ? null : (
+                  <button
+                    key={key}
+                    type="button"
+                    className="summary-chip assistant-marker assistant-read-chip"
+                    aria-expanded={opened.has(key)}
+                    aria-label={`${ASSISTANT_COPY.readCitation}: ${read.label}`}
+                    onClick={() => toggle(key)}
+                  >
+                    {`${ASSISTANT_COPY.readCitation}: ${read.label}`}
+                  </button>
+                );
+              })}
+            </span>
+          )}
+          {sentence.cites.flatMap((key) => {
+            const read = reads.get(key);
+            return read === undefined || !opened.has(key) ? [] : [
+              <p key={key} className="assistant-description" role="note">
+                <span className="assistant-description-mark">{ASSISTANT_COPY.serverWritten}</span>
+                <span>{read.finding}</span>
+              </p>,
+            ];
+          })}
           {sentence.cites.flatMap((key) => {
             const meaning = meanings.get(key);
             return meaning === undefined || !opened.has(key) ? [] : [

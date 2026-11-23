@@ -1,4 +1,5 @@
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, type AskRunResult } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_READ_FINDING_MAX, type AskRunResult } from '@neburyx/contracts';
+import { findingCitationOf } from './tool-answer.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
 import { answerOf, derivedRuleResult, expandResult, fileQueryResult, lowerBoundResult, nodeOf, ok, okResult, rig, routeAsk, unknownCountResult, zeroResult, type Rig } from '../testing/assistant-rig.js';
@@ -86,7 +87,7 @@ describe('the answer after tool steps', () => {
   it('keeps a sentence that cites only the line of a read, though it cites no element', async () => {
     const r = await setup(sentences({ text: 'The read of the second tool found 0 matches.', cites: ['s2'] }), { run: () => ({ status: 'ok', result: zeroResult() }) });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', route: 'ask', citations: [] });
+    expect(answer).toMatchObject({ status: 'answered', route: 'ask', citations: [{ key: 's2', kind: 'read', label: expect.any(String), finding: expect.stringContaining('0 matches shown') }] });
   });
 
   const second = (result: () => ReturnType<typeof okResult>) => {
@@ -262,3 +263,14 @@ describe('the lines of the relationships of a tool result', () => {
 
 });
 
+describe('the finding of a read citation', () => {
+  it('is cut to what the contract allows, with an ellipsis and no split surrogate pair, and a short one is kept as it is', () => {
+    expect(findingCitationOf('25 matches shown · exact')).toBe('25 matches shown · exact');
+    const long = `connected elements by type: ${Array.from({ length: 120 }, (_, index) => `Type${index} 1,${index} (exact)`).join(' · ')}`;
+    const cut = findingCitationOf(long);
+    expect(cut.length).toBeLessThanOrEqual(ASSISTANT_READ_FINDING_MAX);
+    expect(cut.endsWith('…')).toBe(true);
+    const pair = `${'a'.repeat(ASSISTANT_READ_FINDING_MAX - 2)}😀😀`;
+    expect(findingCitationOf(pair)).toBe(`${'a'.repeat(ASSISTANT_READ_FINDING_MAX - 2)}…`);
+  });
+});
