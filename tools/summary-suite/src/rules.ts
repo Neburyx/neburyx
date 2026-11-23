@@ -42,3 +42,10 @@ export async function run(labelled: LabelledCase, evidence: Evidence, sentences:
   return { outcome, rig, sent: evidence.sent, kept: sentencesOf(outcome) };
 }
 
+
+/** The entities of the case that share the type of the first one that has a twin: the type and the keys the view sent for them. */
+export function twinsOf(labelled: LabelledCase, evidence: Evidence): { readonly type: string; readonly keys: readonly string[] } {
+  const twin = defined(labelled.entities.find((entity) => labelled.entities.filter((other) => other.type === entity.type).length >= 2), 'two entities of one type');
+  const keys = labelled.entities.filter((entity) => entity.type === twin.type).map((entity) => defined(evidence.keys.get(entity.key), 'the key of an entity'));
+  return { type: twin.type, keys };
+}

@@ -40,7 +40,7 @@ describe('the citation check', () => {
   });
 
   it('keeps nothing of an empty list', () => {
-    expect(judgeSentences([], base)).toEqual({ kept: [], removed: 0, verdictFound: false, keysStripped: 0, keysRemoved: 0 });
+    expect(judgeSentences([], base)).toEqual({ kept: [], removed: 0, rejected: [], verdictFound: false, keysStripped: 0, keysRemoved: 0 });
   });
 });
 

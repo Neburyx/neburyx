@@ -96,9 +96,21 @@ export function descriptionHoldsVerdict(description: string, ownNames: readonly 
   return hit || statesConclusion(left);
 }
 
+export const REMOVAL_REASONS = ['verdict', 'key', 'citation', 'number', 'count', 'comparison', 'name', 'label', 'cell', 'row'] as const;
+export type RemovalReason = (typeof REMOVAL_REASONS)[number];
+
+export interface RejectedSentence {
+  readonly text: string;
+  readonly reason: RemovalReason;
+}
+
+const isRemovalReason = (value: unknown): value is RemovalReason => REMOVAL_REASONS.some((reason) => reason === value);
+
 export interface Judged {
   readonly kept: readonly SummarySentence[];
   readonly removed: number;
+  /** Each removed sentence with the reason of the check that removed it: as many as `removed`. */
+  readonly rejected: readonly RejectedSentence[];
   /** How many kept sentences had a key written in parentheses or brackets taken out of their text. */
   readonly keysStripped: number;
   /** How many sentences were removed because a key stood in their text outside parentheses. */
@@ -116,6 +128,12 @@ const normalise = (token: string): string => token.replaceAll(',', '').replace(/
 const numbersIn = (text: string, leaveQuotedOut = false): string[] => {
   const plain = (leaveQuotedOut ? text.replace(QUOTED, ' ') : text).replace(TOKEN, (token) => (/[\p{L}_]/u.test(token) ? ' ' : token));
   return (plain.match(NUMBER_TOKEN) ?? []).map(normalise);
+};
+
+/** The standalone numbers of a text with the text that follows each; a word or identifier is blanked to the same length, so the positions are those of the sentence. */
+const numberMentionsIn = (text: string): { readonly value: string; readonly after: string }[] => {
+  const plain = text.replace(TOKEN, (token) => (/[\p{L}_]/u.test(token) ? ' '.repeat(token.length) : token));
+  return [...plain.matchAll(NUMBER_TOKEN)].map((found) => ({ value: normalise(found[0]), after: text.slice(found.index + found[0].length) }));
 };
 
 /** Whether a text occurs in another as a whole: not in the middle of a longer word or identifier. */
@@ -165,14 +183,45 @@ function citationsHold(sentence: SummarySentence, assembled: CheckedText): boole
   return sentence.cites.length > 0 && sentence.cites.every((cite) => assembled.keys.has(cite));
 }
 
-function numbersHold(sentence: SummarySentence, assembled: CheckedText): boolean {
-  const numbers = numbersIn(sentence.text);
-  if (numbers.length === 0) return true;
+/** The words a type's name is written with, lower case: `RECEIVED_BY` gives `received by`. */
+const elementTypeName = (elementType: string): string => elementType.replace(/^(?:entity|relationship) /u, '').toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim();
+
+/** Whether the text after a number opens with the name of the type, whole, as the singular or the plural. */
+function namesType(after: string, name: string): boolean {
+  if (name === '') return false;
+  const lead = after.toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trimStart();
+  const forms = [name, `${name}s`, `${name}es`, ...(name.endsWith('y') ? [`${name.slice(0, -1)}ies`] : [])];
+  return forms.some((form) => lead.startsWith(form) && !/^[\p{L}\p{N}_-]/u.test(lead.slice(form.length)));
+}
+
+/**
+ * Words that say a number is about a population other than the elements the sentence cites: the whole source, what was not retrieved, shown or counted here, or a bound or an approximation. A fixed list of the code. A sentence with one of them
+ * is never verified by counting its cited elements, because a cited subset says nothing of a total, of what was not retrieved, or of a bound.
+ */
+const OTHER_POPULATION = /(?<![\p{L}\p{N}_-])(?:in total|total|totals|overall|altogether|in all|source-wide|the (?:whole |entire )?(?:source|database)|not (?:yet )?(?:retrieved|loaded|shown|read|listed|counted)|unretrieved|hidden|remaining|further|additional|beyond|more|fewer|less|over|under|exceeds?|exceeding|at least|at most|up to|about|approximately|around|roughly|nearly|almost)(?![\p{L}\p{N}_-])/iu;
+
+/** Whether a number is the count of the elements the sentence cites that are of the type the text after it names: the check counts the cited elements itself and invents no number. */
+function countsCitedElements(number: string, after: string, sentence: SummarySentence, assembled: CheckedText): boolean {
+  const types = assembled.elementTypes;
+  if (types === undefined || !/^\d+$/u.test(number) || OTHER_POPULATION.test(sentence.text.replace(/\s+/gu, ' '))) return false;
+  const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
+  const perType = new Map<string, number>();
+  for (const key of new Set(sentence.cites)) {
+    const type = lines.has(key) ? undefined : types.get(key);
+    if (type !== undefined) perType.set(type, (perType.get(type) ?? 0) + 1);
+  }
+  return [...perType].some(([type, count]) => count === Number(number) && namesType(after, elementTypeName(type)));
+}
+
+function numbersHold(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): boolean {
+  const stated = numbersIn(sentence.text);
+  if (stated.length === 0) return true;
   if (sentence.cites.some((cite) => assembled.unknownCountKeys.has(cite))) return false;
   const descriptions = assembled.descriptionKeys;
   const elementCites = descriptions === undefined ? sentence.cites : sentence.cites.filter((cite) => !descriptions.has(cite));
   // a sentence that cites an element holds the numbers of the element lines alone; one that cites only meanings may restate their numbers
   const numberCites = elementCites.length === 0 ? sentence.cites : elementCites;
+  const numbers = countElements ? numberMentionsIn(sentence.text).filter((mention) => !countsCitedElements(mention.value, mention.after, sentence, assembled)).map((mention) => mention.value) : stated;
   const cited = new Set(numberCites.flatMap((cite) => numbersIn(assembled.lines.get(cite) ?? '')));
   if (!numbers.every((number) => cited.has(number))) return false;
   const standalone = numbersIn(sentence.text, true);
@@ -288,9 +337,25 @@ function withoutKeys(text: string, assembled: CheckedText): { readonly text: str
   return tidy === '' || !/\p{L}/u.test(tidy) ? undefined : { text: stripped ? tidy : text, stripped };
 }
 
+/** Whether a sentence states a number for a count that is not known, or the number of an estimated or lower-bound count without the phrase that labels it. */
+function breaksCountRule(sentence: SummarySentence, assembled: CheckedText): boolean {
+  if (numbersIn(sentence.text).length === 0) return false;
+  if (sentence.cites.some((cite) => assembled.unknownCountKeys.has(cite))) return true;
+  const standalone = numbersIn(sentence.text, true);
+  return assembled.inexactCounts.some((count) => standalone.includes(count.value) && !sentence.text.includes(count.phrase));
+}
+
+function removalReasonOf(sentence: SummarySentence, assembled: CheckedText, countElements: boolean): RemovalReason {
+  if (!citationsHold(sentence, assembled)) return 'citation';
+  if (!numbersHold(sentence, assembled, countElements)) return breaksCountRule(sentence, assembled) ? 'count' : 'number';
+  if (!comparisonHolds(sentence, assembled)) return 'comparison';
+  return 'name';
+}
+
 /** Keeps the sentences that cite real elements, hold only the numbers of the elements they cite and the ids, quoted texts and capitalised words the text sent holds, and state no verdict, with the keys of the elements taken out of their text; counts each removed sentence once. */
-export function judgeSentences(sentences: readonly SummarySentence[], assembled: CheckedText): Judged {
+export function judgeSentences(sentences: readonly SummarySentence[], assembled: CheckedText, options: { readonly tableRows?: boolean } = {}): Judged {
   const kept: SummarySentence[] = [];
+  const rejected: RejectedSentence[] = [];
   let removed = 0;
   let verdictFound = false;
   let keysStripped = 0;
@@ -299,32 +364,38 @@ export function judgeSentences(sentences: readonly SummarySentence[], assembled:
     if (holdsVerdict(original, assembled)) {
       verdictFound = true;
       removed += 1;
+      rejected.push({ text: original.text, reason: 'verdict' });
       continue;
     }
     const clean = withoutKeys(original.text, assembled);
     if (clean === undefined) {
       removed += 1;
       keysRemoved += 1;
+      rejected.push({ text: original.text, reason: 'key' });
       continue;
     }
     const sentence = clean.stripped ? { ...original, text: clean.text } : original;
-    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled) || !comparisonHolds(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled))) removed += 1;
-    else {
+    if (!citationsHold(sentence, assembled) || !numbersHold(sentence, assembled, options.tableRows !== true) || !comparisonHolds(sentence, assembled) || !namesHold(sentence, namesScopeOf(sentence, assembled))) {
+      removed += 1;
+      rejected.push({ text: original.text, reason: removalReasonOf(sentence, assembled, options.tableRows !== true) });
+    } else {
       kept.push(sentence);
       if (clean.stripped) keysStripped += 1;
     }
   }
-  return { kept, removed, verdictFound, keysStripped, keysRemoved };
+  return { kept, removed, rejected, verdictFound, keysStripped, keysRemoved };
 }
 
 export interface JudgeInput {
   readonly sentences: readonly SummarySentence[];
   readonly text: CheckedText;
+  /** True when the sentences are the rows of a table: a number in a cell must be in a cited line, whatever the cited elements number. */
+  readonly tableRows?: boolean;
 }
 
 /** The check as a worker thread runs it: one argument, since a worker is handed one value. */
 export function judgeInput(input: JudgeInput): Judged {
-  return judgeSentences(input.sentences, input.text);
+  return judgeSentences(input.sentences, input.text, { tableRows: input.tableRows === true });
 }
 
 export const JUDGE_MODULE: CheckModule = { url: new URL('./reply-checks.js', import.meta.url).href, exportName: 'judgeInput' };
@@ -332,10 +403,13 @@ export const JUDGE_MODULE: CheckModule = { url: new URL('./reply-checks.js', imp
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const isSentence = (value: unknown): value is SummarySentence => isRecord(value) && typeof value['text'] === 'string' && Array.isArray(value['cites']) && value['cites'].every((cite) => typeof cite === 'string');
 
+const isRejected = (value: unknown): value is RejectedSentence => isRecord(value) && typeof value['text'] === 'string' && isRemovalReason(value['reason']);
+
 /** Reads the result a worker sent back; undefined for anything that is not the result of the check. */
 export function parseJudged(value: unknown): Judged | undefined {
   if (!isRecord(value) || !Array.isArray(value['kept']) || !value['kept'].every(isSentence)) return undefined;
-  const { removed, keysStripped, keysRemoved, verdictFound } = value;
+  const { removed, rejected, keysStripped, keysRemoved, verdictFound } = value;
   if (typeof removed !== 'number' || typeof keysStripped !== 'number' || typeof keysRemoved !== 'number' || typeof verdictFound !== 'boolean') return undefined;
-  return { kept: value['kept'], removed, keysStripped, keysRemoved, verdictFound };
+  if (!Array.isArray(rejected) || !rejected.every(isRejected) || rejected.length !== removed) return undefined;
+  return { kept: value['kept'], removed, rejected, keysStripped, keysRemoved, verdictFound };
 }

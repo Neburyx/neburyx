@@ -1,4 +1,4 @@
-import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_READ_FINDING_MAX, type AskRunResult } from '@neburyx/contracts';
+import { ASSISTANT_NOT_ANSWERED_SENTENCE, ASSISTANT_READ_FINDING_MAX, askRunResultSchema, type AskRunResult } from '@neburyx/contracts';
 import { findingCitationOf } from './tool-answer.js';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
@@ -77,6 +77,27 @@ describe('the answer after tool steps', () => {
     const r = await setup(sentences({ text: 'There are 17 accounts.', cites: ['r1'] }, { text: 'Account A-1 is listed.', cites: ['r1'] }));
     const answer = await answerOf(r.route.handler(r.request()));
     expect(answer).toMatchObject({ status: 'answered', route: 'ask', sentences: [{ text: 'Account A-1 is listed.', cites: ['r1'] }] });
+  });
+
+  it('shows the count of the elements the reads listed and cited, and removes the next count', async () => {
+    const shown = await setup(sentences({ text: '2 widgets are listed.', cites: ['r1', 'r2'] }));
+    expect(await answerOf(shown.route.handler(shown.request()))).toMatchObject({ status: 'answered', sentences: [{ text: '2 widgets are listed.', cites: ['r1', 'r2'] }] });
+    const wrong = await setup(sentences({ text: '3 widgets are listed.', cites: ['r1', 'r2'] }));
+    expect(await answerOf(wrong.route.handler(wrong.request()))).toMatchObject({ status: 'not-answered' });
+  });
+
+  it('shows 25 widgets over the 25 elements a read listed and cited, and removes 26', async () => {
+    const listed = (count: number): AskRunResult => askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: count, scope: 'test' }, matchIds: [], nodes: Array.from({ length: count }, (_, index) => nodeOf(`A-${index + 1}`)), edges: [], notices: [], warnings: [] } });
+    const cites = Array.from({ length: 25 }, (_, index) => `r${index + 1}`);
+    const shown = await setup(sentences({ text: '25 widgets are listed.', cites }), { run: () => ({ status: 'ok', result: listed(25) }) });
+    expect(await answerOf(shown.route.handler(shown.request()))).toMatchObject({ status: 'answered', sentences: [{ text: '25 widgets are listed.' }] });
+    const wrong = await setup(sentences({ text: '26 widgets are listed.', cites }), { run: () => ({ status: 'ok', result: listed(25) }) });
+    expect(await answerOf(wrong.route.handler(wrong.request()))).toMatchObject({ status: 'not-answered' });
+  });
+
+  it('removes a count of the cited elements that says a bound or a total', async () => {
+    const r = await setup(sentences({ text: 'At least 2 widgets are listed.', cites: ['r1', 'r2'] }, { text: 'There are 2 widgets in total.', cites: ['r1', 'r2'] }));
+    expect(await answerOf(r.route.handler(r.request()))).toMatchObject({ status: 'not-answered' });
   });
 
   it('rejects a reply with verdict wording, whole, and answers the fixed sentence', async () => {

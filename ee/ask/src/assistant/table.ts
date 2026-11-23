@@ -1,5 +1,5 @@
 import type { AssembledText } from '../case-summary/assemble.js';
-import { descriptionHoldsVerdict, type CheckedText, type CheckRunner, type HeavyCheck, type JudgeInput, type Judged } from '@neburyx/ee-ai-runtime';
+import { descriptionHoldsVerdict, type CheckedText, type CheckRunner, type HeavyCheck, type JudgeInput, type Judged, type RejectedSentence } from '@neburyx/ee-ai-runtime';
 import { ASSISTANT_TABLE_CELL_MAX, ASSISTANT_TABLE_CITES_MAX, ASSISTANT_TABLE_COLUMNS_MAX, ASSISTANT_TABLE_LABEL_MAX, type SummarySentence, type TypeDescriptions } from '@neburyx/contracts';
 
 /** The most rows a reply may hold: a sanity bound of the reply, not the limit of the answer (the answer shows at most 25 rows and counts the rest). */
@@ -78,7 +78,7 @@ export function labelsHold(columns: readonly string[], text: string): boolean {
 /** What the checks made of the rows of a table reply: the rows kept, as sentences and by their position in the reply. */
 export type JudgedRows =
   | { readonly refused: 'worker-failed' | 'timeout' | 'cancelled' }
-  | { readonly kept: Judged['kept'][number][]; readonly removed: number; readonly verdictFound: boolean; readonly keysStripped: number; readonly keysRemoved: number; readonly positions: readonly number[] };
+  | { readonly kept: Judged['kept'][number][]; readonly removed: number; readonly rejected: readonly RejectedSentence[]; readonly verdictFound: boolean; readonly keysStripped: number; readonly keysRemoved: number; readonly positions: readonly number[] };
 
 /**
  * Judges the rows of a table reply, each alone, so that the rows kept are known by their position (in place and in a worker thread alike): a row that `drop` names is removed unjudged, a row whose text a check changed (a key written in a cell) is removed
@@ -94,19 +94,22 @@ export async function judgeTableRows(input: {
   readonly signal: AbortSignal;
   readonly drop: (row: SummarySentence) => boolean;
 }): Promise<JudgedRows> {
-  const none: JudgedRows = { kept: [], removed: input.rows.length, verdictFound: false, keysStripped: 0, keysRemoved: 0, positions: [] };
+  const none: JudgedRows = { kept: [], removed: input.rows.length, rejected: input.rows.map((row) => ({ text: row.text, reason: 'label' as const })), verdictFound: false, keysStripped: 0, keysRemoved: 0, positions: [] };
   if (input.columns !== undefined && !labelsHold(input.columns, input.text.text)) return none;
-  const runs = await Promise.all(input.rows.map((row) => (input.drop(row) ? undefined : input.checks.run(input.judge, { sentences: [row], text: input.text }, { timeoutMs: input.timeoutMs, signal: input.signal }))));
+  const runs = await Promise.all(input.rows.map((row) => (input.drop(row) ? undefined : input.checks.run(input.judge, { sentences: [row], text: input.text, tableRows: true }, { timeoutMs: input.timeoutMs, signal: input.signal }))));
   const kept: Judged['kept'][number][] = [];
   const positions: number[] = [];
+  const rejected: RejectedSentence[] = [];
   let removed = 0;
   let verdictFound = false;
   let keysStripped = 0;
   let keysRemoved = 0;
   for (const [index, run] of runs.entries()) {
     const row = input.rows[index];
-    if (run === undefined || row === undefined) {
+    if (row === undefined) continue;
+    if (run === undefined) {
       removed += 1;
+      rejected.push({ text: row.text, reason: 'row' });
       continue;
     }
     if (run.status === 'refused') return { refused: run.reason };
@@ -117,9 +120,13 @@ export async function judgeTableRows(input: {
     if (held !== undefined && held.text === row.text && held.cites.join() === row.cites.join()) {
       kept.push(row);
       positions.push(index);
-    } else removed += 1;
+    } else {
+      removed += 1;
+      const [reason] = run.value.rejected;
+      rejected.push(reason === undefined ? { text: row.text, reason: 'key' } : { text: reason.text, reason: reason.reason === 'number' ? 'cell' : reason.reason });
+    }
   }
-  return { kept, removed, verdictFound, keysStripped, keysRemoved, positions };
+  return { kept, removed, rejected, verdictFound, keysStripped, keysRemoved, positions };
 }
 
 /** What the turn tells the model when the router chose the table form. */

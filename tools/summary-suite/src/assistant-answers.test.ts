@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { caseOf, loadCases } from './cases.js';
 import { NUMBER_ON_THE_SECOND } from './evidence.js';
 import { mutatedChecks, type Mutation } from './mutants.js';
-import { viewOf, type Evidence } from './rules.js';
+import { twinsOf, viewOf, type Evidence } from './rules.js';
+import { node, reading } from './view.js';
 
+type Counted = { readonly view: Evidence['view'] };
 const set = loadCases();
 const labelled = caseOf(set, 0);
 
@@ -38,7 +40,7 @@ async function parts(mutation: Mutation | undefined, reply: Script) {
 }
 
 /** The answer from the view, drafted by the product's own view path and checks over one labelled view. */
-async function viewAnswer(mutation: Mutation | undefined, reply: Script, evidence: Evidence, form?: 'table') {
+async function viewAnswer(mutation: Mutation | undefined, reply: Script, evidence: Counted, form?: 'table') {
   const { createCheckRunner, model, instructions } = await parts(mutation, reply);
   const { createViewAnswer } = await import('../../../ee/ask/src/assistant/view-answer.js');
   const answer = createViewAnswer({ model, instructions, checks: createCheckRunner(), settings: () => ({ model: 'claude-sonnet-5-5', maxInputTokens: 25_000, maxCalls: 5, timeoutMs: 10_000, totalTimeoutMs: 180_000 }) });
@@ -65,7 +67,7 @@ async function viewAnswer(mutation: Mutation | undefined, reply: Script, evidenc
 }
 
 /** The answer the agent's `answer` tool gives, over the same labelled view as what the turn read: the same basis, the same checks and the same outcome as the tool builds. */
-async function toolAnswer(mutation: Mutation | undefined, reply: Script, evidence: Evidence, form?: 'table') {
+async function toolAnswer(mutation: Mutation | undefined, reply: Script, evidence: Counted, form?: 'table') {
   const { createCheckRunner } = await parts(mutation, reply);
   const { answerBasisOf, outcomeOfDraft, withElementsOfNotes } = await import('../../../ee/ask/src/assistant/tool-answer.js');
   const { judgeCheck } = await import('../../../ee/ask/src/case-summary/judge.js');
@@ -92,7 +94,7 @@ async function toolAnswer(mutation: Mutation | undefined, reply: Script, evidenc
   return outcomeOfDraft({ drafted: { status: 'drafted', sentences: checked.value.kept, removed: checked.value.removed, calls: 0, verdictFound: checked.value.verdictFound, model: 'claude-sonnet-5-5' }, basis, input: done, modelRef: 'claude-sonnet-5-5', keptRows: [], lastNames: undefined });
 }
 
-type Path = (mutation: Mutation | undefined, reply: Script, evidence: Evidence) => Promise<string[]>;
+type Path = (mutation: Mutation | undefined, reply: Script, evidence: Counted) => Promise<string[]>;
 
 const viewPath: Path = async (mutation, reply, evidence) => {
   const outcome = await viewAnswer(mutation, reply, evidence);
@@ -134,13 +136,43 @@ describe.each(PATHS)('%s, over a labelled view, with the product’s own checks'
   });
 });
 
+describe.each(PATHS)('%s: a count of the cited elements, over a labelled view, with the product’s own checks', (_name, path) => {
+  const sayOf = (type: string, number: number, lead = ''): string => `${lead}${number} ${type.toLowerCase().replaceAll('_', ' ')}s are listed.`;
+
+  it('shows the count that equals the number of cited elements of the named type, and removes the next one', async () => {
+    const evidence = await viewOf(labelled);
+    const { type, keys } = twinsOf(labelled, evidence);
+    expect(await path(undefined, sentencesOf({ text: sayOf(type, keys.length), cites: [...keys] }), evidence)).toEqual([sayOf(type, keys.length)]);
+    expect(await path(undefined, sentencesOf({ text: sayOf(type, keys.length + 1), cites: [...keys] }), evidence)).toEqual([]);
+  });
+
+  it.each(['At least ', 'In total '])('removes a count of cited elements said of another population (%s), and the canary shows it when the test of the population is taken out', async (lead) => {
+    const evidence = await viewOf(labelled);
+    const { type, keys } = twinsOf(labelled, evidence);
+    const sentence: SummarySentence = { text: sayOf(type, keys.length, lead), cites: [...keys] };
+    expect(await path(undefined, sentencesOf(sentence), evidence)).toEqual([]);
+    expect(await path({ name: 'the population of a count', from: " || OTHER_POPULATION.test(sentence.text.replace(/\\s+/gu, ' '))", to: '' }, sentencesOf(sentence), evidence)).toEqual([sentence.text]);
+  });
+});
+
+describe.each(PATHS)('%s: 25 transactions over 25 cited transactions, with the product’s own checks', (_name, path) => {
+  const transactions = Array.from({ length: 25 }, (_, index) => node('transaction', `T-${index + 1}`, `Transfer T-${index + 1}`));
+  const cites = transactions.map((_, index) => `n${index + 1}`);
+  const evidence: Counted = { view: reading(transactions) };
+
+  it('shows 25 and removes 26', async () => {
+    expect(await path(undefined, sentencesOf({ text: '25 transactions are listed.', cites }), evidence)).toEqual(['25 transactions are listed.']);
+    expect(await path(undefined, sentencesOf({ text: '26 transactions are listed.', cites }), evidence)).toEqual([]);
+  });
+});
+
 const tableOf = (columns: string[], ...rows: { cells: string[]; cites: string[] }[]): Script => JSON.stringify({ table: { columns, rows } });
 
-const tableViewPath = async (mutation: Mutation | undefined, reply: Script, evidence: Evidence): Promise<string[][]> => {
+const tableViewPath = async (mutation: Mutation | undefined, reply: Script, evidence: Counted): Promise<string[][]> => {
   const outcome = await viewAnswer(mutation, reply, evidence, 'table');
   return outcome.status === 'answered' && 'table' in outcome.answer ? outcome.answer.table.rows.map((row) => row.cells) : [];
 };
-const tableToolPath = async (mutation: Mutation | undefined, reply: Script, evidence: Evidence): Promise<string[][]> => {
+const tableToolPath = async (mutation: Mutation | undefined, reply: Script, evidence: Counted): Promise<string[][]> => {
   const outcome = await toolAnswer(mutation, reply, evidence, 'table');
   return outcome.kind === 'table' ? outcome.table.rows.map((row) => row.cells) : [];
 };

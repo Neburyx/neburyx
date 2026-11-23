@@ -79,7 +79,7 @@ describe('the AI code before and after it is asked to start', () => {
     vi.useRealTimers();
     let now = 0;
     const runner = createCheckRunner({ thresholdMs: 1, clock: () => now });
-    const check = { name: 'counted', inline: () => ((now += 100), { kept: [], removed: 0, keysStripped: 0, keysRemoved: 0, verdictFound: false }), module: JUDGE_MODULE, parse: parseJudged };
+    const check = { name: 'counted', inline: () => ((now += 100), { kept: [], removed: 0, rejected: [], keysStripped: 0, keysRemoved: 0, verdictFound: false }), module: JUDGE_MODULE, parse: parseJudged };
     const text = { text: '', keys: new Map<string, boolean>(), lines: new Map<string, string>(), inexactCounts: [], unknownCountKeys: new Set<string>() };
     await runner.run(check, { sentences: [], text }, { timeoutMs: 10_000 });
     expect(threads.made).toBe(0);

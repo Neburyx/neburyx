@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createCheckRunner } from './check-runner.js';
+import { removalNoteOf } from './removed-sentences.js';
 import { judgeSentences, judgeInput, parseJudged, type CheckedText, type JudgeInput, type Judged } from './reply-checks.js';
 
 const TEXT: CheckedText = {
@@ -40,9 +41,9 @@ describe('the check as a worker thread runs it', () => {
   });
 
   it('reads only the result of the check', () => {
-    expect(parseJudged({ kept: [{ text: 'x', cites: ['n1'] }], removed: 0, keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeDefined();
+    expect(parseJudged({ kept: [{ text: 'x', cites: ['n1'] }], removed: 0, rejected: [], keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeDefined();
     expect(parseJudged({ kept: 'x' })).toBeUndefined();
-    expect(parseJudged({ kept: [{ text: 1 }], removed: 0, keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeUndefined();
+    expect(parseJudged({ kept: [{ text: 1 }], removed: 0, rejected: [], keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeUndefined();
   });
 });
 
@@ -261,5 +262,173 @@ describe('a key of a property written with a capital inside', () => {
   it('is not a name that was given when the text sent does not hold it, nor when only its capital part is written', () => {
     expect(kept('Transaction T-1 shows paidEuro 20.83.')).toBe(false);
     expect(kept('Transaction T-1 shows an Usd amount of 20.83.')).toBe(false);
+  });
+});
+
+describe('a count of the cited elements', () => {
+  const line = (key: string, type: string, title: string): string => `${key} | "${type}" | title: "${title}" | id: "${key}x"`;
+  const counted: CheckedText = {
+    text: ['n1', 'n2', 'n3'].map((key, index) => line(key, 'Transaction', `Item ${'ABC'[index]}`)).concat(line('n4', 'Account', 'Holder D'), 'e1 | "RECEIVED_BY" | n1 -> n4', 'e2 | "RECEIVED_BY" | n2 -> n4').join('\n'),
+    keys: new Map(['n1', 'n2', 'n3', 'n4', 'e1', 'e2', 's1'].map((key) => [key, true])),
+    lines: new Map([['n1', line('n1', 'Transaction', 'Item A')], ['n2', line('n2', 'Transaction', 'Item B')], ['n3', line('n3', 'Transaction', 'Item C')], ['n4', line('n4', 'Account', 'Holder D')], ['e1', 'e1 | "RECEIVED_BY" | n1 -> n4'], ['e2', 'e2 | "RECEIVED_BY" | n2 -> n4'], ['s1', 's1: a read']]),
+    inexactCounts: [],
+    unknownCountKeys: new Set(),
+    elementTypes: new Map([['n1', 'entity Transaction'], ['n2', 'entity Transaction'], ['n3', 'entity Transaction'], ['n4', 'entity Account'], ['e1', 'relationship RECEIVED_BY'], ['e2', 'relationship RECEIVED_BY'], ['s1', 'entity Transaction']]),
+    readKeys: new Set(['s1']),
+  };
+  const judged = (text: string, cites: string[], assembled: CheckedText = counted) => judgeSentences([{ text, cites }], assembled);
+
+  it('shows a count that equals the number of cited elements of the named type', () => {
+    expect(judged('3 transactions are listed.', ['n1', 'n2', 'n3']).kept).toHaveLength(1);
+  });
+
+  it('shows a count of relationships written with the name of their type, and the singular', () => {
+    expect(judged('2 received by relationships end at Holder D.', ['e1', 'e2', 'n4']).kept).toHaveLength(1);
+    expect(judged('1 transaction is listed.', ['n1']).kept).toHaveLength(1);
+  });
+
+  it.each([2, 4])('removes the count %i over three cited transactions, once', (wrong) => {
+    const result = judged(`${wrong} transactions are listed.`, ['n1', 'n2', 'n3']);
+    expect(result.kept).toEqual([]);
+    expect(result.removed).toBe(1);
+  });
+
+  it('judges a number a cited line holds as before', () => {
+    const held: CheckedText = { ...counted, lines: new Map([...counted.lines, ['n1', 'n1 | "Transaction" | title: "Item A" | id: "n1x" | rows: 7']]) };
+    expect(judged('Item A has 7 rows.', ['n1'], held).kept).toHaveLength(1);
+    expect(judged('Item A has 8 rows.', ['n1'], held).kept).toEqual([]);
+  });
+
+  it('verifies no count when the text carries no element types', () => {
+    const { elementTypes: _types, ...untyped } = counted;
+    expect(judged('3 transactions are listed.', ['n1', 'n2', 'n3'], untyped).kept).toEqual([]);
+  });
+
+  it('does not count the line of a read or of a meaning as an element', () => {
+    expect(judged('4 transactions are listed.', ['n1', 'n2', 'n3', 's1']).kept).toEqual([]);
+    const meant: CheckedText = { ...counted, descriptionKeys: new Set(['n3']) };
+    expect(judged('3 transactions are listed.', ['n1', 'n2', 'n3'], meant).kept).toEqual([]);
+  });
+
+  it('keeps the own-value rule of a table cell whatever the cited elements number', () => {
+    const row = [{ text: '3 transactions', cites: ['n1', 'n2', 'n3'] }];
+    expect(judgeSentences(row, counted, { tableRows: true }).kept).toEqual([]);
+    expect(judgeInput({ sentences: row, text: counted, tableRows: true }).kept).toEqual([]);
+    expect(judgeInput({ sentences: row, text: counted }).kept).toHaveLength(1);
+  });
+
+  it.each(['3 items are listed.', '3 accounts are listed.', 'The 3 are listed.'])('does not verify a count that names no type or another type: %s', (text) => {
+    expect(judged(text, ['n1', 'n2', 'n3']).kept).toEqual([]);
+  });
+
+  it.each([
+    'In total there are 3 transactions.',
+    'Altogether 3 transactions were read.',
+    'The source holds 3 transactions.',
+    '3 transactions are not yet retrieved.',
+    '3 hidden transactions remain.',
+    'At least 3 transactions are listed.',
+    'About 3 transactions are listed.',
+    'There are more than 3 transactions.',
+  ])('does not let cited elements stand for another population: %s', (text) => {
+    expect(judged(text, ['n1', 'n2', 'n3']).kept).toEqual([]);
+  });
+
+  it('leaves a source-wide sentence to the cited-line rule alone: a cited line that holds the number keeps it as before', () => {
+    const held: CheckedText = { ...counted, lines: new Map([...counted.lines, ['n1', 'n1 | "Transaction" | title: "Item A" | id: "n1x" | rows: 3']]) };
+    expect(judged('In total there are 3 transactions.', ['n1', 'n2', 'n3'], held).kept).toHaveLength(1);
+  });
+
+  it.each(['3 transactions have a fee of 3.', '3 transactions represent 3%.', 'Of 3 transactions, 3 are listed twice.'])('judges each number of a sentence on its own, so a verified count does not support the same number elsewhere: %s', (text) => {
+    expect(judged(text, ['n1', 'n2', 'n3']).kept).toEqual([]);
+  });
+
+  it.each(['3 transactions are not\tshown.', 'At\nleast 3 transactions are listed.', '3 transactions are in the\nsource.', '3 transactions are not  yet\nretrieved.'])('reads the words of another population across any whitespace: %s', (text) => {
+    expect(judged(text, ['n1', 'n2', 'n3']).kept).toEqual([]);
+  });
+
+  it('keeps the identity of a type that differs by case or repeated whitespace, and reads its name as written in a sentence', () => {
+    const odd: CheckedText = { ...counted, keys: new Map([...counted.keys, ['n5', true], ['n6', true]]), lines: new Map([...counted.lines, ['n5', 'n5 | "Widget" | title: "Eps" | id: "e5x"'], ['n6', 'n6 | "widget" | title: "Zeta" | id: "z6x"']]), elementTypes: new Map([...(counted.elementTypes ?? []), ['n5', 'entity Widget'], ['n6', 'entity widget']]) };
+    expect(judged('1 widget is listed.', ['n5', 'n6'], odd).kept).toHaveLength(1);
+    expect(judged('2 widgets are listed.', ['n5', 'n6'], odd).kept).toEqual([]);
+    const spaced: CheckedText = { ...counted, keys: new Map([...counted.keys, ['n7', true], ['n8', true]]), lines: new Map([...counted.lines, ['n7', 'n7 | "money  movement" | title: "Eta" | id: "h7x"'], ['n8', 'n8 | "money  movement" | title: "Theta" | id: "t8x"']]), elementTypes: new Map([...(counted.elementTypes ?? []), ['n7', 'entity money  movement'], ['n8', 'entity money  movement']]) };
+    expect(judged('2 money movements are listed.', ['n7', 'n8'], spaced).kept).toHaveLength(1);
+  });
+
+  it('reads the name of a type across any whitespace after the number', () => {
+    expect(judged('3\ntransactions are listed.', ['n1', 'n2', 'n3']).kept).toHaveLength(1);
+    expect(judged('2 received\nby relationships end at Holder D.', ['e1', 'e2', 'n4']).kept).toHaveLength(1);
+  });
+
+  it('keeps a wrong count that equals a property value in a cited line, as the cited-line rule always has (a known gap, pinned so that a tightening is a deliberate change)', () => {
+    const held: CheckedText = { ...counted, lines: new Map([...counted.lines, ['n1', 'n1 | "Transaction" | title: "Item A" | id: "n1x" | rows: 4']]) };
+    expect(judged('4 transactions are listed.', ['n1', 'n2', 'n3'], held).kept).toHaveLength(1);
+  });
+
+  it('keeps a figure a cited line states with its label, and removes it without the label', () => {
+    const stated: CheckedText = { ...counted, lines: new Map([...counted.lines, ['s1', 's1: read of transactions: ≥ 3 (lower bound)']]), inexactCounts: [{ phrase: '≥ 3 (lower bound)', value: '3' }] };
+    expect(judged('The read found ≥ 3 (lower bound) transactions.', ['s1'], stated).kept).toHaveLength(1);
+    expect(judged('The read found 3 transactions.', ['s1'], stated).kept).toEqual([]);
+  });
+
+  it('removes a count that equals the number of cited elements when the text gives that figure as a lower bound or an estimate', () => {
+    const bounded: CheckedText = { ...counted, inexactCounts: [{ phrase: '~3 (estimated)', value: '3' }] };
+    expect(judged('3 transactions are listed.', ['n1', 'n2', 'n3'], bounded).kept).toEqual([]);
+  });
+
+  it('removes a number about an element whose count is not known', () => {
+    const unknown: CheckedText = { ...counted, unknownCountKeys: new Set(['n1']) };
+    expect(judged('3 transactions are listed.', ['n1', 'n2', 'n3'], unknown).kept).toEqual([]);
+  });
+
+  it.each(['The 3 transactions sum to 42.', 'The 3 transactions are 75% of the source.', 'Item A ranks 2 of 3 transactions.'])('removes a figure the check cannot verify: %s', (text) => {
+    expect(judged(text, ['n1', 'n2', 'n3']).kept).toEqual([]);
+  });
+});
+
+describe('the reason a sentence was removed', () => {
+  const typed: CheckedText = { ...TEXT, elementTypes: new Map([['n1', 'entity Ledger'], ['n2', 'entity Ledger']]), unknownCountKeys: new Set(['n2']) };
+
+  it.each([
+    ['verdict', 'Ledger A is guilty.', ['n1']],
+    ['key', 'n1 sent money to n2.', ['n1']],
+    ['citation', 'Ledger A is listed.', ['n9']],
+    ['number', 'Ledger A has 7311 rows.', ['n1']],
+    ['count', 'Ledger B has 5 rows.', ['n2']],
+    ['comparison', 'Ledger A is the largest.', ['n1']],
+    ['name', 'Ledger Zed is listed.', ['n1']],
+  ])('names %s as the reason, one for the one sentence removed', (reason, text, cites) => {
+    const judged = judgeSentences([{ text, cites }], typed);
+    expect(judged.kept).toEqual([]);
+    expect(judged.rejected).toEqual([{ text, reason }]);
+    expect(judged.rejected).toHaveLength(judged.removed);
+  });
+
+  it('names an estimated count stated without its label as a count', () => {
+    const estimated: CheckedText = { ...typed, unknownCountKeys: new Set(), inexactCounts: [{ phrase: '~40 (estimated)', value: '40' }], lines: new Map([...TEXT.lines, ['n1', 'Ledger A members: ~40 (estimated)']]) };
+    expect(judgeSentences([{ text: 'Ledger A has 40 members.', cites: ['n1'] }], estimated).rejected).toEqual([{ text: 'Ledger A has 40 members.', reason: 'count' }]);
+  });
+
+  it('keeps no reason for a sentence that is kept, and one reason for each removal among several', () => {
+    const judged = judgeSentences([{ text: 'Ledger A is listed.', cites: ['n1'] }, { text: 'Ledger A has 7311 rows.', cites: ['n1'] }, { text: 'Ledger B is guilty.', cites: ['n2'] }], typed);
+    expect(judged.rejected.map((each) => each.reason)).toEqual(['number', 'verdict']);
+    expect(judged.kept).toHaveLength(1);
+  });
+
+  it('survives the trip through a worker, and a result with a reason that is not one of the set is refused', async () => {
+    const runner = createCheckRunner({ thresholdMs: 0, workerUrl: new URL('./check-worker.ts', import.meta.url) });
+    const check = { name: 'judge', inline: judgeInput, module: { url: new URL('./reply-checks.ts', import.meta.url).href, exportName: 'judgeInput' }, parse: parseJudged };
+    const input = { sentences: [{ text: 'Ledger A has 7311 rows.', cites: ['n1'] }], text: typed };
+    expect(await runner.run(check, input, { timeoutMs: 5000 })).toEqual({ status: 'done', value: judgeSentences(input.sentences, typed) });
+    expect(parseJudged({ kept: [], removed: 1, rejected: [{ text: 'x', reason: 'because' }], keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeUndefined();
+    expect(parseJudged({ kept: [], removed: 1, rejected: [], keysStripped: 0, keysRemoved: 0, verdictFound: false })).toBeUndefined();
+  });
+
+  it('writes the note for the model from the submitted text and fixed words alone', () => {
+    const note = removalNoteOf([{ text: 'Ledger Zed has 99 rows.', reason: 'name' }, { text: 'Ledger A is guilty.', reason: 'verdict' }]);
+    expect(note).toBe('Removed: "Ledger Zed has 99 rows." (it holds a name, an identifier or a quoted text that the text sent does not hold).\nRemoved: "Ledger A is guilty." (it states a conclusion about guilt, intent or an offence; describe only what the elements show).');
+    expect(removalNoteOf([])).toBe('');
+    expect(removalNoteOf([{ text: '2 figures', reason: 'cell' }])).toContain('in a table the count of the cited elements does not stand for it');
+    expect(removalNoteOf([{ text: 'Figure A', reason: 'row' }])).toContain('a line of a read, a meaning or a note');
   });
 });

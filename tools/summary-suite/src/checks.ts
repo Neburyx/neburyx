@@ -132,10 +132,39 @@ function numbersOfLine(line: string): string[] {
   return numbersIn(line.slice(line.indexOf('|') + 1));
 }
 
+/** Words that make a number about something other than the cited elements: the whole source, what was not retrieved or shown, a bound or an approximation. */
+const NOT_ABOUT_THE_CITED = /(?<![\p{L}\p{N}_-])(?:in total|total|totals|overall|altogether|in all|source-wide|the (?:whole |entire )?(?:source|database)|not (?:yet )?(?:retrieved|loaded|shown|read|listed|counted)|unretrieved|hidden|remaining|further|additional|beyond|more|fewer|less|over|under|exceeds?|exceeding|at least|at most|up to|about|approximately|around|roughly|nearly|almost)(?![\p{L}\p{N}_-])/iu;
+
+/** The kind and the type a sent line writes after its key: `n3 | "transaction" | …` is an entity, `e1 | "SENT" | …` a relationship. */
+const typeOfLine = (key: string, line: string | undefined): string | undefined => {
+  const type = /^[ne]\d+ \| "([^"]+)"/u.exec(line ?? '')?.[1];
+  return type === undefined ? undefined : `${key.startsWith('n') ? 'entity' : 'relationship'} ${type}`;
+};
+
+const formsOf = (name: string): string[] => [name, `${name}s`, `${name}es`, ...(name.endsWith('y') ? [`${name.slice(0, -1)}ies`] : [])];
+
+/** Whether a number is how many of the cited elements are of the type the words after it name, said of those elements alone. */
+function countsCitedOfType(found: { readonly value: string; readonly after: string }, sentence: SummarySentence, lines: Map<string, string>): boolean {
+  if (!/^\d+$/u.test(found.value) || NOT_ABOUT_THE_CITED.test(sentence.text.replace(/\s+/gu, ' '))) return false;
+  const named = found.after.toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trimStart();
+  const types = new Map<string, number>();
+  for (const key of new Set(sentence.cites)) {
+    const type = typeOfLine(key, lines.get(key));
+    if (type !== undefined) types.set(type, (types.get(type) ?? 0) + 1);
+  }
+  return [...types].some(([type, count]) => count === Number(found.value) && formsOf(type.slice(type.indexOf(' ') + 1).toLowerCase().replaceAll('_', ' ').replace(/\s+/gu, ' ').trim()).some((form) => named.startsWith(form) && !/^[\p{L}\p{N}_-]/u.test(named.slice(form.length))));
+}
+
+/** The numbers of a sentence with the text after each, the words and identifiers blanked to their own length. */
+function mentionsIn(text: string): { readonly value: string; readonly after: string }[] {
+  const plain = text.replace(TOKEN, (token) => (/[\p{L}_]/u.test(token) ? ' '.repeat(token.length) : token));
+  return [...plain.matchAll(NUMBER)].map((found) => ({ value: found[0].replaceAll(',', '').replace(/^\+/u, ''), after: text.slice(found.index + found[0].length) }));
+}
+
 export function numbersUnsupported(sentence: SummarySentence, sent: string): string[] {
   const lines = linesOfKeys(sent);
   const supported = new Set(sentence.cites.flatMap((key) => numbersOfLine(lines.get(key) ?? '')));
-  return numbersIn(sentence.text).filter((found) => !supported.has(found));
+  return mentionsIn(sentence.text).filter((found) => !supported.has(found.value) && !countsCitedOfType(found, sentence, lines)).map((found) => found.value);
 }
 
 export function expectNumbersCited(sentences: readonly SummarySentence[], sent: string): void {

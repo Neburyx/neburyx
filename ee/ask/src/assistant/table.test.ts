@@ -1,5 +1,7 @@
+import { createCheckRunner, removalNoteOf } from '@neburyx/ee-ai-runtime';
 import { describe, expect, it } from 'vitest';
-import { labelWordsOf, labelsHold, parseTable, pluralOf, rowSentenceOf } from './table.js';
+import { judgeCheck } from '../case-summary/judge.js';
+import { judgeTableRows, labelWordsOf, labelsHold, parseTable, pluralOf, rowSentenceOf } from './table.js';
 
 const VIEW_TEXT = [
   'Entities:',
@@ -66,5 +68,43 @@ describe('the judging of column labels', () => {
 
   it('fails a label with a word nothing backs, a number, a verdict word, a symbol or a key that was not sent', () => {
     for (const label of ['Suspicion level', 'Fraud flag', 'Score 7', 'Code (USD)', 'Total', 'Rank', 'Sum', 'Email', '12', 'codeEur']) expect(labelsHold(['Element', label], VIEW_TEXT), label).toBe(false);
+  });
+});
+
+describe('the rows of a table judged against the count of the cited elements', () => {
+  const line = (key: string, title: string): string => `${key} | "figure" | title: "${title}" | id: "${key}x"`;
+  const text = {
+    text: [line('n1', 'Figure A'), line('n2', 'Figure B')].join('\n'),
+    keys: new Map([['n1', true], ['n2', true]]),
+    lines: new Map([['n1', line('n1', 'Figure A')], ['n2', line('n2', 'Figure B')]]),
+    inexactCounts: [],
+    unknownCountKeys: new Set<string>(),
+    elementTypes: new Map([['n1', 'entity figure'], ['n2', 'entity figure']]),
+  };
+  const judge = (row: { text: string; cites: string[] }, columns?: string[], drop = false) => judgeTableRows({ rows: [row], columns, checks: createCheckRunner({ thresholdMs: 60000 }), judge: judgeCheck, text, timeoutMs: 5000, signal: new AbortController().signal, drop: () => drop });
+
+  it('removes a row whose cell holds a number no cited line holds, though it equals the number of cited elements', async () => {
+    const judged = await judge({ text: '2 figures', cites: ['n1', 'n2'] });
+    expect(judged).toMatchObject({ kept: [], removed: 1 });
+  });
+
+  it('keeps a row whose cells hold the cited line values', async () => {
+    const judged = await judge({ text: 'Figure A', cites: ['n1'] });
+    expect(judged).toMatchObject({ removed: 0, positions: [0] });
+  });
+
+  it.each([
+    ['a number no cited line holds', { text: '2 figures', cites: ['n1', 'n2'] }, undefined, false, 'cell'],
+    ['a key written in a cell', { text: 'Figure A (n1)', cites: ['n1'] }, undefined, false, 'key'],
+    ['a citation the answer may not rest on', { text: 'Figure A', cites: ['n1'] }, undefined, true, 'row'],
+    ['a column label no word of the text sent backs', { text: 'Figure A', cites: ['n1'] }, ['Suspicion level'], false, 'label'],
+  ] as const)('gives one reason for the row removed for %s', async (_cause, row, columns, drop, reason) => {
+    const judged = await judge({ text: row.text, cites: [...row.cites] }, columns === undefined ? undefined : [...columns], drop);
+    expect(judged).toMatchObject({ kept: [], removed: 1, rejected: [{ text: row.text, reason }] });
+    if ('rejected' in judged) {
+      expect(judged.rejected).toHaveLength(judged.removed);
+      if (reason === 'cell') expect(removalNoteOf(judged.rejected)).toContain('in a table');
+      if (reason === 'row') expect(removalNoteOf(judged.rejected)).toContain('a row may not rest on');
+    }
   });
 });
