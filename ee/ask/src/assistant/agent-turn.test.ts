@@ -3,7 +3,7 @@ import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
 import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal, askRunResultSchema, sentencesOfBlocks, type AskRunResult, type AssistantBlocks } from '@neburyx/contracts';
 import { removalNoteOf } from '@neburyx/ee-ai-runtime';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, heavyResult, lowerBoundResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, V, type Rig } from '../testing/assistant-rig.js';
+import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, expandResult, heavyResult, lowerBoundResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, V, type Rig } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 
@@ -167,6 +167,13 @@ describe('a view question on the agent', () => {
     expect(instructions).toContain('a sentence about what a read did not return cites that read\'s own line, and states only what that line says');
     expect(instructions).toContain('take the second step: read the neighbours of that element (expand or linked-entities) before you say the rest is not shown, within the steps allowed');
     expect(instructions).toContain('The line c1 never replaces a read');
+    expect(instructions).toContain('whether several elements share something at their other end');
+    expect(instructions).toContain('read a bounded sample within the steps (the neighbours of up to three elements, picked by a rule you state, such as the largest or the first listed; for example shared-attribute from one of them');
+    expect(instructions).toContain('answer only for that sample: name the elements you read and state what each read returned in a sentence of its own, copying its figure, label and quality, and citing its read line');
+    expect(instructions).toContain('one read is anchored on one element and shows what that element has in common with others, not between every pair of the sample');
+    expect(instructions).toContain('the other elements were not read: one read each, more than this turn allows');
+    expect(instructions).toContain('however it is worded');
+    expect(instructions).toContain('never generalise from the sample to the rest');
     expect(instructions).toContain('that the Relationships lines do not answer is answered by reading its neighbours');
     expect(instructions).toContain('a sentence that the view shows no relationship is no answer to it');
     expect(instructions).toContain('find that element in the lines, then take the second step');
@@ -241,6 +248,33 @@ describe('a view question on the agent', () => {
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
     const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
     expect(told).toContain('A sentence or a row removed for verdict wording is left out, not reworded.');
+  });
+
+  it('answers a question about a shared other end for the two elements it read of five in view, one sentence for each read citing its line, says what was not read citing c1, and removes a sentence that generalises to every element', async () => {
+    // the result of the read of the second anchor is its own: the expansion of A-1 with the ends renamed, so that it holds A-2 and its two neighbours A-4 and A-5
+    const expandOfSecond = () => JSON.parse(JSON.stringify(expandResult()).replaceAll('A-3', 'A-5').replaceAll('A-2', 'A-4').replaceAll('A-1', 'A-2'));
+    const nodes = ['A-1', 'A-2', 'A-3', 'A-4', 'A-5'].map((id) => nodeOf(id, `${V.title} ${id}`));
+    const keys = nodes.map((node) => JSON.stringify(['node', node.ref.sourceId, node.ref.entityType, node.ref.stableId]));
+    const first = { text: `The read of the neighbours of ${V.title} A-1 returned 2 matches shown, exact.`, cites: ['n1', 's1'] };
+    const second = { text: `The read of the neighbours of ${V.title} A-2 returned 2 matches shown, exact.`, cites: ['n2', 's2'] };
+    const generalising = { text: `All the ${V.anchor} elements on screen have an other end of their own, and none of them share one.`, cites: ['n1', 'n2'] };
+    const notRead = { text: 'The other elements were not read: one read each, more than this turn allows.', cites: ['c1'] };
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'expand', args: { entityType: V.anchor, stableId: 'A-1', neighborType: V.anchor } }])
+      .respondWithTools([{ name: 'expand', args: { entityType: V.anchor, stableId: 'A-2', neighborType: V.anchor } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [first, second, generalising] }] } }])
+      .respondWithTools([{ name: 'answer', args: { blocks: [{ kind: 'sentences', sentences: [first, second, notRead] }] } }])
+      .respond(new AIMessage('Done.'));
+    const store = createMemoryAssistantRunStore();
+    // five elements in view and three reads allowed (the view and two anchors): the other three cannot be read in this turn
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 9, maxInputTokens: 60_000 }, viewNodes: nodes, loopSteps: 3, run: (_continuing, asked) => ({ status: 'ok', result: JSON.stringify(asked).includes('A-2') ? expandOfSecond() : expandResult() }), runStore: store });
+    const answer = await answerOf(r.route.handler(r.request({ ...BODY, viewElementKeys: keys })));
+    expect(JSON.stringify(answer)).not.toContain('have an other end of their own');
+    expect(answer).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: first.text }, { text: second.text }, { text: notRead.text, cites: ['c1'] }] }], reads: [{ tool: 'view' }, { tool: 'expand' }, { tool: 'expand' }] });
+    const told = (store.runs[0]?.callStarts ?? []).map((start) => start.valuesText).join('\n');
+    expect(told).toContain('c1: view coverage: 5 entities shown');
+    expect(told).toContain('Checked: 2 sentences kept, 1 removed');
   });
 
   it('keeps a sentence that names the element and states the count when it cites the element and the degree line, and removes it when it cites the line alone', async () => {
