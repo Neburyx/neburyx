@@ -744,15 +744,31 @@
 
 .assistant-table-title {
   margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.assistant-table {
+  line-height: 16px;
+}
+
+.assistant-table thead {
+  background: var(--color-surface-muted);
+}
+
+.assistant-table th {
+  font-weight: 400;
   color: var(--color-text-muted);
 }
 
 .assistant-table th,
 .assistant-table td {
   text-align: left;
-  padding: var(--space-6) var(--space-8);
+  padding: 6px var(--space-4);
   border-bottom: var(--border-width) solid var(--color-border);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .assistant-table th:not(:last-child),
@@ -760,19 +776,65 @@
   min-width: 9ch;
 }
 
-.assistant-table .assistant-table-number {
-  text-align: right;
+.assistant-table .assistant-table-number,
+.assistant-table .assistant-table-stamp {
   white-space: nowrap;
   overflow-wrap: normal;
-  font-variant-numeric: tabular-nums;
 }
 
+.assistant-table th:last-child,
 .assistant-table-cite {
   white-space: nowrap;
+  overflow-wrap: normal;
+}
+
+.assistant-table th:last-child,
+.assistant-table td.assistant-table-cite {
+  position: sticky;
+  right: 0;
+  background: var(--color-surface);
+  box-shadow: calc(-1 * var(--border-width)) 0 0 var(--color-border);
+}
+
+.assistant-table-cite .assistant-marker {
+  background: var(--color-badge-surface);
+  padding: 3px 6px;
+  line-height: 16px;
+}
+
+.assistant-table-cite .assistant-table-source-link .icon {
+  width: 10px;
+  height: 10px;
+  background: var(--color-accent);
+}
+
+.assistant-table-cite .summary-chips {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  vertical-align: middle;
+}
+
+.assistant-table-cite .assistant-table-source-link {
+  vertical-align: middle;
+}
+
+.assistant-table-row:hover td,
+.assistant-table-row:hover td.assistant-table-cite {
+  background: var(--color-badge-surface);
 }
 
 .assistant-table-cite .summary-chip {
   white-space: nowrap;
+}
+
+.assistant-table td {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.assistant-table th:first-child,
+.assistant-table td:first-child {
+  padding-left: var(--space-8);
 }
 
 .assistant-table tbody tr:last-child td {
@@ -830,6 +892,20 @@
   color: var(--color-text-muted);
   font: inherit;
   cursor: pointer;
+}
+
+.assistant-table-copy {
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 3px 9px;
+  color: var(--color-text);
+  font-size: var(--font-size-small);
+  line-height: 16px;
+}
+
+.assistant-table-copy .icon {
+  width: 10px;
+  height: 10px;
 }
 
 .assistant-table-row {

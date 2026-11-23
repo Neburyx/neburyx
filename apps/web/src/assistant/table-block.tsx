@@ -8,6 +8,10 @@ const TABLE_FOLD_HEAD = 3;
 
 const NUMBER = /^[-+(]?\p{Sc}?\s?\d[\d,. ]*\s?[%\p{Sc}A-Za-z]{0,3}\)?$/u;
 /** Whether every cell of a column is a number (with its sign, thousands separators, currency sign, percent or short unit): such a column is aligned right and its cells do not wrap. */
+const STAMP = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?\s?(Z|[+-]\d{2}:?\d{2}|UTC)?)?$/;
+/** Whether every cell of a column is a date or a time stamp: its cells do not wrap. */
+const stampColumn = (rows: readonly { readonly cells: readonly string[] }[], column: number): boolean =>
+  rows.length > 0 && rows.every((row) => STAMP.test((row.cells[column] ?? "").trim()));
 const numericColumn = (rows: readonly { readonly cells: readonly string[] }[], column: number): boolean =>
   rows.length > 0 && rows.every((row) => NUMBER.test((row.cells[column] ?? "").trim()));
 
@@ -36,6 +40,8 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
   const [unfolded, setUnfolded] = useState(false);
   const [copy, setCopy] = useState<CopyState>("idle");
   const numeric = table.columns.map((_, column) => numericColumn(table.rows, column));
+  const stamped = table.columns.map((_, column) => stampColumn(table.rows, column));
+  const classOf = (column: number): string | undefined => (numeric[column] ? "assistant-table-number" : stamped[column] ? "assistant-table-stamp" : undefined);
   const longTable = table.rows.length > TABLE_FOLD_ABOVE;
   const folds = longTable && !unfolded;
   const rows = table.rows.map((row, index) => ({ row, index }));
@@ -69,13 +75,13 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
         }}
       >
         {entry.row.cells.map((cell, column) => (
-          <td key={column} className={numeric[column] ? "assistant-table-number" : undefined}>{cell}</td>
+          <td key={column} className={classOf(column)}>{cell}</td>
         ))}
         <td className="assistant-table-cite">
           <span className="summary-chips">{markersOf(entry.row.cites)}</span>
           {onShowSource === undefined || first === undefined ? null : (
             <button type="button" className="assistant-table-source-link" aria-label={showSourceLabel(first.number)} onClick={() => onShowSource(first)}>
-              <span aria-hidden="true" className="icon icon-link" />
+              <span aria-hidden="true" className="icon icon-arrow-up-right" />
             </button>
           )}
           <button type="button" className="assistant-row-select" aria-label={selectRowLabel(entry.index + 1)} onClick={() => onSelectRow(entry.row.cites)}>
@@ -103,7 +109,7 @@ export function TableBlock({ table, markersOf, markerTextOf, firstEntryOf, onSel
           <thead>
             <tr>
               {table.columns.map((column, index) => (
-                <th key={index} scope="col" className={numeric[index] ? "assistant-table-number" : undefined}>{column}</th>
+                <th key={index} scope="col" className={classOf(index)}>{column}</th>
               ))}
               <th scope="col">{ASSISTANT_COPY.citeColumn}</th>
             </tr>

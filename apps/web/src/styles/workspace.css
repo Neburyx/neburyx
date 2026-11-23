@@ -898,8 +898,8 @@
   --icon: url('../assets/lucide/shapes.svg');
 }
 
-.icon-link {
-  --icon: url('../assets/lucide/link.svg');
+.icon-arrow-up-right {
+  --icon: url('../assets/lucide/arrow-up-right.svg');
 }
 
 .icon-layers {
