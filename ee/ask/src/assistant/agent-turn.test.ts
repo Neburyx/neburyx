@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
 import { ASSISTANT_LAST_CALL_SENTENCE, ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
+import { BODY, VIEW_BODY, answerOf, degreeResult, expandEarlierResult, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, V, type Rig } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 
@@ -16,11 +16,11 @@ describe('a view question on the agent', () => {
   it('answers with the sentences that pass the checks over what the view returned, with one audit event per model call', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 and ${V.title.toLowerCase()} A-2 are in view.`, cites: ['n1', 'n2'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: 'Account A-1 and account A-2 are in view.', cites: ['n1', 'n2'] }] });
+    expect(answer).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: `${V.title} A-1 and ${V.title.toLowerCase()} A-2 are in view.`, cites: ['n1', 'n2'] }] });
     expect(r.elementReads).toHaveLength(1);
     // the read and the answer: no call acknowledges an answer the checks accepted whole
     expect(modelEvents(r)).toHaveLength(2);
@@ -31,7 +31,7 @@ describe('a view question on the agent', () => {
   it('never shows text the model writes after answer, or instead of it', async () => {
     const after = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Also, everything here is certainly fraud.'));
     const r = await rig({ reply: VIEW, agent: { model: after } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -46,7 +46,7 @@ describe('a view question on the agent', () => {
   it('ends with the fixed sentence when every sentence is removed', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} Z-9 is in view.`, cites: ['n9'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -57,11 +57,11 @@ describe('a view question on the agent', () => {
     for (const reply of [ok('{"route":"refuse","cause":"unplaced"}'), ok('not a route'), ok('{"route":"unknown"}')]) {
       const model = fakeModel()
         .respondWithTools([{ name: 'view', args: {} }])
-        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
         .respond(new AIMessage('Done.'));
       const r = await rig({ reply, agent: { model } });
       const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-      expect(answer).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] });
+      expect(answer).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] });
     }
   });
 
@@ -82,12 +82,12 @@ describe('a view question on the agent', () => {
   it('shows the answer that stands when the model call that follows it fails, and the failure when no answer stands', async () => {
     const withAnswer = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(() => {
         throw new Error('fetch failed: connection reset');
       });
     const r = await rig({ reply: VIEW, agent: { model: withAnswer } });
-    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] });
     const none = fakeModel().respond(() => {
       throw new Error('fetch failed: connection reset');
     });
@@ -97,24 +97,24 @@ describe('a view question on the agent', () => {
 
   it('answers how many there are with the count the degree read states, cited, with its quality', async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The gadget count is 169,756, which is exact.', cites: ['s1'] }] } }])
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `The ${V.other} count is 169,756, which is exact.`, cites: ['s1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'The gadget count is 169,756, which is exact.' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `The ${V.other} count is 169,756, which is exact.` }] });
   });
 
   it('keeps a cited sentence for each part of a two-part count question, one of them saying a count is not yet retrieved, and the instructions tell the model to answer every part with a count as a number', async () => {
     const store = createMemoryAssistantRunStore();
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The relationships of A-1 are not yet retrieved by type: the read states all types 184,533 (exact).', cites: ['n1', 's1'] }, { text: 'Account A-1 has 169,756 gadget relationships (exact).', cites: ['n1', 's1'] }] } }])
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The relationships of A-1 are not yet retrieved by type: the read states all types 184,533 (exact).', cites: ['n1', 's1'] }, { text: `${V.title} A-1 has 169,756 ${V.other} relationships (exact).`, cites: ['n1', 's1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }), runStore: store });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: expect.stringContaining('not yet retrieved') }, { text: 'Account A-1 has 169,756 gadget relationships (exact).' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: expect.stringContaining('not yet retrieved') }, { text: `${V.title} A-1 has 169,756 ${V.other} relationships (exact).` }] });
     const instructions = store.runs[0]?.callStarts[1]?.instructionsText ?? '';
     expect(instructions).toContain('answer every part, each in a sentence of its own');
     expect(instructions).toContain('State a count as a number with its quality');
@@ -129,8 +129,8 @@ describe('a view question on the agent', () => {
     const answered = (cites: string[]) =>
       fakeModel()
         .respondWithTools([{ name: 'view', args: {} }])
-        .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 has 169,756 gadget (exact).', cites }] } }])
+        .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 has 169,756 ${V.other} (exact).`, cites }] } }])
         .respond(new AIMessage('Done.'));
     const both = await rig({ reply: VIEW, agent: { model: answered(['n1', 's1']), maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     expect(await answerOf(both.route.handler(both.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ cites: ['n1', 's1'] }] });
@@ -141,8 +141,8 @@ describe('a view question on the agent', () => {
   it('gives a sentence that cites only a read line a marker of its own: a citation of the kind read with what the server wrote of that read', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }, { text: 'The degree read states all types 184,533 (exact).', cites: ['s1'] }] } }])
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: 'The degree read states all types 184,533 (exact).', cites: ['s1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 8 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -155,8 +155,8 @@ describe('a view question on the agent', () => {
 
   it('removes a count that the degree read does not state', async () => {
     const model = fakeModel()
-      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The gadget count is 170,000, which is exact.', cites: ['s1'] }] } }])
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `The ${V.other} count is 170,000, which is exact.`, cites: ['s1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, run: () => ({ status: 'ok', result: degreeResult() }) });
     expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered' });
@@ -165,7 +165,7 @@ describe('a view question on the agent', () => {
   it('shows the fixed sentence of a pointer the model names, and still removes the model\'s own uncited sentence', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Use the Expand action to add them.', cites: [] }, { text: 'Account A-1 is in view.', cites: ['n1'] }], pointer: 'canvas-expand' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Use the Expand action to add them.', cites: [] }, { text: `${V.title} A-1 is in view.`, cites: ['n1'] }], pointer: 'canvas-expand' } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -173,7 +173,7 @@ describe('a view question on the agent', () => {
     expect(JSON.stringify(answer)).not.toContain('Use the Expand action');
     const none = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], pointer: 'anything-else' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }], pointer: 'anything-else' } }])
       .respond(new AIMessage('Done.'));
     const other = await rig({ reply: VIEW, agent: { model: none } });
     expect(JSON.stringify(await answerOf(other.route.handler(other.request(VIEW_BODY))))).not.toContain('anything-else');
@@ -182,11 +182,11 @@ describe('a view question on the agent', () => {
   it('does not mark a limit on an answer given on the last call the turn may make, because the limit cut nothing short', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 3 } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }] });
     expect(answer).not.toHaveProperty('stoppedAt');
     expect(answer).toMatchObject({ lastCallNote: ASSISTANT_LAST_CALL_SENTENCE });
   });
@@ -194,19 +194,19 @@ describe('a view question on the agent', () => {
   it('says nothing of the last call when the answer that stands was written earlier and the last answer kept nothing', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} Z-9 is in view.`, cites: ['n9'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 4 } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }] });
     expect(answer).not.toHaveProperty('lastCallNote');
   });
 
   it('carries no note on an answer given while reads were still allowed', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model, maxCalls: 6 } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -218,23 +218,23 @@ describe('a view question on the agent', () => {
   it('makes no call after an answer the checks accepted whole, and still gives the model its one chance to answer again when a sentence was removed', async () => {
     const whole = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(() => {
         throw new Error('a call after an accepted answer');
       });
     const r = await rig({ reply: VIEW, agent: { model: whole } });
-    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }] });
     expect(modelEvents(r).filter((event) => event.result === 'failed')).toHaveLength(0);
     expect(modelEvents(r)).toHaveLength(2);
     const removed = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }, { text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} Z-9 is in view.`, cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(() => {
         throw new Error('a call after an accepted answer');
       });
     const again = await rig({ reply: VIEW, agent: { model: removed, maxCalls: 8 } });
-    expect(await answerOf(again.route.handler(again.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(await answerOf(again.route.handler(again.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }] });
     expect(modelEvents(again)).toHaveLength(3);
   });
 
@@ -249,18 +249,18 @@ describe('a view question on the agent', () => {
   it('keeps the last answer that left a sentence, and does not replace it with a later one that left none', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} Z-9 is in view.`, cites: ['n9'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.` }] });
   });
 
   it('suppresses the whole draft when a sentence holds verdict wording, even if the others pass', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }, { text: 'Account A-2 is guilty of fraud.', cites: ['n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }, { text: `${V.title} A-2 is guilty of fraud.`, cites: ['n2'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -271,7 +271,7 @@ describe('a view question on the agent', () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, loopSteps: 1 });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -310,7 +310,7 @@ describe('a heavy read of the agent waits for the analyst', () => {
     fakeModel()
       .respondWithTools([{ name: 'byId', args: { id: 'A-2' } }])
       .respondWithTools([{ name: 'byId', args: { id: heavyFor } }, { name: 'byId', args: { id: 'A-3' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 and ${V.title.toLowerCase()} A-2 are listed.`, cites: ['r1', 'r2'] }] } }])
       .respond(new AIMessage('Done.'));
 
   async function waitingTurn() {
@@ -333,7 +333,7 @@ describe('a heavy read of the agent waits for the analyst', () => {
   it('reads the earlier steps again, then the confirmed step, and goes on to the answer', async () => {
     const { r, first } = await waitingTurn();
     const answer = await decide(r, first, 'confirm');
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 and account A-2 are listed.' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 and ${V.title.toLowerCase()} A-2 are listed.` }] });
     expect(r.runs.filter((run) => (run.options as { continue?: boolean } | undefined)?.continue === true)).toHaveLength(1);
   });
 
@@ -374,7 +374,7 @@ describe('the table form of the agent', () => {
   it('keeps the rows that pass the row checks, and drops a row that cites nothing the reads returned', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }, { cells: ['Account Z-9'], cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} Z-9`], cites: ['n9'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: TABLE, agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -425,7 +425,7 @@ describe('the seams of the agent turn', () => {
     const seen: string[] = [];
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account Z-9 is in view.', cites: ['n9'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} Z-9 is in view.`, cites: ['n9'] }] } }])
       .respond((messages) => {
         seen.push(messages.map((message) => JSON.stringify(message.content)).join('\n'));
         return new AIMessage('Done.');
@@ -438,7 +438,7 @@ describe('the seams of the agent turn', () => {
   it('answers a message the router could not place, from the start, through the agent', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: ok('not a route at all'), agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -449,7 +449,7 @@ describe('the seams of the agent turn', () => {
     const emitted: { phase: string }[] = [];
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model } });
     await answerOf(r.route.handler(r.request(VIEW_BODY, { emit: (_name: string, data: unknown) => void emitted.push(data as { phase: string }) })));
@@ -466,7 +466,7 @@ describe('the limits of the agent turn', () => {
     fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
 
   it('answers over what was read when the rows limit is reached, carrying the limit it stopped at', async () => {
@@ -501,25 +501,25 @@ describe('what an agent answer may say beyond the elements', () => {
   });
 
   it('shows the fixed sentence for a type the mapping does not describe beside a table and beside sentences', async () => {
-    const types = ['widget'];
+    const types = [V.anchor];
     const table = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }], noDescription: ['widget'] } }])
+      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }], noDescription: [V.anchor] } }])
       .respond(new AIMessage('Done.'));
-    const a = await rig({ reply: ok('{"route":"view","types":["widget"],"form":"table"}'), agent: { model: table }, types });
+    const a = await rig({ reply: ok(`{"route":"view","types":["${V.anchor}"],"form":"table"}`), agent: { model: table }, types });
     const tabled = await answerOf(a.route.handler(a.request(VIEW_BODY)));
-    expect(tabled).toMatchObject({ status: 'answered', route: 'view', noDescription: 'The mapping has no description for widget, so I cannot say what it means.' });
+    expect(tabled).toMatchObject({ status: 'answered', route: 'view', noDescription: `The mapping has no description for ${V.anchor}, so I cannot say what it means.` });
     const sentences = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], noDescription: ['widget'] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }], noDescription: [V.anchor] } }])
       .respond(new AIMessage('Done.'));
-    const b = await rig({ reply: ok('{"route":"view","types":["widget"]}'), agent: { model: sentences }, types });
+    const b = await rig({ reply: ok(`{"route":"view","types":["${V.anchor}"]}`), agent: { model: sentences }, types });
     expect(await answerOf(b.route.handler(b.request(VIEW_BODY)))).toMatchObject({ status: 'answered', sentences: [{ cites: ['n1'] }], noDescription: expect.stringContaining('no description') });
   });
 
   it('says in the closing event that property values were sent when a read carried them', async () => {
     const model = fakeModel().respondWithTools([{ name: 'view', args: {} }]).respond(new AIMessage('Done.'));
-    const r = await rig({ reply: VIEW, agent: { model }, viewNodes: [nodeOf('A-1', 'Account A-1')] });
+    const r = await rig({ reply: VIEW, agent: { model }, viewNodes: [nodeOf('A-1', `${V.title} A-1`)] });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
     const closed = r.events.find((event) => event.action === 'assistant.turn.closed');
     expect((closed?.detail as { turn: { propertyValuesSent?: boolean } }).turn.propertyValuesSent).toBe(false);
@@ -528,7 +528,7 @@ describe('what an agent answer may say beyond the elements', () => {
   it('titles a table of the elements it reads and counts them, in the server\'s words', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: ['Account A-1'], cites: ['n1'] }, { cells: ['Account A-2'], cites: ['n2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { columns: ['Element'], rows: [{ cells: [`${V.title} A-1`], cites: ['n1'] }, { cells: [`${V.title} A-2`], cites: ['n2'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: ok('{"route":"view","form":"table"}'), agent: { model } });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -563,7 +563,7 @@ describe('a first read that waits for the analyst, with one step allowed', () =>
     const pending = createMemoryAssistantPendingStore();
     const model = fakeModel()
       .respondWithTools([{ name: 'shared', args: { id: 'A-9' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 and ${V.title.toLowerCase()} A-2 are listed.`, cites: ['r1', 'r2'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: routeAsk('shared', { id: 'A-9' }), agent: { model }, pending, loopSteps: 1, run: (continuing: boolean) => ({ status: 'ok' as const, result: continuing ? okResult() : heavyResult() }) });
     const first = await answerOf(r.route.handler(r.request()));
@@ -576,21 +576,21 @@ describe('a first read that waits for the analyst, with one step allowed', () =>
 
 describe('the follow-ups of an agent answer on the ask route', () => {
   const INTENTS = {
-    shared: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: 'widget', stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } },
-    widgetById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: 'widget', stableId: '$id' } } },
+    shared: { parameters: ['id'], template: 'shared-attribute', settings: { ref: { entityType: V.anchor, stableId: '$id' }, attributeType: 'shape', via: 'USES_SHAPE' } },
+    anchorById: { parameters: ['id'], template: 'entity', settings: { ref: { entityType: V.anchor, stableId: '$id' } } },
   };
 
   it('carries the follow-ups Ask\'s own answer to the read has, and none for a view question', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'shared', args: { id: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 and account A-2 are listed.', cites: ['r1', 'r2'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 and ${V.title.toLowerCase()} A-2 are listed.`, cites: ['r1', 'r2'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: routeAsk('shared', { id: 'A-1' }), agent: { model }, intents: INTENTS });
     const answer = await answerOf(r.route.handler(r.request()));
-    expect(answer).toMatchObject({ status: 'answered', sentences: expect.anything(), followUps: expect.arrayContaining([expect.objectContaining({ choice: expect.objectContaining({ intent: 'widgetById' }) })]) });
+    expect(answer).toMatchObject({ status: 'answered', sentences: expect.anything(), followUps: expect.arrayContaining([expect.objectContaining({ choice: expect.objectContaining({ intent: 'anchorById' }) })]) });
     const viewModel = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const v = await rig({ reply: VIEW, agent: { model: viewModel }, intents: INTENTS });
     expect(await answerOf(v.route.handler(v.request(VIEW_BODY)))).not.toHaveProperty('followUps');
@@ -602,7 +602,7 @@ describe('the records and the audit of an agent turn', () => {
     const store = createMemoryAssistantRunStore();
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, runStore: store });
     await answerOf(r.route.handler(r.request(VIEW_BODY)));
@@ -642,12 +642,12 @@ describe('the input limit of the agent turn', () => {
     const scripted = () =>
       fakeModel()
         .respondWithTools([{ name: 'view', args: {} }])
-        .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+        .respondWithTools([{ name: 'degree-preview', args: { entityType: V.anchor, stableId: 'A-1' } }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
         .respond(new AIMessage('Done.'));
     const fits = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 6_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(fits.route.handler(fits.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], reads: [{ tool: 'view' }] });
+    expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }], reads: [{ tool: 'view' }] });
     expect(JSON.stringify(answer)).not.toContain('degree-preview');
     const none = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 3_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
     expect(await answerOf(none.route.handler(none.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'input' });
@@ -663,19 +663,19 @@ describe('the input limit of the agent turn', () => {
       }
       throw new Error('no limit left a read out');
     };
-    const expand = { name: 'expand', args: { entityType: 'widget', stableId: 'A-1', neighborType: 'widget' } };
+    const expand = { name: 'expand', args: { entityType: V.anchor, stableId: 'A-1', neighborType: V.anchor } };
 
     it('judges the answer against the keys the model holds: the read that would shift them is taken back, the cite n1 stays the first element of the view, and the reads and the coverage list the view only', async () => {
       const answer = await firstTrimmed(() =>
         fakeModel()
           .respondWithTools([{ name: 'view', args: {} }])
           .respondWithTools([expand])
-          .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+          .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
           .respond(new AIMessage('Done.')),
       );
-      expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], citations: [{ key: 'n1', ref: { stableId: 'A-1' } }], reads: [{ tool: 'view' }], stoppedAt: 'input' });
+      expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }], citations: [{ key: 'n1', ref: { stableId: 'A-1' } }], reads: [{ tool: 'view' }], stoppedAt: 'input' });
       expect(JSON.stringify(answer)).not.toContain('A-0');
-      const viewOnly = await rig({ reply: VIEW, agent: { model: fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }]).respond(new AIMessage('Done.')), maxCalls: 8 } });
+      const viewOnly = await rig({ reply: VIEW, agent: { model: fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }]).respond(new AIMessage('Done.')), maxCalls: 8 } });
       const plain = await answerOf(viewOnly.route.handler(viewOnly.request(VIEW_BODY)));
       expect('coverage' in answer && 'coverage' in plain && answer.coverage).toEqual('coverage' in plain && plain.coverage);
     });
@@ -686,7 +686,7 @@ describe('the input limit of the agent turn', () => {
           fakeModel()
             .respondWithTools([{ name: 'view', args: {} }])
             .respondWithTools([expand])
-            .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+            .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
             .respond(new AIMessage('Done.')),
         { loopSteps: 1 },
       );
@@ -754,9 +754,9 @@ describe('a question about what a type means that names no type the mapping has'
   it('goes to the agent as a question for the view', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }])
       .respond(new AIMessage('Done.'));
-    const r = await rig({ reply: ok('{"route":"meaning","types":["nonexistent"]}'), agent: { model }, types: ['widget'] });
+    const r = await rig({ reply: ok('{"route":"meaning","types":["nonexistent"]}'), agent: { model }, types: [V.anchor] });
     expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', route: 'view', sentences: [{ cites: ['n1'] }] });
   });
 });

@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ExtensionRefusal, askRunResultSchema, assistantTurnAnswerSchema, type AskPatternOffer, type ElementRefs, type AskRun, type AskRunResult, type AuditEvent, type AuditSink, type ExtensionRequest, type ExtensionRoute, type RecordQueue } from '@neburyx/contracts';
 import { createAuditedModelCall, createCallRecorder, createCheckRunner, type CheckRunner, type ModelProvider } from '@neburyx/ee-ai-runtime';
 import { createFixtureProvider, replyKey, type FixtureReply, type FixtureReplies } from '../../../ai-runtime/src/testing/fixture.js';
@@ -23,18 +24,42 @@ import { makeAskFolder } from './ask-folder.js';
 import { UNAVAILABLE_SUMMARIZER } from './case-summarizer.js';
 
 const SOURCE = 'demo';
+/** The words the scripted suites use for the elements of their source: invented ones, or those of a shipped pack when `NEBURYX_TEST_PACK` names it, so that the same suites run on another data model with no change of code. */
+interface Vocabulary {
+  readonly anchor: string;
+  readonly other: string;
+  /** The label of the anchor type, as it begins a title: "Widget A-1". */
+  readonly titleOf: (stableId: string) => string;
+  readonly links: readonly [string, string];
+}
+
+function vocabularyOf(pack: string | undefined): Vocabulary {
+  if (pack === undefined || pack === '') return { anchor: 'widget', other: 'gadget', titleOf: (stableId) => `Account ${stableId}`, links: ['HOLDS', 'SENT'] };
+  const lines = readFileSync(fileURLToPath(new URL(`../../../../domain-packs/${pack}/neburyx.yaml`, import.meta.url)), 'utf8').split('\n');
+  const at = lines.findIndex((line) => /^\s+relationships:/u.test(line));
+  const entities = lines.slice(0, at);
+  const types = entities.flatMap((line, index) => (/^\s+- type: (\S+)$/u.exec(line)?.[1] === undefined ? [] : [{ type: /^\s+- type: (\S+)$/u.exec(line)?.[1] ?? '', label: /^\s+label: (\S+)$/u.exec(entities[index + 1] ?? '')?.[1] ?? '' }]));
+  const links = lines.slice(at).flatMap((line) => (/^\s+- type: (\S+)$/u.exec(line)?.[1] === undefined ? [] : [/^\s+- type: (\S+)$/u.exec(line)?.[1] ?? '']));
+  const [anchor, other] = types;
+  if (anchor === undefined || other === undefined || links[1] === undefined) throw new Error(`the pack ${pack} has fewer than two entity types or relationship types`);
+  return { anchor: anchor.type, other: other.type, titleOf: (stableId) => `${anchor.label} ${stableId}`, links: [links[0] ?? '', links[1]] };
+}
+
+const VOCABULARY = vocabularyOf(process.env['NEBURYX_TEST_PACK']);
+/** The vocabulary of the suites, with the word that begins a title: "Account A-1" has "Account". */
+export const V = { ...VOCABULARY, title: VOCABULARY.titleOf('x').split(' ')[0] ?? '' };
 const NOW = 1_800_000_000_000;
 const CLASSIFICATION = 'Choose the intent that answers the question. SENTINEL-CLASSIFICATION';
 const PROMPT = 'You route messages. SENTINEL-PROMPT';
 export const MESSAGE = 'Which accounts share a device with SENTINEL-MESSAGE?';
-export const VIEW_KEYS = [JSON.stringify(['node', SOURCE, 'widget', 'A-1']), JSON.stringify(['node', SOURCE, 'widget', 'A-2'])];
+export const VIEW_KEYS = [JSON.stringify(['node', SOURCE, V.anchor, 'A-1']), JSON.stringify(['node', SOURCE, V.anchor, 'A-2'])];
 export const BODY = { sourceId: SOURCE, investigationId: 'inv-1', message: MESSAGE, viewElementKeys: ['n1', 'n2'] };
 export const VIEW_BODY = { ...BODY, viewElementKeys: VIEW_KEYS };
 export const sign = (text: string): string => createHmac('sha256', 'a-test-key').update(text).digest('hex');
 export const ok = (text: string): FixtureReply => ({ kind: 'ok', text, usage: { kind: 'known', inputTokens: 20, outputTokens: 10 } });
 export const routeAsk = (intent: string, entities: Record<string, string>): FixtureReply => ok(JSON.stringify({ route: 'ask', intent, entities }));
 
-const node = (stableId: string, title = `Account ${stableId}`) => ({ ref: { sourceId: SOURCE, entityType: 'widget', stableId }, display: { title, type: 'widget' }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
+const node = (stableId: string, title = V.titleOf(stableId)) => ({ ref: { sourceId: SOURCE, entityType: V.anchor, stableId }, display: { title, type: V.anchor }, properties: [], qualityFlags: [], provenanceRefs: [], authorization: { canInspect: true, canExport: true } });
 export const okResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'exact', value: 1, scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
 /** A read of the shared-attribute template that found no match: the anchor only, with an exact zero. */
@@ -52,10 +77,10 @@ export const degreeResult = (): AskRunResult =>
     result: {
       ref: node('A-1').ref,
       total: { quality: 'exact', value: 184533, scope: 'test' },
-      byType: [{ relationshipType: 'HOLDS', direction: 'in', count: { quality: 'exact', value: 169756, scope: 'test' }, neighborTypes: ['gadget'] }],
+      byType: [{ relationshipType: V.links[0], direction: 'in', count: { quality: 'exact', value: 169756, scope: 'test' }, neighborTypes: [V.other] }],
       byNeighborType: [
-        { entityType: 'gadget', count: { quality: 'exact', value: 169756, scope: 'test' } },
-        { entityType: 'widget', count: { quality: 'lowerBound', value: 1000, scope: 'test' } },
+        { entityType: V.other, count: { quality: 'exact', value: 169756, scope: 'test' } },
+        { entityType: V.anchor, count: { quality: 'lowerBound', value: 1000, scope: 'test' } },
       ],
       warnings: [],
       pageSize: 25,
@@ -70,8 +95,8 @@ export const expandResult = (hasMore = false): AskRunResult =>
       ref: node('A-1').ref,
       pageSize: 25,
       nodes: [node('A-1'), node('A-2'), node('A-3')],
-      edges: [{ ref: { sourceId: SOURCE, type: 'SENT', from: 'A-1', to: 'A-2', stableId: 'e-1' }, from: node('A-1').ref, to: node('A-2').ref, type: 'SENT', direction: 'out', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }],
-      pages: [{ neighborType: 'widget', returned: 2, hasMore, matchingTotal: { quality: hasMore ? 'lowerBound' : 'exact', value: 2, scope: 'test' } }],
+      edges: [{ ref: { sourceId: SOURCE, type: V.links[1], from: 'A-1', to: 'A-2', stableId: 'e-1' }, from: node('A-1').ref, to: node('A-2').ref, type: V.links[1], direction: 'out', semantics: 'stored', properties: [], evidenceRefs: [], qualityFlags: [] }],
+      pages: [{ neighborType: V.anchor, returned: 2, hasMore, matchingTotal: { quality: hasMore ? 'lowerBound' : 'exact', value: 2, scope: 'test' } }],
       warnings: [],
     },
   });
@@ -84,7 +109,7 @@ export const expandEarlierResult = (): AskRunResult =>
       pageSize: 25,
       nodes: [node('A-0'), node('A-1'), node('A-2')],
       edges: [],
-      pages: [{ neighborType: 'widget', returned: 1, hasMore: false, matchingTotal: { quality: 'exact', value: 1, scope: 'test' } }],
+      pages: [{ neighborType: V.anchor, returned: 1, hasMore: false, matchingTotal: { quality: 'exact', value: 1, scope: 'test' } }],
       warnings: [],
     },
   });
@@ -109,7 +134,7 @@ export const offerOf = (id: string, name: string): AskPatternOffer => ({
   id,
   version: 3,
   name,
-  projection: { kind: 'definition', anchorType: 'widget', startingEntity: 'held', steps: [{ relationshipTypes: ['link_a'], direction: 'out', arrivesAt: 'gadget', conditions: [], windowed: false }] },
+  projection: { kind: 'definition', anchorType: V.anchor, startingEntity: 'held', steps: [{ relationshipTypes: ['link_a'], direction: 'out', arrivesAt: V.other, conditions: [], windowed: false }] },
 });
 
 export interface RigOptions {

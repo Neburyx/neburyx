@@ -171,6 +171,14 @@ words that are ordinary in code or part of the product's own vocabulary, such as
 a reason on every entry, no repeats, that each word is an identifier of a shipped pack, and that the scanned code still uses
 each word as a literal, so an entry that nothing uses has to be removed.
 
+**Instruction text.** A second scan, `tools/workspace-checks/src/domain-words/ai-text.ts`, reads the text the product sends a
+model as instructions: the prompt files in `ee/ask/prompts` and the sentences in the string literals of `ee/ask/src`,
+`ee/assistant-agent/src` and `ee/ai-runtime/src` (test files and test stand-ins are exempt). It fails on any whole word, in
+any case, that is a type, label, relationship type or property key of any shipped pack, read from the packs themselves, so a
+new pack is covered with no change of code: the assistant must work on another data model with no change, and the names it
+uses come from the mapping at run time. Its allowlist (`AI_TEXT_ALLOWLIST`) names a word and the reason, for the whole text
+or for one file, and an entry that no text uses fails the check.
+
 **What it cannot see.** Strings built at run time; comments; JSX text, which is where interface copy usually lives; template
 parts that have substitutions; a word spelled or cased differently from the pack; and domain wording in interface copy beyond
 identifiers. Review covers those.
