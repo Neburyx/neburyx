@@ -458,10 +458,24 @@ describe('the Assistant panel: repeated shapes in the Sources list', () => {
     shown(h);
     render(h.tree());
     await typeAndSend('what is linked?');
-    const marker = await screen.findByRole('button', { name: 'Citations 1 to 3: show in Sources' });
+    const marker = await screen.findByRole('button', { name: 'Citations 1 to 3: select on graph and show in Sources' });
     expect(marker.textContent).toBe('[1–3]');
     await userEvent.click(marker);
     expect(document.activeElement?.getAttribute('aria-label')).toMatch(/^Sources: 1, /);
+    const selected = [...h.state.presentation.view.getState().selection];
+    expect(selected).toHaveLength(3);
+    expect(selected).toEqual(expect.arrayContaining([elementKey(A), elementKey(B)]));
+  });
+
+  it('says the elements of a range marker are outside the current view, and selects nothing, when all are hidden', async () => {
+    const h = harness(async () => ok({ ...ANSWER, blocks: [{ kind: 'sentences', sentences: [{ text: 'Three are cited.', cites: ['n1', 'n2', 'e1'] }] }] }));
+    shown(h);
+    render(h.tree());
+    await typeAndSend('what is linked?');
+    act(() => h.state.hide([elementKey(A), elementKey(B)]));
+    await userEvent.click(await screen.findByRole('button', { name: 'Citations 1 to 3: select on graph and show in Sources' }));
+    expect([...h.state.presentation.view.getState().selection]).toEqual([]);
+    expect(screen.getAllByText('Outside the current view').length).toBeGreaterThan(0);
   });
 
   it('leaves focus on the Sources control when the list is closed and opened again after a range marker was pressed', async () => {
@@ -469,7 +483,7 @@ describe('the Assistant panel: repeated shapes in the Sources list', () => {
     shown(h);
     render(h.tree());
     await typeAndSend('what is linked?');
-    await userEvent.click(await screen.findByRole('button', { name: 'Citations 1 to 3: show in Sources' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Citations 1 to 3: select on graph and show in Sources' }));
     const control = screen.getByRole('button', { name: 'Sources · 3' });
     await userEvent.click(control);
     expect(control.getAttribute('aria-expanded')).toBe('false');

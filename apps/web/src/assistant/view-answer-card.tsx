@@ -86,6 +86,7 @@ export function ViewAnswerCard({
       className="summary-chip assistant-marker"
       aria-label={citationRangeLabel(first.number, last.number)}
       onClick={() => {
+        selectEntries(entries.filter((entry) => entry.number >= first.number && entry.number <= last.number));
         setSourcesOpen(true);
         setFocusRequest({ number: first.number, tick: (focusRequest?.tick ?? 0) + 1 });
       }}
@@ -198,15 +199,16 @@ export function ViewAnswerCard({
     markerGroups(entriesOf(cites), sources && entries.length > 0)
       .map((group) => (group.kind === "run" ? `[${group.first.number}–${group.last.number}]` : `[${group.entry.number}]`))
       .join(" ");
-  const selectRow = (cites: readonly string[]): void => {
-    const keys = entriesOf(cites).map((entry) => entry.graphKey).filter((key) => drawn.has(key));
+  const selectEntries = (cited: readonly CitationEntry[]): void => {
+    const keys = cited.map((entry) => entry.graphKey).filter((key) => drawn.has(key));
     if (keys.length === 0) {
-      setNote(SUMMARY_COPY.gone);
+      setNote(cited.some((entry) => held.has(entry.graphKey)) ? SUMMARY_COPY.outsideView : SUMMARY_COPY.gone);
       return;
     }
     setNote("");
     state.presentation.select(keys);
   };
+  const selectRow = (cites: readonly string[]): void => selectEntries(entriesOf(cites));
   const listOf = (block: ListBlock, index: number) => {
     const labelId = `${titleId}-list-${index}`;
     return (

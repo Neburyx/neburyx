@@ -473,6 +473,8 @@ test.describe('the Assistant panel', () => {
     await page.keyboard.press('Enter');
     expect(before).toContain('14 selected');
     await expect.poll(described).toContain('; 1 selected');
+    await panel(page).getByRole('button', { name: /^Citations 1 to 7: select on graph and show in Sources$/ }).click();
+    await expect.poll(described).toContain('; 7 selected');
   });
 
   for (const width of [1440, 1280]) {
