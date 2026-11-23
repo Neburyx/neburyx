@@ -9,6 +9,33 @@ const answerTool = (log: string[]): AgentTool => ({ name: 'answer', description:
 const controlOf = (): AgentControl => ({ stop: false, calls: 0, extra: 0, answerOnly: false });
 const base = (control: AgentControl) => ({ system: 'rules', user: 'question', control, maxCalls: 6, finalTool: 'answer', signal: new AbortController().signal });
 
+describe('the thinking blocks of a call whose list of tools differs from the one before', () => {
+  it('are taken out of the history of the last call, which offers the final tool only, and kept in a call whose list is the same (the provider bound them to the list: a recorded 400)', async () => {
+    const log: string[] = [];
+    const thought = (text: string) => ({ type: 'thinking', thinking: '', signature: `sig-${text}` });
+    const model = fakeModel()
+      .respond(new AIMessage({ content: [thought('one')], tool_calls: [{ name: 'read_view', args: {}, id: 'c1' }] }))
+      .respond(new AIMessage({ content: [thought('two')], tool_calls: [{ name: 'answer', args: { text: 'x' }, id: 'c2' }] }))
+      .respond(new AIMessage({ content: [thought('three')], tool_calls: [{ name: 'answer', args: { text: 'y' }, id: 'c3' }] }))
+      .respond(new AIMessage('Done.'));
+    const sent: { tools: string[]; thinking: number }[] = [];
+    const original = model.bindTools.bind(model);
+    model.bindTools = ((tools: Parameters<typeof original>[0]) => {
+      const bound = original(tools);
+      const names = tools.map((entry) => ('name' in entry ? String(entry.name) : '')).sort();
+      const invoke = bound.invoke.bind(bound);
+      bound.invoke = ((messages: Parameters<typeof invoke>[0], options?: Parameters<typeof invoke>[1]) => {
+        sent.push({ tools: names, thinking: JSON.stringify(messages).split('"type":"thinking"').length - 1 });
+        return invoke(messages, options);
+      }) as typeof bound.invoke;
+      return bound;
+    }) as typeof model.bindTools; // the double only records what it is bound and invoked with and delegates to the original
+    await runAgent({ ...base(controlOf()), maxCalls: 3, model, tools: [reader(log), answerTool(log)] });
+    expect(sent.map((call) => call.tools)).toEqual([['answer', 'read_view'], ['answer', 'read_view'], ['answer']]);
+    expect(sent.map((call) => call.thinking)).toEqual([0, 1, 0]);
+  });
+});
+
 describe('the agent run', () => {
   it('runs the tools the model calls and offers exactly those tools, none of deepagents\' own', async () => {
     const log: string[] = [];

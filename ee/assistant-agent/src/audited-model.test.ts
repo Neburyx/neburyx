@@ -71,6 +71,10 @@ describe('the audited chat model', () => {
   it('describes an error by its class and its status or code, and by nothing it cannot hold as a short code', () => {
     expect(failureDetailOf(Object.assign(new Error('bad request: a long message'), { status: 400 }))).toEqual({ errorClass: 'Error', errorCode: '400' });
     expect(failureDetailOf('text')).toEqual({ errorClass: 'Error' });
+    const refused = Object.assign(new Error('400 {"error":{"type":"invalid_request_error","message":"a long message that holds sk-SECRET-VALUE"}}'), { status: 400, error: { type: 'error', error: { type: 'invalid_request_error', message: 'a long message that holds sk-SECRET-VALUE' } } });
+    expect(failureDetailOf(refused)).toEqual({ errorClass: 'Error', errorCode: '400', errorType: 'invalid_request_error' });
+    expect(JSON.stringify(failureDetailOf(refused))).not.toContain('SECRET');
+    expect(failureDetailOf(Object.assign(new Error('x'), { error: { error: { type: 'a type with spaces' } } }))).toEqual({ errorClass: 'Error' });
     expect(failureDetailOf(Object.assign(new Error('x'), { code: 'has a space and text' }))).toEqual({ errorClass: 'Error' });
   });
 

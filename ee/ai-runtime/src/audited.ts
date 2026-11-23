@@ -70,7 +70,7 @@ export interface CallOutcome {
   readonly modelRef: string;
   readonly usage: TokenUsage;
   /** On a failed call: the class and the code of the error the provider's client threw, as short codes. */
-  readonly failure?: { readonly errorClass: string; readonly errorCode?: string };
+  readonly failure?: { readonly errorClass: string; readonly errorCode?: string; readonly errorType?: string };
 }
 
 export function createCallRecorder(options: Pick<AuditedModelOptions, 'sink'>): CallRecorder {

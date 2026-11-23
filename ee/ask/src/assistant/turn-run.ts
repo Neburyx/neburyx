@@ -24,6 +24,7 @@ interface CallFailure {
   readonly code: string;
   readonly errorClass: string;
   readonly errorCode?: string;
+  readonly errorType?: string;
 }
 
 /** The record of one model call: it is written when the call starts and once when it ends. */
@@ -124,7 +125,7 @@ export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, star
               number,
               status,
               ...(failureKind === undefined ? {} : { failureKind }),
-              ...(failure === undefined || status !== 'failed' ? {} : { errorClass: failure.errorClass, ...(failure.errorCode === undefined ? {} : { errorCode: failure.errorCode }) }),
+              ...(failure === undefined || status !== 'failed' ? {} : { errorClass: failure.errorClass, ...(failure.errorCode === undefined ? {} : { errorCode: failure.errorCode }), ...(failure.errorType === undefined ? {} : { errorType: failure.errorType }) }),
               ...(replyText === undefined ? {} : { replyText }),
               ...(usage?.kind === 'known' ? { tokensIn: usage.inputTokens, tokensOut: usage.outputTokens } : {}),
               durationMs: durationOf(startedAt, deps.now()),

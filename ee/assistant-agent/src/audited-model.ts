@@ -9,7 +9,7 @@ import { AuditUnavailableError, type AuditedCallContext, type CallRecorder, type
 /** What a caller keeps of one call besides its audit event: the record of the turn's calls, with the fixed instructions, the messages sent and what came back. */
 export interface CallTrace {
   received(answer: { readonly text: string; readonly usage: TokenUsage; readonly model: string; readonly prompt: PromptRecord }): void;
-  end(outcome: { readonly error?: unknown; readonly aborted: boolean; readonly failure?: { readonly code: string; readonly errorClass: string; readonly errorCode?: string } }): void;
+  end(outcome: { readonly error?: unknown; readonly aborted: boolean; readonly failure?: { readonly code: string; readonly errorClass: string; readonly errorType?: string; readonly errorCode?: string } }): void;
 }
 
 export interface AuditedModelHook {
@@ -70,13 +70,16 @@ export function failureCodeOf(error: unknown, aborted: boolean): FailureCode {
 const SHORT_CODE = /^[A-Za-z0-9._:/-]{1,80}$/;
 const shortCodeOf = (value: unknown): string | undefined => (typeof value === 'string' || typeof value === 'number') && SHORT_CODE.test(String(value)) ? String(value) : undefined;
 
-/** The class of an error the provider's client threw and its HTTP status or code (its own, or its cause's, such as a reset connection), as short codes; never the message, which can hold a value. */
-export function failureDetailOf(error: unknown): { readonly errorClass: string; readonly errorCode?: string } {
+/** The class of an error the provider's client threw, its HTTP status or code (its own, or its cause's, such as a reset connection) and the short type the provider names (such as `invalid_request_error`), as short codes; never the message, which can hold a value. */
+export function failureDetailOf(error: unknown): { readonly errorClass: string; readonly errorCode?: string; readonly errorType?: string } {
   const held = isRecord(error) ? error : {};
   const cause = isRecord(held['cause']) ? held['cause'] : {};
   const errorClass = shortCodeOf(error instanceof Error ? error.constructor.name : undefined) ?? shortCodeOf(held['name']) ?? 'Error';
   const errorCode = shortCodeOf(held['status']) ?? shortCodeOf(held['code']) ?? shortCodeOf(cause['code']);
-  return { errorClass, ...(errorCode === undefined ? {} : { errorCode }) };
+  const body = isRecord(held['error']) ? held['error'] : {};
+  const inner = isRecord(body['error']) ? body['error'] : {};
+  const errorType = shortCodeOf(inner['type']);
+  return { errorClass, ...(errorCode === undefined ? {} : { errorCode }), ...(errorType === undefined ? {} : { errorType }) };
 }
 
 export class AuditedModelFailure extends Error {
@@ -132,6 +135,14 @@ export function withoutEarlierThinking(messages: readonly BaseMessage[]): BaseMe
     if (index === last || message.type !== 'ai' || !Array.isArray(message.content) || !message.content.some(isThinking)) return message;
     return withContent(message, message.content.filter((block) => !isThinking(block)));
   });
+}
+
+/**
+ * The messages with every thinking block taken out. A thinking block is bound to the list of tools of the call it was made in, and the provider refuses (400) a history whose block comes from another list: a call whose list of tools differs from the one before (the last
+ * call of a turn offers the final tool only) must carry none.
+ */
+export function withoutThinking(messages: readonly BaseMessage[]): BaseMessage[] {
+  return messages.map((message) => (message.type !== 'ai' || !Array.isArray(message.content) || !message.content.some(isThinking) ? message : withContent(message, message.content.filter((block) => !isThinking(block)))));
 }
 
 type Inner = Runnable<BaseLanguageModelInput, AIMessageChunk>;

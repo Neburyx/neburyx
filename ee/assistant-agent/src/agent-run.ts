@@ -3,6 +3,7 @@ import { AIMessage, ToolMessage, createMiddleware, tool } from 'langchain';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { StructuredToolInterface } from '@langchain/core/tools';
 import type { ZodObject, ZodRawShape } from 'zod';
+import { withoutThinking } from './audited-model.js';
 
 /** The names deepagents adds on its own: the file tools, the shell, the sub-agent tool, the async-task tools and the planning tool. None is ever offered or run. */
 export const DEFAULT_TOOL_NAMES = ['ls', 'read_file', 'write_file', 'edit_file', 'delete', 'glob', 'grep', 'execute', 'task', 'write_todos', 'start_async_task', 'check_async_task', 'update_async_task', 'cancel_async_task', 'list_async_tasks'] as const;
@@ -120,6 +121,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
   );
   let modelCalls = 0;
   let refused = false;
+  let previousTools: string | undefined;
   const reserved = (): boolean => options.control.answerOnly || modelCalls + options.control.extra >= options.maxCalls;
   const limits = createMiddleware({
     name: 'TurnLimits',
@@ -136,8 +138,12 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
       }
       modelCalls += 1;
       options.control.calls = modelCalls;
-      offered.push(tools.map(nameOf).sort());
-      return handler({ ...request, tools });
+      const offeredNow = tools.map(nameOf).sort().join(',');
+      offered.push(offeredNow === '' ? [] : offeredNow.split(','));
+      // a thinking block is bound to the list of tools it was made with, so a call whose list differs from the one before carries none
+      const changed = previousTools !== undefined && previousTools !== offeredNow;
+      previousTools = offeredNow;
+      return handler({ ...request, tools, ...(changed ? { messages: withoutThinking(request.messages) } : {}) });
     },
     wrapToolCall: async (request, handler) => {
       const { name, id } = request.toolCall;
