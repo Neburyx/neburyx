@@ -1,5 +1,5 @@
 import { RESERVED_SOURCE_IDS } from './reserved-source-ids.js';
-import { addressableTextOfAtMost, aiSettingsSchema, BUILT_IN_DEFINITION_LIMITS, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_STABLE_ID_LENGTH, MAX_STYLE_LABEL, PII_CLASSES, presetTemplateSchema, STYLE_OPERATORS, type PiiClass } from '@neburyx/contracts';
+import { addressableTextOfAtMost, aiSettingsSchema, BUILT_IN_DEFINITION_LIMITS, FILTER_KINDS, iconKeySchema, MAX_CASE_REF_LENGTH, MAX_PROPERTY_LABEL, MAX_PROPERTY_UNIT, MAX_STABLE_ID_LENGTH, MAX_STYLE_LABEL, PII_CLASSES, presetTemplateSchema, STYLE_OPERATORS, type PiiClass } from '@neburyx/contracts';
 import { z } from 'zod';
 import { isWellFormed } from '../reference/well-formed.js';
 import { budgetsSchema } from './budgets.js';
@@ -16,8 +16,10 @@ const propertyList = z.array(property);
 /** A plain-text meaning of a type: one to 300 characters, well-formed, no control characters. */
 const description = z.string().min(1).max(300).refine((text) => isWellFormed(text) && !/[\u0000-\u001f\u007f-\u009f]/.test(text), { message: 'must be plain text of 1 to 300 characters with no control characters' });
 
+const isPlainText = (text: string): boolean => isWellFormed(text) && !/[\u0000-\u001f\u007f-\u009f]/.test(text);
+
 /** How a screen names a property and the unit it is measured in: both are optional, at least one is given (checked when the source is built). */
-const propertyDisplaySchema = z.record(property, z.strictObject({ label: z.string().trim().min(1).max(80).optional(), unit: z.string().trim().min(1).max(20).optional() }));
+const propertyDisplaySchema = z.record(property, z.strictObject({ label: z.string().trim().min(1).max(MAX_PROPERTY_LABEL).refine(isPlainText, { message: 'must be plain text' }).optional(), unit: z.string().trim().min(1).max(MAX_PROPERTY_UNIT).refine(isPlainText, { message: 'must be plain text' }).optional() }));
 
 /** The kind a mapping declares for filterable properties, by property name; a hint for screens, never read by a statement. */
 const kindsSchema = z.record(property, z.enum(FILTER_KINDS));

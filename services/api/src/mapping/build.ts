@@ -3,7 +3,7 @@ import { PRESET_TEMPLATES, type FilterKind, type PresetTemplate } from '@neburyx
 import { resolveBudgets } from './budgets.js';
 import { hashSource } from './hash.js';
 import { checkLink } from './links.js';
-import { entityProjection } from './projection.js';
+import { entityProjection, relationshipProjection } from './projection.js';
 import { buildStyleRules } from './style-rules.js';
 import {
   MAX_EVIDENCE_PROPERTIES,
@@ -40,13 +40,13 @@ function kindsOf(raw: { readonly kinds?: Readonly<Record<string, FilterKind>> },
 function propertyDisplayOf(raw: { readonly property_display?: Readonly<Record<string, { readonly label?: string | undefined; readonly unit?: string | undefined }>> }, allowed: readonly string[], path: readonly (string | number)[], report: Report): { readonly propertyDisplay?: Readonly<Record<string, PropertyDisplayModel>> } {
   const entries = Object.entries(raw.property_display ?? {});
   if (entries.length === 0) return {};
-  const built: Record<string, PropertyDisplayModel> = {};
+  const built = new Map<string, PropertyDisplayModel>();
   for (const [property, shown] of entries) {
     if (!allowed.includes(property)) report([...path, 'property_display', property], `names ${property}, which is not a property of this type`);
     else if (shown.label === undefined && shown.unit === undefined) report([...path, 'property_display', property], 'gives neither a label nor a unit');
-    else built[property] = { ...(shown.label === undefined ? {} : { label: shown.label }), ...(shown.unit === undefined ? {} : { unit: shown.unit }) };
+    else built.set(property, { ...(shown.label === undefined ? {} : { label: shown.label }), ...(shown.unit === undefined ? {} : { unit: shown.unit }) });
   }
-  return Object.keys(built).length === 0 ? {} : { propertyDisplay: built };
+  return built.size === 0 ? {} : { propertyDisplay: Object.fromEntries(built) };
 }
 
 type Report = (segments: readonly (string | number)[], reason: string) => void;
@@ -117,6 +117,12 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
   const titleProperties = 'properties' in parsedTitle ? parsedTitle.properties : [];
 
   const defaultKeys = defaultKeyProperties(raw.stable_id, search, filterable, pii);
+  const display: EntityModel['display'] = {
+    ...(raw.display?.name === undefined ? {} : { name: raw.display.name }),
+    icon: raw.display?.icon ?? 'generic',
+    keyProperties: raw.display?.key_properties ?? defaultKeys,
+    ...(raw.display?.state_property === undefined ? {} : { stateProperty: raw.display.state_property }),
+  };
   return {
     type: raw.type,
     label: raw.label,
@@ -131,16 +137,11 @@ function buildEntity(raw: RawEntity, path: readonly (string | number)[], report:
     ...(Object.keys(piiClasses).length === 0 ? {} : { piiClasses }),
     filterable,
     ...kindsOf(raw, filterable, path, report),
-    ...propertyDisplayOf(raw, [...new Set([raw.stable_id, ...titleProperties, ...search, ...reference, ...pii, ...filterable, ...(raw.display?.key_properties ?? defaultKeys)])], path, report),
+    ...propertyDisplayOf(raw, entityProjection({ stableId: raw.stable_id, titleProperties, search, reference, pii, filterable, display }), path, report),
     ...((raw.sortable ?? []).length === 0 ? {} : { sortable: [...(raw.sortable ?? [])] }),
     ...((raw.degree ?? []).length === 0 ? {} : { degree: (raw.degree ?? []).map((entry) => ({ type: entry.type, direction: entry.direction, property: entry.property, ...(entry.observed_at === undefined ? {} : { observedAt: entry.observed_at }) })) }),
     ...linkOf(raw, path, report),
-    display: {
-      ...(raw.display?.name === undefined ? {} : { name: raw.display.name }),
-      icon: raw.display?.icon ?? 'generic',
-      keyProperties: raw.display?.key_properties ?? defaultKeys,
-      ...(raw.display?.state_property === undefined ? {} : { stateProperty: raw.display.state_property }),
-    },
+    display,
   };
 }
 
@@ -195,7 +196,7 @@ function buildRelationship(raw: RawRelationship, path: readonly (string | number
     evidence,
     filterable: raw.filterable ?? [],
     ...kindsOf(raw, [...(raw.filterable ?? []), ...(raw.observed_at === undefined ? [] : [raw.observed_at])], path, report),
-    ...propertyDisplayOf(raw, [...new Set([...(raw.stable_id === undefined ? [] : [raw.stable_id]), ...(raw.observed_at === undefined ? [] : [raw.observed_at]), ...evidence, ...(raw.filterable ?? [])])], path, report),
+    ...propertyDisplayOf(raw, relationshipProjection({ ...(raw.stable_id === undefined ? {} : { stableId: raw.stable_id }), ...(raw.observed_at === undefined ? {} : { observedAt: raw.observed_at }), evidence, filterable: raw.filterable ?? [] }), path, report),
     ...((raw.sortable ?? []).length === 0 ? {} : { sortable: [...(raw.sortable ?? [])] }),
     ...(evidenceLink === undefined ? {} : { evidenceLink }),
   };

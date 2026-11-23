@@ -26,7 +26,7 @@ export type { IconKey, PiiClass, PresetTemplate, StyleEffectKind, StyleOperator,
 export { addressable, addressableTextOfAtMost } from './addressable-text.js';
 export { SOURCE_STATES, demoCaseSchema, lastTestSchema, mappingSummarySchema, sourceStateSchema, sourceSummaryFieldsSchema, sourceSummarySchema, sourcesResponseSchema } from './sources.js';
 export type { DemoCase, LastTest, SourceState, SourceSummary, SourcesResponse } from './sources.js';
-export { BIND_KEYS, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema, styleEffectSchema, styleRuleProfileSchema } from './profile.js';
+export { BIND_KEYS, MAX_PROPERTY_LABEL, MAX_PROPERTY_UNIT, derivedRuleProfileSchema, entityTypeProfileSchema, presetProfileSchema, relationshipTypeProfileSchema, sourceProfileSchema, styleEffectSchema, styleRuleProfileSchema } from './profile.js';
 export type { SourceProfile, StyleEffect, StyleRuleProfile } from './profile.js';
 export {
   DEGREE_BASIS_RESULT,

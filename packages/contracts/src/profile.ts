@@ -7,8 +7,12 @@ const nameList = z.array(name);
 
 /** A property's kind as a client may show it: one of the filter kinds the mapping declares, or `unknown` (never guessed from values or names). */
 const FILTER_KINDS_OR_UNKNOWN = [...FILTER_KINDS, 'unknown'] as const;
+/** The longest label and unit a mapping gives a property. */
+export const MAX_PROPERTY_LABEL = 80;
+export const MAX_PROPERTY_UNIT = 20;
+
 /** How a screen names a property and the unit it is measured in. */
-const propertyDisplayProfileSchema = z.record(name, z.strictObject({ label: z.string().min(1).optional(), unit: z.string().min(1).optional() }));
+const propertyDisplayProfileSchema = z.record(name, z.strictObject({ label: z.string().min(1).max(MAX_PROPERTY_LABEL).optional(), unit: z.string().min(1).max(MAX_PROPERTY_UNIT).optional() }));
 const filterKindsSchema = z.record(name, z.enum(FILTER_KINDS_OR_UNKNOWN));
 
 export const BIND_KEYS = ['anchor', 'attribute', 'target', 'via'] as const;

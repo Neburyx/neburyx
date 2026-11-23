@@ -30,6 +30,14 @@ describe('the label and unit a mapping gives a property', () => {
     expect(buildSourceProfile(firstSource(load(sourceOf()))).entityTypes[0]?.propertyDisplay).toBeUndefined();
   });
 
+  it('accepts a property the type names only as its state property, and never lets the name __proto__ write to a prototype', () => {
+    const shown = firstSource(load(sourceOf({ display: { state_property: 'phase' }, property_display: { phase: { label: 'stage' } } })));
+    expect(shown.entities[0]?.propertyDisplay).toEqual({ phase: { label: 'stage' } });
+    const hostile = firstSource(load(sourceOf({ property_display: JSON.parse('{"__proto__": {"label": "x"}, "score": {"unit": "kg"}}') })));
+    expect(hostile.entities[0]?.propertyDisplay).toEqual({ score: { unit: 'kg' } });
+    expect(({} as { label?: string }).label).toBeUndefined();
+  });
+
   it('refuses a property the type does not name, and an entry that gives neither a label nor a unit', () => {
     expectRefused(sourceOf({ property_display: { other: { label: 'x' } } }), 'sources[0].entities[0].property_display.other', 'not a property of this type');
     expectRefused(sourceOf({}, { property_display: { other: { label: 'x' } } }), 'sources[0].relationships[0].property_display.other', 'not a property of this type');
@@ -37,7 +45,7 @@ describe('the label and unit a mapping gives a property', () => {
   });
 
   it('refuses a label over 80 characters, a unit over 20, an empty text, a key it does not know and a document that is not a map', () => {
-    for (const hostile of [{ score: { label: 'x'.repeat(81) } }, { score: { unit: 'x'.repeat(21) } }, { score: { label: '' } }, { score: { label: '  ' } }, { score: { colour: 'red' } }, ['score'], 'score', 7, { '': { label: 'x' } }]) {
+    for (const hostile of [{ score: { label: 'x'.repeat(81) } }, { score: { unit: 'x'.repeat(21) } }, { score: { label: '' } }, { score: { label: '  ' } }, { score: { label: 'bad\u0007text' } }, { score: { unit: 'a\ud800' } }, { score: { colour: 'red' } }, ['score'], 'score', 7, { '': { label: 'x' } }]) {
       expect(() => parseMapping(fileOf(sourceOf({ property_display: hostile })), 'neburyx.yaml')).toThrow();
     }
   });
