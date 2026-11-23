@@ -1046,16 +1046,16 @@ describe('counts and what the model is told of a removal, through the answer too
 
     it('keeps the largest of the cited elements with its figure, in a sentence that says only that', async () => {
       const text = `${title(2)} has the largest amountValue, 1664.72.`;
-      expect(await turn(answering([{ text, cites: all }]), ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [{ text }] });
+      expect(await turn(answering([{ text, cites: all }]), ranked(VALUES))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text }] }] });
       const smallest = `${title(3)} has the smallest amountValue, 99.`;
-      expect(await turn(answering([{ text: smallest, cites: all }]), ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [{ text: smallest }] });
+      expect(await turn(answering([{ text: smallest, cites: all }]), ranked(VALUES))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text: smallest }] }] });
     });
 
     it('removes the wrong element, the wrong figure and a ranking that leaves one element out, and tells the model that it cannot be verified', async () => {
       for (const [text, cites] of [[`${title(1)} has the largest amountValue, 1664.72.`, all], [`${title(2)} has the largest amountValue, 1200.5.`, all], [`${title(2)} has the largest amountValue, 1664.72.`, keys(2)]] as const) {
         const right = { text: `${title(2)} is listed.`, cites: ['r2'] };
         const model = answering([{ text, cites: [...cites] }], [right]);
-        expect(await turn(model, ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [right] });
+        expect(await turn(model, ranked(VALUES))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [right] }] });
         expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text, reason: 'comparison' }]));
       }
     });
@@ -1069,7 +1069,7 @@ describe('counts and what the model is told of a removal, through the answer too
 
     it('keeps an honest statement that the elements do not show who sent the largest figure', async () => {
       const text = 'The elements do not show who sent the largest figure.';
-      expect(await turn(answering([{ text, cites: ['s1'] }]), ranked(VALUES))).toMatchObject({ status: 'answered', sentences: [{ text }] });
+      expect(await turn(answering([{ text, cites: ['s1'] }]), ranked(VALUES))).toMatchObject({ status: 'answered', blocks: [{ kind: 'sentences', sentences: [{ text }] }] });
     });
   });
 
