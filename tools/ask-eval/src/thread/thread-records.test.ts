@@ -106,6 +106,11 @@ describe('the records of a turn', () => {
     expect(noRecords.problems.join(' ')).toContain('the audit events name 1 summary calls and the summary records hold 0');
   });
 
+  it('reads the short type the provider named for a failed call, beside the class and the code', async () => {
+    const failed = await readTurnRecords(dbOf(world({ calls: { 'run-1': [call(1), call(2, { status: 'failed', failure_kind: 'provider-error', error_class: 'BadRequestError', error_code: '400', error_type: 'invalid_request_error' }), call(3)] } })), 'tr-1');
+    expect(failed.calls[1]).toMatchObject({ errorClass: 'BadRequestError', errorCode: '400', errorType: 'invalid_request_error' });
+  });
+
   it('names what is missing from the record of a turn: a run not finished, a count the run states that the record does not hold, a gap in the call numbers, no closing event and events that do not cover the calls', async () => {
     const unfinished = await readTurnRecords(dbOf(world({ runs: { 'tr-1': [{ id: 'run-1', outcome: null, finished_at: null, calls: 3, settings: {} }] } })), 'tr-1');
     expect(unfinished.problems).toContain('the run is not finished in the record');
@@ -148,7 +153,7 @@ describe('the records of a turn', () => {
     const out: string[] = [];
     const code = await runCli(['thread', 'records', '--file', join(dir, 'run.json'), '--database-env-file', join(dir, 'unused.env'), '--allowed-tools', 'answer,view', '--out', join(dir, 'records.json')], { out: (line) => out.push(line), err: () => undefined, env: {} }, noHooks, { database: () => Promise.resolve({ db: dbOf(world()), close: () => Promise.resolve() }) });
     expect(code).toBe(0);
-    expect(out).toEqual(['turns read: 1 of 1']);
+    expect(out).toEqual(['turns read: 1 of 1', 'settings the product loaded: model model-a, calls 7, input tokens undefined']);
     const written = parseEnriched(JSON.parse(readFileSync(join(dir, 'records.json'), 'utf8')), 'the records');
     expect(written.records[0]?.calls).toHaveLength(3);
     expect(written.evidence[0]).toMatchObject({ citations: { missing: [] }, gate: { gated: { verdict: 'passed' }, offered: { verdict: 'passed' } } });

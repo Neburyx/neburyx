@@ -98,6 +98,7 @@ const callRecord = z.strictObject({
   failureKind: z.string().nullable(),
   errorClass: z.string().nullable(),
   errorCode: z.string().nullable(),
+  errorType: z.string().nullable().optional().transform((value) => value ?? null),
   tokensIn: whole.nullable(),
   tokensOut: whole.nullable(),
   instructionsSha256: z.string(),

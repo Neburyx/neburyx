@@ -250,6 +250,8 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
       if (entry.citations.malformed > 0) incomplete.push(`turn ${index + 1}: ${entry.citations.malformed} malformed citations`);
     });
     io.out(`turns read: ${enriched.records.filter((entry) => entry !== undefined).length} of ${file.turns.length}`);
+    const loaded = enriched.records.find((entry) => entry?.run !== undefined)?.run?.settings;
+    if (loaded !== undefined) io.out(`settings the product loaded: model ${String(loaded['model'])}, calls ${String(loaded['maxCalls'])}, input tokens ${String(loaded['maxInputTokens'])}`);
     if (enriched.inconsistent) io.out('the settings of the runs of this repeat differ from one turn to another');
     for (const line of incomplete) io.out(line);
     return incomplete.length > 0 || enriched.inconsistent ? 1 : 0;

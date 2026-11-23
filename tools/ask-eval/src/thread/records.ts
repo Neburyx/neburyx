@@ -11,6 +11,7 @@ interface CallRecord {
   readonly failureKind: string | null;
   readonly errorClass: string | null;
   readonly errorCode: string | null;
+  readonly errorType: string | null;
   readonly tokensIn: number | null;
   readonly tokensOut: number | null;
   readonly instructionsSha256: string;
@@ -61,7 +62,7 @@ const tokens = (value: unknown): number | 'unknown' | null => (value === 'unknow
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const RUN = 'SELECT id, outcome, finished_at, calls, settings FROM assistant_runs WHERE trace_id = $1 ORDER BY started_at';
-const CALLS = 'SELECT run_id, call_number, started_at, duration_ms, status, failure_kind, error_class, error_code, tokens_in, tokens_out, instructions_sha256, instructions_text, values_text, reply_text, tools_offered FROM assistant_run_calls WHERE run_id = ANY($1::uuid[]) ORDER BY started_at, call_number';
+const CALLS = 'SELECT run_id, call_number, started_at, duration_ms, status, failure_kind, error_class, error_code, error_type, tokens_in, tokens_out, instructions_sha256, instructions_text, values_text, reply_text, tools_offered FROM assistant_run_calls WHERE run_id = ANY($1::uuid[]) ORDER BY started_at, call_number';
 const SUMMARY_RUNS = 'SELECT id FROM summary_runs WHERE trace_id = $1 ORDER BY started_at';
 const SUMMARY_CALLS = 'SELECT run_id, call_number, status, tokens_in, tokens_out FROM summary_run_calls WHERE run_id = ANY($1::uuid[]) ORDER BY run_id, call_number';
 const EVENTS = 'SELECT id, action, result, source_id, detail FROM audit_events WHERE trace_id = $1 ORDER BY at';
@@ -120,6 +121,7 @@ async function readOnce(db: Db, traceId: string): Promise<TurnRecords> {
     failureKind: text(row['failure_kind']),
     errorClass: text(row['error_class']),
     errorCode: text(row['error_code']),
+    errorType: text(row['error_type']),
     tokensIn: count(row['tokens_in']),
     tokensOut: count(row['tokens_out']),
     instructionsSha256: text(row['instructions_sha256']) ?? '',

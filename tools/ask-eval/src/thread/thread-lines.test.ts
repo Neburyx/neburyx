@@ -3,7 +3,7 @@ import { gateEvidenceOf } from './gate-evidence.js';
 import { citedLinesOf, linesOfAnswer } from './lines.js';
 import type { TurnRecords } from './records.js';
 
-const call = (number: number, over: Record<string, unknown> = {}) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, tokensIn: 1, tokensOut: 1, instructionsSha256: 'sha-x', instructionsText: '', valuesText: '', replyText: null as string | null, toolsOffered: null as readonly string[] | null, ...over });
+const call = (number: number, over: Record<string, unknown> = {}) => ({ number, startedAt: '', durationMs: 1, status: 'answered', failureKind: null, errorClass: null, errorCode: null, errorType: null, tokensIn: 1, tokensOut: 1, instructionsSha256: 'sha-x', instructionsText: '', valuesText: '', replyText: null as string | null, toolsOffered: null as readonly string[] | null, ...over });
 const records = (over: Partial<TurnRecords> = {}): TurnRecords => ({ traceId: 'tr-1', run: { id: 'run-1', outcome: 'ok', finished: true, calls: 3, settings: {} }, calls: [], events: [], summaryCalls: 0, summaryUsage: [], reconciled: undefined, problems: [], ...over });
 
 const FIRST = 'human: Question:\nhow many?\nai: [{"type":"tool_use","id":"t1","name":"view","input":{}}] [{"name":"view","args":{}}]\ntool: Keys are renumbered after every read: cite only keys of the latest result.\nn1 | "account" | title: "Account W-1" | id: "W-1"\n';
