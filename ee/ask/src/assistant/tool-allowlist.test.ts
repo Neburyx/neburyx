@@ -3,7 +3,7 @@ import type { AgentRun } from '@neburyx/ee-assistant-agent';
 import { AIMessage, KNOWN_REMOVED_FRAMEWORK_TOOLS, fakeModel, toolListFailures } from '@neburyx/ee-assistant-agent/testing';
 import { afterAll, describe, expect, it } from 'vitest';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { VIEW_BODY, answerOf, ok, offerOf, rig } from '../testing/assistant-rig.js';
+import { VIEW_BODY, answerOf, ok, offerOf, rig, V } from '../testing/assistant-rig.js';
 import { ALLOWED_TOOL_NAMES } from '../testing/tool-allowlist.js';
 
 afterAll(removeAskFolders);
@@ -38,7 +38,7 @@ describe('the tools the Assistant offers a model', () => {
 
   it('are `answer` alone on the last allowed call, while the framework still assembles the full list', async () => {
     // the router takes one call; two agent calls are allowed: a read, then the last call
-    const { run, sent } = await turnOf((model) => model.respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }]).respond(new AIMessage('Done.')), 3);
+    const { run, sent } = await turnOf((model) => model.respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }]).respond(new AIMessage('Done.')), 3);
     expect(run.assembled.at(-1)).toEqual(run.assembled[0]);
     expect(toolListFailures({ allowed: ALLOWED_TOOL_NAMES, knownRemoved: KNOWN_REMOVED_FRAMEWORK_TOOLS, assembled: run.assembled, sent, requireAllOnFirst: true, lastCallOnly: 'answer' })).toEqual([]);
     expect(sent.at(-1)).toEqual(['answer']);
