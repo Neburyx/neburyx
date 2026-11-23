@@ -1,7 +1,7 @@
 import { renderForExport } from '@neburyx/ee-ask';
 import type { ExportSummary } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { loadCases } from './cases.js';
+import { keepersOf, loadCases } from './cases.js';
 import { defined } from './checks.js';
 import { INVESTIGATION } from './testing/rig.js';
 import { drafted, hide, withMaskedValues } from './testing/export.js';
@@ -22,7 +22,9 @@ describe('the summary section of an export, for every labelled view', () => {
       const { render, evidence, sentences, outcome } = await drafted(labelled);
       const answer = render(evidence.view);
       const section = sectionOf(answer);
-      expect(section.sentences.map((sentence) => sentence.text), labelled.id).toEqual(sentences.map((sentence) => sentence.text));
+      // a draft written unmasked keeps no sentence for a reading that masks a property: the safeguard of an export, and a labelled view carries one for the ranking of a masked value
+      const masks = labelled.entities.some((entity) => Object.values(entity.props ?? {}).some((value) => typeof value !== 'string' && value.masked === true));
+      expect(section.sentences.map((sentence) => sentence.text), labelled.id).toEqual(masks ? [] : sentences.map((sentence) => sentence.text));
       expect(section.label).toBe('AI-drafted');
       expect(section.model).toBe(outcome.model);
       expect(new Date(section.generatedAt).toISOString(), labelled.id).toBe(section.generatedAt);
@@ -32,7 +34,7 @@ describe('the summary section of an export, for every labelled view', () => {
         expect(sentence.cites.length, labelled.id).toBeGreaterThan(0);
         for (const cite of sentence.cites) expect(refs.has(JSON.stringify(cite.ref)), labelled.id).toBe(true);
       }
-      expect(answer).toMatchObject({ kept: sentences.length, dropped: 0 });
+      expect(answer).toMatchObject(masks ? { kept: 0, dropped: sentences.length } : { kept: sentences.length, dropped: 0 });
     }
   });
 
@@ -42,7 +44,7 @@ describe('the summary section of an export, for every labelled view', () => {
       const { render, evidence, sentences } = await drafted(labelled);
       const keyOf = (key: string): string => defined(evidence.keys.get(key), `${labelled.id}: the key of ${key}`);
       const counts = new Map<string, number>();
-      for (const sentence of labelled.sentences.filter((each) => each.label === 'keep')) for (const key of sentence.cites) counts.set(key, (counts.get(key) ?? 0) + 1);
+      for (const sentence of keepersOf(labelled)) for (const key of sentence.cites) counts.set(key, (counts.get(key) ?? 0) + 1);
       const entity = defined(
         labelled.entities.map((each) => ({ each, count: counts.get(each.key) ?? 0 })).sort((a, b) => b.count - a.count)[0]?.each,
         'an entity',

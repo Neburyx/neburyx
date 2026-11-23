@@ -1,6 +1,6 @@
 import { sealToken } from '@neburyx/ee-ask';
 import { describe, expect, it } from 'vitest';
-import { loadCases, sentenceInKeys } from './cases.js';
+import { keepersOf, loadCases, sentenceInKeys } from './cases.js';
 import { defined } from './checks.js';
 import { viewOf } from './rules.js';
 import { INVESTIGATION, KEYS, replyOf, startRig } from './testing/rig.js';
@@ -84,7 +84,7 @@ describe('why a sentence is not stored', () => {
     const named: string[] = [];
     for (const labelled of set.cases) {
       const evidence = await viewOf(labelled);
-      for (const sentence of labelled.sentences.filter((each) => each.label === 'keep')) {
+      for (const sentence of keepersOf(labelled)) {
         const asked = sentenceInKeys(sentence, evidence.keys);
         const rig = startRig({ replies: [replyOf(asked)], settings: { maxCalls: 1 } });
         const outcome = await rig.summarize(evidence.view);

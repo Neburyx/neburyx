@@ -1,6 +1,6 @@
 import type { SummaryReading } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { loadCases, sentenceInKeys, type LabelledCase } from './cases.js';
+import { keepersOf, loadCases, sentenceInKeys, type LabelledCase } from './cases.js';
 import { defined } from './checks.js';
 import { viewOf } from './rules.js';
 import { INVESTIGATION, replyOf, startRig } from './testing/rig.js';
@@ -12,7 +12,7 @@ const one = { maxCalls: 1 };
 /** A draft of the kept sentences of a labelled view, as the model would write them. */
 async function draftOf(labelled: LabelledCase) {
   const evidence = await viewOf(labelled);
-  const keep = labelled.sentences.filter((sentence) => sentence.label === 'keep').map((sentence) => sentenceInKeys(sentence, evidence.keys));
+  const keep = keepersOf(labelled).map((sentence) => sentenceInKeys(sentence, evidence.keys));
   const rig = startRig({ replies: [replyOf(...keep)], settings: one });
   const outcome = await rig.summarize(evidence.view);
   if (outcome.status !== 'ok') throw new Error(`${labelled.id}: the draft was not made (${outcome.status})`);

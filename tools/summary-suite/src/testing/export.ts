@@ -1,6 +1,6 @@
 import { renderForExport } from '@neburyx/ee-ask';
 import type { SummaryReading } from '@neburyx/contracts';
-import { sentenceInKeys, type LabelledCase } from '../cases.js';
+import { keepersOf, sentenceInKeys, type LabelledCase } from '../cases.js';
 import { viewOf } from '../rules.js';
 import { INVESTIGATION, KEYS, replyOf, startRig } from './rig.js';
 
@@ -10,7 +10,7 @@ const POLICY = 'policy-1';
 /** The draft of the kept sentences of a view, and a way to render its token for an export of any reading. */
 export async function drafted(labelled: LabelledCase, masked?: boolean) {
   const evidence = await viewOf(labelled);
-  const keep = labelled.sentences.filter((sentence) => sentence.label === 'keep').map((sentence) => sentenceInKeys(sentence, evidence.keys));
+  const keep = keepersOf(labelled).map((sentence) => sentenceInKeys(sentence, evidence.keys));
   const rig = startRig({ replies: [replyOf(...keep)], settings: { maxCalls: 1 } });
   const outcome = await rig.summarize(evidence.view, undefined, masked);
   if (outcome.status !== 'ok') throw new Error(`${labelled.id}: the draft was not made (${outcome.status})`);

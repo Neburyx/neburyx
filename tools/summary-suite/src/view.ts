@@ -2,7 +2,7 @@ import type { Count, GraphEdge, GraphNode, SummaryReading } from '@neburyx/contr
 
 const ref = (entityType: string, stableId: string) => ({ sourceId: 'demo', entityType, stableId });
 
-export const prop = (key: string, value: unknown, masked = false): GraphNode['properties'][number] => ({ key, value, dataClass: 'text', masked });
+export const prop = (key: string, value: unknown, masked = false, dataClass: GraphNode['properties'][number]['dataClass'] = 'text'): GraphNode['properties'][number] => ({ key, value, dataClass, masked });
 
 export const node = (entityType: string, stableId: string, title: string, properties: GraphNode['properties'] = []): GraphNode => ({
   ref: ref(entityType, stableId),

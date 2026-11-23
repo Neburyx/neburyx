@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { caseOf, keyMapOf, loadCases, parseCases, readingOf, sentenceInKeys, type LabelledCase, type LabelledSentence } from './cases.js';
-import { countRuleBroken, defined, holdsVerdict, keysOfSentText, numbersUnsupported, sentencesOf } from './checks.js';
+import { caseOf, classesOf, keyMapOf, loadCases, parseCases, readingOf, sentenceInKeys, type LabelledCase, type LabelledSentence } from './cases.js';
+import { countRuleBroken, defined, holdsVerdict, keysOfSentText, numbersUnsupported, rankingBroken, sentencesOf } from './checks.js';
 import { checkedReplyOf, replyOf, startRig } from './testing/rig.js';
 import { scoreLabelled, scoreSummary } from './score.js';
 
@@ -32,6 +32,7 @@ function brokenRules(labelled: LabelledCase, sentence: LabelledSentence, sent: s
   if (numbersUnsupported(asked, sent).length > 0 || countRuleBroken(asked, sent)) rules.push('number');
   if (labelled.invented_names.some((name) => asked.text.toLowerCase().includes(name.toLowerCase()))) rules.push('name');
   if (holdsVerdict(asked, sent)) rules.push('verdict');
+  if (rankingBroken(asked, sent, classesOf(labelled))) rules.push('comparison');
   return rules;
 }
 
@@ -55,9 +56,11 @@ describe('the labelled set', () => {
       for (const entity of labelled.entities) if (entity.name !== entity.id) expect(names.has(entity.name), `${labelled.id}: ${entity.name}`).toBe(true);
       for (const name of labelled.invented_names) expect(names.has(name), `${labelled.id}: ${name}`).toBe(true);
     }
-    expect(original).not.toMatch(/@/u);
-    for (const phone of original.match(/\+?\d[\d -]{7,}\d/gu) ?? []) expect(phone, 'a phone-like value').toMatch(/^\+1-555-0\d{5}$|^\d{4}-\d{2}-\d{2}$/u);
-    expect(original).not.toMatch(/\d{9,}/u);
+    // the two integers either side of the largest that a double holds exactly are in the set to test a ranking that rounding would get wrong
+    const synthetic = original.replaceAll('9007199254740992', '0').replaceAll('9007199254740993', '0');
+    expect(synthetic).not.toMatch(/@/u);
+    for (const phone of synthetic.match(/\+?\d[\d -]{7,}\d/gu) ?? []) expect(phone, 'a phone-like value').toMatch(/^\+1-555-0\d{5}$|^\d{4}-\d{2}-\d{2}$/u);
+    expect(synthetic).not.toMatch(/\d{9,}/u);
   });
 
   it('names the case when the file is invalid', () => {

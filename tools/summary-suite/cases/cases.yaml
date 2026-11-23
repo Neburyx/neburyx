@@ -76,8 +76,8 @@ cases:
     not_retrieved: { value: 99998, quality: "lowerBound" }
     entities:
       - { key: "m1", type: "merchant", id: "MR-0", name: "MR-0" }
-      - { key: "a1", type: "account", id: "AC-0100", name: "AC-0100" }
-      - { key: "a2", type: "account", id: "AC-0101", name: "AC-0101" }
+      - { key: "a1", type: "account", id: "AC-0100", name: "AC-0100", props: { paidAmount: { value: 4200, class: "number" }, openedOn: { value: "2026-01-05", class: "date" } } }
+      - { key: "a2", type: "account", id: "AC-0101", name: "AC-0101", props: { paidAmount: { value: 5000, class: "number" }, openedOn: { value: "2025-12-31", class: "date" } } }
     relationships:
       - { key: "r1", type: "PAID_TO", from: "a1", to: "m1", observed_at: "2026-04-01" }
       - { key: "r2", type: "PAID_TO", from: "a2", to: "m1", observed_at: "2026-04-02" }
@@ -95,6 +95,9 @@ cases:
       - { id: "s5", label: "remove", rule: "verdict", text: "MR-0 is evidence of fraud by the holders.", cites: ["m1"] }
       - { id: "s6", label: "remove", rule: "verdict", text: "The accounts AC-0100 and AC-0101 made two payments to the merchant MR-0. It is evidence of fraud by the holders.", cites: ["a1", "a2", "m1", "r1", "r2"] }
       - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "tobin rask is also linked to MR-0.", cites: ["m1"] }
+      - { id: "s8", label: "keep", plain_view: true, text: "The account AC-0101 has the largest paidAmount, 5000.", cites: ["a1", "a2"] }
+      - { id: "s9", label: "remove", rule: "comparison", text: "The account AC-0100 has the largest paidAmount, 4200.", cites: ["a1", "a2"] }
+      - { id: "s10", label: "keep", plain_view: true, text: "The account AC-0101 has the earliest openedOn, 2025-12-31.", cites: ["a1", "a2"] }
   - id: repeated-payments-between-two-accounts
     pack: banking-fraud
     source_case: repeated-payments-to-one-account
@@ -180,9 +183,9 @@ cases:
     title: "One claimant filed three claims"
     entities:
       - { key: "c1", type: "claimant", id: "CT-00300", name: "Jory Kell" }
-      - { key: "k1", type: "claim", id: "CL-001007", name: "CL-001007" }
-      - { key: "k2", type: "claim", id: "CL-001504", name: "CL-001504" }
-      - { key: "k3", type: "claim", id: "CL-001968", name: "CL-001968" }
+      - { key: "k1", type: "claim", id: "CL-001007", name: "CL-001007", props: { claimedAmount: { value: "1200.50", class: "number" } } }
+      - { key: "k2", type: "claim", id: "CL-001504", name: "CL-001504", props: { claimedAmount: { value: "1200.5", class: "number" } } }
+      - { key: "k3", type: "claim", id: "CL-001968", name: "CL-001968", props: { claimedAmount: { value: "900", class: "number" } } }
     relationships:
       - { key: "r1", type: "FILED_BY", from: "k1", to: "c1" }
       - { key: "r2", type: "FILED_BY", from: "k2", to: "c1" }
@@ -201,6 +204,9 @@ cases:
       - { id: "s5", label: "remove", rule: "verdict", text: "Jory Kell is evidence of fraud by the holders.", cites: ["c1"] }
       - { id: "s6", label: "remove", rule: "verdict", text: "Jory Kell filed three claims, CL-001007, CL-001504 and CL-001968. It is evidence of fraud by the holders.", cites: ["c1", "k1", "k2", "k3", "r1", "r2", "r3"] }
       - { id: "s7", label: "remove", rule: "name", known_slip: true, text: "kestrel voss is also linked to Jory Kell.", cites: ["c1"] }
+      - { id: "s8", label: "remove", rule: "comparison", text: "The claim CL-001007 has the largest claimedAmount, 1200.50.", cites: ["k1", "k2", "k3"] }
+      - { id: "s9", label: "keep", plain_view: true, text: "The claim CL-001968 has the smallest claimedAmount, 900.", cites: ["k1", "k2", "k3"] }
+      - { id: "s10", label: "remove", rule: "comparison", text: "The claim CL-001968 has the smallest claimedAmount, 900.", cites: ["k2", "k3"] }
   - id: same-text-different-addresses
     pack: insurance-claims
     source_case: same-text-different-addresses
@@ -266,9 +272,9 @@ cases:
     title: "One account pays out to five accounts (a fan-out shape)"
     entities:
       - { key: "s1", type: "account", id: "AC-6000", name: "AC-6000" }
-      - { key: "b1", type: "account", id: "AC-6001", name: "AC-6001" }
-      - { key: "b2", type: "account", id: "AC-6002", name: "AC-6002" }
-      - { key: "b3", type: "account", id: "AC-6003", name: "AC-6003" }
+      - { key: "b1", type: "account", id: "AC-6001", name: "AC-6001", props: { settledAmount: { value: 10, class: "number" } } }
+      - { key: "b2", type: "account", id: "AC-6002", name: "AC-6002", props: { settledAmount: { value: 20, class: "number" } } }
+      - { key: "b3", type: "account", id: "AC-6003", name: "AC-6003", props: { settledAmount: { value: 30, class: "number" } } }
       - { key: "b4", type: "account", id: "AC-6004", name: "AC-6004" }
       - { key: "b5", type: "account", id: "AC-6005", name: "AC-6005" }
     relationships:
@@ -293,15 +299,16 @@ cases:
       - { id: "s6", label: "remove", rule: "verdict", text: "AC-6000 is evidence of fraud by the holders.", cites: ["s1"] }
       - { id: "s7", label: "remove", rule: "verdict", text: "The account AC-6000 transferred to five accounts, AC-6001 to AC-6005, which has the shape of a fan-out. It is evidence of fraud by the holders.", cites: ["s1", "b1", "b2", "b3", "b4", "b5", "r1", "r2", "r3", "r4", "r5"] }
       - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "pia wren is also linked to AC-6000.", cites: ["s1"] }
+      - { id: "s9", label: "remove", rule: "comparison", text: "The account AC-6003 has the largest settledAmount, 30.", cites: ["s1", "b1", "b2", "b3", "b4", "b5"] }
   - id: aml-cycle
     pack: banking-fraud
     shape: "cycle"
     title: "Four accounts transfer in a cycle"
     entities:
-      - { key: "a1", type: "account", id: "AC-7001", name: "AC-7001" }
-      - { key: "a2", type: "account", id: "AC-7002", name: "AC-7002" }
-      - { key: "a3", type: "account", id: "AC-7003", name: "AC-7003" }
-      - { key: "a4", type: "account", id: "AC-7004", name: "AC-7004" }
+      - { key: "a1", type: "account", id: "AC-7001", name: "AC-7001", props: { sentAmount: { value: "9007199254740993", class: "number" }, heldAmount: { value: 100, class: "number" }, reviewedOn: { value: "2026-01-01", class: "date" } } }
+      - { key: "a2", type: "account", id: "AC-7002", name: "AC-7002", props: { sentAmount: { value: "9007199254740992", class: "number" }, heldAmount: { value: 200, class: "number" }, reviewedOn: { value: "2026-01-02", class: "date" } } }
+      - { key: "a3", type: "account", id: "AC-7003", name: "AC-7003", props: { sentAmount: { value: 1000, class: "number" }, heldAmount: { value: "***", class: "text", masked: true }, reviewedOn: { value: "2026-01-03", class: "date" } } }
+      - { key: "a4", type: "account", id: "AC-7004", name: "AC-7004", props: { sentAmount: { value: 2000, class: "number" }, heldAmount: { value: 500, class: "number" }, reviewedOn: { value: "2026-01-04", class: "date" } } }
     relationships:
       - { key: "r1", type: "TRANSFERRED_TO", from: "a1", to: "a2", observed_at: "2026-08-01" }
       - { key: "r2", type: "TRANSFERRED_TO", from: "a2", to: "a3", observed_at: "2026-08-02" }
@@ -322,6 +329,10 @@ cases:
       - { id: "s6", label: "remove", rule: "verdict", text: "AC-7001 is evidence of fraud by the holders.", cites: ["a1"] }
       - { id: "s7", label: "remove", rule: "verdict", text: "The accounts AC-7001, AC-7002, AC-7003 and AC-7004 transfer in a cycle, ending back at AC-7001. It is evidence of fraud by the holders.", cites: ["a1", "a2", "a3", "a4", "r1", "r2", "r3", "r4"] }
       - { id: "s8", label: "remove", rule: "name", known_slip: true, text: "quill haverd is also linked to AC-7001.", cites: ["a1"] }
+      - { id: "s9", label: "keep", plain_view: true, text: "The account AC-7001 has the largest sentAmount, 9007199254740993.", cites: ["a1", "a2", "a3", "a4"] }
+      - { id: "s10", label: "remove", rule: "comparison", text: "The account AC-7002 has the largest sentAmount, 9007199254740992.", cites: ["a1", "a2", "a3", "a4"] }
+      - { id: "s11", label: "remove", rule: "comparison", text: "The account AC-7004 has the largest heldAmount, 500.", cites: ["a1", "a2", "a3", "a4"] }
+      - { id: "s12", label: "keep", plain_view: true, text: "The account AC-7001 has the earliest reviewedOn, 2026-01-01.", cites: ["a1", "a2", "a3", "a4"] }
   - id: aml-rapid-pass-through
     pack: banking-fraud
     shape: "rapid pass-through"

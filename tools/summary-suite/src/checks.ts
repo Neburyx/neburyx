@@ -278,3 +278,92 @@ export const sha256Of = (text: string): string => createHash('sha256').update(te
 
 /** The SHA-256 of a value written as JSON with its keys in order, worked out here and not by the product. */
 export const hashOfValue = (value: unknown): string => sha256Of(JSON.stringify(sorted(value)));
+
+
+const RANK_UP = new Set(['largest', 'biggest', 'greatest', 'highest', 'maximum', 'latest']);
+const RANK_DOWN = new Set(['smallest', 'lowest', 'minimum', 'earliest', 'fewest', 'least']);
+
+interface HeldElement {
+  readonly type: string;
+  readonly names: readonly string[];
+  readonly values: ReadonlyMap<string, { readonly raw: unknown; readonly masked: boolean } | undefined>;
+}
+
+/** The elements of the sent text with the values of their properties, read from the lines as they are written: `nK | "type" | title: "T" | id: "I" | key: value; key: value (masked)`. */
+function heldElementsOf(sent: string): Map<string, HeldElement> {
+  const held = new Map<string, HeldElement>();
+  for (const line of sent.split('\n')) {
+    const found = /^(n\d+) \| "([^"]*)" \| title: ("(?:[^"\\]|\\.)*") \| id: ("(?:[^"\\]|\\.)*")(?: \| (.*))?$/u.exec(line);
+    if (found === null) continue;
+    const values = new Map<string, { readonly raw: unknown; readonly masked: boolean } | undefined>();
+    for (const part of (found[5] ?? '').matchAll(/([\p{L}_][\p{L}\p{N}_]*): (\(not shown\)|"(?:[^"\\]|\\.)*"|[^;]+?)( \(masked\))?(?:; |$)/gu)) {
+      values.set(part[1] ?? '', part[2] === '(not shown)' ? undefined : { raw: JSON.parse(part[2] ?? 'null') as unknown, masked: part[3] !== undefined });
+    }
+    held.set(found[1] ?? '', { type: found[2] ?? '', names: [JSON.parse(found[3] ?? '""') as string, JSON.parse(found[4] ?? '""') as string], values });
+  }
+  return held;
+}
+
+/** A decimal as a whole number scaled by 10^30, so that any two decimals compare as integers: no rounding. */
+function scaledDecimal(raw: unknown): bigint | undefined {
+  const text = String(raw).trim();
+  const found = /^(-?)(\d+)(?:\.(\d{1,30}))?$/u.exec(text);
+  if (found === null) return undefined;
+  const value = BigInt(`${found[2]}${(found[3] ?? '').padEnd(30, '0')}`);
+  return found[1] === '-' ? -value : value;
+}
+
+/** A time as a whole number of nanoseconds (an instant), or of days (a calendar day): by the class the fixture declares. */
+function timeAsNumber(raw: unknown, dataClass: string): bigint | undefined {
+  const text = String(raw);
+  if (dataClass === 'date') {
+    const day = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(text);
+    return day === null ? undefined : BigInt(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3])));
+  }
+  const zoned = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})$/u.exec(text);
+  if (dataClass !== 'dateTime' || zoned === null) return undefined;
+  const milliseconds = Date.parse(`${zoned[1]}.000${zoned[3]}`);
+  return Number.isNaN(milliseconds) ? undefined : BigInt(milliseconds) * 1_000_000n + BigInt((zoned[2] ?? '').padEnd(9, '0'));
+}
+
+/**
+ * The suite's own statement of the rule for a ranking sentence, from the sent text and the data class each property declares in the fixture (the sent text does not carry the class). A sentence that says the largest, smallest, latest,
+ * earliest, fewest or least must name, right after the word, a property of the elements it cites; every element of the type that carries it must be cited with a shown, unmasked value of an orderable class; the extreme must be held by
+ * one element; and the element the sentence names, or the figure it claims, must be that one. Returns whether the sentence breaks the rule.
+ */
+export function rankingBroken(sentence: SummarySentence, sent: string, classes: ReadonlyMap<string, string>): boolean {
+  const tokens = sentence.text.match(/[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu) ?? [];
+  const at = tokens.findIndex((token) => RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase()));
+  if (at < 0) return false;
+  const word = (tokens[at] ?? '').toLowerCase();
+  if (tokens.slice(0, at).some((token) => ['not', 'no', 'never'].includes(token.toLowerCase()) || /n't$/iu.test(token))) return true;
+  if (tokens.some((token, index) => index > at && (RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase())))) return true;
+  const held = heldElementsOf(sent);
+  const cited = sentence.cites.filter((key) => held.has(key));
+  const property = [...new Set(cited.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))].find((key) => key === tokens[at + 1]);
+  if (property === undefined) return true;
+  const type = defined(cited.map((key) => held.get(key)).find((element) => element?.values.has(property)), 'an element with the property').type;
+  const population = [...held].filter(([, element]) => element.type === type);
+  const dataClass = classes.get(property);
+  if (dataClass === undefined || !['number', 'date', 'dateTime'].includes(dataClass)) return true;
+  const numbers = new Map<string, bigint>();
+  for (const [key, element] of population) {
+    const value = element.values.get(property);
+    if (!cited.includes(key) || value === undefined || value.masked) return true;
+    const number = dataClass === 'number' ? scaledDecimal(value.raw) : timeAsNumber(value.raw, dataClass);
+    if (number === undefined) return true;
+    numbers.set(key, number);
+  }
+  if ((word === 'latest' || word === 'earliest') && dataClass === 'number') return true;
+  const up = RANK_UP.has(word);
+  const order = [...numbers].sort(([, first], [, second]) => (first === second ? 0 : (first > second) === up ? -1 : 1));
+  const [top, next] = order;
+  if (top === undefined || (next !== undefined && next[1] === top[1])) return true;
+  const named = population.filter(([key, element]) => cited.includes(key) && element.names.some((name) => sentence.text.includes(name)));
+  if (named.length > 1 || (named[0] !== undefined && named[0][0] !== top[0])) return true;
+  const after = tokens.slice(at + 2).join(' ');
+  const figure = dataClass === 'number' ? /-?\d[\d,]*(?:\.\d+)?/u.exec(sentence.text.slice(sentence.text.indexOf(property) + property.length)) : /\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))?/u.exec(after);
+  if (figure === null) return named.length === 0;
+  const claimed = dataClass === 'number' ? scaledDecimal(figure[0].replaceAll(',', '')) : timeAsNumber(figure[0], dataClass === 'date' && figure[0].includes('T') ? 'dateTime' : dataClass);
+  return claimed === undefined || claimed !== top[1];
+}

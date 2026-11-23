@@ -1,6 +1,6 @@
 import { EXPORT_HIDDEN_NOTE, type ElementRefs, type ElementsScope, type GraphEdge, type GraphNode, type SummaryReading } from '@neburyx/contracts';
 import { describe, expect, it } from 'vitest';
-import { loadCases, sentenceInKeys, type LabelledCase } from './cases.js';
+import { keepersOf, loadCases, sentenceInKeys, type LabelledCase } from './cases.js';
 import { defined } from './checks.js';
 import { COUNT_TYPES } from './evidence.js';
 import { viewOf, type Evidence } from './rules.js';
@@ -12,7 +12,7 @@ const set = loadCases();
 /** A draft of the given sentences over the view of a case, copied to the notes of a fresh rig. */
 async function copied(labelled: LabelledCase, write?: (evidence: Evidence) => { text: string; cites: string[] }[]) {
   const evidence = await viewOf(labelled);
-  const sentences = write === undefined ? labelled.sentences.filter((sentence) => sentence.label === 'keep').map((sentence) => sentenceInKeys(sentence, evidence.keys)) : write(evidence);
+  const sentences = write === undefined ? keepersOf(labelled).map((sentence) => sentenceInKeys(sentence, evidence.keys)) : write(evidence);
   const rig = startRig({ replies: [replyOf(...sentences)], settings: { maxCalls: 1 } });
   const outcome = await rig.summarize(evidence.view);
   if (outcome.status !== 'ok') throw new Error(`${labelled.id}: the draft was not made (${outcome.status})`);

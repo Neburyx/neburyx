@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { countSchema, type Count, type GraphEdge, type GraphNode, type SummaryReading } from '@neburyx/contracts';
+import { DATA_CLASSES, countSchema, type Count, type GraphEdge, type GraphNode, type SummaryReading } from '@neburyx/contracts';
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { defined } from './checks.js';
@@ -11,12 +11,14 @@ const here = dirname(fileURLToPath(import.meta.url));
 const CASES_FILE = resolve(here, '../cases/cases.yaml');
 
 const id = z.string().min(1);
-const entitySchema = z.strictObject({ key: id, type: id, id, name: id, props: z.record(z.string(), z.string()).optional() });
+/** A property as the file writes it: text, or a typed value with its data class and whether it is masked (the class and the mask are what the gate returns with a value). */
+const typedPropertySchema = z.strictObject({ value: z.union([z.string(), z.number()]), class: z.enum(DATA_CLASSES), masked: z.boolean().optional() });
+const entitySchema = z.strictObject({ key: id, type: id, id, name: id, props: z.record(z.string(), z.union([z.string(), typedPropertySchema])).optional() });
 const relationshipSchema = z.strictObject({ key: id, type: id, from: id, to: id, observed_at: id.optional() });
 const factSchema = z.strictObject({ id, says: id, phrases: z.array(id).min(1), rests_on: z.array(id).min(1) });
 const claimSchema = z.strictObject({ id, says: id, phrases: z.array(id).min(1), about: z.array(id).min(1) });
-const RULES = ['citation', 'number', 'name', 'verdict'] as const;
-const sentenceSchema = z.strictObject({ id, label: z.enum(['keep', 'remove']), rule: z.enum(RULES).optional(), known_slip: z.boolean().optional(), text: id, cites: z.array(id) });
+const RULES = ['citation', 'number', 'name', 'verdict', 'comparison'] as const;
+const sentenceSchema = z.strictObject({ id, label: z.enum(['keep', 'remove']), rule: z.enum(RULES).optional(), known_slip: z.boolean().optional(), plain_view: z.boolean().optional(), text: id, cites: z.array(id) });
 /** A count as the file writes it: the contract's own count, which the file gives without its scope. */
 const fileCountSchema = z.strictObject({ value: z.number().optional(), quality: z.string() });
 
@@ -85,7 +87,7 @@ const countOf = (count: z.infer<typeof fileCountSchema>): Count => countSchema.p
 
 /** The view of a case as the summarizer reads it. */
 export function readingOf(labelled: LabelledCase): SummaryReading {
-  const nodes = new Map<string, GraphNode>(labelled.entities.map((entity) => [entity.key, node(entity.type, entity.id, entity.name, Object.entries(entity.props ?? {}).map(([key, value]) => prop(key, value)))]));
+  const nodes = new Map<string, GraphNode>(labelled.entities.map((entity) => [entity.key, node(entity.type, entity.id, entity.name, Object.entries(entity.props ?? {}).map(([key, value]) => (typeof value === 'string' ? prop(key, value) : prop(key, value.value, value.masked === true, value.class))))]));
   const edges: GraphEdge[] = labelled.relationships.map((relationship) =>
     edge(relationship.type, relationship.key, defined(nodes.get(relationship.from), relationship.from).ref, defined(nodes.get(relationship.to), relationship.to).ref, relationship.observed_at === undefined ? {} : { observedAt: relationship.observed_at }),
   );
@@ -117,3 +119,11 @@ export function keyMapOf(labelled: LabelledCase, sent: string): Map<string, stri
 export function sentenceInKeys(sentence: LabelledSentence, keys: ReadonlyMap<string, string>): { readonly text: string; readonly cites: string[] } {
   return { text: sentence.text, cites: sentence.cites.map((key) => defined(keys.get(key), `the key of ${key}`)) };
 }
+
+/** The data class of each property key of a case, as the file declares it: the sent text does not carry the class, so the suite's own ranking rule takes it from here. */
+export function classesOf(labelled: LabelledCase): ReadonlyMap<string, string> {
+  return new Map(labelled.entities.flatMap((entity) => Object.entries(entity.props ?? {}).flatMap(([key, value]) => (typeof value === 'string' || value.masked === true ? [] : [[key, value.class] as const]))));
+}
+
+/** The keep sentences of a view that a suite which adds its own evidence to the view may draft: a ranking is judged on the view as the case gives it, and that evidence (a property on one entity) changes the properties the cited elements show. */
+export const keepersOf = (labelled: LabelledCase): readonly LabelledSentence[] => labelled.sentences.filter((sentence) => sentence.label === 'keep' && sentence.plain_view !== true);
