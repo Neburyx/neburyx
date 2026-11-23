@@ -825,6 +825,14 @@ describe('counts and what the model is told of a removal, through the answer too
     expect(await turn(answering([{ text: '26 widgets are listed.', cites: keys(25) }]), listed(25))).toMatchObject({ status: 'not-answered' });
   });
 
+  it('keeps "Of those five widgets" when the sentence cites the five, and removes it, with the reason told to the model, when it cites only the one it speaks of', async () => {
+    const text = 'Of those five widgets, the first is the latest listed.';
+    expect(await turn(answering([{ text, cites: keys(5) }]), listed(5))).toMatchObject({ status: 'answered', sentences: [{ text }] });
+    const model = answering([{ text, cites: ['r1'] }], [{ text: 'The first widget is the latest listed.', cites: ['r1'] }]);
+    expect(await turn(model, listed(5))).toMatchObject({ status: 'answered', sentences: [{ text: 'The first widget is the latest listed.' }] });
+    expect(feedbackOf(model).join('\n')).toContain(removalNoteOf([{ text, reason: 'number' }]));
+  });
+
   it.each(['In total there are 2 widgets.', 'At least 2 widgets are listed.', '2 widgets are not yet retrieved.'])('removes a count of the cited elements that is said of another population: %s', async (text) => {
     expect(await turn(answering([{ text, cites: keys(2) }]), listed(2))).toMatchObject({ status: 'not-answered' });
   });
