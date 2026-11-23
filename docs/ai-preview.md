@@ -257,6 +257,8 @@ For each model call of a turn the application keeps, in the tables `assistant_ru
 ### The agent turn
 
 A message the router places on `ask` or `view`, or cannot place, is read and answered by an agent (LangChain deepagents, behind the gate) instead of one read and a fixed sentence. The router still chooses the route for what has a fixed behaviour: a refusal of a verdict with its overview, a question about what a type means, a clarification and a message that is too large. An AI case summary attached to a message is read beside the view by the view answer, as before.
+A degree read states the relationship ends of the element in all and by the type at the other end, each with its quality (exact, estimated or a lower bound), as the inspector shows them; an answer to "how many" cites that line and states the figure with its quality. The agent cannot change the canvas: when a message asks it to expand or draw, it reads what it can and may name the pointer `canvas-expand` in its answer, and the server adds the fixed sentence that points to the canvas's Expand action. The model never writes that sentence, and its own uncited sentences are removed as before.
+
 
 The agent reads only through the tools it is offered, as native tool calls, each with exactly its parameters, each one text, never query text:
 
