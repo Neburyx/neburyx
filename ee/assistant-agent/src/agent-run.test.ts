@@ -36,6 +36,87 @@ describe('the thinking blocks of a call whose list of tools differs from the one
   });
 });
 
+describe('a request that does not fit', () => {
+  const recorded = (responses: AIMessage[]) => {
+    const model = fakeModel();
+    for (const response of responses) model.respond(response);
+    const sent: { tools: string[]; messages: number }[] = [];
+    const original = model.bindTools.bind(model);
+    model.bindTools = ((tools: Parameters<typeof original>[0]) => {
+      const bound = original(tools);
+      const names = tools.map((entry) => ('name' in entry ? String(entry.name) : '')).sort();
+      const invoke = bound.invoke.bind(bound);
+      bound.invoke = ((messages: Parameters<typeof invoke>[0], options?: Parameters<typeof invoke>[1]) => {
+        sent.push({ tools: names, messages: Array.isArray(messages) ? messages.length : 0 });
+        return invoke(messages, options);
+      }) as typeof bound.invoke;
+      return bound;
+    }) as typeof model.bindTools; // the double only records what it is bound and invoked with and delegates to the original
+    return { model, sent };
+  };
+  const calling = (names: string[], id: string) => new AIMessage({ content: '', tool_calls: names.map((name, index) => ({ name, args: name === 'answer' ? { text: 'from the first read' } : {}, id: `${id}-${index}` })) });
+  const stopping = (control: AgentControl, log: string[]): AgentTool => {
+    const final = answerTool(log);
+    return { ...final, run: (args) => ((control.stop = true), final.run(args)) };
+  };
+
+  it('is sent without the newest reads, the oldest kept, with the final tool only, and the caller is told how many reads stay before it is sent', async () => {
+    const log: string[] = [];
+    const { model, sent } = recorded([calling(['read_view'], 'c1'), calling(['read_view'], 'c2'), calling(['answer'], 'c3'), new AIMessage('Done.')]);
+    const control = controlOf();
+    const takenBack: number[] = [];
+    const run = await runAgent({ ...base(control), maxCalls: 6, model, tools: [reader(log), stopping(control, log)], beforeCall: (request) => request.messages.length <= 3, onTrim: (count) => takenBack.push(count) });
+    expect(run.trimmed).toBe(true);
+    expect(run.refused).toBe(false);
+    expect(takenBack).toEqual([1]);
+    expect(sent.map((call) => call.tools)).toEqual([['answer', 'read_view'], ['answer', 'read_view'], ['answer']]);
+    expect(sent.map((call) => call.messages)).toEqual([2, 4, 4]);
+  });
+
+  it('is sent whole, with the final tool only, when that alone makes it fit: no read is taken back', async () => {
+    const log: string[] = [];
+    const { model } = recorded([calling(['read_view'], 'c1'), calling(['read_view'], 'c2'), calling(['answer'], 'c3'), new AIMessage('Done.')]);
+    const control = controlOf();
+    const takenBack: number[] = [];
+    const run = await runAgent({ ...base(control), maxCalls: 6, model, tools: [reader(log), stopping(control, log)], beforeCall: (request) => request.tools.split('\n').length <= 1 || request.messages.length <= 3, onTrim: (count) => takenBack.push(count) });
+    expect(run.trimmed).toBe(false);
+    expect(takenBack).toEqual([]);
+  });
+
+  it('tells how many reads stay whatever the reply left out held (a parallel pair, a name that did not run), counts a second trim by the same figure, and never leaves out an answer: the run ends when the newest group is the answer', async () => {
+    const log: string[] = [];
+    const parallel = recorded([calling(['read_view'], 'c1'), calling(['read_view', 'read_view'], 'c2'), calling(['answer'], 'c3'), new AIMessage('Done.')]);
+    const control = controlOf();
+    const takenBack: number[] = [];
+    await runAgent({ ...base(control), maxCalls: 6, model: parallel.model, tools: [reader(log), stopping(control, log)], beforeCall: (request) => request.messages.length <= 3, onTrim: (count) => takenBack.push(count) });
+    expect(takenBack).toEqual([1]);
+    const mixed = recorded([calling(['read_view'], 'm1'), calling(['read_view', 'write_file'], 'm2'), calling(['answer'], 'm3'), new AIMessage('Done.')]);
+    const again: number[] = [];
+    const third = controlOf();
+    await runAgent({ ...base(third), maxCalls: 6, model: mixed.model, tools: [reader(log), stopping(third, log)], beforeCall: (request) => request.messages.length <= 3, onTrim: (count) => again.push(count) });
+    expect(again).toEqual([1]);
+    const again2 = recorded([calling(['read_view'], 'd1'), calling(['read_view'], 'd2'), calling(['read_view'], 'd3'), calling(['answer'], 'd4'), new AIMessage('Done.')]);
+    const retaken: number[] = [];
+    const fourth = controlOf();
+    await runAgent({ ...base(fourth), maxCalls: 8, model: again2.model, tools: [reader(log), stopping(fourth, log)], beforeCall: (request) => request.messages.length <= 3, onTrim: (kept) => retaken.push(kept) });
+    expect(retaken.length).toBeGreaterThan(0);
+    expect(new Set(retaken)).toEqual(new Set([1]));
+    const answered = recorded([calling(['read_view'], 'a1'), calling(['answer'], 'a2'), calling(['answer'], 'a3'), new AIMessage('Done.')]);
+    const second = await runAgent({ ...base(controlOf()), maxCalls: 6, model: answered.model, tools: [reader(log), answerTool(log)], beforeCall: (request) => request.messages.length <= 3 });
+    expect(second.refused).toBe(true);
+    expect(second.trimmed).toBe(false);
+  });
+
+  it('ends the run as before when not even the first read fits, and makes no call for it', async () => {
+    const log: string[] = [];
+    const { model, sent } = recorded([calling(['read_view'], 'c1'), calling(['answer'], 'c2'), new AIMessage('Done.')]);
+    const run = await runAgent({ ...base(controlOf()), maxCalls: 6, model, tools: [reader(log), answerTool(log)], beforeCall: (request) => request.messages.length <= 1 });
+    expect(run.refused).toBe(true);
+    expect(run.trimmed).toBe(false);
+    expect(sent).toHaveLength(1);
+  });
+});
+
 describe('the agent run', () => {
   it('runs the tools the model calls and offers exactly those tools, none of deepagents\' own', async () => {
     const log: string[] = [];

@@ -198,11 +198,27 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     const source = scope.options.folder()?.source(scope.sourceId);
     const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and set the answer's pointer to canvas-expand (the server writes the sentence; never write it yourself). For a message that asks how many there are, read the degree preview of the element: its line states the connected elements by type with their quality; answer in plain words, for example \"<element title> has 169,756 <type name> (exact)\", keeping the figure and the quality as the line writes them, and cite both the element and the line, never a total no line states; the check removes any sentence that is not supported by the lines it cites. A message may ask for more than one thing, for example how many of one kind are in view and how many relationships an element has: answer every part, each in a sentence of its own. State a count as a number with its quality as the line that states it writes it; the number of element lines of one type in the view is a count you may state from the view itself. A part that no line supports, such as a count no line states, gets a sentence that says plainly that it is not yet retrieved, and that sentence cites the line that shows what is missing; a part is never left out. A sentence that says what the lines do not show cites the elements or the read line it speaks of, and only those; never cite a key only to keep a sentence: a sentence that cites nothing is removed, and that part goes unanswered. The view holds only the relationships drawn on the canvas (its Relationships lines): a question about who is connected to an element (a sender, a receiver, a counterparty) that those lines do not answer is answered by reading that element's neighbours with expand or linked-entities before you say it is not shown, and when it needs more reads than the steps allow, say plainly what was not read. When a sentence says how many, it cites every element it counts in that same sentence. After answer, reply "${FINAL_TEXT}" and nothing else.`;
 
+    // the state before each read of the tool loop, in order: a request sent without its newest reads takes them back, so that the answer is judged against what the model holds
+    const snapshots: { reads: number; entries: number; done: number; view: typeof view; askAnswer: typeof askAnswer; steps: number; rows: number; limited: AssistantLimit | undefined }[] = [];
+    const takeBack = (kept: number): void => {
+      const target = snapshots[kept];
+      if (target === undefined) return;
+      reads.length = target.reads;
+      entries.length = target.entries;
+      done.length = target.done;
+      view = target.view;
+      askAnswer = target.askAnswer;
+      steps = target.steps;
+      rows = target.rows;
+      limited = target.limited;
+      snapshots.length = kept;
+    };
     const tools: AgentTool[] = readable.map((tool) => ({
       name: tool.name,
       description: describeTool(tool),
       schema: paramsSchema(tool),
       run: async (args) => {
+        snapshots.push({ reads: reads.length, entries: entries.length, done: done.length, view, askAnswer, steps, rows, limited });
         if (steps >= settings.maxSteps) limited ??= 'steps';
         else if (settings.rowsAllowed !== undefined && rows >= settings.rowsAllowed) limited ??= 'rows';
         if (limited !== undefined) {
@@ -345,8 +361,8 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     if (allowedCalls < 1) return { kind: 'limit', limit: 'calls', reads: entries };
     const beforeCall = (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }): boolean => estimateTokens(request.system, `${request.messages.join('\n')}\n${request.tools}`) <= settings.maxInputTokens;
     try {
-      const ran = await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall });
-      if (ran.refused) limited ??= 'input';
+      const ran = await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall, onTrim: takeBack });
+      if (ran.refused || ran.trimmed) limited ??= 'input';
       // an answer is marked with the call limit only when the limit cut the reading short; one given on the last call with no read wanted is not
       else if (ran.reserveRefused) limited ??= 'calls';
     } catch (error) {

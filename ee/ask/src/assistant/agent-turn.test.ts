@@ -638,6 +638,21 @@ describe('the input limit of the agent turn', () => {
     expect(modelEvents(r)).toHaveLength(0);
   });
 
+  it('answers from the reads that fit, with the limit shown under the answer, when the newest read made the next request too large; and stops as before when not even the first read fits', async () => {
+    const scripted = () =>
+      fakeModel()
+        .respondWithTools([{ name: 'view', args: {} }])
+        .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+        .respond(new AIMessage('Done.'));
+    const fits = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 6_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    const answer = await answerOf(fits.route.handler(fits.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], reads: [{ tool: 'view' }] });
+    expect(JSON.stringify(answer)).not.toContain('degree-preview');
+    const none = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: 3_000 }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    expect(await answerOf(none.route.handler(none.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'input' });
+  });
+
   it('ends with the fixed sentence of the limit, and makes no model call, when the request the framework assembles does not fit though the turn\'s own text does', async () => {
     let received = 0;
     const model = fakeModel().respond(() => {

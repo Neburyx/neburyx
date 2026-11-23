@@ -123,7 +123,7 @@ export const ASSISTANT_LIMIT_SENTENCES: Readonly<Record<AssistantLimit, string>>
   steps: 'This turn reached its limit for reads, so it stopped. What was read is shown above.',
   rows: 'This turn reached its limit for rows, so it stopped. What was read is shown above.',
   time: 'This turn ran out of time, so it stopped. What was read is shown above.',
-  input: 'This turn grew past what it may send, so it stopped. What was read is shown above.',
+  input: 'This turn grew past what it may send, so it stopped reading: the last read was not used. Ask a narrower question to read further. What was read is shown above.',
 };
 
 export const ASSISTANT_TOO_LARGE_SENTENCE = 'The message and the view are too large to send. Narrow the view or ask something smaller.';
