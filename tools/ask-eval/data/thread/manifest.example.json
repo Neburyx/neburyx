@@ -1,0 +1,12 @@
+{
+  "name": "example-thread",
+  "sourceId": "demo-source",
+  "anchor": { "entityType": "widget", "stableId": "W-1" },
+  "neighbourType": "gadget",
+  "neighbours": 25,
+  "messages": [
+    "what am I looking at",
+    "summarize",
+    "how many gadgets does this widget have in total?"
+  ]
+}

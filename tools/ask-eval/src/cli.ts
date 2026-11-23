@@ -10,6 +10,7 @@ import { reportLines, resultOf } from './report.js';
 import { checkReplay, parseReplay, replayProviderLines, replayText, requireModel, SCRIPTED, scriptedReplay } from './replay-file.js';
 import { scanTree } from './scan.js';
 import { scoreReplay } from './score.js';
+import { runThread, type ThreadDeps } from './thread/cli.js';
 import { cleanUpTemporary, loadSets, type SetInputs } from './sets.js';
 
 export const USAGE = `usage:
@@ -20,6 +21,7 @@ export const USAGE = `usage:
   ask-eval assistant record (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force | --resume]) [--model <name>]
   ask-eval assistant loop-cost (--packs <folder> | --questions <file> --folder <folder> --source <id>) (--dry-run | --budget <n> --out <folder> [--force]) [--model <name>]
   ask-eval assistant defaults (--packs <folder> | --questions <file> --folder <folder> --source <id>) --run-record <file> --loop-cost <file> [--out <folder> [--force]]
+  ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)
   ask-eval scan --questions <file> --folder <folder> --source <id> [--exclude <path>]... [--common <path>]... <checkout>`;
 
 export interface CliIo {
@@ -153,8 +155,9 @@ async function record(parsed: Parsed, io: CliIo, hooks: EvalHooks): Promise<numb
 }
 
 /** Runs one command and returns its exit code: 0 for a pass, 1 for a miss, 2 for a usage error. A message never holds a wording, an entity value, a reply or a key. */
-export async function runCli(argv: readonly string[], io: CliIo, hooks: EvalHooks & Partial<AssistantHooks>): Promise<number> {
+export async function runCli(argv: readonly string[], io: CliIo, hooks: EvalHooks & Partial<AssistantHooks>, threadDeps?: ThreadDeps): Promise<number> {
   try {
+    if (argv[0] === 'thread') return await runThread(argv.slice(1), io, threadDeps);
     const parsed = parse(argv);
     if (parsed.command === 'scan') return await scan(parsed, io, hooks);
     if (parsed.command === 'record') return await record(parsed, io, hooks);
