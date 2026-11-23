@@ -111,6 +111,17 @@ async function answerTo(handlerOfTest: Handler, limits: Parameters<typeof config
 }
 
 describe('the request', () => {
+  it('asks the provider for a reply of the shape a request names, and for none when it names none', async () => {
+    handler = reply(200, message());
+    const configuration = await configurationWith({ max_retries: 0 });
+    const schema = { type: 'object', properties: { route: { type: 'string' } }, required: ['route'], additionalProperties: false };
+    await createAnthropicProvider({ configuration, env: { NEBURYX_ASK_API_KEY: KEY }, baseUrl }).complete({ ...REQUEST, responseSchema: schema }, SIGNAL);
+    const body = JSON.parse(seen.at(-1)?.body ?? '') as { output_config: { effort: string; format?: unknown } };
+    expect(body.output_config.format).toEqual({ type: 'json_schema', schema });
+    await complete(configuration);
+    expect((JSON.parse(seen.at(-1)?.body ?? '') as { output_config: Record<string, unknown> }).output_config).not.toHaveProperty('format');
+  });
+
   it('is one message to the Messages API, with the model, the limit, the effort and the filled prompt, and the key as the only credential', async () => {
     handler = reply(200, message());
     const configuration = await configurationWith({ effort: 'high', max_tokens: 321, cache: { enabled: false } });

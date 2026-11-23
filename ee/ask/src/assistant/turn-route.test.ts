@@ -67,6 +67,8 @@ describe('an assistant turn: what the router is sent', () => {
     expect(call?.instructions).toContain('SENTINEL-CLASSIFICATION');
     expect(call?.instructions?.endsWith(instructions.text.slice(instructions.text.indexOf('# Reply format')))).toBe(true);
     expect(call?.values).toContain(MESSAGE);
+    // the provider is asked to constrain the reply to a route object, so that its first reply is never prose
+    expect(call?.responseSchema).toMatchObject({ type: 'object', required: ['route'], additionalProperties: false });
     expect(call?.values).toContain('In view:\n(none)');
     expect(call?.values).toContain(ASK_SAVED_PATTERN_NOTE);
     expect(call?.values).not.toContain('SENTINEL-CLASSIFICATION');

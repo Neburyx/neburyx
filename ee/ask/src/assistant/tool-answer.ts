@@ -77,12 +77,12 @@ export function citationTitleOf(title: string | undefined): string | undefined {
 
 const linesPhrase = (count: number): string => `${count} ${count === 1 ? 'line' : 'lines'}`;
 const sentencesPhrase = (count: number): string => `${count} ${count === 1 ? 'sentence' : 'sentences'}`;
-const withDegreeCounts = (run: AskRunResult): string => {
-  const counts = degreeCountsOf(run);
+const withDegreeCounts = (run: AskRunResult, names?: ReadonlyMap<string, string>): string => {
+  const counts = degreeCountsOf(run, names);
   return counts === undefined ? coverageOf(run) : `${coverageOf(run)} · ${counts}`;
 };
-const findingOf = (read: ReadDone): string => (read.typology !== undefined ? linesPhrase(read.typology.length) : read.written !== undefined ? `${sentencesPhrase(read.written.sentences.length)}${read.written.notRead > 0 ? `, ${read.written.notRead} ${read.written.notRead === 1 ? 'entry' : 'entries'} not read` : ''}` : read.result === undefined ? 'found nothing' : withDegreeCounts(read.result));
-const readLine = (key: string, read: ReadDone): string => `${key}: read of ${read.label ?? read.tool}: ${findingOf(read)}`;
+const findingOf = (read: ReadDone, names?: ReadonlyMap<string, string>): string => (read.typology !== undefined ? linesPhrase(read.typology.length) : read.written !== undefined ? `${sentencesPhrase(read.written.sentences.length)}${read.written.notRead > 0 ? `, ${read.written.notRead} ${read.written.notRead === 1 ? 'entry' : 'entries'} not read` : ''}` : read.result === undefined ? 'found nothing' : withDegreeCounts(read.result, names));
+const readLine = (key: string, read: ReadDone, names?: ReadonlyMap<string, string>): string => `${key}: read of ${read.label ?? read.tool}: ${findingOf(read, names)}`;
 
 /**
  * The lines the model may cite. The elements the reads listed, once each (those of a view keep the view's keys, the reads' are r1, r2, ...): the type and the title as the result gave them (masked as it was asked), never
@@ -99,7 +99,7 @@ export interface AssembledResults {
   readonly noteElements: ReadonlyMap<string, readonly string[]>;
 }
 
-export function assembleResults(reads: readonly ReadDone[], view?: AssembledText): AssembledResults {
+export function assembleResults(reads: readonly ReadDone[], view?: AssembledText, names?: ReadonlyMap<string, string>): AssembledResults {
   const inexactCounts = [...(view?.inexactCounts ?? [])];
   const unknownCountKeys = new Set(view?.unknownCountKeys);
   const keys = new Map<string, ElementKey>(view?.keys);
@@ -187,7 +187,7 @@ export function assembleResults(reads: readonly ReadDone[], view?: AssembledText
   }
   const readKeys = [...reads.map((_, index) => `s${index + 1}`), ...typologyKeys];
   reads.forEach((read, index) => {
-    lines.set(`s${index + 1}`, `${readLine(`s${index + 1}`, read)}${noRelationship.has(index) ? ' · no relationship listed' : ''}`);
+    lines.set(`s${index + 1}`, `${readLine(`s${index + 1}`, read, names)}${noRelationship.has(index) ? ' · no relationship listed' : ''}`);
     const inexact = read.result === undefined ? undefined : inexactCountOf(read.result);
     if (inexact === 'unknown') unknownCountKeys.add(`s${index + 1}`);
     else if (inexact !== undefined) inexactCounts.push(inexact);
@@ -210,10 +210,15 @@ export interface AnswerBasis {
 }
 
 /** What an answer is checked against: the lines the reads returned, the coverage the server writes for them, the type descriptions in play and the text the checks read; undefined when the reads returned nothing to cite. */
+/** The display name of each entity type of the source, for the lines that name the type of the elements a count is of. */
+export const typeNamesOf = (request: { readonly typeDescriptions?: (sourceId: string) => { readonly entityTypes: readonly { readonly type: string; readonly displayName: string }[] } }, sourceId: string): ReadonlyMap<string, string> =>
+  new Map((request.typeDescriptions?.(sourceId).entityTypes ?? []).map((entity) => [entity.type, entity.displayName]));
+
 export function answerBasisOf(input: Pick<ToolAnswerInput, 'reads' | 'view' | 'scope' | 'message'>): AnswerBasis | undefined {
-  const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled);
+  const names = typeNamesOf(input.scope.request, input.scope.sourceId);
+  const { assembled, readKeys, noteLines, noteElements } = assembleResults(input.reads, input.view?.assembled, names);
   if (assembled.keys.size === 0 && readKeys.length === 0) return undefined;
-  const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read)}`)].join('; ');
+  const coverage = [...(input.view === undefined ? [] : [`view: ${retrievalLine(input.view.reading)}`]), ...input.reads.map((read, index) => `read ${index + 1}, ${read.tool}: ${findingOf(read, names)}`)].join('; ');
   const typeLines = typeLinesOf(input.scope.request.typeDescriptions?.(input.scope.sourceId), assembled, input.message, input.scope.askedTypes, input.scope.contextTypes);
   const checkable = checkedTextOf(assembled);
   const checkedText = withTypeLines({ ...checkable, keys: new Map([...checkable.keys, ...readKeys.map((key) => [key, true] as const)]), readKeys: new Set(readKeys) }, typeLines);

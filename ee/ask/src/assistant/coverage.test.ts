@@ -97,11 +97,13 @@ describe('the coverage line of a derived rule run: the other ends, never the anc
 });
 
 describe('the counts a degree read states', () => {
-  it('writes the total and the count of each neighbour type with its quality, as the inspector shows them', () => {
-    expect(degreeCountsOf(degreeResult())).toBe('relationship ends in all: 184,533 exact · gadget: 169,756 exact · widget: ≥ 1,000 lower bound');
+  it('writes the connected elements by the display name of their type and in all, each with its quality as the copy rules write it', () => {
+    const names = new Map([['gadget', 'Gadget'], ['widget', 'Widget']]);
+    expect(degreeCountsOf(degreeResult(), names)).toBe('connected elements by type: Gadget 169,756 (exact) · Widget ≥ 1,000 · lower bound · all types 184,533 (exact)');
   });
 
-  it('states none for a read that is not a degree read', () => {
+  it('writes the type itself when no display name is known, and states none for a read that is not a degree read', () => {
+    expect(degreeCountsOf(degreeResult())).toContain('gadget 169,756 (exact)');
     expect(degreeCountsOf(okResult())).toBeUndefined();
   });
 });

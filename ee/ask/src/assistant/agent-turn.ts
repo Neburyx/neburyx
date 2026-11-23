@@ -5,7 +5,7 @@ import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
 import { judgeCheck } from '../case-summary/judge.js';
 import { judgeTableRows, parseTable, rowSentenceOf } from './table.js';
-import { assembleResults, answerBasisOf, failureOf, outcomeOfDraft, withElementsOfNotes, type ReadDone, type ToolAnswerOutcome } from './tool-answer.js';
+import { assembleResults, answerBasisOf, failureOf, outcomeOfDraft, typeNamesOf, withElementsOfNotes, type ReadDone, type ToolAnswerOutcome } from './tool-answer.js';
 import { readNotRead, readOfAnswer, readOfNothing, readOfNotes, readOfSummary, readOfTypology, readOfView } from './reads.js';
 import { afterReads, toolRegistryOf, type LoopOutcome, type ResumeState } from './turn-outcome.js';
 import type { PlanStep } from './plan-token.js';
@@ -126,7 +126,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     let askAnswer: Extract<AskAnswer, { answered: unknown }>['answered'] | undefined;
     // the lines of notes and of a summary the application drafted are model-written context beside the elements, never a source of the checks
     const render = (): string => {
-      const { assembled, noteLines } = assembleResults(reads, view?.assembled);
+      const { assembled, noteLines } = assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId));
       const meaning = answerBasisOf({ reads, ...(view === undefined ? {} : { view }), scope, message: input.message })?.typeLines.section ?? '';
       return `Keys are renumbered after every read: cite only keys of the latest result.\n${assembled.text}${noteLines.length === 0 ? '' : `\n${noteLines.join('\n')}`}${meaning}`;
     };
@@ -195,7 +195,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
 
     const rules = instructions.text.split(REPLY_FORMAT_HEADING)[0] ?? '';
     const source = scope.options.folder()?.source(scope.sourceId);
-    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and set the answer's pointer to canvas-expand (the server writes the sentence; never write it yourself). For a message that asks how many there are, read the degree preview of the element: its line states the counts by type with their quality; answer with that figure and its quality (exact, estimated or a lower bound) and cite the line, never a total no line states; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
+    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and set the answer's pointer to canvas-expand (the server writes the sentence; never write it yourself). For a message that asks how many there are, read the degree preview of the element: its line states the connected elements by type with their quality; answer in plain words such as \"Account X has 169,756 transactions (exact)\", keeping the figure and the quality as the line writes them, and cite the line, never a total no line states; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
 
     const tools: AgentTool[] = readable.map((tool) => ({
       name: tool.name,
@@ -221,7 +221,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         if (step.status !== 'heavy') steps += 1;
         if ('rows' in step) rows += step.rows;
         const text = apply(tool, values, step);
-        notePropertyValuesSent(assembleResults(reads, view?.assembled).assembled.carriesPropertyValues);
+        notePropertyValuesSent(assembleResults(reads, view?.assembled, typeNamesOf(scope.request, scope.sourceId)).assembled.carriesPropertyValues);
         if (estimateTokens(system, text) > settings.maxInputTokens) {
           limited ??= 'input';
           control.answerOnly = true;
@@ -236,8 +236,6 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
       schema: scope.form === 'table' ? tableSchema : answerSchema,
       run: async (args) => {
         stepsOf(scope.request).answering();
-        // the answer given on the last call the turn may make was forced by the call limit
-        if (control.calls + control.extra + input.callsUsed >= settings.maxCalls) limited ??= 'calls';
         const basis = answerBasisOf({ reads, ...(view === undefined ? {} : { view }), scope, message: input.message });
         if (basis === undefined) return NOT_ANSWERED;
         if (scope.form === 'table') {

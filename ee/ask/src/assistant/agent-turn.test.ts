@@ -130,6 +130,17 @@ describe('a view question on the agent', () => {
     expect(JSON.stringify(await answerOf(other.route.handler(other.request(VIEW_BODY))))).not.toContain('anything-else');
   });
 
+  it('does not mark a limit on an answer given on the last call the turn may make, because the limit cut nothing short', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 3 } });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'Account A-1 is in view.' }] });
+    expect(answer).not.toHaveProperty('stoppedAt');
+  });
+
   it('is not called for a verdict the router refuses', async () => {
     const model = fakeModel().respond(new AIMessage('never asked'));
     const r = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}'), agent: { model } });

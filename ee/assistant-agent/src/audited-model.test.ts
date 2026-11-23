@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage, type BaseMessage } from '@langchain/core/messages';
 import { FakeListChatModel } from '@langchain/core/utils/testing';
 import { createCallRecorder, type AuditedCallContext } from '@neburyx/ee-ai-runtime';
 import type { AuditEvent, AuditSink } from '@neburyx/contracts';
-import { AuditedModelFailure, auditChatModel, failureCodeOf, failureDetailOf, usageOf, withoutThinking, withCacheMarkers } from './audited-model.js';
+import { AuditedModelFailure, auditChatModel, failureCodeOf, failureDetailOf, usageOf, withoutEarlierThinking, withCacheMarkers } from './audited-model.js';
 
 const context: AuditedCallContext = { action: 'assistant.agent', actorId: 'person-1', actorRole: 'investigator', traceId: 'trace-1', sourceId: 'source-1', investigationId: 'investigation-1' };
 
@@ -74,16 +74,35 @@ describe('the audited chat model', () => {
     expect(failureDetailOf(Object.assign(new Error('x'), { code: 'has a space and text' }))).toEqual({ errorClass: 'Error' });
   });
 
-  it('sends the earlier replies without their thinking blocks, and keeps every other block and message as it was', () => {
+  it('keeps the thinking block of the last reply and takes out those of the earlier ones, in the request the model receives', async () => {
+    const seen: BaseMessage[][] = [];
+    class Recording extends FakeListChatModel {
+      override async _generate(messages: BaseMessage[]): Promise<{ generations: { text: string; message: AIMessage }[] }> {
+        seen.push(messages);
+        return { generations: [{ text: 'ok', message: new AIMessage('ok') }] };
+      }
+    }
+    const thinking = (text: string) => ({ type: 'thinking', thinking: '', signature: `sig-${text}` });
+    const first = new AIMessage({ content: [thinking('first'), { type: 'text', text: 'reading' }], tool_calls: [{ name: 'view', args: {}, id: 'call-1' }] });
+    const second = new AIMessage({ content: [thinking('second')], tool_calls: [{ name: 'view', args: {}, id: 'call-2' }] });
+    const model = auditChatModel(new Recording({ responses: ['x'] }), hookOf([]));
+    await model.invoke([new HumanMessage('q'), first, new ToolMessage({ content: 'r', tool_call_id: 'call-1' }), second, new ToolMessage({ content: 'r', tool_call_id: 'call-2' })]);
+    const sent = (seen[0] ?? []).filter((message) => message.type === 'ai');
+    expect(JSON.stringify(sent[0]?.content)).not.toContain('thinking');
+    expect(sent[1]?.content).toEqual([thinking('second')]);
+    expect((sent[0] as AIMessage).tool_calls).toHaveLength(1);
+    expect(first.content).toHaveLength(2);
+  });
+
+  it('takes the thinking out of every earlier reply and leaves every other block and message as it was', () => {
     const thought = new AIMessage({ content: [{ type: 'thinking', thinking: '', signature: 'sig' }, { type: 'text', text: 'reading' }], tool_calls: [{ name: 'view', args: {}, id: 'call-1' }] });
     const plain = new AIMessage({ content: 'no blocks' });
     const human = new HumanMessage('q');
-    const [first, second, third] = withoutThinking([thought, plain, human]);
+    const [first, second, third] = withoutEarlierThinking([thought, plain, human]);
     expect(first?.content).toEqual([{ type: 'text', text: 'reading' }]);
     expect((first as AIMessage).tool_calls).toEqual(thought.tool_calls);
     expect(second).toBe(plain);
     expect(third).toBe(human);
-    expect(thought.content).toHaveLength(2);
   });
 
   it('records a cancelled call as one failed event', async () => {

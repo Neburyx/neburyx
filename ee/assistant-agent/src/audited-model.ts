@@ -120,15 +120,17 @@ function withContent(message: BaseMessage, content: BaseMessage['content']): Bas
 }
 
 const THINKING_BLOCKS: ReadonlySet<string> = new Set(['thinking', 'redacted_thinking']);
+const isThinking = (block: unknown): boolean => isRecord(block) && typeof block['type'] === 'string' && THINKING_BLOCKS.has(block['type']);
 
 /**
- * The messages of a call without the thinking blocks of the earlier replies. The provider refuses (400) a request whose last reply holds tool calls but no thinking block while an earlier reply of the same loop holds one,
- * and a reply may or may not think; a history with none is accepted whichever replies thought, and the thinking text is empty anyway.
+ * The messages of a call with the thinking blocks of the earlier replies taken out and those of the last reply kept, as the provider asks for a reply that is followed by tool results. The provider refused (400) a history in
+ * which only an earlier reply of the loop held a thinking block; with the earlier ones taken out it accepted the same history.
  */
-export function withoutThinking(messages: readonly BaseMessage[]): BaseMessage[] {
-  return messages.map((message) => {
-    if (message.type !== 'ai' || !Array.isArray(message.content) || !message.content.some((block) => isRecord(block) && typeof block['type'] === 'string' && THINKING_BLOCKS.has(block['type']))) return message;
-    return withContent(message, message.content.filter((block) => !(isRecord(block) && typeof block['type'] === 'string' && THINKING_BLOCKS.has(block['type']))));
+export function withoutEarlierThinking(messages: readonly BaseMessage[]): BaseMessage[] {
+  const last = messages.map((message) => message.type).lastIndexOf('ai');
+  return messages.map((message, index) => {
+    if (index === last || message.type !== 'ai' || !Array.isArray(message.content) || !message.content.some(isThinking)) return message;
+    return withContent(message, message.content.filter((block) => !isThinking(block)));
   });
 }
 
@@ -159,8 +161,8 @@ class AuditedChatModel extends BaseChatModel {
     const { hook } = this;
     if (!AUDIT_LABEL.test(hook.promptId) || !Number.isInteger(hook.promptVersion) || hook.promptVersion < 0) throw new AuditUnavailableError();
     const prompt = promptOf(hook, messages);
-    // the record holds what is sent: the history without the thinking blocks
-    const sent = withoutThinking(messages);
+    // the record holds what is sent: the history without the thinking blocks of the earlier replies
+    const sent = withoutEarlierThinking(messages);
     const trace = hook.trace?.({ instructions: systemTextOf(messages), instructionsSha256: prompt.sha256, values: valuesOf(sent) });
     let message: AIMessageChunk;
     try {

@@ -73,17 +73,22 @@ export function inexactCountOf(run: AskRunResult): { readonly phrase: string; re
   return figureValue === 0 && matches !== undefined ? undefined : { phrase: `${SIGNS[count.quality]}${figure(figureValue)}`, value: String(figureValue) };
 }
 
-const countWords = (count: Count): string => (count.quality === 'unknown' || count.value === undefined ? QUALITY_WORDS.unknown : `${SIGNS[count.quality]}${figure(count.value)} ${QUALITY_WORDS[count.quality]}`);
+/** A count as the copy rules write it: `169,756 (exact)`, `~ 169,756 (estimated)`, `≥ 1,000 · lower bound`, or `count unknown`. */
+const countWords = (count: Count): string => {
+  if (count.quality === 'unknown' || count.value === undefined) return QUALITY_WORDS.unknown;
+  const figureText = `${SIGNS[count.quality]}${figure(count.value)}`;
+  return count.quality === 'lowerBound' ? `${figureText} · ${QUALITY_WORDS.lowerBound}` : `${figureText} (${QUALITY_WORDS[count.quality]})`;
+};
 
 /**
- * The counts a degree read states, as the inspector shows them: the relationship ends in all and by the type of the element at the other end, each with its quality. The server's own words; the figures are the source's, never summed here.
- * Other reads state none.
+ * The counts a degree read states, as the inspector shows them: the connected elements by the display name of their type, then in all, each with its quality. The figures are the source's, never summed here; `names` maps
+ * an entity type to its display name, and a type it does not hold is written as the type itself.
  */
-export function degreeCountsOf(run: AskRunResult): string | undefined {
+export function degreeCountsOf(run: AskRunResult, names: ReadonlyMap<string, string> = new Map()): string | undefined {
   if (run.templateId !== 'degree-preview') return undefined;
   const { total, byNeighborType } = run.result;
-  const parts = [`relationship ends in all: ${countWords(total)}`, ...byNeighborType.map((entry) => `${entry.entityType}: ${countWords(entry.count)}`)];
-  return parts.join(' · ');
+  const parts = [...byNeighborType.map((entry) => `${names.get(entry.entityType) ?? entry.entityType} ${countWords(entry.count)}`), `all types ${countWords(total)}`];
+  return `connected elements by type: ${parts.join(' · ')}`;
 }
 
 /** The count a read's line is written with: the count the result carries (of matches, or the rows of a file query), or the number of elements it lists, which is exact; `value` is absent when the count is not known. */

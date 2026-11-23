@@ -75,13 +75,31 @@ export function createAssistantRouter(options: RouterOptions): (input: RouterInp
   };
 }
 
+/** The shape the provider constrains the router's reply to, so that its first reply is a route object and never prose; the reply is still read strictly by `readAssistantRoute`. */
+const ROUTE_REPLY_SCHEMA = {
+  type: 'object',
+  properties: {
+    route: { type: 'string', enum: ['view', 'meaning', 'ask', 'clarify', 'refuse'] },
+    intent: { type: 'string' },
+    role: { type: 'string' },
+    cause: { type: 'string', enum: ['verdict', 'raw-query', 'other-source', 'unplaced'] },
+    types: { type: 'array', items: { type: 'string' } },
+    entities: { type: 'object', additionalProperties: { type: 'string' } },
+    elements: { type: 'object', additionalProperties: { type: 'string' } },
+    candidates: { type: 'array', items: { type: 'string' } },
+    form: { type: 'string', enum: ['table'] },
+  },
+  required: ['route'],
+  additionalProperties: false,
+} as const;
+
 /** One call of the router: a route, a failure, or `not-a-route` for a reply that is not one. */
 async function routeOnce(options: RouterOptions, instructions: AssistantInstructions, input: RouterInput, values: string, signal: AbortSignal, call: number): Promise<RouterOutcome | 'not-a-route'> {
   let answer;
   const record = startModelCall({ modelRef: options.model.modelRef, promptId: ROUTER_PROMPT_ID, promptVersion: ROUTER_PROMPT_VERSION, instructionsSha256: instructions.sha256, instructions: instructions.text, values });
   try {
     answer = await options.model.call(
-      { promptId: ROUTER_PROMPT_ID, version: ROUTER_PROMPT_VERSION, instructions: instructions.text, values },
+      { promptId: ROUTER_PROMPT_ID, version: ROUTER_PROMPT_VERSION, instructions: instructions.text, values, responseSchema: ROUTE_REPLY_SCHEMA },
       { action: ROUTER_AUDIT_ACTION, actorId: input.actorId, actorRole: input.actorRole, traceId: input.traceId, sourceId: input.sourceId, investigationId: input.investigationId, ...(record.runId === undefined ? {} : { runId: record.runId }), onProviderAnswer: record.received },
       signal,
     );
