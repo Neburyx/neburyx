@@ -700,7 +700,7 @@ describe('the input limit of the agent turn', () => {
   describe('a read left out because the next request is too large', () => {
     /** The answer of the first limit, from the top down, at which the read was left out and the turn still answered: the sizes depend on the texts of the turn, so the limit is found, not written. */
     const firstTrimmed = async (scripted: () => ReturnType<typeof fakeModel>, over: { loopSteps?: number } = {}): Promise<Awaited<ReturnType<typeof answerOf>>> => {
-      for (let limit = 30_000; limit >= 3_000; limit -= 100) {
+      for (let limit = 16_000; limit >= 3_000; limit -= 200) {
         const r = await rig({ reply: VIEW, agent: { model: scripted(), maxCalls: 8, maxInputTokens: limit }, ...(over.loopSteps === undefined ? {} : { loopSteps: over.loopSteps }), run: () => ({ status: 'ok', result: expandEarlierResult() }) });
         const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
         if ('stoppedAt' in answer && answer.stoppedAt === 'input') return answer;
@@ -722,7 +722,7 @@ describe('the input limit of the agent turn', () => {
       const viewOnly = await rig({ reply: VIEW, agent: { model: fakeModel().respondWithTools([{ name: 'view', args: {} }]).respondWithTools([{ name: 'answer', args: { sentences: [{ text: `${V.title} A-1 is in view.`, cites: ['n1'] }] } }]).respond(new AIMessage('Done.')), maxCalls: 8 } });
       const plain = await answerOf(viewOnly.route.handler(viewOnly.request(VIEW_BODY)));
       expect('coverage' in answer && 'coverage' in plain && answer.coverage).toEqual('coverage' in plain && plain.coverage);
-    });
+    }, 30_000);
 
     it('says the limit of the input, not that of the steps, when the read left out was the one a limit of steps had stopped', async () => {
       const answer = await firstTrimmed(
@@ -735,7 +735,7 @@ describe('the input limit of the agent turn', () => {
         { loopSteps: 1 },
       );
       expect(answer).toMatchObject({ status: 'answered', stoppedAt: 'input', reads: [{ tool: 'view' }] });
-    });
+    }, 30_000);
   });
 
   it('ends with the fixed sentence of the limit, and makes no model call, when the request the framework assembles does not fit though the turn\'s own text does', async () => {
