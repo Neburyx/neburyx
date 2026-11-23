@@ -22,7 +22,7 @@ export const DEFAULTS = {
   model: SUMMARY_DEFAULTS.model,
   timeoutMs: 60_000,
   totalTimeoutMs: SUMMARY_DEFAULTS.totalTimeoutMs,
-  // 7: measured on the trial's 72 agent turns (95th percentile 5 calls with the acknowledging call, 5 without it; at most 5), plus the router's one or two calls; the ceiling stays 10
+  // 7: the trial's 72 agent turns took at most 6 calls with the acknowledging call (95th percentile 5) and at most 5 without it (which the product now drops after an answer the checks accept whole); plus the router's one or two calls. A turn whose last answer still loses a sentence keeps that call and may need 8; the ceiling stays 10
   maxCalls: 7,
   maxSteps: 4,
   contextTurns: 3,

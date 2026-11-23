@@ -66,7 +66,7 @@ async function scriptedModel() {
   };
 }
 
-const flags = (out: string) => ['assistant', 'loop-cost', '--packs', PACKS, '--budget', '490', '--out', out];
+const flags = (out: string) => ['assistant', 'loop-cost', '--packs', PACKS, '--budget', '686', '--out', out];
 
 describe('the loop-cost command', () => {
   it('prints, in a dry run, the messages, the runs and the most calls it would make, needs no key and makes no call', async () => {
@@ -74,12 +74,12 @@ describe('the loop-cost command', () => {
     const out = io();
     expect(await runCli(['assistant', 'loop-cost', '--packs', PACKS, '--dry-run'], out.io, given)).toBe(0);
     expect(out.out.join('\n')).toContain('messages to run: 49, each with the loop off and on (98 runs)');
-    expect(out.out.join('\n')).toContain('calls: at most 490 (5 for each run)');
+    expect(out.out.join('\n')).toContain('calls: at most 686 (7 for each run)');
     expect(given.asked).toEqual([]);
   });
 
   it('refuses a missing budget, a budget below the most the runs can cost, a missing --out and an --out inside a git tree, making no call', async () => {
-    for (const extra of [['--out', scratch()], ['--budget', '489', '--out', scratch()], ['--budget', '490'], ['--budget', '490', '--out', join(ROOT, 'tools', 'ask-eval', 'out-in-a-git-tree')]]) {
+    for (const extra of [['--out', scratch()], ['--budget', '685', '--out', scratch()], ['--budget', '686'], ['--budget', '686', '--out', join(ROOT, 'tools', 'ask-eval', 'out-in-a-git-tree')]]) {
       const given = hooksWith(() => ({ failure: 'timeout' }));
       expect(await runCli(['assistant', 'loop-cost', '--packs', PACKS, ...extra], io().io, given), extra.join(' ')).toBe(2);
       expect(given.asked).toEqual([]);
@@ -101,7 +101,7 @@ describe('the loop-cost command', () => {
     expect(statSync(recordPath).mode & 0o777).toBe(0o600);
     const record = readFileSync(recordPath, 'utf8');
     for (const secret of ['AC-0002000', 'Which accounts', 'What am I looking at']) expect(record).not.toContain(secret);
-    expect(JSON.parse(record)).toMatchObject({ messages: 49, run: 49, steps: 4, maxCalls: 5 });
+    expect(JSON.parse(record)).toMatchObject({ messages: 49, run: 49, steps: 4, maxCalls: 7 });
   });
 
   it('stops before a run the budget cannot cover, never inside a turn, and says how many messages it ran', async () => {
@@ -110,7 +110,7 @@ describe('the loop-cost command', () => {
       ...given,
       recordingProvider: (provider: unknown, budget: number) => {
         const recording = given.recordingProvider(provider, budget);
-        return { ...recording, usage: () => ({ ...recording.usage(), calls: recording.usage().calls + 485 }) };
+        return { ...recording, usage: () => ({ ...recording.usage(), calls: recording.usage().calls + 679 }) };
       },
     };
     const out = io();
