@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -441,5 +442,22 @@ describe('the text of a turn (0013)', () => {
     await rows(database.ownerUrl, 'ALTER TABLE assistant_turns DROP COLUMN question_text, DROP COLUMN mask_on, DROP COLUMN answer, DROP COLUMN sensitivity_version');
     expect(await rows(database.ownerUrl, 'SELECT route, outcome, question_hash FROM assistant_turns')).toEqual([{ route: 'ask', outcome: 'answered', question_hash: HASH }]);
     expect(await rows(database.ownerUrl, 'SELECT count(*)::int AS n FROM assistant_threads')).toEqual([{ n: 1 }]);
+  });
+});
+
+describe('the enterprise migrations 0010 to 0013 in order', () => {
+  it('applies 0010, 0011, 0012 and 0013 one after another on a fresh database, records them in that order, and a second run has nothing to apply', async () => {
+    const database = await postgres.newDatabase();
+    const env = { DATABASE_MIGRATION_URL: database.ownerUrl, DATABASE_APP_ROLE: database.appRole, NEBURYX_CONFIG: PREVIEW_FILE, NEBURYX_PROFILE: 'enterprise' };
+    const files = readdirSync(PREVIEW_MIGRATIONS).filter((name) => name.endsWith('.sql')).sort();
+    expect(files.slice(-4).map((name) => name.slice(0, 4))).toEqual(['0010', '0011', '0012', '0013']);
+    const first = await runInProcess(env, SHIPPED, { extensionLoader: loader });
+    expect([first.code, first.stderr]).toEqual([0, '']);
+    const history = await rows(database.ownerUrl, 'SELECT name FROM kysely_migration_ee ORDER BY name');
+    expect(history.map((row) => row.name)).toEqual(files.map((name) => name.replace(/\.sql$/, '')));
+    // the last file's change is there
+    expect(await rows(database.ownerUrl, "SELECT count(*)::int AS n FROM information_schema.columns WHERE table_name = 'assistant_turns' AND column_name IN ('question_text', 'mask_on', 'answer', 'sensitivity_version')")).toEqual([{ n: 4 }]);
+    const second = await runInProcess(env, SHIPPED, { extensionLoader: loader });
+    expect([second.code, second.stdout]).toEqual([0, 'nothing to apply\n']);
   });
 });
