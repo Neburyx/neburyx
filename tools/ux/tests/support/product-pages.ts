@@ -261,7 +261,7 @@ export const REACH: Readonly<Record<string, (page: Page) => Promise<void>>> = {
   },
   'Patterns library with the Shared tab': async (page) => {
     await page.goto('/patterns?source=banking-demo');
-    await page.getByRole('tab', { name: /^Shared on this source/ }).click();
+    await page.getByRole('tab', { name: /^Shared with me/ }).click();
     await expect(page.getByRole('button', { name: 'Run Shared by Pat' })).toBeVisible();
   },
   'Patterns library with the Built-in tab': async (page) => {

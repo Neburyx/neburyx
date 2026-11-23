@@ -37,8 +37,9 @@ for (const [name, path] of PAGES) {
       expect(await styleOf(page.locator('aside.sidebar'), ['padding-top', 'padding-right', 'padding-bottom', 'padding-left']), 'sidebar padding').toEqual({ 'padding-top': '32px', 'padding-right': '16px', 'padding-bottom': '24px', 'padding-left': '16px' });
       await expectBox('brand', page.locator('.brand'), { x: 16, y: 32, width: 176, height: 29 });
       const items = page.locator('aside.sidebar nav a');
-      await expect(items).toHaveCount(3);
-      for (let index = 0; index < 3; index += 1) await expectBox(`navigation item ${index + 1}`, items.nth(index), { x: 16, y: 101 + 48 * index, width: 176, height: 40 });
+      // The frames list Home, Investigations, Patterns and Sources, in that order.
+      await expect(items).toHaveText(['Home', 'Investigations', 'Patterns', 'Sources']);
+      for (let index = 0; index < 4; index += 1) await expectBox(`navigation item ${index + 1}`, items.nth(index), { x: 16, y: 101 + 48 * index, width: 176, height: 40 });
     });
 
     test('marks the current item by the recorded fill, colour, weight and radius', async ({ page }) => {

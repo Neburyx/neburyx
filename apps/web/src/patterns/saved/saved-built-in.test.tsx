@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { savedPatternSchema, type ListedPattern, type PatternListResponse, type SavedPattern } from '@neburyx/contracts';
@@ -9,7 +9,13 @@ import { setMaskKeepingView } from '../../state/test-data.js';
 import { profiled } from '../../search/search-test-kit.js';
 import { UNAVAILABLE_TEXT } from './saved-copy.js';
 
+// The result sentence shows the measured time of a run; a fixed clock makes the form's sentence and the saved run's the same text.
+beforeEach(() => {
+  vi.spyOn(performance, 'now').mockReturnValue(1000);
+});
+
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   document.body.replaceChildren();
 });
