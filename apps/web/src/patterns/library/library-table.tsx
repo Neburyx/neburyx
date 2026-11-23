@@ -48,7 +48,7 @@ export function LibraryTable({ entries, label }: { readonly entries: readonly Ta
               <td>{row.parameters}</td>
               <td>{row.lastRun}</td>
               <td>
-                <span className="library-pill">{row.visibility}</span>
+                <span className="library-pill" data-shared={row.shared ? 'true' : undefined}>{row.visibility}</span>
               </td>
               <td>
                 <div className="library-actions">

@@ -80,6 +80,24 @@ test.describe('the patterns library page', () => {
     expect((pill?.x ?? 999) - ((title?.x ?? 0) + (title?.width ?? 0))).toBeLessThan(40);
   });
 
+  test('draws the table as the frame does: inset rows of the frame height, muted cells, a filled pill and a plain menu button', async ({ page }) => {
+    const row = rowOf(page, 'Device ring');
+    expect((await row.boundingBox())?.height).toBeGreaterThan(59);
+    expect((await row.boundingBox())?.height).toBeLessThan(67);
+    await expect(row.getByRole('cell').nth(0)).toHaveCSS('color', 'rgb(82, 91, 106)');
+    await expect(row.locator('.library-pill')).toHaveCSS('border-top-width', '0px');
+    const plain = await row.locator('.library-pill').evaluate((element) => getComputedStyle(element).backgroundColor);
+    await page.getByRole('tab', { name: /^Shared with me/ }).click();
+    const shared = await page.locator('.library-pill[data-shared="true"]').first().evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(shared, 'a shared pattern wears the tint, a private one the neutral fill').not.toBe(plain);
+    await page.getByRole('tab', { name: /^My patterns/ }).click();
+    await expect(row.getByRole('button', { name: /^More:/ })).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    const name = await row.getByRole('rowheader').boundingBox();
+    const panel = await page.getByRole('tabpanel').boundingBox();
+    expect((name?.x ?? 0) - (panel?.x ?? 0), 'the rows start inside the card').toBeGreaterThanOrEqual(18);
+    await expect(page.getByText('A saved pattern stores the pattern and its parameters, never query text. Running it applies your own access and limits.')).toHaveCSS('border-top-width', '0px');
+  });
+
   test('keeps Run and the menu of a row side by side at the width of the project', async ({ page }) => {
     for (const row of await page.getByRole('row').filter({ has: page.locator('.library-pill') }).all()) {
       const run = await row.getByRole('button', { name: /^Run / }).boundingBox();

@@ -15,6 +15,8 @@ export interface LibraryRow {
   readonly parameters: string;
   readonly lastRun: string;
   readonly visibility: string;
+  /** Whether others can use the pattern: you shared it, or someone shared it with you. */
+  readonly shared: boolean;
   readonly reasons: Reasons;
 }
 
@@ -35,15 +37,16 @@ export function savedRowOf(item: ListedPattern, presets: readonly Preset[] | und
     parameters: parametersOf(item, presets, nameOf) || LIBRARY_COPY.noValue,
     lastRun: item.lastRunAt === null ? LIBRARY_COPY.notRun : relativeTime(item.lastRunAt, now),
     visibility: item.ownedByYou ? (item.visibility === 'shared' ? LIBRARY_COPY.everyone : LIBRARY_COPY.onlyMe) : LIBRARY_COPY.sharedBy(item.owner.name),
+    shared: !item.ownedByYou || item.visibility === 'shared',
     reasons: item.availability.status === 'unavailable' ? item.availability.reasons : [],
   };
 }
 
 export function presetRowOf(preset: Preset, nameOf: (type: string) => string): LibraryRow {
-  return { key: `preset:${preset.id}`, name: preset.name, pattern: presetSummary(preset, nameOf), parameters: LIBRARY_COPY.noValue, lastRun: LIBRARY_COPY.noValue, visibility: LIBRARY_COPY.builtInVisibility, reasons: [] };
+  return { key: `preset:${preset.id}`, name: preset.name, pattern: presetSummary(preset, nameOf), parameters: LIBRARY_COPY.noValue, lastRun: LIBRARY_COPY.noValue, visibility: LIBRARY_COPY.builtInVisibility, shared: false, reasons: [] };
 }
 
 export function definitionRowOf(definition: BuiltInDefinition): LibraryRow {
-  return { key: `definition:${definition.id}`, name: definition.name, pattern: definition.description ?? definition.group ?? LIBRARY_COPY.noValue, parameters: LIBRARY_COPY.noValue, lastRun: LIBRARY_COPY.noValue, visibility: LIBRARY_COPY.builtInVisibility, reasons: [] };
+  return { key: `definition:${definition.id}`, name: definition.name, pattern: definition.description ?? definition.group ?? LIBRARY_COPY.noValue, parameters: LIBRARY_COPY.noValue, lastRun: LIBRARY_COPY.noValue, visibility: LIBRARY_COPY.builtInVisibility, shared: false, reasons: [] };
 }
 

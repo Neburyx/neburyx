@@ -994,7 +994,7 @@
 }
 
 .library-tab {
-  padding: var(--space-8) 0;
+  padding: var(--space-10) 0;
   border: 0;
   border-bottom: var(--border-width-current) solid transparent;
   background: transparent;
@@ -1012,6 +1012,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
+  margin-top: var(--space-12);
+  padding: 0 var(--space-20);
   border: var(--border-width) solid var(--color-control-border);
   border-radius: var(--radius-panel);
 }
@@ -1023,7 +1025,7 @@
 .library-panel > .sources-failure,
 .library-panel > section > .pattern-section-heading {
   margin: 0;
-  padding: var(--space-10) var(--space-12);
+  padding: var(--space-10) 0;
 }
 
 .library-panel > .patterns-state {
@@ -1043,13 +1045,15 @@
 
 .library-table th,
 .library-table td {
-  padding: var(--space-10) var(--space-12);
+  padding: var(--space-14) var(--space-8) var(--space-14) 0;
   border-bottom: var(--border-width) solid var(--color-control-border);
+  color: var(--color-text-muted);
   text-align: left;
   vertical-align: middle;
 }
 
 .library-table thead th {
+  padding-block: var(--space-12);
   color: var(--color-text-muted);
   font-size: var(--font-size-small);
   font-weight: normal;
@@ -1060,7 +1064,12 @@
   border-bottom: 0;
 }
 
-.library-name {
+.library-name .pattern-row-flag {
+  margin-left: var(--space-6);
+}
+
+.library-table th.library-name {
+  color: var(--color-text-strong);
   font-weight: normal;
 }
 
@@ -1078,18 +1087,32 @@
 
 .library-footnote {
   margin: 0;
-  padding: var(--space-10) var(--space-12);
-  border-top: var(--border-width) solid var(--color-control-border);
+  padding: var(--space-12) 0 var(--space-14);
 }
 
 .library-pill {
   display: inline-block;
   max-width: 100%;
-  padding: 0 var(--space-8);
-  border: var(--border-width) solid var(--color-control-border);
-  border-radius: var(--radius-panel);
-  font-size: var(--font-size-caption);
+  padding: var(--space-2) var(--space-8);
+  border-radius: var(--radius-badge);
+  background: var(--color-neutral-surface);
+  color: var(--color-neutral-text);
+  font-size: var(--font-size-small);
   overflow-wrap: anywhere;
+}
+
+.library-pill[data-shared='true'] {
+  background: var(--color-badge-surface);
+  color: var(--color-badge-text);
+}
+
+.library-actions button.secondary {
+  padding-inline: var(--space-16);
+}
+
+.library-actions .pattern-row-menu > button.secondary:not(:hover, [aria-expanded='true']) {
+  border-color: transparent;
+  background: transparent;
 }
 
 .library-actions .pattern-menu {
@@ -1098,15 +1121,15 @@
 }
 
 .library-table th:nth-child(1) {
-  width: 20%;
+  width: 24%;
 }
 
 .library-table th:nth-child(2) {
-  width: 17%;
+  width: 15%;
 }
 
 .library-table th:nth-child(3) {
-  width: 24%;
+  width: 20%;
 }
 
 .library-table th:nth-child(4) {
@@ -1118,5 +1141,5 @@
 }
 
 .library-table th:nth-child(6) {
-  width: 13%;
+  width: 15%;
 }
