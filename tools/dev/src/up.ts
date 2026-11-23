@@ -28,6 +28,7 @@ export const BUILDS: readonly { readonly name: string; readonly filter: string }
   { name: 'the contracts', filter: '@neburyx/contracts' },
   { name: 'the enterprise audit sink', filter: '@neburyx/ee-audit' },
   { name: 'the AI runtime', filter: '@neburyx/ee-ai-runtime' },
+  { name: 'the assistant agent', filter: '@neburyx/ee-assistant-agent' },
   { name: 'the enterprise extension', filter: '@neburyx/ee-ask' },
   { name: 'the API', filter: '@neburyx/api' },
   { name: 'the web app', filter: '@neburyx/web' },

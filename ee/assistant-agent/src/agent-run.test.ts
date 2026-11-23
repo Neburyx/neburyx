@@ -20,6 +20,23 @@ describe('the agent run', () => {
     for (const request of run.offered) for (const name of DEFAULT_TOOL_NAMES) expect(request).not.toContain(name);
   });
 
+  it('binds to the model only the tools of the run: none of the framework\'s own reaches the model, whichever way the model is wrapped', async () => {
+    const log: string[] = [];
+    const inner = fakeModel().respondWithTools([{ name: 'read_view', args: {} }]).respondWithTools([{ name: 'answer', args: { text: 'x' } }]).respond(new AIMessage('Done.'));
+    const bound: string[][] = [];
+    const original = inner.bindTools.bind(inner);
+    inner.bindTools = ((tools: Parameters<typeof original>[0]) => {
+      bound.push(tools.map((entry) => ('name' in entry ? String(entry.name) : '')).sort());
+      return original(tools);
+    }) as typeof inner.bindTools;
+    await runAgent({ ...base(controlOf()), model: inner, tools: [reader(log), answerTool(log)] });
+    expect(bound.length).toBeGreaterThan(0);
+    for (const names of bound) {
+      for (const name of DEFAULT_TOOL_NAMES) expect(names).not.toContain(name);
+      expect(names.every((name) => name === 'answer' || name === 'read_view')).toBe(true);
+    }
+  });
+
   it.each(['write_file', 'task', 'ls', 'dropEverything'])('runs nothing when the model names %s, which is not a tool of the run', async (name) => {
     const log: string[] = [];
     const model = fakeModel().respondWithTools([{ name, args: {} }]).respond(new AIMessage('Done.'));

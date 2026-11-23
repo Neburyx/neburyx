@@ -555,6 +555,10 @@ export function createAssistantTurnRoute(options: TurnRouteOptions): ExtensionRo
           return (await agentAnswer(request, body, { route: 'view', callsUsed: outcome.calls, startedAt, deadline, context, patterns: built === undefined || listing === undefined ? undefined : { built, listing } })) ?? refused('unplaced');
         case 'routed': {
           const { reply } = outcome;
+          if (reply.route === 'refuse' && reply.cause === 'unplaced') {
+            // a message the router could not place goes to the agent, as one the router never answered does; only the agent's own end is the refusal
+            return (await agentAnswer(request, body, { route: 'view', callsUsed: outcome.calls, startedAt, deadline, context, patterns: built === undefined || listing === undefined ? undefined : { built, listing } })) ?? refused('unplaced');
+          }
           if (reply.route === 'refuse') return reply.cause === 'verdict' ? verdictRefusal({ overview: options.overview?.(), request, body, readElements, deadline, startedAt, callsUsed: outcome.calls }) : refused(reply.cause);
           if (reply.route === 'meaning') {
             // the names are matched by the server, which writes the answer; a name that matches no type is a question for the view

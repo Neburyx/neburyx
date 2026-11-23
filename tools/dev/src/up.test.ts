@@ -147,7 +147,7 @@ describe('pnpm dev', () => {
     const { deps, calls, supervision } = rig();
     expect(await up(deps)).toBe(0);
     expect(calls.filter((call) => call.command === 'pnpm').map((call) => call.args[1])).toEqual(BUILDS.map((build) => build.filter));
-    expect(BUILDS.map((build) => build.filter)).toEqual(['@neburyx/contracts', '@neburyx/ee-audit', '@neburyx/ee-ai-runtime', '@neburyx/ee-ask', '@neburyx/api', '@neburyx/web']);
+    expect(BUILDS.map((build) => build.filter)).toEqual(['@neburyx/contracts', '@neburyx/ee-audit', '@neburyx/ee-ai-runtime', '@neburyx/ee-assistant-agent', '@neburyx/ee-ask', '@neburyx/api', '@neburyx/web']);
     expect(calls.at(-1)?.args).toEqual([join(ROOT, 'tools/dev/entry/enterprise-entry.mjs'), join(ROOT, 'services/api/dist/cli.js'), 'migrate']);
     expect(calls.at(-1)?.options.env).toEqual({ PATH: '/bin', HOME, DATABASE_MIGRATION_URL: 'postgres://mig:MIGPW@elsewhere.example.test/x', DATABASE_APP_ROLE: 'x_app' });
     const given = supervision();

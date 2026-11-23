@@ -52,6 +52,18 @@ describe('a view question on the agent', () => {
     expect(answer.status).toBe('not-answered');
   });
 
+  it('goes to the agent when the router says a message cannot be placed, and when it never returns a route', async () => {
+    for (const reply of [ok('{"route":"refuse","cause":"unplaced"}'), ok('not a route'), ok('{"route":"unknown"}')]) {
+      const model = fakeModel()
+        .respondWithTools([{ name: 'view', args: {} }])
+        .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+        .respond(new AIMessage('Done.'));
+      const r = await rig({ reply, agent: { model } });
+      const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+      expect(answer).toMatchObject({ status: 'answered', route: 'view', sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] });
+    }
+  });
+
   it('is not called for a verdict the router refuses', async () => {
     const model = fakeModel().respond(new AIMessage('never asked'));
     const r = await rig({ reply: ok('{"route":"refuse","cause":"verdict"}'), agent: { model } });
