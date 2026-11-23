@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { prepareOutFolder, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
+import { checkBars, textDecision, unblind, type Bars } from './report.js';
 import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile, type Slot } from './scorer.js';
 import { blindSets, type ArmRepeat } from './blind.js';
 import { enrichRepeat, type EnrichedRepeat } from './enrich.js';
@@ -15,6 +16,7 @@ const THREAD_USAGE = `usage:
   ask-eval thread records --file <run file> --database-env-file <env file> --out <file>
   ask-eval thread score --set <file> --slots <key file> --rubric <file> --scorer (codex --approval <file> | opus --max-calls <n>) --out <file>
   ask-eval thread score --ingest <scores file> --scorer-name <name> --slots <key file> --set <file> --out <file>
+  ask-eval thread report --key-file <key file> --bars <file> --primary <scorer> --product <arm> [--indicative-scorers <names>] [--text-arm <arm>] <scores file>...
   ask-eval thread calibrate --a <scores file> --b <scores file>
   ask-eval thread blind --seed <text> --sets <folder> --key <folder> <records file>...
   ask-eval thread run --manifest <file> --base <loopback url> --settings-file <env file> --head <commit> --arm <name> [--repeats <n>] [--call-limit <n>] [--model <name>] (--dry-run | --budget <n> --out <folder>)`;
@@ -36,7 +38,7 @@ export interface CliIo {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-const VALUE_FLAGS = ['set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
+const VALUE_FLAGS = ['key-file', 'bars', 'primary', 'product', 'indicative-scorers', 'text-arm', 'set', 'slots', 'rubric', 'scorer', 'approval', 'max-calls', 'ingest', 'scorer-name', 'a', 'b', 'seed', 'sets', 'key-folder', 'file', 'database-env-file', 'manifest', 'base', 'settings-file', 'head', 'arm', 'repeats', 'call-limit', 'model', 'budget', 'out'];
 const REFUSED_FLAGS = ['api-key', 'key', 'token', 'password', 'secret', 'api-key-file'];
 
 function parse(args: readonly string[], positional = false): { readonly values: Map<string, string>; readonly dryRun: boolean; readonly rest: readonly string[] } {
@@ -122,6 +124,7 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
   if (argv[0] === 'blind') return runBlind(argv.slice(1), io);
   if (argv[0] === 'score') return await runScore(argv.slice(1), io, deps);
   if (argv[0] === 'calibrate') return runCalibrate(argv.slice(1), io);
+  if (argv[0] === 'report') return runReport(argv.slice(1), io);
   if (argv[0] !== 'run') throw new UsageError(THREAD_USAGE);
   const { values, dryRun } = parse(argv.slice(1));
   for (const name of ['manifest', 'base', 'settings-file', 'head', 'arm']) if (values.get(name) === undefined) throw new UsageError(THREAD_USAGE);
@@ -318,4 +321,28 @@ function runCalibrate(args: readonly string[], io: CliIo): number {
   io.out(`agreement: C1 ${result.c1.toFixed(1)}% · C2 ${result.c2.toFixed(1)}% · C3 ${result.c3.toFixed(1)}% · C4 ${result.c4.toFixed(1)}% · overall ${result.overall.toFixed(1)}%`);
   io.out(result.indicative ? 'indicative: the overall agreement is below 90 percent' : 'the agreement is at or above 90 percent');
   return 0;
+}
+
+/** `ask-eval thread report`: the scores unblinded, the bars checked and the text decision taken. Exit 0 when every figure is at or above its bar, 1 when the feature stays open. */
+function runReport(args: readonly string[], io: CliIo): number {
+  const { values, rest } = parse(args, true);
+  const keyPath = values.get('key-file');
+  const barsPath = values.get('bars');
+  const primary = values.get('primary');
+  const product = values.get('product');
+  if (keyPath === undefined || barsPath === undefined || primary === undefined || product === undefined || rest.length === 0) throw new UsageError(THREAD_USAGE);
+  const key = (readJson(keyPath, 'the key file') as { key: { entries: never[] } }).key;
+  const bars = readJson(barsPath, 'the bars file') as Bars;
+  const files = rest.map((path) => readJson(path, 'a scores file') as ScoreFile);
+  const indicative = (values.get('indicative-scorers') ?? '').split(',').filter((name) => name !== '');
+  const arms = unblind(files, key, { primary, indicativeScorers: indicative });
+  for (const arm of arms) {
+    io.out(`arm ${arm.arm}: ${arm.repeats.map((entry) => `repeat ${entry.repeat} ${entry.total}${entry.indicative ? ' (indicative)' : ''}${entry.counted ? '' : ' (not counted)'}`).join(', ')}; median ${arm.median ?? 'none'}; counts C1 ${arm.criteria.c1} C2 ${arm.criteria.c2} C3 ${arm.criteria.c3} C4 ${arm.criteria.c4}`);
+  }
+  const report = checkBars(arms, product, bars);
+  for (const line of report.lines) io.out(line);
+  for (const finding of report.findings) io.out(`finding: ${finding.bar}: ${finding.figure}: ${finding.kind}: ${finding.where}`);
+  const textArm = values.get('text-arm');
+  if (textArm !== undefined) io.out(`decision: ${textDecision(arms, product, textArm)}`);
+  return report.status === 'met' ? 0 : 1;
 }

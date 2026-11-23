@@ -8,7 +8,7 @@ export interface ArmRepeat {
   readonly enriched: EnrichedRepeat;
 }
 
-interface KeyEntry {
+export interface KeyEntry {
   readonly repeat: number;
   readonly turn: number;
   /** Label to arm, for this turn of this repeat. */
