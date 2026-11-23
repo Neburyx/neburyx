@@ -7,7 +7,7 @@ import type { PanelRegistry } from '../workspace/panel-registry.js';
 import { AssistantPanel } from './assistant-panel.js';
 import { AssistantSessionProvider, createAssistantSession, registerAssistantSession, type AssistantSession } from './assistant-session.js';
 import { ASSISTANT_COPY } from './copy.js';
-import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDTH } from './panel-layout.js';
+import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDEST_SHARE, ASSISTANT_PANEL_WIDTH } from './panel-layout.js';
 
 /** Lives outside React: the panel is registered while the assistant is open, and the thread outlives the panel. A change of investigation, masking or source clears the thread here, so an answer shown under the old state is gone before it can be seen again. */
 export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, session: AssistantSession = createAssistantSession()): () => void {
@@ -16,7 +16,7 @@ export function bindAssistantPanel(state: ClientState, panels: PanelRegistry, se
   let remove: (() => void) | undefined;
   const syncPanel = (): void => {
     const open = state.presentation.view.getState().assistantOpen;
-    if (open && remove === undefined) remove = panels.register({ id: ASSISTANT_PANEL_ID, title: ASSISTANT_COPY.title, placement: { kind: 'floating', side: 'right', top: INSPECTOR_PANEL_TOP }, initialWidth: ASSISTANT_PANEL_WIDTH, content });
+    if (open && remove === undefined) remove = panels.register({ id: ASSISTANT_PANEL_ID, title: ASSISTANT_COPY.title, placement: { kind: 'floating', side: 'right', top: INSPECTOR_PANEL_TOP }, initialWidth: ASSISTANT_PANEL_WIDTH, widestShareOfWindow: ASSISTANT_PANEL_WIDEST_SHARE, content });
     else if (!open && remove !== undefined) {
       remove();
       remove = undefined;

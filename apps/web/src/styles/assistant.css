@@ -702,6 +702,32 @@
   border-color: var(--color-border);
 }
 
+.assistant-wide {
+  flex: 0 0 auto;
+  display: inline-flex;
+  padding: var(--space-4);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.assistant-wide[aria-pressed='true'] {
+  background: var(--color-accent-surface);
+  color: var(--color-accent);
+}
+
+.assistant-wide:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.assistant-wide-icon {
+  width: var(--space-14);
+  height: var(--space-14);
+}
+
 /* a table answer: the table scrolls inside the card, the page never does */
 .assistant-table-scroll {
   overflow-x: auto;

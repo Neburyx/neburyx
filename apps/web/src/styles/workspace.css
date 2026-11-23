@@ -286,7 +286,7 @@
 .canvas-notice {
   position: absolute;
   top: var(--space-16);
-  right: var(--space-16);
+  right: calc(var(--space-16) + var(--panel-reserved-right, 0px));
   margin: 0;
 }
 
@@ -1789,11 +1789,11 @@
 
 .expansion-status {
   position: absolute;
-  right: var(--space-16);
+  right: calc(var(--space-16) + var(--panel-reserved-right, 0px));
   bottom: calc(var(--space-16) * 4);
   z-index: 2;
   display: flex;
-  max-width: var(--menu-width-submenu);
+  max-width: min(var(--menu-width-submenu), calc(100% - var(--panel-reserved-left, 0px) - var(--panel-reserved-right, 0px) - var(--space-32)));
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-8) var(--space-12);
@@ -2207,4 +2207,23 @@
   text-align: center;
   transform: translateX(-50%);
   pointer-events: none;
+}
+
+.canvas-region[data-panels-right] .starting-hint {
+  top: var(--region-top);
+  right: calc(var(--space-16) + var(--panel-reserved-right));
+  left: max(var(--tool-strip-clear), calc(var(--panel-reserved-left, 0px) + var(--space-16)));
+  width: fit-content;
+  max-width: none;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+  transform: none;
+}
+
+.canvas-region[data-no-room-hint] .starting-hint {
+  display: none;
+}
+
+.canvas-region[data-no-room-notice] .expansion-status {
+  display: none;
 }

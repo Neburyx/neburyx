@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
+import { useClientState } from '../state/context.js';
+import { usePanelSize } from '../workspace/panel-host.js';
 import { useAiAvailabilityWhenProvided } from '../shell/shell-data.js';
+import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDE_SIZE, ASSISTANT_PANEL_WIDTH } from './panel-layout.js';
 import { ASSISTANT_COPY, hintText, tooLongText, TOO_LONG_NOTE, wordsSpoken, wordsText } from './copy.js';
 import { MaskingCard, NewThreadCard, StandingNote, StoredTurns } from './thread-notices.js';
 import { useStoredThread } from './stored-thread.js';
@@ -12,6 +15,28 @@ function Chat() {
     <svg aria-hidden="true" className="ask-sparkle" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
       <path d="M1.5 2h9v6h-5L3 10.5V8H1.5z" />
     </svg>
+  );
+}
+
+function WideIcon() {
+  return (
+    <svg aria-hidden="true" className="assistant-wide-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.2">
+      <path d="M1.5 4.5v-3h3M7.5 1.5h3v3M10.5 7.5v3h-3M4.5 10.5h-3v-3" />
+    </svg>
+  );
+}
+
+function WideButton() {
+  const { presentation } = useClientState();
+  const size = usePanelSize();
+  if (size === undefined) return null;
+  const canWiden = size.limits.max > ASSISTANT_PANEL_WIDTH;
+  const wide = canWiden && size.width >= size.limits.max;
+  const toggle = (): void => (wide ? presentation.clearPanelSize(ASSISTANT_PANEL_ID) : presentation.setPanelSize(ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDE_SIZE));
+  return (
+    <button type="button" className="assistant-wide" aria-label={wide ? ASSISTANT_COPY.normalWidth : ASSISTANT_COPY.wide} aria-pressed={wide} disabled={!canWiden} onClick={toggle}>
+      <WideIcon />
+    </button>
   );
 }
 
@@ -125,6 +150,7 @@ export function AssistantPanel({ onClose }: { readonly onClose: () => void }) {
           <h2>{ASSISTANT_COPY.title}</h2>
           <p>{model.title}</p>
         </div>
+        <WideButton />
         <button type="button" className="ask-close" aria-label={ASSISTANT_COPY.close} onClick={close}>
           ×
         </button>

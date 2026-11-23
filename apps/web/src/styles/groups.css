@@ -152,3 +152,16 @@
   font-size: var(--font-size-body);
   transform: translateX(-50%);
 }
+
+.canvas-region[data-panels-right] .group-notice,
+.canvas-region[data-panels-left] .group-notice {
+  right: calc(var(--space-16) + var(--panel-reserved-right, 0px));
+  left: calc(var(--space-16) + var(--panel-reserved-left, 0px));
+  width: fit-content;
+  margin-inline: auto;
+  transform: none;
+}
+
+.canvas-region[data-no-room-notice] .group-notice {
+  display: none;
+}

@@ -5,15 +5,15 @@ import type { Inspector } from './inspector.js';
 import { INSPECTOR_PANEL_ID, INSPECTOR_PANEL_TOP, INSPECTOR_PANEL_WIDTH } from './inspector-layout.js';
 import { inspectedKey } from './inspected.js';
 import { ASK_PANEL_ID, ASK_PANEL_WIDTH } from '../ask/panel-layout.js';
-import { ASSISTANT_PANEL_ID, ASSISTANT_PANEL_WIDTH } from '../assistant/panel-layout.js';
+import { ASSISTANT_PANEL_ID } from '../assistant/panel-layout.js';
 import { SUMMARY_PANEL_ID, SUMMARY_PANEL_WIDTH } from '../summary/panel-layout.js';
 import { PANEL_GAP, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH } from '../workspace/panel-limits.js';
 
-/** While the Ask panel or the summary panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is that panel's width between two gaps. With neither open the inset is the gap alone. */
+/** While the Ask panel or the summary panel is open the inspector hangs beside it, on its left, never over it: the distance from the right edge is that panel's width between two gaps. With neither open the inset is the gap alone. The Assistant panel can be as wide as 60% of the window, so the host measures its drawn width (`beside`) and no inset is computed here. */
 function insetOf(state: ClientState): number {
   const view = state.presentation.view.getState();
   // held to the limits the panel is drawn with, so a stored width below the least is not trusted
-  const beside = view.askOpen ? { id: ASK_PANEL_ID, width: ASK_PANEL_WIDTH } : view.assistantOpen ? { id: ASSISTANT_PANEL_ID, width: ASSISTANT_PANEL_WIDTH } : view.summaryOpen ? { id: SUMMARY_PANEL_ID, width: SUMMARY_PANEL_WIDTH } : undefined;
+  const beside = view.askOpen ? { id: ASK_PANEL_ID, width: ASK_PANEL_WIDTH } : view.summaryOpen ? { id: SUMMARY_PANEL_ID, width: SUMMARY_PANEL_WIDTH } : undefined;
   return beside === undefined ? PANEL_GAP : PANEL_GAP + Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, view.panelSizes.get(beside.id) ?? beside.width)) + PANEL_GAP;
 }
 
@@ -25,7 +25,7 @@ const epochOf = (state: ClientState): string => JSON.stringify([state.investigat
  */
 export function bindInspector(state: ClientState, panels: PanelRegistry, inspector: Inspector): () => void {
   let remove: (() => void) | undefined;
-  let placedAt = PANEL_GAP;
+  let placedAt: number | string = PANEL_GAP;
   let epoch = epochOf(state);
   const Content = inspectorContent(inspector);
   const sync = (): void => {
@@ -39,14 +39,16 @@ export function bindInspector(state: ClientState, panels: PanelRegistry, inspect
     const dismissed = inspector.dismissed.getState();
     if (dismissed !== undefined && dismissed !== shown) inspector.clearDismissal();
     const open = shown !== undefined && inspector.dismissed.getState() !== shown;
-    const inset = insetOf(state);
-    const placement = { kind: 'floating' as const, side: 'right' as const, top: INSPECTOR_PANEL_TOP, ...(inset === PANEL_GAP ? {} : { inset }) };
+    const besideAssistant = !state.presentation.view.getState().askOpen && state.presentation.view.getState().assistantOpen;
+    const inset = besideAssistant ? PANEL_GAP : insetOf(state);
+    const placement = { kind: 'floating' as const, side: 'right' as const, top: INSPECTOR_PANEL_TOP, ...(besideAssistant ? { beside: ASSISTANT_PANEL_ID } : inset === PANEL_GAP ? {} : { inset }) };
+    const placedKey = besideAssistant ? ASSISTANT_PANEL_ID : inset;
     if (open && remove === undefined) {
-      placedAt = inset;
+      placedAt = placedKey;
       remove = panels.register({ id: INSPECTOR_PANEL_ID, title: 'Inspector', placement, initialWidth: INSPECTOR_PANEL_WIDTH, content: Content });
-    } else if (open && inset !== placedAt) {
+    } else if (open && placedKey !== placedAt) {
       // moved, not registered again, so what the inspector holds stays
-      placedAt = inset;
+      placedAt = placedKey;
       panels.place(INSPECTOR_PANEL_ID, placement);
     } else if (!open && remove !== undefined) {
       remove();

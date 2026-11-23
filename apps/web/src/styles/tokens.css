@@ -58,6 +58,7 @@
   --rail-item-size: 40px;
   --header-height: 48px;
   --region-top: 64px;
+  --tool-strip-clear: calc(var(--space-16) * 4 + var(--space-8));
   --sources-icon-size: 10px;
   --assistant-input-height: 40px;
   --assistant-input-line-height: 17px;

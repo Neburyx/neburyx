@@ -5,8 +5,8 @@ import { PANEL_INITIAL_WIDTH } from './panel-limits.js';
 
 type PanelPlacement =
   | { readonly kind: 'dock' }
-  /** Shown over the canvas, `top` px below its top and `inset` px from the given side (the panel gap when none is given). */
-  | { readonly kind: 'floating'; readonly side: 'left' | 'right'; readonly top: number; readonly inset?: number };
+  /** Shown over the canvas, `top` px below its top and `inset` px from the given side (the panel gap when none is given), or beside the floating panel `beside` names: the gap, that panel's drawn width and the gap again. */
+  | { readonly kind: 'floating'; readonly side: 'left' | 'right'; readonly top: number; readonly inset?: number; readonly beside?: string };
 
 export interface PanelEntry {
   readonly id: string;
@@ -16,6 +16,8 @@ export interface PanelEntry {
   readonly initialWidth?: number;
   /** The widest the panel may be drawn in the dock, in place of the usual maximum; it is still held to half the workspace. */
   readonly maxWidth?: number;
+  /** The widest a floating panel may be drawn, as a share of the window's width (0 to 1) in place of the usual maximum; it is still held to the space the canvas has left. */
+  readonly widestShareOfWindow?: number;
   readonly content: ComponentType;
 }
 

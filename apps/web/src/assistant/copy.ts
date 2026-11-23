@@ -3,6 +3,8 @@ import type { AssistantFailureKind } from '@neburyx/contracts';
 export const ASSISTANT_COPY = {
   title: 'Assistant',
   close: 'Close',
+  wide: 'Wide',
+  normalWidth: 'Normal width',
   introTitle: 'Ask about this investigation',
   intro: 'Describe what is on screen, or ask the source a question. Answers cite the elements they rest on.',
   forExample: 'For example',

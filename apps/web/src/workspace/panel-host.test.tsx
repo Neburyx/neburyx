@@ -566,3 +566,94 @@ describe('floating panels', () => {
     error.mockRestore();
   });
 });
+
+describe('a floating panel that takes a share of the window', () => {
+  const setWindow = (width: number): void => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    act(() => void window.dispatchEvent(new Event('resize')));
+  };
+  const original = window.innerWidth;
+  afterEach(() => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: original });
+  });
+  const shared = (id: string, extra: Partial<PanelEntry> = {}): PanelEntry => floating(id, 'right', 64, { widestShareOfWindow: 0.6, ...extra });
+
+  async function open(windowWidth: number, canvasWidth: number, entries: readonly PanelEntry[]) {
+    stub = stubSizeObserver();
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: windowWidth });
+    const state = createClientState();
+    const { container, panels } = renderApp('/explore', client, state);
+    await screen.findByText('Local workspace');
+    act(() => {
+      for (const entry of entries) panels.register(entry);
+    });
+    act(() => stub?.resize(layer(container), canvasWidth, 700));
+    return { container, state };
+  }
+
+  it('is drawn at 60% of the window, not of the canvas, when a larger width is stored: 864 px at 1440 and 768 px at 1280', async () => {
+    const { container, state } = await open(1440, 1384, [shared('assistant')]);
+    act(() => state.presentation.setPanelSize('assistant', 2000));
+    expect(box(container, 'assistant').style.width).toBe('864px');
+    expect(box(container, 'assistant').style.right).toBe('16px');
+    setWindow(1280);
+    act(() => stub?.resize(layer(container), 1224, 700));
+    expect(box(container, 'assistant').style.width).toBe('768px');
+  });
+
+  it('keeps a floating panel without a share at 480 px in the same window', async () => {
+    const { container, state } = await open(1440, 1384, [floating('legend', 'right')]);
+    act(() => state.presentation.setPanelSize('legend', 2000));
+    expect(box(container, 'legend').style.width).toBe('480px');
+  });
+
+  it('follows a window made narrower and draws the width the person set again when it is made wide, never rewriting the stored width', async () => {
+    const { container, state } = await open(1440, 1384, [shared('assistant')]);
+    act(() => state.presentation.setPanelSize('assistant', 800));
+    expect(box(container, 'assistant').style.width).toBe('800px');
+    setWindow(1000);
+    act(() => stub?.resize(layer(container), 944, 700));
+    expect(box(container, 'assistant').style.width).toBe('600px');
+    expect(state.presentation.view.getState().panelSizes.get('assistant')).toBe(800);
+    setWindow(1440);
+    act(() => stub?.resize(layer(container), 1384, 700));
+    expect(box(container, 'assistant').style.width).toBe('800px');
+  });
+
+  it('is held to the space the canvas has left, and to 234 px in a 390 px window', async () => {
+    const { container, state } = await open(1440, 400, [shared('assistant')]);
+    act(() => state.presentation.setPanelSize('assistant', 2000));
+    expect(box(container, 'assistant').style.width).toBe('368px');
+    setWindow(390);
+    act(() => stub?.resize(layer(container), 334, 700));
+    expect(box(container, 'assistant').style.width).toBe('234px');
+  });
+
+  it('hangs a panel that names it beside it: the gap, the drawn width of that panel and the gap, following the width and the window', async () => {
+    const side: PanelEntry = { id: 'inspector', title: 'inspector', placement: { kind: 'floating', side: 'right', top: 64, beside: 'assistant' }, content: () => <p>inspector body</p> };
+    const { container, state } = await open(1440, 1384, [shared('assistant'), side]);
+    expect(box(container, 'inspector').style.right).toBe('352px');
+    act(() => state.presentation.setPanelSize('assistant', 2000));
+    expect(box(container, 'inspector').style.right).toBe('896px');
+    setWindow(1000);
+    act(() => stub?.resize(layer(container), 944, 700));
+    expect(box(container, 'inspector').style.right).toBe('632px');
+  });
+
+  it('keeps the usual gap for a panel that names one that is not registered', async () => {
+    const side: PanelEntry = { id: 'inspector', title: 'inspector', placement: { kind: 'floating', side: 'right', top: 64, beside: 'assistant' }, content: () => <p>inspector body</p> };
+    const { container } = await open(1440, 1384, [side]);
+    expect(box(container, 'inspector').style.right).toBe('16px');
+  });
+
+  it('has a resize handle that reports the 60% limit and goes to it with End and back to the least with Home', async () => {
+    const { container, state } = await open(1440, 1384, [shared('assistant')]);
+    const handle = screen.getByRole('separator', { name: 'Resize assistant' });
+    expect(handle.getAttribute('aria-valuemax')).toBe('864');
+    fireEvent.keyDown(handle, { key: 'End' });
+    expect(state.presentation.view.getState().panelSizes.get('assistant')).toBe(864);
+    expect(box(container, 'assistant').style.width).toBe('864px');
+    fireEvent.keyDown(handle, { key: 'Home' });
+    expect(box(container, 'assistant').style.width).toBe('240px');
+  });
+});

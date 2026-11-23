@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dockLimits, drawnWidth, floatingLimits, floatingPlacement, isPanelSize } from './panel-limits.js';
+import { dockLimits, drawnWidth, floatingLimits, floatingPlacement, isPanelSize, topBelowObstacles, windowShareWidth } from './panel-limits.js';
 
 describe('the dock limits', () => {
   it('take a widest width of the panel in place of 480 and keep it within half of the workspace', () => {
@@ -89,5 +89,57 @@ describe('where a floating panel starts and how high it may be', () => {
 
   it('puts no limit on the height before the canvas was measured', () => {
     expect(floatingPlacement(64, undefined)).toEqual({ top: 64, maxHeight: undefined });
+  });
+});
+
+describe('the share of the window', () => {
+  it('is a share of the window rounded down to a whole pixel, and nothing for a share outside 0 to 1 or a window not measured', () => {
+    expect(windowShareWidth(0.6, 1440)).toBe(864);
+    expect(windowShareWidth(0.6, 1280)).toBe(768);
+    expect(windowShareWidth(0.6, 634)).toBe(380);
+    expect(windowShareWidth(0.6, 635)).toBe(381);
+    expect(windowShareWidth(undefined, 1440)).toBeUndefined();
+    expect(windowShareWidth(0.6, undefined)).toBeUndefined();
+    expect(windowShareWidth(0.6, 0)).toBeUndefined();
+    expect(windowShareWidth(0, 1440)).toBeUndefined();
+    expect(windowShareWidth(1.2, 1440)).toBeUndefined();
+    expect(windowShareWidth(Number.NaN, 1440)).toBeUndefined();
+  });
+
+  it('gives floating limits of 60% of the window, not of the canvas, held to the space the canvas has left', () => {
+    expect(floatingLimits(1384, 16, windowShareWidth(0.6, 1440))).toEqual({ min: 240, max: 864 });
+    expect(floatingLimits(1224, 16, windowShareWidth(0.6, 1280))).toEqual({ min: 240, max: 768 });
+    expect(floatingLimits(400, 16, windowShareWidth(0.6, 1440))).toEqual({ min: 240, max: 368 });
+    expect(floatingLimits(1384, 16, windowShareWidth(undefined, 1440))).toEqual({ min: 240, max: 480 });
+  });
+
+  it('lets the minimum yield in a narrow window: 234 px at a 390 px window, and no room above the opening width up to 634 px', () => {
+    expect(floatingLimits(334, 16, windowShareWidth(0.6, 390))).toEqual({ min: 234, max: 234 });
+    expect(floatingLimits(578, 16, windowShareWidth(0.6, 634)).max).toBe(380);
+    expect(floatingLimits(579, 16, windowShareWidth(0.6, 635)).max).toBe(381);
+  });
+});
+
+describe('the top of a panel below the boxes it would cover', () => {
+  const scope = { left: 24, top: 16, right: 420, bottom: 60 };
+  const strip = { left: 16, top: 64, right: 56, bottom: 342 };
+
+  it('moves down to a gap below the scope lines when the panel overlaps them horizontally', () => {
+    expect(topBelowObstacles(16, { left: 224, right: 544 }, [scope, strip])).toBe(76);
+  });
+
+  it('stays where it is when it is clear of every box horizontally, or already starts below them', () => {
+    expect(topBelowObstacles(16, { left: 652, right: 972 }, [scope, strip])).toBe(16);
+    expect(topBelowObstacles(64, { left: 72, right: 372 }, [{ ...scope, bottom: 60 }])).toBe(64);
+    expect(topBelowObstacles(76, { left: 224, right: 544 }, [scope])).toBe(76);
+  });
+
+  it('goes below the lowest of the boxes it overlaps, and a box it only touches does not count', () => {
+    expect(topBelowObstacles(16, { left: 20, right: 300 }, [scope, strip])).toBe(358);
+    expect(topBelowObstacles(16, { left: 420, right: 700 }, [scope])).toBe(16);
+  });
+
+  it('follows a scope box that grew taller, as a long scope line wraps', () => {
+    expect(topBelowObstacles(16, { left: 224, right: 544 }, [{ ...scope, bottom: 110 }])).toBe(126);
   });
 });
