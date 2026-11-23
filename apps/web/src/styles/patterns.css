@@ -41,6 +41,10 @@
   font: inherit;
 }
 
+.patterns-field .select-control:disabled {
+  color: var(--color-text-muted);
+}
+
 .patterns-dates {
   display: flex;
   gap: var(--space-8);

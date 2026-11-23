@@ -197,6 +197,10 @@ test.describe('the Patterns panel on the canvas', () => {
     const text = panelOf(page).getByLabel('Observed lastSeen · UTC: from');
     const looks = (field: Locator) => field.evaluate((element) => ({ radius: getComputedStyle(element).borderRadius, size: getComputedStyle(element).fontSize, colour: getComputedStyle(element).color }));
     expect(await looks(first), 'a select looks like the inputs beside it').toEqual(await looks(text));
+    const live = await first.evaluate((element) => getComputedStyle(element).color);
+    await first.evaluate((element) => ((element as HTMLSelectElement).disabled = true));
+    expect(await first.evaluate((element) => getComputedStyle(element).color), 'a disabled select reads muted').not.toBe(live);
+    await first.evaluate((element) => ((element as HTMLSelectElement).disabled = false));
     for (const select of await selects.all()) {
       await expect(select).toHaveCSS('appearance', 'none');
       expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/^url\(/);
