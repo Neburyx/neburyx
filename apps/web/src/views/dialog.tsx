@@ -11,11 +11,13 @@ export interface DialogProps {
   readonly onClose: (() => void) | undefined;
   /** The element that takes the focus first; the first control when it is left out. */
   readonly initialFocus?: string;
+  /** A class added to the dialog box, for a dialog whose size or spacing differs from the shared one. */
+  readonly className?: string;
   readonly children: (titleId: string) => ReactNode;
 }
 
 /** A modal dialog over the workspace: it takes the focus, keeps it inside, closes on Esc and gives the focus back to what had it. */
-export function Dialog({ title, onClose, initialFocus, children }: DialogProps) {
+export function Dialog({ title, onClose, initialFocus, className, children }: DialogProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -65,7 +67,7 @@ export function Dialog({ title, onClose, initialFocus, children }: DialogProps) 
         dialog.current?.focus();
       }}
     >
-      <div className="sheet view-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={dialog} onKeyDown={onKeyDown}>
+      <div className={className === undefined ? 'sheet view-dialog' : `sheet view-dialog ${className}`} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={dialog} onKeyDown={onKeyDown}>
         <div className="sheet-title">
           <h2 id={titleId} className="sheet-heading">
             {title}

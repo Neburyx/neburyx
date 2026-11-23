@@ -47,3 +47,34 @@ input[type='checkbox']:not([role='switch']):checked:disabled {
   border-color: var(--color-control-border);
   background-color: var(--color-icon);
 }
+
+/* one radio for every group of choices, the same size as the checkbox: a ring and, when chosen, a filled accent dot */
+input[type='radio'] {
+  appearance: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  flex: none;
+  margin: 0;
+  border: var(--border-width) solid var(--color-icon);
+  border-radius: 50%;
+  background: var(--color-surface);
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+input[type='radio']:checked {
+  border-color: var(--color-accent);
+  background: radial-gradient(circle, var(--color-accent) 0 38%, var(--color-surface) 42%);
+}
+
+input[type='radio']:hover:not(:disabled):not(:checked) {
+  border-color: var(--color-accent);
+}
+
+input[type='radio']:disabled {
+  border-color: var(--color-workspace-border);
+  background: var(--color-surface-muted);
+  cursor: default;
+}

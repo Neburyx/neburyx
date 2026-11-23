@@ -93,6 +93,32 @@ test.describe('saved patterns in the Patterns panel', () => {
     await expect(rowOf(page, 'Saved by the spec')).toContainText('Shared');
   });
 
+  test('draws the save dialog as the frame does: a dimmed page, regular muted labels, room between sections, the product radio and a narrow label column', async ({ page }) => {
+    await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
+    await setNumber(panelOf(page), 'Max matching accounts', '7');
+    await press(page, panelOf(page).getByRole('button', { name: 'Save pattern', exact: true }));
+    const dialog = dialogOf(page);
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('.view-scrim')).toHaveCSS('background-color', /rgba\(.*0\.\d+\)$/);
+    expect((await dialog.boundingBox())?.width).toBe(480);
+    for (const label of await dialog.locator('.save-form .supernode-label').all()) {
+      await expect(label).toHaveCSS('font-weight', '400');
+      await expect(label).toHaveCSS('font-size', '12px');
+    }
+    const input = await dialog.getByLabel('Name').boundingBox();
+    const patternLabel = await dialog.locator('.save-field .supernode-label').nth(1).boundingBox();
+    expect((patternLabel?.y ?? 0) - ((input?.y ?? 0) + (input?.height ?? 0)), 'room between the name and the pattern').toBeGreaterThanOrEqual(14);
+    const radio = dialog.getByRole('radio').first();
+    await expect(radio).toHaveCSS('appearance', 'none');
+    const [radioBox, checkBox] = [await radio.boundingBox(), await dialog.getByRole('checkbox').boundingBox()];
+    expect(radioBox?.width).toBe(checkBox?.width);
+    await expect(radio).toHaveCSS('border-radius', '50%');
+    const row = dialog.locator('.save-summary-row').first();
+    const left = (await row.locator('dt').boundingBox())?.x ?? 0;
+    const value = (await row.locator('dd').boundingBox())?.x ?? 0;
+    expect(Math.abs(value - left - 202)).toBeLessThan(4);
+  });
+
   test('saves a built-in run from its form, lists it with its pattern and parameters, and runs it from its row with the answer of the form', async ({ page }) => {
     await press(page, panelOf(page).getByRole('button', { name: 'Shared devices', exact: true }));
     await setNumber(panelOf(page), 'Max matching accounts', '7');

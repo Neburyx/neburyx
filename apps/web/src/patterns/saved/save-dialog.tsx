@@ -88,29 +88,31 @@ export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, o
   };
 
   return (
-    <Dialog title={SAVED_COPY.saveDialog} onClose={busy ? undefined : onClose} initialFocus="input[type='text']">
+    <Dialog title={SAVED_COPY.saveDialog} onClose={busy ? undefined : onClose} initialFocus="input[type='text']" {...(preset === undefined ? {} : { className: 'save-dialog' })}>
       {() => (
         <form
-          className="rename-form"
+          className={preset === undefined ? 'rename-form' : 'rename-form save-form'}
           onSubmit={(event) => {
             event.preventDefault();
             void submit();
           }}
         >
-          <label htmlFor={nameId} className="supernode-label">
-            {SAVED_COPY.name}
-          </label>
-          <input id={nameId} type="text" className="patterns-input" value={name} aria-invalid={fits && !taken ? undefined : true} aria-describedby={preset !== undefined && fits && !taken ? undefined : ruleId} onChange={(event) => setName(event.target.value)} />
-          {preset !== undefined && fits && !taken ? null : (
-            <p id={ruleId} className="rename-hint">
-              {SAVED_COPY.nameRule}
-            </p>
-          )}
-          {fits ? null : (
-            <p role="alert" className="rename-problem">
-              {nameLimitText}
-            </p>
-          )}
+          <div className={preset === undefined ? 'save-name' : 'save-field'}>
+            <label htmlFor={nameId} className="supernode-label">
+              {SAVED_COPY.name}
+            </label>
+            <input id={nameId} type="text" className="patterns-input" value={name} aria-invalid={fits && !taken ? undefined : true} aria-describedby={preset !== undefined && fits && !taken ? undefined : ruleId} onChange={(event) => setName(event.target.value)} />
+            {preset !== undefined && fits && !taken ? null : (
+              <p id={ruleId} className="rename-hint">
+                {SAVED_COPY.nameRule}
+              </p>
+            )}
+            {fits ? null : (
+              <p role="alert" className="rename-problem">
+                {nameLimitText}
+              </p>
+            )}
+          </div>
           {preset === undefined ? null : (
             <>
               <div className="save-field">
@@ -120,22 +122,24 @@ export function SavePatternDialog({ client, sourceId, subject, anchor, nameOf, o
                   <span className="save-pill">{`v${preset.templateVersion}`}</span>
                 </span>
               </div>
-              {preset.summary.length === 0 ? null : (
-                <dl className="save-summary" aria-label={SAVED_COPY.parameters}>
-                  <dt className="supernode-label save-summary-heading">{SAVED_COPY.parameters}</dt>
-                  {preset.summary.map((line) => (
-                    <div key={line.label} className="save-summary-row">
-                      <dt>{line.label}</dt>
-                      <dd>{line.text}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              <label className="pattern-type">
-                <input type="checkbox" checked={asks} disabled={forced} onChange={(event) => setAsk(event.target.checked)} />
-                {SAVED_COPY.askEachTimeOf(preset.startLabel)}
-              </label>
-              {forced ? <p className="rename-hint">{SAVED_COPY.askEachTimeForcedOf(preset.startLabel)}</p> : null}
+              <div className="save-field">
+                {preset.summary.length === 0 ? null : (
+                  <dl className="save-summary" aria-label={SAVED_COPY.parameters}>
+                    <dt className="supernode-label save-summary-heading">{SAVED_COPY.parameters}</dt>
+                    {preset.summary.map((line) => (
+                      <div key={line.label} className="save-summary-row">
+                        <dt>{line.label}</dt>
+                        <dd>{line.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                <label className="pattern-type">
+                  <input type="checkbox" checked={asks} disabled={forced} onChange={(event) => setAsk(event.target.checked)} />
+                  {SAVED_COPY.askEachTimeOf(preset.startLabel)}
+                </label>
+                {forced ? <p className="rename-hint">{SAVED_COPY.askEachTimeForcedOf(preset.startLabel)}</p> : null}
+              </div>
               <fieldset className="save-plain-options">
                 <legend className="supernode-label">{SAVED_COPY.visibilityLegend}</legend>
                 {OPTIONS.map((option) => (
