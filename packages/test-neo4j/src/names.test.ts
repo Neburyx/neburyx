@@ -45,7 +45,7 @@ describe('the names of what a run creates on the shared server', () => {
   it('never takes a hand-made name with the prefix for one of its own, however old it looks: the owner tag is what makes a name its own', () => {
     const forever = NOW + 10 * 365 * 24 * HOUR;
     // a hand-made login of a person or another tool, with the prefix and no tag, in the shape this module used before it had a tag, and with a tag of another owner
-    for (const name of ['nbx_test_ht2318_ro', 'nbx_test_ep23a4_reader', 'nbx_test_aml_ro', 'nbx_test_1_abcdef_reader', 'nbx_test_mwtiz5si_c4acad_reader', 'nbx_test_mwtiz5si_c4acad_reader_role', 'nbx_test_xx_mwtiz5si_c4acad_reader', 'nbx_test_TN_mwtiz5si_c4acad_reader', 'nbx_test_tn_mwtiz5si_c4acad_admin']) {
+    for (const name of ['nbx_test_ht2318_ro', 'nbx_test_ep23a4_reader', 'nbx_test_aml_ro', 'nbx_test_1_abcdef_reader', 'nbx_test_mwtiz5si_c4acad_reader', 'nbx_test_mwtiz5si_c4acad_reader_role', 'nbx_test_xx_mwtiz5si_c4acad_reader', 'nbx_test_TN_mwtiz5si_c4acad_reader', 'nbx_test_tn_mwtiz5si_c4acad_admin', 'nbx_test_tn_a_c4acad_reader', 'nbx_test_tn_mwtiz5sixx_c4acad_reader']) {
       expect(isStaleObject(name, forever), name).toBe(false);
     }
     for (const name of ['nbx-test-mwtiz5si-c4acad', 'nbx-test-xx-mwtiz5si-c4acad', 'nbx-test-ht2318', 'nbx-test-TN-mwtiz5si-c4acad']) {

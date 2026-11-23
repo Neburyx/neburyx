@@ -27,8 +27,8 @@ export function namesFor(now: number = Date.now(), random: () => string = () => 
   };
 }
 
-const DATABASE = new RegExp(`^${DATABASE_PREFIX}${OWNER_TAG}-([0-9a-z]+)-[0-9a-f]{6}$`);
-const OBJECT = new RegExp(`^${USER_PREFIX}${OWNER_TAG}_([0-9a-z]+)_[0-9a-f]{6}_(?:reader|writer)(?:_role)?$`);
+const DATABASE = new RegExp(`^${DATABASE_PREFIX}${OWNER_TAG}-([0-9a-z]{8})-[0-9a-f]{6}$`);
+const OBJECT = new RegExp(`^${USER_PREFIX}${OWNER_TAG}_([0-9a-z]{8})_[0-9a-f]{6}_(?:reader|writer)(?:_role)?$`);
 
 function stampOf(match: RegExpExecArray | null): number | undefined {
   const stamp = match?.[1];

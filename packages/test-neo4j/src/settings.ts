@@ -12,7 +12,7 @@ export const ENV_NAMES = [ENV_URI, ENV_USER, ENV_PASSWORD] as const;
 /** The file a developer keeps the three variables in, outside the repositories, readable by the owner only. */
 export const DEV_ENV_FILE = join(homedir(), '.config', 'neburyx', 'dev-neo4j.env');
 
-/** What every object the tests create on the shared server starts with; a login that starts with it is refused, so that the sweep can never reach it. */
+/** What every object the tests create on the shared server starts with; a login that starts with it is refused, so that nothing the tests made can be mistaken for the login they use. */
 export const USER_PREFIX = 'nbx_test_';
 export const DATABASE_PREFIX = 'nbx-test-';
 /** The owner tag this module writes into every name it makes, right after the prefix: the sweep removes only names that carry it, so a login or database made by hand (or by another tool) with the prefix is never reached. */
