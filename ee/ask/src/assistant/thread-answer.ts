@@ -55,6 +55,8 @@ export interface StoredAnswerResult {
   readonly keyOf: (ref: Cite) => string | undefined;
 }
 
+const withMade = (result: StoredAnswerResult, made: Pick<StoredAnswer, 'model' | 'coverage'>): StoredAnswerResult => ({ ...result, answer: { ...made, ...result.answer } });
+
 export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, classify?: ClassifyItem): StoredAnswerResult | undefined {
   const fixed = (text: string): TextItem => ({ form: 'frozen', text });
   const citedRefs = (keys: readonly string[], refs: ReadonlyMap<string, Cite>): Cite[] => keys.flatMap((key) => (refs.has(key) ? [refs.get(key) as Cite] : []));
@@ -88,7 +90,9 @@ export function storedAnswerOf(answer: AssistantTurnAnswer, maskOn: boolean, cla
     const rows = table.rows.map((row) => ({ cells: row.cells.map((cell) => itemOf(cell, row.cites.filter((key) => refs.has(key)), refs, maskOn, 80, classify)), cites: citedRefs(row.cites, refs) }));
     return { kind: 'table', columns: labels, rows };
   });
-  return result([...stored, ...fixedBlock], refs);
+  // how the answer was made, as the server wrote it: counts and type names, no value
+  const made = { model: answer.model, coverage: { retrieval: answer.coverage.retrieval, summary: answer.coverage.summary, ...('summaryCited' in answer.coverage && answer.coverage.summaryCited !== undefined ? { summaryCited: answer.coverage.summaryCited } : {}) } };
+  return withMade(result([...stored, ...fixedBlock], refs), made);
 }
 
 /**

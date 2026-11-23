@@ -27,7 +27,8 @@ function RowParts({ turn }: { readonly turn: Turn }) {
 /** The answer of a stored turn in the card of a live answer: its blocks and numbered markers, none of what was not kept (the model, the coverage, the read steps). */
 function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn['answer']>; readonly valueFor: ValueOf }) {
   const view = storedViewOf(answer, valueFor);
-  const shown = { status: 'answered', route: 'view', blocks: view.blocks, citations: [], coverage: { retrieval: '', summary: '' }, model: '', calls: 0 } as unknown as ViewAnswer;
+  // an answer stored without its model and its coverage (before they were kept) draws neither
+  const shown = { status: 'answered', route: 'view', blocks: view.blocks, citations: [], coverage: answer.coverage ?? { retrieval: '', summary: '' }, model: answer.model ?? '', calls: 0 } as unknown as ViewAnswer;
   return (
     <>
       {view.refusals.map((refusal, index) => (
@@ -36,8 +37,7 @@ function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn[
           {refusal.overview === undefined ? null : <ViewAnswerCard answer={{ ...shown, blocks: refusal.overview }} entries={view.entries} heading={ASSISTANT_COPY.overviewHeading} sources={false} stored />}
         </div>
       ))}
-      {view.blocks.length === 0 ? null : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored />}
-      <StoredSources entries={view.entries} refs={view.refs} />
+      {view.blocks.length === 0 ? <StoredSources entries={view.entries} refs={view.refs} /> : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored sourcesNode={<StoredSources entries={view.entries} refs={view.refs} />} />}
     </>
   );
 }

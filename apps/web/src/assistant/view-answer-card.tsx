@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useClientState, useVisibleGraph } from "../state/context.js";
 import { useStoreSelector } from "../state/store.js";
 import { drawnKeys } from "../state/loaded-graph.js";
@@ -26,13 +26,16 @@ export function ViewAnswerCard({
   heading,
   sources = true,
   stored = false,
+  sourcesNode,
 }: {
   readonly answer: ViewAnswer;
   readonly entries: readonly CitationEntry[];
   readonly heading?: string;
   readonly sources?: boolean;
-  /** An earlier answer from the thread: its model, its coverage and its read steps are not kept, so none is drawn. */
+  /** An earlier answer from the thread: its read steps are not kept and are not drawn, and its model and its coverage are drawn only when it was stored with them. */
   readonly stored?: boolean;
+  /** The control of the sources an earlier answer is given instead of the built-in one, drawn where that one stands. */
+  readonly sourcesNode?: ReactNode;
 }) {
   const titleId = useId();
   const sourcesId = useId();
@@ -259,12 +262,13 @@ export function ViewAnswerCard({
         <span className="summary-tag summary-tag-accent">
           {ASSISTANT_COPY.drafted}
         </span>
-        {stored ? null : <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>}
+        {stored && answer.model === "" ? null : <span className="summary-tag">{`${ASSISTANT_COPY.modelTag}: ${answer.model}`}</span>}
       </div>
       {answer.blocks.map(blockOf)}
       {answer.noDescription === undefined ? null : <p className="assistant-no-description">{answer.noDescription}</p>}
       {answer.pointer === undefined ? null : <p className="assistant-pointer">{answer.pointer}</p>}
       {answer.lastCallNote === undefined ? null : <p className="assistant-pointer">{answer.lastCallNote}</p>}
+      {sourcesNode ?? null}
       {entries.length === 0 || !sources ? null : (
         <div className="assistant-sources">
           <button
@@ -289,7 +293,7 @@ export function ViewAnswerCard({
         {note}
       </p>
       {stored ? null : "reads" in answer ? <ReadSteps reads={answer.reads} /> : null}
-      {stored ? null : (
+      {stored && answer.coverage.retrieval === "" ? null : (
         <div className="assistant-coverage">
           <p>{ASSISTANT_COPY.coverage}</p>
           {"summaryCited" in answer.coverage && answer.coverage.summaryCited !== undefined ? <p>{answer.coverage.summaryCited}</p> : null}

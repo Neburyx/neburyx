@@ -71,6 +71,17 @@ describe('what a read sends of a stored thread', () => {
     expect(alone.turns[0]).not.toHaveProperty('answer');
   });
 
+  it('sends the model and the lines of coverage of an answer as they were stored, under either state of the mask and also when its version is not verified, and nothing for an answer stored without them', () => {
+    const made = { model: 'fixture-model', coverage: { retrieval: '27 shown · ≥ 184,506 not yet retrieved (lower bound)', summary: 'The answer cites 3 of the 27 elements the reads returned.' } };
+    for (const [mask, version] of [[true, 'sv1:a'], [false, 'sv1:a'], [true, 'sv1:other'], [true, undefined]] as const) {
+      const shown = presentThread(read(turn(writtenOff({ answer: { ...answer, ...made } }))), mask, version);
+      expect(shown.turns[0]?.answer).toMatchObject(made);
+    }
+    const without = presentThread(read(turn(writtenOff())), false, 'sv1:a');
+    expect(without.turns[0]?.answer).not.toHaveProperty('model');
+    expect(without.turns[0]?.answer).not.toHaveProperty('coverage');
+  });
+
   it('keeps the count of the earlier turns and the clearing', () => {
     expect(presentThread({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' }, false, undefined)).toEqual({ turns: [], earlierTurns: 4, previousThreadClearedAt: '2026-11-18T10:00:00.000Z' });
   });

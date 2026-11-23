@@ -37,6 +37,17 @@ describe('the stored form of an answer', () => {
     expect(stored?.blocks[3]).toMatchObject({ items: [{ text: 'A fixed pointer sentence.' }] });
   });
 
+  it('keeps the model and the lines of coverage of an answer with its blocks, the line of a cited summary when there is one, and none for an answer that has neither', () => {
+    const coverage = { retrieval: '27 shown · ≥ 184,506 not yet retrieved (lower bound)', summary: 'The answer cites 1 of the 27 elements the reads returned.' };
+    const stored = written(viewAnswer({ sentences: [{ text: 'First.', cites: ['n1'] }], model: 'fixture-model', coverage: { ...coverage, summaryCited: 'It rests on sentence 2 of the summary.' } }), false).answer;
+    expect(stored).toMatchObject({ model: 'fixture-model', coverage: { ...coverage, summaryCited: 'It rests on sentence 2 of the summary.' } });
+    const plain = written(viewAnswer({ sentences: [{ text: 'First.', cites: ['n1'] }], model: 'fixture-model', coverage }), false).answer;
+    expect(plain?.coverage).toEqual(coverage);
+    const refusal = storedAnswerOf({ status: 'not-answered', route: 'view', sentence: 'A fixed sentence.' } as AssistantTurnAnswer, false)?.answer;
+    expect(refusal).not.toHaveProperty('model');
+    expect(refusal).not.toHaveProperty('coverage');
+  });
+
   it('keeps twelve sentences of the model and the three fixed lines, cutting nothing', () => {
     const sentences = Array.from({ length: 12 }, (_, index) => ({ text: `Sentence ${index + 1}.`, cites: ['n1'] }));
     const stored = written(viewAnswer({ sentences, pointer: 'P.', noDescription: 'N.', lastCallNote: 'L.' }), false).answer;

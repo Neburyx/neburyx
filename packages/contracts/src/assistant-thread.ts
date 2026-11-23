@@ -59,7 +59,13 @@ const storedSentence = z.union([textItem(THREAD_SENTENCE_MAX).extend({ cites: st
  * The stored form of an answer: its ordered blocks. A block is sentences, a table (its title is the server's own fixed text and is not kept; the columns are labels, each cell is an item) or a refusal (its fixed sentence and the overview a verdict
  * refusal may carry). No citation title or snapshot, no follow-up token, no plan and no run id: nothing that is not text of the answer or a reference.
  */
+/** What an answer shows of how it was made, as the server wrote it: the model and the two lines of coverage (the counts with their labels, exact, estimated, lower bound or unknown) and, when a summary was cited, the line that says so. Counts and type names only, never a value. */
+const storedModel = z.string().min(1).max(200);
+const storedCoverage = z.strictObject({ retrieval: z.string().min(1).max(2000), summary: z.string().min(1).max(1000), summaryCited: z.string().min(1).max(1000).optional() });
+
 export const storedAnswerSchema = z.strictObject({
+  model: storedModel.optional(),
+  coverage: storedCoverage.optional(),
   blocks: z
     .array(
       z.discriminatedUnion('kind', [
@@ -126,6 +132,8 @@ const readItem = z.union([readText, readSegments, readWithheld]);
 const readCited = z.array(threadCitationRefSchema).max(Math.max(ASK_SUMMARY_MAX_CITATIONS, ASSISTANT_VIEW_KEYS_MAX));
 /** The answer of a turn as a read gives it, block by block, each item in one of the three states. */
 export const readAnswerSchema = z.strictObject({
+  model: storedModel.optional(),
+  coverage: storedCoverage.optional(),
   blocks: z
     .array(
       z.discriminatedUnion('kind', [

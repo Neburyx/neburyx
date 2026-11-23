@@ -10722,6 +10722,36 @@
                 "answer": {
                   "type": "object",
                   "properties": {
+                    "model": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    },
+                    "coverage": {
+                      "type": "object",
+                      "properties": {
+                        "retrieval": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 2000
+                        },
+                        "summary": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        },
+                        "summaryCited": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 1000
+                        }
+                      },
+                      "required": [
+                        "retrieval",
+                        "summary"
+                      ],
+                      "additionalProperties": false
+                    },
                     "blocks": {
                       "minItems": 1,
                       "maxItems": 8,

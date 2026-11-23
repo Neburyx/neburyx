@@ -39,6 +39,26 @@ describe('the answers of the stored turns, in the card of a live answer (frame A
     expect(screen.queryByText(ASSISTANT_COPY.coverage)).toBeNull();
   });
 
+  it('draws the model and the coverage card of an answer that was stored with them, the coverage after the sources as frame AS19a draws it, and neither for an answer stored without them', async () => {
+    const coverage = { retrieval: '27 shown · ≥ 184,506 relationships not yet retrieved (lower bound)', summary: 'The answer cites 1 of the 27 elements the reads returned.' };
+    await panel(
+      thread([
+        turn(1, { question: 'First?', answer: { model: 'claude-sonnet-5-5', coverage, blocks: [{ kind: 'sentences', items: [{ item: text('With them.'), cites: [REF_A] }] }] } }),
+        turn(2, { question: 'Second?', answer: { blocks: [{ kind: 'sentences', items: [{ item: text('Without them.'), cites: [REF_A] }] }] } }),
+      ]),
+    );
+    await screen.findByText('With them.');
+    expect(screen.getAllByText(new RegExp(`${ASSISTANT_COPY.modelTag}:`))).toHaveLength(1);
+    expect(screen.getByText(`${ASSISTANT_COPY.modelTag}: claude-sonnet-5-5`)).toBeTruthy();
+    const card = screen.getByText('With them.').closest('section') as HTMLElement;
+    expect(within(card).getByText(coverage.retrieval)).toBeTruthy();
+    expect(within(card).getByText(coverage.summary)).toBeTruthy();
+    const sources = within(card).getByRole('button', { name: /^Sources · 1/ });
+    const coverageBox = within(card).getByText(ASSISTANT_COPY.coverage).closest('div') as HTMLElement;
+    expect(sources.compareDocumentPosition(coverageBox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByText(ASSISTANT_COPY.coverage)).toHaveLength(1);
+  });
+
   it('shows the masking notice in place of an item the read withheld and no text of it, and still shows the question and the rest of the turn', async () => {
     await panel(
       thread([

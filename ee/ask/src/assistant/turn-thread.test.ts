@@ -195,7 +195,7 @@ describe('a turn kept in the thread as references and metadata', () => {
     expect(kept).toMatchObject({ route: 'view', outcome: 'answered' });
     expect(kept?.citationRefs).toHaveLength(2);
     expect(kept?.citationRefs).toEqual(answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref])));
-    expect(kept?.answer).toEqual({ blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'Element' }], rows: tablesOfBlocks(answer.blocks).flatMap((shown) => shown.rows).map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
+    expect(kept?.answer).toEqual({ model: 'fixture-model', coverage: { retrieval: expect.any(String), summary: expect.any(String) }, blocks: [{ kind: 'table', columns: [{ form: 'unbound', text: 'Element' }], rows: tablesOfBlocks(answer.blocks).flatMap((shown) => shown.rows).map((row, index) => ({ cells: [{ form: 'unbound', text: row.cells[0] }], cites: [answer.citations.flatMap((citation) => (citation.kind === 'description' || citation.kind === 'read' ? [] : [citation.ref]))[index]] })) }] });
     const closed = view.r.events.find((event) => event.action === TURN_CLOSED_ACTION);
     expect(closed?.detail).toMatchObject({ turn: { route: 'view', outcome: 'answered', citedElements: 2, form: 'table', tableRowsShown: 2 } });
     expect((closed?.detail as { turn: Record<string, unknown> }).turn).not.toHaveProperty('tableRowsDropped');
