@@ -25,6 +25,8 @@ function itemTextOf(item: Item, valueFor: ValueOf): string {
 
 /** What the card draws of a stored answer: its blocks as a live answer's (the fixed sentence and the overview of a refusal beside them), and the cited elements numbered in the order they are first cited. */
 export interface StoredView {
+  /** The elements the answer cites, in the order they are first cited, as references (what a read by reference is asked for). */
+  readonly refs: readonly Cited[];
   readonly blocks: ViewAnswer['blocks'];
   readonly refusals: readonly { readonly sentence: string; readonly overview: ViewAnswer['blocks'] | undefined }[];
   readonly entries: readonly CitationEntry[];
@@ -32,10 +34,12 @@ export interface StoredView {
 
 export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView {
   const numbers = new Map<string, CitationEntry>();
+  const refsByKey = new Map<string, Cited>();
   const keyOf = (ref: Cited): string => {
     const known = numbers.get(refKeyOf(ref));
     if (known !== undefined) return known.key;
     const number = numbers.size + 1;
+    refsByKey.set(refKeyOf(ref), ref);
     numbers.set(refKeyOf(ref), { key: String(number), number, kind: 'entityType' in ref ? 'entity' : 'relationship', graphKey: refKeyOf(ref), label: undefined });
     return String(number);
   };
@@ -52,7 +56,7 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
       refusals.push({ sentence: block.sentence.state === 'text' ? block.sentence.text : ASSISTANT_COPY.storedWithheld, overview });
     }
   }
-  return { blocks, refusals, entries: [...numbers.values()] };
+  return { blocks, refusals, entries: [...numbers.values()], refs: [...numbers.values()].flatMap((entry) => (refsByKey.has(entry.graphKey) ? [refsByKey.get(entry.graphKey) as Cited] : [])) };
 }
 
 /** The value a binding draws from what the gate returned for its element under the current mask, as the text a live answer writes it: a string, a number or a boolean as it is. Nothing when the element was not returned, holds no such property, or holds a value of another kind. */

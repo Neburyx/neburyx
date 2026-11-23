@@ -3,6 +3,7 @@ import { ASSISTANT_COPY, causeText, earlierText, sourcesText } from './copy.js';
 import { storedViewOf, valueFromReads, type ValueOf } from './stored-answer.js';
 import type { RefReads } from './stored-reads.js';
 import type { ViewAnswer } from './assistant-session.js';
+import { StoredSources } from './stored-sources.js';
 import { ViewAnswerCard } from './view-answer-card.js';
 
 type Turn = AssistantThreadResponse['turns'][number];
@@ -36,6 +37,7 @@ function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn[
         </div>
       ))}
       {view.blocks.length === 0 ? null : <ViewAnswerCard answer={shown} entries={view.entries} sources={false} stored />}
+      <StoredSources entries={view.entries} refs={view.refs} />
     </>
   );
 }
