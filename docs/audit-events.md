@@ -98,7 +98,7 @@ A heavy step of the loop that waits for the analyst writes `assistant.confirmati
 
 ## Not events
 
-The stored model-run records (`ask_runs`, `summary_runs`, `summary_run_calls`, `assistant_runs`, `assistant_run_calls`) and the history of a saved pattern (`pattern_events`) are records of what was done, not audit events. They are written through queues of their own, which `GET /readyz` counts with the audit events.
+The stored model-run records (`ask_runs`, `summary_runs`, `summary_run_calls`, `summary_run_removals`, `assistant_runs`, `assistant_run_calls`) and the history of a saved pattern (`pattern_events`) are records of what was done, not audit events. They are written through queues of their own, which `GET /readyz` counts with the audit events.
 
 ## Settings
 

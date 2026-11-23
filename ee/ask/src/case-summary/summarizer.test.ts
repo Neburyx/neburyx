@@ -24,7 +24,7 @@ const input = (overrides: Partial<CaseSummaryInput['reading']> = {}): CaseSummar
   reading: { nodes: [node], edges: [], unresolved: 0, omitted: false, notRetrieved: { value: 0, quality: 'exact', scope: 'coverage' }, uncounted: 0, ...overrides },
 });
 
-function summarizerWith(replies: readonly string[], overrides: Partial<SummarySettings> = {}) {
+function summarizerWith(replies: readonly string[], overrides: Partial<SummarySettings> = {}, store = createMemorySummaryRunStore()) {
   const requests: ModelRequest[] = [];
   const events: AuditEvent[] = [];
   let index = 0;
@@ -36,8 +36,8 @@ function summarizerWith(replies: readonly string[], overrides: Partial<SummarySe
   };
   const model = createAuditedModelCall({ provider, configuration: { model: 'm' }, sink: { record: async (event) => void events.push(event) } });
   const used = { ...settings, ...overrides };
-  const summarizer = createCaseSummarizer({ settings: used, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => createMemorySummaryRunStore(), availability: () => ({ available: true }) });
-  return { summarizer, requests, events };
+  const summarizer = createCaseSummarizer({ settings: used, instructions, model: () => model, audit: () => ({ record: async (event) => void events.push(event) }), tokenKeys: () => KEYS, runs: () => store, availability: () => ({ available: true }) });
+  return { summarizer, requests, events, store };
 }
 
 describe('the case summarizer', () => {
@@ -164,6 +164,36 @@ describe('the checks in the click', () => {
     const opened = openToken(KEYS, answer.status === 'partial' ? answer.summaryToken : '', { investigationId: '0192f000-0000-7000-8000-000000000042', actorId: 'a', policyVersion: 'p1', now: Date.now() });
     expect(opened.ok && opened.payload.sentences).toEqual([{ text: 'A fixed sentence.', cites: ['n1'] }]);
     expect(closed(events)[0]).toMatchObject({ result: 'partial', detail: { summary: { outcome: 'partial', sentencesKept: 1, sentencesRemoved: 1 } } });
+  });
+
+  it('keeps each removed sentence with its reason in the run record, and nothing of it in the closing event', async () => {
+    const store = createMemorySummaryRunStore();
+    const { summarizer, events } = summarizerWith([reply({ text: 'A fixed sentence.', cites: ['n1'] }, { text: 'An uncited sentence.', cites: [] }, { text: 'Item 4711 is listed.', cites: ['n1'] })], {}, store);
+    await summarizer.summarize(input(), new AbortController().signal);
+    expect(store.runs[0]?.removals).toEqual([{ runId: store.runs[0]?.id, number: 1, rejected: [{ text: 'An uncited sentence.', reason: 'citation' }, { text: 'Item 4711 is listed.', reason: 'number' }] }]);
+    expect(closed(events)[0]).toMatchObject({ detail: { summary: { sentencesKept: 1, sentencesRemoved: 2 } } });
+    for (const text of ['An uncited sentence.', 'Item 4711', 'citation']) expect(JSON.stringify(events)).not.toContain(text);
+  });
+
+  it('keeps the removals of every reply that was checked, with the number of its call', async () => {
+    const store = createMemorySummaryRunStore();
+    const { summarizer } = summarizerWith([reply({ text: 'An uncited sentence.', cites: [] }), reply({ text: 'Another uncited sentence.', cites: [] })], { maxCalls: 2 }, store);
+    await summarizer.summarize(input(), new AbortController().signal);
+    expect(store.runs[0]?.removals.map((removal) => [removal.number, removal.rejected.map((each) => each.text)])).toEqual([[1, ['An uncited sentence.']], [2, ['Another uncited sentence.']]]);
+  });
+
+  it('keeps no record of removals when the checks removed nothing', async () => {
+    const store = createMemorySummaryRunStore();
+    const { summarizer } = summarizerWith([GOOD], {}, store);
+    await summarizer.summarize(input(), new AbortController().signal);
+    expect(store.runs[0]?.removals).toEqual([]);
+  });
+
+  it('still answers, with the removal counted, when the record of the removals cannot be written', async () => {
+    const store = createMemorySummaryRunStore({ failOn: 'recordRemovals' });
+    const { summarizer, events } = summarizerWith([reply({ text: 'A fixed sentence.', cites: ['n1'] }, { text: 'An uncited sentence.', cites: [] })], {}, store);
+    expect(await summarizer.summarize(input(), new AbortController().signal)).toMatchObject({ status: 'partial', removedCount: 1 });
+    expect(closed(events)[0]).toMatchObject({ detail: { summary: { sentencesRemoved: 1 } } });
   });
 
   it('makes no more calls than the budget a caller gives, when it is smaller than its own limit, and no more than its own limit when it is larger', async () => {

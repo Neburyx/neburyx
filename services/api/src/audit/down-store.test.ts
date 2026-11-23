@@ -120,7 +120,7 @@ describe('stored records that a store does not take', () => {
     });
     const extension = createEnterpriseExtension({
       runStore: () => ({ record: (row) => write(row), close: () => Promise.resolve() }),
-      summaryRunStore: () => ({ begin: () => Promise.resolve(), beginCall: () => Promise.resolve(), endCall: () => Promise.resolve(), finish: () => Promise.resolve(), removeStartedBefore: () => Promise.resolve(0), close: () => Promise.resolve() }),
+      summaryRunStore: () => ({ begin: () => Promise.resolve(), beginCall: () => Promise.resolve(), endCall: () => Promise.resolve(), recordRemovals: () => Promise.resolve(), finish: () => Promise.resolve(), removeStartedBefore: () => Promise.resolve(0), close: () => Promise.resolve() }),
     });
     const configured = await extension.configure?.({ preview: true }, { NEBURYX_ASK_API_KEY: 'not-a-real-key', NEBURYX_ASK_MAPPING_FOLDER: makeAskFolder(['demo'], INTENTS) }, { sourceIds: ['demo'] });
     expect(configured?.ok).toBe(true);

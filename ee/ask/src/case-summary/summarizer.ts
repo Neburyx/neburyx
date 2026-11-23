@@ -192,6 +192,7 @@ export function createCaseSummarizer(options: SummarizerOptions): CaseSummarizer
             if (outcome.status === 'refused') return { refused: outcome.reason };
             const judged = outcome.value;
             lastChecked = { kept: judged.kept.length, removed: judged.removed };
+            if (judged.rejected.length > 0) await stored(() => runs.recordRemovals({ runId, number: callsMade, rejected: judged.rejected }));
             observeReply(sentences, judged);
             return judged;
           },

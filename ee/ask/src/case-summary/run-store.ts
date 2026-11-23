@@ -1,4 +1,5 @@
 import type { AuditSinkContext } from '@neburyx/contracts';
+import type { RejectedSentence } from '@neburyx/ee-ai-runtime';
 import pg from 'pg';
 
 /** The size of the pool the store keeps of its own: a record is a few short statements. */
@@ -35,6 +36,13 @@ interface SummaryCallStart {
   readonly valuesText: string;
 }
 
+/** The sentences the checks removed from one reply of the run, in the order the reply held them. */
+interface SummaryRemovals {
+  readonly runId: string;
+  readonly number: number;
+  readonly rejected: readonly RejectedSentence[];
+}
+
 type SummaryCallStatus = 'answered' | 'refused' | 'failed' | 'cancelled';
 
 export interface SummaryCallEnd {
@@ -55,6 +63,8 @@ export interface SummaryRunStore {
   begin(run: SummaryRunStart): Promise<void>;
   beginCall(call: SummaryCallStart): Promise<void>;
   endCall(call: SummaryCallEnd): Promise<void>;
+  /** Keeps each removed sentence with its reason; a reply that lost none writes nothing. */
+  recordRemovals(removals: SummaryRemovals): Promise<void>;
   finish(runId: string, outcome: string, calls: number, finishedAt: Date): Promise<void>;
   /** Removes the runs that started before the moment, with their calls; answers how many. */
   removeStartedBefore(moment: Date): Promise<number>;
@@ -78,6 +88,8 @@ const INSERT_CALL =
   'INSERT INTO summary_run_calls (run_id, call_number, started_at, instructions_sha256, instructions_text, values_text) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (run_id, call_number) DO NOTHING';
 const UPDATE_CALL =
   'UPDATE summary_run_calls SET status = $3, failure_kind = $4, reply_text = $5, tokens_in = $6, tokens_out = $7, duration_ms = $8 WHERE run_id = $1 AND call_number = $2';
+const INSERT_REMOVALS = 'INSERT INTO summary_run_removals (run_id, call_number, position, text, reason) VALUES ';
+const ON_REMOVAL_CONFLICT = ' ON CONFLICT (run_id, call_number, position) DO NOTHING';
 const UPDATE_RUN = 'UPDATE summary_runs SET outcome = $2, calls = $3, finished_at = $4 WHERE id = $1';
 const DELETE_OLD = 'DELETE FROM summary_runs WHERE started_at < $1';
 
@@ -118,6 +130,12 @@ export function createPgSummaryRunStore(context: AuditSinkContext, deps: Deps = 
     async endCall(call) {
       await write(UPDATE_CALL, [call.runId, call.number, call.status, call.failureKind ?? null, call.replyText ?? null, call.tokensIn ?? null, call.tokensOut ?? null, call.durationMs], 1);
     },
+    async recordRemovals(removals) {
+      if (removals.rejected.length === 0) return;
+      const rows = removals.rejected.map((each, position) => [removals.runId, removals.number, position, each.text, each.reason]);
+      const places = rows.map((_, row) => '(' + [1, 2, 3, 4, 5].map((column) => '$' + String(row * 5 + column)).join(', ') + ')').join(', ');
+      await write(INSERT_REMOVALS + places + ON_REMOVAL_CONFLICT, rows.flat());
+    },
     async finish(runId, outcome, calls, finishedAt) {
       await write(UPDATE_RUN, [runId, outcome, calls, finishedAt], 1);
     },
@@ -134,12 +152,13 @@ export interface MemorySummaryRun {
   finishedAt?: Date;
   readonly callStarts: SummaryCallStart[];
   readonly callEnds: SummaryCallEnd[];
+  readonly removals: SummaryRemovals[];
 }
 
 /** Only a test uses this: a store that keeps the records in memory and can be made to fail, so no database is needed. */
-export function createMemorySummaryRunStore(options: { readonly failOn?: 'begin' | 'beginCall' | 'endCall' | 'finish' } = {}): SummaryRunStore & { readonly runs: MemorySummaryRun[] } {
+export function createMemorySummaryRunStore(options: { readonly failOn?: 'begin' | 'beginCall' | 'endCall' | 'recordRemovals' | 'finish' } = {}): SummaryRunStore & { readonly runs: MemorySummaryRun[] } {
   const runs: MemorySummaryRun[] = [];
-  const check = (step: 'begin' | 'beginCall' | 'endCall' | 'finish'): void => {
+  const check = (step: 'begin' | 'beginCall' | 'endCall' | 'recordRemovals' | 'finish'): void => {
     if (options.failOn === step) throw new SummaryRunStoreError();
   };
   const find = (runId: string): MemorySummaryRun => {
@@ -151,7 +170,7 @@ export function createMemorySummaryRunStore(options: { readonly failOn?: 'begin'
     runs,
     async begin(start) {
       check('begin');
-      if (!runs.some((held) => held.id === start.id)) runs.push({ id: start.id, start, callStarts: [], callEnds: [] });
+      if (!runs.some((held) => held.id === start.id)) runs.push({ id: start.id, start, callStarts: [], callEnds: [], removals: [] });
     },
     async beginCall(call) {
       check('beginCall');
@@ -163,6 +182,10 @@ export function createMemorySummaryRunStore(options: { readonly failOn?: 'begin'
       const held = ends.findIndex((end) => end.number === call.number);
       if (held < 0) ends.push(call);
       else ends[held] = call;
+    },
+    async recordRemovals(removals) {
+      check('recordRemovals');
+      if (removals.rejected.length > 0) find(removals.runId).removals.push(removals);
     },
     async finish(runId, outcome, calls, finishedAt) {
       check('finish');

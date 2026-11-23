@@ -68,6 +68,23 @@ describe('the pg summary run store', () => {
     expect(calls[3]?.values).toEqual([NEW_ID, 'ok', 1, AT]);
   });
 
+  it('writes the sentences a reply lost, each with its reason, in one statement, and nothing for a reply that lost none', async () => {
+    const { store, calls } = rig(undefined, 2);
+    await store.recordRemovals({ runId: NEW_ID, number: 2, rejected: [{ text: 'First removed.', reason: 'citation' }, { text: 'Second removed.', reason: 'number' }] });
+    await store.recordRemovals({ runId: NEW_ID, number: 3, rejected: [] });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.text).toContain('INSERT INTO summary_run_removals');
+    expect(calls[0]?.text).toContain('VALUES ($1, $2, $3, $4, $5), ($6, $7, $8, $9, $10) ON CONFLICT');
+    expect(calls[0]?.values).toEqual([NEW_ID, 2, 0, 'First removed.', 'citation', NEW_ID, 2, 1, 'Second removed.', 'number']);
+  });
+
+  it('fails with the fixed error when the removals cannot be written, never with the text of the driver', async () => {
+    const { store } = rig(new Error('duplicate key value violates constraint with First removed.'));
+    const failure = await store.recordRemovals({ runId: NEW_ID, number: 1, rejected: [{ text: 'First removed.', reason: 'name' }] }).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(SummaryRunStoreError);
+    expect(failure).toMatchObject({ code: 'SUMMARY_RUN_WRITE_FAILED', message: 'the record of the case summary could not be written' });
+  });
+
   it('removes the runs that started before the moment and answers how many', async () => {
     const { store, calls } = rig(undefined, 3);
     expect(await store.removeStartedBefore(AT)).toBe(3);
@@ -114,6 +131,16 @@ describe('the memory summary run store', () => {
     expect(await store.removeStartedBefore(AT)).toBe(1);
     expect(store.runs.map((run) => run.id)).toEqual([equal]);
     expect(store.runs.map((run) => run.id)).not.toContain(old);
+  });
+
+  it('keeps the removals of a reply with its run, none for a reply that lost nothing, and drops them with the run', async () => {
+    const store = createMemorySummaryRunStore();
+    await store.begin({ id: NEW_ID, actorId: ACTOR, sourceId: 's', traceId: 't', startedAt: AT, settings: {} });
+    await store.recordRemovals({ runId: NEW_ID, number: 1, rejected: [{ text: 'Removed.', reason: 'verdict' }] });
+    await store.recordRemovals({ runId: NEW_ID, number: 2, rejected: [] });
+    expect(store.runs[0]?.removals).toEqual([{ runId: NEW_ID, number: 1, rejected: [{ text: 'Removed.', reason: 'verdict' }] }]);
+    expect(await store.removeStartedBefore(new Date(AT.getTime() + 1))).toBe(1);
+    expect(store.runs).toEqual([]);
   });
 
   it('fails at the step it is told to', async () => {

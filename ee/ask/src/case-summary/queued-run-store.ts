@@ -16,6 +16,7 @@ export function queuedSummaryRunStore(store: SummaryRunStore, queue: () => Recor
     begin: (run) => queued({ runId: run.id, actorId: run.actorId, step: 'begin' }, () => store.begin(run)),
     beginCall: (call) => queued({ runId: call.runId, call: String(call.number), step: 'beginCall' }, () => store.beginCall(call)),
     endCall: (call) => queued({ runId: call.runId, call: String(call.number), step: 'endCall' }, () => store.endCall(call)),
+    recordRemovals: (removals) => queued({ runId: removals.runId, call: String(removals.number), step: 'recordRemovals' }, () => store.recordRemovals(removals)),
     finish: (runId, outcome, calls, finishedAt) => queued({ runId, step: 'finish' }, () => store.finish(runId, outcome, calls, finishedAt)),
     removeStartedBefore: (moment) => store.removeStartedBefore(moment),
     close: () => store.close(),

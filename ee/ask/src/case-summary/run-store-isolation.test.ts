@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const FOLDERS = ['ee', 'services', 'packages', 'apps', 'tools'];
-const ALLOWED = new Set(['ee/ask/src/case-summary/run-store.ts', 'ee/migrations/0006-summary-runs.sql']);
+const ALLOWED = new Set(['ee/ask/src/case-summary/run-store.ts', 'ee/migrations/0006-summary-runs.sql', 'ee/migrations/0011-summary-run-removals.sql']);
 const SKIPPED = new Set(['node_modules', 'dist', 'coverage', '.turbo']);
 
 function filesUnder(folder: string): string[] {
@@ -17,7 +17,7 @@ function filesUnder(folder: string): string[] {
 }
 
 /** The files that name a stored-record table and are not allowed to. */
-const forbiddenNamers = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => /summary_run(s|_calls)/.test(file.text) && !ALLOWED.has(file.path)).map((file) => file.path);
+const forbiddenNamers = (files: readonly { readonly path: string; readonly text: string }[]): string[] => files.filter((file) => /summary_run(s|_calls|_removals)/.test(file.text) && !ALLOWED.has(file.path)).map((file) => file.path);
 
 describe('the stored case summary records', () => {
   const sources = FOLDERS.flatMap((folder) => filesUnder(join(ROOT, folder)))
@@ -35,6 +35,8 @@ describe('the stored case summary records', () => {
 
   it('canary: the same check fails a new route, export or log module that names a table, and passes the store and the migration', () => {
     const named = "SELECT * FROM summary_run_calls WHERE run_id = $1";
+    const removals = "SELECT text FROM summary_run_removals WHERE run_id = $1";
+    expect(forbiddenNamers([{ path: 'services/api/src/graph/removals-route.ts', text: removals }, { path: 'ee/ask/src/case-summary/run-store.ts', text: removals }, { path: 'ee/migrations/0011-summary-run-removals.sql', text: 'CREATE TABLE summary_run_removals' }])).toEqual(['services/api/src/graph/removals-route.ts']);
     expect(forbiddenNamers([{ path: 'services/api/src/graph/new-route.ts', text: named }, { path: 'ee/ask/src/case-summary/run-store.ts', text: named }, { path: 'ee/migrations/0006-summary-runs.sql', text: 'CREATE TABLE summary_runs' }])).toEqual(['services/api/src/graph/new-route.ts']);
     expect(sources).toContain('ee/ask/src/case-summary/run-store.ts');
   });

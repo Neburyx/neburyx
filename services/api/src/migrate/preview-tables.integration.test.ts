@@ -230,6 +230,30 @@ describe('the summary_runs and summary_run_calls tables of the preview', () => {
     expect(await rows(database.ownerUrl, `SELECT 1 FROM pg_constraint WHERE conrelid = 'summary_runs'::regclass AND contype = 'f'`)).toEqual([]);
   });
 
+  it('has the table of the removed sentences, cascading from the run, with a closed set of reasons', async () => {
+    const database = await migratedWithPreview();
+    expect((await columnsOf(database, 'summary_run_removals')).map((column) => column['column_name'])).toEqual(['run_id', 'call_number', 'position', 'text', 'reason']);
+    expect(await rows(database.ownerUrl, `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'summary_run_removals'::regclass AND contype = 'f'`)).toEqual([{ definition: 'FOREIGN KEY (run_id) REFERENCES summary_runs(id) ON DELETE CASCADE' }]);
+  });
+
+  it('writes the removed sentences through the application role, once for each position, and a removal of the run takes them with it', async () => {
+    const database = await migratedWithPreview();
+    const store = createPgSummaryRunStore(contextOf(database));
+    try {
+      const startedAt = new Date('2026-10-01T00:00:00Z');
+      const id = randomUUID();
+      await store.begin({ ...BASE, id, startedAt });
+      const removals = { runId: id, number: 1, rejected: [{ text: 'First removed.', reason: 'citation' as const }, { text: 'Second removed.', reason: 'number' as const }] };
+      await store.recordRemovals(removals);
+      await store.recordRemovals(removals);
+      expect(await rows(database.ownerUrl, 'SELECT position, text, reason FROM summary_run_removals WHERE run_id = $1 ORDER BY position', [id])).toEqual([{ position: 0, text: 'First removed.', reason: 'citation' }, { position: 1, text: 'Second removed.', reason: 'number' }]);
+      expect(await store.removeStartedBefore(new Date(startedAt.getTime() + 1))).toBe(1);
+      expect(await rows(database.ownerUrl, 'SELECT 1 FROM summary_run_removals')).toEqual([]);
+    } finally {
+      await store.close();
+    }
+  });
+
   it('is written, completed and removed by the real store through the application role, and a removal takes the calls with the run', async () => {
     const database = await migratedWithPreview();
     const store = createPgSummaryRunStore(contextOf(database));
