@@ -5,7 +5,8 @@ import type { ApiResult } from '../../api/client.js';
 import { settle } from '../patterns-kit.js';
 import { addStepButton, addCondition, editRow, openStep, afterDebounce, buildStep, chooseArrival, chooseDirection, chooseStart, cleanup, conditionRow, conditionsWorkspace, fireEvent, openBuilder, optionTexts, rowField, screen, stepCard, toggleType, userEvent, within } from './builder-kit.js';
 
-beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+// user-event waits a timer between its steps; the clock moves only with the real ticks, so a coarse tick makes every click cost its length several times over
+beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 1 }));
 afterEach(() => {
   cleanup();
   document.body.replaceChildren();
