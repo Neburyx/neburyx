@@ -37,7 +37,8 @@ export function readSettingsFile(path: string): Readonly<Partial<Record<AllowedN
     if (at < 1) continue;
     const name = trimmed.slice(0, at).trim().replace(/^export\s+/u, '');
     const known = ALLOWED.find((allowed) => allowed === name);
-    if (known !== undefined) found[known] = trimmed.slice(at + 1).trim().replace(/^["']|["']$/gu, '');
+    const value = trimmed.slice(at + 1).trim().replace(/^["']|["']$/gu, '');
+    if (known !== undefined && value !== '') found[known] = value;
   }
   return found;
 }

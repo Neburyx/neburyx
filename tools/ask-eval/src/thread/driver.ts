@@ -16,6 +16,8 @@ export interface RepeatSettings {
   /** Where the effort and the model come from: the settings file or the product's default. */
   readonly effortSource?: string | undefined;
   readonly modelSource?: string | undefined;
+  /** The settings the file sets, by the name the run record holds them under: each is checked against the record of the first turn. */
+  readonly configured: Readonly<Record<string, string | number>>;
 }
 
 export interface RepeatOptions {
@@ -185,7 +187,12 @@ export async function runRepeat(options: RepeatOptions): Promise<RepeatFile> {
       if (remaining !== undefined) remaining -= settings.callLimit;
       const first = turns[0];
       if (index === 0 && first !== undefined && options.verifyFirstTurn !== undefined && status !== 'failed') {
-        const problem = await options.verifyFirstTurn(first);
+        let problem: string | undefined;
+        try {
+          problem = await options.verifyFirstTurn(first);
+        } catch {
+          problem = 'the records of the first turn could not be read: the repeat stops with its turns kept';
+        }
         if (problem !== undefined) {
           ended = 'failed';
           stoppedBecause = problem;

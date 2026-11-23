@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import { AI_DEFAULTS, SUMMARY_DEFAULTS } from '@neburyx/contracts';
 import { checkPrivateTarget, prepareOutFolder, requireOutsideGitTree, writePrivateFile } from '../paths.js';
 import { UsageError } from '../questions.js';
 import { factsOf } from './facts.js';
 import { checkBars, textDecision, unblind } from './report.js';
-import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, type Runner, type Score, type ScoreFile } from './scorer.js';
+import { agreement, codexRunner, countedRunner, opusRunner, parseApproval, scoreProblems, scoreSet, zeroNoAnswers, ScorerUnavailable, type Runner, type Score, type ScoreFile } from './scorer.js';
 import { parseBars, parseCalibration, parseEnriched, parseIngested, parseKeyFile, parseLedger, parsePrices, parseRepeatFile, parseScoreFile, type Calibration } from './schemas.js';
 import { blindSets, type ArmRepeat } from './blind.js';
 import { readTurnRecords, type Waiting } from './records.js';
@@ -15,7 +15,7 @@ import { connectDb } from './db.js';
 import type { Db } from './records.js';
 import { runRepeat, type Http, type RepeatFile, type RepeatSettings, type TurnRecord } from './driver.js';
 import { parseManifest } from './manifest.js';
-import { readSettingsFile } from './settings-file.js';
+import { readSettingsFile, type AllowedName } from './settings-file.js';
 
 const THREAD_USAGE = `usage:
   ask-eval thread records --file <run file> --database-env-file <env file> --allowed-tools <a,b,...> --out <file>
@@ -74,13 +74,35 @@ function parse(args: readonly string[], positional = false): { readonly values: 
 }
 
 const ARM = /^[A-Za-z0-9][A-Za-z0-9._-]{1,39}$/u;
-const CREDENTIAL = [/sk-[A-Za-z0-9_-]{16,}/u, /\b(?:postgres(?:ql)?|bolt(?:\+s)?|neo4j(?:\+s)?|mongodb|redis):\/\/[^\s"']*:[^\s"'@]*@/u, /\bset-cookie\b|\bcookie:\s/iu, /-----BEGIN [A-Z ]*PRIVATE KEY-----/u, /\bAKIA[0-9A-Z]{16}\b/u, /\bBearer\s+[A-Za-z0-9._-]{20,}/u];
+const CREDENTIAL = [/sk-[A-Za-z0-9_-]{16,}/u, /\b(?:postgres(?:ql)?|bolt(?:\+s)?|neo4j(?:\+s)?|mongodb|redis|mysql):\/\/\S+/iu, /\bset-cookie\b|\bcookie:\s|"(?:set-)?cookie"\s*:|"authorization"\s*:/iu, /-----BEGIN [A-Z ]*PRIVATE KEY-----/u, /\bAKIA[0-9A-Z]{16}\b/u, /\bBearer\s+[A-Za-z0-9._-]{20,}/u];
+
+const looksLikeCredential = (text: string): boolean => CREDENTIAL.some((pattern) => pattern.test(text));
 
 /** A file's text is written only when it holds nothing that looks like a credential; the refusal names no content. */
 function writeChecked(path: string, text: string, replace: boolean): void {
-  if (CREDENTIAL.some((pattern) => pattern.test(text))) throw new UsageError('the content holds credential-like text: it is not written');
+  if (looksLikeCredential(text)) throw new UsageError('the content holds credential-like text: it is not written');
   requireOutsideGitTree(path, 'an output file');
   writePrivateFile(path, text, replace);
+}
+
+/** Every line the tool prints passes the same check: a line that looks like a credential is replaced by a fixed notice, so a value of the product or a scorer never reaches the terminal as such. */
+function guarded(io: CliIo): CliIo {
+  const safe = (line: string): string => (looksLikeCredential(line) ? '[a line that looked like a credential was withheld]' : line);
+  return { out: (line) => io.out(safe(line)), err: (line) => io.err(safe(line)), env: io.env };
+}
+
+/** A file to write is checked before any paid work: not a link, not there already, outside every git tree, and in a folder that exists and can be written. */
+function preflightTarget(path: string, replace = false): void {
+  checkPrivateTarget(path, replace);
+  requireOutsideGitTree(path, 'an output file');
+  const folder = dirname(path);
+  try {
+    if (!statSync(folder).isDirectory()) throw new UsageError('the folder of an output file is not a folder');
+    accessSync(folder, constants.W_OK);
+  } catch (error) {
+    if (error instanceof UsageError) throw error;
+    throw new UsageError('the folder of an output file does not exist or cannot be written');
+  }
 }
 
 const wholeNumber = (text: string | undefined, name: string, min: number, max: number): number | undefined => {
@@ -122,6 +144,9 @@ const realHttp = (base: string): Http => async (method, path, body) => {
   };
 };
 
+/** The numeric allowlisted settings of the file and the key the run record holds each under. */
+const NUMERIC_SETTINGS: readonly (readonly [AllowedName, string])[] = [['NEBURYX_ASSISTANT_TIMEOUT_MS', 'timeoutMs'], ['NEBURYX_ASSISTANT_TOTAL_TIMEOUT_MS', 'totalTimeoutMs'], ['NEBURYX_ASSISTANT_MAX_STEPS', 'maxSteps'], ['NEBURYX_ASSISTANT_MAX_ROWS', 'maxRows'], ['NEBURYX_ASSISTANT_CONTEXT_TURNS', 'contextTurns'], ['NEBURYX_ASSISTANT_MAX_MESSAGE_WORDS', 'maxMessageWords'], ['NEBURYX_ASSISTANT_MAX_INPUT_TOKENS', 'maxInputTokens'], ['NEBURYX_ASSISTANT_MAX_OUTPUT_TOKENS', 'maxOutputTokens']];
+
 /** The settings the product will use: the file's value, else the product's default; a flag that disagrees with that effective value is refused. The effort says where it came from. */
 function settingsOf(values: Map<string, string>, defaults: { readonly maxCalls: number } | undefined): RepeatSettings {
   const file = readSettingsFile(resolve(values.get('settings-file') ?? ''));
@@ -134,11 +159,19 @@ function settingsOf(values: Map<string, string>, defaults: { readonly maxCalls: 
   const model = file['NEBURYX_ASSISTANT_MODEL'] ?? SUMMARY_DEFAULTS.model;
   if (flagModel !== undefined && flagModel !== model) throw new UsageError('--model disagrees with the settings the product will use');
   const fileEffort = file['NEBURYX_ASK_EFFORT'];
-  return { model, callLimit, effort: fileEffort ?? AI_DEFAULTS.effort, effortSource: fileEffort === undefined ? 'the product default' : 'the settings file', modelSource: file['NEBURYX_ASSISTANT_MODEL'] === undefined ? 'the product default' : 'the settings file' };
+  const configured: Record<string, string | number> = {};
+  for (const [name, key] of NUMERIC_SETTINGS) {
+    const value = wholeNumber(file[name], `the settings file value of ${name}`, 1, 10_000_000);
+    if (value !== undefined) configured[key] = value;
+  }
+  if (file['NEBURYX_ASSISTANT_MODEL'] !== undefined) configured['model'] = model;
+  if (fileLimit !== undefined) configured['maxCalls'] = callLimit;
+  return { model, callLimit, configured, effort: fileEffort ?? AI_DEFAULTS.effort, effortSource: fileEffort === undefined ? 'the product default' : 'the settings file', modelSource: file['NEBURYX_ASSISTANT_MODEL'] === undefined ? 'the product default' : 'the settings file' };
 }
 
 /** `ask-eval thread run`: one or more repeats of the thread against a running product, written as run files. Returns the exit code: 0 complete, 1 a repeat ended early, 2 usage. */
-export async function runThread(argv: readonly string[], io: CliIo, deps: ThreadDeps = {}, defaults?: { readonly maxCalls: number }): Promise<number> {
+export async function runThread(argv: readonly string[], rawIo: CliIo, deps: ThreadDeps = {}, defaults?: { readonly maxCalls: number }): Promise<number> {
+  const io = guarded(rawIo);
   if (argv[0] === 'records') return await runRecords(argv.slice(1), io, deps);
   if (argv[0] === 'blind') return runBlind(argv.slice(1), io);
   if (argv[0] === 'score') return await runScore(argv.slice(1), io, deps);
@@ -173,8 +206,7 @@ export async function runThread(argv: readonly string[], io: CliIo, deps: Thread
   // every file this run will write is checked before any request: a link, an existing file or a place inside a git tree stops it with no call made
   for (let repeat = 1; repeat <= repeats; repeat += 1) {
     const target = resolve(folder, `thread-${armName}-r${repeat}.json`);
-    checkPrivateTarget(target, false);
-    requireOutsideGitTree(target, 'an output file');
+    preflightTarget(target);
   }
   const http = (deps.http ?? realHttp)(base);
   const now = deps.now ?? Date.now;
@@ -203,8 +235,7 @@ async function runRecords(args: readonly string[], io: CliIo, deps: ThreadDeps):
   if (input === undefined || envFile === undefined || out === undefined || allowedTools.length === 0) throw new UsageError(THREAD_USAGE);
   const file: RepeatFile = parseRepeatFile(readJson(input, 'the run file'), 'the run file');
   const target = resolve(out);
-  checkPrivateTarget(target, false);
-  requireOutsideGitTree(target, 'an output file');
+  preflightTarget(target);
   const connection = await (deps.database ?? connectDb)(resolve(envFile));
   try {
     const waiting = deps.waiting ?? { attempts: RECORD_WAITS, delayMs: RECORD_WAIT_MS, sleep: (ms: number) => new Promise<void>((done) => setTimeout(done, ms)) };
@@ -290,8 +321,30 @@ function usedUnderApproval(approvalPath: string): number {
   return existsSync(path) ? parseLedger(readJson(path, 'the approval ledger'), 'the approval ledger').used : 0;
 }
 
-function spend(approvalPath: string, used: number): void {
-  writePrivateFile(ledgerPath(approvalPath), `${JSON.stringify({ used })}\n`, true);
+const LOCK_TRIES = 100;
+const LOCK_WAIT_MS = 20;
+const STALE_LOCK_MS = 30_000;
+
+/** Takes one invocation of the approval before a launch: under a lock folder made exclusively, so two commands cannot take the same one, the used count is read, checked against the approval and written back. */
+function reserveInvocation(approvalPath: string, approved: number): void {
+  const lock = `${ledgerPath(approvalPath)}.lock`;
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      mkdirSync(lock, { mode: 0o700 });
+      break;
+    } catch {
+      if (existsSync(lock) && Date.now() - statSync(lock).mtimeMs > STALE_LOCK_MS) rmSync(lock, { recursive: true, force: true });
+      else if (attempt >= LOCK_TRIES) throw new ScorerUnavailable('the approval ledger is locked by another command');
+      else Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, LOCK_WAIT_MS);
+    }
+  }
+  try {
+    const used = usedUnderApproval(approvalPath);
+    if (used >= approved) throw new ScorerUnavailable('the approved number of invocations is used up');
+    writePrivateFile(ledgerPath(approvalPath), `${JSON.stringify({ used: used + 1 })}\n`, true);
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
 }
 
 /** `ask-eval thread score`: scores one blind set with the named scorer, or ingests scores made elsewhere; the scores are validated against the exact slots of the set and carry the set's hash. */
@@ -302,8 +355,7 @@ async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): P
   const out = values.get('out');
   if (setPath === undefined || slotsPath === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
   const target = resolve(out);
-  checkPrivateTarget(target, false);
-  requireOutsideGitTree(target, 'an output file');
+  preflightTarget(target);
   const set = readFileSync(resolve(setPath), 'utf8');
   const repeat = Number(/^# Set (\d+)/u.exec(set)?.[1] ?? NaN);
   if (!Number.isInteger(repeat)) throw new UsageError('the set file is not a blind set');
@@ -324,7 +376,10 @@ async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): P
     const scorer = values.get('scorer');
     if (rubricPath === undefined || (scorer !== 'codex' && scorer !== 'opus')) throw new UsageError(THREAD_USAGE);
     const runners = deps.runners ?? { codex: codexRunner(), opus: opusRunner() };
+    const rubric = readFileSync(resolve(rubricPath), 'utf8');
+    if (looksLikeCredential(rubric) || looksLikeCredential(set)) throw new UsageError('the rubric or the set holds credential-like text: it is not sent to a scorer');
     let limit: number;
+    let reserve: (() => void) | undefined;
     const approvalPath = values.get('approval');
     if (scorer === 'codex') {
       const approval = approvalPath === undefined ? undefined : parseApproval(readFileSync(resolve(approvalPath), 'utf8'));
@@ -332,7 +387,9 @@ async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): P
         io.err('Codex is not invoked: the approver\'s written confirmation of the exception to the live-call rule and the approved number of invocations are required (--approval)');
         return 2;
       }
+      preflightTarget(ledgerPath(approvalPath), true);
       limit = approval.invocations - usedUnderApproval(approvalPath);
+      reserve = () => reserveInvocation(approvalPath, approval.invocations);
       if (limit < 1) {
         io.err('Codex is not invoked: the approved number of invocations is used up');
         return 2;
@@ -342,15 +399,13 @@ async function runScore(args: readonly string[], io: CliIo, deps: ThreadDeps): P
       if (max === undefined) throw new UsageError('--scorer opus needs --max-calls');
       limit = max;
     }
-    const counted = countedRunner(runners[scorer], limit);
+    const counted = countedRunner(runners[scorer], limit, reserve);
     let scores: Score[];
     try {
-      scores = await scoreSet(counted.run, readFileSync(resolve(rubricPath), 'utf8'), set, slots, `set ${repeat}`);
+      scores = await scoreSet(counted.run, rubric, set, slots, `set ${repeat}`);
     } catch (error) {
       io.err(error instanceof Error ? error.message : 'the scorer failed');
       return 1;
-    } finally {
-      if (scorer === 'codex' && approvalPath !== undefined) spend(approvalPath, usedUnderApproval(approvalPath) + counted.made());
     }
     file = { scorer, origin: 'harness', repeat, setSha256, invocations: counted.made(), scores: zeroNoAnswers(scores, none) };
   }
@@ -373,8 +428,7 @@ function runCalibrate(args: readonly string[], io: CliIo): number {
   const out = values.get('out');
   if (a === undefined || b === undefined || keyPath === undefined || out === undefined) throw new UsageError(THREAD_USAGE);
   const target = resolve(out);
-  checkPrivateTarget(target, false);
-  requireOutsideGitTree(target, 'an output file');
+  preflightTarget(target);
   const key = parseKeyFile(readJson(keyPath, 'the key file'), 'the key file');
   const first = parseScoreFile(readJson(a, 'the first scores file'), 'the first scores file');
   const second = parseScoreFile(readJson(b, 'the second scores file'), 'the second scores file');
@@ -453,6 +507,7 @@ function firstTurnVerifier(deps: ThreadDeps, envFile: string, settings: RepeatSe
           const shown = records.run.settings;
           if (shown['model'] !== settings.model) return 'the run record of the first turn shows another model than the settings file';
           if (shown['maxCalls'] !== settings.callLimit) return 'the run record of the first turn shows another call limit than the settings file';
+          for (const [key, value] of Object.entries(settings.configured)) if (shown[key] !== value) return `the run record of the first turn shows another ${key} than the settings file`;
           return undefined;
         }
         await new Promise((done) => setTimeout(done, FIRST_TURN_WAIT_MS));

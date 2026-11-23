@@ -106,14 +106,19 @@ export async function scoreSet(runner: Runner, rubric: string, set: string, slot
   throw new Error(`the scorer's replies for ${name} are not scores that cover its answers exactly`);
 }
 
-/** A runner that stops at a number of model calls: the count the approver approved. A run that reports more calls than were left is refused after the fact and counted in full. */
-export function countedRunner(runner: Runner, maxCalls: number): { readonly run: Runner; readonly made: () => number } {
+/**
+ * A runner that stops at a number of model calls: the count the approver approved. Each launch is counted, and reserved durably through `reserve` when one is given, before the program starts, so a launch that fails or is cut off
+ * still counts; a run that reports more calls than were left is refused and counted in full.
+ */
+export function countedRunner(runner: Runner, maxCalls: number, reserve?: () => void): { readonly run: Runner; readonly made: () => number } {
   let made = 0;
   return {
     run: async (prompt) => {
       if (made >= maxCalls) throw new ScorerUnavailable(`the approved number of calls (${maxCalls}) is used up`);
+      reserve?.();
+      made += 1;
       const result = await runner(prompt);
-      made += result.calls;
+      made += Math.max(0, result.calls - 1);
       if (made > maxCalls) throw new ScorerUnavailable(`the run made ${made} calls and the approved number is ${maxCalls}`);
       return result;
     },
