@@ -74,7 +74,8 @@ describe('the recorder of the assistant\'s router', () => {
     const code = await runCli(['assistant', '--packs', packs, '--replay', join(out, 'recording.json')], scored.io, hooksWith(answerRoutes));
     expect(scored.err.join('\n')).toBe('');
     expect(code).not.toBe(2);
-  });
+    // Measured: about 0.3 s alone and about 0.55 s with every core busy, the same before and after the packs grew by 31 lines. One CI run took the whole file 6.2 s, so the 5 s default is too tight for a runner under load; 30 s keeps a real hang visible.
+  }, 30_000);
 
   it('routes each request once, writes the recording with the wordings and a run record without them, both owner-only in an owner-only folder, and the recording scores', async () => {
     const fixture = privateSet();
