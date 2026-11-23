@@ -1,6 +1,9 @@
 import type { SummarySentence } from '@neburyx/contracts';
 import type { CheckModule } from './check-runner.js';
 
+/** An entity an element is or joins: its entity type, its stable id, and the other names the text sent gives it (its title). */
+export type EntityEnd = readonly [type: string, id: string, ...names: string[]];
+
 /** What the checks read of the text that was sent: the text, the line of each element by key, which keys exist, the counts the text gives as not exact and the keys whose count it gives as not known. */
 export interface CheckedText {
   readonly text: string;
@@ -25,7 +28,7 @@ export interface CheckedText {
   /** The keys of the elements each read listed, by the key of the read's own line: only a line of a read that listed an element speaks for it. */
   readonly readElements?: ReadonlyMap<string, readonly string[]>;
   /** The entities each element stands for or joins, as pairs of an entity type and a stable id, by the element's key: an entity is itself, a relationship is its two ends. A count of the entities of a type that the sentence cites through the relationships that end at them is verified from these. */
-  readonly elementEnds?: ReadonlyMap<string, readonly (readonly [string, string])[]>;
+  readonly elementEnds?: ReadonlyMap<string, readonly EntityEnd[]>;
   /** The properties of each element a ranking may rest on, by the element's key (see `RankedProperty`): plain text and data, so that it crosses to a worker thread. */
   readonly rankedValues?: ReadonlyMap<string, readonly RankedProperty[]>;
 }
@@ -38,7 +41,7 @@ const CAPITALISED = /\p{Lu}[\p{L}]*/gu;
 
 /** The ordinary words a sentence may start with or hold in a capital without naming anything: articles, determiners, small number words, prepositions and conjunctions: language, never a word of a domain. The words of a domain (a shape of a typology, a type) come from the text sent and the instructions the model was given. */
 const STRUCTURAL_VOCABULARY: ReadonlySet<string> = new Set([
-  'i', 'the', 'a', 'an', 'this', 'that', 'these', 'those', 'both', 'each', 'every', 'all', 'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'several', 'some', 'many', 'few',
+  'i', 'the', 'a', 'an', 'any', 'this', 'that', 'these', 'those', 'both', 'each', 'every', 'all', 'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'several', 'some', 'many', 'few',
   'another', 'other', 'it', 'they', 'there', 'here', 'at', 'in', 'on', 'of', 'by', 'for', 'from', 'with', 'to', 'and', 'or', 'but', 'as', 'is', 'are', 'was', 'were', 'also', 'between', 'within',
   'through',
 ]);
@@ -170,7 +173,9 @@ function writtenNumbersIn(text: string, assembled: CheckedText): { readonly inde
   return [...outside.matchAll(NUMBER_WORD)].flatMap((found) => {
     const value = numberWordValue(found[0]);
     const after = text.slice(found.index + found[0].length);
-    const counting = /^\s+\S/u.test(after) && types.some((name) => namesType(after.trimStart(), name));
+    // `no two widgets share an owner`: a pair of the set, not a count of what is cited
+    const pairwise = /(?<![\p{L}\p{N}_-])(?:no|any)\s+$/iu.test(text.slice(0, found.index));
+    const counting = !pairwise && /^\s+\S/u.test(after) && types.some((name) => namesType(after.trimStart(), name));
     return Number(value) <= 10 && !counting ? [] : [{ index: found.index, length: found[0].length, value, after, counting }];
   });
 }
@@ -291,10 +296,17 @@ function countsCitedElements(number: string, after: string, sentence: SummarySen
     return wanted > 0 && (matching.length === wanted || matching.filter((key) => !apart(key)).length === wanted);
   };
   const citedTypes = new Set([...new Set(sentence.cites)].flatMap((key) => (lines.has(key) || types.get(key) === undefined ? [] : [types.get(key) ?? ''])));
-  // the entities of one type that the cited elements are or join (a relationship that ends at an entity of the type counts that entity once): a count of them is exact when it equals how many distinct there are
-  const endsOfType = (entityType: string): number => new Set(sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => (assembled.elementEnds?.get(key) ?? []).filter(([type]) => type === entityType).map(([, id]) => id))).size;
-  const entityTypes = new Set(sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => (assembled.elementEnds?.get(key) ?? []).map(([type]) => type)));
-  const countedEnds = (entityType: string): boolean => typeWordLength(tail, elementTypeName(`entity ${entityType}`)) !== undefined && wanted > 0 && endsOfType(entityType) === wanted;
+  // the entities of one type that the cited elements are or join (a relationship that ends at an entity of the type counts that entity once): a count of them is exact when it equals how many distinct there are, less the ones the sentence names apart from the count, as a target or a subject
+  const endsCited = sentence.cites.filter((key) => !lines.has(key)).flatMap((key) => assembled.elementEnds?.get(key) ?? []);
+  const entityTypes = new Set(endsCited.map(([type]) => type));
+  const countedEnds = (entityType: string): boolean => {
+    const end = typeWordLength(tail, elementTypeName(`entity ${entityType}`));
+    if (end === undefined || wanted === 0) return false;
+    const distinct = new Map(endsCited.filter(([type]) => type === entityType).map((held) => [held[1], held] as const));
+    const outside = outsideTheList(text.slice(0, text.length - tail.length).replace(/\S+$/u, ''), tail.slice(end), namesOfElements(assembled));
+    const apart = [...distinct.values()].filter(([, id, ...names]) => [id, ...names].some((name) => occursWhole(name, outside))).length;
+    return distinct.size === wanted || distinct.size - apart === wanted;
+  };
   return (
     [...entityTypes].some(countedEnds) ||
     [...citedTypes].some((type) => counted(elementTypeName(type), (held) => held === type)) ||
@@ -906,13 +918,13 @@ function rangeHolds(sentence: SummarySentence, assembled: CheckedText): boolean 
     }
     return true;
   };
-  // no type is named and more than one could be what the range is over: it holds only when every one of them with its whole set cited verifies it; a type cited in part is context
+  // no type is named and more than one could be what the range is over: it holds only when every one of them with its whole set cited has a property that verifies it; a type cited in part is context
   const candidateTypes = new Set(candidates.map((pair) => pair.type));
   if (candidateTypes.size > 1) {
     const lines = new Set([...(assembled.readKeys ?? []), ...(assembled.descriptionKeys ?? [])]);
     const wholeSet = (type: string): boolean => [...(assembled.elementTypes ?? [])].every(([key, held]) => held !== type || lines.has(key) || cited.includes(key));
-    const fullyCited = candidates.filter((pair) => wholeSet(pair.type));
-    return fullyCited.length > 0 && fullyCited.every((pair) => verifies(pair.type, pair.property));
+    const fullyCited = [...candidateTypes].filter(wholeSet);
+    return fullyCited.length > 0 && fullyCited.every((type) => candidates.some((pair) => pair.type === type && verifies(pair.type, pair.property)));
   }
   return candidates.some((pair) => verifies(pair.type, pair.property));
 }

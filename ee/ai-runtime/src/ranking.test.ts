@@ -460,6 +460,16 @@ describe.each([
       const matching: CheckedText = { ...crowd, lines: context, text: [...context.values()].join('\n'), rankedValues: alike };
       expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, every, matching)).toBe('kept');
       expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, [...all, 'n8'], crowd)).toBe('kept');
+      // a fully cited type needs one property that verifies, not every one: a second time property outside the window changes nothing
+      const rich = new Map(context);
+      const richRanked = new Map(alike);
+      for (const id of all) {
+        rich.set(id, `${rich.get(id) ?? ''}; ${time}Alt: "2022-09-10T10:00:00Z"`);
+        richRanked.set(id, [...(richRanked.get(id) ?? []), { key: `${time}Alt`, dataClass: 'dateTime', value: temporalKey('dateTime', '2022-09-10T10:00:00Z') ?? '' }]);
+      }
+      const another: CheckedText = { ...matching, lines: rich, text: [...rich.values()].join('\n'), rankedValues: richRanked };
+      expect(verdict(`These were created between 23:50 and 23:59 on 2022-09-10.`, every, another)).toBe('kept');
+      expect(verdict(`These were created between 23:50 and 23:58 on 2022-09-10.`, every, another)).not.toBe('kept');
     });
 
     it('takes a time of day of an instant only as an exact part of it, never a rounding, and a part that is no part as a number to find', () => {

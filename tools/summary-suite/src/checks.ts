@@ -458,10 +458,10 @@ export function rangeBroken(sentence: SummarySentence, sent: string, classes: Re
     return false;
   };
   const candidateTypes = new Set(candidates.map((pair) => pair.type));
-  // no type is named and more than one could be what the range is over: it holds only when every one of them with its whole set cited verifies it; a type cited in part is context
+  // no type is named and more than one could be what the range is over: it holds only when every one of them with its whole set cited has a property that verifies it; a type cited in part is context
   if (candidateTypes.size > 1) {
-    const whole = candidates.filter((pair) => [...held].filter(([, candidate]) => candidate.type === pair.type).every(([key]) => cited.includes(key)));
-    return whole.length === 0 || whole.some((pair) => brokenFor(pair.type, pair.property));
+    const whole = [...candidateTypes].filter((type) => [...held].filter(([, candidate]) => candidate.type === type).every(([key]) => cited.includes(key)));
+    return whole.length === 0 || whole.some((type) => candidates.filter((pair) => pair.type === type).every((pair) => brokenFor(pair.type, pair.property)));
   }
   return candidates.every((pair) => brokenFor(pair.type, pair.property));
 }

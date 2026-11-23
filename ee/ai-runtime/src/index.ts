@@ -9,6 +9,6 @@ export { gateClientOf, type GateClient } from './gate-client.js';
 export { BudgetReached, percentileOf, recordingProvider, type Recording, type Usage } from './eval/recording.js';
 export { replayProvider, type ReplayAnswer } from './eval/replay.js';
 export { removalNoteOf } from './removed-sentences.js';
-export { JUDGE_MODULE, REMOVAL_REASONS, VERDICT, decimalKey, descriptionHoldsVerdict, judgeSentences, parseJudged, temporalKey, type CheckedText, type RankedProperty, type JudgeInput, type Judged, type RejectedSentence, type RemovalReason } from './reply-checks.js';
+export { JUDGE_MODULE, REMOVAL_REASONS, VERDICT, decimalKey, descriptionHoldsVerdict, judgeSentences, parseJudged, temporalKey, type CheckedText, type EntityEnd, type RankedProperty, type JudgeInput, type Judged, type RejectedSentence, type RemovalReason } from './reply-checks.js';
 export { DEFAULT_OFFLOAD_THRESHOLD_MS, createCheckRunner, type CheckModule, type CheckOutcome, type CheckRunner, type CheckRunnerOptions, type HeavyCheck } from './check-runner.js';
 export { AI_FEATURES, featureSwitches, type AiFeature, type AiFeatureSwitches } from './feature-switches.js';

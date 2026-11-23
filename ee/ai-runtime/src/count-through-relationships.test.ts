@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { judgeSentences, type CheckedText } from './reply-checks.js';
+import { judgeSentences, type CheckedText, type EntityEnd } from './reply-checks.js';
 
 /** The sentences of a hand test that were removed: a count of the entities a sentence names, cited through the relationship lines that end at them. */
 interface Vocabulary {
@@ -91,5 +91,45 @@ describe.each(VOCABULARIES)('a count of the $name that the sentence cites throug
     expect(kept(`I read the sender of four ${vocabulary.things}.`, links)).toBe(false);
     expect(judgeSentences([{ text: `I read the ${owner} Zorblax of three ${vocabulary.things}.`, cites: links }], text).rejected.map((entry) => entry.reason)).toEqual(['name']);
     expect(judgeSentences([{ text: `Zorblax read the sender of three ${vocabulary.things}.`, cites: links }], text).rejected.map((entry) => entry.reason)).toEqual(['name']);
+  });
+
+  it('takes "no two" and "any two" for a pair of the set, not for a count of what is cited, and leaves the digit as it was without the ends', () => {
+    const owner = vocabulary.owner.toLowerCase();
+    const without: CheckedText = { ...text, elementEnds: undefined };
+    for (const opening of ['No two', 'Any two']) {
+      const sentence = `${opening} ${vocabulary.things} share a ${owner}.`;
+      expect(kept(sentence, links), sentence).toBe(true);
+      expect(kept(sentence, links, without), sentence).toBe(true);
+    }
+    for (const digit of [`No 2 ${vocabulary.things} share a ${owner}.`, `Any 2 ${vocabulary.things} share a ${owner}.`]) expect(kept(digit, links), digit).toBe(kept(digit, links, without));
+    // a count that is no pair stays a count
+    expect(kept(`Four ${vocabulary.things} share a ${owner}.`, links)).toBe(false);
+  });
+});
+
+describe.each(VOCABULARIES)('a count of the $name that the sentence cites, with a target it names apart', (vocabulary) => {
+  const [first = '', second = '', target = ''] = vocabulary.ids;
+  const lines = new Map<string, string>();
+  const elementTypes = new Map<string, string>();
+  const elementEnds = new Map<string, readonly EntityEnd[]>();
+  const names = new Map<string, readonly string[]>();
+  const type = vocabulary.thing.toLowerCase();
+  [first, second].forEach((id, index) => {
+    const key = `r${index + 1}`;
+    lines.set(key, `${key}: ${vocabulary.link}: ${vocabulary.thing} ${id} → ${vocabulary.thing} ${target} | stored | members: 1 (exact)`);
+    elementTypes.set(key, `relationship ${vocabulary.link}`);
+    elementEnds.set(key, [[type, id, `${vocabulary.thing} ${id}`], [type, target, `${vocabulary.thing} ${target}`]]);
+    names.set(key, [`${vocabulary.thing} ${id} → ${vocabulary.thing} ${target}`]);
+  });
+  const text: CheckedText = { text: [...lines.values()].join('\n'), keys: new Map([...lines.keys()].map((key) => [key, true] as const)), lines, inexactCounts: [], unknownCountKeys: new Set(), elementTypes, elementEnds, elementNames: names };
+  const kept = (sentence: string): boolean => judgeSentences([{ text: sentence, cites: ['r1', 'r2'] }], text).kept.length === 1;
+
+  it('leaves the target out of the count when the sentence names it, in words and in digits, and counts the three when it names none', () => {
+    expect(kept(`Two ${vocabulary.things} sent to ${target}.`)).toBe(true);
+    expect(kept(`2 ${vocabulary.things} sent to ${target}.`)).toBe(true);
+    expect(kept(`Three ${vocabulary.things} are joined by the two relationships.`)).toBe(true);
+    expect(kept(`Four ${vocabulary.things} sent to ${target}.`)).toBe(false);
+    expect(kept(`4 ${vocabulary.things} sent to ${target}.`)).toBe(false);
+    expect(kept(`Five ${vocabulary.things} are joined by the two relationships.`)).toBe(false);
   });
 });

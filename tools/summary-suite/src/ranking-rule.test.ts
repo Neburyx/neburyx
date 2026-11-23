@@ -114,6 +114,14 @@ describe('the suite\'s own rule for a range', () => {
     expect(rangeBroken({ text: 'The widgets were created between 23:50 and 23:58 on 2022-09-10.', cites: ['n1', 'n2', 'n3'] }, lines, kinds)).toBe(true);
   });
 
+  it('holds a range over two whole types with no type named when each has one property that verifies it, whatever other time property it holds, and refuses it when one type has none', () => {
+    const lines = ['n1 | "widget" | title: "Item A" | id: "W-1" | createdAt: "2022-09-10T20:00:00Z"; closedAt: "2022-09-10T10:00:00Z"', 'n2 | "widget" | title: "Item B" | id: "W-2" | createdAt: "2022-09-10T22:00:00Z"; closedAt: "2022-09-10T11:00:00Z"', 'n3 | "person" | title: "Holder" | id: "P-1" | createdAt: "2022-09-10T20:00:00Z"', 'n4 | "person" | title: "Other" | id: "P-2" | createdAt: "2022-09-10T22:00:00Z"'].join('\n');
+    const kinds = new Map([['createdAt', 'dateTime'], ['closedAt', 'dateTime']]);
+    const all = ['n1', 'n2', 'n3', 'n4'];
+    expect(rangeBroken({ text: 'These were created between 20:00 and 22:00 on 2022-09-10.', cites: all }, lines, kinds)).toBe(false);
+    expect(rangeBroken({ text: 'These were created between 20:00 and 21:00 on 2022-09-10.', cites: all }, lines, kinds)).toBe(true);
+  });
+
   it('keeps only the named keys that fit the ends, checks figure ranges of a named plural type, and refuses a sentence that names two types', () => {
     const lines = ['n1 | "widget" | title: "Item A" | id: "W-1" | amount: 5; createdAt: "2022-09-10T23:50:00Z"', 'n2 | "widget" | title: "Item B" | id: "W-2" | amount: 5; createdAt: "2022-09-10T23:59:00Z"', 'n3 | "person" | title: "Holder" | id: "P-1" | createdAt: "2022-09-10T09:00:00Z"', 'n4 | "person" | title: "Other" | id: "P-2" | createdAt: "2022-09-10T10:00:00Z"'].join('\n');
     const kinds = new Map([['createdAt', 'dateTime'], ['amount', 'number']]);
