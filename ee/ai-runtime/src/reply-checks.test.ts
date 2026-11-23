@@ -426,6 +426,53 @@ describe.each([
       expect(kept(`The read lists ${many} without a title.`, ['n1', 's1'])).toBe(true);
     });
 
+    it('takes a quantifier after the noun and a value stated for all of a set: the sentence of the hand test, cited in part, in full and with another value', () => {
+      const many_ = `${many[0]?.toUpperCase() ?? ''}${many.slice(1)}`;
+      const said = (value: string): string => `${many_} in view are each shown as received by this account, all with ${property} "${value}".`;
+      expect(kept(said('5'), ['n1', 'n2'])).toBe(false);
+      expect(kept(said('5'), ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(said('7'), ['n1', 'n2', 'n3'])).toBe(false);
+      expect(kept(`The ${many} in view are all shown, with ${property} 5.`, ['n1'])).toBe(false);
+      expect(kept(`${many_} are each listed.`, ['n1', 'n2'])).toBe(false);
+      expect(kept(`${many_} are each listed.`, ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(`None of the ${many} is hidden.`, ['n1'])).toBe(false);
+    });
+
+    it('takes the other word orders of a quantifier, and not a quantifier that belongs to another noun, names after the noun, a number above twelve or a word that is no value', () => {
+      const M = `${many[0]?.toUpperCase() ?? ''}${many.slice(1)}`;
+      expect(kept(`In view, ${many} are all shown.`, ['n1', 'n2'])).toBe(false);
+      expect(kept(`Here the ${many} are each shown.`, ['n1', 'n2'])).toBe(false);
+      expect(kept(`${M} all carry ${property} "5".`, ['n1', 'n2'])).toBe(false);
+      expect(kept(`${M} all carry ${property} "5".`, ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(`${M} Item A and Item B are all shown.`, ['n1', 'n2'])).toBe(true);
+      expect(kept(`${M} Item A and Item B were sent from ${others} that are all owned by Holder D.`, ['n1', 'n2', 'n4'])).toBe(true);
+      expect(kept(`${M} in view all share one ${property} and are shown.`, ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(`${M} in view are all shown, with ${property} of "5".`, ['n1', 'n2', 'n3'])).toBe(true);
+    });
+
+    it('does not take a bare plural subject in view for the whole set, and does not take a count above twelve for a universal claim', () => {
+      const M = `${many[0]?.toUpperCase() ?? ''}${many.slice(1)}`;
+      expect(kept(`${M} in view include Item A.`, ['n1'])).toBe(true);
+      const ids = Array.from({ length: 30 }, (_, index) => `m${index + 1}`);
+      const big = new Map(ids.map((id, index) => [id, `${id} | "${one}" | title: "Thing ${index + 1}" | id: "${id}x" | ${property}: 5`] as const));
+      const crowd: CheckedText = { ...held, lines: big, text: [...big.values()].join('\n'), keys: new Map(ids.map((id) => [id, true])), elementTypes: new Map(ids.map((id) => [id, `entity ${one}`])), propertyKeys: new Map(ids.map((id) => [id, [property]])), readKeys: new Set(), readElements: new Map(), elementNames: new Map(ids.map((id, index) => [id, [`Thing ${index + 1}`, `${id}x`]])) };
+      const part = ids.slice(0, 25);
+      expect(judgeSentences([{ text: `Twenty-five ${many} are all shown.`, cites: part }], crowd).kept).toHaveLength(1);
+      expect(judgeSentences([{ text: `Thirty ${many} are all shown.`, cites: ids }], crowd).kept).toHaveLength(1);
+      expect(judgeSentences([{ text: `${M} are all shown.`, cites: part }], crowd).kept).toHaveLength(0);
+    });
+
+    it('holds a stated unquoted value to the whole value on each line', () => {
+      expect(kept(`${many} are all shown with ${property}: 5.`, ['n1', 'n2', 'n3'])).toBe(true);
+      expect(kept(`${many} are all shown with ${property}: 55.`, ['n1', 'n2', 'n3'])).toBe(false);
+    });
+
+    it('does not take a count, a part of the set or a plain subject for a universal claim', () => {
+      expect(kept(`Two ${many} are in view.`, ['n1', 'n2'])).toBe(true);
+      expect(kept(`${one[0]?.toUpperCase() ?? ''}${one.slice(1)} Item A is in view, with ${property} 5.`, ['n1'])).toBe(true);
+      expect(kept(`The ${many} share the ${property} 5.`, ['n1', 'n2'])).toBe(true);
+    });
+
     it('quantifies the noun group the quantifier opens, not what follows the verb', () => {
       expect(kept(`Each ${one} uses ${others}.`, ['n1', 'n2', 'n3'])).toBe(true);
       expect(kept(`Each ${one} is listed.`, ['n1'])).toBe(false);

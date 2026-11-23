@@ -449,8 +449,13 @@ function citedElements(sentence: SummarySentence, assembled: CheckedText): strin
   return [...new Set(sentence.cites)].filter((key) => !lines.has(key) && assembled.elementTypes?.has(key) === true);
 }
 
-const QUANTIFIER_BEFORE = /(?<![\p{L}\p{N}_-])(?:all|every|each)(?:\s+of)?(?:\s+(?:the|these|those))?\s+(?:\S+\s+)?(?:(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+)(?:the\s+)?(?:\S+\s+)?)*$/iu;
+const QUANTIFIER_BEFORE = /(?<![\p{L}\p{N}_-])(?:all|every|each|none)(?:\s+of)?(?:\s+(?:the|these|those))?\s+(?:\S+\s+)?(?:(?:,\s*(?:(?:and|or)\s+)?|(?:and|or)\s+)(?:the\s+)?(?:\S+\s+)?)*$/iu;
 const DEFINITE_BEFORE = /(?<![\p{L}\p{N}_-])the\s+(?:\S+\s+)?$/iu;
+/** A quantifier that stands right after the noun it speaks of (`transactions are each shown`, `transactions all carry`, `transactions in view, all with …`): what follows the noun is a place, a verb of being or having, and the quantifier, nothing else. */
+const FLOATING_AFTER = /^(?:\s+(?:in view|on screen|in the view|on the screen))?(?:\s+(?:are|were|is|have|has|had|share|shares|carry|carries|hold|holds|show|shows))?(?:\s*,)?\s+(?:all|each)(?![\p{L}\p{N}_-])/iu;
+const CARDINAL = '(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)(?:-\\S+)?';
+/** The noun opens the sentence, as its subject: before it only a place and `the`, and one more word that is no number, article or determiner of a part of the set. */
+const SUBJECT_BEFORE = new RegExp(`^\\s*(?:(?:in view|on screen|in the view|on the screen|here)\\s*,?\\s*)?(?:the\\s+)?(?:(?!(?:\\d|${CARDINAL}|a|an|several|some|many|few|both|these|those|no|other|another|most|half)(?![\\p{L}\\p{N}_-]))\\S+\\s+)?$`, 'iu');
 const PLACE_AFTER = /^\s+(?:\S+\s+){0,1}?(?:on screen|in view|on the screen|in the view)(?![\p{L}\p{N}_-])/iu;
 
 /**
@@ -464,6 +469,7 @@ function universalHolds(sentence: SummarySentence, assembled: CheckedText): bool
   const text = flatten(withoutQuoted(sentence.text));
   const cited = new Set(citedElements(sentence, assembled));
   const reads = sentence.cites.filter((cite) => assembled.readKeys?.has(cite) === true && assembled.readElements?.has(cite) === true);
+  const spoken: string[] = [];
   const forms: { readonly word: string; readonly of: (type: string) => boolean }[] = [
     ...typesSent(assembled).map(({ type, word }) => ({ word, of: (held: string) => held === type })),
     ...KIND_FORMS.map(([kind]) => ({ word: kind, of: (held: string) => kind === 'element' || (kind === 'relationship') === held.startsWith('relationship ') })),
@@ -471,11 +477,34 @@ function universalHolds(sentence: SummarySentence, assembled: CheckedText): bool
   for (const { word, of } of forms) {
     for (const found of text.matchAll(new RegExp(`(?<![\\p{L}\\p{N}_-])${termPattern(word)}(?![\\p{L}\\p{N}_-])`, 'giu'))) {
       const before = text.slice(0, found.index);
-      const onScreen = DEFINITE_BEFORE.test(before) && PLACE_AFTER.test(text.slice(found.index + found[0].length));
+      const after = text.slice(found.index + found[0].length);
+      const subject = SUBJECT_BEFORE.test(before);
+      const onScreen = DEFINITE_BEFORE.test(before) && PLACE_AFTER.test(after);
       const inRead = !onScreen && READ_DESCRIPTION.test(clauseAt(text, found.index));
-      if (!QUANTIFIER_BEFORE.test(before) && !onScreen) continue;
+      if (!QUANTIFIER_BEFORE.test(before) && !onScreen && !(subject && FLOATING_AFTER.test(after))) continue;
       const population = [...types].filter(([key, held]) => of(held) && assembled.readKeys?.has(key) !== true && assembled.descriptionKeys?.has(key) !== true && (!inRead || reads.length === 0 || reads.some((cite) => assembled.readElements?.get(cite)?.includes(key) === true)) && (!onScreen || /^[ne]\d+$/u.test(key)));
       if (population.some(([key]) => !cited.has(key))) return false;
+      spoken.push(...population.map(([key]) => key));
+    }
+  }
+  return spoken.every((key) => valuesStatedHold(sentence, assembled, key));
+}
+
+/**
+ * A sentence that says a property has a value (`paymentFormat "Cash"`: the key as the line writes it, then the value) of all of a set says it of each element it cites: the line of each must hold that value for that key.
+ * The keys are those of the elements the lines were written from, never a word of the check.
+ */
+function valuesStatedHold(sentence: SummarySentence, assembled: CheckedText, key: string): boolean {
+  const line = assembled.lines.get(key) ?? '';
+  const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  for (const property of assembled.propertyKeys?.get(key) ?? []) {
+    // a value is stated when it is quoted, follows a colon or an equals sign, or is a bare number; any other word after the key is no value
+    const stated = new RegExp(`(?<![\\p{L}\\p{N}_-])${escape(property)}(?![\\p{L}\\p{N}_-])(?:\\s*[:=]\\s*(?:["“]([^"”]+)["”]|([\\p{L}\\p{N}_.-]*[\\p{L}\\p{N}]))|\\s+["“]([^"”]+)["”]|\\s+(-?\\d[\\d.,]*\\d|-?\\d))`, 'gu');
+    for (const found of sentence.text.matchAll(stated)) {
+      const value = found[1] ?? found[2] ?? found[3] ?? found[4] ?? '';
+      if (value === '') continue;
+      const held = [JSON.stringify(value), value].some((text) => new RegExp(`(?<![\\p{L}\\p{N}_-])${escape(property)}: ${escape(text)}(?![\\p{L}\\p{N}_.-])`, 'u').test(line));
+      if (!held) return false;
     }
   }
   return true;
