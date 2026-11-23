@@ -162,6 +162,14 @@ describe.each([
     expect(verdict(`${a} has the smallest minimum balance, 10.`, all, rename('minimumBalance'))).toBe('comparison');
   });
 
+  it('takes a ranking word joined to another by a hyphen for a ranking, and a name that holds one for none', () => {
+    const held = build(['10', '2', '7']);
+    expect(verdict(`${b} is the highest-value ${type}, 2.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} is the largest-ever ${type}.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} is the most-recent ${type}.`, all, held)).toBe('comparison');
+    expect(verdict(`${a} is a non-maximum ${type}.`, all, held)).toBe('kept');
+  });
+
   it('removes a ranking over more than was read, and keeps one over those shown that cites them all with the line of a bounded read', () => {
     const held = build(['10', '2', '7']);
     expect(verdict(`${a} has the largest ${key}, 10, in total.`, all, held)).toBe('comparison');

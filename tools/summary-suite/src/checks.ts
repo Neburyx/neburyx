@@ -333,9 +333,11 @@ function timeAsNumber(raw: unknown, dataClass: string): bigint | undefined {
  */
 export function rankingBroken(sentence: SummarySentence, sent: string, classes: ReadonlyMap<string, string>): boolean {
   const tokens = sentence.text.match(/[\p{L}\p{N}_]+(?:-[\p{L}\p{N}_]+)*/gu) ?? [];
-  const at = tokens.findIndex((token) => RANK_UP.has(token.toLowerCase()) || RANK_DOWN.has(token.toLowerCase()));
+  // a ranking word joined to another by a hyphen (`highest-value`) is the ranking word
+  const head = (token: string): string => token.toLowerCase().split('-')[0] ?? '';
+  const at = tokens.findIndex((token) => RANK_UP.has(head(token)) || RANK_DOWN.has(head(token)));
   if (at < 0) return false;
-  const word = (tokens[at] ?? '').toLowerCase();
+  const word = head(tokens[at] ?? '');
   const held = heldElementsOf(sent);
   const keysOfCited = [...new Set(sentence.cites.flatMap((key) => [...(held.get(key)?.values.keys() ?? [])]))];
   // a property whose key begins with the ranking word and is written out after it is named, not ranked; `a maximum of` is a quantity

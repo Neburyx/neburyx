@@ -627,12 +627,14 @@ const compareValues = (dataClass: string, first: string, second: string): number
 
 const WB = '(?<![\\p{L}\\p{N}_-])';
 const WE = '(?![\\p{L}\\p{N}_-])';
+/** The end of a ranking word: a hyphen and more letters (`highest-value`) are still the word. */
+const RWE = '(?![\\p{L}\\p{N}_])';
 /** The words of a ranking, with their direction: language, never a word of a domain. `most` counts only after the words that make it a measure (`the most`, `has most`), never as a quantifier; `at least` and `at most` are neither. */
 const RANKING_WORDS: readonly (readonly [RegExp, 'max' | 'min'])[] = [
-  [new RegExp(`${WB}(?:largest|biggest|greatest|highest|maximum|latest)${WE}`, 'giu'), 'max'],
-  [new RegExp(`${WB}(?:smallest|lowest|minimum|earliest|fewest)${WE}`, 'giu'), 'min'],
-  [new RegExp(`${WB}(?<!at\\s+)least${WE}`, 'giu'), 'min'],
-  [new RegExp(`${WB}(?:the|has|have|had|holds?|with)\\s+(most)${WE}(?!\\s+of${WE})`, 'giu'), 'max'],
+  [new RegExp(`${WB}(?:largest|biggest|greatest|highest|maximum|latest)${RWE}`, 'giu'), 'max'],
+  [new RegExp(`${WB}(?:smallest|lowest|minimum|earliest|fewest)${RWE}`, 'giu'), 'min'],
+  [new RegExp(`${WB}(?<!at\\s+)least${RWE}`, 'giu'), 'min'],
+  [new RegExp(`${WB}(?:the|has|have|had|holds?|with)\\s+(most)${RWE}(?!\\s+of${RWE})`, 'giu'), 'max'],
 ];
 const MORE_THAN_READ = /(?<![\p{L}\p{N}_-])(?:in total|overall|anywhere|source-wide|not yet retrieved|(?:in|across|of|from) (?:the )?(?:entire |whole |full |complete )?(?:source|database|dataset|data|graph)|(?:entire|whole|full|complete) (?:source|database|dataset|data|graph))(?![\p{L}\p{N}_-])/iu;
 const UNAVAILABLE = /(?<![\p{L}\p{N}_-])(?:do not show|does not show|is not shown|are not shown|cannot say|do not hold)(?![\p{L}\p{N}_-])/iu;

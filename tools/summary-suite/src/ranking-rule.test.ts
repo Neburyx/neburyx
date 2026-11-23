@@ -83,4 +83,9 @@ describe('the suite\'s own rule leaves a property named with a ranking word, and
     expect(rankingBroken({ text: 'Item A has the smallest minimum balance, 10.', cites: ['n1', 'n2'] }, sent, classes)).toBe(false);
     expect(rankingBroken({ text: 'Item B has the smallest minimum balance, 20.', cites: ['n1', 'n2'] }, sent, classes)).toBe(true);
   });
+
+  it('takes a ranking word joined by a hyphen for a ranking', () => {
+    expect(rankingBroken({ text: 'Item A is the highest-value widget, 10.', cites: ['n1'] }, sent, classes)).toBe(true);
+    expect(rankingBroken({ text: 'Item A is a non-maximum widget.', cites: ['n1'] }, sent, classes)).toBe(false);
+  });
 });
