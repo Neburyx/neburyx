@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AskAnswer, AssistantLimit, AssistantRead, SummaryReading, SummarySentence } from '@neburyx/contracts';
+import { ASSISTANT_POINTER_SENTENCES, ASSISTANT_POINTERS, type AskAnswer, type AssistantLimit, type AssistantPointer, type AssistantRead, type SummaryReading, type SummarySentence } from '@neburyx/contracts';
 import { AuditedModelFailure, runAgent, type AgentChatModel, type AgentControl, type AgentTool, type AuditedModelHook } from '@neburyx/ee-assistant-agent';
 import { AuditUnavailableError, type AuditedCallContext, type CheckRunner } from '@neburyx/ee-ai-runtime';
 import { assembleText, estimateTokens, type AssembledText } from '../case-summary/assemble.js';
@@ -67,9 +67,12 @@ export interface AgentTurnInput {
 type Standing = Extract<ToolAnswerOutcome, { kind: 'sentences' | 'table' }> | Extract<ToolAnswerOutcome, { kind: 'noDescription' | 'unsupported' }>;
 
 const sentenceSchema = z.object({ text: z.string().min(1), cites: z.array(z.string()) });
+/** The fixed sentence of the pointer the model named, on an answer that stands: the model never writes it. */
+const withPointer = <T extends { readonly kind: 'sentences' | 'table' }>(outcome: T, pointer: AssistantPointer | undefined): T => (pointer === undefined ? outcome : { ...outcome, pointer: ASSISTANT_POINTER_SENTENCES[pointer] });
 const noDescriptionSchema = z.array(z.string()).optional();
-const answerSchema = z.object({ sentences: z.array(sentenceSchema).min(1), noDescription: noDescriptionSchema });
-const tableSchema = z.object({ columns: z.array(z.string()).min(1), rows: z.array(z.object({ cells: z.array(z.string()), cites: z.array(z.string()) })).min(1), noDescription: noDescriptionSchema });
+const pointerSchema = z.enum(ASSISTANT_POINTERS).optional();
+const answerSchema = z.object({ sentences: z.array(sentenceSchema).min(1), noDescription: noDescriptionSchema, pointer: pointerSchema });
+const tableSchema = z.object({ columns: z.array(z.string()).min(1), rows: z.array(z.object({ cells: z.array(z.string()), cites: z.array(z.string()) })).min(1), noDescription: noDescriptionSchema, pointer: pointerSchema });
 
 function paramsSchema(tool: Tool): z.ZodObject<z.ZodRawShape> {
   return z.strictObject(Object.fromEntries(tool.parameters.map((name) => [name, z.string().min(1)])));
@@ -192,7 +195,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
 
     const rules = instructions.text.split(REPLY_FORMAT_HEADING)[0] ?? '';
     const source = scope.options.folder()?.source(scope.sourceId);
-    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and say that the canvas's own Expand action puts it on screen. For a message that asks how many there are, answer with the count a read returned and what it says about the count (exact, estimated or a lower bound), never a total no read returned; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
+    const system = `${rules}\n\n${source === undefined ? '' : `# This source's questions\n\n${source.classification.text}\n\n`}# How you work\n\nYou are an investigator's assistant. You read only through the tools you were given, and every read goes through the gate. Read what you need, then call answer once. You cannot change the canvas: for a message that asks to expand, add or draw something, read what it asks for with your tools, answer from what they return, and set the answer's pointer to canvas-expand (the server writes the sentence; never write it yourself). For a message that asks how many there are, read the degree preview of the element: its line states the counts by type with their quality; answer with that figure and its quality (exact, estimated or a lower bound) and cite the line, never a total no line states; the check removes any sentence that is not supported by the lines it cites. After answer, reply "${FINAL_TEXT}" and nothing else.`;
 
     const tools: AgentTool[] = readable.map((tool) => ({
       name: tool.name,
@@ -245,7 +248,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
           const judgedRows = await judgeTableRows({ rows: draft.rows.map(rowSentenceOf), columns: draft.columns, checks: options.checks, judge: judgeCheck, text: basis.checkedText, timeoutMs: settings.timeoutMs, signal, drop: (row) => row.cites.some((key) => !basis.assembled.keys.has(key)) });
           if ('refused' in judgedRows) return 'The answer could not be checked. Reply "Done."';
           const tabled = outcomeOfDraft({ drafted: { status: 'drafted', table: draft, sentences: judgedRows.kept, removed: judgedRows.removed, calls: 0, verdictFound: judgedRows.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: judgedRows.positions, lastNames: named });
-          if (tabled.kind === 'sentences' || tabled.kind === 'table') standing = tabled;
+          if (tabled.kind === 'sentences' || tabled.kind === 'table') standing = withPointer(tabled, tableSchema.shape.pointer.parse(args['pointer']));
           else standing ??= tabled.kind === 'noDescription' || tabled.kind === 'unsupported' ? tabled : undefined;
           return feedback({ kept: judgedRows.kept.length, removed: judgedRows.removed, verdictFound: judgedRows.verdictFound });
         }
@@ -256,7 +259,7 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
         if (checked.status === 'refused') return 'The answer could not be checked. Reply "Done."';
         const judged = checked.value;
         const outcome = outcomeOfDraft({ drafted: { status: 'drafted', sentences: judged.kept, removed: judged.removed, calls: 0, verdictFound: judged.verdictFound, model: modelRef, ...(named === undefined ? {} : { noDescription: noDescriptionSentence(named) }) }, basis, input: { reads, scope }, modelRef, keptRows: [], lastNames: named });
-        if (outcome.kind === 'sentences' || outcome.kind === 'table') standing = outcome;
+        if (outcome.kind === 'sentences' || outcome.kind === 'table') standing = withPointer(outcome, parsed.pointer);
         else standing ??= outcome.kind === 'noDescription' || outcome.kind === 'unsupported' ? outcome : undefined;
         return feedback({ kept: judged.kept.length, removed: judged.removed, verdictFound: judged.verdictFound });
       },

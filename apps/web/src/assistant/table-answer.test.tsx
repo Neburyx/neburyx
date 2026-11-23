@@ -14,7 +14,7 @@ const A = ref('a', 'type-a', 'ent-1');
 const B = ref('a', 'type-a', 'ent-2');
 const ok = (value: AssistantTurnAnswer) => ({ ok: true as const, value });
 const rowsOf = (count: number) => Array.from({ length: count }, (_, index) => ({ cells: [`item-${index + 1}`, `code-${index + 1}`], cites: [index % 2 === 0 ? 'n1' : 'n2'] }));
-const tableAnswer = (rows = 2, extra: { droppedRows?: number; moreNotShown?: number; noDescription?: string } = {}): AssistantTurnAnswer => ({
+const tableAnswer = (rows = 2, extra: { droppedRows?: number; moreNotShown?: number; noDescription?: string; pointer?: string } = {}): AssistantTurnAnswer => ({
   status: 'answered',
   route: 'view',
   table: { title: `figures · ${rows} rows`, columns: ['Element', 'Code'], rows: rowsOf(rows), ...(extra.droppedRows === undefined ? {} : { droppedRows: extra.droppedRows }), ...(extra.moreNotShown === undefined ? {} : { moreNotShown: extra.moreNotShown }) },
@@ -26,6 +26,7 @@ const tableAnswer = (rows = 2, extra: { droppedRows?: number; moreNotShown?: num
   model: 'stub-model',
   calls: 2,
   ...(extra.noDescription === undefined ? {} : { noDescription: extra.noDescription }),
+  ...(extra.pointer === undefined ? {} : { pointer: extra.pointer }),
 });
 
 function shown(h: ReturnType<typeof harness>): void {
@@ -106,6 +107,11 @@ describe('the Assistant panel: a table answer', () => {
   it('shows the fixed sentence of a table with noDescription beside it', async () => {
     await draw(tableAnswer(2, { noDescription: 'No description is configured for type-z.' }));
     expect(screen.getByText('No description is configured for type-z.')).toBeTruthy();
+  });
+
+  it('shows the fixed sentence of a pointer beside the answer', async () => {
+    await draw(tableAnswer(2, { pointer: 'Use Expand on the canvas to add them to the graph.' }));
+    expect(screen.getByText('Use Expand on the canvas to add them to the graph.')).toBeTruthy();
   });
 
   it('keeps every control reachable by the keyboard: a chip and the fold control take Tab and Enter', async () => {

@@ -73,6 +73,19 @@ export function inexactCountOf(run: AskRunResult): { readonly phrase: string; re
   return figureValue === 0 && matches !== undefined ? undefined : { phrase: `${SIGNS[count.quality]}${figure(figureValue)}`, value: String(figureValue) };
 }
 
+const countWords = (count: Count): string => (count.quality === 'unknown' || count.value === undefined ? QUALITY_WORDS.unknown : `${SIGNS[count.quality]}${figure(count.value)} ${QUALITY_WORDS[count.quality]}`);
+
+/**
+ * The counts a degree read states, as the inspector shows them: the relationship ends in all and by the type of the element at the other end, each with its quality. The server's own words; the figures are the source's, never summed here.
+ * Other reads state none.
+ */
+export function degreeCountsOf(run: AskRunResult): string | undefined {
+  if (run.templateId !== 'degree-preview') return undefined;
+  const { total, byNeighborType } = run.result;
+  const parts = [`relationship ends in all: ${countWords(total)}`, ...byNeighborType.map((entry) => `${entry.entityType}: ${countWords(entry.count)}`)];
+  return parts.join(' · ');
+}
+
 /** The count a read's line is written with: the count the result carries (of matches, or the rows of a file query), or the number of elements it lists, which is exact; `value` is absent when the count is not known. */
 export function countOf(run: AskRunResult): { readonly quality: Count['quality']; readonly value: number | undefined } {
   const matches = matchesOf(run);

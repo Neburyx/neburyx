@@ -99,6 +99,14 @@ export const ASSISTANT_CLARIFICATION_MAX_CANDIDATES = 5;
 /** The question of a clarification, naming the entity type as the profile calls it. */
 export const assistantClarificationQuestion = (typeName: string): string => `Which ${/^[A-Z][a-z]/.test(typeName) ? typeName.charAt(0).toLowerCase() + typeName.slice(1) : typeName} do you mean?`;
 
+/** What the Assistant may point the analyst to instead of doing it: the model names one of these in its answer and the server writes the sentence. */
+export const ASSISTANT_POINTERS = ['canvas-expand'] as const;
+export type AssistantPointer = (typeof ASSISTANT_POINTERS)[number];
+
+export const ASSISTANT_POINTER_SENTENCES: Readonly<Record<AssistantPointer, string>> = {
+  'canvas-expand': 'I read neighbours but do not change the canvas. Use Expand on the canvas to add them to the graph.',
+};
+
 export const ASSISTANT_NOT_ANSWERED_SENTENCE = 'I can’t support an answer from this investigation.';
 
 export const ASSISTANT_FAILURE_KINDS = ['service', 'source-unavailable', 'busy', 'timeout', 'rate-limit'] as const;
@@ -296,6 +304,8 @@ export const assistantTurnAnswerSchema = z.union([
     summarySentencesCited: z.array(z.number().int().min(1).max(12)).min(1).max(12).optional(),
     /** The fixed sentence for a type in the question that the mapping does not describe, beside the sentences for the ones it does. */
     noDescription: text.optional(),
+    /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
+    pointer: text.optional(),
     model: text,
     calls: z.number().int().positive(),
   }),
@@ -309,6 +319,8 @@ export const assistantTurnAnswerSchema = z.union([
     coverage: z.strictObject({ retrieval: text, summary: text }),
     /** As for the view route's answer. */
     noDescription: text.optional(),
+    /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
+    pointer: text.optional(),
     model: text,
     calls: z.number().int().positive(),
     steps: z.number().int().min(1),
@@ -328,6 +340,8 @@ export const assistantTurnAnswerSchema = z.union([
     coverage: z.strictObject({ retrieval: text, summary: text }),
     /** The fixed sentence for a type in the question that the mapping does not describe, beside the table. */
     noDescription: text.optional(),
+    /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
+    pointer: text.optional(),
     model: text,
     calls: z.number().int().positive(),
   }),
@@ -339,6 +353,8 @@ export const assistantTurnAnswerSchema = z.union([
     citations: z.array(z.union([z.strictObject({ key: text, kind: z.enum(['entity', 'relationship']), ref: z.union([elementRefSchema, edgeRefSchema]), title: text.max(ASSISTANT_CITATION_TITLE_MAX).optional() }), assistantDescriptionCitationSchema])).min(1),
     coverage: z.strictObject({ retrieval: text, summary: text }),
     noDescription: text.optional(),
+    /** The fixed sentence of a pointer the model asked for in its `answer` (see `ASSISTANT_POINTER_SENTENCES`): written by the server, never by the model. */
+    pointer: text.optional(),
     model: text,
     calls: z.number().int().positive(),
     steps: z.number().int().min(1),

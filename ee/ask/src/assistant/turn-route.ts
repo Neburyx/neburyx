@@ -218,10 +218,10 @@ async function loopAnswer(outcome: LoopOutcome, route: 'ask' | 'view', onWaiting
     case 'limit':
       return { status: 'limit', limit: outcome.limit, sentence: ASSISTANT_LIMIT_SENTENCES[outcome.limit], reads: [...outcome.reads] };
     case 'sentences':
-      return { status: 'answered', route, sentences: [...outcome.answer.sentences], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
+      return { status: 'answered', route, sentences: [...outcome.answer.sentences], citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
     case 'table':
       // a table is asked only on the view route; the ask route never carries the form
-      return { status: 'answered', route: 'view', table: outcome.answer.table, citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
+      return { status: 'answered', route: 'view', table: outcome.answer.table, citations: outcome.answer.citations, coverage: outcome.answer.coverage, model: outcome.answer.model, calls: outcome.calls, steps: outcome.steps, reads: [...outcome.reads], ...(outcome.answer.noDescription === undefined ? {} : { noDescription: outcome.answer.noDescription }), ...(outcome.answer.pointer === undefined ? {} : { pointer: outcome.answer.pointer }), ...(outcome.stoppedAt === undefined ? {} : { stoppedAt: outcome.stoppedAt }) };
     case 'no-description':
       return { status: 'no-description', route, sentence: outcome.sentence, names: [...outcome.names] };
     case 'unsupported':

@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { AIMessage, fakeModel } from '@neburyx/ee-assistant-agent/testing';
-import { ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
+import { ASSISTANT_POINTER_SENTENCES, ASSISTANT_REFUSAL_SENTENCES, ExtensionRefusal } from '@neburyx/contracts';
 import { removeAskFolders } from '../testing/ask-folder.js';
-import { BODY, VIEW_BODY, answerOf, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
+import { BODY, VIEW_BODY, answerOf, degreeResult, heavyResult, nodeOf, ok, okResult, rig, routeAsk, zeroResult, type Rig } from '../testing/assistant-rig.js';
 import { createMemoryAssistantPendingStore } from './pending-store.js';
 import { createMemoryAssistantRunStore } from './run-store.js';
 
@@ -78,6 +78,42 @@ describe('a view question on the agent', () => {
     });
     const failed = await rig({ reply: VIEW, agent: { model: none } });
     expect(await answerOf(failed.route.handler(failed.request(VIEW_BODY)))).toMatchObject({ status: 'unavailable' });
+  });
+
+  it('answers how many there are with the count the degree read states, cited, with its quality', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The transaction count is 169,756, which is exact.', cites: ['s1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'The transaction count is 169,756, which is exact.' }] });
+  });
+
+  it('removes a count that the degree read does not state', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The transaction count is 170,000, which is exact.', cites: ['s1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model }, run: () => ({ status: 'ok', result: degreeResult() }) });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered' });
+  });
+
+  it('shows the fixed sentence of a pointer the model names, and still removes the model\'s own uncited sentence', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Use the Expand action to add them.', cites: [] }, { text: 'Account A-1 is in view.', cites: ['n1'] }], pointer: 'canvas-expand' } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: VIEW, agent: { model } });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer).toMatchObject({ status: 'answered', pointer: ASSISTANT_POINTER_SENTENCES['canvas-expand'] });
+    expect(JSON.stringify(answer)).not.toContain('Use the Expand action');
+    const none = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }], pointer: 'anything-else' } }])
+      .respond(new AIMessage('Done.'));
+    const other = await rig({ reply: VIEW, agent: { model: none } });
+    expect(JSON.stringify(await answerOf(other.route.handler(other.request(VIEW_BODY))))).not.toContain('anything-else');
   });
 
   it('is not called for a verdict the router refuses', async () => {

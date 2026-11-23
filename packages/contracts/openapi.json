@@ -8187,6 +8187,10 @@
                 "type": "string",
                 "minLength": 1
               },
+              "pointer": {
+                "type": "string",
+                "minLength": 1
+              },
               "model": {
                 "type": "string",
                 "minLength": 1
@@ -8554,6 +8558,10 @@
                 "additionalProperties": false
               },
               "noDescription": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pointer": {
                 "type": "string",
                 "minLength": 1
               },
@@ -9152,6 +9160,10 @@
                 "type": "string",
                 "minLength": 1
               },
+              "pointer": {
+                "type": "string",
+                "minLength": 1
+              },
               "model": {
                 "type": "string",
                 "minLength": 1
@@ -9556,6 +9568,10 @@
                 "additionalProperties": false
               },
               "noDescription": {
+                "type": "string",
+                "minLength": 1
+              },
+              "pointer": {
                 "type": "string",
                 "minLength": 1
               },

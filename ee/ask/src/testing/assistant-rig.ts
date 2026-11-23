@@ -45,6 +45,23 @@ export const lowerBoundResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'lowerBound', value: 150, scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
 export const unknownCountResult = (): AskRunResult =>
   askRunResultSchema.parse({ templateId: 'shared-attribute', result: { status: 'ok', templateId: 'shared-attribute', templateVersion: '1', count: { quality: 'unknown', scope: 'test' }, matchIds: [node('A-2').ref], nodes: [node('A-1'), node('A-2')], edges: [], notices: [], warnings: [] } });
+/** A degree preview of A-1: the relationship ends in all and by the type at the other end, each with its quality. */
+export const degreeResult = (): AskRunResult =>
+  askRunResultSchema.parse({
+    templateId: 'degree-preview',
+    result: {
+      ref: node('A-1').ref,
+      total: { quality: 'exact', value: 184533, scope: 'test' },
+      byType: [{ relationshipType: 'RECEIVED_BY', direction: 'in', count: { quality: 'exact', value: 169756, scope: 'test' }, neighborTypes: ['transaction'] }],
+      byNeighborType: [
+        { entityType: 'transaction', count: { quality: 'exact', value: 169756, scope: 'test' } },
+        { entityType: 'account', count: { quality: 'lowerBound', value: 1000, scope: 'test' } },
+      ],
+      warnings: [],
+      pageSize: 25,
+      heavyOpThreshold: 1000,
+    },
+  });
 /** An expansion of A-1: the anchor, two neighbours and the stored relationship to the first, with a page that has more when asked to. */
 export const expandResult = (hasMore = false): AskRunResult =>
   askRunResultSchema.parse({

@@ -4,7 +4,7 @@ import { retrievalLine } from '../case-summary/coverage.js';
 import type { DraftedOrAlternative } from '../case-summary/draft.js';
 import { checkedTextOf } from '../case-summary/judge.js';
 import { listedElements } from '../summary/index.js';
-import { countOf, coverageOf, inexactCountOf } from './coverage.js';
+import { countOf, coverageOf, degreeCountsOf, inexactCountOf } from './coverage.js';
 import { rowsPhrase, subjectPluralOf, subjectTypeOf } from './table.js';
 import type { NoteSentence, StepScope } from './tool-step.js';
 import { descriptionCitationsOf, noDescriptionReplyOf, noDescriptionSentence, typeLinesOf, undescribedNamesOf, undescribedOf, withTypeLines } from './type-lines.js';
@@ -31,9 +31,9 @@ export interface ToolAnswerInput {
 }
 
 export type ToolAnswerOutcome =
-  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string }
+  | { readonly kind: 'sentences'; readonly sentences: readonly SummarySentence[]; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; sentences: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string }
   /** The answer as a table (the router chose the form): rows that each cite an element a read returned. */
-  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string }
+  | { readonly kind: 'table'; readonly table: AssistantTable; readonly citations: Extract<AssistantTurnAnswer, { status: 'answered'; table: unknown }>['citations']; readonly coverage: { readonly retrieval: string; readonly summary: string }; readonly model: string; readonly calls: number; readonly noDescription?: string; readonly pointer?: string }
   /** The question is about types the mapping does not describe: the fixed sentence the server wrote and the names of the profile. */
   | { readonly kind: 'noDescription'; readonly sentence: string; readonly names: readonly string[]; readonly calls: number }
   | { readonly kind: 'unsupported'; readonly calls: number }
@@ -77,7 +77,11 @@ export function citationTitleOf(title: string | undefined): string | undefined {
 
 const linesPhrase = (count: number): string => `${count} ${count === 1 ? 'line' : 'lines'}`;
 const sentencesPhrase = (count: number): string => `${count} ${count === 1 ? 'sentence' : 'sentences'}`;
-const findingOf = (read: ReadDone): string => (read.typology !== undefined ? linesPhrase(read.typology.length) : read.written !== undefined ? `${sentencesPhrase(read.written.sentences.length)}${read.written.notRead > 0 ? `, ${read.written.notRead} ${read.written.notRead === 1 ? 'entry' : 'entries'} not read` : ''}` : read.result === undefined ? 'found nothing' : coverageOf(read.result));
+const withDegreeCounts = (run: AskRunResult): string => {
+  const counts = degreeCountsOf(run);
+  return counts === undefined ? coverageOf(run) : `${coverageOf(run)} · ${counts}`;
+};
+const findingOf = (read: ReadDone): string => (read.typology !== undefined ? linesPhrase(read.typology.length) : read.written !== undefined ? `${sentencesPhrase(read.written.sentences.length)}${read.written.notRead > 0 ? `, ${read.written.notRead} ${read.written.notRead === 1 ? 'entry' : 'entries'} not read` : ''}` : read.result === undefined ? 'found nothing' : withDegreeCounts(read.result));
 const readLine = (key: string, read: ReadDone): string => `${key}: read of ${read.label ?? read.tool}: ${findingOf(read)}`;
 
 /**

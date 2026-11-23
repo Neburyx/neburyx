@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { askRunResultSchema, type AskRunResult } from '@neburyx/contracts';
-import { coverageOf } from './coverage.js';
-import { derivedRuleResult, expandResult, fileQueryResult, okResult } from '../testing/assistant-rig.js';
+import { coverageOf, degreeCountsOf } from './coverage.js';
+import { degreeResult, derivedRuleResult, expandResult, fileQueryResult, okResult } from '../testing/assistant-rig.js';
 
 const withCount = (base: AskRunResult, count: unknown): AskRunResult => {
   if (base.templateId !== 'shared-attribute' || base.result.status !== 'ok') throw new Error('fixture');
@@ -93,5 +93,15 @@ describe('the coverage line of a derived rule run: the other ends, never the anc
 
   it('says the count is unknown when a rule\'s count is', () => {
     expect(coverageOf(derivedRuleResult({ quality: 'unknown' }))).toBe('3 matches shown · count unknown');
+  });
+});
+
+describe('the counts a degree read states', () => {
+  it('writes the total and the count of each neighbour type with its quality, as the inspector shows them', () => {
+    expect(degreeCountsOf(degreeResult())).toBe('relationship ends in all: 184,533 exact · transaction: 169,756 exact · account: ≥ 1,000 lower bound');
+  });
+
+  it('states none for a read that is not a degree read', () => {
+    expect(degreeCountsOf(okResult())).toBeUndefined();
   });
 });
