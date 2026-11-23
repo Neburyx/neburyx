@@ -63,6 +63,7 @@ describe('the shipped summary files', () => {
     'Never state or imply guilt, fraud, intent or a conclusion',
     'copy it exactly as the element text shows it and cite the element it belongs to',
     'give the number of those you cite',
+    'List the key of every element a count stands for',
   ])('has the prompt state: %s', (statement) => {
     expect(shipped('summary-prompt.md')).toContain(statement);
   });
