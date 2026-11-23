@@ -9,7 +9,7 @@ import { AuditUnavailableError, type AuditedCallContext, type CallRecorder, type
 /** What a caller keeps of one call besides its audit event: the record of the turn's calls, with the fixed instructions, the messages sent and what came back. */
 export interface CallTrace {
   received(answer: { readonly text: string; readonly usage: TokenUsage; readonly model: string; readonly prompt: PromptRecord }): void;
-  end(outcome: { readonly error?: unknown; readonly aborted: boolean }): void;
+  end(outcome: { readonly error?: unknown; readonly aborted: boolean; readonly failure?: { readonly code: string; readonly errorClass: string; readonly errorCode?: string } }): void;
 }
 
 export interface AuditedModelHook {
@@ -65,6 +65,18 @@ export function failureCodeOf(error: unknown, aborted: boolean): FailureCode {
   if (aborted || text.includes('timeout') || text.includes('abort')) return 'timeout';
   if (text.includes('econnrefused') || text.includes('enotfound') || text.includes('fetch failed') || text.includes('connection')) return 'unreachable';
   return 'provider-error';
+}
+
+const SHORT_CODE = /^[A-Za-z0-9._:/-]{1,80}$/;
+const shortCodeOf = (value: unknown): string | undefined => (typeof value === 'string' || typeof value === 'number') && SHORT_CODE.test(String(value)) ? String(value) : undefined;
+
+/** The class of an error the provider's client threw and its HTTP status or code (its own, or its cause's, such as a reset connection), as short codes; never the message, which can hold a value. */
+export function failureDetailOf(error: unknown): { readonly errorClass: string; readonly errorCode?: string } {
+  const held = isRecord(error) ? error : {};
+  const cause = isRecord(held['cause']) ? held['cause'] : {};
+  const errorClass = shortCodeOf(error instanceof Error ? error.constructor.name : undefined) ?? shortCodeOf(held['name']) ?? 'Error';
+  const errorCode = shortCodeOf(held['status']) ?? shortCodeOf(held['code']) ?? shortCodeOf(cause['code']);
+  return { errorClass, ...(errorCode === undefined ? {} : { errorCode }) };
 }
 
 export class AuditedModelFailure extends Error {
@@ -140,8 +152,9 @@ class AuditedChatModel extends BaseChatModel {
       message = await this.inner.invoke(hook.cache === undefined ? messages : withCacheMarkers(messages, hook.cache.ttl), options.signal === undefined ? {} : { signal: options.signal });
     } catch (error) {
       const code = failureCodeOf(error, options.signal?.aborted === true);
-      trace?.end({ error, aborted: options.signal?.aborted === true });
-      await hook.recorder.record(hook.context(), prompt, { result: 'failed', modelRef: hook.modelRef, usage: UNKNOWN_USAGE });
+      const failure = failureDetailOf(error);
+      trace?.end({ error, aborted: options.signal?.aborted === true, failure: { code, ...failure } });
+      await hook.recorder.record(hook.context(), prompt, { result: 'failed', modelRef: hook.modelRef, usage: UNKNOWN_USAGE, failure });
       throw new AuditedModelFailure(code, { cause: error });
     }
     const usage = usageOf(message.usage_metadata);

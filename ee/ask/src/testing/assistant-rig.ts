@@ -52,10 +52,10 @@ export const degreeResult = (): AskRunResult =>
     result: {
       ref: node('A-1').ref,
       total: { quality: 'exact', value: 184533, scope: 'test' },
-      byType: [{ relationshipType: 'RECEIVED_BY', direction: 'in', count: { quality: 'exact', value: 169756, scope: 'test' }, neighborTypes: ['transaction'] }],
+      byType: [{ relationshipType: 'HOLDS', direction: 'in', count: { quality: 'exact', value: 169756, scope: 'test' }, neighborTypes: ['gadget'] }],
       byNeighborType: [
-        { entityType: 'transaction', count: { quality: 'exact', value: 169756, scope: 'test' } },
-        { entityType: 'account', count: { quality: 'lowerBound', value: 1000, scope: 'test' } },
+        { entityType: 'gadget', count: { quality: 'exact', value: 169756, scope: 'test' } },
+        { entityType: 'widget', count: { quality: 'lowerBound', value: 1000, scope: 'test' } },
       ],
       warnings: [],
       pageSize: 25,

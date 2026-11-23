@@ -64,6 +64,20 @@ describe('a view question on the agent', () => {
     }
   });
 
+  it('records why a model call failed in the run record: the failure code, the class and the code of the error, never its message', async () => {
+    const model = fakeModel().respond(() => {
+      throw Object.assign(new TypeError('SECRET-MESSAGE'), { status: 400 });
+    });
+    const runStore = createMemoryAssistantRunStore();
+    const r = await rig({ reply: VIEW, agent: { model }, runStore });
+    await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    for (let step = 0; step < 10; step += 1) await Promise.resolve();
+    const failed = runStore.runs.flatMap((run) => run.callEnds).filter((end) => end.status === 'failed');
+    expect(failed).toMatchObject([{ failureKind: 'provider-error', errorClass: 'TypeError', errorCode: '400' }]);
+    expect(JSON.stringify(runStore.runs)).not.toContain('SECRET-MESSAGE');
+    expect(JSON.stringify(r.events)).not.toContain('SECRET-MESSAGE');
+  });
+
   it('shows the answer that stands when the model call that follows it fails, and the failure when no answer stands', async () => {
     const withAnswer = fakeModel()
       .respondWithTools([{ name: 'view', args: {} }])
@@ -83,17 +97,17 @@ describe('a view question on the agent', () => {
   it('answers how many there are with the count the degree read states, cited, with its quality', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The transaction count is 169,756, which is exact.', cites: ['s1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The gadget count is 169,756, which is exact.', cites: ['s1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, run: () => ({ status: 'ok', result: degreeResult() }) });
     const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
-    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'The transaction count is 169,756, which is exact.' }] });
+    expect(answer).toMatchObject({ status: 'answered', sentences: [{ text: 'The gadget count is 169,756, which is exact.' }] });
   });
 
   it('removes a count that the degree read does not state', async () => {
     const model = fakeModel()
       .respondWithTools([{ name: 'degree-preview', args: { entityType: 'widget', stableId: 'A-1' } }])
-      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The transaction count is 170,000, which is exact.', cites: ['s1'] }] } }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'The gadget count is 170,000, which is exact.', cites: ['s1'] }] } }])
       .respond(new AIMessage('Done.'));
     const r = await rig({ reply: VIEW, agent: { model }, run: () => ({ status: 'ok', result: degreeResult() }) });
     expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'not-answered' });

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
 const FOLDERS = ['ee', 'services', 'packages', 'apps', 'tools'];
-const ALLOWED = new Set(['ee/ask/src/assistant/run-store.ts', 'ee/migrations/0007-assistant-runs.sql']);
+const ALLOWED = new Set(['ee/ask/src/assistant/run-store.ts', 'ee/migrations/0007-assistant-runs.sql', 'ee/migrations/0010-assistant-run-errors.sql']);
 const SKIPPED = new Set(['node_modules', 'dist', 'coverage', '.turbo']);
 
 function filesUnder(folder: string): string[] {

@@ -98,7 +98,7 @@ describe('the coverage line of a derived rule run: the other ends, never the anc
 
 describe('the counts a degree read states', () => {
   it('writes the total and the count of each neighbour type with its quality, as the inspector shows them', () => {
-    expect(degreeCountsOf(degreeResult())).toBe('relationship ends in all: 184,533 exact · transaction: 169,756 exact · account: ≥ 1,000 lower bound');
+    expect(degreeCountsOf(degreeResult())).toBe('relationship ends in all: 184,533 exact · gadget: 169,756 exact · widget: ≥ 1,000 lower bound');
   });
 
   it('states none for a read that is not a degree read', () => {

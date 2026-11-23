@@ -3,7 +3,7 @@ import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages
 import { FakeListChatModel } from '@langchain/core/utils/testing';
 import { createCallRecorder, type AuditedCallContext } from '@neburyx/ee-ai-runtime';
 import type { AuditEvent, AuditSink } from '@neburyx/contracts';
-import { AuditedModelFailure, auditChatModel, failureCodeOf, usageOf, withCacheMarkers } from './audited-model.js';
+import { AuditedModelFailure, auditChatModel, failureCodeOf, failureDetailOf, usageOf, withCacheMarkers } from './audited-model.js';
 
 const context: AuditedCallContext = { action: 'assistant.agent', actorId: 'person-1', actorRole: 'investigator', traceId: 'trace-1', sourceId: 'source-1', investigationId: 'investigation-1' };
 
@@ -56,6 +56,22 @@ describe('the audited chat model', () => {
     await expect(model.invoke([new HumanMessage('q')])).rejects.toMatchObject({ code: 'rate-limited' });
     expect(events).toHaveLength(1);
     expect(events[0]?.result).toBe('failed');
+  });
+
+  it('records the class and the code of the error of a failed call in the event, and no word of its message', async () => {
+    const events: AuditEvent[] = [];
+    class APIConnectionError extends Error {}
+    const dropped = Object.assign(new APIConnectionError('Connection error: key sk-SECRET-VALUE'), { cause: Object.assign(new Error('read'), { code: 'ECONNRESET' }) });
+    const model = auditChatModel(new FailingModel(dropped), hookOf(events));
+    await expect(model.invoke([new HumanMessage('q')])).rejects.toMatchObject({ code: 'unreachable' });
+    expect(events[0]?.detail).toMatchObject({ ai: { failure: { errorClass: 'APIConnectionError', errorCode: 'ECONNRESET' } } });
+    expect(JSON.stringify(events)).not.toContain('SECRET');
+  });
+
+  it('describes an error by its class and its status or code, and by nothing it cannot hold as a short code', () => {
+    expect(failureDetailOf(Object.assign(new Error('bad request: a long message'), { status: 400 }))).toEqual({ errorClass: 'Error', errorCode: '400' });
+    expect(failureDetailOf('text')).toEqual({ errorClass: 'Error' });
+    expect(failureDetailOf(Object.assign(new Error('x'), { code: 'has a space and text' }))).toEqual({ errorClass: 'Error' });
   });
 
   it('records a cancelled call as one failed event', async () => {

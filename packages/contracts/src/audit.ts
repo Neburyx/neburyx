@@ -42,6 +42,8 @@ export interface AiAuditDetail {
   readonly cacheReadTokens?: TokenCount | 'unknown';
   /** The input tokens the call wrote to the provider's prompt cache; absent on an event written before caching existed. */
   readonly cacheWriteTokens?: TokenCount | 'unknown';
+  /** On a failed call: the class of the error the provider's client threw and its code or HTTP status, as short codes; never a message, a value or a key. */
+  readonly failure?: { readonly errorClass: string; readonly errorCode?: string };
 }
 
 const tokensSchema = z.union([tokenCountSchema, z.literal('unknown')]);
@@ -63,6 +65,7 @@ export const aiAuditDetailSchema = z.strictObject({
   tokensOut: tokensSchema,
   cacheReadTokens: tokensSchema.optional(),
   cacheWriteTokens: tokensSchema.optional(),
+  failure: z.strictObject({ errorClass: label, errorCode: label.optional() }).optional(),
 });
 
 export function parseAiAuditDetail(value: unknown): AiAuditDetail {

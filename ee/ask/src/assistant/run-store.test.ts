@@ -59,12 +59,12 @@ describe('the pg assistant run store', () => {
     const { store, calls } = rig();
     await store.beginCall({ runId: NEW_ID, number: 1, startedAt: AT, instructionsSha256: 'abc', instructionsText: 'INSTR', valuesText: 'VALUES' });
     await store.endCall({ runId: NEW_ID, number: 1, status: 'answered', replyText: 'REPLY', tokensIn: 10, tokensOut: 4, durationMs: 120 });
-    await store.endCall({ runId: NEW_ID, number: 2, status: 'failed', failureKind: 'timeout', durationMs: 5 });
+    await store.endCall({ runId: NEW_ID, number: 2, status: 'failed', failureKind: 'timeout', errorClass: 'AbortError', errorCode: 'ABORT', durationMs: 5 });
     await store.finish(NEW_ID, 'ok', 1, AT);
     expect(calls.map((call) => call.text.split(' ').slice(0, 3).join(' '))).toEqual(['INSERT INTO assistant_run_calls', 'UPDATE assistant_run_calls SET', 'UPDATE assistant_run_calls SET', 'UPDATE assistant_runs SET']);
     expect(calls[0]?.values).toEqual([NEW_ID, 1, AT, 'abc', 'INSTR', 'VALUES']);
-    expect(calls[1]?.values).toEqual([NEW_ID, 1, 'answered', null, 'REPLY', 10, 4, 120]);
-    expect(calls[2]?.values).toEqual([NEW_ID, 2, 'failed', 'timeout', null, null, null, 5]);
+    expect(calls[1]?.values).toEqual([NEW_ID, 1, 'answered', null, 'REPLY', 10, 4, 120, null, null]);
+    expect(calls[2]?.values).toEqual([NEW_ID, 2, 'failed', 'timeout', null, null, null, 5, 'AbortError', 'ABORT']);
     expect(calls[3]?.values).toEqual([NEW_ID, 'ok', 1, AT]);
   });
 

@@ -69,6 +69,8 @@ export interface CallOutcome {
   readonly result: AuditResult;
   readonly modelRef: string;
   readonly usage: TokenUsage;
+  /** On a failed call: the class and the code of the error the provider's client threw, as short codes. */
+  readonly failure?: { readonly errorClass: string; readonly errorCode?: string };
 }
 
 export function createCallRecorder(options: Pick<AuditedModelOptions, 'sink'>): CallRecorder {
@@ -92,6 +94,7 @@ export function createCallRecorder(options: Pick<AuditedModelOptions, 'sink'>): 
       ...(context.runId === undefined ? {} : { runId: context.runId }),
       ...(context.patternCatalog === undefined ? {} : { patternCatalog: context.patternCatalog }),
       ...counts,
+      ...(outcome.failure === undefined ? {} : { failure: outcome.failure }),
     });
     return {
       actorId: context.actorId,

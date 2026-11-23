@@ -19,12 +19,19 @@ interface CallStart {
   readonly values: string;
 }
 
+/** Why a call failed: the product's code and the class and the code of the error the provider's client threw. */
+export interface CallFailure {
+  readonly code: string;
+  readonly errorClass: string;
+  readonly errorCode?: string;
+}
+
 /** The record of one model call: it is written when the call starts and once when it ends. */
 export interface CallRecord {
   /** Keeps what the provider returned the moment it returns, so a call that fails after its reply still holds the reply. */
   received(answer: ModelAnswer): void;
   /** Ends the call: from the provider's answer, or, with an error, as failed; a call the client gave up before it ended is cancelled, whatever came back, and a reply that is not a route is failed. */
-  end(outcome: { readonly error?: unknown; readonly aborted: boolean; readonly notARoute?: boolean }): void;
+  end(outcome: { readonly error?: unknown; readonly aborted: boolean; readonly notARoute?: boolean; readonly failure?: CallFailure }): void;
 }
 
 export interface TurnRun {
@@ -102,18 +109,22 @@ export function createTurnRun(deps: TurnRunDeps, request: ExtensionRequest, star
         received(received) {
           answer = received;
         },
-        end({ error, aborted, notARoute }) {
+        end({ error, aborted, notARoute, failure }) {
           if (ended || store === undefined) return;
           ended = true;
           const usage: TokenUsage | undefined = answer?.usage;
           const replyText = answer === undefined ? undefined : answer.status === 'ok' ? answer.text : answer.received;
-          const { status, failureKind } = endOf(answer, error, aborted, notARoute === true);
+          const result = endOf(answer, error, aborted, notARoute === true);
+          const { status } = result;
+          // a failure the audited model described says why; the generic kind is only for a call that threw something else
+          const failureKind = result.status === 'failed' && failure !== undefined && answer === undefined ? failure.code : result.failureKind;
           quietly(deps, { runId: id, step: 'endCall' }, () =>
             store.endCall({
               runId: id,
               number,
               status,
               ...(failureKind === undefined ? {} : { failureKind }),
+              ...(failure === undefined || status !== 'failed' ? {} : { errorClass: failure.errorClass, ...(failure.errorCode === undefined ? {} : { errorCode: failure.errorCode }) }),
               ...(replyText === undefined ? {} : { replyText }),
               ...(usage?.kind === 'known' ? { tokensIn: usage.inputTokens, tokensOut: usage.outputTokens } : {}),
               durationMs: durationOf(startedAt, deps.now()),
