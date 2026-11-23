@@ -79,16 +79,12 @@ describe('the scorer and its approval', () => {
     const env = { PATH: '/bin', HOME: '/home/x', DATABASE_URL: 'postgres://u:CANARY@h/db', NEBURYX_ASSISTANT_MODEL: 'canary-model', ANTHROPIC_API_KEY: 'scorer-own-key', OPENAI_API_KEY: 'codex-own-key', NEBURYX_PROVIDER_KEY_FILE: '/secret/path' };
     await codexRunner(spawn, env)('p');
     await opusRunner(spawn, env)('p');
-    const { ANTHROPIC_API_KEY: _own, ...signedIn } = env;
-    await opusRunner(spawn, signedIn)('p');
     for (const run of seen) {
       expect(Object.keys(run.env ?? {}).sort()).not.toContain('DATABASE_URL');
       expect(JSON.stringify(run.env)).not.toMatch(/CANARY|canary-model|secret\/path/u);
       expect(run.cwd).toBeDefined();
       expect(run.cwd).toContain('thread-scorer-');
     }
-    expect(seen[2]?.args).not.toContain('--bare');
-    expect(seen[2]?.env?.['HOME']).toBe('/home/x');
     expect(seen[0]?.env).toMatchObject({ OPENAI_API_KEY: 'codex-own-key' });
     expect(seen[0]?.env).not.toHaveProperty('ANTHROPIC_API_KEY');
     expect(seen[0]?.args).toContain('shell_environment_policy.inherit="none"');
@@ -117,12 +113,35 @@ describe('the scorer and its approval', () => {
     expect(existsSync(seen?.home ?? real)).toBe(false);
   });
 
+  it('runs Opus only in bare mode with a key of its own, taken from its environment or by reference from the product key file, and waits when there is none', async () => {
+    let launched = 0;
+    const seen: { env: NodeJS.ProcessEnv | undefined; args: readonly string[] }[] = [];
+    const spawn = stubSpawn((_command, args, options) => {
+      launched += 1;
+      seen.push({ env: options.env, args });
+      return { out: '{"result":"[]","num_turns":1}', code: 0 };
+    });
+    await expect(opusRunner(spawn, { PATH: '/bin', HOME: '/home/x' })('p')).rejects.toThrow('scoring waits');
+    await expect(opusRunner(spawn, { PATH: '/bin', NEBURYX_ASK_API_KEY_FILE: join(tmpdir(), 'no-such-key-file') })('p')).rejects.toBeInstanceOf(ScorerUnavailable);
+    expect(launched).toBe(0);
+    const keyFolder = mkdtempSync(join(tmpdir(), 'thread-opus-key-'));
+    writeFileSync(join(keyFolder, 'key'), 'file-key-value\n');
+    await opusRunner(spawn, { PATH: '/bin', HOME: '/home/x', NEBURYX_ASK_API_KEY_FILE: join(keyFolder, 'key') })('p');
+    expect(seen[0]?.args).toContain('--bare');
+    expect(seen[0]?.env).toMatchObject({ ANTHROPIC_API_KEY: 'file-key-value' });
+    expect(seen[0]?.env?.['HOME']).not.toBe('/home/x');
+    expect(seen[0]?.env).not.toHaveProperty('NEBURYX_ASK_API_KEY_FILE');
+    const failing = stubSpawn(() => ({ out: 'file-key-value leaked', err: 'file-key-value', code: 1 }));
+    const failure = await opusRunner(failing, { ANTHROPIC_API_KEY: 'file-key-value' })('p').catch((error: unknown) => String(error));
+    expect(failure).not.toContain('file-key-value');
+  });
+
   it('counts the model calls an Opus run states and refuses a reply that does not state them', async () => {
     const spawnOf = (out: string) => stubSpawn(() => ({ out, code: 0 }));
-    expect(await opusRunner(spawnOf('{"result":"[]","num_turns":4}'), {})('p')).toEqual({ text: '[]', calls: 4 });
-    await expect(opusRunner(spawnOf('{"result":"[]"}'), {})('p')).rejects.toThrow('does not state the calls');
-    await expect(opusRunner(spawnOf('not json'), {})('p')).rejects.toThrow('not the JSON');
-    const counted = countedRunner(opusRunner(spawnOf('{"result":"[]","num_turns":4}'), {}), 3);
+    expect(await opusRunner(spawnOf('{"result":"[]","num_turns":4}'), { ANTHROPIC_API_KEY: 'k' })('p')).toEqual({ text: '[]', calls: 4 });
+    await expect(opusRunner(spawnOf('{"result":"[]"}'), { ANTHROPIC_API_KEY: 'k' })('p')).rejects.toThrow('does not state the calls');
+    await expect(opusRunner(spawnOf('not json'), { ANTHROPIC_API_KEY: 'k' })('p')).rejects.toThrow('not the JSON');
+    const counted = countedRunner(opusRunner(spawnOf('{"result":"[]","num_turns":4}'), { ANTHROPIC_API_KEY: 'k' }), 3);
     await expect(counted.run('p')).rejects.toThrow('made 4 calls');
   });
 

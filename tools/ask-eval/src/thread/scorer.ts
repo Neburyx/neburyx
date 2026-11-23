@@ -144,22 +144,35 @@ export function codexRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = p
   };
 }
 
+/** The key the Opus scorer signs in with: the one in its environment, else the one in the file the product's own key setting names, read here and never printed or kept. */
+function opusKey(env: NodeJS.ProcessEnv): string | undefined {
+  const own = env['ANTHROPIC_API_KEY'];
+  if (own !== undefined && own !== '') return own;
+  const path = env['NEBURYX_ASK_API_KEY_FILE'];
+  if (path === undefined || path === '') return undefined;
+  try {
+    const text = readFileSync(path, 'utf8').trim();
+    return text === '' ? undefined : text;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, an empty working folder of its own and an environment of its own. With an API key of its own
- * it runs in bare mode with an empty configuration folder (no hooks, memory or settings of the user); signed in through the user's account it keeps that account's folder, because the sign-in lives there, so the user's own
- * settings and memory can reach it (a limit the report of a run names) and it has no tool to read a file with. With no tool a
- * run is one model call; the CLI states the turns it made, and that figure is the count of calls, so a run that made more than one is counted in full and refused by the cap.
+ * An Opus agent run by the harness through the Claude CLI in print mode: no tools, no extra servers or commands, nothing kept of the session, bare mode (no hooks, memory or settings), an empty working folder and configuration
+ * folder of its own and an environment of its own. It runs only with an API key of its own, taken by reference from its environment or from the product's key file; signed in through the user's account it would see that account's
+ * settings and memory, so with no key the scoring waits (`ScorerUnavailable`). With no tool a run is one model call; the CLI states the turns it made, and that figure is the count of calls, so a run that made more than one is counted in full and refused by the cap.
  */
 export function opusRunner(spawn: Spawn = realSpawn, env: NodeJS.ProcessEnv = process.env): Runner {
   return async (prompt) => {
+    const key = opusKey(env);
+    if (key === undefined) throw new ScorerUnavailable('Opus scores only in bare mode with an API key of its own (ANTHROPIC_API_KEY, or the product key file): none is available, so scoring waits');
     const dir = mkdtempSync(join(tmpdir(), 'thread-scorer-'));
     try {
-      const keyed = env['ANTHROPIC_API_KEY'] !== undefined;
-      const args = ['-p', '--model', 'opus', '--tools', '', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json', ...(keyed ? ['--bare'] : [])];
+      const args = ['-p', '--model', 'opus', '--bare', '--tools', '', '--strict-mcp-config', '--disable-slash-commands', '--no-session-persistence', '--output-format', 'json'];
       const home = join(dir, 'home');
       mkdirSync(home);
-      const own = scorerEnv(env, ['ANTHROPIC_API_KEY', 'CLAUDE_CONFIG_DIR']);
-      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: keyed ? { ...own, HOME: home, CLAUDE_CONFIG_DIR: home } : own });
+      const result = await runCommand(spawn, 'claude', args, prompt, { cwd: dir, env: { ...scorerEnv(env, []), ANTHROPIC_API_KEY: key, HOME: home, CLAUDE_CONFIG_DIR: home } });
       if (QUOTA.test(`${result.out}\n${result.err}`) && result.code !== 0) throw new ScorerUnavailable('out of quota');
       if (result.code !== 0) throw new ScorerUnavailable('the command failed');
       let parsed: unknown;
