@@ -20,7 +20,7 @@ export const VIEW: AssistantTurnAnswer = { status: 'not-answered', route: 'view'
 
 export type TurnCall = (request: AssistantTurnRequest, signal: AbortSignal | undefined, onStep?: (step: TurnStep) => void) => Promise<ApiResult<AssistantTurnAnswer>>;
 
-export type ThreadCall = (investigationId: string, signal: AbortSignal | undefined) => Promise<ApiResult<AssistantThreadResponse>>;
+export type ThreadCall = (investigationId: string, signal: AbortSignal | undefined, mask: boolean) => Promise<ApiResult<AssistantThreadResponse>>;
 const EMPTY_THREAD: ThreadCall = async () => ({ ok: true, value: { turns: [], earlierTurns: 0, previousThreadClearedAt: null } });
 
 export type ReadRefsCall = (request: ReadRefsRequest, signal: AbortSignal | undefined) => Promise<ApiResult<ReadRefsResponse>>;
@@ -35,6 +35,7 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
   const sent: AssistantTurnRequest[] = [];
   const reads: string[] = [];
   const askedRefs: ReadRefsRequest[] = [];
+  const asked: { investigationId: string; mask: boolean }[] = [];
   const client = fakeClient({
     readRefs: async (request, signal) => {
       askedRefs.push(request);
@@ -44,9 +45,10 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
       sent.push(request);
       return turn(request, signal, onStep);
     },
-    assistantThread: async (investigationId, signal) => {
+    assistantThread: async (investigationId, mask, signal) => {
       reads.push(investigationId);
-      return thread(investigationId, signal);
+      asked.push({ investigationId, mask });
+      return thread(investigationId, signal, mask);
     },
   });
   const status = aiStatus({ summary, ...(limit === null ? {} : { assistant: limit }) });
@@ -62,7 +64,7 @@ export function harness(turn: TurnCall, limit: number | null = 1000, thread: Thr
       </ClientStateProvider>
     </ApiClientProvider>
   );
-  return { tree, sent, reads, askedRefs, session, state, shell, tools };
+  return { tree, client, sent, reads, asked, askedRefs, session, state, shell, tools };
 }
 
 export const typeAndSend = async (text: string) => {

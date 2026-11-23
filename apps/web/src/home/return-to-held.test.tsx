@@ -39,7 +39,7 @@ function recording(client: ApiClient) {
     ask: (request, signal) => (calls.push('ask'), client.ask(request, signal)),
     askContinue: (request, signal) => (calls.push('askContinue'), client.askContinue(request, signal)),
     assistantTurn: (request, signal) => (calls.push('assistantTurn'), client.assistantTurn(request, signal)),
-    assistantThread: (id, signal) => (calls.push('assistantThread'), client.assistantThread(id, signal)),
+    assistantThread: (id, mask, signal) => (calls.push('assistantThread'), client.assistantThread(id, mask, signal)),
     summarize: (request, key, signal) => (calls.push('summarize'), client.summarize(request, key, signal)),
     copyToNotes: (id, request, signal) => (calls.push('copyToNotes'), client.copyToNotes(id, request, signal)),
     readAiNotes: (id, mask, signal) => (calls.push('readAiNotes'), client.readAiNotes(id, mask, signal)),

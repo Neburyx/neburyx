@@ -116,4 +116,36 @@ describe('the Sources of a stored answer, read by reference when they are opened
     expect(document.body.textContent).not.toContain('SENTINEL-TITLE');
     h.stop();
   });
+
+  it('reads the list again each time the control is opened, so that a label that changed or an element that was removed since shows as it is now', async () => {
+    let opening = 0;
+    const h = open(async (request) => {
+      if (request.entities.length === 0) return read({ nodes: [], edges: [] });
+      opening += 1;
+      return opening === 1 ? read() : read({ nodes: [node('a', 'ent-2')], edges: [], missing: { entities: [A], edges: [] } });
+    }, true);
+    await toggle();
+    await screen.findByText('Account One');
+    await toggle();
+    await toggle();
+    const row = await screen.findByRole('button', { name: /^Sources: 1, Not available/ });
+    expect(row).toBeTruthy();
+    expect(screen.queryByText('Account One')).toBeNull();
+    expect(h.askedRefs.filter((request) => request.entities.length > 0).length).toBeGreaterThanOrEqual(2);
+    h.stop();
+  });
+
+  it('reads the ends of a relationship that is cited alone and lists it by their titles as they are now, with its shape', async () => {
+    const onlyEdge: AssistantThreadResponse = { ...STORED, turns: [{ ...STORED.turns[0], citedElements: 1, answer: { blocks: [{ kind: 'sentences', items: [{ item: { state: 'text', text: 'They are linked.' }, cites: [EDGE.ref] }] }] } } as AssistantThreadResponse['turns'][number]] };
+    const h = harness(async () => ok(REFUSE), 1000, async () => ok(onlyEdge), false, async (request) => {
+      if (request.edges.length > 0) return ok({ nodes: [], edges: [EDGE], missing: { entities: [], edges: [] } });
+      return ok({ nodes: [{ ...node('a', 'ent-1'), display: { title: 'Account One', type: 'type-a' } }, { ...node('a', 'ent-2'), display: { title: 'Account Two', type: 'type-a' } }], edges: [], missing: { entities: [], edges: [] } });
+    });
+    const stop = bindAssistantPanel(h.state, createPanelRegistry(), h.session);
+    render(h.tree());
+    await userEvent.click(await screen.findByRole('button', { name: `${ASSISTANT_COPY.sources} · 1` }));
+    expect(await screen.findByText(/Account One → Account Two · rel-a/)).toBeTruthy();
+    expect(h.askedRefs.map((request) => [request.entities.length, request.edges.length])).toEqual([[0, 1], [2, 0]]);
+    stop();
+  });
 });

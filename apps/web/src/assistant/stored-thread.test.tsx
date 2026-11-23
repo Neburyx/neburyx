@@ -174,18 +174,60 @@ describe('the stored thread in the panel', () => {
     h.stop();
   });
 
-  it('drops an answer that was in flight while a live turn was sent, so the turn is never shown twice', async () => {
+  it('shows the earlier stored turns above a turn sent while the thread was read, and leaves out a stored turn that is that turn, so that none is lost and none is shown twice', async () => {
     const wait = deferred<ApiResult<AssistantThreadResponse>>();
     const h = harness(async () => ok(REFUSE), 1000, () => wait.promise);
     render(h.tree());
     await screen.findByText(ASSISTANT_COPY.storedLoading);
     await typeAndSend('sent first');
     await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
+    const own = { seq: 4, at: new Date(Date.now() + 60_000).toISOString(), route: 'refuse' as const, outcome: 'refused' as const, cause: 'verdict', citedElements: 0, steps: 0, question: 'sent first' };
     await act(async () => {
-      wait.resolve(ok(STORED));
+      wait.resolve(ok({ ...STORED, turns: [...STORED.turns, own] }));
     });
-    expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull();
+    const list = (await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading })).closest('section') as HTMLElement;
+    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
     expect(screen.getAllByText('sent first')).toHaveLength(1);
+    const earlier = within(list).getAllByRole('listitem')[0] as HTMLElement;
+    expect(earlier.compareDocumentPosition(screen.getByText('sent first')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('asks for the thread under the masking the session has, at the first opening and after the switch changes either way', async () => {
+    const h = bound(async () => ok(STORED));
+    h.state.setMask(true);
+    render(h.tree());
+    await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading });
+    act(() => h.state.setMask(false));
+    await vi.waitFor(() => expect(h.asked.map((entry) => entry.mask)).toEqual([true, false]));
+    act(() => h.state.setMask(true));
+    await vi.waitFor(() => expect(h.asked.map((entry) => entry.mask)).toEqual([true, false, true]));
+    h.stop();
+  });
+
+  it('offers a way to read the earlier turns again when the read failed, and shows them once it succeeds without losing a turn sent meanwhile', async () => {
+    let calls = 0;
+    const h = harness(async () => ok(REFUSE), 1000, async () => (calls++ === 0 ? refused('INTERNAL_ERROR') : ok(STORED)));
+    render(h.tree());
+    expect(await screen.findByText(ASSISTANT_COPY.storedFailed)).toBeTruthy();
+    await typeAndSend('meanwhile');
+    await screen.findByText(ASSISTANT_REFUSAL_SENTENCES.verdict);
+    await userEvent.click(screen.getByRole('button', { name: ASSISTANT_COPY.tryAgain }));
+    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeTruthy();
+    expect(screen.getAllByText('meanwhile')).toHaveLength(1);
+    expect(h.reads).toEqual(['inv-1', 'inv-1']);
+  });
+
+  it('reads the thread again when the panel is opened after it was closed while the read was out', async () => {
+    const wait = deferred<ApiResult<AssistantThreadResponse>>();
+    let calls = 0;
+    const h = harness(async () => ok(REFUSE), 1000, () => (calls++ === 0 ? wait.promise : Promise.resolve(ok(STORED))));
+    const { unmount } = render(h.tree());
+    await screen.findByText(ASSISTANT_COPY.storedLoading);
+    unmount();
+    await act(async () => wait.resolve(ok(STORED)));
+    render(h.tree());
+    expect(await screen.findByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeTruthy();
+    expect(h.reads).toEqual(['inv-1', 'inv-1']);
   });
 
   it('drops an answer that was in flight while the investigation was closed and reopened, and reads the thread again for each lifecycle (the close and the reopen)', async () => {

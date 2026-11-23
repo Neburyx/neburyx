@@ -31,8 +31,10 @@ const edge = (text: string): string => text.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$
 
 /** The shortest word of a sensitive value that counts as a part of it. An item the classifier cannot decide is `unbound`, and a false `unbound` only withholds text under the mask, so the threshold errs that way. */
 const WORD_MIN = 2;
-/** The fewest digits of a number that count as a value whatever the separators written between them. */
+/** The fewest digits of a number that count as a value when it is written as a whole word. */
 const DIGITS_MIN = 4;
+/** The fewest letters and digits of a value, or of a word of it, that count as written when its letters and digits are found in the text with any separators between them. A false match only withholds an item under the mask. */
+const SKELETON_MIN = 2;
 
 /** A text as its letters and digits alone: no accent, no case, no separator, and the compatible forms of a character (full-width digits) folded to the plain ones. What a person could read as the same value however it is written. */
 const skeletonOf = (text: string): string => text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
@@ -92,8 +94,9 @@ export function classifyItem(text: string, cited: readonly string[], context: Cl
       if (digits ? word.length < DIGITS_MIN : word.length < WORD_MIN) continue;
       if (new RegExp(`(?<![\\p{L}\\p{N}_])${edge(word)}(?![\\p{L}\\p{N}_])`, 'u').test(left)) return UNBOUND;
     }
-    const skeleton = skeletonOf(value);
-    if (skeleton.length >= DIGITS_MIN && leftSkeleton.includes(skeleton)) return UNBOUND;
+    // the value, and each of its words, in any shape (hyphenated, spaced, with other separators): a piece that cannot be told from ordinary text is withheld rather than shown
+    const pieces = [skeletonOf(value), ...(plainOf(value).match(LETTERS) ?? []).map(skeletonOf)];
+    if (pieces.some((piece) => piece.length >= SKELETON_MIN && leftSkeleton.includes(piece))) return UNBOUND;
   }
   if (spans.length === 0) return { form: 'frozen' };
   const bound: BoundSpan[] = [];

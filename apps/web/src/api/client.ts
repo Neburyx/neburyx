@@ -208,7 +208,7 @@ export interface ApiClient {
   /** One turn of the assistant. With `onStep` the client asks for a streamed turn: each step the server reports is handed over in order, then the result is the answer exactly as the JSON route gives it; a server that does not stream answers as before, with no step. */
   assistantTurn(request: AssistantTurnRequest, signal?: AbortSignal, onStep?: (step: TurnStep) => void): Promise<ApiResult<AssistantTurnAnswer>>;
   /** The caller's own thread of an investigation as the kind and end of each turn (no text), and when their previous thread was cleared. */
-  assistantThread(investigationId: string, signal?: AbortSignal): Promise<ApiResult<AssistantThreadResponse>>;
+  assistantThread(investigationId: string, mask: boolean, signal?: AbortSignal): Promise<ApiResult<AssistantThreadResponse>>;
   /** Drafts a cited summary of the elements named by reference; `key` is the idempotency key, the same text for a retry of the same attempt. */
   summarize(request: SummaryRequest, key: string, signal?: AbortSignal): Promise<ApiResult<SummaryResponse>>;
   /** Copies the storable sentences of a summary into the AI notes of the investigation's draft, with the draft's version the caller holds. */
@@ -407,7 +407,7 @@ export function createApiClient(fetcher: Fetcher = (input, init) => fetch(input,
     askContinue: (body, signal) => request(fetcher, '/v1/ask/continue', askAnswerSchema, signal, 'POST', body),
     assistantTurn: (body, signal, onStep) =>
       request(fetcher, '/v1/assistant/turns', assistantTurnAnswerSchema, signal, 'POST', body, onStep === undefined ? {} : { headers: { accept: 'application/x-ndjson' }, readStream: (response) => settledTurn(response, onStep, signal) }),
-    assistantThread: (investigationId, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread`, assistantThreadResponseSchema, signal),
+    assistantThread: (investigationId, mask, signal) => request(fetcher, `/v1/assistant/investigations/${encodeURIComponent(investigationId)}/thread${mask ? '?mask=true' : ''}`, assistantThreadResponseSchema, signal),
     copyToNotes: (investigationId, body, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes`, copyToNotesResponseSchema, signal, 'POST', body),
     readAiNotes: (investigationId, mask, signal) => request(fetcher, `/v1/investigations/${encodeURIComponent(investigationId)}/draft/ai-notes?mask=${mask ? 'true' : 'false'}`, aiNotesResponseSchema, signal),
     summarize: (body, key, signal) => request(fetcher, '/v1/summary', summaryResponseSchema, signal, 'POST', body, { headers: { 'idempotency-key': key } }),

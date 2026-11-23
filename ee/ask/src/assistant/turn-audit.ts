@@ -111,7 +111,6 @@ export function noteTurn(change: TurnNote): void {
   });
 }
 
-/** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
 /** What the classifier reads of the text an answer was written from: the values sent for every element, every element key, the type of each. Kept with the answer object itself, so that the answer a turn ends with is classified against the text it was checked against and never another attempt's. */
 const PROVENANCE = new WeakMap<object, Provenance>();
 /** The provenance of an answer carried to its copy, when a later step copies it (the follow-ups added to an answer): the copy is the answer the turn ends with. */
@@ -125,6 +124,7 @@ export const stampProvenance = <T extends AssistantTurnAnswer>(answer: T, proven
   return answer;
 };
 
+/** The turn passed the checks that come before it: from here on it ends in a closing event, and the investigation's epoch is read before the turn does any other work. `questionHash` is the keyed hash of the message, for the thread. */
 export const noteTurnStarted = async (started: { readonly sourceId: string; readonly investigationId: string; readonly questionHash?: string; readonly question?: string; readonly maskOn?: boolean }): Promise<void> => {
   const notes = scope.getStore();
   if (notes === undefined) return;

@@ -68,7 +68,10 @@ export function StoredSources({ entries, refs }: { readonly entries: readonly Ci
   const showList = open && !reads.loading && !reads.failed;
   return (
     <div className="assistant-sources">
-      <button type="button" className="assistant-sources-toggle" aria-expanded={open} aria-controls={listId} onClick={() => setOpen(!open)}>
+      <button type="button" className="assistant-sources-toggle" aria-expanded={open} aria-controls={listId} onClick={() => {
+          if (!open) reads.reset();
+          setOpen(!open);
+        }}>
         <span aria-hidden="true" className="icon icon-layers" />
         <span>{`${ASSISTANT_COPY.sources} · ${entries.length}`}</span>
         <span aria-hidden="true" className="assistant-sources-caret">{open ? '▴' : '▾'}</span>

@@ -1,4 +1,4 @@
-import type { ElementRef, ReadAnswer } from '@neburyx/contracts';
+import { SENSITIVE_TITLE_KEY, type ElementRef, type ReadAnswer } from '@neburyx/contracts';
 import { elementKey } from '../state/keys.js';
 import type { CitationEntry } from '../summary/summary-model.js';
 import { ASSISTANT_COPY } from './copy.js';
@@ -61,7 +61,9 @@ export function storedViewOf(answer: ReadAnswer, valueFor: ValueOf): StoredView 
 
 /** The value a binding draws from what the gate returned for its element under the current mask, as the text a live answer writes it: a string, a number or a boolean as it is. Nothing when the element was not returned, holds no such property, or holds a value of another kind. */
 export const valueFromReads = (reads: Pick<RefReads, 'nodes'>): ValueOf => (binding) => {
-  const value = reads.nodes.get(elementKey(binding.element as ElementRef))?.properties.find((property) => property.key === binding.property)?.value;
+  const node = reads.nodes.get(elementKey(binding.element as ElementRef));
+  // the title is not one of the properties: it is the gate's own display title, masked as the gate masked it
+  const value = binding.property === SENSITIVE_TITLE_KEY ? node?.display.title : node?.properties.find((property) => property.key === binding.property)?.value;
   if (typeof value === 'string') return value === '' ? undefined : value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return undefined;

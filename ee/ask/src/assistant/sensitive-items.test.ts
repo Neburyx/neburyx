@@ -42,6 +42,14 @@ describe.each([
     expect(classifyItem('The holder is 555-0100 2000.', ['n3'], make())).toEqual({ form: 'bound', spans: [{ start: 14, end: 27, element: 'n3', property: secret }] });
   });
 
+  it('is unbound, never frozen, for a short value or a part of a value written in another shape (a number with a comma, a short name with a hyphen, a name split by a hyphen)', () => {
+    const short = make({}, { n1: [value('(title)', 'Item One'), value(secret, 'Jordan Lee'), value(plain, 'gold')], n4: [value('(title)', 'Item Four'), value(secret, '123'), value(plain, 'gold')], n5: [value('(title)', 'Item Five'), value(secret, 'Wu'), value(plain, 'gold')] });
+    expect(classifyItem('The figure is 1,23.', ['n4'], short)).toEqual({ form: 'unbound' });
+    expect(classifyItem('The holder is w-u.', ['n5'], short)).toEqual({ form: 'unbound' });
+    expect(classifyItem('The holder is jor-dan.', ['n1'], short)).toEqual({ form: 'unbound' });
+    expect(classifyItem('Item One has the segment gold.', ['n1'], short)).toEqual({ form: 'frozen' });
+  });
+
   it('is unbound for a value of an element the item does not cite, and for a value that two elements or two properties of one element share', () => {
     expect(classifyItem('The holder is Maria Gomez.', ['n1'], make())).toEqual({ form: 'unbound' });
     expect(classifyItem('The holder is Jordan Lee.', ['n1', 'n2'], make({}, { n2: [value(secret, 'Jordan Lee')] }))).toEqual({ form: 'unbound' });

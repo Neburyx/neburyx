@@ -245,7 +245,7 @@ export function useAssistant(): AssistantModel {
       let id = reuse;
       if (id === undefined) {
         id = held.nextId;
-        store.setState({ ...held, nextId: held.nextId + 1, input: '', notice: undefined, turns: [...held.turns, { id, message: text, outcome: { kind: 'pending', call: 'message' } }] });
+        store.setState({ ...held, liveSince: held.liveSince ?? Date.now(), nextId: held.nextId + 1, input: '', notice: undefined, turns: [...held.turns, { id, message: text, outcome: { kind: 'pending', call: 'message' } }] });
       } else setOutcome(id, { kind: 'pending', call: 'message' });
       closeWaiting(id);
       const attached = held.summary?.status === 'attached' ? held.summary.token : undefined;
@@ -292,7 +292,7 @@ export function useAssistant(): AssistantModel {
       let id = reuse;
       if (id === undefined) {
         id = held.nextId;
-        store.setState({ ...held, nextId: held.nextId + 1, notice: undefined, turns: [...held.turns, { id, message: followUpLabel(followUp), chip: true, outcome: { kind: 'pending', call: 'message' } }] });
+        store.setState({ ...held, liveSince: held.liveSince ?? Date.now(), nextId: held.nextId + 1, notice: undefined, turns: [...held.turns, { id, message: followUpLabel(followUp), chip: true, outcome: { kind: 'pending', call: 'message' } }] });
       } else setOutcome(id, { kind: 'pending', call: 'message' });
       closeWaiting(id);
       settle(id, { ...common, choice: followUp.choice }, { kind: 'chip', followUp });

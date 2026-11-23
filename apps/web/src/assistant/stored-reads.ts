@@ -5,6 +5,7 @@ import { edgeKey, elementKey } from '../state/keys.js';
 import { useClientState } from '../state/context.js';
 import { useStoreSelector } from '../state/store.js';
 import { useAssistantSession } from './assistant-session.js';
+import { isAccessLost } from './stored-thread.js';
 
 type Ref = ElementRef | EdgeRef;
 type ChunkStatus = 'loading' | 'failed' | 'done';
@@ -19,6 +20,8 @@ export interface RefReads {
   /** At least one chunk failed: what the other chunks returned stays drawn, and `retry` reads only the failed ones. */
   readonly failed: boolean;
   readonly retry: () => void;
+  /** Forgets everything read and reads again: a list that is opened anew shows no label or element from an earlier opening. */
+  readonly reset: () => void;
 }
 
 export const refKeyOf = (ref: Ref): string => ('entityType' in ref ? elementKey(ref) : edgeKey(ref));
@@ -56,31 +59,56 @@ interface Held {
   readonly edges: Map<string, GraphEdge>;
   readonly missing: Set<string>;
   readonly chunks: Map<string, ChunkStatus>;
+  /** The requests this holder has out. */
+  readonly controllers: Set<AbortController>;
 }
 
-const freshAt = (epoch: number): Held => ({ epoch, nodes: new Map(), edges: new Map(), missing: new Set(), chunks: new Map() });
+const freshAt = (epoch: number): Held => ({ epoch, nodes: new Map(), edges: new Map(), missing: new Set(), chunks: new Map(), controllers: new Set() });
+
+/** Ends the requests of a holder and empties it, so that nothing it held can be read again from anywhere that still refers to it. */
+function retire(held: Held): void {
+  for (const controller of held.controllers) controller.abort();
+  held.controllers.clear();
+  held.nodes.clear();
+  held.edges.clear();
+  held.missing.clear();
+  held.chunks.clear();
+}
+
+/** The ends of the relationships that were read and that neither were asked for nor have been read themselves: a relationship cited alone is listed with the titles of its ends as they are now. */
+function endsToRead(held: Held, asked: ReadonlySet<string>): ElementRef[] {
+  const wanted = new Map<string, ElementRef>();
+  for (const edge of held.edges.values())
+    for (const end of [edge.from, edge.to]) {
+      const key = elementKey(end);
+      if (!asked.has(key) && !held.nodes.has(key) && !held.missing.has(key)) wanted.set(key, end);
+    }
+  return [...wanted.values()];
+}
 
 /**
- * Reads the elements the shown answers cite by reference through the application's route, for the investigation's source and under the session's current mask, a chunk at a time. Everything read belongs to one epoch of the session: a clearing (a
- * change of masking, access, investigation or source) ends the reads that are out and purges what was held before the next read, and a response of an earlier epoch is dropped. A failed chunk is drawn as unavailable and is read again alone by `retry`.
+ * Reads the elements the shown answers cite by reference through the application's route, for the investigation's source and under the session's current mask, a chunk at a time, and the ends of the relationships among them. Everything read belongs to one
+ * epoch of the session: a clearing (a change of masking, access, investigation or source) ends the reads that are out and empties what was held before the next read, and a response of an earlier epoch is dropped; a refusal that says access was lost
+ * clears the session. A failed chunk is drawn as unavailable and is read again alone by `retry`. `reset` forgets everything read and reads again, for a list that is opened anew. Closing the panel ends only the requests this holder made.
  * Nothing is read while `enabled` is false.
  */
 export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
   const client = useApiClient();
-  const { store, open } = useAssistantSession();
+  const { store, stored, clear } = useAssistantSession();
   const state = useClientState();
   const epoch = useStoreSelector(store, (held) => held.epoch);
   const mask = useStoreSelector(store, (held) => held.mask);
   const sourceId = useStoreSelector(state.investigation, (investigation) => investigation.sourceId);
   const [tick, bump] = useReducer((count: number) => count + 1, 0);
   const held = useRef<Held>(freshAt(epoch));
-  // the holder of the earlier epoch is dropped before anything is drawn from it
-  if (held.current.epoch !== epoch) held.current = freshAt(epoch);
+  if (held.current.epoch !== epoch) {
+    retire(held.current);
+    held.current = freshAt(epoch);
+  }
   const keyList = refs.map(refKeyOf).join('\u0001');
-  const [readable, foreign] = useMemo(() => {
-    const own = refs.filter((ref) => ref.sourceId === sourceId);
-    return [chunksOf(own), refs.filter((ref) => ref.sourceId !== sourceId).map(refKeyOf)] as const;
-  }, [keyList, sourceId]);
+  const [own, foreign] = useMemo(() => [refs.filter((ref) => ref.sourceId === sourceId), refs.filter((ref) => ref.sourceId !== sourceId).map(refKeyOf)] as const, [keyList, sourceId]);
+  const asked = useMemo(() => new Set(own.map(refKeyOf)), [own]);
+  const readable = useMemo(() => chunksOf([...own, ...endsToRead(held.current, asked)]), [own, asked, tick, epoch]);
 
   useEffect(() => {
     if (!enabled || sourceId === null) return;
@@ -89,18 +117,19 @@ export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
       if (mine.chunks.has(chunk.id)) continue;
       mine.chunks.set(chunk.id, 'loading');
       const controller = new AbortController();
-      open.add(controller);
+      mine.controllers.add(controller);
       void client.readRefs({ sourceId, ...(mask ? { mask: true } : {}), ...chunk.request }, controller.signal).then((result) => {
-        open.delete(controller);
-        // a response of another epoch, or of a read that was ended, is dropped; a read that was ended is asked again when the references are shown again
-        if (held.current !== mine) return;
-        if (controller.signal.aborted) {
-          mine.chunks.delete(chunk.id);
-          bump();
-          return;
-        }
-        if (!result.ok) mine.chunks.set(chunk.id, 'failed');
-        else {
+        mine.controllers.delete(controller);
+        // a response of another holder (another epoch, or a list read anew) is dropped
+        if (held.current !== mine || controller.signal.aborted) return;
+        if (!result.ok) {
+          if (isAccessLost(result.failure)) {
+            clear({ notice: { kind: 'access-lost' } });
+            stored.setState({ kind: 'denied' });
+            return;
+          }
+          mine.chunks.set(chunk.id, 'failed');
+        } else {
           for (const node of result.value.nodes) mine.nodes.set(elementKey(node.ref), node);
           for (const edge of result.value.edges) mine.edges.set(edgeKey(edge.ref), edge);
           for (const ref of result.value.missing.entities) mine.missing.add(elementKey(ref));
@@ -110,15 +139,14 @@ export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
         bump();
       });
     }
-  }, [client, enabled, epoch, mask, open, readable, sourceId, tick]);
+  }, [clear, client, enabled, epoch, mask, readable, sourceId, stored, tick]);
 
-  // closing the panel ends what is out
+  // closing the panel ends the requests of this holder and empties it
   useEffect(
     () => () => {
-      for (const controller of open) controller.abort();
-      open.clear();
+      retire(held.current);
     },
-    [open],
+    [],
   );
 
   const current = held.current;
@@ -131,6 +159,11 @@ export function useRefReads(refs: readonly Ref[], enabled = true): RefReads {
     failed: statuses.some((status) => status === 'failed'),
     retry: () => {
       for (const chunk of readable) if (current.chunks.get(chunk.id) === 'failed') current.chunks.delete(chunk.id);
+      bump();
+    },
+    reset: () => {
+      retire(held.current);
+      held.current = freshAt(epoch);
       bump();
     },
   };

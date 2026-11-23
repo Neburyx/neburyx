@@ -1,11 +1,18 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AssistantThreadResponse, GraphNode, ReadRefsResponse } from '@neburyx/contracts';
 import type { ApiResult } from '../api/client.js';
 import { createPanelRegistry } from '../workspace/panel-registry.js';
 import { bindAssistantPanel } from './assistant-binder.js';
-import { harness, REFUSE, type ReadRefsCall } from './assistant-kit.js';
+import { harness, REFUSE, typeAndSend, type ReadRefsCall } from './assistant-kit.js';
+import { SENSITIVE_TITLE_KEY } from '@neburyx/contracts';
+import { renderHook } from '@testing-library/react';
+import { ApiClientProvider } from '../api/client-context.js';
+import { ClientStateProvider } from '../state/context.js';
+import { AssistantSessionProvider } from './assistant-session.js';
+import { useRefReads } from './stored-reads.js';
 import { ASSISTANT_COPY } from './copy.js';
 
 afterEach(cleanup);
@@ -156,6 +163,68 @@ describe('the bound values of a stored answer, drawn from their elements under t
     await act(async () => late.resolve(read([node('A-1', [{ key: 'holder', value: 'SENTINEL-LATE' }])])));
     expect(holders(second)).not.toContain('SENTINEL-LATE');
     second.stop();
+  });
+
+  it('draws a binding to the title of an element from the display title the gate returned, masked or not', async () => {
+    const withTitle = (title: string): GraphNode => ({ ...node('A-1', []), display: { title, type: 'widget' } });
+    const h = open(thread([{ item: bindingItem('A-1', SENSITIVE_TITLE_KEY, 'The element is '), cites: [ref('A-1')] }]), async () => read([withTitle('Account One')]));
+    expect(await screen.findByText(/The element is Account One\./)).toBeTruthy();
+    h.stop();
+    cleanup();
+    const masked = open(thread([{ item: bindingItem('A-1', SENSITIVE_TITLE_KEY, 'The element is '), cites: [ref('A-1')] }]), async () => read([withTitle('J••• L•••')]));
+    expect(await screen.findByText(/The element is J••• L•••\./)).toBeTruthy();
+    masked.stop();
+  });
+
+  it('clears the thread, and draws no value an earlier read returned, when a later read says the access was lost', async () => {
+    const ids = Array.from({ length: 150 }, (_, index) => `E-${index + 1}`);
+    const h = open(thread(ids.map((id) => ({ item: bindingItem(id, 'holder', `${id}: `, ''), cites: [ref(id)] }))), async (request) => {
+      const asked = request.entities.map((entity) => entity.stableId);
+      if (asked.includes('E-101')) return { ok: false as const, failure: { code: 'NOT_FOUND' as const, message: 'no', retryable: false, traceId: 'tr-1' } };
+      return read(asked.map((id) => node(id, [{ key: 'holder', value: `SENTINEL-${id}` }])));
+    });
+    expect(await screen.findByText(ASSISTANT_COPY.accessLost)).toBeTruthy();
+    expect(document.body.textContent).not.toContain('SENTINEL-');
+    expect(screen.queryByRole('heading', { name: ASSISTANT_COPY.storedHeading })).toBeNull();
+    h.stop();
+  });
+
+  it('empties what a holder held when the session is cleared, so that a map kept from before holds no node', async () => {
+    const h = harness(async () => ok(REFUSE), 1000, undefined, false, async () => read([node('A-1', [{ key: 'holder', value: 'SENTINEL' }])]));
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <ApiClientProvider client={h.client}>
+        <ClientStateProvider state={h.state}>
+          <AssistantSessionProvider value={h.session}>{children}</AssistantSessionProvider>
+        </ClientStateProvider>
+      </ApiClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useRefReads([ref('A-1')]), { wrapper });
+    await vi.waitFor(() => expect(result.current.nodes.size).toBe(1));
+    const kept = result.current.nodes;
+    act(() => h.session.clear({}));
+    expect(kept.size).toBe(0);
+    await vi.waitFor(() => expect(result.current.nodes.size).toBe(1));
+    const again = result.current.nodes;
+    unmount();
+    expect(again.size).toBe(0);
+  });
+
+  it('leaves a turn that is out when the panel is closed running, and does not end the read of the thread of another opening', async () => {
+    const turn = deferred<ApiResult<never>>();
+    let signal: AbortSignal | undefined;
+    const h = harness(async (_request, aborts) => {
+      signal = aborts;
+      return turn.promise as never;
+    }, 1000, async () => ok(thread([{ item: bindingItem('A-1', 'holder'), cites: [ref('A-1')] }])), false, async () => read([node('A-1', [{ key: 'holder', value: 'Jordan Lee' }])]));
+    const { unmount } = render(h.tree());
+    await screen.findByText(/Jordan Lee/);
+    await typeAndSend('a question');
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    unmount();
+    expect(signal?.aborted).toBe(false);
+    cleanup();
+    render(h.tree());
+    expect(await screen.findByText(/The holder is Jordan Lee\./)).toBeTruthy();
   });
 
   it('asks nothing for an answer with no bound value, nor for a reference of another source', async () => {

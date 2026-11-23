@@ -12,7 +12,6 @@ const routeTag = (route: Turn['route']): string => (route === 'ask' ? ASSISTANT_
 
 const rowLabelOf = (turn: Turn): string => `${routeTag(turn.route)}, ${turn.outcome === 'answered' ? ASSISTANT_COPY.storedAnswered : ASSISTANT_COPY.storedRefused}`;
 
-/** What a turn that kept no text shows, and what a turn that kept a question but no answer shows under it: its kind, how it ended and how many sources it cited, as the panel has always shown a stored turn. */
 function RowParts({ turn }: { readonly turn: Turn }) {
   return (
     <>
@@ -24,10 +23,9 @@ function RowParts({ turn }: { readonly turn: Turn }) {
   );
 }
 
-/** The answer of a stored turn in the card of a live answer: its blocks and numbered markers, none of what was not kept (the model, the coverage, the read steps). */
 function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn['answer']>; readonly valueFor: ValueOf }) {
   const view = storedViewOf(answer, valueFor);
-  // an answer stored without its model and its coverage (before they were kept) draws neither
+  // an answer stored before the model and the coverage were kept has neither, and the card draws neither
   const shown = { status: 'answered', route: 'view', blocks: view.blocks, citations: [], coverage: answer.coverage ?? { retrieval: '', summary: '' }, model: answer.model ?? '', calls: 0 } as unknown as ViewAnswer;
   return (
     <>
@@ -42,7 +40,6 @@ function StoredAnswer({ answer, valueFor }: { readonly answer: NonNullable<Turn[
   );
 }
 
-/** The earlier turns of the thread, oldest first: the question as the person typed it and the answer in the card of a live one, as frame AS19a draws them; a turn that kept no text is a row. */
 export function StoredTurns({ turns, earlier, reads, drawsValues }: { readonly turns: AssistantThreadResponse['turns']; readonly earlier: number; readonly reads: RefReads; /** Whether some answer shown holds a bound value, so that the reading of values has something to say. */ readonly drawsValues: boolean }) {
   const valueFor = valueFromReads(reads);
   return (
