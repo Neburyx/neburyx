@@ -42,7 +42,7 @@ const CAPITALISED = /\p{Lu}[\p{L}]*/gu;
 /** The ordinary words a sentence may start with or hold in a capital without naming anything: articles, determiners, small number words, prepositions and conjunctions: language, never a word of a domain. The words of a domain (a shape of a typology, a type) come from the text sent and the instructions the model was given. */
 const STRUCTURAL_VOCABULARY: ReadonlySet<string> = new Set([
   'i', 'the', 'a', 'an', 'any', 'this', 'that', 'these', 'those', 'both', 'each', 'every', 'all', 'no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'several', 'some', 'many', 'few',
-  'another', 'other', 'it', 'they', 'there', 'here', 'at', 'in', 'on', 'of', 'by', 'for', 'from', 'with', 'to', 'and', 'or', 'but', 'as', 'is', 'are', 'was', 'were', 'also', 'between', 'within',
+  'another', 'other', 'it', 'its', 'they', 'them', 'their', 'we', 'our', 'there', 'here', 'at', 'in', 'on', 'of', 'by', 'for', 'from', 'with', 'to', 'and', 'or', 'but', 'as', 'is', 'are', 'was', 'were', 'also', 'between', 'within',
   'through',
 ]);
 

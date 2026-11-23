@@ -93,6 +93,11 @@ describe.each(VOCABULARIES)('a count of the $name that the sentence cites throug
     expect(judgeSentences([{ text: `Zorblax read the sender of three ${vocabulary.things}.`, cites: links }], text).rejected.map((entry) => entry.reason)).toEqual(['name']);
   });
 
+  it('reads a pronoun that opens a sentence as language, not as a name, and still removes a made-up capitalised opener', () => {
+    for (const opening of ['Their', 'Its']) expect(kept(`${opening} senders are read: ${vocabulary.ids.join(', ')}.`, links), opening).toBe(true);
+    expect(kept(`Zorblax senders are read: ${vocabulary.ids.join(', ')}.`, links)).toBe(false);
+  });
+
   it('takes "no two" and "any two" for a pair of the set, not for a count of what is cited, and leaves the digit as it was without the ends', () => {
     const owner = vocabulary.owner.toLowerCase();
     const without: CheckedText = { ...text, elementEnds: undefined };
