@@ -3,7 +3,7 @@ import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages
 import { FakeListChatModel } from '@langchain/core/utils/testing';
 import { createCallRecorder, type AuditedCallContext } from '@neburyx/ee-ai-runtime';
 import type { AuditEvent, AuditSink } from '@neburyx/contracts';
-import { AuditedModelFailure, auditChatModel, failureCodeOf, failureDetailOf, usageOf, withCacheMarkers } from './audited-model.js';
+import { AuditedModelFailure, auditChatModel, failureCodeOf, failureDetailOf, usageOf, withoutThinking, withCacheMarkers } from './audited-model.js';
 
 const context: AuditedCallContext = { action: 'assistant.agent', actorId: 'person-1', actorRole: 'investigator', traceId: 'trace-1', sourceId: 'source-1', investigationId: 'investigation-1' };
 
@@ -72,6 +72,18 @@ describe('the audited chat model', () => {
     expect(failureDetailOf(Object.assign(new Error('bad request: a long message'), { status: 400 }))).toEqual({ errorClass: 'Error', errorCode: '400' });
     expect(failureDetailOf('text')).toEqual({ errorClass: 'Error' });
     expect(failureDetailOf(Object.assign(new Error('x'), { code: 'has a space and text' }))).toEqual({ errorClass: 'Error' });
+  });
+
+  it('sends the earlier replies without their thinking blocks, and keeps every other block and message as it was', () => {
+    const thought = new AIMessage({ content: [{ type: 'thinking', thinking: '', signature: 'sig' }, { type: 'text', text: 'reading' }], tool_calls: [{ name: 'view', args: {}, id: 'call-1' }] });
+    const plain = new AIMessage({ content: 'no blocks' });
+    const human = new HumanMessage('q');
+    const [first, second, third] = withoutThinking([thought, plain, human]);
+    expect(first?.content).toEqual([{ type: 'text', text: 'reading' }]);
+    expect((first as AIMessage).tool_calls).toEqual(thought.tool_calls);
+    expect(second).toBe(plain);
+    expect(third).toBe(human);
+    expect(thought.content).toHaveLength(2);
   });
 
   it('records a cancelled call as one failed event', async () => {

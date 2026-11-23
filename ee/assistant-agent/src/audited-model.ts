@@ -119,6 +119,19 @@ function withContent(message: BaseMessage, content: BaseMessage['content']): Bas
   return Object.assign(copy, message, { content });
 }
 
+const THINKING_BLOCKS: ReadonlySet<string> = new Set(['thinking', 'redacted_thinking']);
+
+/**
+ * The messages of a call without the thinking blocks of the earlier replies. The provider refuses (400) a request whose last reply holds tool calls but no thinking block while an earlier reply of the same loop holds one,
+ * and a reply may or may not think; a history with none is accepted whichever replies thought, and the thinking text is empty anyway.
+ */
+export function withoutThinking(messages: readonly BaseMessage[]): BaseMessage[] {
+  return messages.map((message) => {
+    if (message.type !== 'ai' || !Array.isArray(message.content) || !message.content.some((block) => isRecord(block) && typeof block['type'] === 'string' && THINKING_BLOCKS.has(block['type']))) return message;
+    return withContent(message, message.content.filter((block) => !(isRecord(block) && typeof block['type'] === 'string' && THINKING_BLOCKS.has(block['type']))));
+  });
+}
+
 type Inner = Runnable<BaseLanguageModelInput, AIMessageChunk>;
 
 /** A chat model that makes every call through the inner one and writes the call's audit event. A copy that deepagents makes by binding tools is another audited model, never the bare inner one. */
@@ -149,7 +162,7 @@ class AuditedChatModel extends BaseChatModel {
     const trace = hook.trace?.({ instructions: systemTextOf(messages), instructionsSha256: prompt.sha256, values: valuesOf(messages) });
     let message: AIMessageChunk;
     try {
-      message = await this.inner.invoke(hook.cache === undefined ? messages : withCacheMarkers(messages, hook.cache.ttl), options.signal === undefined ? {} : { signal: options.signal });
+      message = await this.inner.invoke(hook.cache === undefined ? withoutThinking(messages) : withCacheMarkers(withoutThinking(messages), hook.cache.ttl), options.signal === undefined ? {} : { signal: options.signal });
     } catch (error) {
       const code = failureCodeOf(error, options.signal?.aborted === true);
       const failure = failureDetailOf(error);
