@@ -1,6 +1,6 @@
 import type { TurnRecords } from './records.js';
 
-export type PieceVerdict = 'passed' | 'failed' | 'unverified';
+type PieceVerdict = 'passed' | 'failed' | 'unverified';
 
 export interface GateEvidence {
   /** Every read the answer lists reached the source through the gate: each has a gate audit event of the turn. */
