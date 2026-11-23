@@ -182,4 +182,4 @@ export const pathsNotKept = (count: number): string => `${count.toLocaleString('
 export const linesNotKept = (count: number): string => `${count.toLocaleString('en-US')} more ${count === 1 ? 'count line is' : 'count lines are'} not kept in the thread.`;
 export const noticeEntriesNotKept = (count: number): string => `${count.toLocaleString('en-US')} ${count === 1 ? 'entry of a notice is' : 'entries of notices are'} not kept in the thread.`;
 export const listedText = (count: number): string => `${count.toLocaleString('en-US')} listed in the answer.`;
-export const noticeKeptOf = (total: number): string => `The notice above lists only some of the ${total.toLocaleString('en-US')} entries the source gave.`;
+export const noticeKeptOf = (total: number): string => `This lists only some of the ${total.toLocaleString('en-US')} entries the source gave.`;

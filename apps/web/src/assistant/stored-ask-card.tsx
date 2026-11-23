@@ -108,16 +108,15 @@ export function StoredAskCard({ result, intent, reads }: { readonly result: Read
         </ol>
       )}
       {omitted.paths > 0 ? <p className="ask-notice">{pathsNotKept(omitted.paths)}</p> : null}
-      {result.notices.map((notice) => (
-        <p key={notice.code} className="ask-notice">
-          {noticeText(notice)}
-        </p>
-      ))}
-      {result.noticeTotals.map((entry) => (
-        <p key={entry.code} className="ask-notice">
-          {noticeKeptOf(entry.total)}
-        </p>
-      ))}
+      {result.notices.map((notice) => {
+        const total = result.noticeTotals.find((entry) => entry.code === notice.code)?.total;
+        return (
+          <p key={notice.code} className="ask-notice">
+            {noticeText(notice)}
+            {total === undefined ? null : <span className="ask-notice-more"> {noticeKeptOf(total)}</span>}
+          </p>
+        );
+      })}
       {omitted.noticeEntries > 0 ? <p className="ask-notice">{noticeEntriesNotKept(omitted.noticeEntries)}</p> : null}
       {result.rows.length === 0 ? null : (
         <section className="ask-section" aria-label={ASK_COPY.rows}>

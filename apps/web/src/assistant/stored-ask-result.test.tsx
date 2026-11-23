@@ -105,9 +105,13 @@ describe('the stored result of an Ask answer in the panel', () => {
   });
 
   it('says how many are listed when that differs from the count, keeps the quality word of a heavy stop beside the stop, says the notice lists only some of the entries the source gave, and takes the cap of paths from what the search returned', async () => {
-    const h = open(thread(block({ templateId: 'shared-attribute', count: { count: exact(500), noun: 'match' }, listed: 25, notices: [{ code: 'supernodesSkipped', entities: [A] }], noticeTotals: [{ code: 'supernodesSkipped', total: 40 }] })));
+    const h = open(thread(block({ templateId: 'shared-attribute', count: { count: exact(500), noun: 'match' }, listed: 25, notices: [{ code: 'windowNotApplied', relationshipTypes: ['T1'] }, { code: 'supernodesSkipped', entities: [A] }], noticeTotals: [{ code: 'windowNotApplied', total: 30 }, { code: 'supernodesSkipped', total: 40 }] })));
     expect(await screen.findByText(listedText(25))).toBeTruthy();
-    expect(screen.getByText(noticeKeptOf(40))).toBeTruthy();
+    const notices = [...document.querySelectorAll('.ask-notice')];
+    expect(notices).toHaveLength(2);
+    expect(notices[0]?.textContent).toContain(noticeKeptOf(30));
+    expect(notices[1]?.textContent).toContain(noticeKeptOf(40));
+    expect(notices[0]?.textContent).not.toContain(noticeKeptOf(40));
     h.stop();
     cleanup();
     const heavy = open(thread(block({ templateId: 'shared-attribute', stop: { estimate: { value: 500, quality: 'lowerBound', scope: 's' }, threshold: 500 } })));
