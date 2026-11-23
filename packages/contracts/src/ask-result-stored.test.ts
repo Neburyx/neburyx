@@ -3,11 +3,11 @@ import { ASK_RESULT_LINES_MAX, ASK_RESULT_NOTICE_ENTRIES_MAX, ASK_RESULT_REFS_MA
 import type { AskAnswer } from './ask-question.js';
 import type { Count } from './graph.js';
 
-/** The same projection over three vocabularies: nothing of the code names a type. */
+/** The same projection over three vocabularies of made-up names: nothing of the code names a type. */
 const VOCABULARIES = [
-  { name: 'banking', thing: 'account', other: 'transaction', link: 'SENT', rule: 'rapid-pass-through' },
-  { name: 'claims', thing: 'claim', other: 'provider', link: 'FILED_BY', rule: 'shared-address' },
-  { name: 'a third', thing: 'gizmo', other: 'sprocket', link: 'FEEDS', rule: 'chain' },
+  { name: 'a first', thing: 'widget', other: 'gadget', link: 'MAKES', rule: 'rule-one' },
+  { name: 'a second', thing: 'gizmo', other: 'sprocket', link: 'FEEDS_INTO', rule: 'rule-two' },
+  { name: 'a third', thing: 'item', other: 'part', link: 'HOLDS', rule: 'rule-three' },
 ] as const;
 
 const exact = (value: number): Count => ({ value, quality: 'exact', scope: 'matches' });

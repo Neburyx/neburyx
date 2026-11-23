@@ -39,7 +39,7 @@ const deferred = <T,>() => {
 
 describe('the stored result of an Ask answer in the panel', () => {
   it('draws the label, the values the person typed, the count with its quality word and the rows read by reference, a relationship by the titles of its ends', async () => {
-    const h = open(thread(block({ label: 'Find accounts', values: [{ name: 'account', text: 'typed text' }], count: { count: exact(2), noun: 'row' }, listed: 2, rows: [{ form: 'ref', ref: EDGE.ref }, { form: 'ref', ref: A }] })), async () => read([titled('ent-1', 'Account One'), titled('ent-2', 'Account Two')]));
+    const h = open(thread(block({ label: 'Find accounts', values: [{ name: 'widget', text: 'typed text' }], count: { count: exact(2), noun: 'row' }, listed: 2, rows: [{ form: 'ref', ref: EDGE.ref }, { form: 'ref', ref: A }] })), async () => read([titled('ent-1', 'Account One'), titled('ent-2', 'Account Two')]));
     expect(await screen.findByText('Find accounts')).toBeTruthy();
     expect(screen.getByText('typed text')).toBeTruthy();
     expect(screen.getByText(/2 rows/)).toBeTruthy();
