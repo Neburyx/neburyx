@@ -106,7 +106,6 @@ export interface LoopCostRun {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly ms: number;
-  readonly stepCalls: number;
   readonly steps: number;
   readonly maxInputTokens: number;
   readonly maxOutputTokens: number;

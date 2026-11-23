@@ -24,8 +24,6 @@ export interface LoopCostRun {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly ms: number;
-  /** The calls of the step prompt, which ask for the next read or end the turn. */
-  readonly stepCalls: number;
   /** The reads the turn made, as the answer reports them (a read from the router's own intent counts as one): what the steps limit bounds. */
   readonly steps: number;
   /** The largest input and the largest output of a single call of the turn: what the token limits apply to. */
@@ -109,7 +107,7 @@ export async function loopCostRun(source: LoadedSource, provider: ModelProvider,
   const rows = answer.status === 'answered' && answer.route === 'ask' ? ((raw as { readonly step?: { readonly rows?: number } }).step?.rows ?? 0) : 0;
   const reported = raw as { readonly steps?: number; readonly step?: unknown };
   const reads = reported.steps ?? (reported.step === undefined ? 0 : 1);
-  return { route: where, calls, total: seen.length, stepCalls: calls['assistant.step'] ?? 0, steps: reads, maxInputTokens: Math.max(0, ...seen.map((entry) => entry.inputTokens)), maxOutputTokens: Math.max(0, ...seen.map((entry) => entry.outputTokens)), rows, inputTokens: seen.reduce((sum, entry) => sum + entry.inputTokens, 0), outputTokens: seen.reduce((sum, entry) => sum + entry.outputTokens, 0), ms };
+  return { route: where, calls, total: seen.length, steps: reads, maxInputTokens: Math.max(0, ...seen.map((entry) => entry.inputTokens)), maxOutputTokens: Math.max(0, ...seen.map((entry) => entry.outputTokens)), rows, inputTokens: seen.reduce((sum, entry) => sum + entry.inputTokens, 0), outputTokens: seen.reduce((sum, entry) => sum + entry.outputTokens, 0), ms };
 }
 
 /** The tool steps a turn may take by default and the model calls it may make: the settings of the assistant as a run with no setting given has them. */

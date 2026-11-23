@@ -46,7 +46,7 @@ describe('the token figures', () => {
     const runRecord = join(folder, 'run-record.json');
     const loop = join(folder, 'loop-cost-record.json');
     writeFileSync(runRecord, JSON.stringify({ outcomes: [] }));
-    writeFileSync(loop, JSON.stringify({ rows: [{ name: 'a', on: { total: 5, inputTokens: 5000, outputTokens: 500, stepCalls: 2, steps: 2, maxInputTokens: 30_000, maxOutputTokens: 100, rows: 1 } }] }));
+    writeFileSync(loop, JSON.stringify({ rows: [{ name: 'a', on: { total: 5, inputTokens: 5000, outputTokens: 500, steps: 2, maxInputTokens: 30_000, maxOutputTokens: 100, rows: 1 } }] }));
     const result = runDefaults(sets, { runRecord, loopCost: loop, force: false }, hooksWith(() => ({ failure: 'timeout' })));
     const text = result.lines.join('\n');
     expect(text).toMatch(/input tokens of a call.*max 30000.*over/);
@@ -57,7 +57,7 @@ describe('the token figures', () => {
 
 describe('the defaults command', () => {
   const outcome = (name: string, calls: number, inputTokens: number, outputTokens: number) => ({ name, status: 'ok', calls, inputTokens, outputTokens });
-  const on = (total: number, steps: number, maxInputTokens = 1000, maxOutputTokens = 100) => ({ total, inputTokens: 1000 * total, outputTokens: 100 * total, stepCalls: steps, steps, maxInputTokens, maxOutputTokens, rows: 1 });
+  const on = (total: number, steps: number, maxInputTokens = 1000, maxOutputTokens = 100) => ({ total, inputTokens: 1000 * total, outputTokens: 100 * total, steps, maxInputTokens, maxOutputTokens, rows: 1 });
 
   it('prints each limit with its verdict, proposes only for close or over, and changes no file of the repository', async () => {
     const sets = await loadAssistantSets(PACKS, hooksWith(() => ({ failure: 'timeout' })));

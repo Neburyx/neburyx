@@ -55,7 +55,7 @@ export function judge(setting: string, observed: Observed, limit: { readonly def
 
 const outcomeSchema = z.object({ name: z.string(), status: z.string(), calls: z.number(), inputTokens: z.number(), outputTokens: z.number() });
 const runRecordSchema = z.object({ outcomes: z.array(outcomeSchema) });
-const rowSchema = z.object({ name: z.string(), on: z.object({ total: z.number(), inputTokens: z.number(), outputTokens: z.number(), stepCalls: z.number(), steps: z.number(), maxInputTokens: z.number(), maxOutputTokens: z.number(), rows: z.number() }) });
+const rowSchema = z.object({ name: z.string(), on: z.object({ total: z.number(), inputTokens: z.number(), outputTokens: z.number(), steps: z.number(), maxInputTokens: z.number(), maxOutputTokens: z.number(), rows: z.number() }) });
 const loopRecordSchema = z.object({ rows: z.array(rowSchema) });
 
 function parseRecord<T>(text: string, schema: z.ZodType<T>, what: string): T {

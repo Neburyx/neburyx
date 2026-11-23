@@ -25,8 +25,6 @@ const FINAL_TEXT = 'Done.';
 const NOT_ANSWERED = 'Nothing has been read yet. Read first, then call answer.';
 const LIMIT_TEXT = 'Not read: this turn has reached its limit. Call answer now with what you have.';
 
-/** The request the model was about to be sent is larger than the turn's input limit. */
-class InputTooLarge extends Error {}
 
 /** What the model is told when `answer` removes sentences. A caller may replace it; the default says only how many were removed. */
 type RemovalFeedback = (outcome: { readonly kept: number; readonly removed: number; readonly verdictFound: boolean }) => string;
@@ -333,14 +331,11 @@ export function createAgentTurn(options: AgentTurnOptions): (input: AgentTurnInp
     if (estimateTokens(system, user) > settings.maxInputTokens) return { kind: 'limit', limit: 'input', reads: entries };
     const allowedCalls = settings.maxCalls - input.callsUsed;
     if (allowedCalls < 1) return { kind: 'limit', limit: 'calls', reads: entries };
-    const beforeCall = (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }): void => {
-      if (estimateTokens(request.system, `${request.messages.join('\n')}\n${request.tools}`) > settings.maxInputTokens) throw new InputTooLarge();
-    };
+    const beforeCall = (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }): boolean => estimateTokens(request.system, `${request.messages.join('\n')}\n${request.tools}`) <= settings.maxInputTokens;
     try {
-      await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall });
+      if ((await runAgent({ model, system, user, tools, control, maxCalls: allowedCalls, finalTool: ANSWER_TOOL, signal, beforeCall })).refused) limited ??= 'input';
     } catch (error) {
-      if (error instanceof InputTooLarge) limited ??= 'input';
-      else if (error instanceof AuditUnavailableError || (error instanceof Error && 'code' in error && error.code === 'AUDIT_UNAVAILABLE')) throw error;
+      if (error instanceof AuditUnavailableError || (error instanceof Error && 'code' in error && error.code === 'AUDIT_UNAVAILABLE')) throw error;
       else if (scope.request.signal.aborted) throw new Error('the request was cancelled');
       else if (input.deadline.aborted) return { kind: 'limit', limit: 'time', reads: entries };
       else if (error instanceof AuditedModelFailure) return { kind: 'failed', why: failureOf(error.code) };

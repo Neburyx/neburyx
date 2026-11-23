@@ -79,3 +79,18 @@ describe('a call whose arguments do not fit', () => {
     expect(seen[0]).not.toContain('node_modules');
   });
 });
+
+describe('a request that does not fit', () => {
+  it('ends the run before the call, counts no call and reports that it refused', async () => {
+    let received = 0;
+    const model = fakeModel().respond(() => {
+      received += 1;
+      return new AIMessage('never asked');
+    });
+    const control = controlOf();
+    const run = await runAgent({ ...base(control), model, tools: [reader([]), answerTool([])], beforeCall: () => false });
+    expect(received).toBe(0);
+    expect(run).toMatchObject({ refused: true, modelCalls: 0 });
+    expect(control.calls).toBe(0);
+  });
+});

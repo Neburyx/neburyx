@@ -18,7 +18,7 @@ afterAll(() => {
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const PACKS = join(ROOT, 'domain-packs');
 
-const run = (route: string, router: number, other: number, ms = 10): LoopCostRun => ({ route, calls: other === 0 ? { 'assistant.route': router } : { 'assistant.route': router, 'assistant.step': other }, total: router + other, inputTokens: 100 * (router + other), outputTokens: 10 * (router + other), ms, stepCalls: other, steps: other, maxInputTokens: 100, maxOutputTokens: 10, rows: 1 });
+const run = (route: string, router: number, other: number, ms = 10): LoopCostRun => ({ route, calls: other === 0 ? { 'assistant.route': router } : { 'assistant.route': router, 'assistant.step': other }, total: router + other, inputTokens: 100 * (router + other), outputTokens: 10 * (router + other), ms, steps: other, maxInputTokens: 100, maxOutputTokens: 10, rows: 1 });
 const row = (name: string, off: LoopCostRun, on: LoopCostRun): LoopCostRow => ({ name, off, on });
 
 describe('the summary of the loop\'s cost', () => {

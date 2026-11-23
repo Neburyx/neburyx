@@ -47,8 +47,8 @@ export interface AgentRunOptions {
   readonly maxCalls: number;
   readonly finalTool: string;
   readonly signal: AbortSignal;
-  /** Called with the text of each model request as it will be sent (the system prompt deepagents assembled, the messages and the tools offered), before it counts as a call; a throw ends the run with that error. */
-  readonly beforeCall?: (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }) => void;
+  /** Called with the text of each model request as it will be sent (the system prompt deepagents assembled, the messages and the tools offered), before it counts as a call; false ends the run without the call. */
+  readonly beforeCall?: (request: { readonly system: string; readonly messages: readonly string[]; readonly tools: string }) => boolean;
 }
 
 export interface AgentRun {
@@ -56,6 +56,8 @@ export interface AgentRun {
   readonly offered: readonly (readonly string[])[];
   readonly called: readonly { readonly name: string; readonly args: unknown }[];
   readonly modelCalls: number;
+  /** Whether `beforeCall` ended the run by refusing a request. */
+  readonly refused: boolean;
 }
 
 const END_TEXT = 'Done.';
@@ -114,6 +116,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
       ) as unknown as StructuredToolInterface,
   );
   let modelCalls = 0;
+  let refused = false;
   const reserved = (): boolean => options.control.answerOnly || modelCalls + options.control.extra >= options.maxCalls;
   const limits = createMiddleware({
     name: 'TurnLimits',
@@ -122,7 +125,12 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
       const lastCall = options.control.answerOnly || modelCalls + 1 + options.control.extra >= options.maxCalls;
       const tools = request.tools.filter((entry) => (lastCall ? nameOf(entry) === options.finalTool : allowed.has(nameOf(entry))));
       const textOf = (content: unknown): string => (typeof content === 'string' ? content : JSON.stringify(content));
-      options.beforeCall?.({ system: textOf(request.systemMessage.content), messages: request.messages.map((message) => textOf(message.content)), tools: tools.map(toolText).join('\n') });
+      const fits = options.beforeCall?.({ system: textOf(request.systemMessage.content), messages: request.messages.map((message) => textOf(message.content)), tools: tools.map(toolText).join('\n') }) ?? true;
+      if (!fits) {
+        refused = true;
+        options.control.stop = true;
+        return new AIMessage(END_TEXT);
+      }
       modelCalls += 1;
       options.control.calls = modelCalls;
       offered.push(tools.map(nameOf).sort());
@@ -146,5 +154,5 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRun> {
     throw failure?.error ?? error;
   }
   if (failure !== undefined) throw failure.error;
-  return { offered, called, modelCalls };
+  return { offered, called, modelCalls, refused };
 }

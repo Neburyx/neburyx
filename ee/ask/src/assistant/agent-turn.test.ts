@@ -437,3 +437,83 @@ describe('the records and the audit of an agent turn', () => {
     expect(received).toBe(0);
   });
 });
+
+describe('the input limit of the agent turn', () => {
+  it('ends with the fixed sentence of the limit, and makes no model call, when what the turn would send does not fit', async () => {
+    let received = 0;
+    const model = fakeModel().respond(() => {
+      received += 1;
+      return new AIMessage('never asked');
+    });
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 1 } });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'input' });
+    expect(received).toBe(0);
+    expect(modelEvents(r)).toHaveLength(0);
+  });
+
+  it('ends with the fixed sentence of the limit, and makes no model call, when the request the framework assembles does not fit though the turn\'s own text does', async () => {
+    let received = 0;
+    const model = fakeModel().respond(() => {
+      received += 1;
+      return new AIMessage('never asked');
+    });
+    const r = await rig({ reply: VIEW, agent: { model, maxInputTokens: 1_000 } });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'limit', limit: 'input' });
+    expect(received).toBe(0);
+    expect(modelEvents(r)).toHaveLength(0);
+  });
+});
+
+describe('a model that repeats a read without progress', () => {
+  it('reads no more than the steps allow and ends at the first limit that applies', async () => {
+    const model = fakeModel();
+    for (let call = 0; call < 20; call += 1) model.respondWithTools([{ name: 'view', args: {} }]);
+    const r = await rig({ reply: VIEW, agent: { model, maxCalls: 6 }, loopSteps: 2 });
+    const answer = await answerOf(r.route.handler(r.request(VIEW_BODY)));
+    expect(answer.status).toBe('limit');
+    expect(r.elementReads.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('a decision on a confirmation, beyond a plan used already', () => {
+  const heavyAsk = routeAsk('shared', { id: 'A-9' });
+  const waiting = async () => {
+    const pending = createMemoryAssistantPendingStore();
+    const model = fakeModel().respondWithTools([{ name: 'shared', args: { id: 'A-9' } }]).respond(new AIMessage('Done.'));
+    const r = await rig({ reply: heavyAsk, agent: { model }, pending, run: (continuing: boolean) => ({ status: 'ok' as const, result: continuing ? okResult() : heavyResult() }) });
+    const first = await answerOf(r.route.handler(r.request()));
+    if (first.status !== 'confirmation') throw new Error(`not waiting: ${JSON.stringify(first).slice(0, 160)}`);
+    return { r, first };
+  };
+  const decide = (r: Rig, first: Extract<Awaited<ReturnType<typeof answerOf>>, { status: 'confirmation' }>, over: Record<string, unknown> = {}, principalId?: string) =>
+    answerOf(r.route.handler(r.request({ ...BODY, ...over, confirmation: { pendingId: first.pendingId, plan: first.plan, decision: 'confirm' } }, principalId === undefined ? {} : { principalId })));
+
+  it.each([
+    ['one sent for another message', { message: 'something else' }, undefined],
+    ['one sent by another person', {}, 'p-2'],
+  ])('refuses %s, with nothing read', async (_name, over, principalId) => {
+    const { r, first } = await waiting();
+    const before = r.runs.length;
+    expect(await decide(r, first, over, principalId)).toMatchObject({ status: 'confirmation-invalid' });
+    expect(r.runs).toHaveLength(before);
+  });
+
+  it('refuses one that has expired, with nothing read', async () => {
+    const { r, first } = await waiting();
+    const before = r.runs.length;
+    r.clock.now += 24 * 60 * 60 * 1000;
+    expect(await decide(r, first)).toMatchObject({ status: 'confirmation-invalid' });
+    expect(r.runs).toHaveLength(before);
+  });
+});
+
+describe('a question about what a type means that names no type the mapping has', () => {
+  it('goes to the agent as a question for the view', async () => {
+    const model = fakeModel()
+      .respondWithTools([{ name: 'view', args: {} }])
+      .respondWithTools([{ name: 'answer', args: { sentences: [{ text: 'Account A-1 is in view.', cites: ['n1'] }] } }])
+      .respond(new AIMessage('Done.'));
+    const r = await rig({ reply: ok('{"route":"meaning","types":["nonexistent"]}'), agent: { model }, types: ['widget'] });
+    expect(await answerOf(r.route.handler(r.request(VIEW_BODY)))).toMatchObject({ status: 'answered', route: 'view', sentences: [{ cites: ['n1'] }] });
+  });
+});

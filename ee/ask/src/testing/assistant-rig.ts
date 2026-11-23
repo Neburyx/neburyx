@@ -139,7 +139,7 @@ export interface RigOptions {
   readonly answer?: FixtureReplies[string];
   readonly loopSteps?: number;
   /** The deepagents turn runs on this chat model; every call it makes writes its audit event to the rig's sink. */
-  readonly agent?: { readonly model: AgentChatModel; readonly maxCalls?: number; /** Only a test of the audit sets this, to an id an audit event cannot hold. */ readonly promptId?: string; readonly removalFeedback?: NonNullable<Parameters<typeof createAgentTurn>[0]['removalFeedback']> };
+  readonly agent?: { readonly model: AgentChatModel; readonly maxCalls?: number; /** Only a test of the audit sets this, to an id an audit event cannot hold. */ readonly promptId?: string; /** The input limit of the agent alone, so that a test can pass the router and stop the agent. */ readonly maxInputTokens?: number; readonly removalFeedback?: NonNullable<Parameters<typeof createAgentTurn>[0]['removalFeedback']> };
   readonly loopRows?: number;
   /** The elements the source holds, as `type/id`, for the read of a source's elements that checks a written value; absent, every reference asked for is found. */
   readonly source?: readonly string[];
@@ -203,7 +203,7 @@ export async function rig(options: RigOptions = {}): Promise<Rig> {
           model: (context, trace) => Promise.resolve(agentOptions === undefined ? undefined : auditChatModel(agentOptions.model, { recorder: createCallRecorder({ sink }), context, promptId: agentOptions.promptId ?? AGENT_PROMPT_ID, promptVersion: AGENT_PROMPT_VERSION, modelRef: 'configured-model', ...(trace === undefined ? {} : { trace }) })),
           modelRef: () => 'configured-model',
           instructions: () => buildSummaryInstructions('You answer from what was read. SENTINEL-AGENT-PROMPT', ''),
-          settings: () => ({ maxCalls: agentOptions?.maxCalls ?? options.maxCalls ?? 8, maxSteps: options.loopSteps ?? 4, maxInputTokens: options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }), timeoutMs: 10_000 }),
+          settings: () => ({ maxCalls: agentOptions?.maxCalls ?? options.maxCalls ?? 8, maxSteps: options.loopSteps ?? 4, maxInputTokens: agentOptions?.maxInputTokens ?? options.maxInputTokens ?? 25_000, ...(options.loopRows === undefined ? {} : { rowsAllowed: options.loopRows }), timeoutMs: 10_000 }),
           checks: options.checks ?? createCheckRunner(),
           ...(agentOptions.removalFeedback === undefined ? {} : { removalFeedback: agentOptions.removalFeedback }),
         });
