@@ -268,4 +268,20 @@ describe('the Assistant panel: a table answer', () => {
     expect(within(table).getAllByRole('button', { name: /^Citation \d+/ })).toHaveLength(2);
     expect(screen.getByText('Sources · 2')).toBeTruthy();
   });
+
+  it('aligns a column of numbers right without wrapping and leaves a column of words alone', async () => {
+    const base = tableAnswer();
+    if (base.status !== 'answered' || !('blocks' in base)) throw new Error('not blocks');
+    const answer: AssistantTurnAnswer = {
+      ...base,
+      blocks: [{ kind: 'table', table: { title: 'figures · 2 rows', columns: ['Element', 'Size'], rows: [{ cells: ['AC-1', '$12,400.50'], cites: ['n1'] }, { cells: ['item-2', '-8'], cites: ['n2'] }], note: 'Each row selects its elements on the graph.' } }],
+    };
+    await draw(answer);
+    const table = screen.getByRole('table');
+    const [words, numbers] = within(table).getAllByRole('columnheader');
+    expect(words?.className).toBe('');
+    expect(numbers?.className).toBe('assistant-table-number');
+    expect(within(table).getByText('$12,400.50').className).toBe('assistant-table-number');
+    expect(within(table).getByText('AC-1').className).toBe('');
+  });
 });

@@ -66,6 +66,8 @@ describe('the Assistant panel: an answer from the view', () => {
     await typeAndSend('what is linked?');
     expect(await screen.findByText('The read states 25 matches shown, as a lower bound.')).toBeTruthy();
     const marker = screen.getByRole('button', { name: 'Read: expand' });
+    expect(marker.textContent).toBe('[expand]');
+    expect(marker.className).toContain('summary-chip');
     expect(screen.queryByText('25 matches shown · lower bound')).toBeNull();
     await userEvent.click(marker);
     expect(screen.getByText('25 matches shown · lower bound')).toBeTruthy();

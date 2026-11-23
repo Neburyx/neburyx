@@ -107,6 +107,23 @@ export function ViewAnswerCard({
                 {group.kind === "run" ? runMarkerOf(group.first, group.last) : markerOf(group.entry)}
               </span>
             ))}
+            {readKeys(sentence.cites).map((key) => {
+              const read = reads.get(key);
+              return read === undefined ? null : (
+                <span key={key}>
+                  {" "}
+                  <button
+                    type="button"
+                    className="summary-chip assistant-marker assistant-read-chip"
+                    aria-expanded={opened.has(key)}
+                    aria-label={`${ASSISTANT_COPY.readCitation}: ${read.label}`}
+                    onClick={() => toggle(key)}
+                  >
+                    [{read.label}]
+                  </button>
+                </span>
+              );
+            })}
           </p>
           {descriptionKeys(sentence.cites).length === 0 ? null : (
             <span className="summary-chips">
@@ -122,25 +139,6 @@ export function ViewAnswerCard({
                     onClick={() => toggle(key)}
                   >
                     {`${ASSISTANT_COPY.aboutType} ${meaning.type}`}
-                  </button>
-                );
-              })}
-            </span>
-          )}
-          {readKeys(sentence.cites).length === 0 ? null : (
-            <span className="summary-chips">
-              {readKeys(sentence.cites).map((key) => {
-                const read = reads.get(key);
-                return read === undefined ? null : (
-                  <button
-                    key={key}
-                    type="button"
-                    className="summary-chip assistant-marker assistant-read-chip"
-                    aria-expanded={opened.has(key)}
-                    aria-label={`${ASSISTANT_COPY.readCitation}: ${read.label}`}
-                    onClick={() => toggle(key)}
-                  >
-                    {`${ASSISTANT_COPY.readCitation}: ${read.label}`}
                   </button>
                 );
               })}
