@@ -90,9 +90,16 @@ describe('the shared control styles', () => {
   });
 
   it('give the padding, the placeholder and the disabled look to text-like fields only, and leave a checkbox or a date field alone', () => {
-    const fieldRules = rulesOf(CONTROLS).flatMap((rule) => rule.selectors).filter((selector) => /(^|[^\w.-])input\b/.test(selector) && !selector.startsWith(':where(\n'));
+    const fieldRules = rulesOf(CONTROLS).flatMap((rule) => rule.selectors).filter((selector) => selector.includes('input') && !selector.startsWith(':where(\n') );
     expect(fieldRules.length).toBeGreaterThan(0);
     for (const selector of fieldRules) expect(selector, selector).toContain(":is(:not([type]), [type='text'], [type='search'])");
+  });
+
+  it('draw the select-control class as a select, on a select or on a button, with the same chevron and hover', () => {
+    const selectors = rulesOf(CONTROLS).flatMap((rule) => rule.selectors).join(' ');
+    expect(selectors).toContain('button.select-control');
+    expect(selectors).toContain('.select-control:hover');
+    expect(CONTROLS).toMatch(/select\[class=''\], \.select-control\) \{[^}]*select-chevron\.svg/s);
   });
 
   it('keep a disabled or busy control from reacting to the pointer', () => {

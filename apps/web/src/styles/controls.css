@@ -3,6 +3,7 @@
     button[class=''],
     select:not([class]),
     select[class=''],
+    .select-control,
     input:not([class]):is(:not([type]), [type='text'], [type='search']),
     input[class='']:is(:not([type]), [type='text'], [type='search'])
   ),
@@ -19,7 +20,7 @@ button.link {
   font-size: var(--font-size-small);
 }
 
-:where(button:not([class]), button[class='']),
+:where(button:not([class]), button[class=''], button.select-control),
 button.primary,
 button.secondary,
 button.link {
@@ -29,7 +30,7 @@ button.link {
   cursor: pointer;
 }
 
-:where(select:not([class]), select[class=''], select.patterns-input) {
+:where(select:not([class]), select[class=''], .select-control) {
   padding-right: calc(var(--space-12) + var(--tool-icon-size));
   appearance: none;
   background: var(--color-surface) url('../assets/select-chevron.svg') no-repeat right var(--space-10) center / var(--tool-icon-size);
@@ -54,7 +55,8 @@ button.secondary:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']
 
 :where(
     select:not([class]):hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']),
-    select[class='']:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true'])
+    select[class='']:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true']),
+    .select-control:hover:not(:disabled, [aria-disabled='true'], [aria-busy='true'])
   ) {
   background-color: var(--color-surface-muted);
 }

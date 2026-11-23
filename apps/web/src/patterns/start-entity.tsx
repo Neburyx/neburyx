@@ -91,7 +91,7 @@ export function StartEntityField({ client, sourceId, mask, label, entityType, ca
       <select
         id={id}
         ref={selectRef}
-        className="patterns-input"
+        className="select-control"
         value={chosenKey ?? ''}
         onChange={(event) => {
           const node = options.find((candidate) => elementKey(candidate.ref) === event.target.value);

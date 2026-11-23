@@ -26,17 +26,12 @@
 .patterns-input {
   box-sizing: border-box;
   min-height: var(--button-height);
-  padding-block: 0;
-  padding-inline-start: var(--space-10);
+  padding: 0 var(--space-10);
   border: var(--border-width) solid var(--color-control-border);
   border-radius: var(--radius-panel);
-  background-color: var(--color-surface);
+  background: var(--color-surface);
   color: var(--color-text-strong);
   font: inherit;
-}
-
-.patterns-input:not(select) {
-  padding-inline-end: var(--space-10);
 }
 
 .patterns-dates {

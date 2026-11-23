@@ -189,9 +189,14 @@ test.describe('the Patterns panel on the canvas', () => {
     const selects = panelOf(page).getByRole('combobox');
     expect(await selects.count()).toBeGreaterThan(1);
     const button = await runOf(page).boundingBox();
+    const first = selects.first();
+    const resting = await first.evaluate((element) => getComputedStyle(element).backgroundColor);
+    await first.hover();
+    expect(await first.evaluate((element) => getComputedStyle(element).backgroundColor), 'the hover fill of a plain select').not.toBe(resting);
     for (const select of await selects.all()) {
       await expect(select).toHaveCSS('appearance', 'none');
-      expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toContain('chevron-down');
+      expect(await select.evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/^url\(/);
+      expect(await select.evaluate((element) => parseFloat(getComputedStyle(element).paddingRight)), 'room for the chevron').toBeGreaterThan(20);
       expect(Math.abs(((await select.boundingBox())?.height ?? 0) - (button?.height ?? 99))).toBeLessThan(4);
     }
   });

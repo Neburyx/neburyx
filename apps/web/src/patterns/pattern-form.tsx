@@ -43,7 +43,7 @@ function WindowField({ field, values, error, onChange }: { readonly field: Field
       <label className="supernode-label" htmlFor={id}>
         {field.label}
       </label>
-      <select id={id} className="patterns-input" value={chosen} aria-invalid={error !== undefined} aria-describedby={describedBy} onChange={(event) => choose(event.target.value)}>
+      <select id={id} className="select-control" value={chosen} aria-invalid={error !== undefined} aria-describedby={describedBy} onChange={(event) => choose(event.target.value)}>
         <option value={DEFAULT}>{FORM_COPY.anyTime}</option>
         {RELATIVE_WINDOWS.map((days) => (
           <option key={days} value={`days:${days}`}>
@@ -96,7 +96,7 @@ function NumberField({ field, values, error, onChange }: { readonly field: Field
       <label className="supernode-label" htmlFor={id}>
         {field.label}
       </label>
-      <select id={id} className="patterns-input" value={chosen} aria-invalid={error !== undefined} aria-describedby={error === undefined ? undefined : `${id}-error`} onChange={(event) => choose(event.target.value)}>
+      <select id={id} className="select-control" value={chosen} aria-invalid={error !== undefined} aria-describedby={error === undefined ? undefined : `${id}-error`} onChange={(event) => choose(event.target.value)}>
         <option value={DEFAULT}>{FORM_COPY.defaultChoice}</option>
         {steps.map((step) => (
           <option key={step} value={String(step)}>
@@ -137,7 +137,7 @@ export function PatternForm({ fields, values, errors, onChange }: Props) {
                 <label className="supernode-label" htmlFor={id}>
                   {field.label}
                 </label>
-                <select id={id} className="patterns-input" value={values[field.name] ?? ''} onChange={(event) => onChange(field.name, event.target.value)}>
+                <select id={id} className="select-control" value={values[field.name] ?? ''} onChange={(event) => onChange(field.name, event.target.value)}>
                   <option value="" />
                   {(field.options ?? []).map((option) => (
                     <option key={option.value} value={option.value}>
