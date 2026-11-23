@@ -64,6 +64,8 @@ describe('the shipped summary files', () => {
     'copy it exactly as the element text shows it and cite the element it belongs to',
     'give the number of those you cite',
     'List the key of every element a count stands for',
+    'A sentence that ranks (the largest, smallest, earliest or latest value of a property, or the most or the fewest of a named property) names the property once, makes one ranking assertion, and cites every element of that type it ranks over',
+    'Write a compound ranking as separate sentences',
   ])('has the prompt state: %s', (statement) => {
     expect(shipped('summary-prompt.md')).toContain(statement);
   });

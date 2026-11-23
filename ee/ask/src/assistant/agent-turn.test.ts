@@ -179,6 +179,7 @@ describe('a view question on the agent', () => {
     expect(instructions).toContain('find that element in the lines, then take the second step');
     expect(instructions).toContain('exactly as that line writes it, with its label');
     expect(instructions).toContain('or that compares (the latest, the largest, the most), cites every element it speaks of in that same sentence, as a count does');
+    expect(instructions).toContain('A sentence that ranks (the largest, smallest, earliest or latest value of a property, or the most or the fewest of a named property) names the property once, makes one ranking assertion, cites every element of that type it ranks over, and writes a compound ranking as separate sentences.');
     expect(instructions).toContain('Name a link between two elements only when a relationship line you cite holds it');
   });
 
