@@ -13,7 +13,7 @@ function rootWith(files: Readonly<Record<string, string>>): string {
 describe('a pack word in the instruction text', () => {
   it.each([
     ['a prompt file, with a different case', { 'ee/ask/prompts/p.md': 'Line one\nWhat is a Widget here?\n' }, 'ee/ask/prompts/p.md', 2, 'widget'],
-    ['a relationship type in a prompt file', { 'ee/ask/prompts/p.md': 'Explain what MADE_BY stands for.\n' }, 'ee/ask/prompts/p.md', 1, 'made_by'],
+    ['a relationship type in a prompt file', { 'ee/ask/prompts/p.md': 'Explain what MADE_BY stands for.\n' }, 'ee/ask/prompts/p.md', 1, 'made by'],
     ['a sentence in the code that builds the agent text', { 'ee/ask/src/a.ts': `export const text = '${SENTENCE} and any widget';\n` }, 'ee/ask/src/a.ts', 1, 'widget'],
     ['a template of the assistant agent', { 'ee/assistant-agent/src/a.ts': `export const text = \`${SENTENCE} of a widget\`;\n` }, 'ee/assistant-agent/src/a.ts', 1, 'widget'],
   ])('is reported in %s with its file, line and word', (_name, files, file, line, word) => {
@@ -22,13 +22,39 @@ describe('a pack word in the instruction text', () => {
     expect(formatAiTextResult(result)).toContain(`${file}:${line} '${word}'`);
   });
 
-  it('is not reported in a name or a short literal, in a longer word, or in a test file', () => {
+  it('is not reported in a name with no space in it, in a longer word, or in a test file', () => {
     const files = {
-      'ee/ask/src/a.ts': "export const kind = 'widget';\nexport const key = 'widget in a short text';\nexport const word = 'This sentence only has widgets and gadgets in the plural forms, nothing more';\n",
+      'ee/ask/src/a.ts': "export const kind = 'widget';\nexport const word = 'This sentence only has widgetry and gadgets in other words, nothing more';\n",
       'ee/ask/src/a.test.ts': `export const text = '${SENTENCE} and a widget';\n`,
       'ee/ask/src/testing/rig.ts': `export const text = '${SENTENCE} and a widget';\n`,
     };
     expect(checkAiText(rootWith(files), []).violations).toEqual([]);
+  });
+
+  it.each([
+    ['a plural', 'List the widgets in view.'],
+    ['a plural in -ies of a name in -y', 'Say what the policies cover.'],
+    ['a short literal', 'a widget here'],
+    ['the words of a snake_case name apart', 'Who was it made by?'],
+    ['the words of a camelCase name apart', 'Read the ip address.'],
+  ])('is reported for %s', (_name, text) => {
+    const pack = packText([['widget', 'Widget'], ['policy', 'Policy'], ['ipAddress', 'IpAddress']], ['MADE_BY']).replace('stable_id: id }', 'stable_id: id }');
+    const root = makeRoot({ 'domain-packs/sample/neburyx.yaml': pack, 'ee/ask/src/a.ts': `export const text = ${JSON.stringify(text)};\n` });
+    expect(checkAiText(root, []).violations.length).toBeGreaterThan(0);
+  });
+
+  it('is reported in a piece of a template literal that has a substitution', () => {
+    const root = rootWith({ 'ee/ask/src/a.ts': 'export const text = (n: number) => `${n} widgets in view`;\n' });
+    expect(checkAiText(root, []).violations.map((v) => v.word)).toEqual(['widget']);
+  });
+
+  it('is reported in a multi-word label of a pack', () => {
+    const root = makeRoot({ 'domain-packs/sample/neburyx.yaml': packText([['gizmo', 'Frozen-thing']]), 'ee/ask/prompts/p.md': 'Is the frozen thing here?\n' });
+    expect(checkAiText(root, []).violations.length).toBeGreaterThan(0);
+  });
+
+  it('reads the prompt files of a folder inside the prompts folder too', () => {
+    expect(checkAiText(rootWith({ 'ee/ask/prompts/more/p.md': 'A widget.\n' }), []).violations.map((v) => v.file)).toEqual(['ee/ask/prompts/more/p.md']);
   });
 
   it('is allowed with a reason for a word everywhere, or for one file only, and an entry nothing uses is reported', () => {

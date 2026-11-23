@@ -36,12 +36,22 @@ interface Vocabulary {
 function vocabularyOf(pack: string | undefined): Vocabulary {
   if (pack === undefined || pack === '') return { anchor: 'widget', other: 'gadget', titleOf: (stableId) => `Account ${stableId}`, links: ['HOLDS', 'SENT'] };
   const lines = readFileSync(fileURLToPath(new URL(`../../../../domain-packs/${pack}/neburyx.yaml`, import.meta.url)), 'utf8').split('\n');
-  const at = lines.findIndex((line) => /^\s+relationships:/u.test(line));
-  const entities = lines.slice(0, at);
-  const types = entities.flatMap((line, index) => (/^\s+- type: (\S+)$/u.exec(line)?.[1] === undefined ? [] : [{ type: /^\s+- type: (\S+)$/u.exec(line)?.[1] ?? '', label: /^\s+label: (\S+)$/u.exec(entities[index + 1] ?? '')?.[1] ?? '' }]));
-  const links = lines.slice(at).flatMap((line) => (/^\s+- type: (\S+)$/u.exec(line)?.[1] === undefined ? [] : [/^\s+- type: (\S+)$/u.exec(line)?.[1] ?? '']));
+  const at = lines.findIndex((line) => /^ {4}relationships:/u.test(line));
+  if (at < 0) throw new Error(`the pack ${pack} names no relationships`);
+  // the entities and relationships of the first source are list items at one indent: a `- type:` deeper down belongs to a list inside one of them
+  const itemsOf = (part: readonly string[]): { type: string; label: string }[] =>
+    part.flatMap((line, index) => {
+      const type = /^ {6}- type: (\S+)$/u.exec(line)?.[1];
+      if (type === undefined) return [];
+      const block = part.slice(index + 1).findIndex((next) => /^ {6}- type:/u.test(next));
+      const own = part.slice(index + 1, block < 0 ? undefined : index + 1 + block);
+      return [{ type, label: own.map((next) => /^ {8}label: (.+)$/u.exec(next)?.[1]).find((found) => found !== undefined) ?? '' }];
+    });
+  const types = itemsOf(lines.slice(0, at));
+  const links = itemsOf(lines.slice(at)).map((item) => item.type);
   const [anchor, other] = types;
   if (anchor === undefined || other === undefined || links[1] === undefined) throw new Error(`the pack ${pack} has fewer than two entity types or relationship types`);
+  if (/\s/u.test(anchor.label) || anchor.label === '') throw new Error(`the label of the first entity type of the pack ${pack} is empty or has a space`);
   return { anchor: anchor.type, other: other.type, titleOf: (stableId) => `${anchor.label} ${stableId}`, links: [links[0] ?? '', links[1]] };
 }
 
