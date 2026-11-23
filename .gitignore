@@ -30,3 +30,6 @@ deploy/compose/source.env
 dist-ux/
 test-results/
 playwright-report/
+
+# a copy of agent-run.ts that a canary writes while it runs
+ee/assistant-agent/src/zz-hole-*.ts
